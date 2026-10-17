@@ -268,7 +268,10 @@ function feature_capability_route_requirement_label(array $requirement): string
  * @param string $page Route identifier.
  * @param bool $wantsJson Whether the HTTP boundary selected JSON representation.
  * @param bool $isAdmin Whether the current authenticated principal is an administrator.
- * @return array{status:int,representation:string,headers:array<string,string>,payload:array<string,mixed>,title:string,message:string,admin:bool}
+ * @return array{status:int,representation:string,headers:array<string,string>,
+ *     payload:array{ok:bool,error:string,features?:list<string>,
+ *         requirement?:string,message?:string},title:string,message:string,
+ *     admin:bool} Opaque visitor refusal or actionable administrator guidance.
  */
 function feature_flag_disabled_route_decision(string $page, bool $wantsJson, bool $isAdmin): array
 {
@@ -282,7 +285,9 @@ function feature_flag_disabled_route_decision(string $page, bool $wantsJson, boo
     if (!$isAdmin) {
         return [
             'status' => 404,
-            'representation' => $wantsJson ? 'json' : 'html',
+            'representation' => $wantsJson ? 'json'
+                : (in_array($page, ['gallery_ofp_pdf', 'gallery_music'], true)
+                    ? 'text' : 'html'),
             'headers' => $headers,
             'payload' => ['ok' => false, 'error' => 'not_found'],
             'title' => t('public.not_found_title', 'Not found'),

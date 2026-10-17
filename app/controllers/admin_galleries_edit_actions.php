@@ -272,13 +272,29 @@ function cms_admin_scan_images(): void
 /**
  * Normalize an edit-gallery admin tab identifier.
  *
- * @param string $tab Tab value.
- * @return string Text result for the caller.
+ * @param string $tab Requested query/hash tab identity.
+ * @return string Registered available tab, or empty for an unknown identity
+ *     or the media tab when both attachment capabilities are off.
  */
 function admin_edit_gallery_tab_id(string $tab): string
 {
+    if ($tab === 'admin-edit-documents'
+        && !feature_capability_effective_enabled('gallery_pdf_documents')
+        && !feature_capability_effective_enabled('gallery_music')) {
+        return '';
+    }
     // $allowedTabs stores admin edit tab identifiers that may be returned after POST actions.
-    $allowedTabs = ['admin-edit-identity', 'admin-edit-access', 'admin-edit-display', 'admin-edit-media', 'admin-edit-api', 'admin-edit-images', 'admin-edit-documents', 'admin-edit-organizer', 'admin-edit-renamer'];
+    $allowedTabs = [
+        'admin-edit-identity',
+        'admin-edit-access',
+        'admin-edit-display',
+        'admin-edit-media',
+        'admin-edit-api',
+        'admin-edit-images',
+        'admin-edit-documents',
+        'admin-edit-organizer',
+        'admin-edit-renamer',
+    ];
     return in_array($tab, $allowedTabs, true) ? $tab : '';
 }
 

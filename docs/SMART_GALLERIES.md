@@ -127,3 +127,26 @@ Preview queries actual matching images and renders cards through `smart_gallery_
 When both the global downloads feature and the Smart Gallery presentation setting allow it, the public page exposes an authorized Smart Gallery ZIP action. The server rebuilds the result set through the same access-aware query and streams the archive through the normal download controller. Filesystem paths are never exposed to the browser.
 
 Smart Gallery ZIP generation applies two independent server-side resource limits: at most 5,000 matching images and an aggregate original-file byte ceiling. The byte ceiling is configured by `smart_gallery_zip_max_source_bytes`; existing installations without that key use a 2 GiB default. Archive builders acquire an exclusive lock scoped to the final content signature, re-check the cache after obtaining the lock, write a unique partial archive, and atomically rename it into the final cache path. This prevents concurrent requests from building the same ZIP into one destination. Failure logs retain only the Smart Gallery ID, exception class, and an allowlisted reason code; raw exception messages and filesystem/database details are not persisted.
+
+## Music from physical sources
+
+Smart Galleries expose a read-only OR/union of visible music from their complete
+authorized photo-source scope, independent of photo pagination and temporary
+source filtering. Sources still require public listing and visitor access;
+hidden tracks are omitted, while download-locked tracks remain playable. Default
+track visibility is visible and default download permission is locked. Future
+hiding controls are separate from download permission. No Smart audio folder
+is created.
+
+The existing compact applet, miniplayer and exclusive slideshow player are reused.
+An independent `music_enabled` presentation override starts false and can be
+enabled in the existing Smart editor. Source gallery autoplay preferences do not
+change this setting. Original protected physical-source URLs enforce current
+access/visibility and their own download permissions.
+
+Stored SHA-256 digests deduplicate identical original bytes, including renamed
+copies, in stable source/track order. Equal filenames/durations alone never
+remove a different recording. Different encodings or changed embedded tags need
+a future acoustic/container fingerprint strategy. A visible permitted duplicate
+can supply the download URL; hidden/denied copies never grant permission.
+See [music ownership and lifecycle](GALLERY_MUSIC.md) and issue #249.

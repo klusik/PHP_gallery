@@ -12,6 +12,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 
+import {isBrowserUploadAudioFile} from './gallery-music-upload.js?v=20261017-music-v3';
 import {adminOperationOwnsInput, allowAdminOperationTransition} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {createGalleryUploadQueue} from './admin-upload-queue.js?v=20261008-issue118-v1';
 import {requestGalleryUploadThumbnail, galleryUploadPreviewPolicy} from './admin-upload-thumbnail.js?v=20261008-issue118-v1';
@@ -127,12 +128,13 @@ function label(view, key, values = {}) {
 }
 
 /**
- * Restrict local preview decoding to known image MIME values.
- * @param {string} type Low-trust MIME.
+ * Restrict local preview decoding to known images, excluding audio originals.
+ * @param {File} file Original source with low-trust MIME and filename hints.
  * @return {boolean} Whether to allow inline decoding.
  */
-function mayPreview(type) {
-    return previewableTypes.has(String(type || '').toLowerCase());
+function mayPreview(file) {
+    return !isBrowserUploadAudioFile(file)
+        && previewableTypes.has(String(file.type || '').toLowerCase());
 }
 
 /**
@@ -161,12 +163,14 @@ function selectionWarnings(state, file, repeatedName) {
     if (file.size === 0) warnings.push(label(state.view, 'emptyFile'));
     if (repeatedName) warnings.push(label(state.view, 'repeatedName'));
     const pdf = isPdfFile(file);
+    const audio = isBrowserUploadAudioFile(file);
     if (!pdf && state.input.accept && !accepted.has(ext) && !accepted.has(String(file.type || '').toLowerCase())) {
         // image/* is a picker convenience, not a claim that arbitrary codecs are supported.
         warnings.push(label(state.view, 'unsupportedFormat'));
     }
     if (isZip && !preparing) warnings.push(label(state.view, 'zipRequiresBrowser'));
-    if (preparing && !pdf && !isZip && !['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+    if (preparing && !pdf && !audio && !isZip
+        && !['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
         warnings.push(label(state.view, 'browserFormat'));
     }
     if (state.uploadLimitBytes && file.size > state.uploadLimitBytes) {
@@ -227,7 +231,7 @@ function activatePreview(state, id) {
     const item = state.queue.items().find(entry => entry.id === id);
     const image = state.elements.get(id);
     if (!item || isPdfFile(item.file) || !(image instanceof HTMLImageElement) || state.failedPreviews.has(id)) return;
-    if (item.file.size > MAX_PREVIEW_SOURCE_BYTES || !mayPreview(item.file.type)) return;
+    if (item.file.size > MAX_PREVIEW_SOURCE_BYTES || !mayPreview(item.file)) return;
     const existing = state.urls.get(id);
     if (existing) { image.src = existing; return; }
     if (state.previewJobs.has(id) || state.urls.size + state.previewJobs.size >= MAX_ACTIVE_PREVIEWS) return;
@@ -313,11 +317,17 @@ function renderQueue(state) {
             fallback.textContent = '▤ PDF';
             fallback.title = label(view, 'pdfDocument') || 'PDF document';
             fallback.setAttribute('aria-label', fallback.title);
+        } else if (isBrowserUploadAudioFile(item.file)) {
+            fallback.classList.add('is-document');
+            fallback.textContent = '♪';
+            fallback.title = label(view, 'audioDocument');
+            fallback.setAttribute('aria-label', fallback.title);
         } else {
             fallback.textContent = (item.file.name.split('.').pop() || '?').slice(0, 6).toUpperCase();
         }
         thumb.append(fallback);
-        if (!isPdfFile(item.file) && mayPreview(item.file.type) && item.file.size <= MAX_PREVIEW_SOURCE_BYTES && item.file.size > 0) {
+        if (!isPdfFile(item.file) && mayPreview(item.file)
+            && item.file.size <= MAX_PREVIEW_SOURCE_BYTES && item.file.size > 0) {
             const image = document.createElement('img');
             // Viewport admission belongs to the visible placeholder, not native lazy loading.
             // A hidden image has no intersection box and must still load its admitted PNG.
@@ -359,7 +369,8 @@ function renderQueue(state) {
         note.className = 'gallery-upload-queue-note';
         note.dataset.uploadPreviewNote = '';
         note.hidden = true;
-        if (!isPdfFile(item.file) && item.file.size > MAX_PREVIEW_SOURCE_BYTES && mayPreview(item.file.type)) {
+        if (!isPdfFile(item.file) && item.file.size > MAX_PREVIEW_SOURCE_BYTES
+            && mayPreview(item.file)) {
             note.textContent = label(view, 'largePreview');
             note.hidden = false;
         } else if (state.failedPreviews.has(item.id)) {

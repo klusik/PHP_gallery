@@ -33,6 +33,27 @@
  */
 
 return [
+    'music.title' => 'Musik',
+    'music.track' => 'Titel',
+    'music.order' => 'Reihenfolge',
+    'music.up' => 'Nach oben',
+    'music.down' => 'Nach unten',
+    'music.remove' => 'Entfernen',
+    'music.upload' => 'Musik hochladen',
+    'music.upload_help' => 'MP3, M4A, AAC, Ogg, Opus, WAV, FLAC oder WebM; bis 64 MiB je Datei. Browser-Codecs und PHP-Uploadgrenzen gelten.',
+    'music.default' => 'Musik in der Diashow dieser Galerie standardmäßig einschalten',
+    'music.save_default' => 'Musikvoreinstellung speichern',
+    'music.saved' => 'Musikwiedergabeliste gespeichert.',
+    'music.play_music' => 'Musik abspielen',
+    'music.previous' => 'Vorheriger Titel',
+    'music.next' => 'Nächster Titel',
+    'music.play' => 'Abspielen',
+    'music.stop' => 'Stopp',
+    'music.playback_error' => 'Dieser Titel konnte nicht abgespielt werden. Versuchen Sie Abspielen oder einen anderen Titel.',
+    'music.invalid_file' => 'Wählen Sie eine gültige MP3-, M4A-, AAC-, Ogg-, Opus-, WAV-, FLAC- oder WebM-Audiodatei bis 64 MiB.',
+    'music.failed' => 'Musik konnte nicht gespeichert oder geladen werden. Prüfen Sie Speicherrechte und PHP-Uploadgrenzen und öffnen Sie den Galerieeditor erneut.',
+    'music.conflict' => 'Die Wiedergabeliste wurde geändert. Öffnen Sie den Galerieeditor vor einem erneuten Versuch erneut.',
+    'music.quota' => 'Eine Galerie kann bis zu 100 Titel und 512 MiB Musik enthalten.',
     'lightbox.slideshow_photo_speed' => 'Geschwindigkeit des Bildwechsels',
     'lightbox.slideshow_transition_speed' => 'Übergangsgeschwindigkeit',
     'lightbox.slideshow_speed_fast' => 'Schnell',
@@ -1129,4 +1150,81 @@ return [
     'admin.updates.autoupdate_dry_run_button' => 'Testprüfung jetzt starten',
     'admin.updates.autoupdate_dry_run_hint' => 'Nur die Metadaten jetzt prüfen. Aktualisiert die Diagnose, installiert jedoch keine Dateien.',
     'admin.updates.autoupdate_settings_saved' => 'Einstellungen für automatische Updates wurden gespeichert.',
+    'music.duration' => 'Dauer',
+    'music.duration_unknown' => 'Dauer nicht verfügbar',
+    'music.playback' => 'Wiedergabe',
+    'music.queue_document' => 'Audio',
+    'music.upload_unknown' => 'Das Ergebnis des Musik-Uploads ist unbekannt. Prüfen Sie die Galerie vor einem erneuten Upload.',
+    'music.upload_files_label' => 'Fotos, PDFs und Musik',
+    'music.upload_files_help' => 'Wählen Sie Fotos, PDF-Dokumente und Audiodateien aus oder ziehen Sie diese hierher. Musik bleibt im Original und wird nicht in Fotos umgewandelt.',
+    'music.browser_required' => 'Musik im Foto-Upload benötigt den Browser-Workflow. Laden Sie die Seite neu und versuchen Sie es erneut.',
+    'music.download' => 'Titel herunterladen',
+    'music.allow_download' => 'Download dieses Titels erlauben',
+    'music.lock_download' => 'Download dieses Titels sperren',
+    'music.allow_all' => 'Download aller aktuellen Titel erlauben',
+    'music.lock_all' => 'Download aller aktuellen Titel sperren',
+
+    'admin.features.gallery_pdf_documents.label' =>
+        'PDF-Dokumente der Galerien',
+    'admin.features.gallery_pdf_documents.description' =>
+        'Galerie-PDFs einschließlich SimBrief-Originalen hochladen, '
+        . 'anzeigen und konvertieren. Deaktivieren erhält Dateien und '
+        . 'Einstellungen.',
+    'admin.features.gallery_music.label' =>
+        'Galeriemusik',
+    'admin.features.gallery_music.description' =>
+        'Musik für Galerien und Smart-Galerien hochladen und abspielen. '
+        . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
+        . 'Diashow-Einstellungen.',
+    'admin.upload.media_files_label' =>
+        'Dateien',
+    'admin.upload.media_files_help' =>
+        'Unterstützte Dateien auswählen oder ablegen. Der Dateidialog '
+        . 'zeigt aktivierte Galerie-Medientypen.',
+    'admin.storage.pdf_originals' =>
+        'PDF-Originale',
+    'admin.storage.pdf_originals_hint' =>
+        '{count} Galeriedokument(e), einschließlich SimBrief-PDFs.',
+    'admin.storage.music_originals' =>
+        'Musikoriginale',
+    'admin.storage.music_originals_hint' =>
+        '{count} gespeicherte Audiodatei(en), einschließlich '
+        . 'ausgeblendeter und nicht herunterladbarer Titel.',
+    'admin.storage.total_media' =>
+        'Gesamter Medienspeicher',
+    'admin.storage.total_media_hint' =>
+        'Bilder und ihre Ableitungen sowie PDF- und Musikoriginale.',
+    'admin.storage.attachment_warnings' =>
+        'Unvollständige Anhangsmessung',
+    'admin.storage.attachment_warnings_hint' =>
+        'Einige Originale oder Indizes waren nicht lesbar. Summen '
+        . 'enthalten nur gemessene Dateien.',
+    'admin.storage.description' =>
+        'Fotogrößen stammen aus der Datenbank. Alles aktualisieren misst '
+        . 'Ableitungen und indexierte PDF-/Musikoriginale.',
+    'admin.storage.no_snapshot_hint' =>
+        'Alles aktualisieren misst Fotos, Ableitungen und '
+        . 'PDF-/Musikoriginale und erstellt Diagramme.',
+    'admin.settings.item.feature_gallery_pdf_documents' =>
+        'PDF-Dokumente der Galerien',
+    'admin.settings.item.feature_gallery_pdf_documents.hint' =>
+        'Galerie-PDFs einschließlich SimBrief-Originalen hochladen, '
+        . 'anzeigen und konvertieren. Deaktivieren erhält Dateien und '
+        . 'Einstellungen.',
+    'admin.settings.item.feature_gallery_pdf_documents.example' =>
+        'ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist '
+        . 'umkehrbar.',
+    'admin.settings.item.feature_gallery_music' =>
+        'Galeriemusik',
+    'admin.settings.item.feature_gallery_music.hint' =>
+        'Musik für Galerien und Smart-Galerien hochladen und abspielen. '
+        . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
+        . 'Diashow-Einstellungen.',
+    'admin.settings.item.feature_gallery_music.example' =>
+        'ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist '
+        . 'umkehrbar.',
+    'admin.storage.progress_counts' =>
+        '{processed} / {total} Datensätze',
+    'admin.storage.tab_files_hint' =>
+        'Fotos, Ableitungen, PDF- und Musikoriginale',
 ];

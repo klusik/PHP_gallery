@@ -433,7 +433,8 @@ const editorSources = await Promise.all(editorSourcePaths.map(path =>
     readFile(new URL('../' + path, import.meta.url), 'utf8')));
 const [overviewSource, editorSource, documentsSource, apiSource, entrySource,
     editActionsSource, pdfPostSource, ofpPostSource] = editorSources;
-assert.match(overviewSource, /'id' => 'admin-edit-documents', 'label' => t\('pdf\.documents'/,
+assert.match(overviewSource,
+    /'id' => 'admin-edit-documents',\s*'label' => t\('pdf\.documents'/,
     'A dedicated, already localized Documents / PDFs tab must exist.');
 assert.match(entrySource, /require_once __DIR__ \. '\/admin_galleries_edit_page\/tab_documents\.php'/,
     'The gallery editor must load the Documents tab controller.');

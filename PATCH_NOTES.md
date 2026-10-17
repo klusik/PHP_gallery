@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 0.135
+
+Added configurable gallery PDF and music features, playlist playback across galleries and slideshows, and PDF/music accounting in Admin storage statistics. Updated the Windows uploader’s update indicators and source version to 0.4.1, and expanded related tests and documentation.
+
+### Highlights
+
+#### Gallery music and PDF documents
+- Added music playlists with ordered tracks, track visibility and download permissions, per-gallery slideshow defaults, and playback controls across gallery pages, photo viewers, and slideshows. Slideshow music remained off by default.
+- Added Smart Gallery playback of visible tracks from accessible source galleries, deduplicating identical audio files without copying them into Smart Galleries.
+- Added independent Gallery music and Gallery PDF documents feature switches. Both defaulted on when no preference was saved; disabling either retained its files and settings while hiding its UI and blocking related routes and actions.
+- Added compact PDF and music panels, duration display, and browser uploads for supported audio files. New tracks were visible and download-locked by default. [#250](https://github.com/klusik/PHP_gallery/issues/250)
+
+#### Windows uploader updates
+- Set the Windows uploader source version to `0.4.1`.
+- Kept verified update offers visible in the app and tray, restored valid cached offers, retained offers after failed checks or deferred shutdown, and cleared them after a successful no-offer check or confirmed shutdown. [#120](https://github.com/klusik/PHP_gallery/issues/120)
+
+### Technical Details
+
+#### Backend
+- Added gallery music controller, service, model, and view support for playlist management, uploads, access checks, and protected audio delivery with byte-range responses.
+- Added bounded music storage and playlist metadata in the hidden `.gallery-music/` sidecar. Photo ZIP exports and gallery transfer packages omitted music; backups needed to include the sidecar.
+- Extended Admin storage statistics to measure indexed PDF and music originals, including hidden or download-locked tracks, and to report incomplete measurements.
+- Updated browser upload handling for audio files and denied direct browser access to `.bin` files in `galleries/`.
+
+#### Database
+- Added no SQL tables or columns and no database migration.
+
+#### Frontend
+- Added shared audio playback controls, playlist navigation, slideshow integration, and compact PDF/music attachment panels.
+- Added audio upload handling and updated gallery and Admin interfaces and translations.
+- Updated Windows uploader app and tray update notices and indicators.
+
+#### Tests and documentation
+- Added music service, upload, browser playback, protected-delivery, Smart Gallery, and storage-accounting regression coverage.
+- Updated workflow coverage and the portable Windows test job to install Pillow for the tray-badge visual fixture.
+- Updated the architecture, database, testing, feature, compatibility, and manual documentation.
+
+### User Impact
+
+#### For visitors
+- Visitors could play gallery music and, where permitted, download tracks. Public PDF and music presentation and actions followed their independently configured feature switches.
+
+#### For administrators
+- Administrators could manage playlists, uploads, track ordering, visibility, download permissions, and slideshow defaults. Storage statistics included PDF and music originals, with warnings when files or indexes could not be fully measured. Disabling a feature preserved its existing files and settings.
+
+#### For maintainers
+- Maintainers gained expanded regression coverage and updated operating and compatibility documentation. The release changed the Windows uploader source target but did not build or publish an installer.
+
 ## Version 0.134
 
 Redesigned the Windows uploader around a Watcher-first workflow, added opt-in MSFS UTC synchronization, and prepared the uploader for version 0.4.0. Updated runtime checks, authoring guidance, release records, and documentation alongside the changes.

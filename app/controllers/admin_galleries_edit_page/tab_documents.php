@@ -44,14 +44,20 @@ use function Gallery\Views\view_render_admin_simbrief_legacy_panel;
  * multipart forms and JavaScript delegates. They must not be nested inside the
  * editor's shared settings form or displayed with the upload API configuration.
  *
- * @param array<string, mixed> $gallery Authorized gallery row being edited.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical gallery identity and attachment storage path.
  * @param string $activeEditTab Currently selected editor tab.
- * @return void Emits the Documents / PDFs tab and its existing action controls.
+ * @return void Emit the media tab when either capability is available;
+ *     both OFF omit its empty panel entirely.
  */
 function admin_edit_gallery_render_documents_tab(array $gallery, string $activeEditTab): void
 {
+    if (!feature_capability_effective_enabled('gallery_pdf_documents')
+        && !feature_capability_effective_enabled('gallery_music')) {
+        return;
+    }
     ob_start();
     echo admin_gallery_pdf_documents_html($gallery);
+    echo admin_gallery_music_html($gallery);
     echo admin_edit_gallery_simbrief_legacy_panel_html($gallery);
     render_admin_tab_panel('admin-edit-documents', (string) ob_get_clean(), $activeEditTab === 'admin-edit-documents');
 }
@@ -62,12 +68,13 @@ function admin_edit_gallery_render_documents_tab(array $gallery, string $activeE
  * This is also used after an AJAX upload to replace only its own card in a
  * dynamically mounted side panel, without submitting gallery settings.
  *
- * @param array<string,mixed> $gallery Authorized persisted physical gallery.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
  * @return string Complete document-action card, or empty when disabled.
  */
 function admin_edit_gallery_simbrief_legacy_panel_html(array $gallery): string
 {
-    if (!feature_capability_effective_enabled('simbrief')) {
+    if (!feature_capability_effective_enabled('simbrief')
+        || !feature_capability_effective_enabled('gallery_pdf_documents')) {
         return '';
     }
     require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';

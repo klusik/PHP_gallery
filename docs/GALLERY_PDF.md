@@ -1,5 +1,18 @@
 # General gallery PDF documents
 
+**Admin → Features → Gallery PDF documents** controls original PDF uploads,
+document tables/viewers/downloads and browser PDF conversion independently of
+music. New installations and upgrades without a preference default ON; explicit
+OFF persists. OFF rejects stale editor forms, historical OFP uploads/conversion
+actions and prepared PDF-page batches before target work. Dedicated and legacy
+delivery links are denied. Existing originals, indexes, conversion markers and
+preferences remain stored. Existing indexed page photographs retain their normal
+photo behavior, and incomplete-child publication guards remain enforced.
+SimBrief descriptions/routes can still refresh with PDF OFF; no PDF is fetched,
+and an old original's manifest reference remains available on re-enable.
+When both PDF and music are OFF, the shared editor media tab and its empty panel
+are omitted. An old selected-tab URL falls back to Identity.
+
 In **Admin → Edit gallery**, the **Documents / PDFs** tab owns manual PDF
 upload, the attached-document table, browser PDF-to-PNG conversion, and any
 historical SimBrief OFP PDF/dispatch panel. These forms are independent of the
@@ -11,19 +24,27 @@ The gallery presents documents in a compact table with title, original byte size
 actual PDF page count and text-sized icons. The title and eye icon open the same
 protected viewer; the download icon retains the original filename. PDF.js reads
 page-count metadata sequentially without rasterizing pages. Unknown or unreadable
-counts remain an em dash. When a description exists, only that description and
-the PDF table share a desktop row (text left, documents right). With no description
-the table is left-aligned; narrow screens stack the two blocks. Tags, breadcrumbs,
+counts remain an em dash. PDF and music launchers share one compact column
+beside the description on desktop, or below it on narrow screens. Without a
+description they stay left-aligned. Clicking a launcher reveals a small overlay;
+the list body has a 12rem maximum height and scrolls independently. Its count
+reflects authorized documents, and the panel fits the visual viewport. Tags, breadcrumbs,
 dates and other gallery controls retain their existing placement.
 The text/document row spans the panel's inner width below the title/actions row.
 The document table aligns against its right padding, all action icons remain on
 one line, and long titles use an ellipsis with the complete title in a tooltip.
-The normal collapsed state has one compact row per PDF; expanded conversion
-controls remain available below the selected document. Very narrow screens allow
+The normal collapsed state shows only the launcher and document count. The open
+list has one compact row per PDF; expanded conversion controls remain below the
+selected document inside that scroll area. Very narrow screens allow
 horizontal scrolling within the document area rather than stacking action icons.
 Expanded controls use a fixed-layout table inside a bounded document column, so
 their descriptions and selects cannot increase the column's intrinsic width and
-compress or overlap the gallery description.
+compress or overlap the gallery description. Escape, the close icon, the launcher
+or an outside click dismisses the overlay. Native details retains the bounded
+inline list without JavaScript/Popover API; reduced motion disables animation.
+Forms stay inside their original gallery ownership. In-place card replacement
+retains the open applet and list scroll; deleting the last PDF preserves any
+music applet. See `docs/GALLERY_MUSIC.md` for the shared disclosure owner.
 
 When a child target is missing, changed away from private before completion, or
 its reserved path belongs to unrelated data, the browser offers explicit
@@ -169,3 +190,35 @@ The service and browser lifecycle have focused regression fixtures in the
 repository. Hosted candidate qualification is authoritative. Real-device browser
 qualification and deployment-specific authorization checks remain separate
 acceptance steps; documentation or a fixture pass alone does not establish them.
+
+## Admin storage accounting
+
+**Storage statistics → Files → Update all** measures PDF and music originals
+alongside indexed photographs, thumbnails and DNG display masters. It shows
+separate original counts/bytes and an additive overall media total. The existing
+picture-only total and photograph charts keep their prior meanings.
+
+After bounded photo-derivative work, an independent gallery keyset observes at
+most two physical galleries per request. Galleries without images are included.
+The attachment owner reads the existing bounded indexes and stats only their
+expected opaque-ID originals plus a valid established SimBrief OFP path; it does
+not decode or hash complete payloads. Actual confined sizes count even when a
+size mismatch generates a warning. Hidden, private, locked and globally disabled
+attachments consume storage and are counted. Separate copies count separately;
+Smart Gallery unions never add copies. Generated PDF pages are already ordinary
+indexed photos and are not counted again as attachments.
+
+These are media totals, not an account quota or a recursive full-disk inventory.
+Index/manifest JSON, locks, conversion state, unindexed originals, staging/backup
+files, Trash and unrelated caches are excluded. Missing/unreadable originals,
+unsafe symlinks and corrupt indexes contribute explicit partial-accounting
+warnings; independent readable categories still count and no files are repaired.
+Size accounting is not content-integrity or codec validation.
+
+Ordinary Admin page loads only read cached results. Supported web attachment
+mutations update an advisory revision to mark old snapshots and active jobs
+stale. A failed optional revision write preserves the successful upload response;
+manual Update all still remeasures files. Out-of-band changes require that manual
+refresh. Photo-only snapshots/jobs from older installations are not reused for
+the new coverage; the first new snapshot requires Update all. No media rewrite
+or schema migration is involved.

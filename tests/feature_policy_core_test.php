@@ -114,6 +114,8 @@ namespace {
         'image_voting',
         'picture_game',
         'smart_galleries',
+        'gallery_pdf_documents',
+        'gallery_music',
         'downloads',
         'thumbnail_warmup',
         'multilingual_content',
@@ -145,10 +147,35 @@ namespace {
 
     feature_policy_core_assert(array_keys($definitions) === $expectedKeys, 'Canonical feature policy changed the expected set or order of Admin feature switches.');
     feature_policy_core_assert(feature_capability_validate_registry() === [], 'The canonical capability registry must validate without errors.');
+    foreach (['gallery_pdf_documents', 'gallery_music'] as $capability) {
+        feature_policy_core_assert(
+            feature_capability_effective_enabled($capability)
+                && $definitions[$capability]['default_enabled'] === true
+                && $definitions[$capability]['fresh_default_enabled'] === true
+                && $definitions[$capability]['data_disable_policy'] === 'preserve',
+            'Attachment capabilities must default ON without deleting data.'
+        );
+        set_feature_capability_enabled($capability, false);
+    }
+    feature_policy_core_assert(!feature_flag_route_enabled('gallery_ofp_pdf')
+        && !feature_flag_route_enabled('gallery_music'),
+        'Each disabled attachment route must be guarded.');
     feature_policy_core_assert(feature_capability_effective_enabled('automatic_cache_cleanup')
         && ($definitions['automatic_cache_cleanup']['fresh_default_enabled'] ?? null) === true, 'Automatic cache must default ON for installation and upgrade fallback.');
     set_feature_capability_enabled('automatic_cache_cleanup', false);
     \Gallery\Services\feature_capability_seed_fresh_install_defaults();
+    foreach (['gallery_pdf_documents', 'gallery_music'] as $capability) {
+        feature_policy_core_assert(
+            !feature_capability_effective_enabled($capability),
+            'Fresh seeding must preserve explicit attachment OFF.'
+        );
+        set_feature_capability_enabled($capability, true);
+    }
+    set_feature_capability_enabled('gallery_music', false);
+    feature_policy_core_assert(feature_flag_route_enabled('gallery_ofp_pdf')
+        && !feature_flag_route_enabled('gallery_music'),
+        'PDF availability must remain independent of music OFF.');
+    set_feature_capability_enabled('gallery_music', true);
     feature_policy_core_assert(!feature_capability_effective_enabled('automatic_cache_cleanup'), 'Fresh-default replay overwrote explicit automatic cache OFF.');
     set_feature_capability_enabled('automatic_cache_cleanup', true);
     feature_policy_core_assert(($definitions['picture_game']['dependencies'] ?? []) === ['image_voting'], 'Picture Game must canonically depend on Image Voting.');

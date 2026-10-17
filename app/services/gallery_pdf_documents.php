@@ -10,6 +10,7 @@
  *   - Validate gallery confinement, PDF bytes and document metadata
  *   - Serialize and atomically publish gallery-scoped attachment operations
  *   - Keep general PDF documents separate from SimBrief OFP manifests
+ *   - Measure confined PDF/music originals for explicit Admin storage jobs
  * Author: Rudolf Klusal
  * Contact: https://github.com/klusik
  * License: MIT License (see LICENSE file in repository)
@@ -21,6 +22,93 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use RuntimeException;
+
+/**
+ * Measure indexed attachment originals without decoding or hashing payloads.
+ *
+ * Storage accounting is independent of visibility, download permission and
+ * feature state. Each physical copy consumes bytes; a Smart playlist consumes
+ * none. Invalid indexes remain untouched and contribute a warning, while other
+ * independent categories are still measured. Unindexed staging/backup files
+ * and sidecar metadata are intentionally outside these original-media totals.
+ *
+ * @param array{id:int,folder_path:string} $gallery Registered physical gallery.
+ * @return array{pdf_count:int,pdf_bytes:int,music_count:int,music_bytes:int,
+ *     errors:int} Known confined originals and partial-accounting warnings.
+ */
+function gallery_attachment_storage_summary(array $gallery): array
+{
+    $summary = ['pdf_count' => 0, 'pdf_bytes' => 0,
+        'music_count' => 0, 'music_bytes' => 0, 'errors' => 0];
+    $root = gallery_pdf_documents_gallery_directory($gallery);
+    if ($root === null) {
+        $summary['errors']++;
+        return $summary;
+    }
+    foreach (['pdf', 'music'] as $kind) {
+        try {
+            $entries = $kind === 'pdf'
+                ? gallery_pdf_documents_read_index($root)
+                : \Gallery\Models\gallery_music_model_read(
+                    $root . '/.gallery-music'
+                )['tracks'];
+        } catch (RuntimeException) {
+            $summary['errors']++;
+            continue;
+        }
+        foreach ($entries as $entry) {
+            $relative = $kind === 'pdf'
+                ? '/.gallery-pdf-documents/' . $entry['id'] . '.pdf'
+                : '/.gallery-music/' . $entry['id'] . '.bin';
+            $bytes = gallery_attachment_storage_file_size($root, $relative);
+            if ($bytes === null) {
+                $summary['errors']++;
+                continue;
+            }
+            if ($bytes !== $entry['size']) $summary['errors']++;
+            $summary[$kind . '_count']++;
+            $summary[$kind . '_bytes'] += $bytes;
+        }
+    }
+    $ofp = simbrief_ofp_local_pdf_path($gallery);
+    if ($ofp !== null) {
+        $bytes = gallery_attachment_storage_file_size(
+            $root, '/simbrief-ofp.pdf'
+        );
+        if ($bytes === null) {
+            $summary['errors']++;
+        } else {
+            $summary['pdf_count']++;
+            $summary['pdf_bytes'] += $bytes;
+        }
+    } elseif (file_exists($root . '/simbrief-ofp.pdf')
+        || is_link($root . '/simbrief-ofp.pdf')) {
+        $summary['errors']++;
+    }
+    return $summary;
+}
+
+/**
+ * Stat one expected original while refusing symlinks and escaped paths.
+ * @param string $root Canonical confined physical gallery directory.
+ * @param string $relative Fixed sidecar path built from a validated opaque ID.
+ * @return int|null Actual bytes, including zero, or null for an unsafe/missing
+ *     or unreadable original. This is accounting, not media integrity proof.
+ */
+function gallery_attachment_storage_file_size(
+    string $root,
+    string $relative
+): ?int {
+    $candidate = $root . $relative;
+    $resolved = realpath($candidate);
+    if ($resolved === false || is_link($candidate)
+        || is_link(dirname($candidate)) || !is_file($resolved)
+        || !\Gallery\Core\path_inside($root, $resolved)) {
+        return null;
+    }
+    $bytes = @filesize($resolved);
+    return $bytes === false ? null : max(0, $bytes);
+}
 
 /**
  * Maximum size accepted for one general gallery PDF document.

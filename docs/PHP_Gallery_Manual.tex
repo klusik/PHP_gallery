@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.134}
+\newcommand{\version}{0.135}
 \newcommand{\manualdate}{17 October 2026}
 
 \hypersetup{
@@ -491,10 +491,28 @@ The~ordinary work areas are~\ui{Identity}, \ui{API}, \ui{Access}, \ui{Display}, 
 
 \ui{Identity} keeps title, description, date, source language, SimBrief, and~tags readily available. Its Advanced section includes slug, folder, parent, sort order, and~AI gallery text when enabled. \ui{API} displays a~copyable upload endpoint, the~key label/action, and~a~newly generated key only once; existing keys appear only when there are~any. AI metadata regeneration, migration, and~the~global API manager live under \ui{Advanced API tools}. \ui{Access} groups visibility, password, share-link controls, and~the~NSFW checkbox, with longer policy explanations under question marks. \ui{Display} starts with the~grid and~common voting/filename switches; EXIF/GPS, gallery-card format, count badge, lightbox mode, Picture Game, thumbnail bounds are~under \ui{Advanced display settings}; flight-route text is~available beside SimBrief under \ui{Identity}.
 
+In~\ui{Admin > Features}, \ui{Gallery PDF documents} and~\ui{Gallery music}
+are~independent switches. Both default ON for~new installations and~upgrades
+without a~saved choice; an~explicit OFF remains saved. OFF hides the~matching
+tables/players and~prevents uploads, delivery and~PDF conversion, including
+stale forms. Files, playlists and~preferences remain stored for~re-enabling.
+With both OFF, the~editor omits its~media tab; old tab URLs select Identity.
+Existing converted page photographs keep their normal access rules. SimBrief
+can~still refresh descriptions/routes with PDF OFF and~keeps an~old original.
+
 \subsubsection{Attach and~convert a~PDF document}
 Expanded conversion controls keep the document column bounded. If the previous target is missing or changed, confirm a new private result; earlier files and galleries are preserved.
 
-The gallery shows PDFs in a compact table with size, page count and small action icons. Click a title or the eye to view it. With a description, text appears on the left and documents on the right; without text the table stays left-aligned. Administrators can expand conversion settings, hide or show a PDF, and confirm deletion. Hidden documents are denied to visitors even through direct links; generated photos remain after deletion.
+PDF and~Music launchers show file counts beside the~description,
+or~below it~on~narrow screens. Click a~launcher to~open a~small overlay.
+Its~list has~a~maximum height of~12rem and~scrolls independently. PDF rows
+retain size, page count and~small action icons; a~title or~eye opens
+the~protected viewer. Administrators can~expand conversion, hide/show
+and~confirm deletion. Hidden PDFs remain denied through direct links;
+generated photos remain after deletion. Escape, the~close icon, launcher
+or~an~outside click dismisses the~applet. Native details keeps a~bounded
+inline list without JavaScript or~Popover support. Reduced motion disables
+disclosure animation. In-place replacement retains the~open list and~scroll.
 
 The~existing-gallery Upload photos chooser and~drop queue also accept PDFs. By~default, an~upload attaches only the~original document; it~does not~create a~subgallery or~PNG pages. To~convert during upload, open \ui{Advanced} and~explicitly check \ui{Also convert PDF pages to~PNG}, then select a~private child gallery or~append pages and~choose the~DPI. Opening Advanced alone does not~enable conversion. Mixed selections upload photos first, then attach PDFs and~perform only the~selected conversions. The~panel stays open with progress and~cancellation controls. Retries retain the~original conversion choice; for~an~enabled conversion, unchanged inputs automatically recreate a~missing empty child only when no~page was acknowledged.
 
@@ -505,6 +523,70 @@ An~administrator can~attach a~general PDF to~a~physical gallery even when it~has
 Choose \ui{Convert PDF pages} to~render the~document in~the~browser. PDF.js creates PNG pages sequentially and~the~existing upload process reports progress, acknowledges batches, resumes interrupted work and~can~be cancelled. New conversions use 150~DPI by~default; choose 96, 150, 200, 300, 600, 1200 or~2400~DPI. There is~no~page-count limit. A~page above the~conservative 16,384-pixel edge or~32-million-pixel advisory threshold shows a~warning but does not block rendering or~silently downscale the~page. Its memory estimate covers only the~canvas RGBA buffer at four bytes per pixel, not total browser memory. Actual browser canvas allocation and~upload limits can still make rendering or~upload fail.
 
 Choose either a~reserved private child gallery or~append after the~source gallery's last photograph. A~child stays private until you~change its visibility explicitly; publication is blocked while its PDF conversion is incomplete or~cancelled, so finish or~safely reconcile the conversion first. Appending keeps the~source gallery's visibility and~existing photographs, then places converted pages at~the~end. Conversion never replaces the~original PDF. Progress markers live in~the~source gallery's hidden conversion sidecar for~both destinations and~record the~target gallery ID. Photo ZIP exports and~gallery migration do~not~transfer these general PDF originals. A~full filesystem backup must include hidden sidecar folders. Existing JPG page galleries remain separate. The~former server-side OFP conversion request now returns HTTP 409 and~directs you~to~reload; its rasterizer helper is~for~CLI and~test compatibility only and~is~not~called by~browser actions. See \codeword{docs/GALLERY\_PDF.md} for~the~storage and~conversion contract.
+
+\subsubsection{Music storage}
+
+Use \ui{Upload photos} to~select or~drop photographs, PDFs and~music together.
+Audio remains an~original and~never enters image conversion. Audio-only uploads
+also work with image preparation off. The~gallery editor's \ui{Documents /
+PDFs} tab retains a~separate \ui{Music} table for~upload, ordering, removal
+and~the~saved slideshow default. Actions stay in~the~panel. MP3, M4A, AAC,
+Ogg/Opus, WAV, FLAC and~WebM are~accepted; browser codecs determine
+playability. Gallery visibility, password, sharing and~NSFW rules apply.
+
+The~table shows each track's duration and~one Play/Stop icon before
+its~title. The~same icon changes with playback; there is~no~Pause action
+or~separate playback column. Long titles use an~ellipsis and~full tooltip;
+only the~playing title scrolls horizontally. Reduced motion retains static
+text. Closing the~list keeps music running and~the~existing miniplayer
+visible. Compact
+Previous/Play/Stop/Next icons are~available on~the~page and~in~the~photo viewer
+whenever audio exists. One shared player prevents overlapping music between
+rows, editor and~slideshow. The~whole playlist repeats and~navigation wraps.
+Automatic slideshow music is~initially off; an~administrator can~enable
+it~for~this gallery. An~enabled slideshow replaces other music and~starts
+at~the~first track. Stopping or~closing the~viewer releases its music;
+independently requested table playback can~continue. Photo and~speed changes
+leave music running. Browser refusal permits an~explicit Play retry;
+a~completely unplayable playlist stops after one pass.
+
+Smart Galleries merge visible music from~all~accessible physical sources
+contributing matching photos. Pagination and~temporary source filters do~not
+narrow this union; no~Smart audio folder is~created. SHA-256 deduplicates
+identical original bytes even after renaming. Equal names or~durations alone
+never remove different audio; changed encodings or~embedded tags need future
+fingerprinting. Hidden tracks are~excluded, while visible download-locked
+tracks remain playable. Existing and~new tracks default visible. Protected
+source URLs recheck access and~visibility. In~the~Smart editor's presentation
+overrides, enable its~independent slideshow music preference; it~starts off
+and~does not~inherit source autoplay settings.
+
+Each uploaded track initially forbids downloads. Small administrator icons
+beside each track allow or~lock its download; the~header icon changes all
+current tracks. Later uploads still start locked. Public download icons appear
+only for~allowed tracks, and~the~endpoint rechecks permission and~gallery
+access. Playback delivers audio bytes to~the~browser, so this setting cannot
+prevent a~technically capable visitor from capturing those bytes.
+
+Durations use a~silent browser metadata reader, one visible row at~a~time, with
+a~ten-second deadline. Unknown durations show a~dash. Browsers without
+visibility observation use the~same serialized reader for~connected rows. No
+server decoding occurs. Upload retries preserve acknowledged photos, PDFs
+and~audio; an~unknown audio response requires checking the~gallery before
+submitting again.
+
+Originals and~their ordered JSON index use the~hidden
+\filepath{.gallery-music/} folder. The~index stores names, MIME types, sizes,
+SHA-256 digests, revision, slideshow default and~individual download
+permissions. Older records without permission remain locked. Limits are~64~MiB
+per~file, 100 tracks and~512~MiB per~gallery; lower PHP limits apply. Backups
+must include hidden folders. Photo ZIP exports and~gallery transfers omit
+music. See \filepath{docs/GALLERY_MUSIC.md}.
+
+For~a~development checkout, use the~hosted prepared candidate after changing
+routes. PDF and~audio share the~existing attachment runtime owner; source with
+an~older generated route plan may~refuse requests until the~prepared plan
+is~loaded. Local generation does not~replace hosted qualification.
 
 \subsection{Edit identity and~context}
 \index{gallery metadata}
@@ -700,6 +782,22 @@ sharp, and~input and~table surfaces stay solid and~high-contrast. It~uses no~who
 opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
 surfaces remain, and~native controls and~source-mode operation, including
 \texttt{--once}, stay supported.
+
+\subsection{Update notice and~indicators}
+
+The~app checks for~uploader releases at~startup and~at~most once an~hour;
+\ui{Check for updates} requests a~manual check. A~validated offer appears as~a
+version banner and~marked update control in~the~main header on~every screen.
+\ui{Later} hides the~notice but~leaves both indicators available to~reopen it.
+When tray support is~available, its~icon shows a~red update badge, its~tooltip
+identifies the~offered version, and~the~first menu action names that version
+and~opens the~same notice. Without tray support, the~in-app indicators remain
+available. The~app does~not~set a~Windows taskbar overlay or~show
+operating-system toast notifications.
+
+A~failed network recheck preserves the~validated cached offer across restart;
+the~offer is~validated again before it~is~restored. A~successful check with
+no~current offer clears the~banner, header mark, and~tray badge.
 
 \subsection{Windows simulator location}
 
@@ -1017,7 +1115,12 @@ Vertical cards place the~photograph above the~description; horizontal cards plac
 
 Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
 
-The~independent uploader remains at~0.3.2. Maintainers obtain its installer and~matching generated \filepath{winapp-update.json} together under \filepath{winapp/dist/0.3.2/}. Both belong to~the~same hosted release. This build check does not~replace installed-Windows or~simulator acceptance.
+The~independent uploader source targets 0.4.1. A~separately requested installer
+build will place the~installer and~matching generated
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.4.1/}. The~installer
+and~metadata belong to~the~same hosted release. This build check does~not~replace
+acceptance testing of~the~installed Windows app or~the~simulator. Existing
+version folders, including 0.4.0, remain preserved.
 
 \subsection{Admin workspace}
 
@@ -2076,6 +2179,20 @@ Admin routes and~machine endpoints such as~setup, WebDAV, upload automation, gal
 Database inspection inventories schema objects, references, ownership categories, retention policy, and~cleanup confidence. Logical cleanup uses allow-listed rules with deterministic selection, limited batches, and~audit records. Schema repair provides a~dry-run and~idempotent migration path. \codeword{ANALYZE TABLE} can~refresh optimizer statistics for~selected tables. Physical \codeword{OPTIMIZE TABLE} is~available only as~a~preview followed by~separately confirmed selected-table operation; it~is~never an~automatic cleanup step.\footnote{Storage-engine allocation values such as~data-free estimates describe engine state and~do~not~guarantee a~precise number of~filesystem bytes returned after optimization.}
 
 \subsection{Storage statistics and~Complete report}
+
+The~Files view also shows counts and~bytes for~PDF and~music originals,
+plus an~overall media total. Update all follows photo batches with at~most
+two physical galleries per~step, including galleries without photos. Hidden,
+private and~disabled files and~tracks with downloads denied still consume
+storage. Separate physical copies count separately; Smart playlists add no~copy.
+Generated PDF pages already count as~photographs. Indexes, locks, conversion
+state, unindexed files, Trash and~other caches are~outside these media totals.
+Unreadable indexes or~unsafe/missing files produce partial-accounting warnings
+without repair. Passive pages read cached results; attachment mutations mark
+them stale when the~advisory revision write succeeds. After upgrading from
+photo-only snapshots, run Update all to~obtain the~new measurement. External
+filesystem changes also require this explicit refresh.
+
 \index{storage statistics}
 \index{Complete report}
 \index{gallery report}
@@ -2509,6 +2626,11 @@ for~compatibility, while authored Python docstrings use one consistent format.
 GitHub Actions runs the~source preflight before hosted preparation. Coding agents follow CI-first: identify the~current authorized working branch and~HEAD, verify branch-scoped push access, finish source/tests/documentation, commit and~push that exact branch. Never directly mutate \codeword{develop} or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits, generators and~test loops are~exceptional diagnostics, not~routine handoff gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main}; releases retain the~previous stable tag. Red or~slow CI does~not~justify local-only qualification.
 
 Hosted qualification covers PHP/Node/WinApp tests, source contracts, required Chromium, real MySQL/MariaDB workflows, PHP compatibility and~Linux/Windows/macOS package checks. Every mandatory job and~the~exact-SHA gate must pass. The~release workflow compiles all~four PDF manuals once after the~final source edits, not~during routine development.
+
+The~hosted portable WinApp job installs the~existing Pillow requirement into
+the~Python interpreter selected for~the~audit, so~tray-badge pixel coverage
+runs instead of skipping. Local runs without Pillow may~still skip this
+optional visual fixture; the~headless hosted job does~not~install pystray.
 
 The~title-picture regression extends the~already registered Admin side-panel delegation and~browser lifecycle suites, plus the~existing gallery edit concurrency HTTP/database suite. These fixtures remain under \filepath{scripts/audit.php}; they add no~YAML test owner or~alternate runner, and~the~protected evaluator registry is~unchanged.
 

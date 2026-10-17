@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.134}
+\newcommand{\version}{0.135}
 \newcommand{\manualdate}{17.~října~2026}
 
 \hypersetup{
@@ -488,10 +488,28 @@ Běžné pracovní oblasti jsou \ui{Identita}, \ui{API}, \ui{Přístup}, \ui{Zob
 
 \ui{Identita} ponechává snadno dostupný název, popis, datum, zdrojový jazyk, SimBrief a~štítky. Její pokročilý oddíl obsahuje identifikátor v~URL, složku, nadřazenou galerii, pořadí a~text galerie od AI, je-li povolen. \ui{API} zobrazuje kopírovatelný koncový bod nahrávání, označení a~akci klíče a~nově vygenerovaný klíč pouze jednou; existující klíče se zobrazují, jen pokud nějaké jsou. Obnova metadat pomocí AI, migrace a~globální správce API jsou pod \ui{Pokročilé nástroje API}. \ui{Přístup} seskupuje viditelnost, heslo, ovládání odkazu pro sdílení a~zaškrtávací pole NSFW; delší vysvětlení pravidel jsou pod otazníky. \ui{Zobrazení} začíná mřížkou a~běžnými přepínači hlasování a~názvů souborů; EXIF/GPS, formát karty galerie, odznak počtu, režim lightboxu, hra s~fotografiemi, meze náhledů jsou pod \ui{Pokročilá nastavení zobrazení}; text letové trasy je dostupný vedle SimBrief v~oddílu \ui{Identita}.
 
+V~\ui{Administrace > Funkce} jsou \ui{PDF dokumenty galerií} a~\ui{Hudba
+galerií} nezávislé přepínače. Nové i~aktualizované instalace bez uložené volby
+mají oba zapnuté; výslovné vypnutí zůstane uložené. Vypnutí skryje příslušné
+tabulky či~přehrávače a~zakáže nahrávání, přístup k~souborům i~převod PDF,
+včetně starých otevřených formulářů. Soubory, playlisty a~předvolby zůstanou
+pro opětovné zapnutí. Při vypnutí obou funkcí zmizí také záložka médií;
+starý odkaz vybere Identitu. Vytvořené fotografie stránek zachovají přístupová
+pravidla. SimBrief může dál aktualizovat popis a~trasu a~zachová staré PDF.
+
 \subsubsection{Připojení a~převod dokumentu PDF}
 Rozbalení převodu nezvětší sloupec dokumentů. Pokud předchozí cíl chybí nebo byl změněn, potvrďte nový soukromý výsledek; dřívější soubory a galerie zůstanou zachovány.
 
-Galerie zobrazuje PDF v úsporné tabulce s velikostí, počtem stránek a malými ikonami akcí. Název i oko otevřou prohlížeč. Je-li vyplněn popis, text je vlevo a dokumenty vpravo; bez textu je tabulka vlevo. Admin může rozbalit převod, skrýt či znovu zobrazit PDF a potvrdit jeho smazání. Skryté dokumenty nejsou návštěvníkům dostupné ani přímým odkazem; vygenerované fotografie po smazání zůstávají.
+Spouštěče PDF a~Hudba ukazují počty souborů vedle popisu, na~úzké
+obrazovce pod ním. Kliknutí otevře malý překryvný panel. Seznam má
+maximální výšku 12rem a~samostatně se~posouvá. Řádky PDF zachovávají
+velikost, počet stran a~drobné ikonky; název či~oko otevře chráněný
+prohlížeč. Admin rozbalí převod, skryje či~zobrazí dokument nebo potvrdí
+smazání. Skryté PDF zůstává nepřístupné i~přímým odkazem; vytvořené
+fotografie zůstávají. Escape, křížek, spouštěč či~kliknutí mimo panel
+jej zavře. Bez JavaScriptu nebo podpory Popover se~otevře omezený seznam
+přímo na~stránce. Omezení pohybu vypne animaci. Výměna obsahu po~akci
+zachová otevřený seznam a~jeho posun.
 
 Výběr souborů i~přetažení v~panelu Nahrát fotografie do~existující galerie přijímá také PDF. Ve~výchozím stavu se~připojí pouze originální dokument; nevzniká podgalerie ani stránky PNG. Pro~převod při nahrání rozbalte \ui{Pokročilé} a~výslovně zaškrtněte \ui{Také převést stránky PDF na~PNG}, pak zvolte soukromou podgalerii nebo připojení stránek na~konec a~DPI. Samotné rozbalení převod nezapne. Smíšený výběr nahraje nejprve fotografie, potom připojí PDF a~provede pouze zvolené převody. Panel zůstává otevřený s~průběhem a~možností zrušení. Opakování zachová původní volbu převodu; při zapnutém převodu se~stejnými vstupy obnoví chybějící prázdnou podgalerii pouze tehdy, když nebyla potvrzena žádná stránka.
 
@@ -502,6 +520,69 @@ Správce může k~fyzické galerii připojit obecný dokument PDF i~bez údajů 
 Volba \ui{Převést stránky PDF} vykreslí dokument v~prohlížeči. PDF.js vytváří stránky PNG postupně a~stávající proces nahrávání zobrazuje průběh, potvrzuje dávky, umožňuje navázat na~přerušenou práci a~lze jej zrušit. Nový převod používá výchozí rozlišení 150~DPI; lze zvolit 96, 150, 200, 300, 600, 1200 nebo 2400~DPI. Počet stránek není omezen. Stránka nad orientační hranicí 16\,384 pixelů na~straně nebo 32 milionů pixelů zobrazí upozornění, které vykreslení nezablokuje ani stránku potichu nezmenší. Odhad paměti zahrnuje pouze plátno RGBA při čtyřech bajtech na~pixel, nikoli celkovou spotřebu prohlížeče. Skutečné limity plátna prohlížeče a~nahrávání přesto mohou vykreslení nebo nahrání znemožnit.
 
 Zvolte vyhrazenou soukromou podřízenou galerii nebo připojení stránek za~poslední fotografii zdrojové galerie. Podřízená galerie zůstává soukromá, dokud výslovně nezměníte její viditelnost; dokud je převod PDF nedokončený nebo zrušený, nelze ji zveřejnit, proto převod nejprve dokončete nebo bezpečně uveďte do souladu. Připojení zachová viditelnost zdrojové galerie i~stávající fotografie a~vloží převedené stránky na~konec. Původní PDF se nikdy nepřepisuje. Značky průběhu jsou pro oba cíle uloženy v~skrytém úložišti zdrojové galerie a~obsahují ID cílové galerie. ZIP exporty fotografií ani migrace galerií tyto obecné originály PDF nepřenášejí. Úplná záloha souborového stromu musí zahrnout skryté složky s~bočními daty. Stávající JPG galerie se stránkami zůstávají samostatné. Dřívější požadavek na~serverový převod OFP nyní vrací HTTP 409 a~žádá o~obnovení editoru; rasterizační pomocná funkce je~určena pouze pro kompatibilitu CLI a~testů a~prohlížeč ji~nevolá. Podrobnosti: \codeword{docs/GALLERY\_PDF.md}.
+
+\subsubsection{Úložiště hudby}
+
+Přes \ui{Nahrát fotografie} lze společně vybrat nebo přetáhnout fotografie, PDF
+a~hudbu. Zvuk zůstává originálem a~nepřevádí se na fotografie. Samotnou hudbu
+lze nahrát i~při vypnutém zpracování obrázků. Záložka \ui{Dokumenty / PDF}
+v~editoru zachovává samostatnou tabulku \ui{Hudba} pro nahrávání, řazení,
+odstranění a~výchozí volbu slideshow. Akce zůstávají v~panelu. Přijímají se
+MP3, M4A, AAC, Ogg/Opus, WAV, FLAC a~WebM; přehratelnost závisí na kodecích
+prohlížeče. Platí viditelnost, heslo, sdílení a~NSFW pravidla galerie.
+
+Tabulka ukazuje délku skladby a~jedinou ikonku Přehrát/Zastavit před
+názvem. Její podoba odpovídá přehrávání; není zde pauza ani samostatný
+sloupec přehrávání. Dlouhé názvy jsou zkrácené výpustkou s~plným textem
+v~nápovědě; vodorovně roluje jen přehrávaný název. Omezení pohybu ponechá
+statický text. Zavření seznamu nepřeruší hudbu a~zachová původní miniplayer.
+Kompaktní
+ikonky Předchozí/Přehrát/Zastavit/Další jsou dostupné na stránce i~v~prohlížeči
+fotografií, kdykoliv galerie obsahuje zvuk. Jeden společný přehrávač zabrání
+překryvu mezi skladbami, editorem a~slideshow. Playlist se opakuje a~navigace
+přechází mezi oběma konci. Automatická hudba slideshow je výchozí vypnutá;
+admin ji může pro galerii zapnout. Zapnutá slideshow nahradí ostatní hudbu
+a~začne první skladbou. Zastavení či zavření prohlížeče uvolní jeho hudbu;
+nezávisle spuštěná hudba z~tabulky může pokračovat. Změny fotek a~rychlostí
+hudbu nepřerušují. Odmítnutí prohlížečem umožní nový pokus přes Přehrát; zcela
+nepřehratelný playlist se po jednom průchodu zastaví.
+
+Smart galerie slučují viditelnou hudbu ze~všech přístupných fyzických
+zdrojů, které přispívají odpovídajícími fotografiemi. Stránkování ani dočasný
+filtr zdroje tento souhrn neomezí; vlastní složka hudby nevzniká. SHA-256
+odstraní opakování stejných původních bajtů i~po~přejmenování. Shodný název
+či~délka nestačí; jiné kódování či~změněné vložené tagy vyžadují budoucí
+otisk obsahu. Skryté skladby se~vynechají, viditelné zamčené proti stažení
+zůstanou přehratelné. Starší i~nové skladby jsou výchozí viditelné. Chráněné
+odkazy zdroje znovu kontrolují přístup a~viditelnost. V~přepsání prezentace
+Smart galerie lze zapnout její samostatnou výchozí hudbu slideshow; začíná
+vypnutá a~nepřebírá automatické přehrávání zdrojů.
+
+Každá nahraná skladba má stahování výchozí zakázané. Drobná admin ikonka
+u~skladby stahování povolí či zamkne; ikonka v~záhlaví změní všechny aktuální
+skladby. Pozdější uploady začínají opět zamčené. Návštěvník vidí stažení pouze
+u~povolených skladeb a~endpoint znovu kontroluje povolení i~přístup do galerie.
+Přehrávání dodává zvuková data prohlížeči; toto nastavení proto nezabrání
+jejich zachycení technicky zdatným návštěvníkem.
+
+Délku zjišťuje tichá čtečka metadat v~prohlížeči, vždy pro jeden viditelný
+řádek, s~limitem deseti sekund. Neznámá délka se zobrazí pomlčkou. Bez podpory
+sledování viditelnosti stejná čtečka postupně obslouží připojené řádky. Server
+zvuk nedekóduje. Opakování uploadu zachovává potvrzené fotografie, PDF i~zvuk;
+neznámý výsledek nahrání hudby vyžaduje před dalším pokusem kontrolu galerie.
+
+Originály a~seřazený JSON index jsou ve skryté složce
+\filepath{.gallery-music/}. Index ukládá názvy, MIME, velikosti, SHA-256,
+revizi, výchozí volbu slideshow a~povolení stažení každé skladby. Starší
+záznamy bez povolení zůstávají zamčené. Limity jsou 64~MiB na soubor, 100
+skladeb a~512~MiB na galerii; platí i~nižší limity PHP. Zálohy musí obsahovat
+skryté složky. ZIP exporty fotek a~přenos galerie hudbu nezahrnují.
+Podrobnosti: \filepath{docs/GALLERY_MUSIC.md}.
+
+Ve vývojovém checkoutu po změně rout použijte kandidáta připraveného hosted
+workflow. PDF a~zvuk sdílí existujícího runtime vlastníka příloh; samotné
+zdroje se starším generovaným plánem mohou odmítat požadavky do načtení
+připraveného plánu. Lokální generování nenahrazuje hosted kvalifikaci.
 
 \subsection{Úprava identity a~souvislostí}
 \index{m00084@metadata galerie}
@@ -696,6 +777,22 @@ zůstává ostrý a~plochy polí a~tabulek zůstávají neprůhledné a~kontrast
 průhlednost celého okna a~nepřidávají se běhové závislosti. Bez Pillow zůstávají
 čitelné ploché styly ttk a~nativní ovládací prvky i~zdrojový režim včetně
 \texttt{--once} zůstávají podporované.
+
+\subsection{Oznámení aktualizace a~indikátory}
+
+Aplikace kontroluje nová vydání uploaderu při spuštění a~poté nejvýše jednou
+za hodinu; \ui{Check for updates} spustí ruční kontrolu. Ověřená nabídka se
+zobrazí jako banner a~označené ovládání aktualizace v~hlavičce aplikace na všech
+obrazovkách. \ui{Later} skryje oznámení, ale oba indikátory zůstanou dostupné
+pro jeho opětovné otevření. Pokud je dostupná ikona tray, zobrazí červený odznak
+aktualizace, její tooltip uvede nabízenou verzi a~první položka nabídky pojmenuje
+tuto verzi a~otevře stejné oznámení. Bez podpory tray zůstávají plně dostupné
+indikátory v~aplikaci. Aplikace nenastavuje překryvnou značku hlavního panelu
+Windows ani nezobrazuje systémová oznámení toast.
+
+Neúspěšná síťová kontrola zachová ověřenou nabídku v~mezipaměti i~po restartu;
+před obnovením se nabídka znovu ověří. Úspěšná kontrola bez aktuální nabídky
+skryje banner, označení v~hlavičce i~odznak tray.
 
 \subsection{Poloha simulátoru ve Windows}
 
@@ -1011,7 +1108,12 @@ Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migr
 
 Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
-Samostatný uploader zůstává na 0.3.2. Správce sestavení získá instalátor a odpovídající generovaný \filepath{winapp-update.json} společně v \filepath{winapp/dist/0.3.2/}. Oba patří do stejného vydání. Sestavení nenahrazuje ověření nainstalovaného Windows programu a simulátoru.
+Zdroj samostatného uploaderu nyní cílí na verzi 0.4.1. Samostatně vyžádané
+sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.4.1/}. Instalátor
+a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
+ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
+verzí včetně 0.4.0 zůstávají zachovány.
 
 \subsection{Pracovní prostředí administrace}
 
@@ -2058,6 +2160,20 @@ Trasy administrace a~strojové koncové body, například nastavení, WebDAV, au
 Průzkum databáze inventarizuje objekty schématu, odkazy, kategorie vlastnictví, pravidla uchování a~jistotu úklidu. Logický úklid používá povolená pravidla s~deterministickým výběrem, omezenými dávkami a~auditními záznamy. Oprava schématu poskytuje plán nanečisto a~idempotentní migrační postup. \codeword{ANALYZE TABLE} může obnovit statistiky optimalizátoru vybraných tabulek. Fyzický \codeword{OPTIMIZE TABLE} je dostupný pouze jako náhled následovaný samostatně potvrzenou operací vybraných tabulek; nikdy není automatickým krokem úklidu.\footnote{Hodnoty alokace databázového stroje, například odhady volných dat, popisují stav stroje a~nezaručují přesný počet bajtů souborového systému uvolněných po optimalizaci.}
 
 \subsection{Statistiky úložiště a~Úplná zpráva}
+
+Pohled Soubory uvádí také počty a~velikosti originálů PDF a~hudby
+spolu s~celkovým součtem médií. Aktualizovat vše po dávkách fotografií
+projde nejvýše dvě fyzické galerie za krok, včetně galerií bez fotografií.
+Počítají se i~skryté, soukromé, vypnuté a~nestáhnutelné soubory. Fyzické
+kopie zabírají místo samostatně; playlist Smart galerie žádnou kopii
+nepřidává. Stránky převedené z~PDF už patří mezi fotografie. Indexy, zámky,
+stav převodů, neindexované soubory, Koš a~ostatní cache sem nepatří.
+Nečitelné indexy a~nebezpečné či~chybějící soubory vyvolají upozornění
+na neúplné měření bez oprav. Běžné stránky čtou uložené výsledky; změny
+příloh je označí za zastaralé, pokud se podaří zapsat pomocnou revizi.
+Po aktualizaci starých statistik pouze fotografií spusťte Aktualizovat vše.
+Ruční obnovení vyžadují také změny souborů mimo aplikaci.
+
 \index{s00225@statistiky úložiště}
 \index{u00243@úplná zpráva}
 \index{z00282@zpráva galerie}
@@ -2487,6 +2603,11 @@ ale autorské Python docstringy používají jednotný formát.
 Zdrojovou předběžnou kontrolu provádí GitHub Actions před hostovanou přípravou. Agenti dodržují CI-first: ověří aktuální povolenou pracovní větev, HEAD a~výslovné oprávnění k~pushi, dokončí zdroje/testy/dokumentaci, commitnou a~pushnou přesně tuto větev. Nikdy přímo nemění \codeword{develop} ani \codeword{main}. Chybějící oprávnění nebo přístup k~CI znamená BLOCKED. Lokální audity, generátory a~smyčky testů jsou výjimečná diagnostika. CI zachovává neměnnou merge-base s~\codeword{origin/main}, vydání předchozí stabilní tag. Červené ani pomalé CI není důvod pro pouze lokální kvalifikaci.
 
 Povinná hostovaná kvalifikace zahrnuje PHP/Node/WinApp testy, zdrojové kontrakty, Chromium, skutečné MySQL/MariaDB scénáře, kompatibilitu PHP a~balení na~Linuxu, Windows i~macOS. Všechny povinné joby a~kontrola přesného SHA musejí uspět. Release workflow sestaví všechny čtyři PDF příručky jednou po~posledních úpravách zdrojů, nikoli při běžném vývoji.
+
+Hostovaný přenosný job WinApp instaluje existující požadavek Pillow
+do~interpretu Pythonu vybraného pro~audit, takže test pixelů odznaku na~liště
+běží a~nepřeskočí se. Lokální běh bez Pillow může tento volitelný vizuální test
+přeskočit; hostovaný job bez grafického rozhraní neinstaluje pystray.
 
 Regresní pokrytí titulní fotografie rozšiřuje již registrované sady delegování postranního panelu Admin a~životního cyklu prohlížeče spolu se~stávající HTTP/databázovou sadou souběžných změn galerie. Testy zůstávají součástí \filepath{scripts/audit.php}; nepřidávají vlastníka YAML ani alternativní běh a~chráněný registr evaluátorů zůstává nezměněn.
 

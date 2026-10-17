@@ -14,6 +14,7 @@
  *   - Return source/gallery fingerprint aggregates
  *   - Return image/gallery rows for storage scanning in bounded or full form
  *   - Aggregate durable thumbnail-variant counts and bytes
+ *   - Page physical-gallery attachment owners independently of image membership
  *
  * Author:
  *   Rudolf Klusal
@@ -34,6 +35,37 @@ declare(strict_types=1);
 namespace Gallery\Models;
 
 use function Gallery\Core\db;
+
+/**
+ * Count physical galleries independently of indexed photographs.
+ * @return int Number of registered physical galleries, including empty ones.
+ */
+function admin_storage_statistics_model_gallery_count(): int
+{
+    $statement = db()->prepare('SELECT COUNT(*) FROM galleries');
+    $statement->execute();
+    return (int) $statement->fetchColumn();
+}
+
+/**
+ * Read one keyset batch of physical attachment-storage owners.
+ * @param int $lastGalleryId Exclusive cursor from the previous batch.
+ * @param int $limit Positive service-owned gallery observation limit.
+ * @return list<array{id:int|string,folder_path:string}> Ordered physical owners.
+ */
+function admin_storage_statistics_model_gallery_rows_after_id(
+    int $lastGalleryId,
+    int $limit
+): array {
+    $statement = db()->prepare(
+        'SELECT id, folder_path FROM galleries'
+        . ' WHERE id > ? ORDER BY id LIMIT ?'
+    );
+    $statement->bindValue(1, max(0, $lastGalleryId), \PDO::PARAM_INT);
+    $statement->bindValue(2, max(1, $limit), \PDO::PARAM_INT);
+    $statement->execute();
+    return $statement->fetchAll();
+}
 
 /** Return aggregate image/gallery values used for the storage cache fingerprint. */
 function admin_storage_statistics_model_fingerprint_rows(): array

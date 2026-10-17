@@ -2,10 +2,12 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/gallery-workflows.yml
 # Module Type: Continuous Integration Workflow
-# Purpose: Run isolated database, HTTP, source and required Chromium coverage.
+# Purpose: Run isolated database, HTTP, source, WinApp and Chromium coverage.
 # Responsibilities:
 #   - Provision disposable services and execute the central audit with required runtime capabilities.
+#   - Run portable WinApp coverage with its declared Pillow test dependency.
 # Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
 # Runtime lifecycle policy: docs/RUNTIME_SUPPORT.md.
 name: Isolated gallery workflows
 
@@ -158,6 +160,7 @@ jobs:
       PHP_GALLERY_PORTABLE_OWNER: portable-node-winapp
       PHP_GALLERY_BROWSER: disabled
       GALLERY_WORKFLOW_BROWSER: disabled
+      PHP_GALLERY_REQUIRE_PILLOW: '1'
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -172,7 +175,38 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
+      - name: Select Python for portable WinApp coverage
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Install the declared Pillow test dependency
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          pillow_requirements = [
+              line.strip()
+              for line in Path("winapp/requirements.txt")
+              .read_text(encoding="utf-8")
+              .splitlines()
+              if line.strip().lower().startswith("pillow")
+          ]
+          if len(pillow_requirements) != 1:
+              raise SystemExit(
+                  "Expected exactly one Pillow requirement in "
+                  "winapp/requirements.txt."
+              )
+          subprocess.run(
+              [sys.executable, "-m", "pip", "install", pillow_requirements[0]],
+              check=True,
+          )
+          PY
       - name: Central portable Node and WinApp coverage
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
         run: php scripts/audit.php --profile=portable
       - name: Retain exact-candidate portable evidence
         if: always()

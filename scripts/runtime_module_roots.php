@@ -42,17 +42,22 @@ return [
             'Gallery\\Services\\gallery_access_assert_public_policy_available',
             'Gallery\\Services\\nsfw_guard_assert_public_policy_available',
         ],
-        // File attachment lookup uses the established routing-paths and DB
-        // closure. Share those files through their existing owner, not by
-        // directly duplicating bootstrap and filesystem helpers per route.
+        // PDF and audio attachments share this established attachment owner.
+        // Retain its historical machine name and full routing/access closure;
+        // a separate music root would exceed the consumed module allowance.
         'gallery-pdf-documents' => [
             'Gallery\\Services\\find_gallery_by_public_path',
             'Gallery\\Services\\resolve_public_gallery_path',
             'Gallery\\Services\\simbrief_ofp_local_pdf_path',
             'Gallery\\Services\\gallery_pdf_documents_read',
+            'Gallery\\Services\\gallery_attachment_storage_summary',
             'Gallery\\Services\\gallery_pdf_publication_forces_private',
             'Gallery\\Controllers\\gallery_pdf_documents_view_model',
             'Gallery\\Views\\view_render_gallery_pdf_documents',
+            'Gallery\\Controllers\\cms_gallery_music',
+            'Gallery\\Controllers\\gallery_music_view_model',
+            'Gallery\\Controllers\\gallery_music_smart_view_model',
+            'Gallery\\Views\\view_render_gallery_music',
         ],
         'schema-unavailable-response' => ['Gallery\\Controllers\\cms_public_schema_unavailable'],
         // Authenticated document actions load the uploader only after the public attachment list is prepared.
@@ -124,6 +129,7 @@ return [
         'Gallery\\Controllers\\cms_sitemap_xml' => 'public-sitemap',
         'Gallery\\Controllers\\cms_media' => 'public-media',
         'Gallery\\Controllers\\cms_gallery_ofp_pdf' => 'gallery-pdf-documents',
+        'Gallery\\Controllers\\cms_gallery_music' => 'gallery-pdf-documents',
         'Gallery\\Controllers\\cms_public_media' => 'public-media',
         'Gallery\\Controllers\\cms_thumb' => 'public-thumbnails',
         'Gallery\\Controllers\\cms_public_thumb' => 'public-thumbnails',
@@ -153,7 +159,7 @@ return [
     'route_dependencies' => [
         'public-policy' => [
             'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap',
-            'picture_game', 'media', 'gallery_ofp_pdf', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup',
+            'picture_game', 'media', 'gallery_ofp_pdf', 'gallery_music', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup',
             'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data',
             'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data',
             'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest',
@@ -164,6 +170,11 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // Explicit storage jobs load the existing attachment owner. Cached
+        // Admin reads and ordinary public routes do not acquire its closure.
+        'Gallery\\Services\\admin_storage_statistics_attachment_batch' => [
+            'Gallery\\Services\\gallery_attachment_storage_summary',
+        ],
         // GitHub writes explicitly load the producer-lease owner immediately before
         // acquisition; read-only public routes do not need that storage module.
         'Gallery\\Services\\cms_github_api_write_cache' => [
@@ -176,8 +187,16 @@ return [
             'Gallery\\Services\\gallery_pdf_publication_forces_private',
         ],
         'Gallery\\Controllers\\render_public_gallery_branding_header' => [
+            'Gallery\\Controllers\\gallery_music_view_model',
+            'Gallery\\Views\\view_render_gallery_music',
             'Gallery\\Controllers\\gallery_pdf_documents_view_model',
             'Gallery\\Views\\view_render_gallery_pdf_documents',
+        ],
+        // Smart music uses the same complete attachment owner only after
+        // canonical public source membership and index presence are resolved.
+        'Gallery\\Controllers\\cms_smart_gallery' => [
+            'Gallery\\Controllers\\gallery_music_smart_view_model',
+            'Gallery\\Views\\view_render_gallery_music',
         ],
         'Gallery\\Controllers\\gallery_pdf_documents_view_model' => [
             'Gallery\\Controllers\\gallery_pdf_documents_admin_controls',

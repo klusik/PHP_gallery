@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.134. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.135. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -9,6 +9,33 @@ Version 0.105 adds three integrity structures. Migration `202609200001_gallery_i
 Version 0.104.1 introduces no schema migration, table, column, index, or stored-data conversion. Title completion reads existing gallery metadata through bounded keyset queries and performs normalization in the service layer; it adds no persisted normalized-title storage. Disposable workflow databases belong only to isolated test fixtures, not to the installation's application schema.
 
 Version 0.120 adds no schema migration, table, column or index. Its database changes are support-policy documentation and direct disposable engine regression coverage; existing schema inspection and interrupted-DDL replay semantics remain unchanged.
+
+## Gallery music storage
+
+PDF/music capability and accounting changes add no tables, columns or migrations.
+The canonical keys `feature_flag.gallery_pdf_documents.enabled` and
+`feature_flag.gallery_music.enabled` use existing `app_settings` storage.
+Both missing-key upgrade fallbacks and fresh-install defaults are ON. An explicit
+OFF value is preserved, and no playlist/document metadata or original is deleted.
+
+Manual storage snapshots use `admin_storage_statistics_cache_v3`; resumable
+photo/gallery cursors use `admin_storage_statistics_job_v2`. Older derived keys
+are retained but are not reused as complete attachment measurements; run Update
+all after upgrading. `gallery_attachment_storage_revision` is an opaque advisory
+nonce changed after supported web attachment mutations. It marks cached totals
+and active jobs stale without scanning files. Failure to update that optional
+marker does not turn a committed attachment operation into a failed upload;
+the next explicit scan still measures actual files. Out-of-band filesystem edits
+also require Update all. Original storage remains under its existing owners.
+
+Music playlists introduce no tables or columns. Each physical gallery's denied
+`.gallery-music/index.json` stores its ordered immutable-original metadata,
+optimistic revision, explicit slideshow-music default and per-track download
+permission. Both preferences default false. Older v1 records without a download
+field remain locked without a storage rewrite. Atomic index writes
+belong to `app/models/gallery_music.php`; validation and file lifecycle belong
+to the music service. Backups must include the entire hidden sidecar. See
+[the music contract](docs/GALLERY_MUSIC.md).
 
 ## Cache lifecycle regions
 
@@ -1332,7 +1359,26 @@ Rule version 1 contains `version` and `root`. Nodes are boolean groups (`AND`, `
 
 Migration `202608140002_smart_gallery_placement.php` introduces the `unlisted`, `root`, and `gallery` listing modes. Migration `202608140003_smart_gallery_multiple_placements.php` adds the `smart_gallery_placements` junction table and migrates existing single-parent assignments. Each `(smart_gallery_id, gallery_id)` pair is unique; deleting either record removes its junction rows through foreign-key cascades. A gallery-mode Smart Gallery may be attached beneath any number of physical galleries.
 
-Migration `202608170001_smart_gallery_presentation.php` adds nullable `smart_galleries.presentation_json MEDIUMTEXT`. The JSON document is versioned separately from `rules_json`; version 1 stores only Smart Gallery presentation overrides. Supported normalized keys are `grid_columns`, `grid_rows`, `pagination_enabled`, `thumbnail_min_size`, `thumbnail_max_size`, `thumbnail_rendering_mode`, `card_layout`, `metadata_visible`, `lightbox_enabled`, `lightbox_browsing_mode`, `slideshow_enabled`, `download_enabled`, and `voting_enabled`. Missing, malformed, unknown-version, or invalid values are treated as absent so current Theme/site defaults remain authoritative. An override-free document is stored as `{"version":1}`.
+Migration `202608170001_smart_gallery_presentation.php` adds nullable
+`smart_galleries.presentation_json MEDIUMTEXT`. The JSON document is versioned
+separately from `rules_json`; version 1 stores only Smart Gallery presentation
+overrides. Supported normalized keys are `grid_columns`, `grid_rows`,
+`pagination_enabled`, `thumbnail_min_size`, `thumbnail_max_size`,
+`thumbnail_rendering_mode`, `card_layout`, `metadata_visible`,
+`lightbox_enabled`, `lightbox_browsing_mode`, `slideshow_enabled`,
+`music_enabled`, `download_enabled`, and `voting_enabled`. Missing, malformed,
+unknown-version, or invalid values are treated as absent so current Theme/site
+defaults remain authoritative. An override-free document is stored as
+`{"version":1}`.
+
+Smart Gallery music adds no SQL table or source-membership copy. The existing
+version-1 presentation JSON accepts `music_enabled` as an independent boolean
+override (absent means false). Physical sidecar indexes retain original tracks,
+visibility and download permission; the music model maps missing `hidden` to
+false and missing `downloadable` to false without rewriting existing records.
+The public source union is derived from canonical grouped photo membership and
+visitor access, not persisted into Smart rows.
+
 
 Migration `202608170002_smart_gallery_attachment_ordering.php` extends the canonical `smart_gallery_placements` junction rather than adding a parallel relationship table. `placement ENUM('top','bottom') NOT NULL DEFAULT 'bottom'` preserves the previous below-content behavior for every existing row. `placement_order INT NOT NULL DEFAULT 0` stores per-parent order, and the `(gallery_id, placement, placement_order, smart_gallery_id)` index supports deterministic grouped reads. The existing composite primary key `(smart_gallery_id, gallery_id)` continues to prevent duplicate attachment instances under one physical parent while allowing the same Smart Gallery under multiple parents.
 

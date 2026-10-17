@@ -33,6 +33,27 @@
  */
 
 return [
+    'music.title' => 'Musik',
+    'music.track' => 'Spår',
+    'music.order' => 'Spellisteordning',
+    'music.up' => 'Flytta upp',
+    'music.down' => 'Flytta ned',
+    'music.remove' => 'Ta bort',
+    'music.upload' => 'Ladda upp musik',
+    'music.upload_help' => 'MP3, M4A, AAC, Ogg, Opus, WAV, FLAC eller WebM; högst 64 MiB per fil. Webbläsarens kodekstöd och PHP:s uppladdningsgränser gäller.',
+    'music.default' => 'Aktivera musik som standard i galleriets bildspel',
+    'music.save_default' => 'Spara musikinställning',
+    'music.saved' => 'Musikspellistan har sparats.',
+    'music.play_music' => 'Spela musik',
+    'music.previous' => 'Föregående spår',
+    'music.next' => 'Nästa spår',
+    'music.play' => 'Spela',
+    'music.stop' => 'Stoppa',
+    'music.playback_error' => 'Spåret kunde inte spelas. Tryck på Spela för att försöka igen eller välj ett annat spår.',
+    'music.invalid_file' => 'Välj en giltig MP3-, M4A-, AAC-, Ogg-, Opus-, WAV-, FLAC- eller WebM-ljudfil på högst 64 MiB.',
+    'music.failed' => 'Musiken kunde inte sparas eller läsas. Kontrollera lagringsbehörigheter och PHP:s uppladdningsgränser och öppna galleriredigeraren igen.',
+    'music.conflict' => 'Spellistan har ändrats. Öppna galleriredigeraren igen innan du försöker på nytt.',
+    'music.quota' => 'Ett galleri kan innehålla högst 100 spår och 512 MiB musik.',
     'lightbox.slideshow_photo_speed' => 'Bildväxlingshastighet',
     'lightbox.slideshow_transition_speed' => 'Övergångshastighet',
     'lightbox.slideshow_speed_fast' => 'Snabb',
@@ -1129,4 +1150,77 @@ return [
     'admin.updates.autoupdate_dry_run_button' => 'Gör en torrkörning nu',
     'admin.updates.autoupdate_dry_run_hint' => 'Kontrollera bara metadata nu. Uppdaterar diagnostiken men installerar inga filer.',
     'admin.updates.autoupdate_settings_saved' => 'Inställningarna för automatiska uppdateringar har sparats.',
+    'music.duration' => 'Längd',
+    'music.duration_unknown' => 'Längd saknas',
+    'music.playback' => 'Uppspelning',
+    'music.queue_document' => 'Ljud',
+    'music.upload_unknown' => 'Resultatet av musikuppladdningen är okänt. Kontrollera galleriet innan du laddar upp igen.',
+    'music.upload_files_label' => 'Foton, PDF och musik',
+    'music.upload_files_help' => 'Välj eller släpp foton, PDF-dokument och ljudfiler. Musik sparas som original och omvandlas aldrig till foton.',
+    'music.browser_required' => 'Musik i fotouppladdningen kräver webbläsarflödet. Ladda om sidan och försök igen.',
+    'music.download' => 'Hämta spår',
+    'music.allow_download' => 'Tillåt hämtning av detta spår',
+    'music.lock_download' => 'Spärra hämtning av detta spår',
+    'music.allow_all' => 'Tillåt hämtning av alla aktuella spår',
+    'music.lock_all' => 'Spärra hämtning av alla aktuella spår',
+
+    'admin.features.gallery_pdf_documents.label' =>
+        'Galleriernas PDF-dokument',
+    'admin.features.gallery_pdf_documents.description' =>
+        'Ladda upp, visa och konvertera galleri-PDF:er, inklusive '
+        . 'SimBrief-original. Avstängning bevarar filer och inställningar.',
+    'admin.features.gallery_music.label' =>
+        'Gallerimusik',
+    'admin.features.gallery_music.description' =>
+        'Ladda upp och spela musik i gallerier och smarta gallerier. '
+        . 'Avstängning bevarar filer, spellistor och '
+        . 'bildspelsinställningar.',
+    'admin.upload.media_files_label' =>
+        'Filer',
+    'admin.upload.media_files_help' =>
+        'Välj eller släpp filer som stöds. Filväljaren visar aktiverade '
+        . 'medietyper för gallerier.',
+    'admin.storage.pdf_originals' =>
+        'PDF-original',
+    'admin.storage.pdf_originals_hint' =>
+        '{count} galleridokument, inklusive SimBrief-PDF:er.',
+    'admin.storage.music_originals' =>
+        'Musikoriginal',
+    'admin.storage.music_originals_hint' =>
+        '{count} lagrade ljudfiler, inklusive dolda spår och spår utan '
+        . 'nedladdning.',
+    'admin.storage.total_media' =>
+        'All medielagring',
+    'admin.storage.total_media_hint' =>
+        'Bilder och deras härledda filer samt PDF- och musikoriginal.',
+    'admin.storage.attachment_warnings' =>
+        'Ofullständig mätning av bilagor',
+    'admin.storage.attachment_warnings_hint' =>
+        'Vissa original eller index kunde inte läsas. Summorna omfattar '
+        . 'endast uppmätta filer.',
+    'admin.storage.description' =>
+        'Fotostorlekar hämtas från databasen. Uppdatera allt mäter '
+        . 'härledda filer och indexerade PDF-/musikoriginal.',
+    'admin.storage.no_snapshot_hint' =>
+        'Använd Uppdatera allt för att mäta foton, härledda filer och '
+        . 'PDF-/musikoriginal samt skapa diagram.',
+    'admin.settings.item.feature_gallery_pdf_documents' =>
+        'Galleriernas PDF-dokument',
+    'admin.settings.item.feature_gallery_pdf_documents.hint' =>
+        'Ladda upp, visa och konvertera galleri-PDF:er, inklusive '
+        . 'SimBrief-original. Avstängning bevarar filer och inställningar.',
+    'admin.settings.item.feature_gallery_pdf_documents.example' =>
+        'ON tillåter medietypen; OFF bevarar filer och kan återställas.',
+    'admin.settings.item.feature_gallery_music' =>
+        'Gallerimusik',
+    'admin.settings.item.feature_gallery_music.hint' =>
+        'Ladda upp och spela musik i gallerier och smarta gallerier. '
+        . 'Avstängning bevarar filer, spellistor och '
+        . 'bildspelsinställningar.',
+    'admin.settings.item.feature_gallery_music.example' =>
+        'ON tillåter medietypen; OFF bevarar filer och kan återställas.',
+    'admin.storage.progress_counts' =>
+        '{processed} / {total} poster',
+    'admin.storage.tab_files_hint' =>
+        'Foton, härledda filer, PDF- och musikoriginal',
 ];

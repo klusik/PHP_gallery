@@ -45,6 +45,8 @@ const optionalPublicModules = {
     galleryDownload: './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1',
     ofpViewer: './gallery-modules/simbrief-ofp-viewer.js?v=20261008-ofp-keyboard-repeat',
     publicContentWidgets: './gallery-modules/public-content-widgets.js?v=20261011-widget-size-observer-v1',
+    music: './gallery-modules/gallery-music-player.js?v=20261017-media-applets-v1',
+    mediaPanels: './gallery-modules/gallery-media-panels.js?v=20261017-media-applets-v2',
 };
 
 /**
@@ -124,6 +126,16 @@ function bootPublicGalleryBrowserFeatures() {
         setupOptionalPublicFeature(optionalPublicModules.galleryDownload, 'setupGalleryDownload', '[data-gallery-download]');
         setupOptionalPublicFeature(optionalPublicModules.ofpViewer, 'setupSimbriefOfpViewer', '[data-simbrief-ofp-open]');
         setupOptionalPublicFeature(optionalPublicModules.publicContentWidgets, 'setupPublicContentWidgets', '[data-public-widget-floating]');
+        setupOptionalPublicFeature(
+            optionalPublicModules.music,
+            'setupGalleryMusicPlayback',
+            '[data-gallery-music-playlist]'
+        );
+        setupOptionalPublicFeature(
+            optionalPublicModules.mediaPanels,
+            'setupGalleryMediaPanels',
+            '[data-gallery-media-widget]'
+        );
     });
 }
 

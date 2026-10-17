@@ -12,6 +12,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
+import './gallery_music_upload_scenarios.mjs';
 
 /**
  * Describe one prepared original record supplied to the ZIP batcher.

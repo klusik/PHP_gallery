@@ -629,6 +629,13 @@ function cms_gallery_ofp_pdf_not_found(bool $head = false): void
 function cms_gallery_ofp_pdf(): void
 {
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    // The historical media&ofp=1 alias bypasses dedicated-route dispatch.
+    if (!\Gallery\Services\feature_capability_effective_enabled(
+        'gallery_pdf_documents'
+    )) {
+        cms_gallery_ofp_pdf_not_found($method === 'HEAD');
+        return;
+    }
     if ($method !== 'GET' && $method !== 'HEAD') {
         header('Allow: GET, HEAD');
         http_response_code(405);

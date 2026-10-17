@@ -94,6 +94,8 @@ namespace Gallery\Core {
         'image_voting',
         'picture_game',
         'smart_galleries',
+        'gallery_pdf_documents',
+        'gallery_music',
         'downloads',
         'thumbnail_warmup',
         'multilingual_content',

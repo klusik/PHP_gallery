@@ -15,14 +15,13 @@ namespace Gallery\Controllers;
 
 /**
  * Dispatch one administrator and CSRF-guarded gallery PDF mutation.
- * @param array<string,mixed> $gallery Authorized physical source gallery.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical source.
  * @return void Emit canonical AJAX results or the direct-page fallback redirect.
  */
 function admin_edit_gallery_handle_pdf_action(array $gallery): void
 {
     require_once __DIR__ . '/../../services/gallery_pdf_documents.php';
     require_once __DIR__ . '/../../services/gallery_pdf_conversion.php';
-    require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';
     require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';
     $ajax = admin_wants_json();
     $action = (string) ($_POST['pdf_action'] ?? '');
@@ -91,6 +90,7 @@ function admin_edit_gallery_handle_pdf_action(array $gallery): void
         } else {
             throw new \RuntimeException('Enable JavaScript to convert PDF pages in this browser.');
         }
+        \Gallery\Services\gallery_attachment_storage_changed();
         $message = \Gallery\Services\t('pdf.saved', 'PDF operation saved.');
         $targetId = (int) ($result['gallery_id'] ?? $result['child_gallery_id'] ?? 0);
         $contexts = [\Gallery\Core\admin_mutation_public_gallery_context($galleryId, \Gallery\Core\gallery_public_url($gallery))];

@@ -1,5 +1,105 @@
 # Testing Guide
 
+## Gallery music
+
+`gallery_music_service_test.php` uses isolated real PCM WAV bytes to exercise
+exact-byte storage, gallery-scoped lookup, content rejection, ordered mutations,
+stale revisions, persistent preferences, deletion, damaged-index preservation,
+symlink refusal, exact upload receipts, per-track/bulk download permissions
+and conservative legacy-record defaults. The central PHP regression owner
+discovers this test.
+Synthetic bytes do not establish browser codec support or live-host acceptance.
+See [the music contract](docs/GALLERY_MUSIC.md).
+
+The same service owner exercises complete-source discovery with controlled
+listing/visitor grants, renamed byte deduplication, distinct same-name/duration
+WAV samples, hidden-copy exclusion, representative download permission, corrupt
+index preservation and mounted anonymous-preview Smart URLs. The existing Smart
+presentation test checks default-off music and normalized JSON persistence.
+
+The existing isolated attachment HTTP fixture also exercises music originals
+under root and subdirectory mounts, exact bytes, GET/HEAD, suffix/closed byte
+ranges, invalid ranges, administrator and anonymous-preview authority, sharing,
+private/password/NSFW denials, locked/allowed download responses, restricted
+revision reads and read-only methods. It runs under the existing
+exclusive PHP owner. Access state is deterministic fixture policy; deployment
+schema, real session and inherited-access acceptance remain separate coverage.
+
+The required `gallery_music_browser_test.mjs` Chromium fixture imports the
+production player, anonymous public entrypoint and music manager. It verifies
+conditional public initialization, no eager playback, default on/off,
+repeat-all and both wrap directions, Stop/Play, restart, autoplay/unsupported
+failures, stale promises and disposal. Table/editor/viewer handover asserts
+exclusive playback; durations verify finite formatting and a silent reader.
+Native DOM forms are submitted through
+two successive fragment replacements using the production completion
+coordinator, with unchanged URL/open panel and fresh revisions. Audio outcomes
+and mutation responses are controlled adapters; this does not qualify real
+codec decoding, production PHP multipart handling or full lightbox geometry.
+The same fixture uses desktop and narrow portrait CSS viewports for compact
+attachment launchers, top-layer fitting, bounded PDF scrolling, exclusive
+Play/Stop row icons, title ellipsis/active scrolling and persistent miniplayer.
+It exercises Escape/outside/close dismissal, focus restoration, replacement
+scroll retention and a missing-Popover inline fallback. The isolated PHP view
+assertions retain protected PDF hooks and place the miniplayer outside details.
+No-JavaScript, reduced motion, screen readers, Safari and physical mobile devices
+remain manual acceptance; emulated Chromium dimensions do not establish those.
+The upload stream owner imports `gallery_music_upload_scenarios.mjs` to exercise
+original file partition, exact acknowledged retries, uncertain-write refusal,
+canonical response aggregation and audio-only admission with image preparation
+disabled. These VM adapters do not replace real multipart acceptance.
+The assisted-import VM explicitly supplies an empty music selection; its
+image-only replay/cancellation assertions retain their original boundaries.
+
+The existing speed fixture retains a narrow music-stop adapter so its real
+scheduler/HUD assertions remain independent.
+
+The existing real database/HTTP workflow creates a Smart definition through the
+actual Admin save endpoint and verifies its persisted music preference. Its
+canonical OR scope contains multiple visible sources plus a password-protected
+source, renamed duplicate bytes, different equal-duration samples and hidden
+audio. Actual paginated/filtered public pages must retain one complete merged
+playlist, stream exact protected originals and deny an old URL after source
+visibility is revoked. Owned test sidecars/definition are removed before the
+remaining workflow stages. Chromium also exercises negative Smart presentation
+and composite track identities through the existing exclusive player.
+
+Manual acceptance must exercise real MP3/M4A/Ogg/WAV files on current desktop
+and mobile browsers, gallery default on/off, keyboard and touch HUD controls,
+speed/photo changes without audio restart, exit/close during a pending play,
+real multipart/PHP size failures, password/share/NSFW sessions and denied static
+originals. Include empty/one-track playlists and disabled slideshow. These checks
+remain unperformed unless separately reported with exact-candidate evidence.
+## PDF/music masters and Admin storage accounting
+
+The canonical feature core/inventory fixtures enumerate both new masters,
+upgrade/fresh defaults, explicit-OFF preservation and independent route gating.
+The existing real database/HTTP gallery workflow saves both switches through
+the rendered Admin Features form. Each independent OFF combination must hide
+the matching physical/Smart player or document table, remove disabled picker
+formats and conversion controls, keep galleries working and leave no empty
+attachment column. Both masters OFF omit the shared editor media tab and
+normalize an old selected-tab URL back to the available default.
+Direct/legacy PDF and audio GET/HEAD requests are denied;
+stale PDF/music upload forms, conversion actions and prepared page batches fail
+at the server boundary without changing retained hashes. Re-enable restores
+the same originals and Smart playlist. The real manual storage job measures
+physical duplicates, hidden and globally disabled originals and proves the
+additive total without counting the Smart union again.
+
+`admin_storage_statistics_test.php` runs actual attachment readers and resumable
+statistics logic over private temporary files with model/settings adapters. It
+checks the gallery cap independently of image batch size, progress across phases,
+an installation with no photos, hidden/locked originals, manual/OFP separation,
+exact known byte totals, no passive scan, stale revisions, optional invalidation
+write failure, corrupt-index preservation and missing/symlink originals. It also
+calls actual SimBrief persistence with PDF OFF to retain JSON import and an old
+PDF manifest reference without permitting a direct PDF fetch/write. These tests
+do not establish full-disk allocated blocks, arbitrary external-file discovery
+or real-host performance. Manual acceptance includes a large media library,
+permission failures, OFF/ON after reload, mounted upload panels and all four
+languages. Hosted exact-candidate FULL remains the qualification owner.
+
 ## Optional readability report
 
 **Code readability report** is a manual, read-only advisory workflow. Select only
@@ -150,7 +250,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.134. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.135. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -594,10 +694,18 @@ Self-update regression uses fake releases/transports to cover numeric versions
 across paginated CMS releases, stable filtering, identical/conflicting duplicates,
 highest-version missing hashes, metadata/URL limits, same-release manifests,
 streaming hash/size refusal, cancellation and unrelated partial-file preservation.
-UI/helper fixtures exercise hourly scheduling, safe drain, ticket ownership, exact
-target identity and elevated installation. AST contracts enforce documented,
-typed definitions and absence of future imports in new updater modules/tests.
+UI fixtures cover the persistent version banner/header mark, Later/reopen behavior,
+tray badge/menu/tooltip routing, clearing after a successful no-offer check, and
+retaining a validated cached offer after failed rechecks and restart. Helper
+fixtures exercise hourly scheduling, safe drain, ticket ownership, exact target
+identity and elevated installation. AST contracts enforce documented, typed
+definitions and absence of future imports in new updater modules/tests.
 The central WinApp suite owns these checks; tests never download a live installer.
+The hosted portable job installs only the existing Pillow requirement into the
+Python interpreter selected for the audit and sets
+`PHP_GALLERY_REQUIRE_PILLOW=1`, so the tray-badge pixel fixture must run there.
+Local runs without Pillow may still skip that optional visual fixture; the
+headless hosted job does not install pystray.
 
 Frozen updater regression must distinguish the bundled `VERSION` text file from
 Windows `version.dll`. Source tests cover explicit `version.dll`, `kernel32.dll`

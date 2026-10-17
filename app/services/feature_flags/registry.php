@@ -41,7 +41,14 @@ namespace Gallery\Services;
  * definitions may opt into a disabled default when a staged subsystem must require
  * an explicit administrator decision before becoming reachable.
  *
- * @return array<string,array<string,mixed>> Structured capability definitions.
+ * @return array<string,array{group:string,label:string,description:string,
+ *     default_enabled?:bool,fresh_default_enabled?:bool,
+ *     source:array{type:string,key?:string,adapter?:string},
+ *     dependencies:list<string>,routes:list<string>,route_prefixes:list<string>,
+ *     editable_on_features:bool,data_disable_policy:string,
+ *     behavior_tags:list<string>,settings_route:string,
+ *     settings_params:array<string,string|int|bool>,settings_fragment:string}>
+ *     Canonical configured/effective policy and Admin discovery metadata.
  */
 function feature_capability_definitions(): array
 {
@@ -104,6 +111,35 @@ function feature_capability_definitions(): array
             'label' => t('admin.features.smart_galleries.label', 'Smart Galleries'),
             'description' => t('admin.features.smart_galleries.description', 'Saved dynamic galleries, their public pages, physical-gallery attachments, and Smart Gallery-specific browsing workflows.'),
             'routes' => ['admin_smart_galleries', 'smart_gallery'],
+        ],
+        'gallery_pdf_documents' => [
+            'group' => 'public_display',
+            'label' => t('admin.features.gallery_pdf_documents.label',
+                'Gallery PDF documents'),
+            'description' => t('admin.features.gallery_pdf_documents.description',
+                'Upload, display and convert gallery PDFs, including SimBrief'
+                . ' originals. Disabling preserves existing files and settings.'),
+            'default_enabled' => true,
+            'fresh_default_enabled' => true,
+            'dependencies' => [],
+            'routes' => ['gallery_ofp_pdf'],
+            'data_disable_policy' => 'preserve',
+            'behavior_tags' => ['public', 'admin-only', 'writes-files'],
+            'settings_route' => 'admin_features',
+        ],
+        'gallery_music' => [
+            'group' => 'public_display',
+            'label' => t('admin.features.gallery_music.label', 'Gallery music'),
+            'description' => t('admin.features.gallery_music.description',
+                'Upload and play gallery and Smart Gallery music. Disabling'
+                . ' preserves existing files, playlists and slideshow settings.'),
+            'default_enabled' => true,
+            'fresh_default_enabled' => true,
+            'dependencies' => [],
+            'routes' => ['gallery_music'],
+            'data_disable_policy' => 'preserve',
+            'behavior_tags' => ['public', 'admin-only', 'writes-files'],
+            'settings_route' => 'admin_features',
         ],
         'downloads' => [
             'group' => 'public_display',

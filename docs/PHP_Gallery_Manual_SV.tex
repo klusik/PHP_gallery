@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.134}
+\newcommand{\version}{0.135}
 \newcommand{\manualdate}{17~oktober~2026}
 
 \hypersetup{
@@ -488,10 +488,28 @@ De vanliga arbetsområdena är \ui{Identitet}, \ui{API}, \ui{Åtkomst}, \ui{Visn
 
 \ui{Identitet} håller titel, beskrivning, datum, källspråk, SimBrief och taggar lätt tillgängliga. Dess avancerade avsnitt innehåller URL-namn, mapp, övergalleri, sorteringsordning och AI-galleritext när funktionen är~aktiverad. \ui{API} visar en kopierbar uppladdningsadress, nyckelns etikett och åtgärd samt en nyskapad nyckel endast en gång; befintliga nycklar visas bara när sådana finns. Omgenerering av AI-metadata, migrering och den globala API-hanteraren ligger under \ui{Avancerade API-verktyg}. \ui{Åtkomst} samlar synlighet, lösenord, delningslänkskontroller och NSFW-kryssrutan, med längre policyförklaringar under frågetecken. \ui{Visning} börjar med rutnätet och vanliga växlar för röstning och filnamn; EXIF/GPS, format för gallerikort, antalmarkering, ljuslådeläge, Bildspelet, miniatyrbildsgränser ligger under \ui{Avancerade visningsinställningar}; flygrutttext finns bredvid SimBrief under \ui{Identitet}.
 
+I~\ui{Admin > Funktioner} är \ui{Galleriernas PDF-dokument}
+och~\ui{Gallerimusik} separata reglage. Båda är på för nya och~uppdaterade
+installationer utan sparat val; ett uttryckligt OFF bevaras. OFF döljer
+motsvarande tabeller/spelare och~stoppar uppladdning, leverans och~PDF-konvertering,
+även från gamla formulär. Filer, spellistor och~inställningar bevaras.
+Med båda OFF döljs även mediefliken; gamla fliklänkar väljer Identitet.
+Redan skapade sidfoton behåller sina vanliga åtkomstregler. SimBrief kan
+fortsätta uppdatera beskrivningar/rutter och~behåller gamla PDF-original.
+
 \subsubsection{Bifoga och konvertera ett PDF-dokument}
 Öppnade konverteringskontroller gör inte dokumentkolumnen bredare. Om det tidigare målet saknas eller har ändrats, bekräfta ett nytt privat resultat; tidigare filer och gallerier bevaras.
 
-Galleriet visar PDF i en kompakt tabell med storlek, sidantal och små åtgärdsikoner. Titeln och ögat öppnar visaren. Med beskrivning står texten till vänster och dokumenten till höger; utan text ligger tabellen till vänster. Administratörer kan öppna konverteringsinställningar, dölja eller visa PDF och bekräfta borttagning. Dolda dokument nekas besökare även via direkta länkar; skapade foton bevaras efter borttagning.
+PDF- och~musikknappar visar filantal bredvid beskrivningen,
+eller~under den~på~smala skärmar. Ett~klick öppnar en~liten överlagring.
+Listan är~högst 12rem hög~och~rullar separat. PDF-rader behåller storlek,
+sidantal och~små åtgärdsikoner; titel eller~öga öppnar den~skyddade visaren.
+Administratörer kan~öppna konvertering, dölja/visa eller~bekräfta radering.
+Dolda PDF:er förblir spärrade via~direktlänkar; skapade foton bevaras.
+Escape, stängikonen, knappen eller~ett~klick utanför stänger appleten.
+Utan JavaScript eller~Popover-stöd finns en~begränsad inbyggd lista
+på~sidan. Minskad rörelse stänger av~animation. Innehållsbyte behåller
+öppen lista och~rullningsläge.
 
 Filväljaren och släppkön i uppladdningspanelen för ett befintligt galleri accepterar också PDF. Som standard bifogas endast originaldokumentet; inga undergallerier eller PNG-sidor skapas. För konvertering vid uppladdningen öppnar du \ui{Avancerat} och markerar uttryckligen \ui{Konvertera även PDF-sidor till PNG}; välj sedan ett privat undergalleri eller att lägga till sidor sist, samt DPI. Att enbart öppna Avancerat aktiverar inte konvertering. Blandade val laddar upp foton först, bifogar sedan PDF och utför endast valda konverteringar. Panelen förblir öppen med förlopp och avbrytning. Nya försök behåller det ursprungliga konverteringsvalet; vid aktiverad konvertering återskapas ett saknat tomt undergalleri endast när ingen sida har bekräftats.
 
@@ -502,6 +520,68 @@ En administratör kan bifoga ett vanligt PDF-dokument till ett fysiskt galleri �
 Välj \ui{Konvertera PDF-sidor} för att rendera dokumentet i webbläsaren. PDF.js skapar PNG-sidor i turordning och den befintliga uppladdningen visar förlopp, bekräftar batcher, återupptar avbrutet arbete och kan avbrytas. Nya konverteringar använder 150~DPI som standard; välj 96, 150, 200, 300, 600, 1200 eller 2400~DPI. Antalet sidor är obegränsat. Sidor som överskrider riktvärdet 16\,384 pixlar per sida eller 32 miljoner pixlar visar en vägledande varning som inte stoppar renderingen eller förminskar sidan i tysthet. Minnesuppskattningen omfattar endast canvasens RGBA-buffert med fyra byte per pixel, inte webbläsarens totala minnesanvändning. Webbläsarens faktiska canvas- och uppladdningsgränser kan ändå hindra rendering eller uppladdning.
 
 Välj antingen ett reserverat privat undergalleri eller lägg till sidorna efter källgalleriets sista foto. Ett undergalleri förblir privat tills du uttryckligen ändrar synligheten; publicering är spärrad medan PDF-konverteringen är ofullständig eller avbruten. Slutför eller stäm av konverteringen på ett säkert sätt först. Vid tillägg behålls källgalleriets synlighet och befintliga foton, och de nya sidorna placeras sist. Original-PDF-filen ersätts aldrig. För båda målen lagras förloppsmarkörer i källgalleriets dolda sidokatalog och innehåller målgalleriets ID. Foto-ZIP-exporter och gallerimigrering överför inte dessa allmänna PDF-original. En fullständig filsystemsbackup måste ta med dolda sidokataloger. Befintliga JPG-sidgallerier är fortsatt separata. Den tidigare serverbaserade OFP-konverteringsbegäran svarar nu med HTTP 409 och ber dig läsa om redigeraren; rasteriseringshjälpen finns endast för CLI- och testkompatibilitet och anropas inte av webbläsaråtgärder. Mer information finns i \codeword{docs/GALLERY\_PDF.md}.
+
+\subsubsection{Musiklagring}
+
+Använd \ui{Ladda upp foton} för~att~välja eller~släppa foton, PDF och~musik
+tillsammans. Ljud förblir original och~omvandlas inte till foton. Enbart ljud
+fungerar även med~bildförberedelsen avstängd. Galleriredigerarens \ui{Dokument
+/ PDF} behåller tabellen \ui{Musik} för~uppladdning, ordning, borttagning
+och~bildspelets sparade standard. Åtgärder stannar i~panelen. MP3, M4A, AAC,
+Ogg/Opus, WAV, FLAC och~WebM accepteras; webbläsarens kodekar avgör
+uppspelning. Galleriets synlighet, lösenord, delning och~NSFW-regler gäller.
+
+Tabellen visar spårlängd och~en~Spela/Stoppa-ikon före titeln. Ikonen
+växlar med~uppspelningen; ingen paus eller~separat uppspelningskolumn finns.
+Långa titlar förkortas med~ellips och~fullständig verktygstips; endast
+det~spelande spårets titel rullar vågrätt. Minskad rörelse behåller statisk
+text. Stängning av~listan behåller musik och~den~befintliga minispelaren.
+Kompakta
+Föregående/Spela/Stoppa/Nästa-ikoner finns på~sidan och~i~fotovisaren när~ljud
+finns. En~gemensam spelare förhindrar överlappning mellan rader, redigerare
+och~bildspel. Hela listan upprepas och~navigeringen går runt vid~ändarna.
+Automatisk bildspelsmusik är~avstängd från början; administratören kan~aktivera
+den~för~galleriet. Ett~aktiverat bildspel ersätter annan musik och~börjar
+med~första spåret. Stopp eller~stängning av~visaren frigör dess musik;
+oberoende startad tabellmusik kan~fortsätta. Foto- och~hastighetsändringar
+avbryter inte musiken. Webbläsaravslag tillåter ett~nytt Spela-försök;
+en~ospelbar lista stannar efter ett~varv.
+
+Smartgallerier förenar synlig musik från alla tillgängliga fysiska källor
+med~matchande foton. Fotosidor och~tillfälliga källfilter begränsar inte
+unionen; ingen egen ljudmapp skapas. SHA-256 tar~bort identiska originaldata
+även efter namnbyte. Lika namn eller~längd räcker inte; ändrad kodning
+eller~inbäddade taggar kräver framtida fingeravtryck. Dolda spår utelämnas,
+medan synliga hämtningsspärrade spår förblir spelbara. Befintliga och~nya
+spår är~synliga från början. Skyddade källadresser kontrollerar tillgång
+och~synlighet igen. Smartredigerarens presentationsundantag har~en~egen
+musikstandard för~bildspel, avstängd från början; källornas automatiska
+uppspelning ärvs inte.
+
+Varje nytt spår spärrar hämtning från början. Små administratörsikoner per~rad
+tillåter eller~spärrar hämtning; rubrikikonen ändrar alla aktuella spår. Senare
+uppladdningar börjar spärrade igen. Besökare ser hämtningsikoner enbart
+för~tillåtna spår; slutpunkten kontrollerar rättigheten och~galleritillgången
+igen. Uppspelning levererar ljuddata till webbläsaren, så~tekniskt kunniga
+besökare kan~fortfarande fånga dessa data.
+
+En~tyst metadataläsare i~webbläsaren hämtar längden, en~synlig rad åt~gången
+med~tio sekunders tidsgräns. Okänd längd visas som~ett~streck. Utan
+synlighetsobservation använder anslutna rader samma sekventiella läsare.
+Servern avkodar inget ljud. Uppladdningsförsök bevarar bekräftade foton, PDF
+och~musik; ett~okänt ljudsvar kräver kontroll av~galleriet före nästa försök.
+
+Original och~ordnat JSON-index ligger i~\filepath{.gallery-music/}. Indexet
+sparar namn, MIME-typer, storlekar, SHA-256, revision, bildspelsstandard
+och~spårens hämtningsrättigheter. Äldre poster utan rättighet förblir spärrade.
+Gränserna är~64~MiB per~fil, 100 spår och~512~MiB per~galleri; lägre
+PHP-gränser gäller. Säkerhetskopior måste inkludera dolda mappar. Foto-ZIP
+och~galleriöverföringar utelämnar musik. Se~\filepath{docs/GALLERY_MUSIC.md}.
+
+Använd den~värdbaserat förberedda kandidaten efter ruttändringar. PDF och~ljud
+delar den~befintliga körningsägaren för~bilagor; källor med~en~äldre genererad
+ruttplan kan~avvisa anrop tills den~förberedda planen har~lästs in. Lokal
+generering ersätter inte värdbaserad kvalificering.
 
 \subsection{Redigera identitet och sammanhang}
 \index{g00102@gallerimetadata}
@@ -695,6 +775,24 @@ operativsystemet; texten förblir skarp, medan inmatnings- och tabellområden
 förblir ogenomskinliga och kontrastrika. Ingen opacitet för hela fönstret används och inga
 körningsberoenden läggs till. Utan Pillow finns läsbara, platta ttk-ytor kvar;
 inbyggda kontroller samt källäget, inklusive \texttt{--once}, stöds fortfarande.
+
+\subsection{Uppdateringsmeddelande och indikatorer}
+
+Appen söker efter nya uploader-versioner vid start och därefter högst en gång
+i timmen; \ui{Check for updates} startar en manuell kontroll. Ett validerat
+erbjudande visas som en versionsbanner och en markerad uppdateringsknapp i
+sidhuvudet på alla skärmar. \ui{Later} döljer meddelandet, men båda indikatorerna
+finns kvar och kan öppna det igen. När systemfältet är tillgängligt visar ikonen
+en röd uppdateringsmarkering, verktygstipset anger erbjuden version och den
+första menyåtgärden anger versionen och öppnar samma meddelande. Utan stöd för
+systemfältet finns indikatorerna i appen kvar med full funktion. Appen lägger
+inte till någon överläggsmarkering i Windows aktivitetsfält och visar inga
+systemaviseringar.
+
+En misslyckad nätverkskontroll bevarar det validerade erbjudandet i cachen även
+efter omstart; erbjudandet valideras på nytt innan det återställs. En lyckad
+kontroll utan ett aktuellt erbjudande tar bort bannern, markeringen i sidhuvudet
+och uppdateringsmärket i systemfältet.
 
 \subsection{Simulatorposition i Windows}
 
@@ -1011,7 +1109,13 @@ Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanlig
 
 Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
-Den fristående uppladdaren är fortfarande 0.3.2. Bygget levererar installationsfil och motsvarande genererade \filepath{winapp-update.json} tillsammans under \filepath{winapp/dist/0.3.2/}. Båda hör till samma publicerade utgåva. Bygget ersätter inte verifiering av installerad Windows-app eller simulator.
+Källan till den fristående uppladdaren riktar sig nu mot version 0.4.1. Ett
+separat beställt installationsbygge placerar installationsfilen och tillhörande
+genererade metadata \filepath{winapp-update.json} under
+\filepath{winapp/dist/0.4.1/}. Installationsfilen och metadata hör till samma
+publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
+installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
+0.4.0, bevaras.
 
 \subsection{Administrationens arbetsyta}
 
@@ -2058,6 +2162,19 @@ Administrationsrutter och maskinadresser såsom installation, WebDAV, uppladdnin
 Databasundersökning inventerar schemaobjekt, referenser, ansvarskategorier, lagringspolicy och tillförlitligheten för rensning. Logisk rensning använder uttryckligen tillåtna regler med deterministiskt urval, begränsade omgångar och granskningsposter. Schemareparation ger en provkörning och en idempotent migreringsväg. \codeword{ANALYZE TABLE} kan uppdatera optimerarstatistik för valda tabeller. Fysisk \codeword{OPTIMIZE TABLE} finns bara som förhandsvisning följd av en separat bekräftad åtgärd för valda tabeller; den är aldrig ett automatiskt rensningssteg.\footnote{Lagringsmotorns allokeringsvärden såsom uppskattningar av ledigt datautrymme beskriver motorns tillstånd och garanterar inte ett exakt antal filsystemsbyte som frigörs efter optimering.}
 
 \subsection{Lagringsstatistik och fullständig rapport}
+
+Filvyn visar också antal och~byte för PDF- och~musikoriginal samt en
+samlad mediesumma. Efter fotobatcher mäter Uppdatera allt högst två fysiska
+gallerier per steg, även gallerier utan foton. Dolda, privata, avstängda
+filer och~spår utan nedladdning räknas också. Fysiska kopior räknas separat;
+smarta spellistor skapar ingen kopia. Konverterade PDF-sidor räknas redan
+som foton. Index, lås, konverteringstillstånd, oindexerade filer, Papperskorg
+och~andra cacher ingår inte. Oläsbara index eller osäkra/saknade filer ger
+synlig ofullständig mätning utan reparation. Vanliga sidor läser cache;
+bilageändringar markerar den som gammal när revisionsskrivningen lyckas.
+Efter uppgradering av äldre fotostatistik och~vid externa filändringar
+behövs Uppdatera allt för en ny mätning.
+
 \index{l00147@lagringsstatistik}
 \index{f00087@fullständig rapport}
 \index{g00107@gallerirapport}
@@ -2490,6 +2607,12 @@ Python-docstrings använder ett gemensamt format.
 GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agenter följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uttrycklig pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt den grenen. Ändra aldrig \codeword{develop} eller \codeword{main} direkt. Saknad behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller långsamt CI motiverar inte enbart lokal kvalificering.
 
 Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt, obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet och~paketkontroller på~Linux, Windows och~macOS. Alla obligatoriska jobb och~kontrollen av~exakt SHA måste lyckas. Utgåveflödet bygger alla fyra PDF-handböcker en~gång efter de~slutliga källändringarna, inte vid~rutinmässig utveckling.
+
+Det värdbaserade portabla WinApp-jobbet installerar det befintliga
+Pillow-kravet i den Python-tolk som valts för revisionen, så att pixeltestet
+för aktivitetsfältsmärket körs i stället för att hoppas över. Lokala körningar
+utan Pillow kan fortfarande hoppa över detta valfria visuella test; värdjobbet
+utan grafiskt gränssnitt installerar inte pystray.
 
 Regressionstesterna för~titelbilden utökar de~redan registrerade sviterna för~Admin-panelens delegering och~webbläsarens livscykel samt den~befintliga HTTP-/databassviten för~samtidiga galleriändringar. Testfixturerna körs via \filepath{scripts/audit.php}; de~lägger inte till någon YAML-testägare eller alternativ körning, och~det~skyddade evaluatorregistret förblir oförändrat.
 

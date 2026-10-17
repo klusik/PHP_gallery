@@ -62,6 +62,7 @@ function view_render_admin_upload_clipboard_hint(bool $panelMode = false): void
             'unnamed' => t('admin.upload.queue_unnamed', 'Unnamed image'),
             'unsupported-format' => t('admin.upload.queue_unsupported_format', 'This format may not be supported for upload'),
             'pdf-document' => t('pdf.queue_document', 'PDF document'),
+            'audio-document' => t('music.queue_document'),
             'zip-requires-browser' => t('admin.upload.queue_zip_requires_browser', 'ZIP requires browser-assisted upload'),
             'browser-format' => t('admin.upload.queue_browser_format', 'Use classic upload for this format'),
             'large-upload' => t('admin.upload.queue_large_upload', 'Exceeds the reported per-file server limit ({size})'),
@@ -151,19 +152,59 @@ function view_render_admin_upload_browser_checkbox(array $viewModel): void
 }
 
 /**
- * Render an existing-gallery upload form with attachment-only PDF defaults and collapsed opt-in conversion controls.
+ * Render an existing-gallery upload form with attachment-only PDF defaults and
+ *     collapsed opt-in conversion controls.
  *
- * @param array{panel_mode?:bool,action_url?:string,pdf_attachment_url?:string,csrf_html?:string,operation_key?:string,gallery_id?:int,target_title?:string,gallery_options_html?:string,accept_value?:string,pdf_render_dpi?:int,browser_checkbox_html?:string} $viewModel Controller-prepared target context and presentation fragments.
+ * @param array{panel_mode?:bool, action_url?:string,
+ *     pdf_attachment_url?:string, music_attachment_url?:string,
+ *     music_playlist_url?:string, music_accept_value?:string,
+ *     csrf_html?:string, operation_key?:string, gallery_id?:int,
+ *     target_title?:string, gallery_options_html?:string, accept_value?:string,
+ *     pdf_render_dpi?:int, browser_checkbox_html?:string,
+ *     pdf_enabled?:bool,music_enabled?:bool} $viewModel
+ *     Controller-prepared target context and image/PDF/music presentation
+ *     hints.
  * @return void Emit the native/AJAX-compatible form without resolving domain policy.
  */
 function view_render_admin_upload_existing_gallery_form(array $viewModel): void
 {
     $panelMode = !empty($viewModel['panel_mode']);
+    $pdfEnabled = $viewModel['pdf_enabled'] ?? true;
+    $musicAttributes = ' data-music-attachment-url="'
+        . e((string) ($viewModel['music_attachment_url'] ?? ''))
+        . '" data-music-playlist-url="'
+        . e((string) ($viewModel['music_playlist_url'] ?? ''))
+        . '" data-music-upload-error="' . e(t('music.failed'))
+        . '" data-music-upload-unknown="' . e(t('music.upload_unknown')) . '"';
     if ($panelMode) {
-        echo '<section class="admin-side-panel-card admin-side-panel-upload-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.existing_gallery', 'Existing gallery')) . '</p><h3>' . e(t('admin.upload.upload_existing_title', 'Upload into an existing gallery')) . '</h3></div><p class="muted">' . e(t('admin.upload.upload_existing_help', 'Choose a gallery and upload photos without leaving the drawer.')) . '</p></div><form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" enctype="multipart/form-data" class="admin-side-panel-form" data-gallery-upload-form data-pdf-attachment-url="' . e((string) ($viewModel['pdf_attachment_url'] ?? '')) . '" data-gallery-panel-close-on-success="1">' . (string) ($viewModel['csrf_html'] ?? '');
+        echo '<section class="admin-side-panel-card'
+            . ' admin-side-panel-upload-card">'
+            . '<div class="admin-side-panel-card-heading"><div>'
+            . '<p class="admin-kicker">'
+            . e(t('admin.upload.existing_gallery', 'Existing gallery'))
+            . '</p><h3>' . e(t('admin.upload.upload_existing_title',
+                'Upload into an existing gallery'))
+            . '</h3></div><p class="muted">'
+            . e(t('admin.upload.upload_existing_help',
+                'Choose a gallery and upload photos without leaving the drawer.'))
+            . '</p></div><form method="post" action="'
+            . e((string) ($viewModel['action_url'] ?? ''))
+            . '" enctype="multipart/form-data" class="admin-side-panel-form"'
+            . ' data-gallery-upload-form data-pdf-attachment-url="'
+            . e((string) ($viewModel['pdf_attachment_url'] ?? ''))
+            . '" data-gallery-panel-close-on-success="1"'
+            . $musicAttributes . '>' . (string) ($viewModel['csrf_html'] ?? '');
         echo '<input type="hidden" name="panel" value="1">';
     } else {
-        echo '<section class="panel"><h2>' . e(t('admin.upload.upload_existing_title', 'Upload into existing gallery')) . '</h2><form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form data-pdf-attachment-url="' . e((string) ($viewModel['pdf_attachment_url'] ?? '')) . '">' . (string) ($viewModel['csrf_html'] ?? '');
+        echo '<section class="panel"><h2>'
+            . e(t('admin.upload.upload_existing_title',
+                'Upload into existing gallery'))
+            . '</h2><form method="post" action="'
+            . e((string) ($viewModel['action_url'] ?? ''))
+            . '" enctype="multipart/form-data" class="form-grid"'
+            . ' data-gallery-upload-form data-pdf-attachment-url="'
+            . e((string) ($viewModel['pdf_attachment_url'] ?? '')) . '"'
+            . $musicAttributes . '>' . (string) ($viewModel['csrf_html'] ?? '');
     }
     echo '<input type="hidden" name="upload_mode" value="existing">';
     echo '<input type="hidden" name="operation_key" value="' . e((string) ($viewModel['operation_key'] ?? '')) . '" data-admin-operation-key>';
@@ -173,20 +214,58 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
     } else {
         echo '<label' . ($panelMode ? ' class="admin-side-panel-field admin-side-panel-field-wide"' : '') . '><span>' . e(t('admin.upload.gallery', 'Gallery')) . '</span><select name="gallery_id" required>' . (string) ($viewModel['gallery_options_html'] ?? '') . '</select></label>';
     }
-    $existingGalleryAccept = trim((string) ($viewModel['accept_value'] ?? ''), ',') . ',.pdf,application/pdf';
-    echo '<label tabindex="0" data-gallery-upload-drop-zone' . ($panelMode ? ' class="admin-side-panel-file-drop"' : '') . '><span class="admin-side-panel-file-title">' . e(t('admin.upload.images', 'Images')) . '</span><input name="images[]" type="file" accept="' . e($existingGalleryAccept) . '" multiple><span class="muted">' . e(t('admin.upload.choose_images_for_gallery', 'Choose one or more images for this gallery.')) . '</span></label>';
-    echo '<fieldset class="gallery-upload-pdf-options" data-gallery-upload-pdf-options><legend>' . e(t('pdf.documents', 'Documents / PDFs')) . '</legend>';
-    echo '<label><span>' . e(t('pdf.choose', 'Choose PDF (maximum 25 MiB)')) . '</span><input name="pdf_files[]" type="file" accept=".pdf,application/pdf" multiple data-gallery-upload-pdf-input></label>';
-    echo '<p class="muted">' . e(t('pdf.upload.attach_help', 'PDFs are attached as original documents. No gallery or page images are created unless you enable conversion in Advanced.')) . '</p>';
-    echo '<details data-gallery-upload-pdf-advanced><summary>' . e(t('pdf.upload.advanced', 'Advanced')) . '</summary>';
-    echo '<label><input type="checkbox" name="pdf_convert_pages" value="1" data-gallery-upload-pdf-convert> <span>' . e(t('pdf.upload.convert_pages', 'Also convert PDF pages to PNG')) . '</span></label>';
-    echo '<p class="muted">' . e(t('pdf.convert_help', 'Render pages in this browser; choose a private subgallery or append them at the end of this gallery. The original PDF remains unchanged.')) . '</p>';
-    echo '<label>' . e(t('pdf.destination', 'PNG page destination')) . '<select name="pdf_target_mode" data-gallery-upload-pdf-target><option value="child">' . e(t('pdf.private_child', 'Create private subgallery')) . '</option><option value="append">' . e(t('pdf.append', 'Append after the last photo in this gallery')) . '</option></select></label>';
-    echo '<label>' . e(t('pdf.dpi', 'PDF page rendering resolution (DPI)')) . '<select name="pdf_dpi" data-gallery-upload-pdf-dpi>';
-    foreach ([96, 150, 200, 300, 600, 1200, 2400] as $dpi) {
-        echo '<option value="' . $dpi . '"' . ($dpi === (int) ($viewModel['pdf_render_dpi'] ?? 150) ? ' selected' : '') . '>' . $dpi . ' DPI</option>';
+    $existingGalleryAccept = trim((string) ($viewModel['accept_value'] ?? ''), ',')
+        . ($pdfEnabled ? ',.pdf,application/pdf' : '')
+        . ',' . (string) ($viewModel['music_accept_value'] ?? '');
+    echo '<label tabindex="0" data-gallery-upload-drop-zone'
+        . ($panelMode ? ' class="admin-side-panel-file-drop"' : '')
+        . '><span class="admin-side-panel-file-title">'
+        . e(t('admin.upload.media_files_label', 'Files')) . '</span>'
+        . '<input name="images[]" type="file" accept="'
+        . e($existingGalleryAccept) . '" multiple><span class="muted">'
+        . e(t('admin.upload.media_files_help',
+            'Select or drop supported files. Enabled gallery media types'
+            . ' are shown in the file picker.')) . '</span></label>';
+    if ($pdfEnabled) {
+        echo '<fieldset class="gallery-upload-pdf-options"'
+            . ' data-gallery-upload-pdf-options><legend>'
+            . e(t('pdf.documents', 'Documents / PDFs')) . '</legend>';
+        echo '<label><span>'
+            . e(t('pdf.choose', 'Choose PDF (maximum 25 MiB)'))
+            . '</span><input name="pdf_files[]" type="file"'
+            . ' accept=".pdf,application/pdf" multiple'
+            . ' data-gallery-upload-pdf-input></label>';
+        echo '<p class="muted">' . e(t('pdf.upload.attach_help',
+            'PDFs are attached as original documents. No gallery or page'
+            . ' images are created unless you enable conversion in Advanced.'))
+            . '</p><details data-gallery-upload-pdf-advanced><summary>'
+            . e(t('pdf.upload.advanced', 'Advanced')) . '</summary>';
+        echo '<label><input type="checkbox" name="pdf_convert_pages" value="1"'
+            . ' data-gallery-upload-pdf-convert> <span>'
+            . e(t('pdf.upload.convert_pages', 'Also convert PDF pages to PNG'))
+            . '</span></label><p class="muted">' . e(t('pdf.convert_help',
+                'Render pages in this browser; choose a private subgallery'
+                . ' or append them at the end of this gallery.'
+                . ' The original PDF remains unchanged.')) . '</p>';
+        echo '<label>' . e(t('pdf.destination', 'PNG page destination'))
+            . '<select name="pdf_target_mode" data-gallery-upload-pdf-target>'
+            . '<option value="child">'
+            . e(t('pdf.private_child', 'Create private subgallery'))
+            . '</option><option value="append">'
+            . e(t('pdf.append', 'Append after the last photo in this gallery'))
+            . '</option></select></label><label>'
+            . e(t('pdf.dpi', 'PDF page rendering resolution (DPI)'))
+            . '<select name="pdf_dpi" data-gallery-upload-pdf-dpi>';
+        foreach ([96, 150, 200, 300, 600, 1200, 2400] as $dpi) {
+            $selected = $dpi === (int) ($viewModel['pdf_render_dpi'] ?? 150);
+            echo '<option value="' . $dpi . '"'
+                . ($selected ? ' selected' : '') . '>' . $dpi . ' DPI</option>';
+        }
+        echo '</select><span class="muted">' . e(t('pdf.dpi_help',
+            'Higher DPI increases dimensions, memory, upload size and'
+            . ' processing time. PNG pages are lossless.'))
+            . '</span></label></details></fieldset>';
     }
-    echo '</select><span class="muted">' . e(t('pdf.dpi_help', 'Higher DPI increases dimensions, memory, upload size and processing time. PNG pages are lossless.')) . '</span></label></details></fieldset>';
     view_render_admin_upload_clipboard_hint($panelMode);
     echo '<label' . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '') . '><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
     echo (string) ($viewModel['browser_checkbox_html'] ?? '');

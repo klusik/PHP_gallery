@@ -114,6 +114,7 @@ function seo_request_guard_route_is_non_indexable_download(string $page): bool
 {
     return in_array($page, [
         'gallery_ofp_pdf',
+        'gallery_music',
         'download_gallery_start',
         'download_gallery',
         'download_gallery_manifest',
@@ -223,6 +224,9 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'share' => ['token', 'id', 'view_as'],
         'media' => ['id', 'v', 'ofp', 'download', 'share', 'token'],
         'gallery_ofp_pdf' => ['id', 'document', 'download', 'share', 'token'],
+        'gallery_music' => [
+            'id', 'track', 'playlist', 'download', 'share', 'token', 'view_as',
+        ],
         'thumb' => ['id', 'size', 'format', 'v'],
         'public_media' => ['public_path', 'v'],
         'public_thumb' => ['public_path', 'size', 'format', 'v'],

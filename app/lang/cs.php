@@ -33,6 +33,27 @@
  */
 
 return [
+    'music.title' => 'Hudba',
+    'music.track' => 'Skladba',
+    'music.order' => 'Pořadí playlistu',
+    'music.up' => 'Posunout výš',
+    'music.down' => 'Posunout níž',
+    'music.remove' => 'Odstranit',
+    'music.upload' => 'Nahrát hudbu',
+    'music.upload_help' => 'MP3, M4A, AAC, Ogg, Opus, WAV, FLAC nebo WebM; nejvýše 64 MiB na soubor. Platí podpora kodeků prohlížeče a limity nahrávání PHP.',
+    'music.default' => 'Ve slideshow této galerie zapnout hudbu ve výchozím stavu',
+    'music.save_default' => 'Uložit výchozí volbu hudby',
+    'music.saved' => 'Hudební playlist byl uložen.',
+    'music.play_music' => 'Přehrávat hudbu',
+    'music.previous' => 'Předchozí skladba',
+    'music.next' => 'Další skladba',
+    'music.play' => 'Přehrát',
+    'music.stop' => 'Zastavit',
+    'music.playback_error' => 'Skladbu nelze přehrát. Zkuste Přehrát nebo vyberte jinou skladbu.',
+    'music.invalid_file' => 'Vyberte platný zvukový soubor MP3, M4A, AAC, Ogg, Opus, WAV, FLAC nebo WebM do 64 MiB.',
+    'music.failed' => 'Hudbu se nepodařilo uložit nebo načíst. Zkontrolujte oprávnění úložiště a limity PHP a znovu otevřete editor galerie.',
+    'music.conflict' => 'Playlist se změnil. Před dalším pokusem znovu otevřete editor galerie.',
+    'music.quota' => 'Galerie může obsahovat nejvýše 100 skladeb a 512 MiB hudby.',
     'lightbox.slideshow_photo_speed' => 'Rychlost střídání fotografií',
     'lightbox.slideshow_transition_speed' => 'Rychlost přechodu',
     'lightbox.slideshow_speed_fast' => 'Rychlá',
@@ -1185,4 +1206,77 @@ return [
     'admin.updates.autoupdate_dry_run_button' => 'Provést suchou kontrolu',
     'admin.updates.autoupdate_dry_run_hint' => 'Ihned zkontrolovat pouze metadata. Aktualizuje diagnostiku, ale neinstaluje soubory.',
     'admin.updates.autoupdate_settings_saved' => 'Nastavení automatických aktualizací bylo uloženo.',
+    'music.duration' => 'Délka',
+    'music.duration_unknown' => 'Délka není dostupná',
+    'music.playback' => 'Přehrávání',
+    'music.queue_document' => 'Hudba',
+    'music.upload_unknown' => 'Výsledek nahrání hudby není známý. Před dalším nahráním zkontrolujte galerii.',
+    'music.upload_files_label' => 'Fotografie, PDF a hudba',
+    'music.upload_files_help' => 'Vyberte nebo přetáhněte fotografie, dokumenty PDF a zvukové soubory. Hudba se uloží jako originál a nepřevádí se na fotografie.',
+    'music.browser_required' => 'Hudba z formuláře Nahrát fotografie vyžaduje nahrávání v prohlížeči. Obnovte stránku a zkuste to znovu.',
+    'music.download' => 'Stáhnout skladbu',
+    'music.allow_download' => 'Povolit stažení této skladby',
+    'music.lock_download' => 'Zakázat stažení této skladby',
+    'music.allow_all' => 'Povolit stažení všech aktuálních skladeb',
+    'music.lock_all' => 'Zakázat stažení všech aktuálních skladeb',
+
+    'admin.features.gallery_pdf_documents.label' =>
+        'PDF dokumenty galerií',
+    'admin.features.gallery_pdf_documents.description' =>
+        'Nahrávání, zobrazení a převod PDF galerií včetně originálů '
+        . 'SimBrief. Vypnutí zachová existující soubory a nastavení.',
+    'admin.features.gallery_music.label' =>
+        'Hudba galerií',
+    'admin.features.gallery_music.description' =>
+        'Nahrávání a přehrávání hudby galerií a Smart galerií. Vypnutí '
+        . 'zachová soubory, playlisty a nastavení slideshow.',
+    'admin.upload.media_files_label' =>
+        'Soubory',
+    'admin.upload.media_files_help' =>
+        'Vyberte nebo přetáhněte podporované soubory. Dialog nabízí '
+        . 'zapnuté typy médií galerie.',
+    'admin.storage.pdf_originals' =>
+        'Originály PDF',
+    'admin.storage.pdf_originals_hint' =>
+        '{count} dokumentů galerií včetně PDF ze SimBrief.',
+    'admin.storage.music_originals' =>
+        'Originály hudby',
+    'admin.storage.music_originals_hint' =>
+        '{count} uložených hudebních souborů včetně skrytých a '
+        . 'nestáhnutelných skladeb.',
+    'admin.storage.total_media' =>
+        'Všechna média',
+    'admin.storage.total_media_hint' =>
+        'Obrázky a jejich odvozené soubory spolu s originály PDF a hudby.',
+    'admin.storage.attachment_warnings' =>
+        'Neúplné měření příloh',
+    'admin.storage.attachment_warnings_hint' =>
+        'Některé originály nebo indexy se nepodařilo načíst. Součty '
+        . 'zahrnují jen změřené soubory.',
+    'admin.storage.description' =>
+        'Velikosti fotografií pocházejí z databáze. Aktualizovat vše '
+        . 'změří odvozené soubory a indexované originály PDF a hudby.',
+    'admin.storage.no_snapshot_hint' =>
+        'Spusťte Aktualizovat vše pro změření fotografií, odvozených '
+        . 'souborů, originálů PDF a hudby i grafů.',
+    'admin.settings.item.feature_gallery_pdf_documents' =>
+        'PDF dokumenty galerií',
+    'admin.settings.item.feature_gallery_pdf_documents.hint' =>
+        'Nahrávání, zobrazení a převod PDF galerií včetně originálů '
+        . 'SimBrief. Vypnutí zachová existující soubory a nastavení.',
+    'admin.settings.item.feature_gallery_pdf_documents.example' =>
+        'Zapnutí povolí tento typ médií; vypnutí zachová soubory a je '
+        . 'vratné.',
+    'admin.settings.item.feature_gallery_music' =>
+        'Hudba galerií',
+    'admin.settings.item.feature_gallery_music.hint' =>
+        'Nahrávání a přehrávání hudby galerií a Smart galerií. Vypnutí '
+        . 'zachová soubory, playlisty a nastavení slideshow.',
+    'admin.settings.item.feature_gallery_music.example' =>
+        'Zapnutí povolí tento typ médií; vypnutí zachová soubory a je '
+        . 'vratné.',
+    'admin.storage.progress_counts' =>
+        '{processed} / {total} záznamů',
+    'admin.storage.tab_files_hint' =>
+        'Fotografie, odvozené soubory, originály PDF a hudby',
 ];

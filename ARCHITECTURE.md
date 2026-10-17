@@ -16,7 +16,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.134';
+const CMS_VERSION = '0.135';
 ```
 
 Update-related code uses:
@@ -25,6 +25,61 @@ Update-related code uses:
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 ```
+
+## Gallery music ownership
+
+Global PDF and music availability uses independent default-ON capabilities
+`gallery_pdf_documents` and `gallery_music` in the canonical feature registry.
+Missing preferences preserve enabled behavior on upgrades; explicit OFF survives
+fresh-default replay. Shared editor/upload actions gate their individual media
+operation. Dedicated routes and the historical OFP alias enforce OFF as well.
+Public controllers omit discovery/presentation before loading attachment data;
+the existing compact row therefore has no empty media column. SimBrief can
+refresh descriptions/routes with PDF OFF while retaining an old original.
+
+Admin storage uses the existing statistics model/service/view and manual Update
+all coordinator. Photo derivative keysets are followed by physical-gallery
+keysets, at most two galleries per step. The existing attachment owner measures
+bounded indexes and expected original file sizes without payload hashing or a
+recursive filesystem scan. Galleries without images and hidden/locked/disabled
+originals count; Smart unions create no additional storage. Separate PDF/music
+counts and bytes join the existing photograph total in `total_media_bytes`.
+Unreadable indexes/originals produce explicit partial-accounting warnings.
+Passive pages only read cached totals. See the accounting scope in
+[gallery PDF documents](docs/GALLERY_PDF.md#admin-storage-accounting).
+
+Gallery music originals and ordered preferences use a confined hidden sidecar.
+`app/services/gallery_music.php` owns content admission and revisioned filesystem
+workflows; `app/models/gallery_music.php` owns atomic index persistence. No SQL
+schema is added. See [music storage and limits](docs/GALLERY_MUSIC.md).
+
+PDF and audio routes share the existing attachment runtime owner under its
+historical `gallery-pdf-documents` machine name. Public presentation loads it
+only when attachments exist. This retains the complete routing/access closure
+without adding a logical module beyond the consumed global allowance.
+
+Shared view helpers render native attachment disclosures;
+`gallery-media-panels.js` owns bounded top-layer presentation without moving
+forms out of their gallery. It retains native inline capability fallback and
+reopens same-identity cards after canonical replacement. PDF/music launchers
+share one description column; the existing miniplayer stays outside the list.
+
+Smart music resolves complete canonical source-summary IDs before optional
+attachment loading. The existing music service merges visible indexed tracks
+by stored content digest, without SQL or audio decoding. Source authorization
+and track visibility remain enforced by protected physical delivery. Smart
+presentation owns its independent default-off autoplay flag; no Smart music
+filesystem is created. See `docs/SMART_GALLERIES.md` for union semantics.
+
+One exclusive page-wide Audio owner synchronously applies the saved slideshow
+preference before fullscreen awaits. Tables, editor cards and viewer HUD share
+icon controls; only one source can play. Duration uses one separate silent,
+bounded metadata reader. Upload photos partitions audio before image decoding
+and retains acknowledged stages across exact retries. Download permission is
+per track, defaults false and is checked in the protected controller as well as
+presentation. See the music contract for lifecycle and byte-capture limitations.
+The independent editor card uses canonical mutation completion and delegated
+fragment replacement.
 
 ## Runtime slideshow timing controls
 
@@ -601,6 +656,7 @@ contract and load order are preserved.
 
 | Module entry point | Part directory | Parts |
 | --- | --- | --- |
+| `app/services/admin_storage_statistics.php` | `app/services/admin_storage_statistics/` | `jobs.php` (bounded photo/gallery cursors and additive cached snapshots) |
 | `app/services/admin_setup_wizard.php` | `app/services/admin_setup_wizard/` | `catalog.php`, `draft.php`, `preferences.php`, `apply.php` (registry discovery, staged choices, operational owner adapters, and approved transactional settings writes) |
 | `app/services/cooperative_galleries.php` | `app/services/cooperative_galleries/` | `validation.php`, `credentials.php`, `proposals.php`, `storage.php`, `sources.php` (peer, unanimous collaboration and local source preparation) |
 | `app/services/cooperative_proposals.php` | `app/services/cooperative_proposals/` | `state.php`, `decisions.php`, `protocol.php`, `transport.php`, `verification.php`, `activation.php`, `maintenance.php`, `review.php`, `composition.php`, `metadata.php`, `workflow.php` (proposal exchange, email, direct invalidation and bounded activation) |

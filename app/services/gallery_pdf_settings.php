@@ -4,13 +4,35 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: app/services/gallery_pdf_settings.php
  * Module Type: Service
- * Purpose: Own resolution settings for new browser PDF page conversions.
- * Responsibilities: Validate DPI choices independently of image-upload ingestion.
+ * Purpose: Own PDF conversion settings and attachment accounting invalidation.
+ * Responsibilities: Validate DPI choices and mark cached attachment totals stale.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
 declare(strict_types=1);
 namespace Gallery\Services;
+
+/**
+ * Invalidate cached media totals after a committed attachment mutation.
+ *
+ * This marker is advisory reporting state, independent of original publication.
+ * If its database write fails, preserve the successful attachment response;
+ * the next explicit Update all still measures the files. This permanent
+ * best-effort policy prevents an acknowledged file from being uploaded twice
+ * merely because optional statistics invalidation failed.
+ *
+ * @return void Advance the opaque accounting revision when storage permits.
+ */
+function gallery_attachment_storage_changed(): void
+{
+    try {
+        // A random 128-bit nonce identifies a change, not a numeric policy.
+        set_app_setting('gallery_attachment_storage_revision',
+            bin2hex(random_bytes(16)));
+    } catch (\Throwable) {
+        // Optional reporting failure must not undo committed attachment work.
+    }
+}
 
 /**
  * Validate the administrator's lossless PNG page resolution.

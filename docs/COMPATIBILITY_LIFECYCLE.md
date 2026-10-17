@@ -1,5 +1,98 @@
 # Compatibility lifecycle and retirement register
 
+## Attachment masters and accounting snapshots
+
+Owners: canonical capability registry, shared upload/editor controllers,
+attachment readers and Admin storage statistics. Independent PDF/music masters
+default ON when no preference exists, including upgrades; fresh seeding preserves
+explicit OFF. OFF retains files, indexes, preferences and the incomplete-PDF-child
+publication guard. The historical `media&ofp=1` alias remains supported and applies
+the same PDF master. Stored page photos retain their normal image ownership.
+Both masters OFF omit the shared editor media tab; an old selected-tab URL
+normalizes to the available Identity default rather than an empty panel.
+
+Photo-only cached snapshots/jobs are derived state and cannot establish complete
+attachment coverage. The new v3 snapshot/v2 job keys do not rewrite original data
+or old derived bytes; the first new measurement requires explicit Update all.
+The existing optional snapshot argument remains supported for pure/legacy
+photo-only consumers and contributes zero attachment bytes when omitted.
+
+The attachment accounting owner omits corrupt indexes and unsafe/unreadable
+originals with visible partial-coverage warnings, preserving independent readable
+categories and all original bytes. This is permanent read-only reporting behavior,
+not permission to repair indexes. A post-commit advisory revision write may fail
+without failing the successful attachment response; the next manual scan still
+measures files. This permanent fallback avoids duplicate retries after optional
+reporting failures. Out-of-band file changes require manual refresh.
+
+Regression owners: canonical feature core/inventory, real MySQL/MariaDB HTTP
+workflow and the existing storage-statistics fixture. Real-host library sizes,
+permissions and media usage remain unknown; no performance/usage-based retirement
+of these compatibility paths is claimed.
+
+## Gallery soundtrack browser support
+
+Owners: gallery music service/model, protected controller and
+`gallery-music-player.js`. Music is additive, stored per physical gallery and
+defaults off. Existing galleries without a music index retain silent slideshows
+without loading attachment presentation. There is no SQL migration or change to
+existing gallery visibility, password/share or NSFW policy.
+
+Native codec and autoplay support varies by browser. The permanent compatibility
+path keeps photos running when optional music is refused, exposes an explicit
+Play retry for user-gesture rejection, and skips failed sources with one bounded
+pass rather than an unbounded retry loop. Viewer teardown retires pending audio
+generations and releases the source. Adopted formats/browser versions and live
+device usage are unknown; retain these behaviors until deployed browser and
+regression evidence proves a specific support path can be safely retired.
+Controlled browser and isolated HTTP fixtures are coverage, not live codec or
+installed-host acceptance. See `docs/GALLERY_MUSIC.md` and `TESTING.md`.
+
+The same player owns a permanent serialized metadata fallback when
+IntersectionObserver is unavailable: connected duration cells share one silent
+reader and ten-second deadlines. Unknown duration remains explicit. Live usage
+of this fallback is unknown; retire only with supported-browser/deployment proof.
+The music model also owns permanent v1 compatibility: a missing download flag
+means false. New tracks always start locked; bulk permission affects current
+tracks only. This prevents old indexes or later uploads inheriting permission.
+
+## Smart Gallery music and visibility compatibility
+
+Owners: music model/service/controller and existing Smart source/presentation
+services. V1 records without `hidden` remain visible, preserving historical
+behavior; missing download permission still means locked. New uploads explicitly
+start visible and locked. Public view/stream boundaries enforce hidden state,
+including anonymous preview; administrator hiding controls remain future work.
+No SQL migration or format rewrite is required to read existing indexes.
+
+Smart music uses canonical complete source membership and protected source URLs.
+Its own `music_enabled` presentation override is absent/false for existing Smart
+galleries. A corrupt source index is omitted read-only by the merge service,
+retaining original bytes and other sources. Both paths are permanent supported
+behavior; deployed adoption is unknown, so retirement needs explicit stored-data
+and supported-installation proof. SHA-256 only proves identical original bytes;
+acoustic equality across encodings/tags is unknown and is not inferred from
+filenames or duration. Hosted service, actual HTTP/DB and browser owners cover
+these boundaries; real codecs/devices and large deployed unions remain manual.
+
+## Compact attachment browser presentation
+
+Owners: `gallery-media-panels.js`, shared lightbox view helpers and music player.
+Native details is the permanent no-JavaScript and missing-Popover fallback: the
+bounded list opens inline while forms keep their original ownership. Optional
+Web Animations is feature-detected; missing support closes immediately. User
+reduced-motion preference disables both disclosure motion and row-title scrolling.
+ResizeObserver is optional: play/open/resize events still measure title overflow
+without it. These paths protect attachment access, keyboard dismissal and
+exclusive audio without requiring newer browser APIs.
+
+Live browser adoption and low-end device results are unknown. Required Chromium
+covers desktop/narrow popup bounds, toggled row state, single audio ownership,
+scroll-preserving replacement and missing-Popover presentation. Native
+no-JavaScript use, assistive technology, Safari/mobile and reduced-motion
+acceptance remain manual coverage. Retain these capability fallbacks permanently
+unless deployed support and regression evidence justify a deliberate retirement.
+
 ## Watch-folder UTC synchronization and packaged Python
 
 Owners: `winapp/uploader/simconnect_time.py`, the watcher GUI and updater drain.

@@ -9,7 +9,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {createPdfPngUploadStream} from './admin-pdf-conversion.js?v=20261012-pdf-dpi-warning-v3';
-import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261016-three-state-covers-v1';
+import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261017-media-applets-v1';
 import {beginAdminOperation, finishAdminOperation, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {completeAdminMutation} from './admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 import {i18nForElement, appendUploadProgressLog} from './admin-core.js?v=20261003-scoped-i18n-v1';
@@ -360,8 +360,14 @@ async function submitPdfAttachment(form, submitter) {
             container.replaceWith(replacement);
         } else if (result.panel_html === '') {
             const layout = container.closest('.gallery-description-documents');
+            const applets = container.closest('[data-gallery-attachment-applets]');
             container.remove();
-            if (layout) layout.replaceWith(...layout.childNodes);
+            if (applets && !applets.querySelector(
+                '[data-gallery-pdf-documents], [data-gallery-music]'
+            )) applets.remove();
+            if (layout && !layout.querySelector(
+                '[data-gallery-pdf-documents], [data-gallery-music]'
+            )) layout.replaceWith(...layout.childNodes);
             return true;
         }
         return Boolean(replacement);

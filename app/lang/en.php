@@ -33,6 +33,27 @@
  */
 
 return [
+    'music.title' => 'Music',
+    'music.track' => 'Track',
+    'music.order' => 'Playlist order',
+    'music.up' => 'Move up',
+    'music.down' => 'Move down',
+    'music.remove' => 'Remove',
+    'music.upload' => 'Upload music',
+    'music.upload_help' => 'MP3, M4A, AAC, Ogg, Opus, WAV, FLAC or WebM; up to 64 MiB per file. Browser codec support and PHP upload limits apply.',
+    'music.default' => 'Enable music by default in this gallery’s slideshow',
+    'music.save_default' => 'Save music preference',
+    'music.saved' => 'Music playlist saved.',
+    'music.play_music' => 'Play music',
+    'music.previous' => 'Previous track',
+    'music.next' => 'Next track',
+    'music.play' => 'Play',
+    'music.stop' => 'Stop',
+    'music.playback_error' => 'This track could not play. Press Play to retry or choose another track.',
+    'music.invalid_file' => 'Choose a valid MP3, M4A, AAC, Ogg, Opus, WAV, FLAC or WebM audio file of up to 64 MiB.',
+    'music.failed' => 'Music could not be saved or loaded. Check storage permissions and PHP upload limits, then reopen the gallery editor.',
+    'music.conflict' => 'The playlist changed. Reopen the gallery editor before trying again.',
+    'music.quota' => 'A gallery can hold up to 100 tracks and 512 MiB of music.',
     'lightbox.slideshow_photo_speed' => 'Photo change speed',
     'lightbox.slideshow_transition_speed' => 'Transition speed',
     'lightbox.slideshow_speed_fast' => 'Fast',
@@ -1190,4 +1211,77 @@ return [
     'admin.updates.autoupdate_dry_run_button' => 'Run dry check now',
     'admin.updates.autoupdate_dry_run_hint' => 'Run a metadata-only check now. This updates last-check diagnostics but never installs files.',
     'admin.updates.autoupdate_settings_saved' => 'Automatic update settings were saved.',
+    'music.duration' => 'Duration',
+    'music.duration_unknown' => 'Duration unavailable',
+    'music.playback' => 'Playback',
+    'music.queue_document' => 'Audio',
+    'music.upload_unknown' => 'The music upload response is unknown. Check the gallery before uploading again.',
+    'music.upload_files_label' => 'Photos, PDFs and music',
+    'music.upload_files_help' => 'Select or drop photos, PDF documents and audio files. Music is stored as an original and is never converted into photos.',
+    'music.browser_required' => 'Music from Upload photos requires the browser workflow. Reload the page and try again.',
+    'music.download' => 'Download track',
+    'music.allow_download' => 'Allow downloading this track',
+    'music.lock_download' => 'Prevent downloading this track',
+    'music.allow_all' => 'Allow downloading all current tracks',
+    'music.lock_all' => 'Prevent downloading all current tracks',
+
+    'admin.features.gallery_pdf_documents.label' =>
+        'Gallery PDF documents',
+    'admin.features.gallery_pdf_documents.description' =>
+        'Upload, display and convert gallery PDFs, including SimBrief '
+        . 'originals. Disabling preserves existing files and settings.',
+    'admin.features.gallery_music.label' =>
+        'Gallery music',
+    'admin.features.gallery_music.description' =>
+        'Upload and play gallery and Smart Gallery music. Disabling '
+        . 'preserves existing files, playlists and slideshow settings.',
+    'admin.upload.media_files_label' =>
+        'Files',
+    'admin.upload.media_files_help' =>
+        'Select or drop supported files. Enabled gallery media types are '
+        . 'shown in the file picker.',
+    'admin.storage.pdf_originals' =>
+        'PDF originals',
+    'admin.storage.pdf_originals_hint' =>
+        '{count} gallery document(s), including SimBrief PDFs.',
+    'admin.storage.music_originals' =>
+        'Music originals',
+    'admin.storage.music_originals_hint' =>
+        '{count} stored audio file(s), including hidden and locked '
+        . 'tracks.',
+    'admin.storage.total_media' =>
+        'All media storage',
+    'admin.storage.total_media_hint' =>
+        'Pictures and their derivatives plus PDF and music originals.',
+    'admin.storage.attachment_warnings' =>
+        'Partial attachment accounting',
+    'admin.storage.attachment_warnings_hint' =>
+        'Some originals or indexes could not be read. Totals include only '
+        . 'measured files.',
+    'admin.storage.description' =>
+        'Photo sizes come from the database. Update all measures '
+        . 'derivatives and indexed PDF/music originals.',
+    'admin.storage.no_snapshot_hint' =>
+        'Use Update all to measure photos, derivatives, PDF/music '
+        . 'originals and charts.',
+    'admin.settings.item.feature_gallery_pdf_documents' =>
+        'Gallery PDF documents',
+    'admin.settings.item.feature_gallery_pdf_documents.hint' =>
+        'Upload, display and convert gallery PDFs, including SimBrief '
+        . 'originals. Disabling preserves existing files and settings.',
+    'admin.settings.item.feature_gallery_pdf_documents.example' =>
+        'ON permits this media type; OFF preserves files and can be '
+        . 'reversed.',
+    'admin.settings.item.feature_gallery_music' =>
+        'Gallery music',
+    'admin.settings.item.feature_gallery_music.hint' =>
+        'Upload and play gallery and Smart Gallery music. Disabling '
+        . 'preserves existing files, playlists and slideshow settings.',
+    'admin.settings.item.feature_gallery_music.example' =>
+        'ON permits this media type; OFF preserves files and can be '
+        . 'reversed.',
+    'admin.storage.progress_counts' =>
+        '{processed} / {total} record(s)',
+    'admin.storage.tab_files_hint' =>
+        'Photos, derivatives, PDF and music originals',
 ];

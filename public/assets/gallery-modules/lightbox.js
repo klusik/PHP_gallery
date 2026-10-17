@@ -48,6 +48,8 @@
  */
 
 
+import {getGalleryMusicPlayer, stopGalleryMusicViewer} from './gallery-music-player.js?v=20261017-media-applets-v1';
+
 /**
  * Return a translated browser string with simple placeholder replacement.
  *
@@ -757,6 +759,13 @@ export function setupGalleryLightbox() {
     let lightboxSlideshowSpeedPointerActive = false;
     // lightboxSlideshowEnabled stores whether this rendered gallery permits slideshow activation.
     const lightboxSlideshowEnabled = !(overlay instanceof HTMLElement) || overlay.dataset.lightboxSlideshowEnabled !== '0';
+    // Resolve the page-wide owner at activation time: an editor/table may have
+    // selected a different gallery since this viewer was initialized.
+    const musicPlayer = {
+        start: () => getGalleryMusicPlayer()?.start(),
+        stop: () => stopGalleryMusicViewer(),
+        closeViewer: () => stopGalleryMusicViewer(true),
+    };
     // lightboxPreviewPreloadRadius limits how many nearby preview images are warmed after a photo opens.
     const lightboxPreviewPreloadRadius = 4;
     // lightboxFullPreloadRadius stays zero so adjacent navigation warms previews without downloading full media early.
@@ -1108,6 +1117,7 @@ export function setupGalleryLightbox() {
     }
 
     galleryLightboxState.cleanup = () => {
+        musicPlayer.closeViewer();
         cancelLightboxMetadataRequests();
         controller.abort();
         lightboxNavigation.dispose();
@@ -4785,6 +4795,7 @@ export function setupGalleryLightbox() {
 
         /**
      * Start fullscreen slideshow mode.
+     * @returns {Promise<void>} Activate slideshow and audio before awaiting fullscreen.
      */
     async function startLightboxSlideshow() {
         if (lightboxSlideshowActive) {
@@ -4794,6 +4805,7 @@ export function setupGalleryLightbox() {
         resetLightboxZoom(false);
         lightboxSlideshowActive = true;
         syncLightboxSlideshowControls();
+        musicPlayer.start();
         if (!isLightboxFullscreen()) {
             await enterLightboxFullscreen();
         }
@@ -4808,6 +4820,7 @@ export function setupGalleryLightbox() {
      * @return {void} Cancels automatic work and releases the slider pointer hold.
      */
     function stopLightboxSlideshow(syncControls = true) {
+        musicPlayer.stop();
         lightboxSlideshowSpeedPointerActive = false;
         clearLightboxSlideshowTimer();
         if (!lightboxSlideshowActive) {
@@ -4823,6 +4836,7 @@ export function setupGalleryLightbox() {
 
         /**
      * Toggle slideshow mode from the toolbar, HUD, or S keyboard shortcut.
+     * @returns {Promise<void>} Stop active playback or activate the existing viewer.
      */
     async function toggleLightboxSlideshow() {
         if (!lightboxSlideshowEnabled) {
@@ -4886,6 +4900,7 @@ export function setupGalleryLightbox() {
             });
         }
         telemetryPhotoClosed();
+        musicPlayer.closeViewer();
         lightboxNavigation.invalidate();
         resetLightboxZoom(false);
         stopLightboxSlideshow();
@@ -5314,7 +5329,9 @@ export function setupGalleryLightbox() {
             close();
             return;
         }
-        if (event.target instanceof Element && event.target.closest('[data-lightbox-slideshow-speeds]')) {
+        if (event.target instanceof Element && event.target.closest(
+            '[data-lightbox-slideshow-speeds], [data-lightbox-music]'
+        )) {
             // Native range arrows/Home/End belong to the slider, never photo navigation or voting.
             return;
         }

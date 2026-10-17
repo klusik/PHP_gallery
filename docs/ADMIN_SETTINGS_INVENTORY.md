@@ -233,6 +233,17 @@ and protects the shared fallback and gallery-only inheritance sentinel.
 
 ## Feature capability ownership
 
+PDF documents and music have independent canonical masters
+`gallery_pdf_documents` and `gallery_music`, stored only as
+`feature_flag.<key>.enabled` in `app_settings`. Both registry defaults and fresh
+defaults are true; the seeder never overwrites an explicit OFF. The existing
+Settings capability-discovery loop indexes them automatically; edits remain in
+Admin Features. Their disable-data policy is `preserve`, with public, Admin and
+filesystem behavior tags and no dependency on one another or on SimBrief.
+Shared upload/editor routes gate the individual attachment action. PDF OFF also
+guards its historical delivery alias, optional SimBrief PDF import and prepared
+conversion batches; source descriptions and normal photos remain available.
+
 Admin > Features and the centralized Settings hub intentionally share discovery metadata but not persistence ownership. `app/services/feature_flags/registry.php` is authoritative for optional-capability keys, configured/effective semantics, dependencies, route ownership, storage source, behavior tags, and specialized destinations. `app/services/admin_settings_registry.php` may index those capabilities so search and status pages can find them, but it must not create a second copy of a feature master or write arbitrary `feature_flag.*` keys. Feature changes are saved through the feature policy/domain adapter that already owns the value.
 
 Three capability storage patterns are valid: the historical `feature_flag.<key>.enabled` app-setting convention, an explicit existing scalar app-setting key, or a domain adapter around an established subsystem setting. Existing masters such as Gallery Trash, public thumbnail self-healing, and Development Diagnostics therefore keep their established storage. A specialized Settings link is navigation metadata only; it does not transfer ownership to the central registry.

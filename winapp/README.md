@@ -12,6 +12,19 @@ use no Gallery API key; their timestamp and any available offer are stored
 separately in `%LOCALAPPDATA%\PHPGalleryUploader\updates`, so restarting within
 the hourly interval can still display an already discovered update.
 
+A validated offer remains visible as a version banner and marked update control
+in the main header across all screens. **Later** hides the notice but leaves both
+indicators available to reopen it. When tray support is available, the tray icon
+shows a red update badge, its tooltip identifies the offered version, and its
+first menu action becomes **Update <version>** and opens the same notice. Without
+tray support, the full in-app indicator remains available. The app does not set
+a Windows taskbar overlay or show operating-system toast notifications.
+
+A failed network recheck preserves the validated cached offer across restart;
+cached release metadata passes the current validator before the offer is
+restored. A successful check that finds no current offer clears the banner,
+header mark, and tray badge.
+
 Discovery examines paginated releases for the highest newer
 `PHPGalleryUploader-X.Y.Z-Setup.exe` asset. CMS release tags are not the uploader
 version. The highest candidate must have a trusted published SHA-256 digest;
@@ -55,13 +68,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.4.0)
+## Windows installer (next version: 0.4.1)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
-Gallery CMS release. The current source targets the upcoming **0.4.0** version;
-this version bump does not build or publish an installer. The next explicitly
-requested build will use a separate `winapp/dist/0.4.0/` folder, preserving the
-existing 0.3.2 installer and its update metadata.
+Gallery CMS release. The current source targets **0.4.1**; this source version
+change does not build or publish an installer. A separately requested build
+will place the installer and generated `winapp-update.json` in
+`winapp/dist/0.4.1/`. Existing 0.4.0 outputs and other version folders remain
+preserved.
 
 The installer includes Python, Tkinter, Pillow, pystray,
 the tray icons, and an embedded `SimConnect.dll` inside one application EXE.
@@ -114,8 +128,8 @@ The build script produces the installer and its matching update metadata togethe
 in a folder named after the independent WinApp version:
 
 ```text
-winapp/dist/0.4.0/PHPGalleryUploader-0.4.0-Setup.exe
-winapp/dist/0.4.0/winapp-update.json
+winapp/dist/0.4.1/PHPGalleryUploader-0.4.1-Setup.exe
+winapp/dist/0.4.1/winapp-update.json
 ```
 
 Attach both files from that folder to the same GitHub release as the CMS release.
@@ -127,8 +141,8 @@ metadata when GitHub's asset digest is unavailable. Its schema is:
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.4.0-Setup.exe",
-      "version": "0.4.0",
+      "name": "PHPGalleryUploader-0.4.1-Setup.exe",
+      "version": "0.4.1",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }

@@ -1,5 +1,13 @@
 # PHP Gallery CMS
 
+Gallery PDF documents and music have separate switches in **Admin → Features**.
+Both default ON for fresh and updated installations without a saved preference;
+OFF hides the corresponding media UI and rejects uploads/delivery while keeping
+stored files and preferences. **Storage statistics → Update all** includes
+PDF/music original counts and bytes, even while hidden, download-locked or
+globally disabled, plus an overall media total. See the
+[accounting scope](docs/GALLERY_PDF.md#admin-storage-accounting).
+
 Cache operations: [automatic visitor-driven retention, independent updater GC and safe incident remediation](docs/CACHE_MAINTENANCE.md). Installation/update enables the single Admin Features cache preference; explicit OFF survives updates. A suitable public visit starts authenticated server continuations with thirty-second opportunities and at most five seconds of work. A persistent database registry rotates due regions, resumes partial checkpoints and retains last-known measurements and confirmed deletion receipts. Healthy completed regions are rechecked hourly; an interrupted server chain needs a later restart opportunity. Cron is optional.
 Hosting cron can run `php scripts/site_maintenance.php --cache-only` every minute
 to drain already-staged updater trash independently of thumbnail maintenance.
@@ -22,7 +30,7 @@ PHP 8.1 is the compatibility minimum. For deployment, use the latest patch relea
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.134
+**Current Version:** 0.135
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -173,6 +181,36 @@ all HUD controls and the optional developer panel disappear, even if a range rem
 drag holds the controls visible until release, and automatic advances do not shorten the input inactivity window.
 Both ranges run from Slow on the left through Medium to Fast on the right.
 Choices remain only in the current viewer instance, including stop/resume and close/reopen; reloading resets them.
+
+### Gallery music and slideshow soundtrack
+
+Upload music through the ordinary Upload photos chooser/drop queue alongside
+photographs and PDFs, or through the gallery editor's separate Music table.
+Arrange tracks, remove them and save whether slideshow starts music automatically
+(initially off). MP3, M4A, AAC, Ogg/Opus, WAV, FLAC and WebM are accepted,
+subject to browser codecs/PHP limits: 64 MiB each, 100 tracks, 512 MiB per gallery.
+
+PDF/music lists open from compact count launchers into bounded scrollable
+applets. Each music row has one Play/Stop icon before its title; long titles
+truncate and scroll only while playing (static with reduced motion). Closing
+the list keeps its miniplayer and audio available. The table shows duration. Compact
+Previous/Play/Stop/Next controls are also available on the page and in the viewer
+whenever music exists. One shared player prevents overlap between rows, editor
+and slideshow; the playlist repeats in saved order. Enabled slideshow starts at
+the first track and replaces other music. Stopping/closing the viewer releases
+its owned music. Independently started table playback can continue.
+
+Smart Galleries merge visible music from all accessible canonical photo sources,
+independent of pagination/filtering. Identical original bytes appear once even
+when renamed; equal names/durations do not remove different audio. The Smart
+editor has its own default-off slideshow music preference. No originals are copied.
+
+Downloads start locked for every upload. Administrator row/header icons allow
+individual/all current tracks; visitors see download icons only when allowed.
+The endpoint enforces that permission and normal gallery access. Playable bytes
+can still be captured by a technically capable visitor. Backups must include
+hidden `.gallery-music/` directories; photo ZIPs and gallery transfer packages
+omit music. See [the music contract](docs/GALLERY_MUSIC.md).
 
 ### Lightbox Image Zoom
 

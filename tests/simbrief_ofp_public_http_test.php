@@ -28,6 +28,14 @@ declare(strict_types=1);
 const OFP_HTTP_STARTUP_POLL_MICROSECONDS = 50000;
 
 /**
+ * Bound one isolated attachment HTTP request.
+ * Type: int. Units: seconds. Scope: one fixture request.
+ * Consumers: ofp_http_request.
+ * Rationale: Eight seconds permits the local server while bounding stalled reads.
+ */
+const ATTACHMENT_HTTP_REQUEST_SECONDS = 8;
+
+/**
  * Abort a failed HTTP assertion with a bounded diagnostic message.
  *
  * @param bool $ok Required postcondition.
@@ -63,9 +71,10 @@ function ofp_http_free_port(): int
  * @param string $url Full loopback fixture URL.
  * @param string $method GET, HEAD or POST.
  * @param string $cookie Optional exact fixture cookie header.
+ * @param list<string> $extraHeaders Optional Range/If-Range request fields.
  * @return array{status:int,headers:list<string>,body:string} Response status, headers and bytes.
  */
-function ofp_http_request(string $url, string $method = 'GET', string $cookie = ''): array
+function ofp_http_request(string $url, string $method = 'GET', string $cookie = '', array $extraHeaders = []): array
 {
     $headers = ['Accept: application/pdf'];
     if ($cookie !== '') {
@@ -73,8 +82,8 @@ function ofp_http_request(string $url, string $method = 'GET', string $cookie = 
     }
     $context = stream_context_create(['http' => [
         'method' => $method,
-        'header' => implode("\r\n", $headers),
-        'timeout' => 8,
+        'header' => implode("\r\n", array_merge($headers, $extraHeaders)),
+        'timeout' => ATTACHMENT_HTTP_REQUEST_SECONDS,
         'ignore_errors' => true,
         'follow_location' => 0,
     ]]);
@@ -265,7 +274,117 @@ try {
     ofp_http_assert($ready, 'OFP fixture HTTP server did not start.');
 
     $origin = 'http://127.0.0.1:' . $port;
+    // A PCM WAV header and eight silent samples are a complete small original,
+    // not an operational media-size default.
+    $musicBytes = 'RIFF' . pack('V', 44) . 'WAVEfmt '
+        . pack('VvvVVvv', 16, 1, 1, 8000, 8000, 1, 8)
+        . 'data' . pack('V', 8) . str_repeat("\x80", 8);
+    $musicId = str_repeat('b', 32);
+    $downloadId = str_repeat('c', 32);
+    $hiddenMusicId = str_repeat('d', 32);
+    foreach (['public', 'unpublished', 'private', 'password', 'nsfw', 'share'] as $folder) {
+        $directory = $root . '/galleries/' . $folder . '/.gallery-music';
+        ofp_http_assert(mkdir($directory, 0700), 'Cannot create music fixture sidecar.');
+        file_put_contents($directory . '/' . $musicId . '.bin', $musicBytes);
+        file_put_contents($directory . '/' . $downloadId . '.bin', $musicBytes);
+        file_put_contents($directory . '/' . $hiddenMusicId . '.bin', $musicBytes);
+        file_put_contents($directory . '/index.json', json_encode([
+            'format' => 'gallery_music_v1', 'revision' => str_repeat('a', 32),
+            'enabled' => true, 'tracks' => [[
+                'id' => $musicId, 'filename' => 'sound.wav', 'title' => 'Sound',
+                'mime' => 'audio/wav', 'size' => strlen($musicBytes),
+                'sha256' => hash('sha256', $musicBytes),
+            ], [
+                'id' => $downloadId, 'filename' => 'download.wav',
+                'title' => 'Download', 'mime' => 'audio/wav',
+                'size' => strlen($musicBytes),
+                'sha256' => hash('sha256', $musicBytes),
+                'downloadable' => true,
+            ], [
+                'id' => $hiddenMusicId, 'filename' => 'hidden.wav',
+                'title' => 'Hidden', 'mime' => 'audio/wav',
+                'size' => strlen($musicBytes),
+                'sha256' => hash('sha256', $musicBytes),
+                'hidden' => true, 'downloadable' => true,
+            ]],
+        ], JSON_THROW_ON_ERROR));
+    }
     foreach (['', '/galerie'] as $base) {
+        $musicUrl = $origin . $base . '/index.php?page=gallery_music&id=1&track=' . $musicId;
+        $music = ofp_http_request($musicUrl);
+        $hiddenMusicUrl = str_replace($musicId, $hiddenMusicId, $musicUrl);
+        foreach (['', '&download=1'] as $mode) {
+            $hiddenMusic = ofp_http_request($hiddenMusicUrl . $mode);
+            ofp_http_assert($hiddenMusic['status'] === 404
+                && $hiddenMusic['body'] === 'Not found',
+                'Hidden audio must not play/download despite download permission.');
+        }
+        ofp_http_assert(ofp_http_request($hiddenMusicUrl, 'HEAD')['status'] === 404,
+            'HEAD must enforce track visibility too.');
+        ofp_http_assert(ofp_http_request($hiddenMusicUrl, 'GET',
+            'ofp_test_admin=1')['body'] === $musicBytes,
+            'Verified administrator must retain hidden-track inspection.');
+        ofp_http_assert(ofp_http_request($hiddenMusicUrl . '&view_as=anonymous',
+            'GET', 'ofp_test_admin=1')['status'] === 404,
+            'Anonymous preview must not inherit hidden-track authority.');
+        foreach (['', 'ofp_test_admin=1'] as $cookie) {
+            $denied = ofp_http_request($musicUrl . '&download=1', 'GET', $cookie);
+            ofp_http_assert($denied['status'] === 404
+                && $denied['body'] === 'Not found',
+                'A legacy locked track must refuse downloads for visitors and admins.');
+        }
+        $downloadUrl = str_replace($musicId, $downloadId, $musicUrl)
+            . '&download=1';
+        $download = ofp_http_request($downloadUrl);
+        ofp_http_assert($download['status'] === 200
+            && $download['body'] === $musicBytes
+            && ofp_http_header_contains($download, 'Content-Disposition', 'attachment'),
+            'An explicitly allowed track must download exact original bytes.');
+        $privateDownload = str_replace('id=1&', 'id=3&', $downloadUrl);
+        ofp_http_assert(ofp_http_request($privateDownload)['status'] === 404,
+            'Download permission must never bypass gallery access.');
+        $metadataUrl = $origin . $base
+            . '/index.php?page=gallery_music&id=1&playlist=1';
+        ofp_http_assert(ofp_http_request($metadataUrl)['status'] === 404,
+            'Playlist revision reads must require administrator authority.');
+        $metadata = ofp_http_request($metadataUrl, 'GET', 'ofp_test_admin=1');
+        ofp_http_assert($metadata['status'] === 200
+            && json_decode($metadata['body'], true)['revision'] === str_repeat('a', 32),
+            'The audio upload workflow must read the exact current revision.');
+        ofp_http_assert($music['status'] === 200 && $music['body'] === $musicBytes
+            && ofp_http_header_contains($music, 'Content-Type', 'audio/wav')
+            && ofp_http_header_contains($music, 'Cache-Control', 'no-store')
+            && ofp_http_header_contains($music, 'Accept-Ranges', 'bytes'),
+            'Authorized music must retain exact bytes and protected stream headers.');
+        // Byte offsets 1..3 and a four-byte suffix exercise inclusive range ends.
+        foreach (['bytes=1-3' => substr($musicBytes, 1, 3), 'bytes=-4' => substr($musicBytes, -4)] as $range => $expectedBytes) {
+            $partial = ofp_http_request($musicUrl, 'GET', '', ['Range: ' . $range]);
+            ofp_http_assert($partial['status'] === 206 && $partial['body'] === $expectedBytes,
+                'Music byte range must stream exactly the selected original bytes.');
+        }
+        $invalidRange = ofp_http_request($musicUrl, 'GET', '', ['Range: bytes=999999-']);
+        ofp_http_assert($invalidRange['status'] === 416 && $invalidRange['body'] === '',
+            'Out-of-file ranges must be refused without original bytes.');
+        $musicHead = ofp_http_request($musicUrl, 'HEAD');
+        ofp_http_assert($musicHead['status'] === 200 && $musicHead['body'] === ''
+            && ofp_http_header_contains($musicHead, 'Content-Length', (string) strlen($musicBytes)),
+            'Music HEAD must report the original size without bytes.');
+        foreach ([3, 4, 5] as $deniedId) {
+            $deniedMusicUrl = str_replace('id=1&', 'id=' . $deniedId . '&', $musicUrl);
+            $deniedMusic = ofp_http_request($deniedMusicUrl);
+            ofp_http_assert($deniedMusic['status'] === 404 && $deniedMusic['body'] === 'Not found',
+                'Private/password/NSFW music must share a generic byte-free denial.');
+        }
+        $privateMusicUrl = str_replace('id=1&', 'id=3&', $musicUrl);
+        ofp_http_assert(ofp_http_request($privateMusicUrl, 'GET', 'ofp_test_admin=1')['status'] === 200,
+            'Verified administrator must retain ordinary gallery audio access.');
+        ofp_http_assert(ofp_http_request($privateMusicUrl . '&view_as=anonymous', 'GET', 'ofp_test_admin=1')['status'] === 404,
+            'Anonymous preview must never reuse administrator music authority.');
+        $shareMusicUrl = str_replace('id=1&', 'id=10&', $musicUrl) . '&share=fixture-allowed';
+        ofp_http_assert(ofp_http_request($shareMusicUrl)['body'] === $musicBytes,
+            'Gallery sharing grants must also authorize its soundtrack.');
+        ofp_http_assert(ofp_http_request($musicUrl, 'POST')['status'] === 405,
+            'The public music route must remain read-only.');
         $links = ofp_http_request($origin . $base . '/index.php?fixture_links=1');
         ofp_http_assert($links['status'] === 200, 'Cannot retrieve URL fixture for ' . $base);
         $urls = json_decode($links['body'], true, 512, JSON_THROW_ON_ERROR);

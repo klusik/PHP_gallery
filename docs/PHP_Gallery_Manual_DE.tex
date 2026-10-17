@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.134}
+\newcommand{\version}{0.135}
 \newcommand{\manualdate}{17.~Oktober~2026}
 
 \hypersetup{
@@ -492,10 +492,30 @@ Die üblichen Arbeitsbereiche sind \ui{Identität}, \ui{API}, \ui{Zugriff}, \ui{
 
 \ui{Identität} hält Titel, Beschreibung, Datum, Ausgangssprache, SimBrief und Schlagwörter direkt erreichbar. Der erweiterte Abschnitt enthält Slug, Ordner, übergeordnete Galerie, Sortierreihenfolge und, sofern aktiviert, KI-Galerietext. \ui{API} zeigt einen kopierbaren Uploadendpunkt, Schlüsselbezeichnung und -aktion sowie einen neu erzeugten Schlüssel genau einmal; vorhandene Schlüssel erscheinen nur, wenn welche existieren. Die Neuerzeugung von KI-Metadaten, Migration und die globale API-Verwaltung liegen unter \ui{Erweiterte API-Werkzeuge}. \ui{Zugriff} bündelt Sichtbarkeit, Passwort, Freigabelink-Steuerungen und das NSFW-Kontrollkästchen; längere Richtlinienerklärungen stehen hinter Fragezeichen. \ui{Anzeige} beginnt mit dem Raster und den üblichen Schaltern für Abstimmung und Dateinamen; EXIF/GPS, Galeriekartenformat, Anzahlkennzeichnung, Lightbox-Modus, Picture Game, Vorschaubildgrenzen liegen unter \ui{Erweiterte Anzeigeeinstellungen}; Flugroutentext ist neben SimBrief unter \ui{Identität} verfügbar.
 
+Unter \ui{Admin > Funktionen} sind \ui{PDF-Dokumente der Galerien}
+und~\ui{Galeriemusik} unabhängig schaltbar. Neue und~aktualisierte
+Installationen ohne gespeicherte Wahl starten mit beiden Funktionen an;
+eine ausdrückliche Abschaltung bleibt erhalten. OFF verbirgt die zugehörigen
+Tabellen/Player und~sperrt Upload, Auslieferung und~PDF-Konvertierung, auch aus
+alten Formularen. Dateien, Listen und~Einstellungen bleiben erhalten.
+Bei beiden OFF entfällt auch der Medienreiter; alte Reiter-URLs wählen Identität.
+Bereits erzeugte Seitenfotos behalten ihre normalen Zugriffsregeln.
+SimBrief kann Beschreibungen/Routen weiter aktualisieren und~behält alte PDFs.
+
 \subsubsection{PDF-Dokumente anhängen und umwandeln}
 Aufgeklappte Konvertierungsfelder vergrößern die Dokumentspalte nicht. Fehlt das bisherige Ziel oder wurde es geändert, bestätigen Sie ein neues privates Ergebnis; bisherige Dateien und Galerien bleiben erhalten.
 
-Die Galerie zeigt PDFs in einer kompakten Tabelle mit Größe, Seitenzahl und kleinen Aktionssymbolen. Titel und Auge öffnen den Betrachter. Mit Beschreibung steht der Text links und die Tabelle rechts; ohne Text bleibt die Tabelle links. Administratoren können die Konvertierung aufklappen, PDFs verbergen oder anzeigen und die Löschung bestätigen. Verborgene PDFs sind für Besucher auch über direkte Links gesperrt; erzeugte Fotos bleiben nach der Löschung erhalten.
+PDF- und~Musik-Schalter zeigen Dateizahlen neben der~Beschreibung,
+auf~schmalen Bildschirmen darunter. Ein~Klick öffnet ein~kleines Overlay.
+Die~Liste ist~höchstens 12rem hoch und~scrollt unabhängig. PDF-Zeilen
+behalten Größe, Seitenzahl und~kleine Aktionssymbole; Titel oder~Auge
+öffnen den~geschützten Betrachter. Administratoren können Umwandlung
+aufklappen, Dokumente ausblenden/einblenden oder~Löschen bestätigen.
+Verborgene PDFs bleiben auch per~Direktlink gesperrt; erzeugte Fotos
+bleiben erhalten. Escape, Schließen, der~Schalter oder~ein~Klick außerhalb
+schließt das~Applet. Ohne JavaScript oder~Popover-Unterstützung bleibt
+eine begrenzte native Aufklappliste. Reduzierte Bewegung deaktiviert
+Animation. Ein~Inhaltsaustausch behält offene Liste und~Scrollposition.
 
 Die Dateiauswahl und die Ablage im Upload-Panel einer bestehenden Galerie akzeptieren auch PDFs. Standardmäßig wird nur das Originaldokument angehängt; es entstehen weder Untergalerien noch PNG-Seiten. Öffnen Sie für eine Konvertierung beim Upload \ui{Erweitert} und aktivieren Sie ausdrücklich \ui{PDF-Seiten zusätzlich in PNG umwandeln}; wählen Sie danach eine private Untergalerie oder das Anhängen der Seiten sowie die DPI. Das Öffnen allein aktiviert keine Konvertierung. Gemischte Auswahlen laden zuerst Fotos hoch, hängen dann PDFs an und führen nur gewählte Konvertierungen aus. Das Panel bleibt mit Fortschritt und Abbruch geöffnet. Wiederholungen behalten die ursprüngliche Konvertierungswahl; bei aktivierter Konvertierung wird ein fehlendes leeres Untergalerieziel nur wiederhergestellt, wenn noch keine Seite bestätigt wurde.
 
@@ -506,6 +526,73 @@ Administratoren können einer physischen Galerie auch ohne SimBrief-Daten ein al
 \ui{PDF-Seiten umwandeln} rendert das Dokument im Browser. PDF.js erstellt PNG-Seiten nacheinander; der vorhandene Uploadprozess zeigt den Fortschritt, bestätigt Batches, setzt unterbrochene Arbeit fort und lässt sich abbrechen. Neue Umwandlungen verwenden standardmäßig 150~DPI; wählbar sind 96, 150, 200, 300, 600, 1200 oder 2400~DPI. Die Seitenzahl ist nicht begrenzt. Seiten über dem Richtwert von 16\,384 Pixeln Kantenlänge oder 32 Millionen Pixeln lösen einen unverbindlichen Hinweis aus, der das Rendern nicht blockiert und die Seite nicht still verkleinert. Die Speicherschätzung umfasst nur den RGBA-Canvas mit vier Byte pro Pixel, nicht den gesamten Speicherbedarf des Browsers. Tatsächliche Canvas-Zuweisungs- und Uploadgrenzen des Browsers können das Rendern oder Hochladen dennoch verhindern.
 
 Wählen Sie entweder eine reservierte private Untergalerie oder das Anhängen nach dem letzten Foto der Quellgalerie. Eine Untergalerie bleibt privat, bis Sie ihre Sichtbarkeit ausdrücklich ändern; solange die PDF-Konvertierung unvollständig oder abgebrochen ist, bleibt die Veröffentlichung gesperrt. Schließen Sie die Konvertierung zuerst ab oder gleichen Sie sie sicher ab. Beim Anhängen bleiben Sichtbarkeit und vorhandene Fotos erhalten; die neuen Seiten stehen am Ende. Das Original-PDF wird nie ersetzt. Fortschrittsmarker liegen für beide Ziele im verborgenen Quellgalerie-Sidecar und enthalten die Zielgalerie-ID. Foto-ZIP-Exporte und die Galeriemigration übertragen diese allgemeinen PDF-Originale nicht. Eine vollständige Dateisystemsicherung muss die verborgenen Sidecar-Ordner einschließen. Vorhandene JPG-Seitengalerien bleiben eigenständig. Die frühere serverseitige OFP-Konvertierungsanfrage antwortet jetzt mit HTTP 409 und fordert zum Neuladen des Editors auf; der Rasterizer-Helfer dient nur noch der CLI- und Testkompatibilität und wird von keiner Browseraktion aufgerufen. Einzelheiten stehen in \codeword{docs/GALLERY\_PDF.md}.
+
+\subsubsection{Musikspeicher}
+
+Über \ui{Fotos hochladen} lassen sich Fotos, PDFs und~Musik gemeinsam auswählen
+oder~ablegen. Audio bleibt unverändert und~wird nicht in~Fotos umgewandelt.
+Reine Audio-Uploads funktionieren auch bei~ausgeschalteter Bildvorbereitung.
+Im~Galerieeditor bietet \ui{Dokumente / PDFs} weiterhin eine eigene Tabelle
+\ui{Musik} für~Upload, Reihenfolge, Entfernen und~Diashow-Voreinstellung.
+Aktionen bleiben im~Panel. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC und~WebM werden
+akzeptiert; Browser-Codecs bestimmen die~Wiedergabe. Sichtbarkeit, Passwort,
+Freigabe und~NSFW-Regeln gelten weiterhin.
+
+Die~Tabelle zeigt Titeldauer und~ein~Abspielen/Stopp-Symbol vor~dem~Titel.
+Das~Symbol wechselt mit~der~Wiedergabe; es~gibt keine Pause oder~eigene
+Wiedergabespalte. Lange Titel erhalten Auslassung und~vollständigen Tooltip;
+nur~der~laufende Titel scrollt horizontal. Reduzierte Bewegung behält
+statischen Text. Schließen der~Liste lässt Musik und~den~bisherigen
+Miniplayer verfügbar. Kompakte
+Vorheriger/Abspielen/Stopp/Nächster-Symbole stehen auf~der~Seite
+und~im~Fotobetrachter bereit, sobald Audio vorhanden ist. Ein~gemeinsamer
+Player verhindert überlappende Musik zwischen Zeilen, Editor und~Diashow.
+Die~ganze Liste wiederholt sich; Navigation springt an~den~Enden um.
+Automatische Diashow-Musik ist~anfangs aus; ein~Administrator kann
+sie~für~die~Galerie aktivieren. Eine aktivierte Diashow ersetzt andere Musik
+und~beginnt beim ersten Titel. Stoppen oder~Schließen des~Betrachters gibt
+dessen Musik frei; unabhängig gestartete Tabellenmusik kann weiterlaufen. Foto-
+und~Tempoänderungen unterbrechen Musik nicht. Browser-Ablehnung erlaubt einen
+neuen Abspielen-Versuch; eine unspielbare Liste stoppt nach einem Durchlauf.
+
+Smart Galleries vereinen sichtbare Musik aller zugänglichen physischen
+Quellen mit~passenden Fotos. Fotoseiten und~temporäre Quellfilter begrenzen
+diese Vereinigung nicht; kein eigener Audioordner entsteht. SHA-256 entfernt
+identische Originalbytes auch nach Umbenennung. Gleiche Namen oder~Längen
+reichen nicht; andere Kodierungen oder~geänderte eingebettete Tags benötigen
+künftige Fingerabdrücke. Verborgene Titel entfallen, sichtbare gesperrte
+Downloads bleiben abspielbar. Bestehende und~neue Titel sind zunächst
+sichtbar. Geschützte Quell-URLs prüfen Zugriff und~Sichtbarkeit erneut.
+Die~Präsentationsüberschreibung im~Smart-Editor besitzt eine eigene anfangs
+ausgeschaltete Musikvoreinstellung; Quell-Autoplay wird nicht übernommen.
+
+Jeder neue Titel verbietet zunächst Downloads. Kleine Admin-Symbole je~Zeile
+erlauben oder~sperren Downloads; das~Kopfsymbol ändert alle aktuellen Titel.
+Spätere Uploads beginnen wieder gesperrt. Besucher sehen Download-Symbole
+nur~für~erlaubte Titel; der~Endpunkt prüft Erlaubnis und~Galeriezugang erneut.
+Wiedergabe liefert Audiodaten an~den~Browser; technisch versierte Besucher
+können diese Daten weiterhin erfassen.
+
+Ein~stummer Browser-Metadatenleser ermittelt die~Dauer, jeweils für~eine
+sichtbare Zeile mit~zehn Sekunden Frist. Unbekannte Dauer erscheint als~Strich.
+Ohne Sichtbarkeitsbeobachtung bedient derselbe Leser verbundene Zeilen
+nacheinander. Der~Server dekodiert kein Audio. Upload-Wiederholungen bewahren
+bestätigte Fotos, PDFs und~Musik; bei~unbekannter Audioantwort muss die~Galerie
+vor~einem erneuten Versuch geprüft werden.
+
+Originale und~geordneter JSON-Index liegen in~\filepath{.gallery-music/}.
+Der~Index speichert Namen, MIME-Typen, Größen, SHA-256, Revision,
+Diashow-Standard und~einzelne Download-Rechte. Ältere Datensätze ohne Recht
+bleiben gesperrt. Es~gelten 64~MiB je~Datei, 100 Titel und~512~MiB je~Galerie
+sowie niedrigere PHP-Grenzen. Sicherungen müssen versteckte Ordner enthalten.
+Foto-ZIP-Exporte und~Galerieübertragungen enthalten keine Musik. Siehe
+\filepath{docs/GALLERY_MUSIC.md}.
+
+Verwenden Sie nach Routenänderungen den~gehostet vorbereiteten Kandidaten. PDF
+und~Audio teilen den~bestehenden Laufzeitbesitzer für~Anhänge; Quellen
+mit~älterem generiertem Routenplan können Anfragen bis~zum~Laden
+des~vorbereiteten Plans ablehnen. Lokale Generierung ersetzt keine gehostete
+Qualifikation.
 
 \subsection{Identität und Kontext bearbeiten}
 \index{g00129@Galeriemetadaten}
@@ -706,6 +793,24 @@ gesetzt und es kommen keine Laufzeitabhängigkeiten hinzu. Ohne Pillow bleiben
 lesbare,
 flache ttk-Flächen sowie native Steuerelemente und der Quellmodus einschließlich
 \texttt{--once} unterstützt.
+
+\subsection{Updatehinweis und~Anzeigen}
+
+Die~App prüft beim Start und~danach höchstens einmal pro Stunde auf neue
+Uploader-Versionen; \ui{Check for updates} startet eine manuelle Prüfung. Ein
+validiertes Angebot erscheint als Versionshinweis und~markierte Update-Steuerung
+in~der~App-Kopfzeile auf~allen Bildschirmen. \ui{Later} blendet den~Hinweis aus,
+beide Anzeigen bleiben zum erneuten Öffnen verfügbar. Wenn die~Taskleistenablage
+verfügbar ist, zeigt ihr~Symbol eine rote Update-Markierung, der~Tooltip nennt
+die~angebotene Version und~der~erste Menüpunkt nennt diese Version und~öffnet
+denselben Hinweis. Ohne Ablageunterstützung bleiben die~Anzeigen in~der~App voll
+verfügbar. Die~App setzt kein Overlay in~der~Windows-Taskleiste und~zeigt keine
+Systembenachrichtigungen.
+
+Eine fehlgeschlagene Netzwerkprüfung behält das~validierte Angebot im~Cache,
+auch über einen Neustart hinweg; vor der~Wiederherstellung wird es erneut
+validiert. Eine erfolgreiche Prüfung ohne aktuelles Angebot entfernt den~Hinweis,
+die~Markierung in~der~Kopfzeile und~den~Ablage-Badge.
 
 \subsection{Simulatorposition unter Windows}
 
@@ -1024,7 +1129,13 @@ Vertikale Karten zeigen das Foto über dem Text, horizontale daneben. Die normal
 
 Öffentliche Suche ist nur ohne gespeicherte Wahl und bei verfügbarer Funktion standardmäßig an. Updates aktualisieren Versionen, Notizen und API-Zustand gemeinsam; automatische Metadatenprüfung erfolgt höchstens stündlich, deaktivierte automatische Updates lassen alte Hintergrundaufträge pausiert. OurAirports verwendet wöchentliche Aktualität und eine Stunde Fehlerabstand. Der Papierkorb zeigt Restdauer und sichere Löschbarkeit. Auch Präsentationsschema-Probleme verlangen eine Aktion im Systemstatus.
 
-Der unabhängige Uploader bleibt bei 0.3.2. Der Build liefert Installer und passende generierte \filepath{winapp-update.json} gemeinsam unter \filepath{winapp/dist/0.3.2/}. Beide gehören zu derselben Veröffentlichung. Der Build ersetzt keine Prüfung der installierten Windows-Anwendung oder des Simulators.
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.4.1. Ein
+separat angeforderter Installer-Build legt den Installer und die passenden
+generierten Metadaten \filepath{winapp-update.json} unter
+\filepath{winapp/dist/0.4.1/} ab. Installer und Metadaten gehören zur selben
+gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
+installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
+einschließlich 0.4.0 bleiben erhalten.
 
 \subsection{Administrativer Arbeitsbereich}
 
@@ -2073,6 +2184,20 @@ Administrationsrouten und maschinelle Endpunkte wie Einrichtung, WebDAV, Uploada
 Die Datenbankprüfung erfasst Schemaobjekte, Referenzen, Zuordnungskategorien, Aufbewahrungsrichtlinie und Bereinigungssicherheit. Logische Bereinigung verwendet Regeln einer Positivliste mit deterministischer Auswahl, begrenzten Chargen und Auditdatensätzen. Schemareparatur bietet Probelauf und idempotenten Migrationsweg. \codeword{ANALYZE TABLE} kann Optimiererstatistiken ausgewählter Tabellen aktualisieren. Physisches \codeword{OPTIMIZE TABLE} ist nur als Vorschau mit anschließend separat bestätigtem Vorgang für ausgewählte Tabellen verfügbar; es ist niemals ein automatischer Bereinigungsschritt.\footnote{Zuweisungswerte der Speicherengine wie Schätzungen freien Datenspeichers beschreiben den Enginezustand und garantieren keine genaue Anzahl nach Optimierung freigegebener Dateisystembytes.}
 
 \subsection{Speicherstatistik und Gesamtbericht}
+
+Die Dateiansicht zeigt auch Anzahl und~Bytes der~PDF- und~Musikoriginale
+sowie eine Gesamtmediensumme. Nach Fotobatches prüft Alles aktualisieren
+höchstens zwei physische Galerien je Schritt, auch Galerien ohne Fotos.
+Verborgene, private, deaktivierte und~nicht herunterladbare Dateien zählen
+weiter. Physische Kopien zählen einzeln; Smart-Listen erzeugen keine Kopie.
+Konvertierte PDF-Seiten zählen bereits als Fotos. Indizes, Sperren,
+Konvertierungszustand, nicht indexierte Dateien, Papierkorb und~andere Caches
+sind ausgeschlossen. Unlesbare Indizes oder unsichere/fehlende Dateien
+führen zu~sichtbarer Teilmessung ohne Reparatur. Normale Seiten lesen den~Cache;
+Anhangsänderungen markieren ihn bei erfolgreicher Revisionsspeicherung als
+veraltet. Nach dem Upgrade alter Fotostatistiken sowie externen Dateiänderungen
+ist Alles aktualisieren für~eine neue Messung erforderlich.
+
 \index{s00229@Speicherstatistik}
 \index{g00139@Gesamtbericht}
 \index{g00120@Galeriebericht}
@@ -2510,6 +2635,12 @@ verwenden das einheitliche Format.
 GitHub Actions führt die Quellvorprüfung vor der gehosteten Vorbereitung aus. Agenten folgen CI-first: aktuellen autorisierten Arbeitszweig, HEAD und ausdrückliche Push-Berechtigung prüfen, Quellen/Tests/Dokumentation fertigstellen, committen und genau diesen Zweig pushen. \codeword{develop} und \codeword{main} niemals direkt ändern. Fehlender Zugriff bedeutet BLOCKED. Lokale Audits, Generatoren und Testschleifen sind Ausnahmediagnosen. CI behält die unveränderliche Merge-Base mit \codeword{origin/main}; Releases verwenden den vorherigen stabilen Tag. Rotes oder langsames CI rechtfertigt keine rein lokale Qualifikation.
 
 Die~gehostete Qualifikation umfasst PHP/Node/WinApp-Tests, Quellverträge, erforderliches Chromium, echte MySQL/MariaDB-Abläufe, PHP-Kompatibilität und~Paketprüfungen auf~Linux, Windows und~macOS. Alle erforderlichen Jobs und~das~Gate für~das~exakte SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder Entwicklungsänderung.
+
+Der gehostete portable WinApp-Job installiert die vorhandene Pillow-Anforderung
+in den für das Audit ausgewählten Python-Interpreter, damit der Pixeltest für
+das Tray-Badge ausgeführt und nicht übersprungen wird. Lokale Läufe ohne Pillow
+dürfen diesen optionalen visuellen Test überspringen; der gehostete Job ohne
+grafische Oberfläche installiert pystray nicht.
 
 Die~Regression für~das~Galerietitelbild erweitert die~bereits registrierten Admin-Seitenpanel- und~Browser-Lifecycle-Suiten sowie die~bestehende HTTP-/Datenbank-Suite zur Galerie-Editorkonkurrenz. Diese Fixtures bleiben Bestandteil von \filepath{scripts/audit.php}; sie~fügen weder einen YAML-Testeigentümer noch einen alternativen Runner hinzu, und~das~geschützte Evaluator-Register bleibt unverändert.
 

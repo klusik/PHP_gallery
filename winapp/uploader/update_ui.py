@@ -52,8 +52,23 @@ class UpdateApplication(Protocol):
         """Run ordinary application shutdown after updater cancellation."""
         ...
 
+    def set_update_available(self, version: Optional[str]) -> None:
+        """Persist the visible version indicator, or clear it after a clean check.
+
+        Args:
+            version (Optional[str]): Offered release version, or None to clear.
+        Returns:
+            None: Updates the application's persistent header and tray state.
+        """
+        ...
+
 
 UPDATE_CHECK_INTERVAL_SECONDS = 3600
+# Purpose: Bound how many persisted state bytes are read before cache validation.
+# Type: int. Units: bytes. Scope: one updater state file.
+# Consumers: read_update_state.
+# Rationale: Preserve the existing 16 KiB metadata cap against malformed local data.
+UPDATE_STATE_MAX_BYTES = 16384
 
 
 class InstallGate:
@@ -88,10 +103,20 @@ class InstallGate:
 
 
 def read_update_state(state_path: Path) -> dict[str, object]:
-    """Read a bounded cache object without allowing oversized local state input."""
+    """Read a bounded cache object without allowing oversized local state input.
+
+    Args:
+        state_path (Path): Path to the updater's persisted metadata object.
+    Returns:
+        dict[str, object]: JSON object whose known fields are `last_check` (number
+            or numeric string), `version` (string), and `available` (None or a
+            mapping with ReleaseAsset fields `version`, `name`, `download_url`,
+            `size`, `sha256`, `asset_id`, and `release_id`). Additional fields,
+            when present, contain JSON null, boolean, number, string, list, or map.
+    """
     with state_path.open("rb") as stream:
-        data = stream.read(16385)
-    if len(data) > 16384:
+        data = stream.read(UPDATE_STATE_MAX_BYTES + 1)
+    if len(data) > UPDATE_STATE_MAX_BYTES:
         raise ValueError("Update state exceeds its size limit.")
     payload = json.loads(data)
     if not isinstance(payload, dict):
@@ -112,7 +137,14 @@ class UpdateController:
     """Own all Tk-facing transitions; workers communicate exclusively by queue."""
 
     def __init__(self, app: UpdateApplication, version: str) -> None:
-        """Attach background phase scheduling to an existing Tk application."""
+        """Attach background phase scheduling to an existing Tk application.
+
+        Args:
+            app (UpdateApplication): Host UI, callbacks, and shutdown state owner.
+            version (str): Current uploader version used for release validation.
+        Returns:
+            None: Initializes worker coordination and schedules Tk polling.
+        """
         self.app = app
         self.root = app.root
         self.version = version
@@ -122,6 +154,7 @@ class UpdateController:
         self.busy = False
         self.close_pending = False
         self.auto_install = False
+        self.check_result_pending = False
         self.asset: Optional[ReleaseAsset] = None
         self.installer: Optional[Path] = None
         self.window: Optional["tk.Toplevel"] = None
@@ -133,14 +166,69 @@ class UpdateController:
         self.root.after(1500, self.automatic_check)
 
     def automatic_check(self) -> None:
-        """Check once hourly while the application stays open as well as at startup."""
+        """Restore a verified cached offer, then check at startup and hourly.
+
+        Returns:
+            None: Restores or schedules updater state and its next cadence callback.
+        """
         if self.app.exiting or self.close_pending:
             return
+        if not self.cached_offer_loaded and not self.busy and not self.gate.active:
+            self.restore_cached_offer()
         self.check(automatic=True)
         self.root.after(60000, self.automatic_check)
 
+    def restore_cached_offer(self) -> None:
+        """Restore only a cached offer that passes the current release validator.
+
+        Returns:
+            None: Publishes a verified current-version offer or clears stale state.
+        """
+        if self.busy or self.gate.active:
+            return
+        self.cached_offer_loaded = True
+        try:
+            payload = read_update_state(self.state_path)
+        except (OSError, ValueError, TypeError):
+            return
+        if payload.get("version") != self.version:
+            if payload.get("available") is not None:
+                try:
+                    atomic_write_json(self.state_path, {
+                        "last_check": payload.get("last_check"),
+                        "version": self.version,
+                        "available": None,
+                    })
+                except OSError:
+                    pass
+            self.asset = None
+            self.app.set_update_available(None)
+            return
+        available = payload.get("available")
+        if available is None:
+            self.asset = None
+            self.app.set_update_available(None)
+            return
+        try:
+            from uploader.self_update import validated_release_asset
+            asset = validated_release_asset(available, self.version)
+        except (ValueError, TypeError, KeyError, RuntimeError):
+            self.asset = None
+            self.app.set_update_available(None)
+            return
+        self.asset = asset
+        self.app.set_update_available(asset.version)
+        if self.window is not None:
+            self._restore_notice_state()
+
     def request_close(self) -> bool:
-        """Delay ordinary shutdown until updater work ends or refuse during handoff."""
+        """Decide whether shutdown may proceed or must wait for updater work.
+
+        Returns:
+            bool: True when shutdown must wait or installation is gated; otherwise
+                False so the caller can continue its remaining shutdown checks.
+                This decision does not change the update indicator.
+        """
         if self.gate.active:
             self.show()
             return True
@@ -159,7 +247,11 @@ class UpdateController:
         return True
 
     def show(self) -> None:
-        """Show a reusable, nonmodal notice without a grab or confirmation dialog."""
+        """Show a reusable, nonmodal notice without a grab or confirmation dialog.
+
+        Returns:
+            None: Raises the current notice or creates one reflecting coordinator state.
+        """
         import tkinter as tk
         from tkinter import ttk
         if self.window is not None and self.window.winfo_exists():
@@ -180,6 +272,65 @@ class UpdateController:
         self.cancel_button = ttk.Button(buttons, text="Cancel download", command=self.cancel.set, state="disabled")
         self.cancel_button.pack(side="left", padx=5)
         ttk.Button(buttons, text="Later", command=self.later).pack(side="left", padx=5)
+        self._restore_notice_state()
+
+    def _restore_notice_state(self) -> None:
+        """Render persisted offer, installer, or installation-gate state in a new notice.
+
+        Returns:
+            None: Enables only the action supported by the restored coordinator state.
+        """
+        if self.status is None or self.action is None:
+            return
+        if self.gate.active:
+            self.status.set("Preparing installation: stopping new work and waiting for active operations...")
+            self.action.configure(state="disabled")
+            return
+        if self.busy:
+            self.status.set("An update operation is still in progress.")
+            self.action.configure(state="disabled")
+            return
+        if self.installer is not None:
+            if getattr(sys, "frozen", False):
+                self.status.set("Installer verified. Installation stops active work and closes the app after completion.")
+                self.action.configure(state="normal", text="Update", command=self.install)
+            else:
+                self.status.set("Installer verified. Open installer starts manual installation; this source application remains open.")
+                self.action.configure(state="normal", text="Open installer", command=self.install)
+            return
+        if self.asset is not None:
+            self.status.set(self._offer_status())
+            self.action.configure(state="normal", text="Update", command=self.download)
+
+    def _offer_status(self) -> str:
+        """Build the mode-specific text for a validated available release.
+
+        Returns:
+            str: User-facing offer status for frozen or source-mode operation.
+        """
+        if getattr(sys, "frozen", False):
+            return (
+                f"Version {self.asset.version} is available (installed: {self.version}). "
+                "Update downloads and verifies Setup, safely stops work, closes this app "
+                "and restarts it after installation. Windows may request administrator approval."
+            )
+        return (
+            f"Version {self.asset.version} is available (current: {self.version}). "
+            "Update downloads and verifies Setup for manual installation; this source "
+            "folder remains intact."
+        )
+
+    def open_updates(self) -> None:
+        """Open current updater state or start a manual check when idle.
+
+        Returns:
+            None: Displays existing progress/offer or schedules one manual check.
+        """
+        self.show()
+        if (self.busy or self.asset is not None or self.installer is not None
+                or self.gate.active):
+            return
+        self.check(automatic=False)
 
     def later(self) -> None:
         """Hide the notice; a running download remains cancellable when reopened."""
@@ -207,7 +358,13 @@ class UpdateController:
         self.worker.start()
 
     def check(self, automatic: bool = False) -> None:
-        """Reserve an hourly check before network I/O, independent of credential config."""
+        """Throttle automatic checks and preserve cached offers until success.
+
+        Args:
+            automatic (bool): Whether the hourly cadence may suppress this check.
+        Returns:
+            None: Schedules a network check or leaves current state unchanged.
+        """
         if self.app.exiting or self.close_pending or self.gate.active:
             return
         if not automatic:
@@ -227,19 +384,33 @@ class UpdateController:
             except (OSError, ValueError, TypeError, KeyError, RuntimeError):
                 pass
             return
-        self.asset = None
         previous_installer = self.installer
-        self.installer = None
         if self.window is not None:
-            self.action.configure(state="disabled", text="Update", command=self.download)
+            if self.asset is None and self.installer is None:
+                self.action.configure(state="disabled", text="Update", command=self.download)
         def work() -> None:
-            """Reserve the hourly attempt and persist a reusable verified offer."""
+            """Reserve the attempt and replace cache only after a successful check.
+
+            Returns:
+                None: Queues a validated offer/no-offer result after successful I/O.
+            """
             from uploader.self_update import find_update, retire_download_session
-            if previous_installer is not None:
-                retire_download_session(previous_installer.parent, self.state_path.parent)
-            atomic_write_json(self.state_path, {"last_check": now})
+            try:
+                previous_state = read_update_state(self.state_path)
+            except (OSError, ValueError, TypeError):
+                previous_state = {}
+            reserved_state = dict(previous_state)
+            reserved_state["last_check"] = now
+            atomic_write_json(self.state_path, reserved_state)
             asset = find_update(self.version)
             atomic_write_json(self.state_path, {"last_check": now, "version": self.version, "available": asdict(asset) if asset else None})
+            if previous_installer is not None:
+                try:
+                    retire_download_session(previous_installer.parent, self.state_path.parent)
+                except (OSError, RuntimeError) as exc:
+                    # Updater-owned housekeeping cannot revoke a validated check;
+                    # refusing unsafe cleanup preserves unknown bytes in the session.
+                    self.events.put(("cleanup_warning", str(exc)))
             self.events.put(("checked", asset))
         self.run_worker(work)
 
@@ -346,7 +517,11 @@ class UpdateController:
         self.events.put(("handoff_ready", None))
 
     def poll(self) -> None:
-        """Apply queued phase transitions on Tk only."""
+        """Apply queued phase transitions and app-wide indicators on Tk only.
+
+        Returns:
+            None: Applies available worker events and schedules the next poll.
+        """
         if self.app.exiting:
             return
         while True:
@@ -356,15 +531,17 @@ class UpdateController:
                 break
             if kind == "checked":
                 self.asset = value
+                self.installer = None
+                self.check_result_pending = self.busy
+                self.app.set_update_available(value.version if value is not None else None)
                 if value is not None:
                     self.show()
-                    if getattr(sys, "frozen", False):
-                        self.set_status(f"Version {value.version} is available (installed: {self.version}). Update downloads and verifies Setup, safely stops work, closes this app and restarts it after installation. Windows may request administrator approval.")
-                    else:
-                        self.set_status(f"Version {value.version} is available (current: {self.version}). Update downloads and verifies Setup for manual installation; this source folder remains intact.")
-                    self.action.configure(state="normal")
+                    if not self.busy:
+                        self._restore_notice_state()
+                    self.app.write_log(self._offer_status(), "system")
                 elif self.window is not None:
                     self.set_status("No newer Windows uploader installer is available.")
+                    self.action.configure(state="disabled", text="Update", command=self.download)
             elif kind == "progress":
                 done, total = value
                 self.progress["value"] = 100 * done / total if total else 0
@@ -396,10 +573,30 @@ class UpdateController:
                 self.gate.cancel()
                 self.set_status("Update stopped: " + value)
                 if self.window is not None:
-                    self.action.configure(state="normal" if self.asset else "disabled")
+                    self.action.configure(
+                        state="disabled" if self.busy else "normal" if self.asset else "disabled"
+                    )
                     self.cancel_button.configure(state="disabled")
+            elif kind == "cleanup_warning":
+                self.app.write_log("Previous installer cleanup refused: " + value, "warning")
             elif kind == "done":
                 self.busy = False
+                if self.check_result_pending:
+                    self.check_result_pending = False
+                    if self.asset is not None and not self.gate.active:
+                        self._restore_notice_state()
+                    elif self.window is not None:
+                        self.action.configure(state="disabled", text="Update", command=self.download)
+                elif self.installer is not None and not self.gate.active:
+                    if self.window is not None:
+                        label = "Update" if getattr(sys, "frozen", False) else "Open installer"
+                        self.action.configure(
+                            state="normal", text=label, command=self.install
+                        )
+                elif self.asset is not None and self.installer is None and not self.gate.active:
+                    # Keep any preceding failure status while making the retained offer usable.
+                    if self.window is not None:
+                        self.action.configure(state="normal", text="Update", command=self.download)
                 if self.close_pending:
                     self.close_pending = False
                     self.app.close()

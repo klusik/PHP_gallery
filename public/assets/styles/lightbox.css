@@ -2052,3 +2052,296 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     }
     dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-header-actions { flex-wrap: wrap; }
 }
+
+/* Compact audio controls share one exclusive page-wide playback owner. */
+.gallery-music {
+    min-width: 0;
+    width: min(36rem, 100%);
+    max-width: 100%;
+    margin-block: 0.75rem;
+}
+.gallery-music h3 { margin: 0 0 0.4rem; font-size: 0.95rem; }
+.gallery-music-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.85rem;
+}
+.gallery-music-table :is(td, th) {
+    padding: 0.3rem;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+    overflow-wrap: anywhere;
+}
+.gallery-music form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.1rem;
+    margin-block: 0.5rem;
+}
+.gallery-music-table form { margin: 0; }
+.gallery-music input[type="file"] { max-width: 100%; }
+.gallery-music output { flex-basis: 100%; }
+.music-player {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.45rem;
+    margin-block: 0.35rem;
+}
+.music-player[hidden] { display: none; }
+.music-player-actions {
+    display: inline-flex;
+    gap: 0.1rem;
+    align-items: center;
+}
+.gallery-music .music-icon, .lightbox-music .music-icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 1.6rem;
+    height: 1.6rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 0.2rem;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+.music-icon svg { width: 1rem; height: 1rem; }
+.music-icon:is(:hover, :focus-visible) {
+    background: var(--color-border);
+    outline: 1px solid currentColor;
+}
+.music-icon:disabled { opacity: 0.4; cursor: default; }
+.music-icon[aria-pressed="true"] { background: var(--color-border); }
+.music-player-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+.music-player > output { grid-column: 1 / -1; font-size: 0.75rem; }
+.music-player > output:empty { display: none; }
+.lightbox-music {
+    position: absolute;
+    z-index: 14;
+    top: 4.25rem;
+    left: 1rem;
+    width: min(24rem, calc(100% - 2rem));
+    box-sizing: border-box;
+    padding: 0.4rem;
+    border-radius: 0.4rem;
+    color: #fffdf8;
+    line-height: 1.35;
+    background: rgba(10, 10, 10, 0.7);
+}
+.lightbox.is-slideshow .lightbox-music { top: 9.25rem; }
+.lightbox-music .music-icon:is(:hover, :focus-visible),
+.lightbox-music .music-icon[aria-pressed="true"] {
+    background: rgba(255, 255, 255, 0.18);
+}
+.gallery-music-duration {
+    width: 3.75rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.gallery-music-download { width: 2rem; }
+.gallery-music[data-music-editor="1"] th:last-child { width: 5.25rem; }
+.gallery-music-table tr.is-playing { background: var(--color-border); }
+.gallery-description-documents > .gallery-music {
+    grid-column: 2;
+    justify-self: end;
+    margin-top: 0;
+}
+/* Reuse the existing document-row mobile breakpoint for the music table. */
+@media (max-width: 760px) {
+    .gallery-description-documents > .gallery-music {
+        grid-column: 1;
+        justify-self: start;
+    }
+}
+
+/* Attachment lists occupy one launcher row until explicitly disclosed. */
+.gallery-attachment-applets {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+    align-items: stretch;
+}
+.gallery-description-documents > .gallery-attachment-applets {
+    grid-column: 2;
+    justify-self: end;
+    width: min(36rem, 100%);
+}
+.gallery-attachment-applets > :is(.gallery-music, .gallery-pdf-documents) {
+    margin: 0;
+}
+.gallery-pdf-documents { overflow: visible; }
+.gallery-media-widget { min-width: 0; }
+.gallery-media-widget > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.45rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+}
+.gallery-media-widget > summary::-webkit-details-marker { display: none; }
+.gallery-media-widget > summary:is(:hover, :focus-visible) {
+    background: var(--color-border);
+}
+.gallery-media-count {
+    padding: 0 0.3rem;
+    border-radius: 0.3rem;
+    background: var(--color-border);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+.gallery-media-widget > summary svg {
+    width: 0.85rem;
+    height: 0.85rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+}
+.gallery-media-widget[open] > summary svg { transform: rotate(90deg); }
+.gallery-media-panel {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    width: 100%;
+    margin-top: 0.4rem;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 0.65rem;
+    background: var(--color-surface, #fff);
+    color: var(--color-text, #181818);
+    box-shadow: 0 0.5rem 1.75rem #0003;
+    overflow: hidden;
+}
+.gallery-media-panel[popover] {
+    position: fixed;
+    inset: auto;
+    width: min(36rem, calc(100vw - 1rem));
+    margin: 0;
+}
+.gallery-media-panel[popover]:not(:popover-open) { display: none; }
+.gallery-media-panel > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+    flex: 0 0 auto;
+}
+.gallery-media-panel > header h3 {
+    margin: 0;
+    font-size: 0.85rem;
+}
+.gallery-media-panel .gallery-media-close {
+    display: inline-grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: inherit;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.gallery-media-close:is(:hover, :focus-visible) {
+    background: var(--color-border);
+    outline: 1px solid currentColor;
+}
+.gallery-media-body {
+    /* Bound the applet to roughly five compact file rows.
+     * Type: length. Units: rem. Scope: each media applet body.
+     * Consumers: the PDF/music scroll container.
+     * Rationale: 12rem exposes a useful sample without dominating the gallery.
+     */
+    --media-list-max-height: 12rem;
+    min-height: 0;
+    max-height: var(--media-list-max-height);
+    padding: 0.25rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+.gallery-media-body :is(.gallery-pdf-table, .gallery-music-table) {
+    margin: 0;
+}
+.gallery-media-body thead {
+    position: sticky;
+    top: -0.25rem;
+    z-index: 1;
+    background: var(--color-surface, #fff);
+}
+.music-track-line {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+}
+.music-track-toggle > span { display: inline-grid; }
+.music-track-toggle > [hidden] { display: none; }
+.music-track-name {
+    display: block;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.music-track-name > span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.is-playing .music-track-name.is-overflowing > span {
+    width: max-content;
+    overflow: visible;
+    text-overflow: clip;
+    animation: music-title-scroll var(--music-title-duration)
+        linear infinite alternate;
+}
+@keyframes music-title-scroll {
+    /* Holds at both edges are animation phases, not an additional timer. */
+    0%, 15% { transform: translateX(0); }
+    85%, 100% { transform: translateX(var(--music-title-offset)); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .is-playing .music-track-name.is-overflowing > span {
+        width: auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        animation: none;
+    }
+}
+@media (max-width: 760px) {
+    .gallery-description-documents > .gallery-attachment-applets {
+        grid-column: 1;
+        justify-self: start;
+    }
+}
+
+body:not([data-media-panels-bound]) .gallery-media-close { display: none; }

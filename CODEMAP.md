@@ -1,5 +1,31 @@
 # PHP Gallery Code Map
 
+- Media masters: `app/services/feature_flags/registry.php` owns the independent
+  PDF/music capabilities. Shared editor actions and browser PDF batch admission
+  enforce them without disabling ordinary photo settings/uploads.
+- Media accounting: the existing `admin_storage_statistics` model/service/view
+  owns gallery keysets, resumable progress and cached totals;
+  `gallery_attachment_storage_summary()` in the PDF attachment service measures
+  original payload sizes. `gallery_pdf_settings.php` owns the advisory mutation
+  revision. The attachment runtime owner is deferred until explicit scan work.
+- Compact PDF/music applets: shared markup in
+  `app/views/public_gallery_lightbox.php`; disclosure lifecycle in
+  `public/assets/gallery-modules/gallery-media-panels.js`.
+- Smart music: complete source IDs in `app/services/smart_galleries.php`;
+  read-only union/deduplication in the existing music service; source URLs in
+  `app/controllers/gallery_music.php`.
+- Gallery music: `app/models/gallery_music.php` owns atomic playlist indexes;
+  `app/services/gallery_music.php` owns audio validation and revisioned file
+  workflows; `app/controllers/gallery_music.php` owns view models, Admin
+  responses and the protected GET/HEAD/range route. The compact table lives in
+  `app/views/gallery_music.php`, delegated panel mutations in
+  `admin-gallery-music.js`, exclusive table/viewer audio in
+  `gallery-music-player.js`, and ordinary chooser
+  attachment retries in `gallery-music-upload.js`.
+  The lightbox owns activation/stop/teardown. See `docs/GALLERY_MUSIC.md` for
+  limits, backup boundaries, runtime closure review and browser compatibility.
+  PDF/audio runtime loading shares the existing `gallery-pdf-documents` owner.
+
 - Updater status diagnostics expose nonmutating worker-lock observation and
   server checkpoint age. Cache UI samples compare phase counters and retain one
   latest observation; retry preserves the prior owner-redacted failure separately.

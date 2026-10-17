@@ -427,8 +427,8 @@ function public_gallery_ofp_document_url(int $galleryId, bool $download = false)
  * image visually replaces it. The logo is decorative here because it appears
  * beside an existing text or banner title and would otherwise duplicate content.
  *
- * @param array<string,mixed> $gallery Source gallery record and branding configuration.
- * @param array<string,mixed> $seo SEO metadata for the public gallery title.
+ * @param array{id:int,folder_path:string,title?:string,description?:string} $gallery Authorized source gallery identity, text and branding owner inputs.
+ * @param array{title?:string} $seo Optional localized title override.
  * @param bool $publicOnly Whether only visitor-visible assets should be used.
  * @return string Prepared description/document HTML for the full-width content row; emits title and date markup separately.
  */
@@ -444,11 +444,24 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     $pdfHtml = '';
     // Only attachment galleries load document presentation; the prepared HTML
     // joins the description in the view without moving unrelated hero controls.
-    if (\Gallery\Services\gallery_pdf_documents_present($gallery)) {
+    if (\Gallery\Services\feature_capability_effective_enabled(
+        'gallery_pdf_documents'
+    ) && \Gallery\Services\gallery_pdf_documents_present($gallery)) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         ob_start();
         \Gallery\Views\view_render_gallery_pdf_documents(gallery_pdf_documents_view_model($gallery));
         $pdfHtml = (string) ob_get_clean();
+    }
+    // Music presentation is deferred until a physical gallery has a playlist.
+    // Keep its index/controller/view closure out of ordinary gallery requests.
+    if (\Gallery\Services\feature_capability_effective_enabled('gallery_music')
+        && is_file(\Gallery\Services\gallery_abs_path(
+            (string) $gallery['folder_path']
+        ) . '/.gallery-music/index.json')) {
+        \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
+        ob_start();
+        \Gallery\Views\view_render_gallery_music(gallery_music_view_model($gallery));
+        $pdfHtml .= (string) ob_get_clean();
     }
     $viewModel = [
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
