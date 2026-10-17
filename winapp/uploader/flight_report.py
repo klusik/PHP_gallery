@@ -2127,6 +2127,15 @@ def render_report(
             leftMargin=18 * mm,
             topMargin=16 * mm,
             bottomMargin=20 * mm,
+            # Type: int; Units: none (boolean-compatible flag).
+            # Scope: generated PDF; Consumers: SimpleDocTemplate._makeCanvas.
+            # Rationale: keep identifiers and timestamps stable across retries.
+            # Value: 1; enables deterministic document output.
+            invariant=1,
+            # Type: str; Units: BCP 47 tag; Scope: PDF catalog.
+            # Consumers: SimpleDocTemplate._makeCanvas; Rationale: identify
+            # the document language for readers and accessibility tools.
+            lang=language,
             title=tr(language, "title"),
             author="PHP Gallery",
             subject=(
@@ -2153,7 +2162,6 @@ def render_report(
             _build_story(analysis, language, analysis_sha256),
             onFirstPage=page_callback,
             onLaterPages=page_callback,
-            canvasmaker=partial(Canvas, invariant=1, lang=language),
         )
         os.replace(temporary_path, target)
         temporary_path = None

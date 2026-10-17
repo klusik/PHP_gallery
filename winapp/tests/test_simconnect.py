@@ -762,6 +762,14 @@ class WatchedUploadLocationTests(unittest.TestCase):
         watcher.events = queue.Queue()
         watcher.stop_event = threading.Event()
         watcher.initial_paths = set()
+        watcher.accepted_paths = set()
+        watcher._admission_lock = threading.RLock()
+        watcher.drain_event = threading.Event()
+        watcher.drain_only = False
+        watcher.drain_requested_at = 0.0
+        watcher.drain_started_monotonic = 0.0
+        watcher.drain_error = ""
+        watcher.drain_manifest = None
         watcher.remote_skipped_paths = set()
         watcher.stability = mock.Mock()
         watcher.stability.stable.return_value = True

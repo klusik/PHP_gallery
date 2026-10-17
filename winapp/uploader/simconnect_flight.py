@@ -803,12 +803,17 @@ class SimConnectFlightClient:
             if packet.dwRequestID == REQUEST_FLIGHT_STATE:
                 self.flight_loaded = bool(packet.szString)
                 if self.flight_loaded:
-                    self.pending_discontinuity = (\n                    self.pending_discontinuity or "attached to loaded flight"\n                )
+                    self.pending_discontinuity = (
+                        self.pending_discontinuity or "attached to loaded flight"
+                    )
             elif packet.dwRequestID == REQUEST_AIRCRAFT_STATE:
                 loaded_aircraft = bytes(packet.szString).split(
                     b"\0", 1
                 )[0].decode("utf-8", "replace")
-                self.pending_discontinuity = (\n                    self.pending_discontinuity\n                    or "attached aircraft identity pending"\n                )
+                self.pending_discontinuity = (
+                    self.pending_discontinuity
+                    or "attached aircraft identity pending"
+                )
 
     def _sample_from_core(self, elapsed: float) -> FlightSample | None:
         """Normalize the latest full frame and currently available optional data.

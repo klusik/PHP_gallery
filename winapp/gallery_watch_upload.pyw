@@ -3550,6 +3550,21 @@ class WatcherThread(threading.Thread):
         self.emit("info", f"Upload endpoint: {upload_url}")
         self.emit(
             "info",
+            f"Remote inventory reconnect interval: {self.config.inventory_refresh_seconds:g} seconds.",
+        )
+        if self.config.attach_sim_camera_metadata:
+            self.emit(
+                "info",
+                "[simconnect] Flight Simulator location metadata enabled. "
+                + self.simconnect_client.dll_resolution_message(),
+            )
+        else:
+            self.emit(
+                "info",
+                "[simconnect] Flight Simulator location metadata disabled.",
+            )
+        self.emit(
+            "info",
             f"Ignoring {len(self.initial_paths)} existing image file(s).",
         )
         while not self.stop_event.is_set():
@@ -7738,6 +7753,12 @@ class WatcherApp:
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
+        if getattr(self, "api_key_revoke_running", False):
+            self.write_log(
+                "Manual import cannot start while accepted work is finishing.",
+                "warning",
+            )
+            return
         if not paths:
             return
         use_local_thumbnails = bool(self.manual_local_thumbnails_var.get()) and local_thumbnail_supported()
@@ -8134,7 +8155,13 @@ class WatcherApp:
                             saved_key = self.config.api_key.strip()
                             current_url = self.gallery_url_var.get().strip()
                             current_key = self.api_key_var.get().strip()
-                            if resolved_url and resolved_url != saved_url and current_url == saved_url and current_key == saved_key:
+                            if (
+                                resolved_url
+                                and resolved_url != saved_url
+                                and current_url == saved_url
+                                and current_key == saved_key
+                                and not getattr(self, "api_key_revoke_running", False)
+                            ):
                                 resolved_config = WatcherConfig.from_dict(self.config.to_dict())
                                 resolved_config.gallery_url = resolved_url
                                 try:

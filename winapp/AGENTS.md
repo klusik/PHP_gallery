@@ -22,6 +22,16 @@ match its native signature, including optional and variadic arguments.
 Describe callbacks with their `Callable` signatures, host objects with concrete
 Pillow/Tk/ctypes types, and JSON inputs with their actual elements/fields.
 
+Before publishing Python source built through an API or escaped string,
+inspect the returned blob at every replaced declaration boundary. Keep physical
+line breaks as source lines; retain literal escapes only inside Python strings.
+
+When a fixture bypasses a worker constructor, initialize its complete current
+lifecycle state and preserve the behavioral assertions for existing consumers.
+For ReportLab documents, set forwarded canvas options on their document owner;
+verify actual PDF catalog metadata and stable output hashes after manifest loss.
+Keep binary assertion messages concise while retaining the exact conditions.
+
 Scope simulated Windows platform attributes to the tested transport module's
 namespace so host pathlib/profile lookup and diagnostic redaction retain the
 runner's actual platform during portable native fixtures.

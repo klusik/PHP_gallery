@@ -230,19 +230,36 @@ class FlightReportTests(unittest.TestCase):
                             )
                         )
                         shutil.copy2(group_manifest, artifact_directory)
+                    output_hashes = {
+                        hashlib.sha256(path.read_bytes()).hexdigest()
+                        for path in outputs
+                    }
                     self.assertEqual(
-                        len({path.read_bytes() for path in outputs}),
+                        len(output_hashes),
                         len(supported_languages()),
                     )
                     for path, language in zip(outputs, supported_languages()):
                         pdf_bytes = path.read_bytes()
                         self.assertTrue(pdf_bytes.startswith(b"%PDF-"))
-                        self.assertIn(b"DejaVuSans", pdf_bytes)
-                        self.assertIn(b"/FontFile2", pdf_bytes)
-                        self.assertIn(b"/ToUnicode", pdf_bytes)
-                        self.assertIn(
-                            b"/Lang (" + language.encode("ascii") + b")",
-                            pdf_bytes,
+                        self.assertTrue(
+                            b"DejaVuSans" in pdf_bytes,
+                            "embedded DejaVu font missing",
+                        )
+                        self.assertTrue(
+                            b"/FontFile2" in pdf_bytes,
+                            "embedded TrueType font stream missing",
+                        )
+                        self.assertTrue(
+                            b"/ToUnicode" in pdf_bytes,
+                            "font Unicode map missing",
+                        )
+                        self.assertTrue(
+                            (
+                                b"/Lang ("
+                                + language.encode("ascii")
+                                + b")"
+                            ) in pdf_bytes,
+                            "PDF catalog language is missing",
                         )
                         self.assertEqual(
                             hashlib.sha256(pdf_bytes).hexdigest(),
@@ -258,7 +275,10 @@ class FlightReportTests(unittest.TestCase):
                             ).read_text(encoding="utf-8")
                         )
                         self.assertEqual(manifest["language"], language)
-                        self.assertIn(b"/Title", pdf_bytes)
+                        self.assertTrue(
+                            b"/Title" in pdf_bytes,
+                            "PDF title metadata is missing",
+                        )
 
     def test_rerender_is_idempotent_and_group_manifest_is_complete(self) -> None:
         """Keep report identities and bytes stable across retry calls.
@@ -273,10 +293,17 @@ class FlightReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             first = render_reports(analysis, ("en", "cs", "de", "sv"), directory)
-            first_bytes = [path.read_bytes() for path in first]
+            first_hashes = [
+                hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in first
+            ]
             second = render_reports(analysis, ("en", "cs", "de", "sv"), directory)
             self.assertEqual(first, second)
-            self.assertEqual(first_bytes, [path.read_bytes() for path in second])
+            second_hashes = [
+                hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in second
+            ]
+            self.assertEqual(first_hashes, second_hashes)
             manifest_path = next(directory.glob("postflight-manifest-*.json"))
             manifest = json.loads(
                 manifest_path.read_text(encoding="utf-8")
@@ -307,15 +334,18 @@ class FlightReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "flight-en.pdf"
             first_path = render_report(analysis, "en", destination)
-            first_bytes = first_path.read_bytes()
+            first_hash = hashlib.sha256(first_path.read_bytes()).hexdigest()
             first_manifest = first_path.with_suffix(
                 first_path.suffix + ".manifest.json"
             )
             first_manifest.unlink()
             second_path = render_report(analysis, "en", destination)
-            self.assertEqual(second_path.read_bytes(), first_bytes)
+            second_hash = hashlib.sha256(
+                second_path.read_bytes()
+            ).hexdigest()
+            self.assertEqual(second_hash, first_hash)
             self.assertEqual(
-                hashlib.sha256(second_path.read_bytes()).hexdigest(),
+                second_hash,
                 json.loads(first_manifest.read_text(encoding="utf-8"))["pdf_sha256"],
             )
 
