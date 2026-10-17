@@ -277,6 +277,7 @@ class FlightUITests(unittest.TestCase):
             def delayed_analysis(path: Path) -> SimpleNamespace:
                 """Hold analysis so explicit Revoke joins after the first drain.
 
+                Args:
                     path (Path): Session directory supplied by finalization.
 
                 Returns:

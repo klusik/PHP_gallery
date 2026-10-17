@@ -47,3 +47,9 @@ binaries or installer/build behavior changed since the prior installer. CMS-only
 markers, docs and test fixes leave winapp/dist untouched. Installer generation,
 qualification and publication are separate; release rules are in RELEASE.md and
 docs/AGENTS.md. Do not create deploy bundles or publish without explicit authority.
+
+When editing Google-style parameter docs, preserve the `Args:` heading for
+all remaining parameters after removing implicit `self`/`cls`. Document each
+variadic argument with its native element type, and retain concrete SDK argument
+order in the prose. Keep continuation prose free of parameter-like `name:`
+fragments so declaration scanners can distinguish it from parameter entries.

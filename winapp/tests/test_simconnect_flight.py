@@ -49,7 +49,7 @@ class NativeCallable:
         """Forward native-style arguments.
 
         Args:
-            arguments (tuple[object, ...]): Native arguments in SDK order. Open
+            arguments (object): Native arguments in SDK order. Open
                 receives a c_void_p by-reference output, client-name bytes,
                 optional window handle, event ID, optional event handle and
                 configuration index. Close receives one c_void_p handle.
@@ -108,7 +108,7 @@ class FakeFlightDLL:
         Args:
             name (str): Export purpose label.
             arguments (tuple[object, ...]): Values after the handle, varying by
-                export: Open has name/window/event/config values; definition
+                SDK export. Open has name/window/event/config values; definition
                 has ID/name/units/type/epsilon/datum ID; data request has
                 request/definition/object IDs, period, flags, origin, interval
                 and limit; event/state requests have ID/name. Close has none.
@@ -126,7 +126,7 @@ class FakeFlightDLL:
         Args:
             output_handle (ctypes.c_void_p): By-reference output slot for the
                 native SimConnect handle.
-            arguments (tuple[object, ...]): SimConnect_Open values after
+            arguments (object): SimConnect_Open values after
                 output_handle, in order: client-name bytes, optional HWND,
                 Win32 event ID, optional event HANDLE and configuration index.
 
@@ -216,7 +216,7 @@ class FakeFlightDLL:
         Args:
             _handle (ctypes.c_void_p): Handle passed to
                 SimConnect_AddToDataDefinition.
-            arguments (tuple[object, ...]): SDK values after the handle, in order:
+            arguments (object): SDK values after the handle, in order:
                 definition ID (uint32), SimVar-name bytes, optional unit bytes,
                 datatype enum, floating epsilon and datum ID (uint32).
 
@@ -233,7 +233,7 @@ class FakeFlightDLL:
         Args:
             _handle (ctypes.c_void_p): Handle passed to
                 SimConnect_SubscribeToSystemEvent.
-            arguments (tuple[object, ...]): Client event ID (uint32), then system-event
+            arguments (object): Client event ID (uint32), then system-event
                 name bytes.
 
         Returns:
@@ -249,7 +249,7 @@ class FakeFlightDLL:
         Args:
             _handle (ctypes.c_void_p): Handle passed to
                 SimConnect_RequestSystemState.
-            arguments (tuple[object, ...]): Request ID (uint32), then system-state name
+            arguments (object): Request ID (uint32), then system-state name
                 bytes.
 
         Returns:
@@ -277,7 +277,7 @@ class FakeFlightDLL:
         Args:
             _handle (ctypes.c_void_p): Handle passed to
                 SimConnect_RequestDataOnSimObject.
-            arguments (tuple[object, ...]): Request ID, definition ID, object selector,
+            arguments (object): Request ID, definition ID, object selector,
                 period, flags, origin, interval and request limit, each passed
                 as a uint32 in native SDK order.
 
@@ -493,7 +493,7 @@ class SimConnectFlightTests(unittest.TestCase):
             Args:
                 output_handle (ctypes.c_void_p): By-reference native handle
                     output slot.
-                _arguments (tuple[object, ...]): Open arguments in SDK order:
+                _arguments (object): Open arguments in SDK order:
                     client-name bytes, optional HWND, Win32 event ID, HANDLE and
                     configuration index.
 

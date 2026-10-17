@@ -311,6 +311,7 @@ class FlightWorkflowTests(unittest.TestCase):
             ) -> None:
                 """Hold the worker at its accepted-work drain barrier.
 
+                Args:
                     cancel (threading.Event): Worker cancellation signal.
                     deadline (float): Monotonic deadline supplied by workflow.
 
