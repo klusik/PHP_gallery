@@ -1027,7 +1027,12 @@ Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migr
 
 Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
-Samostatný uploader zůstává na 0.3.2. Správce sestavení získá instalátor a odpovídající generovaný \filepath{winapp-update.json} společně v \filepath{winapp/dist/0.3.2/}. Oba patří do stejného vydání. Sestavení nenahrazuje ověření nainstalovaného Windows programu a simulátoru.
+Zdroj samostatného uploaderu nyní cílí na verzi 0.4.1. Samostatně vyžádané
+sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.4.1/}. Instalátor
+a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
+ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
+verzí včetně 0.4.0 zůstávají zachovány.
 
 \subsection{Pracovní prostředí administrace}
 

@@ -1029,7 +1029,13 @@ Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanlig
 
 Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
-Den fristående uppladdaren är fortfarande 0.3.2. Bygget levererar installationsfil och motsvarande genererade \filepath{winapp-update.json} tillsammans under \filepath{winapp/dist/0.3.2/}. Båda hör till samma publicerade utgåva. Bygget ersätter inte verifiering av installerad Windows-app eller simulator.
+Källan till den fristående uppladdaren riktar sig nu mot version 0.4.1. Ett
+separat beställt installationsbygge placerar installationsfilen och tillhörande
+genererade metadata \filepath{winapp-update.json} under
+\filepath{winapp/dist/0.4.1/}. Installationsfilen och metadata hör till samma
+publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
+installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
+0.4.0, bevaras.
 
 \subsection{Administrationens arbetsyta}
 
