@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.136.2}
+\newcommand{\version}{0.136.3}
 \newcommand{\manualdate}{18.~Oktober~2026}
 
 \hypersetup{
@@ -951,6 +951,17 @@ bleiben lokal und können erneut übertragen werden. Nicht unterstützte Signale
 bleiben nicht verfügbar; die Live-Abnahme für Simulator, Flugzeug und Build
 erfolgt getrennt für jede Generation.
 
+Der Recorder fordert \texttt{ABSOLUTE TIME} in Sekunden und das Lastvielfache
+in \texttt{GForce} an. Das Präfix \texttt{E:} gehört zu RPN-Ausdrücken.
+Erfolgreiche Kameradaten belegen keine Flugaufzeichnung. Kopierte Diagnosen
+zeigen App-Version, unabhängigen Recorderstatus, gespeicherte Messpunkte und
+letzte Warnung. Abgelehnte SDK-Aufrufe nennen Variable, Einheit, Sende-ID und
+Parameterindex. Bekannte SDK/HRESULT-Codes enthalten Namen, Erklärung und
+Auswirkung; unbekannte Codes bleiben ausdrücklich unbekannt. Geänderte
+Fehlergründe bleiben in Sitzungswarnungen. Verbindung, erster gültiger Datensatz
+und erster gespeicherter Messpunkt werden getrennt protokolliert.
+Fehlende historische Messpunkte sind nicht rekonstruierbar.
+
 Beide Aktionen nutzen denselben dauerhaften Koordinator. Ein eigenständiges
 Stoppen beendet die Überwachung, die zugehörige UTC-Synchronisierung und die
 Flugaufzeichnung, schließt danach angenommene Fotos und erforderliche
@@ -1257,10 +1268,10 @@ Vertikale Karten zeigen das Foto über dem Text, horizontale daneben. Die normal
 
 Öffentliche Suche ist nur ohne gespeicherte Wahl und bei verfügbarer Funktion standardmäßig an. Updates aktualisieren Versionen, Notizen und API-Zustand gemeinsam; automatische Metadatenprüfung erfolgt höchstens stündlich, deaktivierte automatische Updates lassen alte Hintergrundaufträge pausiert. OurAirports verwendet wöchentliche Aktualität und eine Stunde Fehlerabstand. Der Papierkorb zeigt Restdauer und sichere Löschbarkeit. Auch Präsentationsschema-Probleme verlangen eine Aktion im Systemstatus.
 
-Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.5.1. Ein
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.5.2. Ein
 separat angeforderter Installer-Build legt den Installer und die passenden
 generierten Metadaten \filepath{winapp-update.json} unter
-\filepath{winapp/dist/0.5.1/} ab. Installer und Metadaten gehören zur selben
+\filepath{winapp/dist/0.5.2/} ab. Installer und Metadaten gehören zur selben
 gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
 installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
 einschließlich 0.4.0 bleiben erhalten.

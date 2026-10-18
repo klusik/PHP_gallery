@@ -108,6 +108,7 @@ class FakeFlightDLL:
         self.sent = 0
         self.calls = []
         self.closed = 0
+        self.rejected_definitions: set[int] = set()
         exports = {
             "Open": self.open,
             "Close": self.close,
@@ -238,7 +239,7 @@ class FakeFlightDLL:
     def add_definition(
         self, _handle: ctypes.c_void_p, *arguments: NativeFlightArgument
     ) -> int:
-        """Record one read-only SimVar definition.
+        """Model asynchronous rejection of invalid SDK names and units.
 
         Args:
             _handle (ctypes.c_void_p): Handle passed to
@@ -248,9 +249,24 @@ class FakeFlightDLL:
                 enum, floating epsilon and datum ID.
 
         Returns:
-            int: Successful fake HRESULT.
+            int: Successful send HRESULT; invalid values queue SDK exception 7.
         """
-        return self.next_send("definition", arguments)
+        result = self.next_send("definition", arguments)
+        definition, variable, units = arguments[:3]
+        # Independent SDK contract: E: is RPN syntax, and g is not GForce.
+        # Code 7 and parameter indices 2/3 are SDK wire values, not policies.
+        if variable == b"E:ABSOLUTE TIME" or (
+            variable == b"G FORCE" and units != b"GForce"
+        ):
+            self.rejected_definitions.add(int(definition))
+            packet = flight._SimConnectRecvException()
+            packet.dwSize = ctypes.sizeof(packet)
+            packet.dwID = flight.SIMCONNECT_RECV_ID_EXCEPTION
+            packet.dwException = 7
+            packet.dwSendID = self.sent
+            packet.dwIndex = 2 if variable == b"E:ABSOLUTE TIME" else 3
+            self.queue.append((packet, ctypes.sizeof(packet)))
+        return result
 
     def subscribe(
         self, _handle: ctypes.c_void_p, *arguments: NativeFlightArgument
@@ -313,6 +329,8 @@ class FakeFlightDLL:
         """
         result = self.next_send("request", arguments)
         request_id, definition_id = int(arguments[0]), int(arguments[1])
+        if definition_id in self.rejected_definitions:
+            return result
         if definition_id == flight.FLIGHT_TITLE_DEFINITION_ID:
             packet = flight._FlightTitleData()
             packet.dwSize = ctypes.sizeof(packet)
@@ -369,6 +387,128 @@ class FakeFlightDLL:
 
 class SimConnectFlightTests(unittest.TestCase):
     """Exercise native handshakes, frames and state events without MSFS."""
+
+    def test_core_rejection_identifies_variable_units_and_sdk_packet(self) -> None:
+        """Reproduce the deployed invalid-clock failure through native dispatch.
+
+        Returns:
+            None: Both generations refuse the sample and retain actionable
+                exception details after closing the failed connection.
+        """
+        invalid_core = tuple(
+            (b"E:ABSOLUTE TIME" if name == b"ABSOLUTE TIME" else name, units)
+            for name, units in flight.CORE_SIMVARS
+        )
+        for generation in (2020, 2024):
+            with self.subTest(generation=generation):
+                provider, dll = self.provider(generation)
+                with (
+                    mock.patch.object(flight, "WINDOWS_NATIVE_TRANSPORT", True),
+                    mock.patch.object(
+                        flight.ctypes, "WinDLL", return_value=dll, create=True
+                    ),
+                    mock.patch.object(flight, "CORE_SIMVARS", invalid_core),
+                ):
+                    self.assertIsNone(provider.sample())
+                self.assertIn("7 NAME_UNRECOGNIZED", provider.last_error)
+                self.assertIn("E:ABSOLUTE TIME", provider.last_error)
+                self.assertIn("seconds", provider.last_error)
+                self.assertIn("SimConnect_AddToDataDefinition", provider.last_error)
+                self.assertIn("send_id=", provider.last_error)
+                self.assertIn("index=2", provider.last_error)
+                self.assertIn("variable=b'E:ABSOLUTE TIME'", provider.last_error)
+                self.assertIn("units=b'seconds'", provider.last_error)
+                self.assertIn("A requested name is unknown", provider.last_error)
+                self.assertIn("No flight sample accepted", provider.last_error)
+                self.assertEqual(1, dll.closed)
+                self.assertEqual({}, provider.send_details)
+
+    def test_rejected_load_factor_keeps_core_recording_available(self) -> None:
+        """Isolate an unsupported optional unit from usable aircraft frames.
+
+        Returns:
+            None: Core position survives; load factor remains unknown and its
+                warning identifies the exact rejected variable and units.
+        """
+        invalid_optional = tuple(
+            (key, name, b"g" if key == "load_factor" else units)
+            for key, name, units in flight.OPTIONAL_SIMVARS
+        )
+        for generation in (2020, 2024):
+            with self.subTest(generation=generation):
+                provider, dll = self.provider(generation)
+                messages: list[str] = []
+                provider.emit = lambda _level, message: messages.append(message)
+                with (
+                    mock.patch.object(flight, "WINDOWS_NATIVE_TRANSPORT", True),
+                    mock.patch.object(
+                        flight.ctypes, "WinDLL", return_value=dll, create=True
+                    ),
+                    mock.patch.object(flight, "OPTIONAL_SIMVARS", invalid_optional),
+                ):
+                    result = provider.sample()
+                    self.assertIsNotNone(result)
+                    self.assertAlmostEqual(49.0, result[0].latitude_deg)
+                    self.assertIsNone(result[0].load_factor_g)
+                    self.assertIn("load_factor", provider.unavailable)
+                    self.assertEqual("", provider.last_error)
+                    self.assertTrue(any(
+                        "G FORCE" in message and "b'g'" in message
+                        and "NAME_UNRECOGNIZED" in message
+                        for message in messages
+                    ))
+                    provider.stop()
+
+    def test_native_hresult_names_the_failed_operation_and_argument(self) -> None:
+        """Keep a synchronous Windows failure readable after handle cleanup.
+
+        Returns:
+            None: The failed variable, units, hex HRESULT and decoded meaning
+                remain available to activity and durable session warnings.
+        """
+        provider, dll = self.provider(2024)
+        # Signed E_INVALIDARG is a fixed Windows HRESULT, not a timeout policy.
+        dll.SimConnect_AddToDataDefinition = NativeCallable(
+            lambda *_arguments: -2147024809
+        )
+        with (
+            mock.patch.object(flight, "WINDOWS_NATIVE_TRANSPORT", True),
+            mock.patch.object(
+                flight.ctypes, "WinDLL", return_value=dll, create=True
+            ),
+        ):
+            self.assertIsNone(provider.sample())
+        self.assertIn("0x80070057", provider.last_error)
+        self.assertIn("E_INVALIDARG", provider.last_error)
+        self.assertIn("rejected an argument", provider.last_error)
+        self.assertIn("variable=b'PLANE LATITUDE'", provider.last_error)
+        self.assertIn("units=b'degrees'", provider.last_error)
+        self.assertEqual(1, dll.closed)
+
+    def test_unknown_sdk_code_preserves_context_without_inventing_a_cause(self) -> None:
+        """Retain an undecoded future SDK exception as explicit unknown data.
+
+        Returns:
+            None: The raw code and original operation survive; a later dependent
+                definition error cannot overwrite the original failure.
+        """
+        provider, _dll = self.provider(2024)
+        # 9999 deliberately lies outside the documented SDK enumeration.
+        packet = flight._SimConnectRecvException()
+        packet.dwSize = ctypes.sizeof(packet)
+        packet.dwID = flight.SIMCONNECT_RECV_ID_EXCEPTION
+        packet.dwException = 9999
+        packet.dwSendID = 1
+        provider.send_ids[1] = "definition:core"
+        provider.send_details[1] = "SimConnect_AddToDataDefinition(variable='test')"
+        provider.dispatch(ctypes.pointer(packet), ctypes.sizeof(packet), None)
+        self.assertIn("9999 UNKNOWN_SDK_EXCEPTION", provider.last_error)
+        self.assertIn("No decoded SDK meaning", provider.last_error)
+        self.assertIn("variable='test'", provider.last_error)
+        original_error = provider.last_error
+        packet.dwException = 28
+        provider.dispatch(ctypes.pointer(packet), ctypes.sizeof(packet), None)
+        self.assertEqual(original_error, provider.last_error)
 
     def provider(self, generation: int) -> tuple[flight.SimConnectFlightClient, FakeFlightDLL]:
         """Create a provider and matching fake DLL.

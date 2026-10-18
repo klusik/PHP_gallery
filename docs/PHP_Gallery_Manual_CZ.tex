@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.136.2}
+\newcommand{\version}{0.136.3}
 \newcommand{\manualdate}{18.~října~2026}
 
 \hypersetup{
@@ -922,6 +922,16 @@ Zprávy zůstávají místně uložené pro opakované odeslání. Nepodporovan�
 zůstávají nedostupné, nikoli vymyšlené; živé ověření simulátoru, letadla a
 sestavení se provádí zvlášť pro každou generaci.
 
+Recorder žádá \texttt{ABSOLUTE TIME} v~sekundách a~přetížení v~jednotce
+\texttt{GForce}. Předpona \texttt{E:} patří do~výrazů RPN.
+Úspěšné čtení kamery nedokládá záznam letu. Zkopírovaná diagnostika ukazuje
+verzi aplikace, samostatný stav recorderu, počet uložených vzorků a~poslední
+varování. Odmítnuté volání SDK uvádí proměnnou, jednotku, ID odeslání a~index
+parametru. Známé kódy SDK/HRESULT mají název, vysvětlení a~dopad; neznámé
+zůstávají výslovně nerozpoznané. Změny důvodu chyby zůstávají ve~varováních
+session. Připojení, první platný rámec a~první uložený vzorek mají vlastní log.
+Chybějící historické vzorky nelze zpětně vytvořit.
+
 Obě akce používají jediný trvalý koordinátor. Samostatné Zastavení ukončí
 sledování složky, jeho vlastní synchronizaci UTC a záznam letu, poté dokončí
 přijaté fotografie a povinné doručení zpráv; nesouvisející pracovníci AI,
@@ -1226,9 +1236,9 @@ Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migr
 
 Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
-Zdroj samostatného uploaderu nyní cílí na verzi 0.5.1. Samostatně vyžádané
+Zdroj samostatného uploaderu nyní cílí na verzi 0.5.2. Samostatně vyžádané
 sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
-\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.1/}. Instalátor
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.2/}. Instalátor
 a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
 ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
 verzí včetně 0.4.0 zůstávají zachovány.
