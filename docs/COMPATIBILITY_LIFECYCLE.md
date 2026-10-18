@@ -1396,6 +1396,19 @@ migration of that discovery contract and supported-client acceptance evidence.
 
 ## Interrupted GitHub release transfers
 
+Ready-draft automatic cleanup is owned by
+`.github/scripts/release-draft-retirement.mjs`. It requires a schema-4 synchronized
+completion with the retained complete byte inventory. Historical schema-1--3
+completions and published/manual retirement keep their existing approval and
+publication controls; automatic cleanup skips unsupported/incomplete completion
+instead of inventing proof. The manual retirement path remains supported for
+retained historical refs. Usage of automatic cleanup is unknown until the first
+production release containing this change. The registered retirement fixture
+exercises real leased deletion, active/open dependencies, changed assets, lost
+responses and retries without a branch. Live GitHub deletion permissions remain
+unperformed coverage. Removing the manual compatibility path requires proof that
+all retained historical refs were retired through their existing controls.
+
 Owner: `.github/scripts/release-completion.mjs` and
 `.github/scripts/release-draft-assets.mjs`. A failed create response may follow a
 successful server write. Read-only inventory reconciliation preserves that draft,

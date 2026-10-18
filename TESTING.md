@@ -3229,6 +3229,15 @@ operator path and exact live GitHub protections. Tests
 `tests/hosted_release_policy_test.mjs`, `tests/release_origin_test.mjs`,
 `tests/release_reconciliation_test.mjs` and
 `tests/release_retirement_test.mjs` are registered with the central audit.
+The retirement owner also imports `release_draft_retirement_scenarios.mjs` for
+current ready-draft cleanup: retained inventory, assembly/review, M/tag ancestry,
+pending/blocked draft refusal, missing/corrupt/duplicate/incomplete assets, open
+PRs, active/unknown run inventory, changed refs, server lease races, refused/lost
+delete responses and idempotent retries without a release branch. Its real
+disposable Git remote verifies main/develop/tag preservation. Workflow assertions
+bind cleanup to `DRAFT_READY`, successful completion and prior artifact retention.
+Live GitHub deletion permissions and a complete production release remain manual
+acceptance; source fixtures do not certify those provider operations.
 The hosted policy suite also starts a successor release from a tagged but
 unpublished schema-3 predecessor. Shared in-memory ZIP fixtures feed the real
 coverage loader and verify both the predecessor's FULL integration archive and

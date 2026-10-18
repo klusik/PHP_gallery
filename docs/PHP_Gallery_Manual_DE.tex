@@ -3042,7 +3042,16 @@ Warten Sie~auf \codeword{DRAFT_READY} und~wählen Sie~manuell
 \ui{Publish release}. \codeword{TAGGED / DRAFT_PENDING} wird für~dasselbe Q
 fortgesetzt; Kandidat und~korrekter Tag werden nicht neu aufgebaut oder~verschoben.
 Paralleles develop blockiert unsichere Synchronisierung, keinen korrekten Tag
-oder~Entwurf. Manuelle Hosting-/Browserprüfung und~Zweigbereinigung bleiben separat.
+oder~Entwurf. Nach \codeword{DRAFT_READY} und~Speicherung der~Abschlussbelege
+entfernt der~letzte Job automatisch den~genauen Release-Zweig mit~einer Q-SHA-Lease.
+Er~prüft erneut Anhang-Hashes, genehmigten Merge/Tag, main/develop-Abstammung
+und~abhängige offene PRs oder~aktive Workflows. Unvollständige Synchronisierung
+behält den~Zweig; fehlerhafte Belege stoppen die~Bereinigung und~erhalten den~Entwurf.
+Nur den~fehlgeschlagenen Bereinigungsjob wiederholen; unveränderliches Q und~gespeicherte
+Belege unterstützen auch einen bereits gelöschten Zweig. Dies gilt ab~dem~ersten
+Release mit~der~Änderung im~qualifizierten develop. Veröffentlichung und~manuelle
+Hosting-/Browserprüfung bleiben separat. Historische Zweige behalten den~gesondert
+genehmigten Stilllegungsworkflow.
 Siehe \filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
 \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} und~\filepath{docs/LATEX_BUILD.md}.
 

@@ -19,8 +19,18 @@ import {inspectSync,matchingBranchSha} from './release-reconciliation.mjs';
 import {requireOwnerDispatch,requireOwnerEnvironment} from './release-owner-authorization.mjs';
 
 /** @typedef {{branch:string,mode:string,manualReview:string}} RetirementRequest */
-/** @typedef {function(string,string=,object=):object} GithubReader */
+/** Recursive GitHub transport; each retirement reader validates consumed fields.
+ * @typedef {import('./release-completion.mjs').CompletionApi} GithubReader
+ */
 /** @typedef {function(string,string[]):string} GitCommand */
+
+/** Bound active-run inventory before a release ref can be removed.
+ * Type: number. Units: workflow runs per status/workflow response.
+ * Scope: release retirement. Consumers: hasActiveReleaseWork.
+ * Rationale: one hundred is GitHub's maximum page size; larger or incomplete
+ * inventories conservatively refuse cleanup rather than hide active writers.
+ */
+const ACTIVE_RELEASE_RUN_PAGE_SIZE=100;
 
 /** Validate targeted cleanup intent without wildcard branch operations.
  * @param {RetirementRequest} request Explicit repository operator input.
@@ -40,21 +50,24 @@ export function validateRetirementRequest(request) {
  * @param {GithubReader} call GitHub API reader.
  * @param {string} repository Exact repository identity.
  * @param {string} branch Exact release ref.
+ * @param {string} currentRun Already authenticated completion run to exclude, or empty for manual retirement.
  * @returns {boolean} True when a matching run or any publication operation remains active.
  */
-export function hasActiveReleaseWork(call, repository, branch) {
-    for (const state of ['queued','in_progress','waiting','pending']) {
+export function hasActiveReleaseWork(call, repository, branch, currentRun='') {
+    for (const state of ['requested','queued','in_progress','waiting','pending']) {
         for (const workflow of ['release-qualification.yml','release-promotion.yml']) {
             const list = call('repos/' + repository + '/actions/workflows/' + workflow
-                + '/runs?status=' + state + '&per_page=100');
+                + '/runs?status=' + state + '&per_page='+ACTIVE_RELEASE_RUN_PAGE_SIZE);
             if (!Array.isArray(list?.workflow_runs) || !Number.isInteger(list.total_count)
-                || list.total_count > 100) {
+                || list.total_count > ACTIVE_RELEASE_RUN_PAGE_SIZE
+                || list.total_count !== list.workflow_runs.length) {
                 throw new Error('BLOCKED incomplete active release workflow inventory.');
             }
             // Promotion executes on main, so conservatively block *any* active
             // promotion. Qualification is scoped to the exact release branch.
-            if (list.workflow_runs.some(run => workflow !== 'release-qualification.yml'
-                || run.head_branch === branch)) return true;
+            if (list.workflow_runs.some(run => String(run.id)!==currentRun
+                && (workflow !== 'release-qualification.yml'
+                || run.head_branch === branch))) return true;
         }
     }
     return false;

@@ -3003,7 +3003,15 @@ Vänta på~\codeword{DRAFT_READY} och~välj manuellt \ui{Publish release}.
 \codeword{TAGGED / DRAFT_PENDING} fortsätter för~samma Q;
 bygg inte om~kandidaten och~flytta inte en korrekt tagg.
 Parallell develop blockerar osäker synkronisering, inte korrekt tagg eller~utkast.
-Manuell hosting-/webbläsarkontroll och~grenstädning är~separata.
+Efter \codeword{DRAFT_READY} och~sparade slutförandebevis tar~det sista jobbet
+automatiskt bort exakt release-gren med~ett villkor på~oförändrat Q-SHA.
+Det kontrollerar åter bilagornas hashvärden, godkänd merge/tagg, main/develop-historik
+och~beroende öppna PR:er eller~aktiva arbetsflöden. Ofullständig synkronisering
+behåller grenen; felaktiga bevis stoppar städningen och~bevarar utkastet.
+Kör endast om~det misslyckade städjobbet; oföränderligt Q och~sparade bevis
+stöder även en~redan borttagen gren. Detta börjar med~första releasen som~innehåller
+ändringen i~kvalificerad develop. Publicering och~manuell hosting-/webbläsarkontroll
+är~separata. Historiska grenar behåller det separat godkända pensioneringsflödet.
 Se~\filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
 \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} och~\filepath{docs/LATEX_BUILD.md}.
 

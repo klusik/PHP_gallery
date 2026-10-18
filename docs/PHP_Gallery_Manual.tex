@@ -3034,7 +3034,15 @@ Wait for~\codeword{DRAFT_READY}, then manually choose \ui{Publish release}.
 \codeword{TAGGED / DRAFT_PENDING} is~recoverable for~the~same Q;
 do~not~rebuild the~candidate or~move a~correct tag. Parallel develop work
 blocks unsafe synchronization, not~a~correct completed tag or~draft.
-Human browser/hosting smoke tests and~branch cleanup remain separate.
+After \codeword{DRAFT_READY} and~retention of~completion evidence, the~final job
+automatically removes the~exact release branch with a~Q SHA lease.
+It~rechecks uploaded asset hashes, reviewed merge/tag, main/develop ancestry
+and~active PR/workflow dependencies. Incomplete synchronization keeps the~branch;
+failed proof blocks cleanup while preserving the~draft. Retry only the~failed
+cleanup job; immutable Q and~retained evidence support an~already deleted branch.
+This starts with the~first release containing the~change in~qualified develop.
+Manual publication and~browser/hosting smoke tests remain separate. Historical
+branches retain the~separately approved retirement workflow.
 See \filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
 \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} and~\filepath{docs/LATEX_BUILD.md}.
 

@@ -2995,8 +2995,16 @@ Chybějící ověřené přílohy doplní, totožné existující zachová.
 Počkejte na~\codeword{DRAFT_READY}, potom ručně zvolte \ui{Publish release}.
 \codeword{TAGGED / DRAFT_PENDING} lze obnovit pro~stejné Q; nepřestavujte
 kandidáta ani neposouvejte správný tag. Souběžný develop brání nebezpečné
-synchronizaci, nikoli správnému tagu nebo draftu. Ruční kontrola hostingu
-a~prohlížeče i~úklid větví zůstávají samostatné.
+synchronizaci, nikoli správnému tagu nebo draftu.
+Po~\codeword{DRAFT_READY} a~uložení dokladů dokončení závěrečný job
+automaticky smaže přesnou release větev s~podmínkou nezměněného SHA Q.
+Znovu ověří hashe příloh, schválený merge/tag, historii main/develop
+a~závislá otevřená PR či~běžící workflow. Neúplná synchronizace větev zachová;
+chybný doklad zastaví úklid a~ponechá draft. Opakujte pouze neúspěšný úklidový
+job; neměnné Q a~uložené doklady podporují i~již smazanou větev.
+Chování začne prvním releasem obsahujícím změnu v~kvalifikovaném develop.
+Publikace a~ruční kontrola hostingu či~prohlížeče zůstávají samostatné.
+Historické větve ponechávají zvlášť schvalované workflow odstranění.
 Viz~\filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
 \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} a~\filepath{docs/LATEX_BUILD.md}.
 

@@ -1,7 +1,7 @@
 # Maintainer checklist: feature to published release
 
 Feature agents prepare and push only their working branch. The maintainer performs
-the protected integration, release, publication and separately approved cleanup
+the protected integration, release, publication and historical approved cleanup
 below. BASIC alone is not FULL qualification; `plan` authorizes nothing unless
 its summary explicitly says `ELIGIBLE`.
 
@@ -46,6 +46,13 @@ its summary explicitly says `ELIGIBLE`.
 - [ ] Verify the installer and `winapp-update.json` pair is present. Automation
   uses the exact qualification artifact when built, or verifies and preserves
   the pinned predecessor's pair when shipped WinApp source is unchanged.
+- [ ] Confirm the final **Retire release branch after verified draft and retained
+  evidence** job reports `RETIRED` or `ALREADY_DELETED`. It runs after successful
+  draft/evidence retention and verifies exact Q, M/tag, protected branch ancestry,
+  complete assets and dependencies before a leased deletion. Incomplete develop
+  synchronization reports `SKIPPED` and retains the branch. On cleanup failure,
+  retry only that job; original draft preparation and manual publication remain
+  valid, and immutable-SHA retries handle an already deleted ref.
 - [ ] Review outstanding browser/PDF/manual checks, then click **Publish release**.
   There is no normal download, ZIP extraction, manual asset attachment or extra
   upload workflow. Actions artifacts remain available for diagnostics.
@@ -73,7 +80,11 @@ its summary explicitly says `ELIGIBLE`.
 - [ ] Check [the live site](https://klusik.github.io/PHP_gallery/) on desktop/mobile:
   EN/CS/DE/SV, docs navigation, published version and pinned README/patch notes/PDF links.
 
-## Retire the completed release branch
+## Retire a retained historical release branch
+
+Current synchronized schema-4 releases clean their own branch automatically
+after `DRAFT_READY`. Use this separate reviewed path for historical/retained refs;
+it does not change its published-release prerequisite or environment approval.
 
 - [ ] Require published release/evidence, qualified Q retained in protected linear
   develop and no open dependent PR or active release qualification/promotion.
