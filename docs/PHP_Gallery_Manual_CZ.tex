@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.136.1}
+\newcommand{\version}{0.136.2}
 \newcommand{\manualdate}{18.~října~2026}
 
 \hypersetup{
@@ -894,6 +894,25 @@ Volba \ui{Update} stáhne instalátor s~průběhem a~možností zrušení, ově�
 
 \subsection{Záznam letů a zprávy}
 
+Uploader používá tmavé skleněné panely, navigaci pomocí ikon a~posuvné
+přepínače. Popis ikony se zobrazí při najetí nebo zaměření klávesnicí.
+Podtitulek o~autopilotu je v~hlavičce u~PHP Gallery. Ozubená kolečka jsou
+přímo u~galerie, sledované složky nebo záznamu letu. Cesta a~výběr složky
+jsou v~nastavení Watch folder. Kolečko letu otevírá lokální nastavení
+automatických reportů, jazyků reportů a~rozhraní, průběhu a~složky reportů.
+Spuštění watcheru automaticky připraví záznam; samostatné spuštění letu není
+potřeba. Přepínač Record flight za běhu pozastaví nebo obnoví sběr ve stejné
+relaci a~označí mezeru v~trase. Při vypnutém záznamu se SimConnect
+nepřipojuje. Fotografie se nahrávají nezávisle. Zavření nastavení nezahajuje
+žádnou operaci. Skleněný vzhled používá neprůhledné RGB obrázky kvůli
+spolehlivosti Windows Tk; zdrojový režim bez Pillow ponechává funkční
+nativní ovládání pro opravu závislostí.
+
+Uložené cesty, URL galerie a~volby funkcí se při příštím spuštění obnoví.
+Jazyk rozhraní se vybírá čtyřmi přímo zobrazenými volbami. Posuvníky jsou
+viditelné pouze při přetečení obsahu; pomocná okna a~tooltipy používají
+stejné tmavé barvy.
+
 Windows uploader zaznamenává telemetrii letadla v MSFS 2020 i 2024 společným
 poskytovatelem pouze pro čtení. Záznam i tvorba zpráv jsou ve výchozím stavu
 zapnuté; záznam lze nezávisle vypnout a uložený výběr jazyků zpočátku zahrnuje
@@ -1207,9 +1226,9 @@ Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migr
 
 Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
-Zdroj samostatného uploaderu nyní cílí na verzi 0.5.0. Samostatně vyžádané
+Zdroj samostatného uploaderu nyní cílí na verzi 0.5.1. Samostatně vyžádané
 sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
-\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.0/}. Instalátor
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.1/}. Instalátor
 a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
 ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
 verzí včetně 0.4.0 zůstávají zachovány.
@@ -2954,6 +2973,11 @@ odstupy. Každé opakování znovu ověří aktivní běh, důkazy BASIC/FULL, p
 ID checků a~stav větví. Jiné chyby běh zastaví; FULL se neopakuje.
 
 \subsection{Sestavení vydání z~kvalifikovaného develop}
+
+V~GitHub Actions spusťte \ui{Begin Release} z~větve \codeword{develop}
+a~zadejte číslo verze včetně \codeword{v_}, například \codeword{v_0.136.2}.
+Workflow vytvoří \codeword{release/v_0.136.2} přesně na SHA developu
+vybraném pro~toto spuštění; vydání tím nekvalifikuje ani nepublikuje.
 
 Před schválením PR sestavení zachová historii zafixovaného main i~připravený
 strom. Po~schválení a~vytvoření tagu posune nezměněný develop přímo na~skutečný

@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.136.1}
+\newcommand{\version}{0.136.2}
 \newcommand{\manualdate}{18 October 2026}
 
 \hypersetup{
@@ -901,6 +901,25 @@ Choose \ui{Update} to~download with progress and~optional cancellation, verify t
 
 \subsection{Flight recording and reports}
 
+The~uploader uses dark glass panels, an~icon navigation rail, and~sliding
+switches. Hover or~focus icons for their descriptions. The~header groups
+PHP Gallery with its~autopilot subtitle. Settings gears sit directly beside
+their gallery, watch-folder, or~flight control. The~flight gear opens a~local
+sheet for automatic reports, report languages, interface language, progress,
+and~the~report folder. Starting the~watcher automatically arms recording;
+there is~no~separate flight-start action. The~Record flight switch pauses
+and~resumes acquisition during watching, preserving the~session and~marking
+the~gap in~the~track. Starting with recording off opens no~SimConnect
+connection. Photo uploads continue independently. Closing settings starts
+no~operation. Glass artwork uses opaque RGB pixels for reliable Windows Tk;
+source mode without Pillow retains usable native controls for repair.
+
+The~folder path and~picker share Watch folder settings. Saved paths,
+gallery URL, and~feature choices are restored after restart. The~interface
+language uses four directly visible choices. Scrollbars appear only when
+content exceeds the~viewport; helper windows and~tooltips use the~same
+dark palette.
+
 The~Windows uploader records MSFS 2020 and~2024 aircraft telemetry through
 a~shared read-only provider. Recording and~report creation are enabled by
 default; recording can~be opted out independently, and~the~saved language
@@ -1215,9 +1234,9 @@ Vertical cards place the~photograph above the~description; horizontal cards plac
 
 Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
 
-The~independent uploader source targets 0.5.0. A~separately requested installer
+The~independent uploader source targets 0.5.1. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.5.0/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.5.1/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.
@@ -2994,6 +3013,11 @@ two-second waits. Each retry revalidates the~active run, BASIC/FULL evidence,
 original check IDs and~branch leases. Other failures stop; FULL is~not~replayed.
 
 \subsection{Release assembly from qualified develop}
+
+In~GitHub Actions, run \ui{Begin Release} from~\codeword{develop} and~enter
+the~version including \codeword{v_}, for example \codeword{v_0.136.2}.
+The~workflow creates \codeword{release/v_0.136.2} at~the~exact develop SHA
+selected for~that run; it~does not qualify or~publish the~release.
 
 Before PR review, assembly retains the~frozen main history and~prepared tree.
 After approval and~tagging, unchanged develop fast-forwards to~the~actual tagged

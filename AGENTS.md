@@ -37,6 +37,10 @@ Read applicable rows; scoped rules cannot waive authorization, CI or security.
 
 ## Branch authorization and repository safety
 
+Run Git commands, especially ref creation, checkout, fetch and push, outside
+the sandbox. The user explicitly requires non-sandbox Git because sandboxed Git
+cannot reliably write repository refs or access the configured remote.
+
 Before writes, verify branch/HEAD, exact remote repository/head, explicit branch
 authorization and usable write permission. Targets: `feature/*`, `fix/*`,
 `bugfix/*`, `hotfix/*`, `codex/*`; new work uses `feature/`. Missing identity,

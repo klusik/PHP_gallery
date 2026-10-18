@@ -79,6 +79,27 @@ class FrozenDependencyTests(unittest.TestCase):
 class ConfigStateTests(unittest.TestCase):
     """Configuration, persistence, migration, and redaction contracts."""
 
+    def test_restart_restores_saved_paths_and_local_options(self) -> None:
+        """Keep prior folder, runtime and uploader choices across a new store.
+
+        Returns:
+            None: A fresh app configuration reader recovers the saved settings.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            saved = MAIN.WatcherConfig(
+                watched_folder=str(Path(tmp) / "screenshots"),
+                simconnect_dll_path=str(Path(tmp) / "SimConnect.dll"),
+                gallery_url="https://gallery.test/index.php?page=upload_automation_upload",
+                api_key="test-gallery-key",
+                watch_recursive=True,
+                sync_utc_time=True,
+                delete_uploaded_files=False,
+            )
+            MAIN.ConfigStore(path).save(saved)
+            restored = MAIN.ConfigStore(path).load()
+            self.assertEqual(saved.to_dict(), restored.to_dict())
+
     def test_config_migration_preserves_legacy_keys_and_clamps_new_values(self):
         payload = {
             "gallery_url": "https://example.test",
@@ -998,6 +1019,20 @@ class WatcherActionTests(unittest.TestCase):
 
 class ScrollableFrameWheelTests(unittest.TestCase):
     """Route page wheel input without stealing other controls' scrolling."""
+
+    def test_scrollbar_appears_only_for_overflowing_content(self) -> None:
+        """Reclaim scrollbar width when the full page fits the viewport.
+
+        Returns:
+            None: Overflow shows the scrollbar and a full visible interval hides it.
+        """
+        frame = mock.Mock()
+        frame.scrollbar.winfo_manager.return_value = ""
+        MAIN.ScrollableFrame._set_scrollbar(frame, "0.0", "0.7")
+        frame.scrollbar.pack.assert_called_once_with(side="right", fill="y")
+        frame.scrollbar.winfo_manager.return_value = "pack"
+        MAIN.ScrollableFrame._set_scrollbar(frame, "0.0", "1.0")
+        frame.scrollbar.pack_forget.assert_called_once_with()
 
     def test_owned_child_wheel_scrolls_its_page_in_units(self) -> None:
         """Send a full wheel notch from a child to the owning page canvas.

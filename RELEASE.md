@@ -26,8 +26,11 @@ protections. This installs infrastructure, not a production version.
 
 ## Prepare the release
 
-The maintainer separately authorizes creation/push of `release/v_X.Y[.Z]` from
-current qualified develop A. The automated release workflow:
+In GitHub Actions, select **Begin Release**, run it from `develop` and enter the
+version including `v_` (for example `v_0.136.2`). It creates
+`release/v_0.136.2` at the exact `develop` commit selected for that run. The
+workflow only creates the branch; it does not qualify or publish the release.
+The automated release workflow:
 
 1. Freezes A and the actual main/release heads and resolves the existing stable
    tag through protected main merge history. Existing tags/origins stay immutable.

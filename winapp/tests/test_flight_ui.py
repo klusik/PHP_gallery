@@ -22,7 +22,7 @@ from unittest.mock import Mock, patch
 
 import uploader.flight_ui as flight_ui
 import uploader.flight_workflow as flight_workflow
-from uploader.flight_jobs import SessionPlan, connection_binding
+from uploader.flight_jobs import FlightPreferences, SessionPlan, connection_binding
 
 
 # Type: float; Units: seconds; Scope: flight UI worker race tests.
@@ -92,6 +92,16 @@ class FlightUITests(unittest.TestCase):
         ui.bar = None
         ui.lease = None
         ui.load_error = ""
+        ui.preferences = FlightPreferences()
+        ui.record_var = Mock()
+        ui.record_var.get.return_value = True
+        ui.report_var = Mock()
+        ui.report_var.get.return_value = True
+        ui.ui_language = Mock()
+        ui.ui_language.get.return_value = "en"
+        ui.language_vars = {code: Mock() for code in ("en", "cs", "de", "sv")}
+        for variable in ui.language_vars.values():
+            variable.get.return_value = True
         ui.manual_job_id = None
         ui.resume_workers = []
         ui.phase_var = Mock()
@@ -114,6 +124,99 @@ class FlightUITests(unittest.TestCase):
             ui, flight_ui.FlightUI
         )
         return ui
+
+    def test_watcher_automatically_arms_one_shared_session(self) -> None:
+        """Arm recording at watcher start, including a dormant opted-out worker.
+
+        Returns:
+            None: Assert one durable photo/flight directory and no extra action.
+        """
+        for recording in (True, False):
+            with self.subTest(recording=recording), tempfile.TemporaryDirectory() as tmp:
+                host = self._host()
+                ui = self._ui(host)
+                ui.directory = Path(tmp)
+                ui.lease = object()
+                ui.preferences = FlightPreferences(recording=recording)
+                ui.save_preferences = Mock(return_value=True)
+                recorder = Mock(directory=Path(tmp) / "shared-session")
+                with patch.object(flight_ui, "FlightRecorder", return_value=recorder):
+                    directory = flight_ui.FlightUI.start_session(ui)
+                self.assertEqual(directory, recorder.directory)
+                self.assertEqual(ui.plan.directory, directory)
+                self.assertEqual(ui.plan.reports_enabled, recording)
+                self.assertTrue((directory / "completion.json").exists())
+                recorder.start.assert_called_once_with()
+                if recording:
+                    recorder.pause.assert_not_called()
+                else:
+                    recorder.pause.assert_called_once_with()
+                    self.assertEqual(
+                        [entry[0] for entry in recorder.method_calls],
+                        ["pause", "start"],
+                    )
+
+    def test_recording_switch_pauses_and_resumes_without_stopping_photos(self) -> None:
+        """Apply saved recording choices to the active shared flight session.
+
+        Returns:
+            None: Assert durable preferences, recorder gating and photo isolation.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            host = self._host()
+            host.worker = Mock()
+            ui = self._ui(host)
+            ui.directory = Path(tmp)
+            ui.recorder = Mock()
+            ui.plan = SessionPlan(
+                Path(tmp) / "shared-session", ui.binding(),
+                ("en", "cs", "de", "sv"), True,
+            )
+            ui.plan.directory.mkdir()
+            ui.record_var.get.return_value = False
+            self.assertTrue(flight_ui.FlightUI.save_preferences(ui))
+            self.assertFalse(FlightPreferences.load(ui.directory).recording)
+            ui.recorder.pause.assert_called_once_with()
+            self.assertTrue(ui.plan.reports_enabled)
+            ui.record_var.get.return_value = True
+            self.assertTrue(flight_ui.FlightUI.save_preferences(ui))
+            self.assertTrue(FlightPreferences.load(ui.directory).recording)
+            ui.recorder.resume.assert_called_once_with()
+            host.worker.stop.assert_not_called()
+            host.worker.request_drain.assert_not_called()
+
+    def test_invalid_preferences_restore_switches_without_touching_recorder(self) -> None:
+        """Reject reports with no selected language before applying acquisition.
+
+        Returns:
+            None: Assert controls return to saved settings and workers stay intact.
+        """
+        ui = self._ui(self._host())
+        ui.recorder = Mock()
+        ui.record_var.get.return_value = False
+        for variable in ui.language_vars.values():
+            variable.get.return_value = False
+        with patch.object(flight_ui.messagebox, "showerror"):
+            self.assertFalse(flight_ui.FlightUI.save_preferences(ui))
+        ui.record_var.set.assert_called_once_with(True)
+        for variable in ui.language_vars.values():
+            variable.set.assert_called_once_with(True)
+        ui.recorder.pause.assert_not_called()
+        ui.recorder.resume.assert_not_called()
+
+    def test_finalization_rejects_switch_changes_and_keeps_progress_available(self) -> None:
+        """Keep accepted finalization immutable while restoring rejected controls.
+
+        Returns:
+            None: Assert no new recorder action during active finalization.
+        """
+        ui = self._ui(self._host())
+        ui.busy.return_value = True
+        ui.recorder = Mock()
+        self.assertFalse(flight_ui.FlightUI.save_preferences(ui))
+        ui.record_var.set.assert_called_once_with(True)
+        ui.show_progress.assert_called_once_with()
+        ui.recorder.pause.assert_not_called()
 
     def test_start_session_fails_closed_when_preferences_do_not_save(self) -> None:
         """Require durable preferences before starting any recorder or queue.

@@ -32,10 +32,12 @@ stable tag and release-side Git identities without replaying historical CI.
 A ref race, conflicting immutable identity or different merge tree still blocks
 the corresponding Git operation.
 
-The maintainer creates/pushes `release/v_X.Y[.Z]` from current develop.
-Feature implementation does not authorize release/tag/publication or protected
-branch writes. Main review, develop's non-force/check protections and no-bypass
-rules remain mandatory. The target develop policy admits reviewed main merges;
+The maintainer runs **Begin Release** from `develop` in GitHub Actions and enters
+the version including `v_`, such as `v_0.136.2`. The workflow creates
+`release/v_0.136.2` at that run's exact `develop` SHA. Feature implementation
+does not authorize release/tag/publication or protected branch writes. Main
+review, develop's non-force/check protections and no-bypass rules remain
+mandatory. The target develop policy admits reviewed main merges;
 ordinary feature integration still requires one direct child of develop.
 The legacy `required_linear_history` rule conflicts with main's actual merge.
 Read-only readiness and schema-4 PR creation report that blocker before approval.

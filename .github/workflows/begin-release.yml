@@ -1,0 +1,47 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/begin-release.yml
+# Module Type: Release Branch Creation Workflow
+# Purpose: Create a release branch at the selected current develop commit.
+# Responsibilities:
+#   - Accept the release version from a maintainer workflow dispatch
+#   - Create release/v_<version> at the selected develop commit
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Begin Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version, including v_ (for example v_0.136.2).
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release-branch:
+    name: Create release branch from develop
+    if: ${{ github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Create release branch at selected develop commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^v_(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$ ]]; then
+            echo 'Expected version format v_X.Y or v_X.Y.Z.' >&2
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+            --method POST \
+            --field ref="refs/heads/release/${VERSION}" \
+            --field sha="${SOURCE_SHA}"
+          echo "Created release/${VERSION} at ${SOURCE_SHA}." \
+            >> "${GITHUB_STEP_SUMMARY}"

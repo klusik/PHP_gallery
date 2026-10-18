@@ -4,12 +4,48 @@ The Windows companion app is a desktop import client for one PHP Gallery target 
 
 The application keeps the existing `gallery_watch_upload.pyw` launcher, `run_gallery_watcher.bat`, and `--once` compatibility. Normal operation needs only Python plus the lightweight dependencies in `requirements.txt`.
 
-## Flight recording and reports (source target 0.5.0)
+## Interface and local feature settings
+
+The compact dark interface uses slate glass panels, cyan actions, an icon
+navigation rail and borderless contextual icons. Hover or focus an icon to
+discover its action; the selected screen remains highlighted. Boolean
+preferences use sliding switches, including
+keyboard focus, Space activation and disabled states. Glass is composited into
+opaque RGB artwork for reliable Windows Tk rendering; it does not change window
+opacity. Source mode without Pillow retains usable native controls for repair.
+Import, Activity, AI and Settings share the same card spacing, continuous
+toolbar surfaces and flat table headings as the Watcher view.
+
+The app header groups PHP Gallery with “Your gallery on autopilot”. The Watcher
+screen contains the gallery connection, Watch folder settings and primary
+Start/Stop control. The folder path, picker and open-folder action share the
+Watch folder settings sheet. Settings gears sit immediately beside their
+gallery, folder or flight control. Record flight is the only flight preference
+on the main screen. Its
+gear opens a local settings sheet containing automatic report creation, report
+languages, interface language, progress and the report folder. Closing the sheet
+never starts a flight or finalization operation. Interface language uses four
+visible language segments. Tooltips, menus and secondary windows share the dark
+palette; page scrollbars appear only when content exceeds the viewport.
+
+Existing saved paths, Gallery URL, connection and local options are restored on
+restart from `%APPDATA%\PHPGalleryUploader\config.json`. Flight switches and
+languages use the existing `flights/preferences.json` in the same app profile.
+Saving feature preferences never resets unrelated settings.
+
+## Flight recording and reports (source target 0.5.1)
 
 The uploader supports a shared, read-only flight-recording/reporting workflow for
 MSFS 2020 and MSFS 2024. Recording is enabled by default and has an independent
-opt-out; it does not change screenshot watching or Sync UTC time. The simulator
-provider records aircraft telemetry, while per-photo camera coordinates remain
+opt-out; it does not change screenshot watching or Sync UTC time. Starting the
+watcher automatically arms flight recording according to that switch, with no
+separate flight-start action. Switching recording off during a session pauses
+acquisition; switching it back on resumes the same durable session with an
+explicit track discontinuity. Starting with recording off keeps a dormant
+recorder ready without opening SimConnect. Accepted photographs keep uploading.
+Previously captured data remains available for the selected report policy.
+The simulator provider records aircraft telemetry, while per-photo camera
+coordinates remain
 owned by the existing location feature. Unavailable signals are labelled and
 degrade the affected metric/chart without disabling basic recording or reports.
 Live simulator/aircraft/build qualification remains a separate acceptance step.
@@ -124,13 +160,13 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.5.0)
+## Windows installer (next version: 0.5.1)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
-Gallery CMS release. The current source targets **0.5.0**; this source version
+Gallery CMS release. The current source targets **0.5.1**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.5.0/`. Existing version outputs and other version folders remain
+`winapp/dist/0.5.1/`. Existing version outputs and other version folders remain
 preserved.
 
 The installer includes Python, Tkinter, Pillow, pystray, ReportLab,
@@ -185,8 +221,8 @@ The build script produces the installer and its matching update metadata togethe
 in a folder named after the independent WinApp version:
 
 ```text
-winapp/dist/0.5.0/PHPGalleryUploader-0.5.0-Setup.exe
-winapp/dist/0.5.0/winapp-update.json
+winapp/dist/0.5.1/PHPGalleryUploader-0.5.1-Setup.exe
+winapp/dist/0.5.1/winapp-update.json
 ```
 
 Attach both files from that folder to the same GitHub release as the CMS release.
@@ -198,8 +234,8 @@ metadata when GitHub's asset digest is unavailable. Its schema is:
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.5.0-Setup.exe",
-      "version": "0.5.0",
+      "name": "PHPGalleryUploader-0.5.1-Setup.exe",
+      "version": "0.5.1",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }
