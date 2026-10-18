@@ -8,6 +8,7 @@
  * Responsibilities:
  *   - Compare responses with persistence outcomes in disposable application state.
  * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  * Cookie-isolated HTTP and persistence assertions for disposable workflows.
  */
 declare(strict_types=1);
@@ -34,7 +35,9 @@ final class Http
     /**
      * Send one real application request, preserving cookies, status, headers and body.
      *
-     * @param string $route Root-relative front-controller route, supported clean public gallery asset route, or clean Home/Gallery document route; an absolute URL is accepted only for a same-origin loopback redirect to one of those routes.
+     * @param string $route Root-relative front-controller, public gallery asset,
+     *     or clean Home/Gallery/Smart document route. Absolute URLs must remain
+     *     on the same loopback origin and a supported application route.
      * @param ?array<string,string|int|float|bool|null|\CURLFile|list<string|int|float|bool|null>> $fields Form fields keyed by input name; values are scalar values, top-level upload handles, or one-dimensional repeated scalar values.
      * @param bool $json Whether to request the JSON transport envelope.
      * @param string $method GET or HEAD; form submissions always use POST.
@@ -78,17 +81,39 @@ final class Http
         $cleanHomeDocumentRoute = $path === '/';
         $cleanGalleryDocumentRoute = is_string($path)
             && preg_match('~^/gallery/(?:' . $safeSegmentPattern . '/)+$~D', $path) === 1;
-        $cleanDocumentRoute = $cleanHomeDocumentRoute || $cleanGalleryDocumentRoute;
+        $cleanSmartDocumentRoute = is_string($path) && $fields === null
+            && preg_match('~^/smart/' . $safeSegmentPattern . '/?$~D', $path) === 1;
+        $cleanDocumentRoute = $cleanHomeDocumentRoute
+            || $cleanGalleryDocumentRoute || $cleanSmartDocumentRoute;
         $cleanDocumentQueryAllowed = true;
         if ($cleanDocumentRoute && is_string($query) && $query !== '') {
             $documentQuery = [];
             parse_str($query, $documentQuery);
             $allowedDocumentQuery = ['preview' => 'visual', 'view_as' => 'anonymous', 'visual_notice' => 'anonymous_fallback'];
+            if ($cleanSmartDocumentRoute) {
+                // Admit only the public playback vocabulary, never arbitrary
+                // paths, origins, mutation fields or repeated/bracket values.
+                $allowedDocumentQuery += [
+                    'lang' => ['en', 'cs', 'de', 'sv'],
+                    'presentation' => ['1'],
+                    'autoplay' => ['0', '1'],
+                    'presentation_music' => ['0', '1'],
+                    'presentation_fullscreen' => ['0', '1'],
+                    'presentation_exclusive' => ['0', '1'],
+                    'presentation_interval' => ['slow', 'medium', 'fast'],
+                    'presentation_transition' => ['slow', 'medium', 'fast'],
+                ];
+            }
             $cleanDocumentQueryAllowed = $documentQuery !== []
                 && count($documentQuery) === count(explode('&', $query));
             foreach ($documentQuery as $key => $value) {
+                // A selected source is a canonical positive database identity.
+                if ($cleanSmartDocumentRoute && $key === 'source_gallery_id'
+                    && is_string($value) && filter_var($value,
+                        FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]
+                    ) !== false) continue;
                 if (!is_string($key) || !isset($allowedDocumentQuery[$key])
-                    || $value !== $allowedDocumentQuery[$key]) {
+                    || !in_array($value, (array) $allowedDocumentQuery[$key], true)) {
                     $cleanDocumentQueryAllowed = false;
                     break;
                 }
@@ -127,7 +152,9 @@ final class Http
                 return strlen($line);
             }]);
         if ($fields !== null) {
-            $multipart = count(array_filter($fields, static fn ($value): bool => $value instanceof \CURLFile)) > 0;
+            $multipart = count(array_filter($fields,
+                static fn (mixed $value): bool => $value instanceof \CURLFile
+            )) > 0;
             curl_setopt($this->handle, CURLOPT_POST, true);
             curl_setopt($this->handle, CURLOPT_POSTFIELDS, $multipart ? $fields : http_build_query($fields));
         } elseif ($method === 'HEAD') {

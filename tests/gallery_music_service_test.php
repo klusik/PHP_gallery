@@ -409,6 +409,11 @@ namespace {
                 'visibility' => 'public'],
         ];
         $GLOBALS['music_denied_sources'] = [104];
+        $attachmentSources = \Gallery\Services\smart_gallery_attachment_sources([
+            102, 103, 104, 101, 101, 999,
+        ]);
+        music_assert(array_column($attachmentSources, 'id') === [102, 101],
+            'PDF and music membership must share the complete authorized sources.');
         $sources = \Gallery\Services\smart_gallery_music_sources([
             102, 103, 104, 101, 101, 999,
         ]);

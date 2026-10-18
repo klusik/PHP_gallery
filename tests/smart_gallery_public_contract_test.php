@@ -117,7 +117,18 @@ smart_gallery_public_contract_assert(str_contains($featureRoutes, "'smart_galler
 smart_gallery_public_contract_assert(str_contains($seoGuard, "'smart_gallery_map_data' => ['id', 'source_gallery_id', 'view_as']") && str_contains($earlyRuntime, "'smart_gallery_map_data'") && str_contains($httpHelpers, "'smart_gallery_map_data'"), 'Smart Gallery aggregate map endpoint is classified consistently as bounded public JSON across request guard and failure handling.');
 smart_gallery_public_contract_assert(str_contains($dispatch, "'smart_gallery_lightbox_data'") && str_contains($dispatch, 'cms_smart_gallery_lightbox_data'), 'Smart Gallery lazy lightbox endpoint is routed explicitly.');
 smart_gallery_public_contract_assert(substr_count($dispatch, "'smart_gallery_lightbox_data'") >= 2, 'Smart Gallery lazy lightbox endpoint is also covered by public route policy.');
-smart_gallery_public_contract_assert(str_contains($seoGuard, "'smart_gallery' => ['slug', 'photo_page', 'source_gallery_id', 'view_as']"), 'Anonymous Smart Gallery pages allow canonical route, pagination, and temporary source-filter parameters through the SEO request guard.');
+require_once $root . '/app/services/seo_request_guard.php';
+smart_gallery_public_contract_assert(
+    \Gallery\Services\seo_request_guard_allowed_parameters_for_page('smart_gallery')
+        === [
+            'page', 'lang', 'preview', 'slug', 'photo_page', 'source_gallery_id',
+            'view_as', 'presentation', 'autoplay', 'presentation_music',
+            'presentation_interval', 'presentation_transition',
+            'presentation_fullscreen', 'presentation_exclusive',
+        ],
+    'Anonymous Smart pages allow exactly the canonical route, filter, locale'
+        . ' and supported playback flags through the production guard.'
+);
 smart_gallery_public_contract_assert(str_contains($seoGuard, "'smart_gallery_lightbox_data' => ['id', 'limit', 'offset', 'target_image_id', 'source_gallery_id', 'view_as']"), 'Anonymous Smart Gallery lazy-lightbox requests allow bounded window and temporary source-filter parameters through the SEO request guard.');
 smart_gallery_public_contract_assert(str_contains($seoGuard, "'download_smart_gallery' => ['id', 'capability']"), 'Anonymous Smart Gallery downloads allow the trusted Smart Gallery id route parameter through the SEO request guard.');
 smart_gallery_public_contract_assert(str_contains($seoGuard, "if (\$page === 'smart_gallery')") && str_contains($seoGuard, "url_for('smart_gallery', ['slug' => \$slug])"), 'Smart Gallery direct pages emit their clean canonical URL.');

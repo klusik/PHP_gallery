@@ -58,6 +58,21 @@ Exclusive links allow this initial confirmation, then hide controls normally.
 Only settled launch/reveal work may start the existing advance scheduler;
 close/stop invalidate pending results. No additional viewer or audio is created.
 
+Smart Galleries reuse that hero description/applets view and the same launcher,
+configurable share panel and activation lifecycle. Their URLs retain language and
+an active source filter, omit pagination/preview, and start at matching photo one.
+The existing canonical complete result determines attachment source membership;
+the shared Smart attachment service rechecks public listing and visitor access.
+PDF applets combine visible source documents/OFPs read-only, with source-qualified
+DOM IDs and unchanged protected physical-source delivery URLs. This excludes
+hidden PDFs even for administrators viewing the public Smart collection. Music
+keeps its existing exact-byte union. Global media masters remain independent;
+explicit launch defaults do not alter the ordinary Smart slideshow preference.
+The common prepared-HTML row and launcher live in the existing lightbox/media
+view owner. Physical Markdown/link formatting stays in its original wrapper;
+Smart descriptions retain escaped plain text. This keeps sharing the layout
+from pulling physical-description dependencies into Smart/attached-gallery routes.
+
 Global PDF and music availability uses independent default-ON capabilities
 `gallery_pdf_documents` and `gallery_music` in the canonical feature registry.
 Missing preferences preserve enabled behavior on upgrades; explicit OFF survives

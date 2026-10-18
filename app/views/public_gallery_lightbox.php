@@ -381,3 +381,58 @@ function view_media_panel_end(): void
 {
     echo '</div></div></details>';
 }
+
+/**
+ * Render the common responsive description, media and presentation hero row.
+ * @param array{description_html:string,media_html:string,
+ *     presentation_url?:string,presentation_music?:bool} $model Escaped/rendered
+ *     description and authorized attachment fragments, plus the prepared URL.
+ * @return void Emit the same applet layout without discovering source policy
+ *     or loading a caller's Markdown/link-metadata dependencies.
+ */
+function view_render_gallery_media_hero(array $model): void
+{
+    $descriptionHtml = $model['description_html'];
+    $mediaHtml = $model['media_html'];
+    $presentationUrl = (string) ($model['presentation_url'] ?? '');
+    if ($presentationUrl !== '') {
+        $mediaHtml .= view_public_gallery_presentation(
+            $presentationUrl, !empty($model['presentation_music'])
+        );
+    }
+    $hasDescription = trim($descriptionHtml) !== '';
+    if ($hasDescription && $mediaHtml !== '') {
+        echo '<div class="gallery-description-documents">';
+    }
+    if ($hasDescription) {
+        echo '<div class="hero-description gallery-description-rich">'
+            . $descriptionHtml . '</div>';
+    }
+    if ($mediaHtml !== '') {
+        echo '<div class="gallery-attachment-applets"'
+            . ' data-gallery-attachment-applets>' . $mediaHtml . '</div>';
+    }
+    if ($hasDescription && $mediaHtml !== '') echo '</div>';
+}
+
+/**
+ * Render a soundtrack presentation launcher and configurable share applet.
+ * @param string $url Complete canonical, localized presentation launch URL.
+ * @param bool $hasMusic Whether authorized music is available for this launch.
+ * @return string Escaped launcher and native share disclosure.
+ */
+function view_public_gallery_presentation(string $url, bool $hasMusic): string
+{
+    return '<div class="gallery-presentation" data-gallery-presentation>'
+        . '<p class="gallery-presentation-caption">'
+        . e(t($hasMusic ? 'presentation.description'
+            : 'presentation.description_silent')) . '</p>'
+        . '<div class="gallery-presentation-actions">'
+        . '<a class="button secondary" href="' . e($url) . '"'
+        . ' data-gallery-presentation-start>'
+        . '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        . '<path d="m8 4 13 8-13 8Z"/></svg>'
+        . e(t('presentation.start')) . '</a>'
+        . view_presentation_share($url, 'public-' . sha1($url))
+        . '</div></div>';
+}

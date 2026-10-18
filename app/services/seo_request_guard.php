@@ -234,7 +234,12 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
             'benchmark_cache_bust',
             'benchmark_phase',
         ],
-        'smart_gallery' => ['slug', 'photo_page', 'source_gallery_id', 'view_as'],
+        'smart_gallery' => [
+            'slug', 'photo_page', 'source_gallery_id', 'view_as',
+            'presentation', 'autoplay', 'presentation_music',
+            'presentation_interval', 'presentation_transition',
+            'presentation_fullscreen', 'presentation_exclusive',
+        ],
         'tag' => ['slug', 'view_as'],
         'public_search' => ['q', 'context_only', 'gallery_id', 'phase'],
         'gallery_lightbox_data' => ['id', 'limit', 'offset', 'target_image_id', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_phase'],

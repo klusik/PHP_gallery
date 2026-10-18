@@ -80,6 +80,20 @@ real audible autoplay permissions remain manual device checks. For a fresh direc
 URL, check that one trusted confirmation starts sound and requests native fullscreen;
 cancel with Esc/close, and repeat with autoplay OFF, music OFF and exclusive ON.
 
+The real HTTP/database workflow also checks Smart hero applets, localized snapshot
+URLs and selected-source retention across pages. It follows the generated link
+with a fresh anonymous client, opens protected source PDF/OFP originals, hides and
+restores a source PDF for anonymous/admin discovery, revokes its gallery access,
+and checks independent PDF/music masters without losing the photo launcher.
+The shared source-service fixture covers duplicate/private/denied/missing source
+IDs; the anonymous guard covers all Smart playback flags while retaining unknown
+query and metadata-endpoint refusal. Native viewer/permission behavior uses the
+existing production browser owner; local Smart hero resizing/share acceptance
+remains a separate UI check.
+The confined workflow transport admits same-origin clean Smart document URLs
+with a closed playback/locale/source vocabulary; unknown, repeated, bracketed,
+invalid-source and cross-origin route vectors remain refused before transport.
+
 Manual acceptance for physical galleries: compare authorized PDF count/bytes/pages
 and music count/duration against the opened lists, including unknown metadata;
 resize the gallery/window so cards move beside/below each other; start from a later

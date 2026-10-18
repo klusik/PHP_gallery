@@ -101,6 +101,16 @@ acoustic equality across encodings/tags is unknown and is not inferred from
 filenames or duration. Hosted service, actual HTTP/DB and browser owners cover
 these boundaries; real codecs/devices and large deployed unions remain manual.
 
+Smart hero media/presentation parity uses the existing source-policy, attachment
+controller/view and shared lightbox owners without schema or format changes.
+PDF/OFP discovery uses canonical complete matching sources, excludes hidden
+documents for all audiences and keeps physical endpoint access checks. Existing
+ordinary Smart `music_enabled` defaults remain unchanged; explicit presentation
+links snapshot common autoplay/music ON and medium speeds without persisting.
+This permanent shared path preserves pagination-independent media, current source
+filter/language in share links and the established activation fallback. Adoption
+and large deployed PDF unions remain unknown; no retirement is inferred.
+
 ## Compact attachment browser presentation
 
 The physical-gallery presentation settings owner is the existing lightbox service,

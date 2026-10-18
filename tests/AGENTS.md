@@ -15,6 +15,11 @@ require a browser/database only when the behavior needs one.
   PHP namespaces, including negative branches.
 - Model each provider endpoint's actual response separately, including omitted
   fields; creation, collection and combined responses need not share a shape.
+  Seed request-guard probes with each route's own valid base query. Compare
+  semantic allowlists and exercise generated same-origin public URLs through
+  the confined transport, retaining unknown/repeated-value rejection.
+  Use resource-specific names for response bodies and retained original paths
+  in long workflow fixtures; preserve later phases' owned values across loops.
 - When an owner exposes a filtered verified list, assert its actual
   unavailable result (for example, no receipt) separately from exceptions raised
   when a listed item fails a later integrity read. Keep missing/corrupt payloads

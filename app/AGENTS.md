@@ -14,6 +14,12 @@ Web requests use the small PHP 8.1-compatible Core runtime in `app/runtime/`; ex
 For a bounded numeric runtime-policy default, define a named constant with the attached six-field policy comment and use that constant in parameter defaults. Keep the policy explanation with the owning constant instead of embedding a multiline comment in a callable signature; keep PHPDoc focused on the callable contract.
 
 Before adding runtime owners, record current counts, unchanged limits and expected deltas, including allowance already consumed. Label estimates; hosted generated-plan checks establish actual conformance.
+Keep shared media-layout helpers in an existing shared view owner and pass
+prepared description HTML. Leave caller-specific Markdown/link discovery with
+its current owner so sharing a hero does not expand unrelated route closures.
+When a caller explicitly loads a deferred owner, register both its module roots
+and the guarded call edges in runtime_module_roots.php; keep presence checks
+before the load and actual deferred calls after it.
 
 ## Translation Catalog Ownership
 

@@ -222,56 +222,17 @@ function view_render_public_gallery_branding_header(array $viewModel, bool $incl
 function view_render_public_gallery_description_documents(array $viewModel): void
 {
     $description = (string) ($viewModel['description'] ?? '');
-    $pdfHtml = (string) ($viewModel['pdf_html'] ?? '');
-    $presentationUrl = (string) ($viewModel['presentation_url'] ?? '');
-    if ($presentationUrl !== '') {
-        $pdfHtml .= view_public_gallery_presentation(
-            $presentationUrl, !empty($viewModel['presentation_music'])
-        );
-    }
-    $hasDescription = trim($description) !== '';
-    if ($hasDescription && $pdfHtml !== '') {
-        echo '<div class="gallery-description-documents">';
-    }
-    if (trim($description) !== '') {
-        echo '<div class="hero-description gallery-description-rich">';
-        if (trim($description) !== '') {
-            echo view_gallery_description_markdown_html(
-                $description,
-                (array) ($viewModel['description_links'] ?? [])
-            );
-        }
-        echo '</div>';
-    }
-    if ($pdfHtml !== '') {
-        echo '<div class="gallery-attachment-applets"'
-            . ' data-gallery-attachment-applets>' . $pdfHtml . '</div>';
-    }
-    if ($hasDescription && $pdfHtml !== '') {
-        echo '</div>';
-    }
-}
-
-/**
- * Render a soundtrack presentation launcher and configurable share applet.
- * @param string $url Complete canonical, localized presentation launch URL.
- * @param bool $hasMusic Whether authorized music is available for this launch.
- * @return string Escaped launcher and native share disclosure.
- */
-function view_public_gallery_presentation(string $url, bool $hasMusic): string
-{
-    return '<div class="gallery-presentation" data-gallery-presentation>'
-        . '<p class="gallery-presentation-caption">'
-        . e(t($hasMusic ? 'presentation.description'
-            : 'presentation.description_silent')) . '</p>'
-        . '<div class="gallery-presentation-actions">'
-        . '<a class="button secondary" href="' . e($url) . '"'
-        . ' data-gallery-presentation-start>'
-        . '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
-        . '<path d="m8 4 13 8-13 8Z"/></svg>'
-        . e(t('presentation.start')) . '</a>'
-        . view_presentation_share($url, 'public-' . sha1($url))
-        . '</div></div>';
+    // Keep rich-description dependencies with physical-gallery presentation.
+    // Smart collections reuse only the shared prepared-HTML layout below.
+    view_render_gallery_media_hero([
+        'description_html' => trim($description) !== ''
+            ? view_gallery_description_markdown_html(
+                $description, (array) ($viewModel['description_links'] ?? [])
+            ) : '',
+        'media_html' => (string) ($viewModel['pdf_html'] ?? ''),
+        'presentation_url' => (string) ($viewModel['presentation_url'] ?? ''),
+        'presentation_music' => !empty($viewModel['presentation_music']),
+    ]);
 }
 
 /**

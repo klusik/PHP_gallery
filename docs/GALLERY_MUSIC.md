@@ -262,7 +262,15 @@ Smart Galleries have no audio directory. Their complete canonical grouped photo
 result supplies source IDs, including sources outside the current photo page.
 Temporary source filtering changes photos, not this union. The Smart service
 rechecks public listing and visitor access against the request-cached source
-inventory, and only sources with an index load the existing attachment owner.
+inventory. Music admits sources with an index; PDFs use the existing PDF/OFP
+presence service before loading the established attachment owner.
+The shared `smart_gallery_attachment_sources()` access check also supplies PDF
+membership. PDF/OFP originals from these sources render in the same responsive
+hero applets as physical galleries, beside the description and music summary.
+Hidden PDFs are excluded even for signed-in administrators on the public Smart
+page. Aggregate document lists have no physical mutation forms. Each document
+retains its source delivery URL and version; identical copies in different source
+galleries remain separate documents with independent visibility/access authority.
 A source must contribute a matching accessible photo to the canonical result;
 an unrelated or empty physical gallery contributes no music merely because it
 exists. Protected source URLs recheck access when audio is requested.
@@ -292,3 +300,13 @@ automatic slideshow music and initially defaults false. Enable presentation
 overrides and the music preference in the Smart editor; manual Play remains
 available when music exists. This does not inherit a source's autoplay setting,
 copy originals or alter per-source download permission.
+
+The public Smart hero also offers the shared Presentation button and configurable
+share overlay. Explicit launches use the common autoplay/music ON and medium
+timings; they temporarily request music independently of the ordinary Smart
+slideshow preference above. Shared URLs preserve the active language and selected
+source filter, omit photo pagination/admin preview, and snapshot all playback
+switches/speeds. The existing black introduction, trusted activation confirmation,
+exclusive controls and paused/muted overrides apply unchanged. Global lightbox
+and effective Smart slideshow settings gate discovery/launch; PDF and music
+masters independently control their applets. Sharing grants no source access.

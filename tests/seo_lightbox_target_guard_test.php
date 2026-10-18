@@ -52,6 +52,8 @@ namespace {
         $_GET = ['page' => $route, 'id' => '1', 'limit' => '60', 'offset' => '0'];
         if ($route === 'gallery') {
             $_GET = ['page' => $route, 'public_path' => 'album', 'lang' => 'en'];
+        } elseif ($route === 'smart_gallery') {
+            $_GET = ['page' => $route, 'slug' => 'album', 'lang' => 'en'];
         }
         if (($argv[4] ?? '') !== 'none') {
             $_GET[$argv[4]] = $argv[4] === 'presentation' ? '1' : '123';
@@ -100,6 +102,16 @@ namespace {
         ['public', 'gallery', 'presentation_fullscreen', 200],
         ['public', 'gallery', 'presentation_exclusive', 200],
         ['public', 'gallery_lightbox_data', 'presentation_music', 404],
+        ['public', 'smart_gallery', 'presentation', 200],
+        ['admin', 'smart_gallery', 'presentation', 200],
+        ['public', 'smart_gallery', 'autoplay', 200],
+        ['public', 'smart_gallery', 'presentation_music', 200],
+        ['public', 'smart_gallery', 'presentation_interval', 200],
+        ['public', 'smart_gallery', 'presentation_transition', 200],
+        ['public', 'smart_gallery', 'presentation_fullscreen', 200],
+        ['public', 'smart_gallery', 'presentation_exclusive', 200],
+        ['public', 'smart_gallery', 'unexpected', 404],
+        ['public', 'smart_gallery_lightbox_data', 'presentation', 404],
     ];
     foreach ($cases as [$principal, $route, $parameter, $expectedStatus]) {
         $process = proc_open([PHP_BINARY, __FILE__, '--probe', $principal, $route, $parameter],
@@ -121,5 +133,6 @@ namespace {
             throw new RuntimeException("Unexpected guard result for $principal/$route/$parameter: $output");
         }
     }
-    echo "Lightbox target request guard: 18 public/Admin scenarios passed.\n";
+    echo 'Lightbox target request guard: ' . count($cases)
+        . " public/Admin scenarios passed.\n";
 }
