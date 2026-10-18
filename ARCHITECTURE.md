@@ -16,7 +16,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.137';
+const CMS_VERSION = '0.137.1';
 ```
 
 Update-related code uses:
@@ -2122,13 +2122,41 @@ The Admin migration endpoint is a JSON-only enhanced workflow. Authentication, C
 The WinApp flight subsystem is local-first and read-only. `flight_recorder.py`
 subscribes through the persistent `simconnect_flight.py` provider for both
 MSFS 2020 and MSFS 2024. It records aircraft coordinates independently from
-the per-photo camera/location client. `flight_data.py` normalizes available
+the per-photo camera/location client. Optional `flight_simbrief.py` normalizes
+explicit latest-OFP fetches and archived JSON/XML imports; session-local
+snapshots carry planned evidence into analysis identity without replacing
+measured telemetry. `flight_navdata.py` retains bounded AIRAC-scoped coordinate
+evidence in private SQLite. `flight_maps.py` projects captured/planned routes
+over cached OSM tiles in the report worker, with attribution and an offline
+route fallback. `flight_ui.py` owns identity prompts, late-response session
+checks and explicitly selected historical attachments. `flight_data.py` normalizes available
 samples into one analysis model; unavailable generation/build/aircraft fields
 remain unavailable rather than being fabricated. `flight_report.py` renders
 the same immutable analysis into one PDF per selected language using the bundled
 ReportLab/DejaVu assets and shared translations.
+Map raster dimensions derive from physical PDF placement at 300 dpi; native OSM
+tiles sit beneath vector recorded/purple-planned routes, endpoints and attribution.
+The overview fades its background. Timed OFP altitude/fuel points use detected
+takeoff and captured simulator clocks for unit-aware comparison on the existing
+host-elapsed charts. If that time anchor is unavailable, a labelled positional
+comparison matches at least two ordered OFP fixes within 10 NM of captured legs;
+declared gaps and position jumps still split lines. Missing comparison inputs
+remain visible in chart explanations. Regeneration applies an already loaded
+OFP to the selected saved flight before worker admission; its next-flight
+indicator and each historical flight's attachment status are separate.
+Two optional planning pages retain dispatch identity, loading, fuel components,
+weights and schedule as planned evidence. New PDF reservations may add flight
+number/ICAO pair; existing catalog filenames and receipts remain stable.
 
 `flight_jobs.py` owns persisted preferences, session plans and workspace leases.
+Its saved-PDF metadata reader tolerates missing pypdf with an unknown page count,
+so browsing/opening existing files does not depend on the rendering environment.
+`flight_ui.py` sorts cached rows by typed UTC/count/name keys without rebuilding
+native tree items on a heading click; refresh restores expanded groups and all
+selected identities. SimBrief indicators derive from staged/current accepted
+plans, while historical plans appear only in the selected flight's details.
+`ui_theme.place_dialog` positions flight and update notices over their invoking
+window, with explicit parents for native confirmations and failures.
 `flight_workflow.py` owns durable finalization tasks and progress. Standalone
 Stop ends the watcher, its owned UTC synchronizer and flight recorder, then
 drains accepted photographs and completes required report delivery; unrelated
@@ -2139,6 +2167,14 @@ server revocation. Restart recovery never silently resumes irreversible revoke
 consent. Failures remain durable, retain local telemetry/reports and expose retry
 or an explicit local-only resolution. Unknown waits have indeterminate progress;
 elapsed time is shown and ETA appears only when measured work supports it.
+One-click Finish authorizes this same final barrier without a modal prompt,
+enables four PDF editions and applies loaded OFP only to its current/sole pending
+flight. Incomplete recordings render with unchanged evidence. The exact worker
+identity owns automatic completion UI: its progress hides only after completion,
+including local credential cleanup; local PDF creation uses the same UI mode.
+Separate saved-PDF upload and direct key-management workflows retain their
+existing destination/revoke confirmation. Functional fixtures use mocked revoke
+callbacks rather than sending live revocation during source verification.
 
 Recording defaults on and can be disabled independently of screenshot watching
 and Sync UTC time. Automatic report creation defaults on with EN, CS, DE and SV
@@ -2251,6 +2287,9 @@ installers retain their existing shutdown policy. Actual installer progress uses
 session-scoped local named pipe. The helper restarts the application as the original
 user after successful installation and matching installed PE version, preserving saved settings and jobs. UAC cancellation reopens the existing application; installer exit 3010 requests a Windows restart instead of an application restart. There is no automatic
 rollback. Native Python/source mode offers a verified installer for manual launch.
+The helper publishes a typed verified/reboot outcome only after writing its
+durable completion marker. The Tk owner closes automatically after verified
+installation and restart; failures and reboot instructions remain readable.
 
 
 Gallery-scoped API-key create/revoke forms are also embedded in the gallery editor. Their enhanced path uses the canonical Admin mutation success/error envelope and `panel.workflow=gallery-edit`; the token mutation itself has no public gallery context because changing an API credential does not change public rendering. `admin-side-panel.js` delegates the successful response to the shared completion coordinator and refreshes the API-key fragment from the server-provided panel URL while keeping the drawer mounted. The ordinary POST/redirect route remains the non-JavaScript/direct-page fallback.

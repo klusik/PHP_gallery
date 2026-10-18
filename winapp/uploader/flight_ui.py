@@ -11,21 +11,25 @@
 """Compact live readings, saved-flight browsing and independent report actions."""
 
 import queue
+import sqlite3
+import sys
 import threading
 import time
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Protocol
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from uploader.flight_jobs import (
+    REPORT_LANGUAGES,
     FlightPreferences,
     ImportBindings,
     SessionPlan,
     SavedFlight,
     ReportRevision,
+    ReportFileDetails,
     WorkspaceLease,
     connection_binding,
     pending_sessions,
@@ -41,7 +45,12 @@ from uploader.flight_report_translations import tr
 from uploader.flight_workflow import FinalizationWorker
 from uploader.models import ImportJob, JsonValue
 from uploader.state_store import JobStateStore
-from uploader.ui_theme import GlassCard, icon_button
+from uploader.state_store import atomic_write_json
+from uploader.flight_simbrief import (
+    DispatchPlan, fetch_dispatch, identity_query, import_dispatch, load_dispatch,
+)
+from uploader.flight_navdata import remember_plan
+from uploader.ui_theme import GlassCard, icon_button, place_dialog
 from uploader.simconnect_flight import (
     METRES_PER_FOOT,
     METRES_PER_SECOND_PER_FPM,
@@ -62,7 +71,7 @@ DRAIN_POLL_SECONDS = 0.1
 # Type: tuple[int, ...]. Units: pixels. Scope: report catalog columns.
 # Consumers: FlightUI.show_reports. Rationale: six compact metadata columns
 # retain creation seconds and page count beside a shrinking filename column.
-REPORT_COLUMN_WIDTHS = (110, 50, 40, 145, 45, 75)
+REPORT_COLUMN_WIDTHS = (145, 60, 45, 145, 45, 110)
 # Show a short history while the Treeview retains ordinary wheel scrolling.
 # Type: int. Units: visible rows. Scope: report catalog window.
 # Consumers: FlightUI.show_reports. Rationale: seven flights fit a small dialog.
@@ -72,6 +81,14 @@ REPORT_VISIBLE_ROWS = 7
 # Consumers: FlightUI.show_progress. Rationale: three columns wrap the six
 # ordinary actions into two rows instead of forcing a very wide dialog.
 PROGRESS_ACTION_COLUMNS = 3
+# Keep identity help and validation readable without a desktop-sized dialog.
+# Type: int; Units: pixels; Scope: SimBrief identity sheet.
+# Consumers: prompt_simbrief_identity. Rationale: 360 px fits its single input.
+SIMBRIEF_PROMPT_WRAP_PX = 360
+# Show a normal pilot identity without forcing a very wide control.
+# Type: int; Units: character columns; Scope: SimBrief identity entry.
+# Consumers: prompt_simbrief_identity. Rationale: 40 columns leaves editing room.
+SIMBRIEF_IDENTITY_COLUMNS = 40
 
 
 class ConnectionConfig(Protocol):
@@ -192,14 +209,28 @@ class FlightUI:
         self.resume_photos = resume_photos
         self.import_bindings = ImportBindings(directory)
         self.operation: FinalizationWorker | None = None
+        self.automatic_operation: FinalizationWorker | None = None
         self.recorder: FlightRecorder | None = None
         self.plan: SessionPlan | None = None
+        self.dispatch: DispatchPlan | None = None
+        self.dispatch_results: queue.Queue[tuple[str, DispatchPlan | None, Path | None, str]] = queue.Queue()
+        self.dispatch_worker: threading.Thread | None = None
+        self.dispatch_cancelled = False
+        self.active_dispatch: DispatchPlan | None = None
+        self.active_dispatch_directory: Path | None = None
+        self.dispatch_loading = False
+        self.dispatch_loading_target: Path | None = None
+        self.simbrief_button_var = tk.StringVar(value="")
+        self.simbrief_status_var = tk.StringVar(value="")
+        self.report_sort_column = "started"
+        self.report_sort_descending = True
         self.dialog: tk.Toplevel | None = None
         self.settings_dialog: tk.Toplevel | None = None
         self.report_dialog: tk.Toplevel | None = None
         self.report_tree: ttk.Treeview | None = None
         self.report_rows: dict[str, SavedFlight] = {}
         self.report_files: dict[str, tuple[str, ReportRevision, str]] = {}
+        self.report_file_sort_keys: dict[str, ReportFileDetails] = {}
         self.report_button: ttk.Button | None = None
         self.keep_local_button: ttk.Button | None = None
         self.bar: ttk.Progressbar | None = None
@@ -229,6 +260,7 @@ class FlightUI:
             for code in ("en", "cs", "de", "sv")
         }
         self.ui_language = tk.StringVar(value=self.preferences.ui_language)
+        self.refresh_dispatch_status()
         self._last_terminal = ""
         host.root.after(PROGRESS_TICK_MS, self.tick)
 
@@ -242,6 +274,307 @@ class FlightUI:
             str: Label in the selected UI language.
         """
         return tr(self.ui_language.get(), key)
+
+    def dialog_owner(self) -> tk.Misc:
+        """Find the invoking window so related dialogs stay together.
+
+        Returns:
+            tk.Misc: Focused application toplevel, or the main window.
+        """
+        focused = self.host.root.focus_get()
+        return focused.winfo_toplevel() if focused is not None else self.host.root
+
+    def prompt_simbrief_identity(self, identity: str) -> str | None:
+        """Ask for one validated identity in the application's themed dialog.
+
+        Args:
+            identity (str): Previously successful identity used as an editable draft.
+        Returns:
+            str | None: Validated draft after Load, or None after cancellation.
+        """
+        owner = self.dialog_owner()
+        previous_grab, previous_focus = owner.grab_current(), owner.focus_get()
+        dialog = tk.Toplevel(owner)
+        dialog.withdraw()
+        dialog.title("SimBrief")
+        dialog.configure(background="#131B26")
+        dialog.resizable(False, False)
+        panel = GlassCard(dialog, padding=(24, 20))
+        panel.pack(fill="both", expand=True, padx=12, pady=12)
+        ttk.Label(panel, text=self.text("simbrief_identity"),
+                  style="Section.TLabel").pack(anchor="w")
+        ttk.Label(panel, text=self.text("simbrief_identity_hint"),
+                  style="Muted.TLabel", wraplength=SIMBRIEF_PROMPT_WRAP_PX).pack(anchor="w", pady=(8, 12))
+        draft = tk.StringVar(value=identity)
+        entry = ttk.Entry(panel, textvariable=draft, width=SIMBRIEF_IDENTITY_COLUMNS)
+        entry.pack(fill="x")
+        error = tk.StringVar(value="")
+        ttk.Label(panel, textvariable=error, style="Muted.TLabel",
+                  wraplength=SIMBRIEF_PROMPT_WRAP_PX).pack(anchor="w", pady=(6, 0))
+        result = None
+
+        def close() -> None:
+            """Dismiss the draft and restore the invoking window's focus/grab.
+
+            Returns:
+                None: Releases this modal dialog without starting any fetch.
+            """
+            dialog.destroy()
+            if previous_grab is not None and previous_grab.winfo_exists():
+                previous_grab.grab_set()
+            if previous_focus is not None and previous_focus.winfo_exists():
+                previous_focus.focus_set()
+
+        def submit() -> None:
+            """Validate the single draft before admitting a provider request.
+
+            Returns:
+                None: Retains invalid input inline or returns an accepted draft.
+            """
+            nonlocal result
+            value = draft.get().strip()
+            try:
+                identity_query(value)
+            except ValueError:
+                error.set(self.text("simbrief_identity_invalid"))
+                entry.focus_set()
+                return
+            result = value
+            close()
+
+        actions = ttk.Frame(panel, style="Card.TFrame")
+        actions.pack(fill="x", pady=(14, 0))
+        ttk.Button(actions, text=self.text("simbrief_cancel"), command=close).pack(side="left")
+        ttk.Button(actions, text=self.text("simbrief_load"), command=submit,
+                   style="Primary.TButton").pack(side="right", padx=(12, 0))
+        dialog.protocol("WM_DELETE_WINDOW", close)
+        dialog.bind("<Escape>", lambda _event: close())
+        dialog.bind("<Return>", lambda _event: submit())
+        place_dialog(dialog, owner)
+        dialog.deiconify()
+        dialog.grab_set()
+        entry.selection_range(0, "end")
+        entry.focus_set()
+        dialog.wait_window()
+        return result
+
+    def refresh_dispatch_status(self) -> None:
+        """Describe only the staged or current session's accepted dispatch plan.
+
+        Returns:
+            None: Updates shared controls without disk, simulator or network work.
+        """
+        plan = self.dispatch
+        if (
+            plan is None
+            and self.recorder is not None
+            and self.active_dispatch_directory == self.recorder.directory
+        ):
+            plan = self.active_dispatch
+        loading = self.dispatch_loading and (
+            self.dispatch_loading_target is None
+            or (
+                self.recorder is not None
+                and self.dispatch_loading_target == self.recorder.directory
+            )
+        )
+        self.simbrief_button_var.set(self.text(
+            "simbrief_loading_short" if loading else
+            "simbrief_ready" if plan is not None else "simbrief_load"
+        ))
+        prefix = self.text("simbrief_next_flight") + ": " if self.dispatch is not None else ""
+        self.simbrief_status_var.set(
+            prefix + plan.origin + " → " + plan.destination if plan is not None else ""
+        )
+
+    def load_simbrief(self, change_identity: bool = False, saved: bool = False) -> None:
+        """Fetch an optional OFP without blocking Tk or changing recorder state.
+
+        Args:
+            change_identity (bool): Prompt for a replacement pilot identity.
+            saved (bool): Attach to the selected stopped historical flight.
+        Returns:
+            None: Starts one bounded worker; success is committed on the Tk tick.
+        """
+        if self.load_error or self.lease is None or self.busy():
+            return
+        if self.dispatch_worker is not None and self.dispatch_worker.is_alive():
+            return
+        target = None
+        if saved:
+            row = self.selected_saved_flight()
+            if row is None:
+                return
+            if not row.recording_ended:
+                messagebox.showinfo(
+                    "SimBrief",
+                    self.text("finish_recording_first"),
+                    parent=self.dialog_owner(),
+                )
+                return
+            target = row.directory
+            if self.recorder is not None and self.recorder.is_alive() and self.recorder.directory == target:
+                messagebox.showinfo(
+                    "SimBrief",
+                    self.text("finish_recording_first"),
+                    parent=self.dialog_owner(),
+                )
+                return
+        elif self.recorder is not None and self.recorder.is_alive():
+            target = self.recorder.directory
+        identity = ""
+        try:
+            identity = str(read_document(self.directory / "simbrief-account.json").get("identity", ""))
+        except ValueError:
+            pass
+        if not identity or change_identity:
+            entered = self.prompt_simbrief_identity(identity)
+            if entered is None:
+                return
+            identity = entered.strip()
+        if self.dispatch_cancelled:
+            # The prior worker is no longer alive at this admission point.
+            # Discard its cancelled results before accepting a fresh explicit
+            # load after Finish/Exit; never revive an earlier flight's response.
+            while not self.dispatch_results.empty():
+                try:
+                    self.dispatch_results.get_nowait()
+                except queue.Empty:
+                    break
+            self.dispatch_cancelled = False
+        self.host.events.put(("info", self.text("simbrief_loading")))
+        self.dispatch_loading = True
+        self.dispatch_loading_target = target
+        self.refresh_dispatch_status()
+
+        def fetch() -> None:
+            """Return provider results to Tk without accessing widgets or disk.
+
+            Returns:
+                None: Enqueues a normalized plan or a safe provider failure.
+            """
+            try:
+                plan = fetch_dispatch(identity)
+                self.dispatch_results.put((identity, plan, target, ""))
+            except (OSError, ValueError) as exc:
+                self.dispatch_results.put((identity, None, target, str(exc)))
+
+        self.dispatch_worker = threading.Thread(target=fetch, name="SimBrief", daemon=True)
+        self.dispatch_worker.start()
+
+    def accept_simbrief(self) -> None:
+        """Commit completed explicit imports on Tk with a session identity check.
+
+        Returns:
+            None: Saves identities only after success and applies the OFP to
+                its captured explicit target without another modal confirmation.
+        """
+        try:
+            identity, plan, target, error = self.dispatch_results.get_nowait()
+        except queue.Empty:
+            return
+        self.dispatch_loading = False
+        self.refresh_dispatch_status()
+        if self.dispatch_cancelled:
+            return
+        if plan is None:
+            messagebox.showerror("SimBrief", error, parent=self.dialog_owner())
+            return
+        try:
+            atomic_write_json(self.directory / "simbrief-account.json", {"identity": identity})
+            if self.busy():
+                messagebox.showinfo(
+                    "SimBrief",
+                    self.text("simbrief_retry"),
+                    parent=self.dialog_owner(),
+                )
+                return
+            active = self.recorder is not None and self.recorder.is_alive()
+            # A response belongs only to the session captured at admission.
+            if target is not None:
+                if active and self.recorder.directory != target:
+                    messagebox.showinfo(
+                        "SimBrief",
+                        self.text("simbrief_retry"),
+                        parent=self.dialog_owner(),
+                    )
+                    return
+                plan.save(target)
+                if self.recorder is not None and self.recorder.directory == target:
+                    self.active_dispatch = plan
+                    self.active_dispatch_directory = target
+            elif active:
+                messagebox.showinfo(
+                    "SimBrief",
+                    self.text("simbrief_retry"),
+                    parent=self.dialog_owner(),
+                )
+                return
+            else:
+                self.dispatch = plan
+            self.cache_dispatch(plan)
+            self.refresh_dispatch_status()
+            if self.report_dialog is not None and self.report_dialog.winfo_exists():
+                self.select_report()
+            status = "simbrief_staged_loaded" if target is None else "simbrief_loaded"
+            self.host.events.put(("info", self.text(status) + "\n"
+                + plan.origin + " → " + plan.destination))
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("SimBrief", str(exc), parent=self.dialog_owner())
+
+    def attach_ofp_file(self) -> None:
+        """Attach an archived machine-readable OFP to a stopped saved flight.
+
+        Returns:
+            None: Explicit file selection saves optional dispatch data without
+                another confirmation; old PDFs remain and loaded state updates.
+        """
+        row = self.selected_saved_flight()
+        if row is None or self.busy() or self.lease is None or self.load_error:
+            return
+        if not row.recording_ended:
+            messagebox.showinfo(
+                "SimBrief",
+                self.text("finish_recording_first"),
+                parent=self.dialog_owner(),
+            )
+            return
+        if self.recorder and self.recorder.is_alive() and self.recorder.directory == row.directory:
+            messagebox.showinfo(
+                "SimBrief",
+                self.text("finish_recording_first"),
+                parent=self.dialog_owner(),
+            )
+            return
+        filename = filedialog.askopenfilename(parent=self.dialog_owner(),
+            title=self.text("simbrief_file"), filetypes=[("SimBrief OFP", "*.json *.xml")])
+        if not filename:
+            return
+        try:
+            plan = import_dispatch(Path(filename))
+            plan.save(row.directory)
+            if self.recorder is not None and self.recorder.directory == row.directory:
+                self.active_dispatch = plan
+                self.active_dispatch_directory = row.directory
+            self.cache_dispatch(plan)
+            self.refresh_dispatch_status()
+            self.select_report()
+            self.host.events.put(("info", self.text("simbrief_loaded")))
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("SimBrief", str(exc), parent=self.dialog_owner())
+
+    def cache_dispatch(self, plan: DispatchPlan) -> None:
+        """Retain waypoint evidence without making cache availability mandatory.
+
+        Args:
+            plan (DispatchPlan): Valid OFP already attached or staged by the user.
+        Returns:
+            None: Cache errors are warnings; the original session plan survives.
+        """
+        try:
+            remember_plan(self.directory, plan)
+        except (OSError, sqlite3.Error) as exc:
+            self.host.events.put(("warning", "SimBrief navigation cache: " + str(exc)))
 
     def controls(self, parent: tk.Misc) -> None:
         """Place recording, compact live readings and report access in one row.
@@ -280,7 +613,9 @@ class FlightUI:
             self.settings_dialog.lift()
             self.settings_dialog.focus_set()
             return
-        dialog = tk.Toplevel(self.host.root)
+        owner = self.dialog_owner()
+        dialog = tk.Toplevel(owner)
+        dialog.withdraw()
         self.settings_dialog = dialog
         dialog.title(self.text("flight_settings"))
         dialog.transient(self.host.root)
@@ -334,13 +669,8 @@ class FlightUI:
             panel, text=self.text("finish_pdf"), command=self.finish_report,
         ).grid(row=7, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
-        dialog.update_idletasks()
-        # Center this small sheet inside its owning app rather than the desktop.
-        x = max(0, self.host.root.winfo_rootx()
-                + (self.host.root.winfo_width() - dialog.winfo_reqwidth()) // 2)
-        y = max(0, self.host.root.winfo_rooty()
-                + (self.host.root.winfo_height() - dialog.winfo_reqheight()) // 2)
-        dialog.geometry(f"+{x}+{y}")
+        place_dialog(dialog, owner)
+        dialog.deiconify()
         dialog.focus_set()
 
     def refresh_telemetry(self) -> None:
@@ -370,35 +700,49 @@ class FlightUI:
         )
 
     def finish_report(self) -> None:
-        """Explicitly finish pending flight PDFs while keeping the gallery key.
+        """Finish the flight, its PDFs and revocation without modal confirmation.
 
         Returns:
-            None: Confirms watcher/recording stop, enables the selected report
-                editions for this operation, then uses ordinary Stop delivery.
+            None: Uses loaded OFP for the current or sole pending flight,
+                enables all four report editions for this operation,
+                then drains accepted work and revokes after report delivery.
+                Successful progress closes after durable credential cleanup.
         """
         if self.busy():
-            self.show_progress()
+            self.begin(True, automatic=True)
             return
-        languages = tuple(
-            code for code, variable in self.language_vars.items() if variable.get()
-        )
-        if not languages:
-            messagebox.showerror(self.text("finish_pdf"), self.text("choose_languages"))
-            return
+        languages = REPORT_LANGUAGES
         try:
             plans = self.pending()
-            if not plans:
-                messagebox.showinfo(self.text("finish_pdf"), self.text("no_pending_flights"))
-                return
-            if not messagebox.askyesno(self.text("finish_pdf"), self.text("confirm_finish_pdf")):
-                return
+            current = next((
+                plan for plan in plans
+                if self.plan is not None and plan.directory == self.plan.directory
+            ), None)
+            target = current or (plans[0] if len(plans) == 1 else None)
+            if target is not None:
+                self.attach_loaded_dispatch(target.directory)
             for plan in plans:
                 plan.languages = languages
                 plan.reports_enabled = True
                 plan.save()
-            self.begin(False)
+            self.begin(True, automatic=True)
         except (OSError, ValueError) as exc:
-            messagebox.showerror(self.text("finish_pdf"), str(exc))
+            messagebox.showerror(self.text("finish_pdf"), str(exc), parent=self.dialog_owner())
+
+    def attach_loaded_dispatch(self, directory: Path) -> None:
+        """Use an accepted in-memory OFP for an explicitly finished/rendered flight.
+
+        Args:
+            directory (Path): Current/sole pending or selected historical session.
+        Returns:
+            None: Saves the staged plan, or the matching active plan. With no
+                loaded plan, existing session evidence remains untouched.
+        """
+        plan = self.dispatch
+        if plan is None and self.active_dispatch_directory == directory:
+            plan = self.active_dispatch
+        if plan is not None:
+            plan.save(directory)
 
     def show_reports(self) -> None:
         """Show saved flights, local PDFs and explicit independent report actions.
@@ -411,7 +755,9 @@ class FlightUI:
             self.report_dialog.lift()
             self.refresh_reports()
             return
-        self.report_dialog = tk.Toplevel(self.host.root)
+        owner = self.dialog_owner()
+        self.report_dialog = tk.Toplevel(owner)
+        self.report_dialog.withdraw()
         self.report_dialog.title(self.text("saved_reports"))
         self.report_dialog.transient(self.host.root)
         panel = GlassCard(self.report_dialog, padding=(16, 12))
@@ -426,9 +772,11 @@ class FlightUI:
             selectmode="extended",
         )
         self.report_tree.heading("#0", text=self.text("saved_reports"))
+        self.report_tree.heading("#0", command=lambda: self.sort_reports("#0"))
         self.report_tree.column("#0", width=300, minwidth=170)
         for name, width in zip(columns, REPORT_COLUMN_WIDTHS, strict=True):
-            self.report_tree.heading(name, text=self.text("column_" + name))
+            self.report_tree.heading(name, text=self.text("column_" + name),
+                                     command=lambda column=name: self.sort_reports(column))
             self.report_tree.column(name, width=width, minwidth=40)
         self.report_tree.pack(fill="both", expand=True)
         self.report_tree.bind("<<TreeviewSelect>>", lambda _event: self.select_report())
@@ -448,6 +796,11 @@ class FlightUI:
             actions, text=self.text("create_local_pdf"), command=self.create_local_pdf,
         )
         self.report_button.grid(row=0, column=1, sticky="ew", pady=(0, 4))
+        ttk.Button(actions, text=self.text("simbrief_load"),
+            command=lambda: self.load_simbrief(saved=True),
+        ).grid(row=2, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
+        ttk.Button(actions, text=self.text("simbrief_file"), command=self.attach_ofp_file,
+        ).grid(row=2, column=1, sticky="ew", pady=(6, 0))
         ttk.Button(
             actions, text=self.text("open_reports"), command=self.open_selected_reports,
         ).grid(row=1, column=0, sticky="ew", padx=(0, 6))
@@ -466,6 +819,91 @@ class FlightUI:
             tools, text=self.text("upload_saved_pdf"), command=self.upload_saved_pdf,
         ).pack(side="left", padx=(6, 0))
         self.refresh_reports()
+        place_dialog(self.report_dialog, owner)
+        self.report_dialog.deiconify()
+
+    def sort_reports(self, column: str) -> None:
+        """Toggle a column's direction and reorder existing catalog rows.
+
+        Args:
+            column (str): Tree column identity: #0, started, samples, pdfs,
+                created, pages or state.
+        Returns:
+            None: Preserves open groups and selection without rereading files.
+        """
+        if column == self.report_sort_column:
+            self.report_sort_descending = not self.report_sort_descending
+        else:
+            self.report_sort_column = column
+            self.report_sort_descending = column in {"started", "created"}
+        self.apply_report_sort()
+
+    def report_sort_key(self, identity: str) -> tuple[str | int, str]:
+        """Prepare typed time, count or text keys from the passive catalog.
+
+        Args:
+            identity (str): Cached saved-flight row or its retained PDF child.
+        Returns:
+            tuple[str | int, str]: Comparable value for the chosen column and
+                stable row identity; each column uses one consistent value type.
+        """
+        column = self.report_sort_column
+        if identity in self.report_files:
+            session, _revision, _language = self.report_files[identity]
+            row = self.report_rows[session]
+            details = self.report_file_sort_keys.get(identity)
+            if column == "pages":
+                return (details.pages if details and details.pages is not None else -1, identity)
+            stamp = details.created_utc if details and column == "created" else row.started_utc
+            if column in {"samples", "pdfs"}:
+                return (0, identity)
+            text = str(self.report_tree.item(identity, "text"))
+        else:
+            row = self.report_rows[identity]
+            stamp = row.started_utc
+            if column in {"samples", "pdfs"}:
+                return (row.sample_count if column == "samples" else row.report_count, identity)
+            children = self.report_tree.get_children(identity)
+            if column == "pages":
+                return (sum(self.report_file_sort_keys[child].pages or 0
+                    for child in children if child in self.report_file_sort_keys), identity)
+            if column == "created":
+                stamp = max((self.report_file_sort_keys[child].created_utc
+                    for child in children if child in self.report_file_sort_keys), default="")
+            text = row.aircraft
+        if column in {"started", "created"}:
+            try:
+                parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                stamp = parsed.astimezone(timezone.utc).isoformat()
+            except ValueError:
+                stamp = ""
+            return (stamp, identity)
+        if column == "state":
+            text = str(self.report_tree.set(identity, "state"))
+        return (text.casefold(), identity)
+
+    def apply_report_sort(self) -> None:
+        """Apply the selected column to both flight groups and their PDF children.
+
+        Returns:
+            None: Moves existing Treeview items and marks direction in the heading.
+        """
+        tree = self.report_tree
+        if tree is None or not tree.winfo_exists():
+            return
+        parents = ("",) + tuple(tree.get_children())
+        for parent in parents:
+            ordered = sorted(tree.get_children(parent), key=self.report_sort_key,
+                             reverse=self.report_sort_descending)
+            for position, identity in enumerate(ordered):
+                tree.move(identity, parent, position)
+        for column in ("#0", "started", "samples", "pdfs", "created", "pages", "state"):
+            title = self.text("saved_reports" if column == "#0" else "column_" + column)
+            if column == self.report_sort_column:
+                title += " ↓" if self.report_sort_descending else " ↑"
+            tree.heading(column, text=title)
 
     def refresh_reports(self) -> None:
         """Refresh checkpoint rows without reading or analyzing raw sample files.
@@ -489,6 +927,7 @@ class FlightUI:
         for identity in tree.get_children():
             tree.delete(identity)
         self.report_files = {}
+        self.report_file_sort_keys = {}
         for identity, row in self.report_rows.items():
             live = bool(
                 self.recorder and self.recorder.is_alive()
@@ -505,8 +944,15 @@ class FlightUI:
                 self.recorder.diagnostics_snapshot()["sample_count"]
                 if live else row.sample_count
             )
+            try:
+                stamp = datetime.fromisoformat(row.started_utc.replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    stamp = stamp.replace(tzinfo=timezone.utc)
+                started = stamp.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                started = row.started_utc
             tree.insert("", "end", iid=identity, text=row.aircraft or "—", open=identity in expanded, values=(
-                row.started_utc.replace("T", " ")[:16], count,
+                started, count,
                 row.report_count, "", "", self.text("report_state_" + state),
             ))
             try:
@@ -517,6 +963,7 @@ class FlightUI:
                         filename = report_file_label(row.directory, revision, language)
                         version = filename.rsplit(" - ", 1)[-1].removesuffix(".pdf")
                         details = report_file_details(revision.files[language])
+                        self.report_file_sort_keys[child] = details
                         created = datetime.fromisoformat(
                             details.created_utc,
                         ).astimezone().strftime("%Y-%m-%d %H:%M:%S")
@@ -533,12 +980,12 @@ class FlightUI:
                         )
             except (OSError, ValueError) as exc:
                 self.report_detail_var.set(str(exc))
-        identity = (
-            selected[0] if selected and tree.exists(selected[0])
-            else next(iter(self.report_rows), "")
-        )
-        if identity:
-            tree.selection_set(identity)
+        self.apply_report_sort()
+        selection = tuple(identity for identity in selected if tree.exists(identity))
+        if not selection:
+            selection = tuple(tree.get_children())[:1]
+        if selection:
+            tree.selection_set(selection)
         self.select_report()
 
     def selected_saved_flight(self) -> SavedFlight | None:
@@ -570,10 +1017,22 @@ class FlightUI:
             None: Updates the local create/re-create label without starting work.
         """
         row = self.selected_saved_flight()
-        self.report_detail_var.set(
-            row.directory.name + (": " + row.error if row.error else "")
-            if row else self.text("select_saved_flight")
-        )
+        detail = row.directory.name + (": " + row.error if row.error else "") if row else self.text("select_saved_flight")
+        if row is not None:
+            dispatch = load_dispatch(row.directory)
+            if dispatch is not None:
+                detail += (
+                    "\n" + self.text("simbrief_ready") + ": "
+                    + dispatch.origin + " → " + dispatch.destination
+                )
+            else:
+                detail += "\n" + self.text("simbrief_not_attached")
+            if self.dispatch is not None and dispatch != self.dispatch:
+                detail += (
+                    "\n" + self.text("simbrief_available_for_report") + ": "
+                    + self.dispatch.origin + " → " + self.dispatch.destination
+                )
+        self.report_detail_var.set(detail)
         if self.report_button is not None and self.report_button.winfo_exists():
             self.report_button.configure(
                 text=self.text(
@@ -586,44 +1045,55 @@ class FlightUI:
         """Create or re-create selected local PDFs without changing delivery state.
 
         Returns:
-            None: Starts a worker for one stopped session and selected editions;
+            None: Starts a worker for one stopped session and all four editions;
                 an active recorder must first use Finish flight and create PDF.
+                An already loaded OFP is attached to this explicitly selected
+                flight before rendering without a second confirmation.
         """
         if self.busy():
             self.show_progress()
             return
         row = self.selected_saved_flight()
         if row is None:
-            messagebox.showinfo(self.text("saved_reports"), self.text("select_saved_flight"))
+            messagebox.showinfo(
+                self.text("saved_reports"),
+                self.text("select_saved_flight"),
+                parent=self.dialog_owner(),
+            )
             return
         if self.load_error or self.lease is None:
-            messagebox.showerror(self.text("saved_reports"), self.load_error or "Flight workspace unavailable.")
+            messagebox.showerror(
+                self.text("saved_reports"),
+                self.load_error or "Flight workspace unavailable.",
+                parent=self.dialog_owner(),
+            )
             return
         if (
             self.recorder and self.recorder.is_alive()
             and self.recorder.directory == row.directory
         ) or not row.recording_ended:
-            messagebox.showinfo(self.text("saved_reports"), self.text("finish_recording_first"))
+            messagebox.showinfo(
+                self.text("saved_reports"),
+                self.text("finish_recording_first"),
+                parent=self.dialog_owner(),
+            )
             return
-        languages = tuple(
-            code for code, variable in self.language_vars.items() if variable.get()
-        )
-        if not languages:
-            messagebox.showerror(self.text("saved_reports"), self.text("choose_languages"))
-            return
+        languages = REPORT_LANGUAGES
         try:
             plan = replace(SessionPlan.load(row.directory), languages=languages)
+            self.attach_loaded_dispatch(row.directory)
             self.operation = FinalizationWorker(
                 [plan], "", "", lambda _cancel, _deadline: None,
                 lambda: None, False, local_reports=True,
                 emit=lambda level, message: self.host.events.put((level, message)),
             )
+            self.automatic_operation = self.operation
             self._last_terminal = ""
             self.operation.start()
             self.select_report()
             self.show_progress()
         except (OSError, ValueError, RuntimeError) as exc:
-            messagebox.showerror(self.text("saved_reports"), str(exc))
+            messagebox.showerror(self.text("saved_reports"), str(exc), parent=self.dialog_owner())
 
     def upload_saved_pdf(self) -> None:
         """Confirm and upload a retained revision with the current saved key.
@@ -637,15 +1107,27 @@ class FlightUI:
             return
         row = self.selected_saved_flight()
         if row is None:
-            messagebox.showinfo(self.text("saved_reports"), self.text("select_saved_flight"))
+            messagebox.showinfo(
+                self.text("saved_reports"),
+                self.text("select_saved_flight"),
+                parent=self.dialog_owner(),
+            )
             return
         selected = self.report_tree.selection() if self.report_tree is not None else ()
         files = [self.report_files[identity] for identity in selected if identity in self.report_files]
         if not files:
-            messagebox.showinfo(self.text("saved_reports"), self.text("select_pdf_files"))
+            messagebox.showinfo(
+                self.text("saved_reports"),
+                self.text("select_pdf_files"),
+                parent=self.dialog_owner(),
+            )
             return
         if len({identity for identity, _revision, _language in files}) != 1:
-            messagebox.showinfo(self.text("saved_reports"), self.text("single_flight_selection"))
+            messagebox.showinfo(
+                self.text("saved_reports"),
+                self.text("single_flight_selection"),
+                parent=self.dialog_owner(),
+            )
             return
         row = self.report_rows[files[0][0]]
         groups: dict[str, ReportRevision] = {}
@@ -692,23 +1174,39 @@ class FlightUI:
             self.show_progress()
             return
         if self.load_error or self.lease is None:
-            messagebox.showerror(self.text("saved_reports"), self.load_error or "Flight workspace unavailable.")
+            messagebox.showerror(
+                self.text("saved_reports"),
+                self.load_error or "Flight workspace unavailable.",
+                parent=self.dialog_owner(),
+            )
             return
         gallery = self.host.gallery_label_var.get().removeprefix("Target gallery: ")
         if not self.host.config.api_key or not gallery or gallery == "unknown":
-            messagebox.showinfo(self.text("saved_reports"), self.text("test_saved_connection"))
+            messagebox.showinfo(
+                self.text("saved_reports"),
+                self.text("test_saved_connection"),
+                parent=self.dialog_owner(),
+            )
             return
         if not row.recording_ended or (
             self.recorder and self.recorder.is_alive() and self.recorder.directory == row.directory
         ):
-            messagebox.showinfo(self.text("saved_reports"), self.text("finish_recording_first"))
+            messagebox.showinfo(
+                self.text("saved_reports"),
+                self.text("finish_recording_first"),
+                parent=self.dialog_owner(),
+            )
             return
         detail = (
             self.text("confirm_saved_upload") + "\n\n" + gallery + "\n"
             + row.directory.name + "\n" + revision.modified_utc + "\n"
             + "\n".join(pdf.name for item in (revision,) + additional for pdf in item.files.values())
         )
-        if not messagebox.askyesno(self.text("upload_saved_pdf"), detail):
+        if not messagebox.askyesno(
+            self.text("upload_saved_pdf"),
+            detail,
+            parent=self.dialog_owner(),
+        ):
             return
         try:
             languages = tuple(dict.fromkeys(code for item in (revision,) + additional for code in item.files))
@@ -725,7 +1223,7 @@ class FlightUI:
             self.operation.start()
             self.show_progress()
         except (OSError, ValueError, RuntimeError) as exc:
-            messagebox.showerror(self.text("saved_reports"), str(exc))
+            messagebox.showerror(self.text("saved_reports"), str(exc), parent=self.dialog_owner())
 
     def open_selected_pdf(self) -> None:
         """Open explicitly selected retained PDFs in the system's default viewer.
@@ -748,7 +1246,11 @@ class FlightUI:
                 pdf.is_symlink() or pdf.parent.is_symlink() or not pdf.is_file()
                 or not pdf.resolve().is_relative_to((row.directory / "reports").resolve())
             ):
-                messagebox.showerror(self.text("saved_reports"), "PDF unavailable; refresh the list.")
+                messagebox.showerror(
+                    self.text("saved_reports"),
+                    "PDF unavailable; refresh the list.",
+                    parent=self.dialog_owner(),
+                )
                 return
             self.host.open_local_path(pdf)
 
@@ -783,17 +1285,25 @@ class FlightUI:
             or reports.is_symlink()
             or not reports.resolve().is_relative_to(directory.resolve())
         ):
-            messagebox.showerror(self.text("saved_reports"), "Unsafe report directory.")
+            messagebox.showerror(
+                self.text("saved_reports"),
+                "Unsafe report directory.",
+                parent=self.dialog_owner(),
+            )
             return
         try:
             if not report_revisions(directory):
-                messagebox.showinfo(self.text("saved_reports"), self.text("no_saved_pdf"))
+                messagebox.showinfo(
+                    self.text("saved_reports"),
+                    self.text("no_saved_pdf"),
+                    parent=self.dialog_owner(),
+                )
                 return
             organize_reports(directory)
             self.refresh_reports()
             self.host.open_local_path(reports)
         except (OSError, ValueError) as exc:
-            messagebox.showerror(self.text("saved_reports"), str(exc))
+            messagebox.showerror(self.text("saved_reports"), str(exc), parent=self.dialog_owner())
 
     def save_preferences(self) -> bool:
         """Persist feature choices and immediately gate active acquisition.
@@ -818,6 +1328,7 @@ class FlightUI:
             )
             preferences.save(self.directory)
             self.preferences = preferences
+            self.refresh_dispatch_status()
             if (
                 self.plan is not None and self.recorder is not None
                 and self.recorder.is_alive()
@@ -833,7 +1344,11 @@ class FlightUI:
             return True
         except (OSError, ValueError) as exc:
             self.restore_preferences()
-            messagebox.showerror(self.text("flight_progress"), str(exc))
+            messagebox.showerror(
+                self.text("flight_progress"),
+                str(exc),
+                parent=self.dialog_owner(),
+            )
             return False
 
     def restore_preferences(self) -> None:
@@ -845,6 +1360,7 @@ class FlightUI:
         self.record_var.set(self.preferences.recording)
         self.report_var.set(self.preferences.reports)
         self.ui_language.set(self.preferences.ui_language)
+        self.refresh_dispatch_status()
         for code, variable in self.language_vars.items():
             variable.set(code in self.preferences.languages)
 
@@ -889,7 +1405,8 @@ class FlightUI:
         if pending:
             self.show_progress()
             messagebox.showinfo(
-                self.text("flight_progress"), self.text("finish_pending")
+                self.text("flight_progress"), self.text("finish_pending"),
+                parent=self.dialog_owner(),
             )
             return False
         return True
@@ -918,6 +1435,10 @@ class FlightUI:
             self.recorder.pause()
         directory = self.recorder.directory
         directory.mkdir(parents=True, exist_ok=True)
+        if self.dispatch is not None:
+            self.dispatch.save(directory)
+        self.active_dispatch = self.dispatch
+        self.active_dispatch_directory = directory
         self.plan = SessionPlan(
             directory=directory,
             binding=self.binding(),
@@ -926,6 +1447,8 @@ class FlightUI:
         )
         self.plan.save()
         self.recorder.start()
+        self.dispatch = None
+        self.refresh_dispatch_status()
         return directory
 
     def busy(self) -> bool:
@@ -974,26 +1497,31 @@ class FlightUI:
         Returns:
             None: Reuses in-memory consent; never restores consent from disk.
         """
-        self.begin(self.pending_revoke_intent())
+        if self.automatic_completion():
+            self.begin(self.pending_revoke_intent(), automatic=True)
+        else:
+            self.begin(self.pending_revoke_intent())
 
     def is_alive(self) -> bool:
         """Include recorder work in ordinary shutdown/update worker ownership.
 
         Returns:
-            bool: True while recording or finalization owns a live thread.
+            bool: True while recording, finalization or SimBrief has a live thread.
         """
         return bool(
             (self.recorder and self.recorder.is_alive())
             or (self.operation and self.operation.is_alive())
+            or (self.dispatch_worker and self.dispatch_worker.is_alive())
         )
 
     def stop(self) -> None:
         """Preserve unfinished tasks while stopping recording for Exit/update.
 
         Returns:
-            None: Requests sensor stop and independent PDF cancellation;
+            None: Cancels pending SimBrief admission, sensor and independent PDF work;
                 ordinary accepted finalization retains its existing drain.
         """
+        self.dispatch_cancelled = True
         if self.recorder is not None:
             self.recorder.stop()
         if self.independent_operation():
@@ -1020,22 +1548,33 @@ class FlightUI:
                 if timeout is not None else None
             )
             self.operation.join(timeout=remaining)
+        if self.dispatch_worker is not None and self.dispatch_worker.ident is not None:
+            remaining = max(0.0, timeout - (time.monotonic() - started)) if timeout is not None else None
+            self.dispatch_worker.join(timeout=remaining)
 
-    def begin(self, revoke: bool = False) -> None:
-        """Start or join one confirmed Stop/Revoke operation on the Tk thread.
+    def begin(self, revoke: bool = False, *, automatic: bool = False) -> None:
+        """Start or join Stop/Revoke, honoring the one-click Finish action.
 
         Args:
             revoke (bool): Whether this explicit action should finally revoke.
+            automatic (bool): Finish already authorizes the captured operation;
+                skip confirmation and close its views only after verified success.
 
         Returns:
             None: Shows progress and runs expensive tasks on a worker.
         """
         if self.load_error:
-            messagebox.showerror(self.text("flight_progress"), self.load_error)
+            messagebox.showerror(
+                self.text("flight_progress"),
+                self.load_error,
+                parent=self.dialog_owner(),
+            )
             return
         if self.busy() and self.independent_operation():
             self.show_progress()
             return
+        if automatic and self.busy():
+            self.automatic_operation = self.operation
         if (
             self.busy() and self.operation is not None
             and self.operation.wants_revoke
@@ -1046,10 +1585,12 @@ class FlightUI:
             self.pending_revoke_intent() and self.operation is not None
             and self.operation.snapshot().phase == "error"
         )
-        if revoke and not continuing_revoke and not messagebox.askyesno(
-            self.text("finish_revoke"), self.text("confirm_revoke")
-        ):
-            return
+        if revoke and not automatic and not continuing_revoke:
+            if not messagebox.askyesno(
+                self.text("finish_revoke"), self.text("confirm_revoke"),
+                parent=self.dialog_owner(),
+            ):
+                return
         if self.busy():
             if revoke and self.operation is not None:
                 self.stop_other_workers()
@@ -1087,6 +1628,10 @@ class FlightUI:
                 self.submit_revoke, revoke,
                 emit=lambda level, message: self.host.events.put((level, message)),
             )
+            if automatic:
+                self.automatic_operation = self.operation
+                if self.report_dialog is not None and self.report_dialog.winfo_exists():
+                    self.report_dialog.withdraw()
             self.host.api_key_revoke_thread = self.operation
             self.operation.start()
             self._last_terminal = ""
@@ -1094,7 +1639,11 @@ class FlightUI:
             self.host.refresh_connection_controls()
         except (OSError, ValueError, RuntimeError) as exc:
             self.host.api_key_revoke_running = False
-            messagebox.showerror(self.text("flight_progress"), str(exc))
+            messagebox.showerror(
+                self.text("flight_progress"),
+                str(exc),
+                parent=self.dialog_owner(),
+            )
 
     def stop_other_workers(self) -> None:
         """Stop other authenticated producers only for an explicit Revoke.
@@ -1216,6 +1765,16 @@ class FlightUI:
         if self.operation is not None:
             self.operation.confirm_local_cleanup(error)
 
+    def automatic_completion(self) -> bool:
+        """Identify the exact one-click Finish or local PDF operation.
+
+        Returns:
+            bool: True only while the current worker is the captured Finish or
+                local-render operation; unrelated upload workers do not inherit
+                its automatic completion UI mode.
+        """
+        return self.operation is not None and self.operation is self.automatic_operation
+
     def show_progress(self) -> None:
         """Open or restore the one shared nonmodal progress view.
 
@@ -1246,7 +1805,9 @@ class FlightUI:
                 ) or self.text("finish_pending"))
             except ValueError as exc:
                 self.detail_var.set(str(exc))
-        self.dialog = tk.Toplevel(self.host.root)
+        owner = self.dialog_owner()
+        self.dialog = tk.Toplevel(owner)
+        self.dialog.withdraw()
         self.dialog.title(self.text("flight_progress"))
         self.dialog.transient(self.host.root)
         frame = ttk.Frame(self.dialog, padding=18)
@@ -1304,6 +1865,8 @@ class FlightUI:
             if label == "keep_local":
                 self.keep_local_button = button
         self.dialog.protocol("WM_DELETE_WINDOW", self.dialog.withdraw)
+        place_dialog(self.dialog, owner)
+        self.dialog.deiconify()
 
     def cancel_local_pdf(self) -> None:
         """Cancel independent PDF work between editions, retaining finished work.
@@ -1394,23 +1957,29 @@ class FlightUI:
                 the same connection's already-confirmed unsubmitted revocation.
         """
         revoke = self.pending_revoke_intent()
+        automatic = self.automatic_completion()
         if self.busy() or not messagebox.askyesno(
             self.text("keep_local_revoke" if revoke else "keep_local"),
             self.text("confirm_local_revoke" if revoke else "confirm_local"),
+            parent=self.dialog_owner(),
         ):
             return
         try:
             for plan in self.pending():
                 plan.local_only = True
-                # A partial flight can be retained without a fabricated landing.
-                from uploader.flight_data import analyze_session
-                analysis = analyze_session(plan.directory)
-                if not analysis.landings or not analysis.completed:
-                    plan.reports_enabled = False
+                # Retain requested PDFs even for partial/diverted recordings;
+                # the renderer preserves their incomplete analysis explicitly.
                 plan.save()
-            self.begin(revoke)
+            if automatic:
+                self.begin(revoke, automatic=True)
+            else:
+                self.begin(revoke)
         except (OSError, ValueError) as exc:
-            messagebox.showerror(self.text("flight_progress"), str(exc))
+            messagebox.showerror(
+                self.text("flight_progress"),
+                str(exc),
+                parent=self.dialog_owner(),
+            )
 
     def abandon(self) -> None:
         """Explicitly leave unuploaded tasks retained as abandoned local records.
@@ -1419,7 +1988,8 @@ class FlightUI:
             None: No files are deleted and no server revocation is requested.
         """
         if self.busy() or not messagebox.askyesno(
-            self.text("abandon"), self.text("confirm_abandon")
+            self.text("abandon"), self.text("confirm_abandon"),
+            parent=self.dialog_owner(),
         ):
             return
         try:
@@ -1433,7 +2003,11 @@ class FlightUI:
                     self.import_bindings.resolve(job_id)
             self.detail_var.set(self.text("revoke_cancelled"))
         except (OSError, ValueError) as exc:
-            messagebox.showerror(self.text("flight_progress"), str(exc))
+            messagebox.showerror(
+                self.text("flight_progress"),
+                str(exc),
+                parent=self.dialog_owner(),
+            )
 
     def tick(self) -> None:
         """Refresh phase/time feedback without calling native/network operations.
@@ -1443,6 +2017,7 @@ class FlightUI:
         """
         operation = self.operation
         self.refresh_telemetry()
+        self.accept_simbrief()
         if self.keep_local_button is not None and self.keep_local_button.winfo_exists():
             self.keep_local_button.configure(text=self.text(
                 "keep_local_revoke" if self.pending_revoke_intent() else "keep_local"
@@ -1456,6 +2031,17 @@ class FlightUI:
                 and progress.phase == "cancelled" else "phase_" + progress.phase
             ))
             detail = progress.detail or progress.error
+            if detail.startswith("pdf_dependency_missing:"):
+                module = detail.split(":", 1)[1]
+                detail = self.text("pdf_dependency_missing").format(module=module)
+                if not getattr(sys, "frozen", False):
+                    # Match the active source interpreter instead of a generic
+                    # python command that may select a different installation.
+                    executable = Path(sys.executable)
+                    if executable.name.lower() == "pythonw.exe":
+                        executable = executable.with_name("python.exe")
+                    requirements = Path(__file__).resolve().parents[1] / "requirements.txt"
+                    detail += f'\n"{executable}" -m pip install --user -r "{requirements}"'
             detail += f"  ({progress.done}/{progress.total})"
             if progress.bytes_total:
                 detail += f"  {progress.bytes_done}/{progress.bytes_total} B"
@@ -1500,4 +2086,9 @@ class FlightUI:
                     )
                 self.refresh_reports()
                 self.host.refresh_connection_controls()
+                if (
+                    progress.phase == "completed" and self.automatic_completion()
+                    and self.dialog is not None and self.dialog.winfo_exists()
+                ):
+                    self.dialog.withdraw()
         self.host.root.after(PROGRESS_TICK_MS, self.tick)

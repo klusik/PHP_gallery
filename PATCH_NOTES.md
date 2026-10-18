@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.137.1
+
+Updated the Windows uploader to version 0.6.0 with optional SimBrief flight plans, expanded flight reports, improved saved-flight management, and clearer finalization and update flows. The release also added regression coverage, updated the manuals and lifecycle records, and made no Gallery server schema changes.
+
+### Highlights
+
+#### SimBrief plans and flight reports
+- Added optional SimBrief plan loading by pilot ID or username and import of archived JSON/XML plans. Plans remained separate from recorded telemetry and could be staged for a flight or attached to a stopped saved flight.
+- Expanded PDF reports with recorded and planned route maps, dispatch and fuel/loading pages, and optional planned altitude and fuel comparisons. Missing or incompatible evidence remained unavailable rather than being inferred.
+- Improved flight finalization to generate all four report editions and complete accepted work and required delivery before revoking and clearing the saved key. Partial and diverted recordings remained explicitly incomplete without fabricated takeoff or landing evidence.
+- Added sortable saved-flight and PDF lists while preserving group expansion and selection.
+
+#### Release records
+- Added immutable origin and predecessor records for `v_0.137.1`. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Technical Details
+
+#### Windows uploader
+- Updated `winapp/VERSION` to `0.6.0` and added SimBrief dispatch handling in `winapp/uploader/flight_simbrief.py`. Successful fetches saved the account identity; imported plans were stored separately from telemetry.
+- Added bounded waypoint caching and route-map support in `winapp/uploader/flight_navdata.py` and `winapp/uploader/flight_maps.py`. Map tiles were cached with attribution, and unavailable tiles left route graphics available for offline reports.
+- Updated `winapp/uploader/flight_data.py` and `winapp/uploader/flight_report.py` to include optional dispatch data and generate the expanded reports. Timed profile comparisons used captured flight timing; when unavailable, positional comparisons required ordered nearby route fixes. Known fuel units were converted without treating planned values as measured telemetry.
+- Updated `winapp/uploader/flight_ui.py`, `winapp/uploader/flight_jobs.py`, and `winapp/uploader/flight_workflow.py` for plan attachment, sorting, four-edition generation, and finalization ordering. Failed required delivery retained earlier receipts and blocked key revocation.
+- Updated `winapp/uploader/update_helper.py` and `winapp/uploader/update_ui.py` to distinguish verified installation and restart from required reboot; progress closed automatically only after verified success and successful cleanup.
+- Kept saved PDFs accessible when `pypdf` was unavailable, with page counts unknown. Missing rendering dependencies produced guidance for the active source interpreter.
+
+#### Tests and documentation
+- Expanded Windows regression coverage for SimBrief plans, saved-flight targeting and sorting, map rendering, report alignment and units, finalization and delivery ordering, and updater outcomes. The added tests did not establish hosted or native acceptance.
+- Updated `winapp/README.md`, `TESTING.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, `winapp/AGENTS.md`, and all four TeX manual sources.
+
+#### Compatibility and persistence
+- Made no Gallery server schema changes. Dispatch snapshots and report metadata used existing local session storage; waypoint coordinates were cached locally by AIRAC cycle.
+- Preserved existing PDF paths, bytes, and delivery receipts. Without `pypdf`, saved PDFs remained browsable while page counts were unknown.
+
+### User Impact
+
+#### For visitors
+- No direct visitor behavior changed.
+
+#### For administrators
+- No Gallery administrator behavior changed. Windows uploader users could load or import optional flight plans, view expanded reports, sort saved flights, and finalize flights through the updated workflow.
+
+#### For maintainers
+- Regression coverage and permanent documentation were expanded for the uploader’s dispatch, reporting, saved-flight, finalization, and updater workflows. The release evidence did not establish full hosted or native acceptance.
+
 ## Version 0.137
 
 Updated the Windows uploader to version 0.5.3 with saved-flight report management, revised landscape PDF reports, and clearer live flight readings and diagnostics. The release also added regression coverage and updated the uploader documentation and release records.

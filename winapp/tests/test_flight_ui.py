@@ -43,7 +43,7 @@ class FlightUITests(unittest.TestCase):
             SimpleNamespace: Fake host with saved config and observable workers.
         """
         return SimpleNamespace(
-            root=SimpleNamespace(after=Mock()),
+            root=SimpleNamespace(after=Mock(), focus_get=Mock(return_value=None)),
             config=SimpleNamespace(
                 gallery_url="https://gallery.test/api",
                 api_key="test-key",
@@ -89,14 +89,28 @@ class FlightUITests(unittest.TestCase):
         ui.resume_photos = Mock(return_value=None)
         ui.import_bindings = SimpleNamespace(entries=lambda: {})
         ui.operation = None
+        ui.automatic_operation = None
         ui.text = lambda key: key
         ui.recorder = None
         ui.plan = None
+        ui.dispatch = None
+        ui.dispatch_results = queue.Queue()
+        ui.dispatch_worker = None
+        ui.dispatch_cancelled = False
+        ui.active_dispatch = None
+        ui.active_dispatch_directory = None
+        ui.dispatch_loading = False
+        ui.dispatch_loading_target = None
+        ui.simbrief_button_var = Mock()
+        ui.simbrief_status_var = Mock()
+        ui.report_sort_column = "started"
+        ui.report_sort_descending = True
         ui.dialog = None
         ui.report_dialog = None
         ui.report_tree = None
         ui.report_rows = {}
         ui.report_files = {}
+        ui.report_file_sort_keys = {}
         ui.report_button = None
         ui.keep_local_button = None
         ui.report_detail_var = Mock()
@@ -190,6 +204,55 @@ class FlightUITests(unittest.TestCase):
         ui.host.config.api_key = "replacement-key"
         ui.retry_finalization()
         ui.begin.assert_called_with(False)
+
+    def test_automatic_finish_admits_revoke_without_modal_confirmation(self) -> None:
+        """Treat the Finish click as authorization for the final revoke barrier.
+
+        Returns:
+            None: A fresh worker starts without a confirmation dialog and owns
+                automatic completion; ordinary connection controls remain gated.
+        """
+        ui = self._ui(self._host())
+        operation = Mock(local_reports=False, saved_upload=False)
+        with patch.object(flight_ui.messagebox, "askyesno") as confirm, patch.object(
+            flight_ui, "FinalizationWorker", return_value=operation,
+        ) as factory:
+            ui.begin(True, automatic=True)
+        confirm.assert_not_called()
+        self.assertTrue(factory.call_args.args[5])
+        operation.start.assert_called_once_with()
+        self.assertIs(operation, ui.automatic_operation)
+        self.assertTrue(ui.host.api_key_revoke_running)
+
+    def test_automatic_progress_closes_only_after_successful_terminal_state(self) -> None:
+        """Keep recovery visible while removing successful transient windows.
+
+        Returns:
+            None: Saving-key, failed and cancelled operations never hide their
+                progress view; completed cleanup hides it without a dialog.
+        """
+        # These four lifecycle boundaries separate acknowledgement from success.
+        for phase in ("saving_key", "error", "cancelled", "completed"):
+            with self.subTest(phase=phase):
+                ui = self._ui(self._host())
+                now = time.monotonic()
+                ui.operation = SimpleNamespace(
+                    local_reports=True, saved_upload=False,
+                    snapshot=lambda: SimpleNamespace(
+                        phase=phase, detail="", error="", done=1, total=1,
+                        bytes_done=0, bytes_total=0, started=now,
+                        phase_started=now, eta_seconds=None,
+                    ),
+                )
+                ui.automatic_operation = ui.operation
+                ui.dialog = Mock()
+                ui.refresh_tasks = Mock()
+                ui.refresh_reports = Mock()
+                ui.tick()
+                if phase == "completed":
+                    ui.dialog.withdraw.assert_called_once_with()
+                else:
+                    ui.dialog.withdraw.assert_not_called()
 
     def test_saved_pdf_upload_uses_current_key_without_stopping_live_flight(self) -> None:
         """Upload an old local revision with a new explicitly confirmed key.
@@ -672,13 +735,16 @@ class FlightUITests(unittest.TestCase):
         host.root.after.assert_called_once()
 
 
-    def test_manual_finish_enables_reports_without_revoking(self) -> None:
-        """Enable this flight's PDFs even when automatic creation was disabled.
+    def test_one_click_finish_uses_loaded_ofp_and_enables_reports_without_questions(self) -> None:
+        """Finish with four PDFs and revoke intent after one explicit click.
 
         Returns:
-            None: The explicit action saves selected languages and invokes only
-                ordinary Stop, preserving automatic preferences and credentials.
+            None: Loaded OFP is saved for the sole pending flight before worker
+                admission, all editions are enabled and revoke is requested
+                without a confirmation; saved automatic preferences stay intact.
         """
+        from uploader.flight_simbrief import DispatchPlan, load_dispatch
+
         with tempfile.TemporaryDirectory() as temporary:
             ui = self._ui(self._host())
             directory = Path(temporary) / "flight"
@@ -686,13 +752,17 @@ class FlightUITests(unittest.TestCase):
             ui.preferences.reports = False
             plan = SessionPlan(directory, ui.binding(), ("en",), False)
             ui.pending.return_value = [plan]
+            ui.dispatch = DispatchPlan("RKSS", "RJTT", "DCT", "A320", "120",
+                "5000", "kgs", "2610", "2026-10-18")
             ui.begin = Mock()
-            with patch.object(flight_ui.messagebox, "askyesno", return_value=True):
+            with patch.object(flight_ui.messagebox, "askyesno") as confirm:
                 ui.finish_report()
             saved = SessionPlan.load(directory)
             self.assertTrue(saved.reports_enabled)
             self.assertEqual(("en", "cs", "de", "sv"), saved.languages)
-            ui.begin.assert_called_once_with(False)
+            ui.begin.assert_called_once_with(True, automatic=True)
+            confirm.assert_not_called()
+            self.assertEqual(ui.dispatch, load_dispatch(directory))
             ui.revoke_transport.assert_not_called()
             self.assertEqual("test-key", ui.host.config.api_key)
             self.assertFalse(ui.preferences.reports)
@@ -827,6 +897,205 @@ class FlightUITests(unittest.TestCase):
         self.assertTrue(ui.host.api_key_revoke_running)
         ui.host.watcher_activity_var.set.assert_not_called()
         ui.host.status_var.set.assert_not_called()
+
+    def test_regeneration_uses_loaded_ofp_without_questions_before_worker_reads_session(self) -> None:
+        """Generate four local editions using available OFP without extra dialogs.
+
+        Returns:
+            None: A loaded plan is stored before rendering starts, absence of
+                one retains previous evidence, and neither path confirms or
+                sends a network revoke. Each worker gets all four languages.
+        """
+        from uploader.flight_simbrief import DispatchPlan, load_dispatch
+
+        for loaded in (True, False):
+            with self.subTest(loaded=loaded), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                ui = self._ui(self._host())
+                ui.lease = object()
+                SessionPlan(directory, ui.binding(), ("en",), False).save()
+                previous = DispatchPlan("LKPR", "EDDF", "OLD", "A320", "100",
+                    "5000", "kgs", "2610", "2026-10-18")
+                previous.save(directory)
+                staged = DispatchPlan("RKSS", "RJTT", "NEW", "A320", "120",
+                    "6000", "kgs", "2610", "2026-10-18")
+                ui.dispatch = staged if loaded else None
+                ui.selected_saved_flight = Mock(return_value=SavedFlight(
+                    directory, aircraft="A320", recording_ended=True,
+                ))
+                ui.select_report = Mock()
+                seen = []
+                operation = Mock(local_reports=True)
+                operation.start.side_effect = lambda: seen.append(load_dispatch(directory))
+                with patch.object(flight_ui.messagebox, "askyesnocancel") as confirm, patch.object(
+                    flight_ui, "FinalizationWorker", return_value=operation,
+                ) as factory:
+                    ui.create_local_pdf()
+                confirm.assert_not_called()
+                self.assertIs(ui.dispatch, staged if loaded else None)
+                self.assertEqual([staged if loaded else previous], seen)
+                self.assertEqual(staged if loaded else previous, load_dispatch(directory))
+                self.assertEqual(("en", "cs", "de", "sv"), factory.call_args.args[0][0].languages)
+                self.assertIs(operation, ui.automatic_operation)
+                ui.revoke_transport.assert_not_called()
+
+
+    def test_dispatch_failure_does_not_save_identity(self) -> None:
+        """Leave initial account setup pending when the provider rejects a fetch.
+
+        Returns:
+            None: No account or session file is written after an OFP failure.
+        """
+        ui = self._ui(self._host())
+        ui.dispatch_results.put(("123", None, None, "No OFP"))
+        with patch.object(flight_ui, "atomic_write_json") as save, patch.object(
+            flight_ui.messagebox, "showerror"
+        ):
+            ui.accept_simbrief()
+            save.assert_not_called()
+            self.assertIsNone(ui.dispatch)
+
+    def test_new_explicit_dispatch_load_discards_cancelled_previous_results(self) -> None:
+        """Permit another flight's OFP load after one-click Finish stops imports.
+
+        Returns:
+            None: A finished provider's cancelled response is discarded before
+                starting the new fetch, so old evidence cannot be revived.
+        """
+        ui = self._ui(self._host())
+        ui.lease = object()
+        ui.dispatch_cancelled = True
+        ui.dispatch_results.put(("previous", None, None, "cancelled response"))
+        with patch.object(flight_ui, "read_document", return_value={"identity": "123"}), patch.object(
+            flight_ui.threading, "Thread",
+        ) as factory:
+            ui.load_simbrief()
+        self.assertFalse(ui.dispatch_cancelled)
+        self.assertTrue(ui.dispatch_results.empty())
+        factory.return_value.start.assert_called_once_with()
+
+    def test_late_dispatch_cannot_cross_active_sessions(self) -> None:
+        """Reject a result admitted for a different flight before any attachment.
+
+        Returns:
+            None: The old and new session files remain unchanged.
+        """
+        from uploader.flight_simbrief import DispatchPlan
+
+        ui = self._ui(self._host())
+        plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
+        ui.dispatch_results.put(("123", plan, ui.directory / "old", ""))
+        ui.recorder = SimpleNamespace(directory=ui.directory / "new", is_alive=lambda: True)
+        with patch.object(flight_ui, "atomic_write_json"), patch.object(
+            plan, "save"
+        ) as attach, patch.object(flight_ui.messagebox, "showinfo"):
+            ui.accept_simbrief()
+            attach.assert_not_called()
+            self.assertIsNone(ui.dispatch)
+
+    def test_historical_dispatch_uses_its_explicit_target_without_confirmation(self) -> None:
+        """Accept a fetched OFP for the historical target selected at admission.
+
+        Returns:
+            None: The explicit fetch saves only its captured historical target,
+                without a second route confirmation or success message window.
+        """
+        from uploader.flight_simbrief import DispatchPlan
+
+        ui = self._ui(self._host())
+        plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
+        ui.dispatch_results.put(("123", plan, ui.directory / "old", ""))
+        with patch.object(flight_ui, "atomic_write_json"), patch.object(
+            plan, "save"
+        ) as attach, patch.object(flight_ui.messagebox, "askyesno") as confirm, patch.object(
+            flight_ui.messagebox, "showinfo"
+        ) as info:
+            ui.accept_simbrief()
+            confirm.assert_not_called()
+            info.assert_not_called()
+            attach.assert_called_once_with(ui.directory / "old")
+
+
+    def test_dispatch_indicator_follows_session_and_keeps_old_plan_on_failure(self) -> None:
+        """Show a loaded route only for its staged or matching current session.
+
+        Returns:
+            None: Failed reloading preserves accepted evidence; another session
+                cannot inherit the previous session's loaded indicator.
+        """
+        from uploader.flight_simbrief import DispatchPlan
+
+        ui = self._ui(self._host())
+        plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000", "kgs", "2610", "2026-10-18")
+        ui.dispatch = plan
+        ui.refresh_dispatch_status()
+        ui.simbrief_button_var.set.assert_called_with("simbrief_ready")
+        ui.simbrief_status_var.set.assert_called_with("simbrief_next_flight: LKPR → EDDF")
+        ui.dispatch_results.put(("123", None, None, "offline"))
+        with patch.object(flight_ui.messagebox, "showerror"):
+            ui.accept_simbrief()
+        self.assertIs(plan, ui.dispatch)
+        ui.dispatch = None
+        ui.active_dispatch = plan
+        ui.active_dispatch_directory = ui.directory / "old"
+        ui.recorder = SimpleNamespace(directory=ui.directory / "new")
+        ui.refresh_dispatch_status()
+        ui.simbrief_button_var.set.assert_called_with("simbrief_load")
+        ui.simbrief_status_var.set.assert_called_with("")
+
+    def test_sorting_uses_utc_time_and_numeric_counts_without_rebuilding_tree(self) -> None:
+        """Sort actual flight times and counts while preserving native tree state.
+
+        Returns:
+            None: Header toggles reorder existing items without deleting,
+                collapsing or resetting the user's multi-selection.
+        """
+        ui = self._ui(self._host())
+        ui.report_rows = {
+            "a": SavedFlight(ui.directory / "a", "2026-10-18T12:00:00+02:00", "Zulu", 20),
+            "b": SavedFlight(ui.directory / "b", "2026-10-18T11:00:00Z", "alpha", 3),
+        }
+        ui.report_tree = Mock()
+        ui.report_tree.winfo_exists.return_value = True
+        ui.report_tree.get_children.side_effect = lambda parent="": ("a", "b") if not parent else ()
+        ui.apply_report_sort()
+        self.assertEqual(["b", "a"], [call.args[0] for call in ui.report_tree.move.call_args_list])
+        ui.report_tree.move.reset_mock()
+        ui.sort_reports("started")
+        self.assertEqual(["a", "b"], [call.args[0] for call in ui.report_tree.move.call_args_list])
+        ui.report_tree.move.reset_mock()
+        ui.sort_reports("samples")
+        self.assertEqual(["b", "a"], [call.args[0] for call in ui.report_tree.move.call_args_list])
+        ui.report_tree.move.reset_mock()
+        ui.sort_reports("#0")
+        self.assertEqual(["b", "a"], [call.args[0] for call in ui.report_tree.move.call_args_list])
+        ui.report_tree.delete.assert_not_called()
+        ui.report_tree.selection_set.assert_not_called()
+        ui.report_tree.item.assert_not_called()
+
+    def test_dialog_is_placed_near_its_invoking_window(self) -> None:
+        """Center secondary windows over their owner on a large desktop.
+
+        Returns:
+            None: Requested geometry remains beside a far-right parent window.
+        """
+        owner = Mock()
+        parent = owner.winfo_toplevel.return_value
+        parent.winfo_rootx.return_value = 3000
+        parent.winfo_rooty.return_value = 1000
+        parent.winfo_width.return_value = 1000
+        parent.winfo_height.return_value = 600
+        dialog = Mock()
+        dialog.winfo_reqwidth.return_value = 400
+        dialog.winfo_reqheight.return_value = 200
+        flight_ui.place_dialog(dialog, owner)
+        dialog.transient.assert_called_once_with(parent)
+        dialog.geometry.assert_called_once_with("400x200+3300+1200")
+        parent.winfo_rootx.return_value = -1000
+        dialog.winfo_screenwidth.return_value = 1920
+        dialog.geometry.reset_mock()
+        flight_ui.place_dialog(dialog, owner)
+        dialog.geometry.assert_called_once_with("400x200-2220+1200")
 
 
 if __name__ == "__main__":

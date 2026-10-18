@@ -40,7 +40,7 @@ connection and performs no disk or network work on a display tick. Stopped,
 paused, disconnected or more-than-three-second-old values become dashes.
 The adjacent **PDF** shortcut opens saved flights and reports.
 
-## Flight recording and reports (source target 0.5.3)
+## Flight recording and reports (source target 0.6.0)
 
 The uploader supports a shared, read-only flight-recording/reporting workflow for
 MSFS 2020 and MSFS 2024. Recording is enabled by default and has an independent
@@ -132,8 +132,11 @@ Unsupported servers leave reports local and retryable.
 ### Manual completion and saved PDFs
 
 **Finish flight…** sits directly below **Target gallery** in Watcher and Import;
-long gallery names shrink inside their own row. Its confirmation explicitly
-includes key revocation. Settings retains the direct key-management action.
+long gallery names shrink inside their own row. One click stops acquisition,
+drains accepted work, creates all four PDF editions and completes their required
+delivery before revoking the saved key. No confirmation or success message box
+appears; successful progress closes after durable local key cleanup. Errors
+remain visible and retain work for retry. Settings retains direct key management.
 Without a saved key the enabled button reads **Begin flight…** and opens
 connection/API-key settings.
 If report delivery fails, **Keep locally and revoke key** finishes accepted work
@@ -155,16 +158,29 @@ Ctrl/Shift selects files across versions of one flight for upload. **Refresh** r
 checkpoints without analyzing samples; **Open app log** opens the existing
 rotating log. Report work logs its session, phase, edition and failure details.
 
-**Finish flight and create PDFs** confirms ordinary Stop, enables the currently
-selected report languages for pending sessions and retains the configured key.
-It drains accepted photographs and uses existing report delivery. This explicit
-action also works when automatic creation was disabled, without changing that
-saved preference. Existing valid-landing requirements still govern delivery.
+Click a column heading to sort flights and their retained PDFs; click again to
+reverse the direction. The initial order is newest flight first. Names sort
+without case differences, counts sort numerically, and dates use their actual
+UTC instants. Flight start now includes seconds. Created/page columns order
+groups by the newest PDF creation time/total known pages and order individual
+PDFs by those same fields. Refresh retains direction, expanded flights and
+multi-selection. Missing pypdf leaves page counts as `?`, preserving the file
+tree, timestamps and ordinary open/upload actions. Creating new PDFs requires
+ReportLab; a missing component gives an installation/repair message rather than
+classifying the recording as damaged.
+
+**Finish flight and create PDFs** uses the same one-click finish/revoke flow,
+enabling EN/CS/DE/SV for pending sessions even when automatic creation was
+disabled, without changing that saved preference. Loaded OFP is saved to the
+current flight, or the sole pending flight if none is current. It is never
+copied across several unrelated pending flights. Partial recordings also render
+with their incomplete/unknown evidence; no takeoff or landing is fabricated.
 
 Select a stopped session and choose **Create local PDF** or **Re-create local
 PDF**. This reads saved raw data without requiring its former gallery key. It
 does not stop another active flight or upload/revoke anything. Each action
-creates a fresh numbered version in the common `reports/` folder, preserving all earlier PDFs,
+automatically uses an already loaded OFP and creates four fresh numbered editions
+in the common `reports/` folder without a confirmation, preserving all earlier PDFs,
 checksums and delivery receipts. A stopped partial flight may render, but remains
 explicitly incomplete; empty recordings create no blank PDF. Active or
 interrupted-unclosed recordings must first finish recording.
@@ -216,7 +232,7 @@ DejaVu supports every edition. Titles use 28 pt, normal text 12 pt, secondary
 notes 9.5 pt and plot axes 9 pt. Overview cards sit beside the captured route;
 full-flight profiles appear two per page. Each landing has a summary with its
 wind card/configuration, followed by a separate page of four larger profiles.
-The template identity advances to 4 so older PDFs are retained as earlier
+The template identity advances to 7 so older PDFs are retained as earlier
 editions; recording, analysis, report upload and completion remain unchanged.
 
 The bundled bold face is the DejaVu font distributed by the official
@@ -236,9 +252,10 @@ Scalar plots linearly bridge omitted values/ordinary cadence gaps up to five
 seconds in the series color; gaps of five to 300 seconds use amber dashed
 segments and an explicit legend. Longer losses, pauses, reloads and position
 jumps remain breaks. This is presentation only: raw data, rate fits and measured
-statistics never use interpolated values. The coordinate
-plot labels latitude/longitude, north and first/last captured positions; these
-are not inferred airport locations. Contact/configuration cards replace dense
+statistics never use interpolated values. The recorded route uses a light
+OpenStreetMap background with vector tracks and first/last captured-position
+markers. Optional ICAO airport labels come from the OFP, not inferred airport
+locations. Contact/configuration cards replace dense
 raw sensor tables. Noisy change lists disclose displayed/total counts. No runway,
 touchdown score or missing descent measurement is invented. Landing rollout
 deceleration cannot arm a rejected-takeoff event. Landing profiles preserve
@@ -259,6 +276,74 @@ The [SDK fuel reference](https://docs.flightsimulator.com/msfs2024/retail/progra
 defines this mass signal. Old volume-only captures use a visibly marked
 0.80 kg/L estimate for mass display; measured values take priority. Raw gallons
 are never overwritten and unavailable fuel stays unavailable.
+
+## Optional SimBrief and route maps (0.6.0)
+
+Optional SimBrief loading sits beside Begin/Finish flight, with an adjacent
+identity gear. Enter one pilot ID or username; only a successful OFP fetch saves
+the identity. Loading is explicit and never required for recording. The staged
+plan is consumed by the next session; plans attached during recording belong
+only to that session. No previous flight plan is automatically reused.
+The identity sheet uses the same dark controls as the main app, with inline
+validation, Enter to load and Escape to cancel. The main action shows loading,
+then a checked **SimBrief loaded** state and the accepted airport pair. Failed
+reloads retain the previous accepted plan; a new unrelated flight clears it.
+Historical OFP attachment appears in the selected flight's details. Successful
+loading updates that status/activity without opening a message box. Flight
+settings, history, progress and identity sheets open over their invoking window;
+confirmation/error dialogs use explicit ownership as well.
+Saved flights also offer loading the latest OFP directly into the selected flight,
+or attaching an archived SimBrief JSON/XML export. A PDF-only OFP cannot supply
+machine-readable dispatch data. Create a new local PDF version afterwards;
+existing PDFs and delivery receipts remain intact.
+Reports include recorded OpenStreetMap route maps independently of SimBrief.
+An attached OFP adds a separate planned route, planned passengers and ramp fuel.
+These values never replace measured telemetry. Coordinates come from the OFP
+navlog and are retained in a bounded, AIRAC-scoped local SQLite evidence cache;
+ambiguous names are not guessed, and no external navigation subscription is
+required. Displayed OSM tiles are cached for at least seven days, with attribution
+and a bounded cache. Missing network tiles leave the route visible on a pale
+background. Mercator maps clamp polar latitudes; original geographic coordinates
+remain in the saved raw recording. Online tile rendering sends viewport tile
+coordinates and the app User-Agent to OSM, without Gallery keys or SimBrief
+identity.
+
+Maps use native tile pixels sized for their PDF placement at a minimum of
+300 dpi, with vector recorded tracks and purple dashed OFP routes. The first-page
+map fades its background; the final map shows the same geography at full contrast.
+Only the requested viewport is fetched, with a 45-second network budget and
+existing cache/attribution. The first provider failure ends new requests for that
+viewport while cached tiles and vector routes remain available.
+
+New report filenames may add the OFP flight number and departure/arrival ICAO,
+for example `2026-10-18 09-46-05 UTC - CY0734 - LKPR-EDDF - A320 - EN - v06.pdf`.
+Airline codes and leading zeroes are taken from the OFP; none are guessed.
+Existing journaled filenames, prior PDFs and delivery receipts are preserved.
+Two optional planning pages show passengers, cargo/payload, aircraft registration,
+runways/alternate, cruise altitude, cost index, distance/duration, scheduled UTC
+out/in times, fuel components and estimated weights. Unknown fields stay unknown.
+
+Fuel and altitude charts can overlay timed navlog values. Detected takeoff anchors
+the OFP clock; captured simulator time maps each planned fix onto the recorder's
+host-elapsed axis, including simulator-rate changes. Unit conversion is explicit
+for known kg/lb mass, and the planned line breaks at capture discontinuities.
+If takeoff/time alignment is unavailable, an explicitly labelled position
+comparison matches planned fixes within 10 NM of captured route legs. It needs
+two distinct, ordered matches and never extends across capture gaps or position
+jumps. This mode compares quantities at recorded positions, without inventing
+a takeoff time. Missing matching data or compatible units suppress comparison
+with a visible chart explanation. Sparse OFP fixes are connected linearly and are
+always identified as planning evidence. Old dispatch snapshots remain readable,
+but need an explicit OFP reload/import to obtain fields not retained previously.
+
+The main SimBrief control identifies a staged plan as belonging to the next
+flight. Saved-flight details separately show whether that flight has an OFP.
+When generating saved-flight PDFs, the loaded plan is attached before the
+worker starts, without another confirmation. With no loaded plan the flight's
+existing OFP remains unchanged. No fetch or identity prompt is triggered by
+generation/Finish. Manual PDF progress also closes after success; historical
+PDFs/receipts remain intact. A new explicit OFP load after Finish clears only
+cancelled results from the previous completed provider worker.
 
 ## Updating the Windows application
 
@@ -304,6 +389,9 @@ before the application completely exits, including its tray icon. The helper
 waits for both PyInstaller processes from that installation to exit, invokes
 Setup with the existing installation directory, and verifies the installed
 version before restarting the app. Windows may request administrator approval.
+After the installed version is verified and the app restarts successfully,
+the helper progress window closes automatically. Installation failures and
+Windows-reboot requirements remain visible until dismissed.
 Canceling that approval keeps the old application and permits its restart.
 Source-mode Python runs can check and download updates, but offer **Open installer**
 for manual installation and never overwrite the Python source folder. Only a
@@ -324,13 +412,13 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.5.3)
+## Windows installer (next version: 0.6.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
-Gallery CMS release. The current source targets **0.5.3**; this source version
+Gallery CMS release. The current source targets **0.6.0**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.5.3/`. Existing version outputs and other version folders remain
+`winapp/dist/0.6.0/`. Existing version outputs and other version folders remain
 preserved.
 
 The installer includes Python, Tkinter, Pillow, pystray, ReportLab,
@@ -385,8 +473,8 @@ The build script produces the installer and its matching update metadata togethe
 in a folder named after the independent WinApp version:
 
 ```text
-winapp/dist/0.5.3/PHPGalleryUploader-0.5.3-Setup.exe
-winapp/dist/0.5.3/winapp-update.json
+winapp/dist/0.6.0/PHPGalleryUploader-0.6.0-Setup.exe
+winapp/dist/0.6.0/winapp-update.json
 ```
 
 Attach both files from that folder to the same GitHub release as the CMS release.
@@ -398,8 +486,8 @@ metadata when GitHub's asset digest is unavailable. Its schema is:
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.5.3-Setup.exe",
-      "version": "0.5.3",
+      "name": "PHPGalleryUploader-0.6.0-Setup.exe",
+      "version": "0.6.0",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }
@@ -919,6 +1007,11 @@ Writes use a same-directory temporary file and atomic replace. Malformed config/
 The log uses rotation instead of growing without a bound.
 
 ## Dependency installation
+
+Install into the same Python interpreter used to launch the source app; a
+different installed app or virtual environment does not supply its dependencies.
+Missing ReportLab blocks only new PDF rendering. Missing pypdf does not hide
+retained PDFs: page count is shown as unknown until that component is restored.
 
 `install.bat` installs `requirements.txt` into the Python runtime used by the Windows shortcut. Current normal dependencies are Pillow, pystray, ReportLab and pypdf. Portable
 CI installs the three image/PDF requirements; installer preflight requires

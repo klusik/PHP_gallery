@@ -5735,11 +5735,22 @@ class WatcherApp:
         ttk.Label(
             hero, textvariable=self.connection_status_var, style="Muted.TLabel",
         ).grid(row=0, column=1, sticky="e", padx=(16, 0))
+        flight_actions = ttk.Frame(hero, style="Card.TFrame")
+        flight_actions.grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.finish_flight_button = ttk.Button(
-            hero, text=self.flights.text("finish_flight"),
+            flight_actions, text=self.flights.text("finish_flight"),
             command=self.flight_action,
         )
-        self.finish_flight_button.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.finish_flight_button.grid(row=0, column=0, sticky="w")
+        ttk.Button(flight_actions, textvariable=self.flights.simbrief_button_var,
+            command=self.flights.load_simbrief,
+        ).grid(row=0, column=1, padx=(6, 0))
+        icon_button(flight_actions, "settings",
+            lambda: self.flights.load_simbrief(change_identity=True),
+            self.flights.text("simbrief_identity"),
+        ).grid(row=0, column=2, padx=(4, 0))
+        ttk.Label(flight_actions, textvariable=self.flights.simbrief_status_var,
+                  style="Muted.TLabel").grid(row=1, column=1, sticky="w", pady=(4, 0))
 
         card = GlassCard(parent, padding=(14, 10))
         card.grid(row=1, column=0, sticky="ew", padx=6, pady=4)
@@ -7559,15 +7570,16 @@ class WatcherApp:
         """Open connection setup without a saved key, otherwise finish the flight.
 
         Returns:
-            None: Begin flight opens API settings; Finish flight retains the
-                existing explicitly confirmed completion/revocation workflow.
+            None: Begin flight opens API settings. Finish uses the saved
+                connection, loaded OFP and report editions, then revokes without
+                modal confirmation after accepted work and PDFs complete.
         """
         if self.updates.blocked():
             return
         if not self.config.api_key.strip():
             self.open_connection_dialog()
             return
-        self.revoke_api_key()
+        self.flights.finish_report()
 
     def revoke_api_key(self) -> None:
         """Confirm one combined stop, finish, upload and key-revocation action.
@@ -8311,7 +8323,8 @@ class WatcherApp:
                         "system",
                     )
                     self.refresh_connection_controls()
-                    messagebox.showinfo("Revoke API key", message)
+                    if not self.flights.automatic_completion():
+                        messagebox.showinfo("Revoke API key", message)
                 elif kind == "api_key_revoke_error":
                     self.api_key_revoke_running = False
                     self.api_key_revoke_thread = None

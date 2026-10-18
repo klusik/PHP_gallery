@@ -196,13 +196,19 @@ class UpdateHelperTests(unittest.TestCase):
         self.assertEqual(0, backend.installs)
 
     def test_success_requires_matching_pe_version(self) -> None:
-        """Installer success alone cannot claim a verified application update."""
+        """Installer success alone cannot claim a verified application update.
+
+        Returns:
+            None: Only matching installed version plus restart marks success.
+        """
         backend = FakeBackend(version="1.2.2")
         with self.assertRaisesRegex(RuntimeError, "does not match"):
             helper.perform_update(self.ticket, backend, mock.Mock())
         self.assertEqual([], backend.restarts)
         backend = FakeBackend()
-        self.assertIn("installed", helper.perform_update(self.ticket, backend, mock.Mock()))
+        result = helper.perform_update(self.ticket, backend, mock.Mock())
+        self.assertIn("installed", result.message)
+        self.assertTrue(result.verified)
         self.assertEqual([str(self.installed)], backend.restarts)
 
     def test_uac_cancellation_reopens_old_application_under_original_user(self) -> None:
@@ -213,9 +219,15 @@ class UpdateHelperTests(unittest.TestCase):
         self.assertEqual([str(self.installed)], backend.restarts)
 
     def test_restart_required_and_unknown_codes_are_honest(self) -> None:
-        """Restart-required results never prematurely relaunch the uploader."""
+        """Restart-required results never prematurely relaunch the uploader.
+
+        Returns:
+            None: Reboot notices remain unverified and unknown codes still fail.
+        """
         backend = FakeBackend(code=3010)
-        self.assertIn("restart required", helper.perform_update(self.ticket, backend, mock.Mock()))
+        result = helper.perform_update(self.ticket, backend, mock.Mock())
+        self.assertIn("restart required", result.message)
+        self.assertFalse(result.verified)
         self.assertEqual([], backend.restarts)
         with self.assertRaisesRegex(RuntimeError, "code 42"):
             helper.perform_update(self.ticket, FakeBackend(code=42), mock.Mock())
@@ -238,6 +250,53 @@ class UpdateHelperTests(unittest.TestCase):
         self.assertIn("/DIR=" + str(self.installed.parent), arguments)
         self.assertIn("/UPDATESTATUS=" + self.ticket.session_id, arguments)
         self.assertIn("/RESTARTEXITCODE=3010", arguments)
+
+
+    def test_helper_closes_only_after_verified_success(self) -> None:
+        """Exercise Tk terminal handling without installing or opening windows.
+
+        Returns:
+            None: Verified success closes automatically after its marker;
+                reboot notices and failures retain the enabled Close action.
+        """
+        for outcome in (
+            helper.UpdateOutcome("installed", True),
+            helper.UpdateOutcome("Windows restart required", False),
+            RuntimeError("setup failed"),
+        ):
+            with self.subTest(outcome=outcome):
+                root, label, button = mock.Mock(), mock.Mock(), mock.Mock()
+                root.destroy.side_effect = lambda: self.assertTrue((self.session / "completed").is_file())
+                tkinter = types.ModuleType("tkinter")
+                tkinter.Tk = mock.Mock(return_value=root)
+                tkinter.StringVar = mock.Mock(return_value=label)
+                ttk = types.ModuleType("tkinter.ttk")
+                ttk.Label = mock.Mock()
+                ttk.Progressbar = mock.Mock()
+                ttk.Button = mock.Mock(return_value=button)
+                tkinter.ttk = ttk
+                (self.session / "proceed").write_text("1", encoding="ascii")
+                (self.session / "completed").unlink(missing_ok=True)
+                result_options = {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}
+                with (
+                    mock.patch.dict("sys.modules", {"tkinter": tkinter, "tkinter.ttk": ttk}),
+                    mock.patch.object(helper, "load_ticket", return_value=self.ticket),
+                    mock.patch.object(helper, "installed_identity"),
+                    mock.patch.object(helper, "WindowsBackend"),
+                    mock.patch.object(helper.sys, "executable", str(self.session / "helper.exe")),
+                    mock.patch.object(helper, "perform_update", **result_options),
+                    mock.patch.object(helper.threading, "Thread",
+                        side_effect=lambda **kwargs: types.SimpleNamespace(start=kwargs["target"])),
+                ):
+                    code = helper.main(str(self.session / "ticket.json"))
+                self.assertEqual(1 if isinstance(outcome, Exception) else 0, code)
+                if isinstance(outcome, helper.UpdateOutcome) and outcome.verified:
+                    root.destroy.assert_called_once()
+                    button.configure.assert_not_called()
+                else:
+                    root.destroy.assert_not_called()
+                    button.configure.assert_called_once_with(state="normal")
+                root.after.assert_not_called()
 
 
 if __name__ == "__main__":

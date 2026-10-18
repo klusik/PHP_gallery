@@ -1089,6 +1089,30 @@ def _attach_tooltip(widget: ttk.Button, message: str) -> None:
     widget.bind("<Destroy>", hide, add="+")
 
 
+def place_dialog(dialog: tk.Toplevel, owner: tk.Misc) -> None:
+    """Center a child window over the window that opened it.
+
+    Args:
+        dialog (tk.Toplevel): Fully populated child window awaiting display.
+        owner (tk.Misc): Invoking widget or its active application toplevel.
+    Returns:
+        None: Sets transient ownership and nearby requested-size geometry.
+    """
+    parent = owner.winfo_toplevel()
+    dialog.transient(parent)
+    dialog.update_idletasks()
+    width, height = dialog.winfo_reqwidth(), dialog.winfo_reqheight()
+    x = parent.winfo_rootx() + max(0, (parent.winfo_width() - width) // 2)
+    y = parent.winfo_rooty() + max(0, (parent.winfo_height() - height) // 2)
+    # Preserve the parent's monitor, including negative desktop coordinates.
+    # winfo_screenwidth can describe only the primary monitor on Windows.
+    # Tk's negative geometry offsets are measured from the right/bottom edge.
+    # Convert absolute negative monitor coordinates instead of emitting '+-'.
+    horizontal = f"+{x}" if x >= 0 else f"-{dialog.winfo_screenwidth() - width - x}"
+    vertical = f"+{y}" if y >= 0 else f"-{dialog.winfo_screenheight() - height - y}"
+    dialog.geometry(f"{width}x{height}{horizontal}{vertical}")
+
+
 def _show_help(owner: tk.Misc, title: str, body: str) -> None:
     """Display a modal-style help panel with selectable content.
 

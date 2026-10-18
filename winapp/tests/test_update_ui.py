@@ -36,6 +36,12 @@ class UpdateControllerTests(unittest.TestCase):
         """
         controller = UpdateController.__new__(UpdateController)
         controller.root = SimpleNamespace(after=Mock(), destroy=Mock())
+        # Model the invoking window on a secondary monitor for place_dialog.
+        controller.root.winfo_toplevel = Mock(return_value=controller.root)
+        controller.root.winfo_rootx = Mock(return_value=3000)
+        controller.root.winfo_rooty = Mock(return_value=1000)
+        controller.root.winfo_width = Mock(return_value=900)
+        controller.root.winfo_height = Mock(return_value=600)
         controller.app = SimpleNamespace(root=controller.root, exiting=False,
                                          stop_tray_icon=Mock(), write_log=Mock(),
                                          set_update_available=Mock())
@@ -424,7 +430,8 @@ class UpdateControllerTests(unittest.TestCase):
         """A restored offer remains usable after a failed fresh check.
 
         Returns:
-            None: Confirms a newly created notice shows the cached version and action.
+            None: The new notice shows the cached version/action and is placed
+                nonmodally over its invoking window on the secondary monitor.
         """
         controller = self.controller()
         controller.installer = None
@@ -453,13 +460,16 @@ class UpdateControllerTests(unittest.TestCase):
             controller.poll()
 
             window = Mock()
+            window.winfo_reqwidth.return_value = 400
+            window.winfo_reqheight.return_value = 200
             status = Mock()
             button = Mock()
             ttk_stub = SimpleNamespace(
                 Label=Mock(return_value=Mock()),
                 Progressbar=Mock(return_value=Mock()),
                 Frame=Mock(return_value=Mock()),
-                Button=Mock(return_value=button),
+                # Update, Cancel and Later are distinct native controls.
+                Button=Mock(side_effect=[button, Mock(), Mock()]),
             )
             tkinter_stub = SimpleNamespace(
                 Toplevel=Mock(return_value=window),
@@ -470,6 +480,9 @@ class UpdateControllerTests(unittest.TestCase):
                 controller.open_updates()
             self.assertEqual(len(operations), 1)
             self.assertIs(controller.window, window)
+            window.transient.assert_called_once_with(controller.root)
+            window.geometry.assert_called_once_with('400x200+3250+1200')
+            window.grab_set.assert_not_called()
             shown_text = str(status.set.call_args.args[0])
             self.assertIn(asset.version, shown_text)
             button.configure.assert_any_call(

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.137}
+\newcommand{\version}{0.137.1}
 \newcommand{\manualdate}{18~oktober~2026}
 
 \hypersetup{
@@ -944,8 +944,9 @@ gamla värden ersätts med streck. Genvägen \ui{PDF} öppnar sparade flygningar
 \ui{Sparade flygningar och PDF} visar start, flygplan, checkpointens mätpunkter,
 lokala PDF-filer, status och bevarade fel. Uppdatera läser bara checkpoints;
 Öppna applogg använder befintlig logg. \ui{Avsluta flygning och skapa PDF}
-bekräftar vanligt Stop och aktiverar valda rapportspråk även när automatisk
-skapning är av. Nyckeln behålls och befintliga leveransregler gäller.
+skapar fyra språkversioner utan bekräftelse, slutför accepterat arbete och
+obligatorisk leverans och återkallar sedan den sparade nyckeln. Detta gäller
+även när automatisk PDF-skapning är av.
 
 För en stoppad flygning skapar \ui{Skapa lokal PDF} eller \ui{Skapa lokal PDF
 igen} en ny numrerad version i \filepath{reports/}. Tidigare PDF-filer,
@@ -957,7 +958,7 @@ slutför inte väntande serverleverans. Avbrott behåller färdiga språkversion
 Avslut och uppdatering hanterar denna arbetare. Windows-layout och
 livegodkännande förblir en separat manuell kontroll.
 
-\ui{Slutför flygning} ligger direkt under målgalleriet; bekräftelsen omfattar
+\ui{Slutför flygning} ligger direkt under målgalleriet; ett klick påbörjar
 återkallelse av nyckeln. Efter fel behåller \ui{Behåll lokalt och återkalla
 nyckeln} och Försök igen det redan bekräftade beslutet för samma anslutning
 i denna appsession. Avbruten återkallelse, nyckelbyte eller omstart överför
@@ -1317,10 +1318,67 @@ Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanlig
 
 Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.5.3. Ett
+Valfri inläsning från SimBrief finns bredvid flygstart/-avslut; kugghjulet
+ändrar pilot-ID eller användarnamn i ett fält. Identiteten sparas först efter
+en lyckad OFP-hämtning. Inspelning kräver ingen OFP. En förinläst plan används
+bara för nästa flygning; en plan som läses in under inspelning tillhör den
+flygningen. Vald sparad flygning kan direkt kopplas till senaste
+OFP eller en arkiverad SimBrief-export i JSON/XML. Enbart PDF ger inte
+strukturerade data. Skapa därefter en ny lokal PDF-version; äldre PDF-filer
+och överföringskvitton bevaras.
+Rapporter visar inspelade OpenStreetMap-rutter även utan OFP. OFP lägger till
+en separat planerad rutt, planerat passagerarantal och rampbränsle utan att
+ersätta mätvärden. Navloggkoordinater sparas i en begränsad lokal SQLite-cache
+per AIRAC; tvetydiga namn gissas inte. Visade kartplattor sparas minst sju dagar
+med källangivelse och begränsad cache. Utan nät visas rutten på ljus bakgrund.
+Mercator begränsar polära latituder; ursprungliga koordinater finns i rådata.
+OSM får plattkoordinater och appidentifiering, inte Gallery-nycklar eller
+SimBrief-identitet.
+
+SimBrief-dialogen använder appens mörka tema, validerar direkt i fönstret
+och stöder Enter/Escape. En bock och ett flygplatspar visar den accepterade planen
+för nästa/aktuell flygning; misslyckad omläsning bevarar den. Inställningar,
+historik, förlopp och bekräftelser öppnas nära fönstret som anropade dem.
+Kolumnrubriker växlar mellan stigande och fallande sortering. Flygstart visar
+sekunder; tider sorteras enligt UTC, antal numeriskt och namn utan skiftläge.
+Skapad/sidor använder senaste PDF-tiden respektive summan av kända sidor per
+grupp. Utvecklade flygningar och flerval bevaras vid sortering och uppdatering.
+Utan pypdf är sidantalet okänt men sparade PDF-filer kan öppnas. Saknad ReportLab
+ger instruktioner för att reparera beroenden. Installera requirements i samma
+Python som startar källappen. Uppdateringsförloppet stängs automatiskt först efter
+verifierad installerad version och lyckad appstart; fel och krav på omstart av
+Windows förblir synliga tills användaren stänger dem.
+
+Kartbakgrunder byggs av ursprungliga plattor med minst 300 dpi vid den
+slutliga PDF-storleken. Inspelade och lila streckade OFP-rutter förblir vektorer;
+översikten har en ljus bakgrund och sista kartan full kontrast. Nya PDF-namn kan
+innehålla flygnummer samt avgångs-/ankomst-ICAO; äldre versioner, namn och kvitton
+bevaras. Två plansidor visar passagerare, frakt/nyttolast, registrering,
+banor/alternativ flygplats, marschhöjd, cost index, distans/tid, planerade
+UTC-tider, bränsledelar och vikter. Saknade värden är okända. Tidsatta höjd- och
+bränslepunkter kan visas med inspelningen: upptäckt start och simulatorklockor
+anpassar dem även vid ändrad simuleringshastighet. Kända kg/lb omvandlas;
+inspelningsluckor bryter jämförelsen. Utan tidsankare jämför det markerade
+positionsläget minst två ordnade OFP-punkter med inspelade sträckor inom 10 NM.
+Luckor och positionshopp förblir avbrott; ingen starttid hittas på. Saknade data
+förklaras i diagrammet. Planvärden är inga ombordmätningar och skapar inget
+faktiskt passagerarantal eller förseningsbetyg. Äldre OFP-bilder kan läsas;
+nya fält kräver uttrycklig omläsning/import. Karthämtning gäller bara den visade
+vyn med 45 sekunders nätbudget och stopp vid första leverantörsfelet.
+
+SimBrief-huvudkontrollen visar den inlästa planen; sparade flygdetaljer visar
+sin egen OFP-koppling. Slutförandet använder planen för aktuell eller enda
+väntande flygning. Manuell skapning använder den för vald flygning och skapar
+fyra nya språkversioner utan bekräftelse. Utan inläst OFP behålls tidigare data;
+ingen av åtgärderna hämtar en plan eller frågar efter identitet. Delinspelningar
+förblir ofullständiga. Framgång uppdaterar status utan OK-ruta och stänger
+förloppet efter varaktigt slutförande och rensning av nyckeln. Fel förblir
+synliga; tidigare PDF-filer bevaras.
+
+Källan till den fristående uppladdaren riktar sig nu mot version 0.6.0. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.5.3/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.6.0/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.

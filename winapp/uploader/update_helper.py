@@ -27,6 +27,27 @@ from typing import Callable, Protocol, TYPE_CHECKING
 if TYPE_CHECKING:
     from uploader.self_update import ReleaseAsset
 
+# Allow the app to finish its existing graceful shutdown before setup starts.
+# Type: float; Units: seconds; Scope: one helper installation.
+# Consumers: perform_update. Rationale: preserve the existing 30-second wait.
+SHUTDOWN_TIMEOUT_SECONDS = 30.0
+# Poll exact-target process state without busy-waiting.
+# Type: float; Units: seconds; Scope: shutdown observation.
+# Consumers: perform_update. Rationale: 0.1 seconds retains responsive handoff.
+SHUTDOWN_POLL_SECONDS = 0.1
+# Bound the uploader-to-helper proceed handshake before any installation.
+# Type: float; Units: seconds; Scope: one update session.
+# Consumers: main worker. Rationale: preserve the existing 25-second handshake.
+HANDSHAKE_TIMEOUT_SECONDS = 25.0
+# Yield between proceed/cancel marker observations.
+# Type: float; Units: seconds; Scope: one update session.
+# Consumers: main worker. Rationale: 0.05 seconds avoids a spin loop.
+HANDSHAKE_POLL_SECONDS = 0.05
+# Read background progress at a modest Tk cadence.
+# Type: int; Units: milliseconds; Scope: helper progress window.
+# Consumers: main poll. Rationale: 100 ms keeps installation feedback responsive.
+HELPER_POLL_MS = 100
+
 
 @dataclass(frozen=True)
 class UpdateTicket:
@@ -423,14 +444,35 @@ class WindowsBackend:
         subprocess.Popen([executable], cwd=str(Path(executable).parent))
 
 
+@dataclass(frozen=True)
+class UpdateOutcome:
+    """Distinguish verified/restarted installation from a required Windows reboot."""
+
+    message: str
+    verified: bool
+
+
 def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
-                   timeout: float = 30) -> str:
-    """Wait for graceful shutdown, run setup, and verify its resulting version."""
+                   timeout: float = SHUTDOWN_TIMEOUT_SECONDS) -> UpdateOutcome:
+    """Wait for graceful shutdown, run setup, and verify its resulting version.
+
+    Args:
+        ticket (UpdateTicket): Validated local installer and target identity.
+        backend (Backend): Native process, installation and version adapter.
+        progress (Progress): Callback receiving phase/percent pairs or None.
+        timeout (float): Seconds allowed for the uploader to exit gracefully.
+    Returns:
+        UpdateOutcome: Verified success only after matching version and restart;
+            a reboot requirement is returned with verified False.
+    Raises:
+        RuntimeError: Shutdown, installation or resulting version was not verified.
+        InterruptedError: Administrator approval was cancelled.
+    """
     deadline = time.monotonic() + timeout
     while backend.target_running(ticket.installed_executable):
         if time.monotonic() >= deadline:
             raise RuntimeError("Uploader is still running. No update was started.")
-        time.sleep(0.1)
+        time.sleep(SHUTDOWN_POLL_SECONDS)
     verify_ticket_installer(ticket)
     try:
         code = backend.install(ticket, progress)
@@ -439,17 +481,26 @@ def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
             backend.restart(ticket.installed_executable)
         raise
     if code == 3010:
-        return "Windows restart required. Restart Windows before opening the uploader."
+        return UpdateOutcome(
+            "Windows restart required. Restart Windows before opening the uploader.", False,
+        )
     if code != 0:
         raise RuntimeError(f"Setup exited with code {code}. The update was not verified.")
     if backend.version(ticket.installed_executable) != ticket.target_version:
         raise RuntimeError("Setup finished, but the installed version does not match. The update was not verified.")
     backend.restart(ticket.installed_executable)
-    return f"Version {ticket.target_version} installed. Uploader restarted."
+    return UpdateOutcome(f"Version {ticket.target_version} installed. Uploader restarted.", True)
 
 
 def main(ticket_path: str) -> int:
-    """Open an independent progress window before signalling uploader readiness."""
+    """Open update progress and close automatically only after verified success.
+
+    Args:
+        ticket_path (str): Owned session's validated local update-ticket path.
+    Returns:
+        int: Zero after installation or a required reboot; one after failure.
+            Errors and reboot instructions remain visible until dismissed.
+    """
     import tkinter as tk
     from tkinter import ttk
     path = Path(ticket_path)
@@ -463,11 +514,15 @@ def main(ticket_path: str) -> int:
     button = ttk.Button(root, text="Close", command=root.destroy, state="disabled")
     button.pack(pady=10)
     def prevent_close() -> None:
-        """Keep the helper alive while setup or verification is in progress."""
+        """Keep the helper alive while setup or verification is in progress.
+
+        Returns:
+            None: Ignores closing until the operation reaches a terminal result.
+        """
         return None
 
     root.protocol("WM_DELETE_WINDOW", prevent_close)
-    events: queue.Queue[tuple[str, str | tuple[int, int] | None]] = queue.Queue()
+    events: queue.Queue[tuple[str, str | tuple[int, int] | UpdateOutcome | None]] = queue.Queue()
     try:
         ticket = load_ticket(path)
         if Path(sys.executable).resolve() != path.parent / "helper.exe":
@@ -478,43 +533,65 @@ def main(ticket_path: str) -> int:
     except Exception as exc:
         text.set(str(exc))
         button.configure(state="normal")
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
         root.mainloop()
         return 1
     exit_status = 1
 
     def forward_progress(value: tuple[int, int] | None) -> None:
-        """Queue a bounded status record for the Tk event thread."""
+        """Queue a bounded status record for the Tk event thread.
+
+        Args:
+            value (tuple[int, int] | None): Phase/percent pair or unavailable progress.
+        Returns:
+            None: Queues feedback without touching native Tk widgets.
+        """
         events.put(("progress", value))
 
     def worker() -> None:
-        """Wait for an explicit proceed handshake before observing uploader exit."""
+        """Wait for consent and seal helper state before publishing completion.
+
+        Returns:
+            None: Publishes a terminal outcome only after its completion marker.
+        """
         nonlocal exit_status
         try:
-            deadline = time.monotonic() + 25
+            deadline = time.monotonic() + HANDSHAKE_TIMEOUT_SECONDS
             while not (path.parent / "proceed").is_file():
                 if (path.parent / "cancel").is_file() or time.monotonic() >= deadline:
                     raise RuntimeError("Update cancelled before uploader shutdown")
-                time.sleep(0.05)
+                time.sleep(HANDSHAKE_POLL_SECONDS)
             result = perform_update(ticket, backend, forward_progress)
             exit_status = 0
-            events.put(("done", result))
         except Exception as exc:
-            events.put(("done", str(exc)))
-        finally:
+            result = str(exc)
+        try:
             (path.parent / "completed").write_text("1", encoding="ascii")
+        except OSError as exc:
+            exit_status = 1
+            result = str(exc)
+        events.put(("done", result))
     def poll() -> None:
-        """Apply background progress on Tk's owning thread."""
+        """Apply progress and dismiss only a verified terminal result on Tk.
+
+        Returns:
+            None: Stops polling after terminal completion; failures stay visible.
+        """
         while not events.empty():
             kind, value = events.get_nowait()
             if kind == "done":
-                text.set(str(value))
+                if isinstance(value, UpdateOutcome) and value.verified:
+                    root.destroy()
+                    return
+                text.set(value.message if isinstance(value, UpdateOutcome) else str(value))
                 button.configure(state="normal")
                 root.protocol("WM_DELETE_WINDOW", root.destroy)
+                return
             elif isinstance(value, tuple):
                 phase, percent = value
                 bar.configure(value=percent)
                 text.set(["Preparing setup…", "Preparing installation…", "Installing…", "Finishing setup…", "Verifying installation…"][phase])
-        root.after(100, poll)
+        root.after(HELPER_POLL_MS, poll)
     threading.Thread(target=worker, daemon=True).start()
     poll()
     root.mainloop()

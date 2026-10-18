@@ -1,13 +1,105 @@
 # Compatibility lifecycle and retirement register
 
+## Optional WinApp dispatch and maps (0.6.0)
+
+Owners: `flight_simbrief.py`, `flight_navdata.py`, `flight_maps.py`,
+`flight_ui.py`, `flight_data.py` and `flight_report.py` in `winapp/uploader`.
+Legacy sessions without simbrief.json remain valid. Dispatch values are planned
+evidence and never overwrite simulator measurements. The OFP snapshot participates
+in the analysis checksum; template 7 prevents reuse of earlier report layouts.
+Explicit local regeneration retains all previous PDF revisions and receipts.
+
+SimBrief identity is stored only after a successful explicit fetch; archived
+JSON/XML imports need no account. The next session consumes a staged plan once.
+An explicit historical load/file selection attaches without a second prompt;
+a changed active session
+rejects late results. A separate AIRAC-scoped SQLite cache retains exact provider
+fix coordinates, including ambiguous identifiers; it does not guess unresolved
+airway points. Snapshots remain authoritative after cache eviction.
+
+OSM tiles use TLS, an identifying User-Agent, attribution, a seven-day cache and
+bounded displayed-viewport requests. Missing tiles retain an explicitly labelled
+route-only background. This permanent fallback supports offline postflight work;
+its retirement would require an equivalent offline report path. Polar map
+latitudes are clamped by Web Mercator; original coordinates remain in
+the saved raw data. Gallery credentials and pilot identity never enter tile URLs.
+
+Regression owners: `test_flight_simbrief.py`, `test_flight_ui.py` and
+`test_flight_report.py`. These fixtures do not establish live SimBrief account,
+native Windows layout, live simulator or printed PDF acceptance. Real usage
+evidence and live provider qualification are currently unknown.
+
+Report maps now allocate native pixel dimensions from PDF points at 300 dpi;
+routes, legends and attribution stay vector. Background tile failures never
+synthesize ground data. The overview is faded and the final route comparison
+uses full contrast. Fetches remain confined to the requested viewport, with a
+45-second budget and a stop on the first provider failure. Old low-resolution
+reports are retained; template 7 requires a new edition for the changed layout.
+
+Dispatch snapshots add optional flight identity, loading/fuel/schedule fields
+and timed fix altitude/fuel. Defaulted dataclass fields preserve old snapshots;
+missing old data requires an explicit reload/import, never a silent latest-OFP
+substitution. New filename reservations may add flight number and ICAO pair;
+existing catalog reservations and migration labels remain unchanged.
+
+`flight_report.py` aligns planned curves only through detected takeoff and
+captured simulator time, converting known OFP kg/lb values into displayed mass.
+Declared gaps prevent bridging. If anchors/clocks cannot align the plan, the
+report owner permanently supports a labelled position comparison for recordings
+that began airborne: at least two ordered OFP fixes must match captured legs
+within 10 NM, with no extrapolation across jumps/gaps. It compares at positions
+and does not invent a takeoff time. Retirement requires equivalent comparison
+for airborne-start recordings. Missing matching data/units suppress the overlay
+with a visible explanation. Purple dashed plans remain distinct from amber recorded-gap
+interpolation. No delay score, actual passenger count or unseen fuel is inferred.
+New regressions cover source-pixel density, vector routes, simulator-rate mapping,
+unit conversion, legacy snapshot defaults and preservation of old filenames.
+
+Saved-flight regeneration automatically uses an already loaded OFP before the
+worker starts. With none loaded, the saved session's OFP remains unchanged.
+It creates all four editions without a second confirmation. The next-flight
+plan remains staged and historical attachment status is shown
+separately. This corrects the observed case where an accepted main-window load
+was mistaken for a historical attachment. Focused replay of the affected captured
+flight and an isolated retained OFP confirmed positional profile availability;
+it does not qualify a fresh provider fetch or full native UI acceptance.
+
+The SimBrief identity sheet uses the existing dark theme, inline validation and
+owner-relative positioning. Main controls retain only the staged/current flight's
+accepted plan and airport pair; failed reloads leave accepted evidence intact.
+Saved-flight headings toggle direction with UTC-aware time/count/name sorting,
+preserving native expanded groups and multi-selection. Missing pypdf is a
+permanent catalog fallback to unknown pages, owned by `flight_jobs.py`; it keeps
+old PDFs accessible during source-environment repair. Its retirement requires
+an equally independent saved-file recovery path. Missing renderer packages are
+reported as dependency repair tasks by `flight_workflow.py`/`flight_ui.py`.
+Local diagnosis on Python 3.14.4 recovered page counts for 20 existing PDFs after
+installing the already-declared requirements; original files were unchanged.
+
+The independent update helper publishes a typed result after its durable
+completion marker. Only a matching installed version followed by successful
+restart closes progress automatically. Reboot-required outcomes and failures
+stay visible. `update_helper.py` owns that lifecycle; installer privileges,
+checksum validation and restart identity are unchanged. Fake-native
+regressions exercise all three terminal outcomes. Live installed-update and
+Windows dialog acceptance remain separate.
+
 ## Manual flight PDFs and compact recorder readings (0.5.3)
 
 Finish flight is visible below Target gallery, including at compact widths.
 Without a saved key it becomes enabled Begin flight and opens API settings.
-Its confirmation includes revocation. Keep locally and Retry preserve that
-same process's confirmed, unsubmitted intent for the same saved endpoint/key;
+One click authorizes PDF creation and final revocation without confirmation.
+Keep locally and Retry preserve that same process's accepted, unsubmitted intent
+for the same saved endpoint/key;
 cancellation, changed credentials and restart never reconstruct consent.
 An ordinary Stop still keeps the key. Recovery buttons wrap into three columns.
+The exact Finish worker owns automatic UI completion: progress closes only
+after durable local key cleanup, with no success message box. Manual local
+generation similarly creates four retained editions and closes successful
+progress. Failures/cancellation stay visible. Missing takeoff/landing no longer
+requires a local-only decision; reports retain incomplete facts while required
+delivery receipts still gate revocation. No live-key revocation was performed
+for source verification; native one-click acceptance remains separate.
 
 The expandable browser opens individual PDFs and uploads selected edition
 subsets across retained versions of one flight with the
@@ -351,7 +443,8 @@ Stop flow, additionally stops other authenticated producers and finishes
 accepted work before requesting scoped server revocation. Failures retain local
 data and task state; the UI shows phase, elapsed time and an ETA only when
 remaining work is measurable. After restart the app restores work but requires
-renewed confirmation before irreversible Revoke. Local-only resolution is
+an explicit Finish click or direct Revoke confirmation before revocation.
+Local-only resolution is
 explicit and does not count as server delivery.
 
 Automated provider and transport fixtures are not live qualification. Actual

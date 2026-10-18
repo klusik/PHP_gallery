@@ -18,6 +18,7 @@
 """Render local multilingual postflight reports from normalized flight data."""
 
 import hashlib
+import io
 import json
 import math
 import os
@@ -28,6 +29,8 @@ from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
+
+from PIL import Image as PillowImage
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
@@ -49,10 +52,11 @@ from reportlab.platypus import (
     TableStyle,
 )
 from reportlab.graphics.shapes import (
-    Circle, Drawing, Group, Line, Path as ShapePath,
+    Circle, Drawing, Group, Image as MapShape, Line, Path as ShapePath,
     PolyLine, Polygon, Rect, String,
 )
 
+from .flight_maps import map_viewport, print_size, render_map
 from .diagnostics import redact_text
 from .flight_data import (
     ANALYSIS_VERSION,
@@ -62,6 +66,7 @@ from .flight_data import (
     FlightAnalysis,
     FlightSample,
     Landing,
+    _distance_nm,
 )
 from .flight_report_translations import supported_languages, tr
 from .flight_jobs import readable_pdf_name, read_document
@@ -69,7 +74,7 @@ from .flight_jobs import readable_pdf_name, read_document
 
 # Template identity is included in every manifest and output filename so a
 # future layout revision does not silently reuse a prior rendering.
-REPORT_TEMPLATE_VERSION = "4"
+REPORT_TEMPLATE_VERSION = "7"
 
 # Purpose: Share true A4 landscape geometry across document and page chrome.
 # Type: tuple[float, float]; Units: PDF points; Scope: rendered report pages.
@@ -94,6 +99,22 @@ CHART_WIDTH = REPORT_PAGE_SIZE[0] - 2 * REPORT_SIDE_MARGIN
 # Consumers: _profile_chart and _route_chart; Rationale: two full-width
 # profiles fit one landscape page with larger labels and a short legend.
 CHART_HEIGHT = 184
+# Keep first-page map detail subordinate to the recorded vector route.
+# Type: float; Units: white blend fraction; Scope: overview map background.
+# Consumers: _route_chart. Rationale: 0.72 makes labels/terrain a light context.
+MAP_OVERVIEW_FADE = 0.72
+# Keep OFP plans distinct from amber warnings about interpolated recorded gaps.
+_COLOR_PLANNED = colors.HexColor("#8056AD")
+# Match OFP fixes only to nearby captured legs when takeoff was not recorded.
+# Type: float; Units: nautical miles; Scope: positional OFP profile comparison.
+# Consumers: _dispatch_position_series. Rationale: 10 NM admits ordinary route
+# offsets while refusing distant fixes and unrelated routes; no endpoint extension.
+DISPATCH_POSITION_MATCH_NM = 10.0
+# Keep report geometry consistent with the analysis owner's jump exclusion.
+# Type: float; Units: nautical miles; Scope: consecutive captured positions.
+# Consumers: _recorded_positions and _dispatch_position_series. Rationale: the
+# existing analysis rejects 50-NM single-sample jumps rather than drawing a leg.
+REPORT_POSITION_JUMP_NM = 50.0
 # Type: float; Units: knots per metre per second; Scope: displayed speeds;
 # Consumers: _format_speed; Rationale: convert SI capture values to aviation
 # units without changing source data; value: 1.9438444924406.
@@ -812,6 +833,199 @@ def _axis_limits(minimum: float, maximum: float, attribute: str) -> Tuple[float,
     return lower, upper, minor, major
 
 
+def _dispatch_series(
+    analysis: FlightAnalysis, attribute: str, scale: float, unit: str,
+) -> list[tuple[float | None, float | None, bool]]:
+    """Align timed OFP fixes to observed takeoff through captured simulator time.
+
+    Args:
+        analysis (FlightAnalysis): Recorded samples, phase events and optional OFP.
+        attribute (str): Supported recorded field: altitude_m or fuel_weight_kg.
+        scale (float): Recorded SI-to-displayed-unit multiplier.
+        unit (str): Display unit; planned fuel admits only known kg/lb units.
+    Returns:
+        list[tuple[float | None, float | None, bool]]: Session-elapsed seconds,
+            already converted planned values and explicit gaps. Missing takeoff,
+            simulator clock, compatible units or detailed navlog produces no line.
+    """
+    plan = analysis.dispatch
+    takeoff = next((event for event in analysis.events if event.phase == "takeoff"), None)
+    if plan is None or takeoff is None or attribute not in {"altitude_m", "fuel_weight_kg"}:
+        return []
+    timed = [sample for sample in analysis.samples if sample.simulator_elapsed_seconds is not None]
+    if len(timed) < 2:
+        return []
+    anchor_time = None
+    for left, right in zip(timed, timed[1:]):
+        if left.session_elapsed_seconds <= takeoff.elapsed_seconds <= right.session_elapsed_seconds:
+            host_span = right.session_elapsed_seconds - left.session_elapsed_seconds
+            if (
+                host_span <= 0 or host_span > PROFILE_MAX_BRIDGE_SECONDS
+                or right.discontinuity_before
+                or right.simulator_elapsed_seconds <= left.simulator_elapsed_seconds
+            ):
+                continue
+            fraction = (takeoff.elapsed_seconds - left.session_elapsed_seconds) / host_span
+            anchor_time = left.simulator_elapsed_seconds + fraction * (
+                right.simulator_elapsed_seconds - left.simulator_elapsed_seconds)
+            break
+    if anchor_time is None:
+        return []
+    if attribute == "fuel_weight_kg" and (
+        plan.units.lower() not in {"kg", "kgs", "lb", "lbs"}
+        or unit.rstrip(" *") not in {"kg", "lb"}
+    ):
+        return []
+    points: list[tuple[float | None, float | None, bool]] = []
+    previous_time = -1.0
+    previous_host = None
+    for fix in plan.points:
+        value = fix.altitude_ft if attribute == "altitude_m" else fix.fuel_onboard
+        if fix.elapsed_seconds is None or value is None:
+            points.append((None, None, True))
+            continue
+        if fix.elapsed_seconds < previous_time:
+            points.append((None, None, True))
+            continue
+        previous_time = fix.elapsed_seconds
+        target = anchor_time + fix.elapsed_seconds
+        host_time = None
+        for left, right in zip(timed, timed[1:]):
+            if not left.simulator_elapsed_seconds <= target <= right.simulator_elapsed_seconds:
+                continue
+            if right.session_elapsed_seconds < takeoff.elapsed_seconds:
+                continue
+            span = right.simulator_elapsed_seconds - left.simulator_elapsed_seconds
+            if span <= 0 or right.discontinuity_before:
+                continue
+            if right.session_elapsed_seconds - left.session_elapsed_seconds > PROFILE_MAX_BRIDGE_SECONDS:
+                continue
+            fraction = (target - left.simulator_elapsed_seconds) / span
+            host_time = left.session_elapsed_seconds + fraction * (
+                right.session_elapsed_seconds - left.session_elapsed_seconds)
+            break
+        if host_time is None:
+            points.append((None, None, True))
+            continue
+        if previous_host is not None and any(
+            sample.discontinuity_before
+            and previous_host < sample.session_elapsed_seconds <= host_time
+            for sample in timed
+        ):
+            points.append((None, None, True))
+        previous_host = host_time
+        if attribute == "altitude_m":
+            displayed = value / METRES_TO_FEET * scale
+        else:
+            kilograms = value / POUNDS_PER_KG if plan.units.lower() in {"lb", "lbs"} else value
+            displayed = kilograms * scale
+        points.append((host_time, displayed, False))
+    return points
+
+
+def _dispatch_position_series(
+    analysis: FlightAnalysis, attribute: str, scale: float, unit: str,
+) -> list[tuple[float | None, float | None, bool]]:
+    """Place planned fix values where the recorded trajectory passed nearby.
+
+    Args:
+        analysis (FlightAnalysis): Captured positions and attached timed OFP.
+        attribute (str): Supported altitude_m or fuel_weight_kg profile field.
+        scale (float): Recorded SI-to-displayed-unit multiplier.
+        unit (str): Display unit; fuel requires compatible known kg/lb mass.
+    Returns:
+        list[tuple[float | None, float | None, bool]]: Captured host seconds,
+            converted planned values and breaks. At least two distinct matched
+            positions are required; absent or distant matches return no series.
+            This compares at route positions and does not infer a takeoff time.
+    """
+    plan = analysis.dispatch
+    if plan is None or attribute not in {"altitude_m", "fuel_weight_kg"}:
+        return []
+    if attribute == "fuel_weight_kg" and (
+        plan.units.lower() not in {"kg", "kgs", "lb", "lbs"}
+        or unit.rstrip(" *") not in {"kg", "lb"}
+    ):
+        return []
+    legs: list[tuple[FlightSample, FlightSample, int]] = []
+    block = 0
+    for left, right in zip(analysis.samples, analysis.samples[1:]):
+        span = right.session_elapsed_seconds - left.session_elapsed_seconds
+        distance = _distance_nm(left, right)
+        if (
+            right.discontinuity_before or not 0 < span <= PROFILE_MAX_BRIDGE_SECONDS
+            or distance is None or distance >= REPORT_POSITION_JUMP_NM
+        ):
+            # Reuse captured-route jump exclusion; never match across a gap.
+            block += 1
+            continue
+        legs.append((left, right, block))
+    points: list[tuple[float | None, float | None, bool]] = []
+    previous_host = -1.0
+    previous_block = None
+    for fix in plan.points:
+        value = fix.altitude_ft if attribute == "altitude_m" else fix.fuel_onboard
+        if value is None:
+            points.append((None, None, True))
+            continue
+        best: tuple[float, float, int, FlightSample, float, float] | None = None
+        cosine = math.cos(math.radians(fix.latitude))
+        for left, right, leg_block in legs:
+            # Local equirectangular projection selects a nearby point on each
+            # short captured leg. Final acceptance uses the geodesic owner.
+            ax = (left.longitude_deg - fix.longitude + 180) % 360 - 180
+            bx = (right.longitude_deg - fix.longitude + 180) % 360 - 180
+            if abs(bx - ax) > 180:
+                continue
+            ay = left.latitude_deg - fix.latitude
+            by = right.latitude_deg - fix.latitude
+            dx, dy = (bx - ax) * cosine, by - ay
+            length = dx * dx + dy * dy
+            fraction = (
+                max(0.0, min(1.0, -(ax * cosine * dx + ay * dy) / length))
+                if length else 0.0
+            )
+            host = left.session_elapsed_seconds + fraction * (
+                right.session_elapsed_seconds - left.session_elapsed_seconds)
+            if host <= previous_host:
+                continue
+            squared = (ax * cosine + fraction * dx) ** 2 + (ay + fraction * dy) ** 2
+            if best is None or squared < best[0]:
+                latitude = left.latitude_deg + fraction * (
+                    right.latitude_deg - left.latitude_deg)
+                longitude = (
+                    fix.longitude + ax + fraction * (bx - ax) + 180
+                ) % 360 - 180
+                best = (squared, host, leg_block, left, latitude, longitude)
+        if best is None:
+            points.append((None, None, True))
+            continue
+        _squared, host, leg_block, source, latitude, longitude = best
+        separation = _distance_nm(
+            replace(source, latitude_deg=latitude, longitude_deg=longitude),
+            replace(source, latitude_deg=fix.latitude, longitude_deg=fix.longitude),
+        )
+        if separation is None or separation > DISPATCH_POSITION_MATCH_NM:
+            points.append((None, None, True))
+            continue
+        if previous_block is not None and leg_block != previous_block:
+            points.append((None, None, True))
+        previous_host, previous_block = host, leg_block
+        if attribute == "altitude_m":
+            displayed = value / METRES_TO_FEET * scale
+        else:
+            kilograms = (
+                value / POUNDS_PER_KG
+                if plan.units.lower() in {"lb", "lbs"} else value
+            )
+            displayed = kilograms * scale
+        points.append((host, displayed, False))
+    # A comparison line needs two distinct matched positions, rather than one
+    # coincidental airport/fix shared with an otherwise unrelated flight.
+    matched = sum(host is not None for host, _value, _gap in points)
+    return points if matched >= 2 else []
+
+
 def _profile_chart(
     analysis: FlightAnalysis,
     attribute: str,
@@ -848,7 +1062,10 @@ def _profile_chart(
     Returns:
         Drawing: Rounded enclosing Y range, aligned labels, timed grids and
             measured segments and bounded linear bridges; no inferred samples
-            enter landing analysis, raw storage or measured extrema.
+            enter landing analysis, raw storage or measured extrema. Eligible
+            full-flight altitude/fuel profiles also show a separate OFP plan,
+            aligned through takeoff/simulator clocks or explicitly labelled
+            nearby captured route positions when time alignment is unavailable.
     """
     drawing = Drawing(chart_width, chart_height)
     drawing.add(Rect(0, 4, chart_width - 1, chart_height - 8,
@@ -865,12 +1082,20 @@ def _profile_chart(
     chosen = analysis.samples if samples is None else samples
     points = _chart_series(chosen, attribute)
     valid = [(t, v * scale) for t, v, _gap in points if t is not None and v is not None]
+    planned = _dispatch_series(analysis, attribute, scale, unit) if samples is None else []
+    positional = False
+    # One timed point gives a marker, but a comparison curve needs two points.
+    if samples is None and sum(t is not None for t, _v, _gap in planned) < 2:
+        positions = _dispatch_position_series(analysis, attribute, scale, unit)
+        if positions:
+            planned, positional = positions, True
+    planned_valid = [(t, v) for t, v, _gap in planned if t is not None and v is not None]
     min_x, max_x = x_bounds if x_bounds else (0.0, max(analysis.duration_seconds, 1.0))
     if max_x <= min_x:
         max_x = min_x + 1.0
     low, high, minor, major = _axis_limits(
-        min((v for _t, v in valid), default=0.0),
-        max((v for _t, v in valid), default=1.0), attribute,
+        min((v for _t, v in valid + planned_valid), default=0.0),
+        max((v for _t, v in valid + planned_valid), default=1.0), attribute,
     )
     count = int(round((high - low) / minor))
     for index in range(count + 1):
@@ -957,6 +1182,32 @@ def _profile_chart(
         prior = (elapsed, x, y)
         missing, hard_break = False, False
     _draw_profile_segment(drawing, segment, color)
+    segment = []
+    for elapsed, value, _gap in planned + [(None, None, True)]:
+        if elapsed is None or value is None or not min_x <= elapsed <= max_x:
+            if len(segment) >= 4:
+                drawing.add(PolyLine(segment, strokeColor=_COLOR_PLANNED,
+                    strokeWidth=1.6, strokeDashArray=[5, 3]))
+            elif len(segment) == 2:
+                drawing.add(Circle(*segment, 2, fillColor=_COLOR_PLANNED, strokeColor=None))
+            segment = []
+            continue
+        segment.extend((left + (elapsed - min_x) / span * width,
+                        bottom + (value - low) / (high - low) * height))
+    if planned_valid:
+        legend = "simbrief_position_legend" if positional else "simbrief_overlay_legend"
+        drawing.add(String(chart_width - 16, chart_height - 36,
+            tr(language, legend), textAnchor="end",
+            fontName=_FONT_NAME, fontSize=8, fillColor=_COLOR_MUTED))
+    elif samples is None and attribute in {"altitude_m", "fuel_weight_kg"}:
+        explanation = (
+            "simbrief_comparison_unavailable"
+            if analysis.dispatch else "simbrief_not_attached"
+        )
+        drawing.add(String(chart_width - 16, chart_height - 36,
+            tr(language, explanation),
+            textAnchor="end", fontName=_FONT_NAME, fontSize=8,
+            fillColor=_COLOR_MUTED))
     if not valid:
         drawing.add(String(left + 8, bottom + height / 2, tr(language, "unavailable"),
                            fontName=_FONT_NAME, fontSize=10, fillColor=_COLOR_MUTED))
@@ -992,164 +1243,115 @@ def _draw_profile_segment(
         )
 
 
+def _recorded_positions(analysis: FlightAnalysis) -> list[tuple[float, float] | None]:
+    """Prepare measured route geometry with explicit capture and jump breaks.
+
+    Args:
+        analysis (FlightAnalysis): Immutable recorded aircraft samples.
+    Returns:
+        list[tuple[float, float] | None]: Latitude/longitude pairs with None
+            separators for missing positions, discontinuities or 50 NM jumps.
+    """
+    points: list[tuple[float, float] | None] = []
+    previous = None
+    for sample in analysis.samples:
+        if sample.discontinuity_before or sample.latitude_deg is None or sample.longitude_deg is None:
+            points.append(None)
+            previous = None
+        if sample.latitude_deg is not None and sample.longitude_deg is not None:
+            distance = _distance_nm(previous, sample) if previous is not None else None
+            # Match the existing analysis distance owner's 50 NM jump exclusion.
+            if distance is not None and distance >= REPORT_POSITION_JUMP_NM:
+                points.append(None)
+            points.append((sample.latitude_deg, sample.longitude_deg))
+            previous = sample
+    return points
+
+
 def _route_chart(
     analysis: FlightAnalysis, language: str,
     chart_width: float = CHART_WIDTH, chart_height: float = CHART_HEIGHT,
+    cache: Path | None = None, *, planned: bool = False, light: bool = True,
 ) -> Drawing:
-    """Draw only captured aircraft positions and preserve all coordinate gaps.
+    """Draw printable OSM backgrounds beneath vector recorded/planned routes.
 
     Args:
-        analysis (FlightAnalysis): Ordered user-aircraft position samples.
-        language (str): Language used for the route heading.
-        chart_width (float): Landscape panel width in PDF points.
-        chart_height (float): Landscape panel height in PDF points.
-
+        analysis (FlightAnalysis): Recorded samples and optional OFP geometry.
+        language (str): Supported route/legend language.
+        chart_width (float): Panel width in PDF points.
+        chart_height (float): Panel height in PDF points.
+        cache (Path | None): Private tile cache; None uses the offline background.
+        planned (bool): Use the comparison-map heading for the full-page view.
+        light (bool): Fade the overview basemap so recorded detail stays prominent.
     Returns:
-        Drawing: Recorded aircraft-position chart; no camera route is inferred.
+        Drawing: Native 300-dpi tile background with vector tracks, labels and
+            attribution; gaps and the international dateline remain explicit.
     """
     drawing = Drawing(chart_width, chart_height)
     drawing.add(Rect(0, 4, chart_width - 1, chart_height - 8,
                      fillColor=colors.white, strokeColor=_COLOR_GRID,
                      strokeWidth=0.6, rx=8))
-    drawing.add(
-        String(
-            15,
-            chart_height - 23,
-            tr(language, "aircraft_track"),
-            fontName=_FONT_BOLD,
-            fontSize=11,
-            fillColor=_COLOR_INK,
-        )
-    )
-    coordinates: List[Tuple[Optional[float], Optional[float], bool]] = []
-    for sample in analysis.samples:
-        latitude = sample.latitude_deg
-        longitude = sample.longitude_deg
-        if sample.discontinuity_before is not None:
-            coordinates.append((None, None, True))
-        if latitude is None or longitude is None:
-            coordinates.append((None, None, True))
-            continue
-        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
-            coordinates.append((None, None, True))
-            continue
-        coordinates.append((float(longitude), float(latitude), False))
-    unwrapped_coordinates: List[
-        Tuple[Optional[float], Optional[float], bool]
-    ] = []
-    previous_longitude: Optional[float] = None
-    for longitude, latitude, break_before in coordinates:
-        if break_before or longitude is None or latitude is None:
-            unwrapped_coordinates.append((None, None, True))
-            previous_longitude = None
-            continue
-        adjusted_longitude = longitude
-        if previous_longitude is not None:
-            while adjusted_longitude - previous_longitude > 180.0:
-                adjusted_longitude -= 360.0
-            while adjusted_longitude - previous_longitude < -180.0:
-                adjusted_longitude += 360.0
-        unwrapped_coordinates.append(
-            (adjusted_longitude, latitude, False)
-        )
-        previous_longitude = adjusted_longitude
-    coordinates = unwrapped_coordinates
-    valid_coordinates = [
-        (longitude, latitude)
-        for longitude, latitude, _ in coordinates
-        if longitude is not None and latitude is not None
-    ]
-    left, bottom = 61, 38
-    width, height = chart_width - 80, chart_height - 108
-    if not valid_coordinates:
-        drawing.add(
-            String(
-                left,
-                bottom + height / 2,
-                tr(language, "unavailable"),
-                fontName=_FONT_NAME,
-                fontSize=9,
-                fillColor=_COLOR_MUTED,
-            )
-        )
+    title = tr(language, "simbrief_compare_route" if planned else "aircraft_track")
+    drawing.add(String(15, chart_height - 23, title,
+        fontName=_FONT_BOLD, fontSize=11, fillColor=_COLOR_INK))
+    recorded = _recorded_positions(analysis)
+    dispatch = [(p.latitude, p.longitude) for p in analysis.dispatch.points] if analysis.dispatch else []
+    points = recorded + [None] + dispatch
+    left, bottom = 12, 38
+    width, height = chart_width - 24, chart_height - 77
+    size = print_size(width, height)
+    viewport = map_viewport(points, size)
+    if viewport is None:
+        drawing.add(String(left, bottom + height / 2, tr(language, "unavailable"),
+            fontName=_FONT_NAME, fontSize=9, fillColor=_COLOR_MUTED))
         return drawing
-    min_x = min(point[0] for point in valid_coordinates)
-    max_x = max(point[0] for point in valid_coordinates)
-    min_y = min(point[1] for point in valid_coordinates)
-    max_y = max(point[1] for point in valid_coordinates)
-    longitude_scale = max(0.01, math.cos(math.radians((min_y + max_y) / 2)))
-    span_x = max((max_x - min_x) * longitude_scale, 0.0001)
-    span_y = max(max_y - min_y, 0.0001)
-    scale = min(width / span_x, height / span_y)
-    offset_x = left + (width - span_x * scale) / 2
-    offset_y = bottom + (height - span_y * scale) / 2
-    for fraction in (0.0, 0.25, 0.5, 0.75, 1.0):
-        x = offset_x + fraction * span_x * scale
-        y = offset_y + fraction * span_y * scale
-        drawing.add(Line(x, bottom, x, bottom + height, strokeColor=_COLOR_MINOR_GRID, strokeWidth=0.4))
-        drawing.add(Line(left, y, left + width, y, strokeColor=_COLOR_MINOR_GRID, strokeWidth=0.4))
-        longitude = (min_x + (max_x - min_x) * fraction + 180) % 360 - 180
-        drawing.add(String(x, bottom - 14, format(longitude, ".2f") + "°", textAnchor="middle", fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
-        drawing.add(String(left - 5, y - 2, format(min_y + (max_y - min_y) * fraction, ".2f") + "°", textAnchor="end", fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
-    drawing.add(String(left + width / 2, 10, tr(language, "longitude"), textAnchor="middle", fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
-    drawing.add(String(15, chart_height - 44, tr(language, "latitude"), fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
-    drawing.add(String(chart_width - 15, chart_height - 23, "N ↑", textAnchor="end", fontName=_FONT_NAME, fontSize=9, fillColor=_COLOR_MUTED))
-    drawing.add(Circle(20, chart_height - 60, 2, fillColor=_COLOR_GREEN, strokeColor=None))
-    drawing.add(String(27, chart_height - 63, tr(language, "track_start"), fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
-    drawing.add(Circle(chart_width / 2 + 8, chart_height - 60, 2, fillColor=_COLOR_INK, strokeColor=None))
-    drawing.add(String(chart_width / 2 + 15, chart_height - 63, tr(language, "track_end"), fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
-    drawing.add(
-        Line(
-            left,
-            bottom,
-            left + width,
-            bottom,
-            strokeColor=_COLOR_GRID,
-            strokeWidth=0.5,
-        )
-    )
-    drawing.add(
-        Line(
-            left,
-            bottom,
-            left,
-            bottom + height,
-            strokeColor=_COLOR_GRID,
-            strokeWidth=0.5,
-        )
-    )
-    segment: List[float] = []
-    drawn_points: List[Tuple[float, float]] = []
-    for longitude, latitude, break_before in coordinates:
-        if break_before or longitude is None or latitude is None:
-            _draw_route_segment(drawing, segment)
-            segment = []
-            if longitude is None or latitude is None:
+    image = render_map(points, cache, size=size,
+        fade=MAP_OVERVIEW_FADE if light else 0.0, draw_track=False)
+    if image:
+        raster = PillowImage.open(io.BytesIO(image))
+        raster.load()
+        drawing.add(MapShape(left, bottom, width, height, raster))
+        if raster.info.get("tile_status") == "unavailable":
+            drawing.add(String(left, 28, tr(language, "map_tiles_unavailable"),
+                fontName=_FONT_NAME, fontSize=7, fillColor=_COLOR_MUTED))
+    drawing.add(String(left, 16,
+        "© OpenStreetMap contributors · openstreetmap.org/copyright",
+        fontName=_FONT_NAME, fontSize=7, fillColor=_COLOR_MUTED))
+    recorded_count = len(recorded)
+    split = recorded_count + 1
+    for subset, color, dashed in (
+        (viewport.points[split:], _COLOR_PLANNED, True),
+        (viewport.points[:recorded_count], _COLOR_BLUE, False),
+    ):
+        segment: List[float] = []
+        for point in list(subset) + [None]:
+            if point is None:
+                if len(segment) >= 4:
+                    drawing.add(PolyLine(segment, strokeColor=color,
+                        strokeWidth=1.7, strokeDashArray=[5, 3] if dashed else None))
+                elif len(segment) == 2:
+                    drawing.add(Circle(*segment, 2, fillColor=color, strokeColor=None))
+                segment = []
                 continue
-        x = offset_x + (longitude - min_x) * longitude_scale * scale
-        y = offset_y + (latitude - min_y) * scale
-        segment.extend([x, y])
-        drawn_points.append((x, y))
-    _draw_route_segment(drawing, segment)
-    if drawn_points:
-        drawing.add(
-            Circle(
-                drawn_points[0][0],
-                drawn_points[0][1],
-                3,
-                fillColor=_COLOR_GREEN,
-                strokeColor=None,
-            )
-        )
-        drawing.add(
-            Circle(
-                drawn_points[-1][0],
-                drawn_points[-1][1],
-                3,
-                fillColor=_COLOR_INK,
-                strokeColor=None,
-            )
-        )
+            x = left + (point[0] * viewport.world - viewport.left) / size[0] * width
+            y = bottom + height - (point[1] * viewport.world - viewport.top) / size[1] * height
+            segment.extend((x, y))
+    actual = [point for point in viewport.points[:recorded_count] if point is not None]
+    for point, color in ((actual[0], _COLOR_GREEN), (actual[-1], _COLOR_INK)) if actual else ():
+        x = left + (point[0] * viewport.world - viewport.left) / size[0] * width
+        y = bottom + height - (point[1] * viewport.world - viewport.top) / size[1] * height
+        drawing.add(Circle(x, y, 3, fillColor=color, strokeColor=colors.white, strokeWidth=0.5))
+    planned_points = [point for point in viewport.points[split:] if point is not None]
+    if planned_points and analysis.dispatch:
+        for point, code in ((planned_points[0], analysis.dispatch.origin),
+                            (planned_points[-1], analysis.dispatch.destination)):
+            x = left + (point[0] * viewport.world - viewport.left) / size[0] * width
+            y = bottom + height - (point[1] * viewport.world - viewport.top) / size[1] * height
+            drawing.add(String(x + 5, y + 5, code, fontName=_FONT_BOLD,
+                fontSize=8, fillColor=_COLOR_PLANNED))
+    drawing.add(String(chart_width - 14, chart_height - 36,
+        tr(language, "recorded_short") + (" / " + tr(language, "planned_short") if dispatch else ""),
+        textAnchor="end", fontName=_FONT_NAME, fontSize=7, fillColor=_COLOR_MUTED))
     return drawing
 
 
@@ -2555,13 +2757,17 @@ def _landing_visuals(
     return story
 
 
-def _build_story(analysis: FlightAnalysis, language: str, analysis_sha256: str) -> List[Flowable]:
+def _build_story(
+    analysis: FlightAnalysis, language: str, analysis_sha256: str,
+    map_cache: Path | None = None,
+) -> List[Flowable]:
     """Arrange unchanged report content into landscape overview and paired profiles.
 
     Args:
         analysis (FlightAnalysis): Immutable shared flight-analysis model.
         language (str): Supported output language.
         analysis_sha256 (str): Private canonical identity retained in PDF metadata.
+        map_cache (Path | None): Private tile directory, or None for offline previews.
 
     Returns:
         List[Flowable]: Wide overview, two profiles per page and landing spreads;
@@ -2589,7 +2795,7 @@ def _build_story(analysis: FlightAnalysis, language: str, analysis_sha256: str) 
     story.extend([
         _panel_row([
             overview,
-            _route_chart(analysis, language, CHART_WIDTH - metric_width - 8, 240),
+            _route_chart(analysis, language, CHART_WIDTH - metric_width - 8, 240, map_cache),
         ], [metric_width, CHART_WIDTH - metric_width]),
         _paragraph(tr(language, "phase_timeline"), styles["heading"]),
         _phase_infographic(analysis, language),
@@ -2624,6 +2830,134 @@ def _build_story(analysis: FlightAnalysis, language: str, analysis_sha256: str) 
         notes.append(tr(language, "capture_warning"))
     if notes:
         story.append(_paragraph(" · ".join(notes), styles["small"]))
+    return story
+
+
+def _dispatch_pages(analysis: FlightAnalysis, language: str) -> List[Flowable]:
+    """Present optional dispatch identity, loading, schedule and fuel planning.
+
+    Args:
+        analysis (FlightAnalysis): Recorded analysis with optional planned OFP data.
+        language (str): Supported report edition.
+    Returns:
+        List[Flowable]: Two factual planning pages, or no pages without an OFP;
+            missing values remain unknown and never become observed quantities.
+    """
+    plan = analysis.dispatch
+    if plan is None:
+        return []
+    styles = _styles()
+    unknown = tr(language, "unavailable")
+
+    def value(text: str, unit: str = "") -> str:
+        """Format a finite planned scalar without converting absent data to zero.
+
+        Args:
+            text (str): Normalized optional provider number.
+            unit (str): Explicit original or declared display unit.
+        Returns:
+            str: Localized value/unit, or the unknown label for missing data.
+        """
+        try:
+            numeric = float(text)
+            if not math.isfinite(numeric) or numeric < 0:
+                return unknown
+            formatted = str(int(numeric)) if numeric.is_integer() else _number(numeric, language)
+            return formatted + (" " + unit if unit else "")
+        except ValueError:
+            return unknown
+
+    def duration(text: str) -> str:
+        """Format provider duration seconds without inventing an estimate.
+
+        Args:
+            text (str): Optional provider duration in seconds.
+        Returns:
+            str: Duration label or unknown when the source has no valid duration.
+        """
+        try:
+            seconds = float(text)
+            return _format_duration(seconds, language) if math.isfinite(seconds) and seconds >= 0 else unknown
+        except ValueError:
+            return unknown
+
+    def scheduled_time(text: str) -> str:
+        """Show a normalized OFP schedule without technical ISO suffixes.
+
+        Args:
+            text (str): Optional timezone-aware ISO schedule value.
+        Returns:
+            str: Human-readable UTC date and minute, or the unknown label.
+        """
+        try:
+            stamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            return stamp.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M") if stamp.tzinfo else unknown
+        except ValueError:
+            return unknown
+
+    unit = {"kgs": "kg", "kg": "kg", "lbs": "lb", "lb": "lb"}.get(plan.units.lower(), "")
+    weight = lambda text: value(text, unit) if unit else unknown
+    identity = plan.flight_number or plan.callsign or unknown
+    route = plan.origin + " → " + plan.destination
+    story: List[Flowable] = [
+        PageBreak(), _paragraph(tr(language, "simbrief_dispatch_title"), styles["title"]),
+        _paragraph(_safe_source_text(identity + " · " + route), styles["subtitle"]),
+        _paragraph(_safe_source_text((plan.origin_name or plan.origin) + " → "
+            + (plan.destination_name or plan.destination)), styles["small"]),
+        _visual_metrics([
+            (tr(language, "simbrief_passengers"), value(plan.passengers)),
+            (tr(language, "simbrief_cargo"), weight(plan.cargo)),
+            (tr(language, "simbrief_payload"), weight(plan.payload)),
+            (tr(language, "simbrief_distance"), value(plan.distance_nm, "NM")),
+            (tr(language, "simbrief_duration"), duration(plan.duration_seconds)),
+            (tr(language, "simbrief_cruise"), value(plan.cruise_altitude_ft, "ft AMSL")),
+            (tr(language, "simbrief_registration"), _safe_source_text(plan.registration or unknown)),
+            (tr(language, "simbrief_callsign"), _safe_source_text(plan.callsign or identity)),
+            (tr(language, "simbrief_cost_index"), value(plan.cost_index)),
+            (tr(language, "simbrief_runways"), _safe_source_text((plan.origin_runway or "—") + " → " + (plan.destination_runway or "—"))),
+            (tr(language, "simbrief_alternate"), _safe_source_text(plan.alternate or unknown)),
+            ("AIRAC", _safe_source_text(plan.airac or unknown)),
+        ], language),
+        _paragraph(tr(language, "simbrief_schedule") + ": "
+            + scheduled_time(plan.scheduled_departure_utc) + " → "
+            + scheduled_time(plan.scheduled_arrival_utc), styles["small"]),
+        _paragraph(tr(language, "simbrief_evidence"), styles["small"]),
+        PageBreak(), _paragraph(tr(language, "simbrief_fuel_load_title"), styles["title"]),
+        _visual_metrics([
+            (tr(language, "simbrief_fuel"), weight(plan.fuel)),
+            (tr(language, "simbrief_trip_fuel"), weight(plan.fuel_trip)),
+            (tr(language, "simbrief_taxi_fuel"), weight(plan.fuel_taxi)),
+            (tr(language, "simbrief_reserve_fuel"), weight(plan.fuel_reserve)),
+            (tr(language, "simbrief_contingency"), weight(plan.fuel_contingency)),
+            (tr(language, "simbrief_zfw"), weight(plan.zero_fuel_weight)),
+            (tr(language, "simbrief_tow"), weight(plan.takeoff_weight)),
+            (tr(language, "simbrief_ldw"), weight(plan.landing_weight)),
+            (tr(language, "simbrief_aircraft"), _safe_source_text(plan.aircraft or unknown)),
+        ], language),
+        _paragraph(tr(language, "simbrief_alignment_note"), styles["small"]),
+        _paragraph(tr(language, "simbrief_evidence"), styles["small"]),
+        _paragraph(tr(language, "simbrief_route_text"), styles["heading"]),
+        _paragraph(_safe_source_text(plan.route or unknown), styles["small"]),
+    ]
+    return story
+
+
+def _map_pages(analysis: FlightAnalysis, language: str, cache: Path) -> List[Flowable]:
+    """Finish with a print-quality vector route comparison after dispatch pages.
+
+    Args:
+        analysis (FlightAnalysis): Recorded trajectory and optional OFP route.
+        language (str): Supported report language.
+        cache (Path): Private native-tile cache shared by all editions.
+    Returns:
+        List[Flowable]: Optional planning pages followed by the full-width map.
+    """
+    story = _dispatch_pages(analysis, language)
+    story.extend([
+        PageBreak(),
+        _route_chart(analysis, language, CHART_WIDTH, CHART_WIDTH / 2,
+                     cache, planned=analysis.dispatch is not None, light=False),
+    ])
     return story
 
 
@@ -2714,7 +3048,8 @@ def render_report(
             analysis_sha256=analysis_sha256,
         )
         document.build(
-            _build_story(analysis, language, analysis_sha256),
+            _build_story(analysis, language, analysis_sha256, target.parent / ".metadata" / "map-tiles")
+            + _map_pages(analysis, language, target.parent / ".metadata" / "map-tiles"),
             onFirstPage=page_callback,
             onLaterPages=page_callback,
         )
@@ -2800,6 +3135,9 @@ def render_reports(
             readable_pdf_name(
                 analysis.samples[0].recorded_utc if analysis.samples else "Flight",
                 analysis.aircraft or "Aircraft", language, number,
+                flight_number=analysis.dispatch.flight_number if analysis.dispatch else "",
+                origin=analysis.dispatch.origin if analysis.dispatch else "",
+                destination=analysis.dispatch.destination if analysis.dispatch else "",
             )
         )
         rendered = render_report(analysis, language, target)

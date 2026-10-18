@@ -82,7 +82,8 @@ class FinalizationWorker(threading.Thread):
                 ignored in local mode.
             revoke (Callable[[], None]): Send revocation and queue its GUI result;
                 never called in local mode.
-            wants_revoke (bool): Explicit confirmation for this app session.
+            wants_revoke (bool): Explicit Finish click or direct Revoke
+                confirmation authorizing this app session's final barrier.
             local_reports (bool): Render one stopped session locally without
                 draining workers, uploading, changing receipts or revoking.
             emit (Callable[[str, str], None] | None): Optional thread-safe
@@ -313,10 +314,18 @@ class FinalizationWorker(threading.Thread):
             self.save_local_result("cancelled", str(exc))
             self.update("cancelled", str(exc))
         except Exception as exc:
-            self.save_local_result("error", f"{type(exc).__name__}: {exc}")
+            detail = str(exc)
+            if isinstance(exc, ModuleNotFoundError) and exc.name in {
+                "reportlab", "pypdf", "PIL",
+            }:
+                # Source launches can use a different interpreter from the
+                # installer. Keep recovery tied to that executable and retain
+                # recorded data instead of treating missing packages as damage.
+                detail = "pdf_dependency_missing:" + str(exc.name)
+            self.save_local_result("error", f"{type(exc).__name__}: {detail}")
             with self._lock:
-                self.update("error", str(exc))
-                self._progress.error = str(exc)
+                self.update("error", detail)
+                self._progress.error = detail
 
     def save_local_result(self, phase: str, error: str = "") -> None:
         """Persist local render progress separately from remote delivery state.
@@ -491,7 +500,7 @@ class FinalizationWorker(threading.Thread):
             None: Completed flag is written only after required receipts exist.
 
         Raises:
-            RuntimeError: Required landing evidence or delivery capability fails.
+            RuntimeError: Required delivery capability is unavailable.
         """
         analysis = analyze_session(plan.directory)
         self.update("analyzing", plan.session_id, advance=True)
@@ -507,11 +516,9 @@ class FinalizationWorker(threading.Thread):
             )
             plan.save()
             return
-        if not analysis.landings or not analysis.completed:
-            raise RuntimeError(
-                "No verified landing. Recording is retained; choose local-only "
-                "completion or retry after reviewing this partial flight."
-            )
+        # An explicitly finished airborne-start, diversion or partial recording
+        # still gets a report. Its analysis keeps incomplete/unknown evidence;
+        # finalization completion never fabricates takeoff or landing facts.
         from uploader.flight_delivery import (
             check_report_capability,
             deliver_report,
