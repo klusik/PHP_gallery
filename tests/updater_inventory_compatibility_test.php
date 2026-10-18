@@ -5,8 +5,10 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/updater_inventory_compatibility_test.php
  * Module Type: Updater Compatibility Regression Test
- * Purpose: Validate incoming release membership using the installed pre-WinApp archive reader.
- * Responsibilities: Reproduce the old rejection, prove additive companion compatibility and preserve updater scope.
+ * Purpose: Validate incoming releases with frozen pre-WinApp and companion-aware installed readers.
+ * Responsibilities:
+ *   - Reproduce both reported inventory rejections
+ *   - Prove additive companion/resource compatibility with retained updater scope
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -15,9 +17,15 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/release_file_policy.php';
 require_once __DIR__ . '/fixtures/updater_inventory_before_winapp.php';
+require_once __DIR__ . '/fixtures/updater_inventory_before_resources.php';
 
 use function Gallery\Core\release_file_policy_read;
 use function Gallery\Core\release_file_policy_archive_updater_paths;
+use function Gallery\Core\release_file_policy_paths;
+use function Gallery\Tests\CompanionInstalledPolicy\{
+    release_file_policy_archive_updater_paths as companion_installed_archive_paths,
+    release_file_policy_read as companion_installed_policy_read
+};
 use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_archive_updater_paths as installed_archive_paths;
 use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_paths as installed_policy_paths;
 use function Gallery\Tests\LegacyUpdatePolicy\release_file_policy_read as installed_policy_read;
@@ -63,9 +71,53 @@ updater_inventory_compatibility_assert(installed_policy_read($root)['updater_fil
     'The installed reader refused the real incoming release inventory or changed its activation set.');
 updater_inventory_compatibility_assert(installed_policy_paths($root, 'updater') === $inventory['updater_files'],
     'The incoming release is missing a path required by the installed updater.');
+updater_inventory_compatibility_assert(
+    companion_installed_policy_read($root)['updater_files']
+        === $inventory['updater_files'],
+    'The installed 0.135.1 reader rejected the real incoming inventory.'
+);
+$resources = [
+    'winapp/uploader/resources/DejaVuSans.ttf',
+    'winapp/uploader/resources/LICENSE_DEJAVU',
+];
+updater_inventory_compatibility_assert($inventory['companion_resource_files'] === $resources,
+    'The real generated inventory did not isolate the new font and license in its additive field.');
 
 $fixture = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-old-updater-' . bin2hex(random_bytes(5));
 try {
+    // The running checkout also contains generated scanner/test artifacts.
+    // Only an isolated inventory snapshot models the actual incoming package.
+    $incomingRoot = $fixture . '/incoming';
+    foreach (release_file_policy_paths($root) as $path) {
+        $destination = $incomingRoot . '/' . $path;
+        if (!is_dir(dirname($destination))
+            && !mkdir(dirname($destination), 0777, true)) {
+            throw new RuntimeException('Could not create incoming package fixture.');
+        }
+        if (!copy($root . '/' . $path, $destination)) {
+            throw new RuntimeException('Could not copy incoming package fixture.');
+        }
+    }
+    updater_inventory_compatibility_assert(
+        companion_installed_archive_paths($incomingRoot)['files']
+            === $inventory['updater_files'],
+        'The real incoming package changed installed activation ownership.'
+    );
+    $unlisted = $incomingRoot . '/app/unlisted-compatibility.php';
+    file_put_contents($unlisted, "unlisted fixture\n");
+    $refused = false;
+    try {
+        companion_installed_archive_paths($incomingRoot);
+    } catch (RuntimeException $exception) {
+        $refused = $exception->getMessage()
+            === 'Update archive contains unexpected updater-owned files.';
+    }
+    updater_inventory_compatibility_assert(
+        $refused,
+        'The installed reader accepted an unlisted file in the real package.'
+    );
+    unlink($unlisted);
+
     $production = ['app/production-files.json', 'app/runtime.php', 'winapp/.htaccess'];
     $companion = ['winapp/uploader/media.py'];
     $payload = [
@@ -104,6 +156,47 @@ try {
         'The installed updater refused the additive inventory or activated companion sources.');
     updater_inventory_compatibility_assert(release_file_policy_archive_updater_paths($fixture) === $expected,
         'Current and installed updater activation scopes disagree.');
+
+    foreach ($resources as $path) {
+        $absolute = $fixture . '/' . $path;
+        if (!is_dir(dirname($absolute)) && !mkdir(dirname($absolute), 0777, true)) {
+            throw new RuntimeException('Could not create the companion resource fixture.');
+        }
+        file_put_contents($absolute, "resource fixture\n");
+    }
+    $brokenResources = $payload;
+    $brokenResources['companion_files'] = array_merge($companion, $resources);
+    sort($brokenResources['companion_files'], SORT_STRING);
+    file_put_contents($sidecar, json_encode($brokenResources, JSON_THROW_ON_ERROR));
+    $reference = null;
+    try {
+        companion_installed_archive_paths($fixture);
+    } catch (RuntimeException $exception) {
+        $reference = strtoupper(substr(hash('sha256', $exception->getMessage()), 0, 12));
+    }
+    updater_inventory_compatibility_assert($reference === 'C35BC3B622B0',
+        'The actual 0.135.1 reader did not reproduce the reported resource rejection.');
+    updater_inventory_compatibility_assert(
+        release_file_policy_archive_updater_paths($fixture) === $expected,
+        'Current readers must retain the published 0.136 inventory shape.'
+    );
+
+    $payload['companion_resource_files'] = $resources;
+    file_put_contents($sidecar, json_encode($payload, JSON_THROW_ON_ERROR));
+    foreach ([
+        installed_archive_paths(...),
+        companion_installed_archive_paths(...),
+        release_file_policy_archive_updater_paths(...),
+    ] as $reader) {
+        updater_inventory_compatibility_assert($reader($fixture) === $expected,
+            'An additive resource field changed or blocked the installed CMS activation set.');
+    }
+    $allPackagePaths = array_merge($production, $companion, $resources);
+    sort($allPackagePaths, SORT_STRING);
+    updater_inventory_compatibility_assert(
+        release_file_policy_paths($fixture) === $allPackagePaths,
+        'Production distribution lost the font or license during compatibility.'
+    );
 
     file_put_contents($fixture . '/app/unlisted.php', "unlisted\n");
     $refused = false;

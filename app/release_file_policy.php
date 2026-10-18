@@ -37,7 +37,14 @@ function release_file_policy_root(string $rootPath): string
  * Read and validate the static production file inventory.
  *
  * @param string $rootPath Application root containing app/production-files.json.
- * @return array{schema_version:int,production_files:list<string>,companion_files:list<string>,updater_files:list<string>,source_review_files:list<string>} Validated inventory.
+ * @return array{
+ *     schema_version:int,
+ *     production_files:list<string>,
+ *     companion_files:list<string>,
+ *     companion_resource_files:list<string>,
+ *     updater_files:list<string>,
+ *     source_review_files:list<string>
+ * } Validated inventory, including optional non-updater companion resources.
  * @throws RuntimeException When the inventory is missing, malformed, unsafe, duplicated, or unsorted.
  */
 function release_file_policy_read(string $rootPath): array
@@ -57,16 +64,26 @@ function release_file_policy_read(string $rootPath): array
         || !is_array($manifest['production_files'])
         || !is_array($manifest['updater_files'])
         || !is_array($manifest['source_review_files'])
-        || (array_key_exists('companion_files', $manifest) && !is_array($manifest['companion_files']))) {
+        || (array_key_exists('companion_files', $manifest)
+            && !is_array($manifest['companion_files']))
+        || (array_key_exists('companion_resource_files', $manifest)
+            && !is_array($manifest['companion_resource_files']))) {
         throw new RuntimeException('Production file inventory has an unsupported or invalid schema.');
     }
 
     $productionFiles = release_file_policy_validate_path_list($manifest['production_files']);
     // Schema-1 readers shipped before companion distribution ignore this additive field.
     $companionFiles = release_file_policy_validate_path_list($manifest['companion_files'] ?? []);
+    // Installed 0.135.1 readers validate companion_files with their old allowlist.
+    // Keep newly introduced resources in an additive field those readers ignore.
+    $companionResources = release_file_policy_validate_path_list(
+        $manifest['companion_resource_files'] ?? []
+    );
     $updaterFiles = release_file_policy_validate_path_list($manifest['updater_files']);
     $sourceReviewFiles = release_file_policy_validate_path_list($manifest['source_review_files']);
-    $allPackagePaths = array_merge($productionFiles, $companionFiles, $sourceReviewFiles);
+    $allPackagePaths = array_merge(
+        $productionFiles, $companionFiles, $companionResources, $sourceReviewFiles
+    );
     sort($allPackagePaths, SORT_STRING);
     release_file_policy_validate_path_list($allPackagePaths);
     $productionSet = array_fill_keys($productionFiles, true);
@@ -80,6 +97,14 @@ function release_file_policy_read(string $rootPath): array
         if (!release_file_policy_is_production_path($path)
             || !release_file_policy_is_winapp_source_path($path) || release_file_policy_is_updater_path($path)) {
             throw new RuntimeException('Companion inventory entries must be approved non-updater WinApp files.');
+        }
+    }
+    foreach ($companionResources as $path) {
+        if (!release_file_policy_is_winapp_resource_path($path)
+            || release_file_policy_is_updater_path($path)) {
+            throw new RuntimeException(
+                'Companion resource inventory contains an unapproved or updater-owned path.'
+            );
         }
     }
     foreach ($updaterFiles as $path) {
@@ -103,6 +128,7 @@ function release_file_policy_read(string $rootPath): array
         'schema_version' => 1,
         'production_files' => $productionFiles,
         'companion_files' => $companionFiles,
+        'companion_resource_files' => $companionResources,
         'updater_files' => $updaterFiles,
         'source_review_files' => $sourceReviewFiles,
     ];
@@ -155,21 +181,42 @@ function release_file_policy_is_production_path(string $relativePath): bool
  */
 function release_file_policy_is_winapp_source_path(string $relativePath): bool
 {
-    if (in_array($relativePath, [
-        'winapp/README.md', 'winapp/VERSION', 'winapp/SimConnect.dll',
-        'winapp/build.bat', 'winapp/build_installer.py', 'winapp/installer.iss',
-        'winapp/gallery_http_monitor.py', 'winapp/gallery_watch_upload.pyw',
-        'winapp/install.bat', 'winapp/run_gallery_watcher.bat',
-        'winapp/requirements.txt', 'winapp/requirements-build.txt',
-        'winapp/assets/tray-icon.ico', 'winapp/assets/tray-icon.png',
-        'winapp/uploader/resources/DejaVuSans.ttf',
-        'winapp/uploader/resources/LICENSE_DEJAVU',
-    ], true)) {
+    if (release_file_policy_is_winapp_resource_path($relativePath)
+        || in_array($relativePath, [
+            'winapp/README.md',
+            'winapp/VERSION',
+            'winapp/SimConnect.dll',
+            'winapp/build.bat',
+            'winapp/build_installer.py',
+            'winapp/installer.iss',
+            'winapp/gallery_http_monitor.py',
+            'winapp/gallery_watch_upload.pyw',
+            'winapp/install.bat',
+            'winapp/run_gallery_watcher.bat',
+            'winapp/requirements.txt',
+            'winapp/requirements-build.txt',
+            'winapp/assets/tray-icon.ico',
+            'winapp/assets/tray-icon.png',
+        ], true)) {
         return true;
     }
 
     return str_starts_with($relativePath, 'winapp/uploader/')
         && strtolower(pathinfo($relativePath, PATHINFO_EXTENSION)) === 'py';
+}
+
+/**
+ * Identify exact non-updater resources introduced after installed readers.
+ *
+ * @param string $relativePath Project-relative candidate using forward slashes.
+ * @return bool True only for the reviewed font and its redistribution license.
+ */
+function release_file_policy_is_winapp_resource_path(string $relativePath): bool
+{
+    return in_array($relativePath, [
+        'winapp/uploader/resources/DejaVuSans.ttf',
+        'winapp/uploader/resources/LICENSE_DEJAVU',
+    ], true);
 }
 
 /**
@@ -299,14 +346,19 @@ function release_file_policy_is_safe_relative_path(string $relativePath): bool
  *
  * @param string $rootPath Application root containing the inventory.
  * @param string $profile Production distribution or updater activation profile.
- * @return list<string> Sorted project-relative package paths.
+ * @return list<string> Sorted CMS and companion/resource production paths,
+ *     or only CMS activation paths for the updater profile.
  * @throws RuntimeException When the profile is invalid or an inventory path is missing or unsafe.
  */
 function release_file_policy_paths(string $rootPath, string $profile = 'production'): array
 {
     $inventory = release_file_policy_read($rootPath);
     if ($profile === 'production') {
-        $paths = array_merge($inventory['production_files'], $inventory['companion_files']);
+        $paths = array_merge(
+            $inventory['production_files'],
+            $inventory['companion_files'],
+            $inventory['companion_resource_files']
+        );
         sort($paths, SORT_STRING);
     } elseif ($profile === 'updater') {
         $paths = $inventory['updater_files'];

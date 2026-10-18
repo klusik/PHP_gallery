@@ -1,5 +1,38 @@
 # Patch notes
 
+## Version 0.136.1
+
+Preserved compatibility with installed companion-aware updaters when packaging WinApp font and license resources. Updated production inventory generation, regression coverage, and permanent documentation; no database schema or WinApp binary/version changes were made.
+
+### Highlights
+
+#### Companion resource compatibility
+- Added an optional `companion_resource_files` inventory field for the WinApp DejaVu font and redistribution license, allowing installed 0.135.1 companion-aware updaters to accept incoming CMS packages.
+- Preserved published inventory shapes, strict resource path validation, and existing CMS activation and deletion ownership.
+
+### Technical Details
+
+#### Backend and packaging
+- Updated `app/release_file_policy.php` to accept the previously published companion-list shape and validate additive companion resource paths.
+- Updated `scripts/generate_production_files.php` to report companion files and resources together.
+- Added `companion_resource_files` entries to `app/production-files.json` and `app/core-manifest.json`.
+
+#### Tests and documentation
+- Added a trusted installed-reader fixture for the 0.135.1 updater and regression coverage for additive resource compatibility, activation ownership, invalid inventories, and exact font and license bytes in folder and ZIP packages.
+- Updated architecture, testing, compatibility, and production-file documentation, along with all four TeX manual sources.
+- Documented that after a failed pre-activation update, administrators should cancel it before selecting a corrected newer package; retrying the same incompatible build will not correct its inventory.
+
+### User Impact
+
+#### For administrators
+- Administrators using installed 0.135.1 companion-aware updaters could update with packages containing the WinApp font and license resources. A failed pre-activation update remained cancellable before retrying with a corrected newer package.
+
+#### For visitors
+- No direct visitor behavior changed.
+
+#### For maintainers
+- Regression coverage now checks compatibility with the installed reader and resource integrity across folder and ZIP packages. The change did not alter database schema, WinApp binaries, or WinApp version.
+
 ## Version 0.136
 
 Added configurable, shareable gallery presentations and media summaries, Windows flight recording with multilingual PDF reports, and guarded release-draft branch retirement. The release also added the gallery presentation settings migration and expanded regression coverage and documentation.

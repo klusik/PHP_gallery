@@ -823,6 +823,32 @@ not a source parser or a commitment to remove anything on a calendar date.
   compatibility by executing PHP supplied in an incoming archive or granting
   companions authority over installation-owned state.
 
+### UPD-5 — Additive companion resources for installed validators
+
+- **Reason / protected scenario:** The reported 0.135.1 to 0.136 update stopped
+  before activation with `C35BC3B622B0`. Its installed companion-aware reader
+  rejects the new DejaVu font/license in `companion_files` before a replacement
+  validator can run. Testing only the current and pre-companion readers missed
+  this schema-generation boundary.
+- **Owner:** `app/release_file_policy.php` and
+  `scripts/generate_production_files.php`. Schema 1 adds optional
+  `companion_resource_files`, strictly limited to reviewed non-updater resources.
+  Stable companion entries remain in the original field. Current readers also
+  retain the original published resource placement. No installed-version
+  dispatch, incoming-code execution or weaker path/ownership checks are added.
+- **Evidence / tests:** `updater_inventory_compatibility_test.php` uses a frozen
+  trusted 0.135.1 reader to reproduce the exact failure and accept additive
+  resources with unchanged CMS activation ownership. It retains the existing
+  pre-companion fixture. Policy regressions reject malformed, unsafe, duplicate,
+  unordered or updater-owned resources. The real folder/ZIP builder checks full
+  font/license bytes, with complete package coverage on all three hosted systems.
+- **Usage / retirement:** The supplied production failure confirms this reader
+  generation remains deployed; aggregate adoption is unknown. Preserve the
+  additive format until supported installed readers no longer validate the old
+  field with its historical allowlist. Direct-upgrade mechanics do not establish
+  arbitrary historical database/hosting acceptance. Published 0.136 assets stay
+  immutable; the corrected inventory needs a newly authorized release.
+
 ### UPD-3 — Windows checkout line endings in production inventory verification
 
 - **Reason / protected scenario:** Git may convert the checked-in JSON inventory

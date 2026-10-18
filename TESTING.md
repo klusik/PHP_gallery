@@ -351,7 +351,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.136. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.136.1. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -587,7 +587,32 @@ by AGENTS.md and cannot replace hosted CI.
 
 ### Clean PHP include-phase probes
 
-`production_file_policy_test.php` validates canonical positive membership, private-path exclusion, safe contained paths, additive companion membership and source-archive activation. `updater_inventory_compatibility_test.php` retains the frozen installed pre-WinApp reader and old/current activation proof. `updates_path_safety_test.php` checks updater destination ancestors. The compact `production_package_test.php` uses the real canonical PHP builder with a minimal isolated payload: folder and ZIP membership, complete SHA-256 content, deterministic output, missing/stale/unsafe inputs, links, destination protection, no-clobber and cleanup. The central packaging owner runs it independently of the SQL engine. The `production-package` CI matrix additionally builds a complete production folder and ZIP on Ubuntu, Windows and macOS and verifies every file against its source bytes. Windows owns real junction/reparse-point rejection. A missing required capability or incomplete proof fails that owner. Legacy FTP, interactive collision naming and source-review/media packaging options have been removed with their implementation; their old tests are retired.
+`production_file_policy_test.php` validates canonical positive membership,
+private-path exclusion, safe contained paths, additive companion membership and
+source-archive activation. `updater_inventory_compatibility_test.php` retains
+the frozen pre-WinApp reader and a trusted companion-aware reader from 0.135.1.
+It reproduces reference `C35BC3B622B0` for resources in the historical field,
+then proves that the real incoming inventory and additive resource fixture
+preserve installed CMS activation ownership. The archive check uses an isolated
+snapshot of the complete real package inventory; the running checkout can
+contain scanner bytecode and other test artifacts. It retains exact unexpected
+file rejection in that owned snapshot. This is a schema-generation
+regression, not a matrix of all historical releases or a complete database
+upgrade certification. Policy cases reject malformed, unordered, duplicate,
+private and updater-owned resource entries, while retaining published resource
+placement. Compact real folder/ZIP fixtures preserve the exact font/license
+bytes. `updates_path_safety_test.php` checks updater destination ancestors. The
+compact `production_package_test.php` uses the real canonical PHP builder with
+a minimal isolated payload: folder and ZIP membership, complete SHA-256
+content, deterministic output, missing/stale/unsafe inputs, links, destination
+protection, no-clobber and cleanup. The central packaging owner runs it
+independently of the SQL engine. The `production-package` CI matrix
+additionally builds a complete production folder and ZIP on Ubuntu, Windows and
+macOS and verifies every file against its source bytes. Windows owns real
+junction/reparse-point rejection. A missing required capability or incomplete
+proof fails that owner. Legacy FTP, interactive collision naming and
+source-review/media packaging options have been removed with their
+implementation; their old tests are retired.
 
 `tests/cli_http_boundary_test.php` exercises real direct HTTP requests to CLI
 entrypoints through a PHP server without rewrite rules, checks empty refusals

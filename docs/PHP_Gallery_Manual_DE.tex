@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.136}
+\newcommand{\version}{0.136.1}
 \newcommand{\manualdate}{18.~Oktober~2026}
 
 \hypersetup{
@@ -273,6 +273,17 @@ Der Webprozess benötigt Lesezugriff auf den Laufzeitcode und Schreibzugriff auf
 Interne Verzeichnisse für Anwendung, Werkzeuge, Dokumentation, Cache, Daten und Protokolle besitzen eigene Apache-Zugriffssperren unabhängig von URL-Umschreibungen. Der Hoster muss diese Regeln beachten oder gleichwertige Serverregeln bereitstellen; der PHP-Entwicklungsserver liest sie nicht. Direkte HTTP-Aufrufe von CLI-Befehlen erhalten vor dem Anwendungsstart eine leere Antwort 404. Verwenden Sie für Browserrouten den öffentlichen Einstiegspunkt und für Wartungsbefehle die Kommandozeile. Siehe \filepath{docs/HTTP_ENTRYPOINTS.md}.
 
 Erstellen Sie angeforderte Produktionsordner oder ZIP-Dateien mit \filepath{scripts/package_production.php}. Das Werkzeug für PHP 8.1+ verwendet \filepath{app/production-files.json}, verlangt aktuelle Integritätsdaten und prüft vor der Bereitstellung exakte Mitgliedschaft und vollständige SHA-256-Inhalte. Vorhandene Ausgaben, unsichere Pfade und Dateisystemverknüpfungen werden abgelehnt. Tests, private Medien, installierte Konfiguration und Laufzeitdaten sind ausgeschlossen. WinApp-Quellen behalten ihr separates Begleitinventar. Historische interaktive und FTP-Bereitstellungsskripte wurden entfernt. Siehe \filepath{docs/PRODUCTION_FILES.md}.
+
+Schrift und~Lizenz der~Begleitanwendung verwenden das~optionale Inventarfeld
+\codeword{companion_resource_files}. Installierte Leser können diese Ergänzung
+ignorieren; die~aktuelle Paketrichtlinie prüft die~exakten erlaubten Pfade.
+Das ursprüngliche Begleitfeld bleibt für~ältere Updater lesbar; beide Felder
+gewähren keine CMS-Ersetzungsrechte. Direkte Updates verwenden ein~vollständiges
+neueres Paket und~alle ausstehenden Migrationen ohne jede Zwischenversion.
+Dies qualifiziert keine beliebigen historischen Hosting- oder~Datenbankzustände.
+Brechen Sie~einen fehlgeschlagenen Auftrag vor~der Aktivierung ab, bevor Sie~ein
+korrigiertes neueres Paket wählen; Wiederholung desselben inkompatiblen Builds
+repariert sein~Inventar nicht.
 
 \subsection{Installation im Browser}
 

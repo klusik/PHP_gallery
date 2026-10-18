@@ -16,7 +16,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.136';
+const CMS_VERSION = '0.136.1';
 ```
 
 Update-related code uses:
@@ -1417,7 +1417,20 @@ The gallery-layout migration owner uses its own bounded Windows sidecar commit p
 
 Windows updater checkpoint persistence retries the same complete staging file for at most ten atomic rename attempts, with nine 50 ms pauses. The prior checkpoint is never unlinked to obtain permission; persistent refusal deletes only the staging file and reports failure. Other platforms retain one commit attempt. Retry limits belong to `app/services/updates_jobs.php`, and `app/services/updates_jobs/state.php` owns the filesystem workflow.
 
-Production membership is the exact checked-in `app/production-files.json` policy, read by `app/release_file_policy.php`. Bash and PowerShell packaging, integrity ownership and updater activation derive from that owner. Schema-1 packaging combines the base production list with optional reviewed WinApp companion membership; the base remains readable by installed pre-WinApp updaters. The updater list is a validated base subset retaining installation-owned custom CSS and distribution-only artifacts; a GitHub source archive may contain development or companion files without activating them. Obsolete removal uses prior owned inventory/manifest evidence. See [production file policy](docs/PRODUCTION_FILES.md).
+Production membership is the exact checked-in `app/production-files.json`
+policy, read by `app/release_file_policy.php`. Canonical PHP packaging,
+integrity ownership and updater activation derive from that owner. Schema-1
+packaging combines the base production list with reviewed WinApp companion
+membership and optional `companion_resource_files`. New font/license resources
+use that additive field so installed companion-aware readers can accept the
+inventory before their own validator is replaced. Current readers strictly
+validate the resource allowlist and preserve previously published
+companion-list shapes; neither companion field expands CMS activation
+ownership. The updater list is a validated base subset retaining
+installation-owned custom CSS and distribution-only artifacts; a GitHub source
+archive may contain development or companion files without activating them.
+Obsolete removal uses prior owned inventory/manifest evidence. See [production
+file policy](docs/PRODUCTION_FILES.md).
 
 `app/services/updates_jobs.php` is the canonical installer engine for stable updates, beta installs, stable restores, clean reinstalls, rollback, Admin button requests, pure-PHP entry points, and automatic background updates. Legacy functions in `updates_install.php` now start a durable job instead of downloading, extracting, copying, migrating, and cleaning in one request.
 

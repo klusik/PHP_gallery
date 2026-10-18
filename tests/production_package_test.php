@@ -137,12 +137,19 @@ try {
         'public/assets/žluťoučký soubor.css' => "body { color: red; }\n",
         'scripts/check.php' => "#!/usr/bin/env php\n<?php echo 'fixture';\n",
         'winapp/uploader/media.py' => "# Companion bytes\n",
+        'winapp/uploader/resources/DejaVuSans.ttf' => "font-fixture\x00\xFF\r\n",
+        'winapp/uploader/resources/LICENSE_DEJAVU' => "Font redistribution license fixture\n",
     ];
     $production = array_values(array_filter(array_keys($payloads), static fn(string $path): bool => !str_starts_with($path, 'winapp/')));
     sort($production, SORT_STRING);
     $updater = array_values(array_filter($production, '\\Gallery\\Core\\release_file_policy_is_updater_path'));
     $payloads['app/production-files.json'] = json_encode(['schema_version' => 1, 'production_files' => $production,
-        'companion_files' => ['winapp/uploader/media.py'], 'updater_files' => $updater, 'source_review_files' => []],
+        'companion_files' => ['winapp/uploader/media.py'],
+        'companion_resource_files' => [
+            'winapp/uploader/resources/DejaVuSans.ttf',
+            'winapp/uploader/resources/LICENSE_DEJAVU',
+        ],
+        'updater_files' => $updater, 'source_review_files' => []],
         JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
     foreach ($payloads as $path => $bytes) {
         production_package_write($source, $path, $bytes);

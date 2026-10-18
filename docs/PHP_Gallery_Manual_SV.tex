@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.136}
+\newcommand{\version}{0.136.1}
 \newcommand{\manualdate}{18~oktober~2026}
 
 \hypersetup{
@@ -269,6 +269,16 @@ Webbprocessen behöver läsåtkomst till programkoden och skrivåtkomst till uts
 Interna mappar för program, verktyg, dokumentation, cache, data och loggar har egna Apache-regler som nekar åtkomst oberoende av URL-omskrivning. Webbhotellet måste följa reglerna eller ordna motsvarande serverregler; PHP:s utvecklingsserver läser dem inte. Direkta HTTP-anrop till CLI-kommandon får ett tomt 404-svar före programstart. Använd den offentliga ingången för webbläsarrutter och kommandoraden för underhåll. Se \filepath{docs/HTTP_ENTRYPOINTS.md}.
 
 Bygg begärda produktionsmappar eller ZIP-filer med \filepath{scripts/package_production.php}. Verktyget för PHP 8.1+ använder \filepath{app/production-files.json}, kräver aktuella integritetsdata och verifierar exakt medlemskap och fullständigt SHA-256-innehåll före publicering. Befintliga utdata, osäkra sökvägar och filsystemslänkar nekas. Tester, privata medier, installerad konfiguration och körningsdata utesluts. WinApp-källor behåller sitt separata följeinventarium. Historiska interaktiva skript och FTP-driftsättning har tagits bort. Se \filepath{docs/PRODUCTION_FILES.md}.
+
+Följeappens typsnitt och~licens använder det valfria inventariefältet
+\codeword{companion_resource_files}. Installerade läsare kan~ignorera tillägget;
+den aktuella paketpolicyn verifierar exakt tillåtna sökvägar. Det ursprungliga
+följefältet förblir läsbart för~äldre uppdaterare; inget fält ger~rätt att ersätta
+CMS-filer. Direkta uppdateringar använder ett~fullständigt nyare paket och~alla
+väntande migreringar utan varje mellanversion. Detta kvalificerar inte godtyckliga
+historiska webbhotells- eller~databastillstånd. Avbryt ett~misslyckat jobb före
+aktivering innan ett~korrigerat nyare paket väljs; samma inkompatibla bygge
+kan~inte reparera sitt~inventarium genom nya försök.
 
 \subsection{Installation i webbläsaren}
 
