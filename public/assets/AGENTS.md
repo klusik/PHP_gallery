@@ -12,6 +12,9 @@ control execution.
 Always document JavaScript callback parameters with JSDoc callable syntax, for
 example `@param {function(number, string):void} onProgress`, and describe what each
 callback argument means in the parameter description.
+Document exported preset arrays with the complete policy fields as well as scalar
+timings. Preserve native failure messages across cleanup by capturing the message
+before release and assigning the relevant feedback after release.
 
 Whenever a revisioned module's bytes change, including formatting-only edits,
 advance its owning import URL and the complete upstream import/re-export chain.
@@ -42,6 +45,10 @@ The selected-gallery mode is stored as `public_thumbnail_rendering_mode` with on
 `PATCH_NOTES.md` is intentionally not changed as part of renderer implementation work unless a separate task explicitly requests release notes.
 
 ## Public Lightbox Zoom Guidelines
+Always exercise shared-link query flags through the anonymous request guard.
+For native fullscreen refusal, use the production CSS in a browser and assert
+decoded photographs have a nonzero stage on desktop and narrow viewports.
+
 The public lightbox zoom is a single-viewer feature. Keep `data-lightbox-stage`, `.lightbox-zoom-surface`, and
 `data-lightbox-img` as one coordinated presentation path rather than adding a parallel fullscreen viewer or a second
 media authorization route. Scale is bounded to 100-400%. The fitted 100% photograph is explicitly centered; the zoom

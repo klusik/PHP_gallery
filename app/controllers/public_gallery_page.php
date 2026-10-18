@@ -456,7 +456,9 @@ function cms_gallery(): void
     $heroCountBadge = gallery_count_badge_presentation($gallery, $isCountAdmin, $heroBranchImageCount, $heroAllImageCount);
 
     ob_start();
-    $descriptionDocumentsHtml = render_public_gallery_branding_header($gallery, $seo, $publicOnly);
+    $descriptionDocumentsHtml = render_public_gallery_branding_header(
+        $gallery, $seo, $publicOnly, $lightboxTotalCount > 0
+    );
     $brandingHeaderHtml = (string) ob_get_clean();
     ob_start();
     render_breadcrumbs($gallery);
@@ -764,7 +766,11 @@ function cms_gallery(): void
     $lightboxHtml = '';
     if ($lightboxFeatureEnabled) {
         ob_start();
-        render_lightbox($votingAllowed, $mapsAllowed, $galleryMapUrl, (string) $gallery['title'], $lightboxBrowsingMode);
+        render_lightbox(
+            $votingAllowed, $mapsAllowed, $galleryMapUrl,
+            (string) $gallery['title'], $lightboxBrowsingMode, true,
+            \Gallery\Services\gallery_presentation_settings($gallery)
+        );
         $lightboxHtml = (string) ob_get_clean();
     }
     if ($requestedImage && $lightboxFeatureEnabled) {

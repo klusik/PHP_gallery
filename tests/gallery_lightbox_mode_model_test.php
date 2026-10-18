@@ -135,3 +135,59 @@ assert_gallery_lightbox_mode_same('3D carousel', gallery_lightbox_browsing_mode_
 assert_gallery_lightbox_mode_same('Single image', gallery_lightbox_browsing_mode_label('bad-value'), 'Invalid label values must use single-image fallback.');
 
 echo "Gallery lightbox mode model tests passed.\n";
+
+// Existing rows and unknown versions preserve the established launch behavior.
+$presentationDefaults = \Gallery\Services\gallery_presentation_settings([]);
+assert_gallery_lightbox_mode_same([
+    'version' => 1, 'enabled' => true, 'autoplay' => true, 'music' => true,
+    'interval' => 'medium', 'transition' => 'medium',
+], $presentationDefaults, 'Missing presentation defaults must remain compatible.');
+foreach ([null, 'damaged', '{"version":99,"music":false}'] as $raw) {
+    assert_gallery_lightbox_mode_same($presentationDefaults,
+        \Gallery\Services\gallery_presentation_normalize($raw),
+        'Unrecognized settings must retain compatible defaults.');
+}
+$presentation = \Gallery\Services\gallery_presentation_settings([
+    'presentation_json' => '{"version":1,"enabled":false,"music":false,'
+        . '"interval":"fast","transition":"slow"}',
+]);
+assert_gallery_lightbox_mode_same([
+    'presentation' => '1', 'autoplay' => '1',
+    'presentation_fullscreen' => '1', 'presentation_music' => '0',
+    'presentation_interval' => 'fast', 'presentation_transition' => 'slow',
+], \Gallery\Services\gallery_presentation_query($presentation),
+    'Links must carry complete explicit playback preferences.');
+assert_gallery_lightbox_mode_same(false, $presentation['enabled'],
+    'A stored hidden launcher must stay hidden.');
+assert_gallery_lightbox_mode_same($presentationDefaults,
+    \Gallery\Services\gallery_presentation_normalize([
+        'version' => 1, 'enabled' => '0', 'music' => 0,
+        'interval' => 'invalid', 'transition' => '999999',
+    ]), 'Malformed types and arbitrary timings must not become playback policy.');
+
+// Explicit writes refuse both confirmed absence and inspection failure.
+foreach (['available', 'missing', 'unknown'] as $state) {
+    schema_inspection_set_query_executor_for_tests(
+        static function (string $type, string $table, string $object,
+            string $token = '') use ($state): bool {
+            if ($state === 'unknown') throw new RuntimeException('Fixture failure');
+            return $state === 'available';
+        }
+    );
+    schema_inspection_reset_request_cache();
+    assert_gallery_lightbox_mode_same($state === 'available',
+        \Gallery\Services\gallery_presentation_schema_ready(),
+        'Only verified schema may expose preference writes.');
+    $refused = false;
+    try {
+        \Gallery\Services\gallery_presentation_assert_writable('fixture.save');
+    } catch (\Gallery\Services\PresentationSchemaUnavailableException $error) {
+        $refused = true;
+    }
+    assert_gallery_lightbox_mode_same($state !== 'available', $refused,
+        'Presentation writes must refuse missing and unknown storage.');
+}
+assert_gallery_lightbox_mode_same(false,
+    \Gallery\Services\gallery_presentation_normalize([
+        'version' => 1, 'autoplay' => false,
+    ])['autoplay'], 'Explicit autoplay-off must survive normalization.');

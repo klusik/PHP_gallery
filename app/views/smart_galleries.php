@@ -391,7 +391,7 @@ function view_render_smart_gallery_source_summary(array $summary): void
 }
 
 /**
- * Render a published Smart Gallery with prepared source music and photo controls.
+ * Render a published Smart Gallery with shared hero applets and photo controls.
  * @param array{title?:string,description?:string,total?:int,
  *     breadcrumbs?:array{aria_label?:string,style_class?:string,
  *     items?:list<array{label:string,url:?string,current:bool}>},
@@ -403,7 +403,8 @@ function view_render_smart_gallery_source_summary(array $summary): void
  *     breadcrumb_compact:string,source_url:string,image_count:int,
  *     selected:bool,filter_url?:string}>},pagination_html?:string,
  *     lightbox_enabled?:bool,lightbox_endpoint?:string,
- *     lightbox_browsing_mode?:string,lightbox_html?:string,music_html?:string,
+ *     lightbox_browsing_mode?:string,lightbox_html?:string,media_html?:string,
+ *     presentation_url?:string,presentation_music?:bool,
  *     cards?:array{grid_class?:string,cards?:list<array{attributes_html?:string,
  *     favourite_attribute_html?:string,url?:string,thumbnail_html?:string,
  *     favourite_html?:string,collection_html?:string,vote_html?:string,
@@ -417,7 +418,15 @@ function view_render_public_smart_gallery(array $viewModel): void
 {
     render_header((string) ($viewModel['title'] ?? ''));
     view_render_breadcrumbs((array) ($viewModel['breadcrumbs'] ?? []));
-    echo '<section class="hero"><div class="hero-topbar"><div class="hero-primary"><div><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h1>' . e((string) ($viewModel['title'] ?? '')) . '</h1><p>' . e((string) ($viewModel['description'] ?? '')) . '</p><p class="muted">' . e(t('smart_gallery.dynamic_count', '{count} matching images', ['count' => (int) ($viewModel['total'] ?? 0)])) . '</p></div></div><div class="hero-meta"><div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
+    echo '<section class="hero"><div class="hero-topbar">'
+        . '<div class="hero-primary"><div><p class="admin-kicker">'
+        . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h1>'
+        . e((string) ($viewModel['title'] ?? '')) . '</h1><p class="muted">'
+        . e(t('smart_gallery.dynamic_count', '{count} matching images', [
+            'count' => (int) ($viewModel['total'] ?? 0),
+        ])) . '</p></div></div>'
+        . '<div class="hero-meta"><div class="hero-actions" aria-label="'
+        . e(t('gallery.actions', 'Gallery actions')) . '">';
     $download = $viewModel['download'] ?? null;
     if (is_array($download)) {
         echo '<form class="public-download-legacy-form" method="post" action="' . e((string) ($download['action_url'] ?? '')) . '"><input type="hidden" name="id" value="' . (int) ($download['id'] ?? 0) . '"><input type="hidden" name="capability" value="' . e((string) ($download['capability'] ?? '')) . '"><button type="submit" class="button hero-icon-button hero-download-button" data-gallery-download data-gallery-download-start-url="' . e((string) ($download['start_url'] ?? '')) . '" aria-label="' . e((string) ($download['label'] ?? '')) . '" title="' . e((string) ($download['label'] ?? '')) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e((string) ($download['label'] ?? '')) . '</span></button></form>';
@@ -427,7 +436,16 @@ function view_render_public_smart_gallery(array $viewModel): void
         echo '<button type="button" class="button secondary hero-icon-button smart-gallery-map-button" data-gallery-map-url="' . e((string) $viewModel['map_url']) . '" data-gallery-map-title="' . e((string) ($viewModel['title'] ?? '')) . '" aria-label="' . e($mapLabel) . '" title="' . e($mapLabel) . '"><span aria-hidden="true">&#128205;</span><span class="visually-hidden">' . e($mapLabel) . '</span></button>';
     }
     echo '</div></div></div>';
-    echo (string) ($viewModel['music_html'] ?? '');
+    $description = (string) ($viewModel['description'] ?? '');
+    view_render_gallery_media_hero([
+        // Preserve Smart descriptions as escaped plain text while physical
+        // galleries retain their own existing rich-description formatter.
+        'description_html' => trim($description) !== ''
+            ? '<p>' . e($description) . '</p>' : '',
+        'media_html' => (string) ($viewModel['media_html'] ?? ''),
+        'presentation_url' => (string) ($viewModel['presentation_url'] ?? ''),
+        'presentation_music' => !empty($viewModel['presentation_music']),
+    ]);
     echo '</section>';
 
     view_render_smart_gallery_source_summary((array) ($viewModel['source_summary'] ?? []));

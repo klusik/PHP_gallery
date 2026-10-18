@@ -1,5 +1,31 @@
 # Testing Guide
 
+## Flight recording and report delivery
+
+The PHP flight-report service regression exercises gallery-token confinement,
+separate report identity, checksum idempotency/conflicts, PDF MIME/size rejection
+and same-gallery status reconciliation. Missing or corrupt physical PDFs must
+return no receipt, including same-size checksum corruption. A same-identity
+retry after deletion must restore one visible,
+physically verified report. A failure during the second read remains an error
+rather than an acknowledged upload. The WinApp delivery fixture exercises
+capability negotiation, status-before-upload deduplication, multipart field
+contract, progress events and recovery after an ambiguous transport outcome.
+These focused tests use controlled inputs/transports; they do not prove behavior
+against a live Gallery installation.
+
+The native Windows fixtures must separately drive both MSFS 2020 and MSFS 2024
+provider identities through normalized analysis, selected-language PDF jobs,
+delivery and shared Stop/Revoke progress/recovery. Verify that standalone Stop
+ends only the watcher, owned UTC synchronization and flight recorder while
+unrelated AI, manual-import and preflight workers remain active; confirmed
+Revoke must additionally stop other authenticated producers and wait for
+accepted work before the scoped server request. Renderer fixtures should check
+all four languages, embedded DejaVu glyphs, pagination and chart gaps.
+No live simulator/aircraft/build evidence is claimed here: record that matrix
+during Windows acceptance. Central hosted audit owns test execution.
+
+
 ## Media-renamer staging and continued uploads
 
 `media_renamer_staging_test.php` runs actual same-directory staging and rollback
@@ -16,6 +42,65 @@ rows are hidden no-ops. Item adapters do not establish real database/upload or
 filesystem collision behavior. Live-host rename/upload acceptance remains manual.
 
 ## Gallery music
+
+The existing music Chromium fixture also verifies explicit soundtrack launches
+without changing default-off preferences, complete duration while collapsed,
+clipboard success/refusal without navigation, and media cards wrapping when only
+the gallery container is resized. The PDF workflow fixture executes the shared
+production metadata queue for totals, exact-version reuse, version changes,
+serial disposal and unreadable originals. The slideshow speed fixture exercises
+the production presentation launcher for photo one, default timing and disabled
+slideshow behavior. Hosted central integration owns execution.
+The same Chromium fixture opens a fresh presentation iframe through the public
+entrypoint with production desktop/mobile CSS and real decoded synthetic images.
+It rejects native fullscreen, checks nonzero photo-stage geometry and photo-one
+startup, waits for scheduled photo two, confirms controlled activation refusal and
+asserts close/audio cleanup. This covers desktop and narrow viewport dimensions.
+The real anonymous HTTP gallery workflow accepts `presentation=1`; guard probes
+retain unknown-parameter and non-gallery-route rejection.
+The music browser fixture runs denied, allowed, muted, paused and exclusive URL launches,
+asserts that link presets override saved defaults, and verifies that blocked
+launches hold black on photo one until the focused confirmation, even exclusive.
+Settled music controls hide with the HUD. It also checks that explicit silence stops existing page
+music and that Stop cancels pending activation. The production slideshow closure
+covers independent link-selected timing presets and bounded invalid-value fallback.
+The database workflow persists versioned preferences, checks stale/anonymous
+refusal, verifies sidecar export and tests public launcher visibility plus complete
+snapshot parameters. Native form association is asserted by the isolated gallery
+edit fixture. Manual acceptance additionally covers saving from the mounted drawer,
+preview/copy after changing values, window resizing, and real sound activation.
+The configurable share disclosure must open before copy, preserve the locale,
+default autoplay ON/exclusive OFF, serialize every control, and retain selectable
+clipboard fallback. The production closure checks decode-gated black hold,
+audio timing, synchronous audio-before-fullscreen confirmation, double-click
+suppression, scheduler handoff and late-result cancellation. Browser coverage checks initial
+silence, fullscreen geometry, paused launch, hidden exclusive controls, Escape
+cleanup and no repeated black hold on loop. Native browser-chrome fullscreen and
+real audible autoplay permissions remain manual device checks. For a fresh direct
+URL, check that one trusted confirmation starts sound and requests native fullscreen;
+cancel with Esc/close, and repeat with autoplay OFF, music OFF and exclusive ON.
+
+The real HTTP/database workflow also checks Smart hero applets, localized snapshot
+URLs and selected-source retention across pages. It follows the generated link
+with a fresh anonymous client, opens protected source PDF/OFP originals, hides and
+restores a source PDF for anonymous/admin discovery, revokes its gallery access,
+and checks independent PDF/music masters without losing the photo launcher.
+The shared source-service fixture covers duplicate/private/denied/missing source
+IDs; the anonymous guard covers all Smart playback flags while retaining unknown
+query and metadata-endpoint refusal. Native viewer/permission behavior uses the
+existing production browser owner; local Smart hero resizing/share acceptance
+remains a separate UI check.
+The confined workflow transport admits same-origin clean Smart document URLs
+with a closed playback/locale/source vocabulary; unknown, repeated, bracketed,
+invalid-source and cross-origin route vectors remain refused before transport.
+
+Manual acceptance for physical galleries: compare authorized PDF count/bytes/pages
+and music count/duration against the opened lists, including unknown metadata;
+resize the gallery/window so cards move beside/below each other; start from a later
+photo page and verify photo one/default speeds/music; copy/open the presentation
+link with ordinary visitor access; close/stop and verify audio is released.
+Real browser codec/autoplay, native fullscreen and mobile-device behavior remain
+environment-dependent acceptance, separate from controlled fixture evidence.
 
 `gallery_music_service_test.php` uses isolated real PCM WAV bytes to exercise
 exact-byte storage, gallery-scoped lookup, content rejection, ordered mutations,
@@ -50,7 +135,7 @@ Native DOM forms are submitted through
 two successive fragment replacements using the production completion
 coordinator, with unchanged URL/open panel and fresh revisions. Audio outcomes
 and mutation responses are controlled adapters; this does not qualify real
-codec decoding, production PHP multipart handling or full lightbox geometry.
+codec decoding, production PHP multipart handling or every lightbox layout.
 The same fixture uses desktop and narrow portrait CSS viewports for compact
 attachment launchers, top-layer fitting, bounded PDF scrolling, exclusive
 Play/Stop row icons, title ellipsis/active scrolling and persistent miniplayer.
@@ -93,8 +178,9 @@ The existing real database/HTTP gallery workflow saves both switches through
 the rendered Admin Features form. Each independent OFF combination must hide
 the matching physical/Smart player or document table, remove disabled picker
 formats and conversion controls, keep galleries working and leave no empty
-attachment column. Both masters OFF omit the shared editor media tab and
-normalize an old selected-tab URL back to the available default.
+attachment column. Both attachment masters OFF retain core presentation settings.
+With lightbox OFF as well, the empty media tab is omitted and an old tab URL
+normalizes back to the available default.
 Direct/legacy PDF and audio GET/HEAD requests are denied;
 stale PDF/music upload forms, conversion actions and prepared page batches fail
 at the server boundary without changing retained hashes. Re-enable restores
@@ -265,7 +351,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.135.1. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.136. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 
@@ -3143,6 +3229,15 @@ operator path and exact live GitHub protections. Tests
 `tests/hosted_release_policy_test.mjs`, `tests/release_origin_test.mjs`,
 `tests/release_reconciliation_test.mjs` and
 `tests/release_retirement_test.mjs` are registered with the central audit.
+The retirement owner also imports `release_draft_retirement_scenarios.mjs` for
+current ready-draft cleanup: retained inventory, assembly/review, M/tag ancestry,
+pending/blocked draft refusal, missing/corrupt/duplicate/incomplete assets, open
+PRs, active/unknown run inventory, changed refs, server lease races, refused/lost
+delete responses and idempotent retries without a release branch. Its real
+disposable Git remote verifies main/develop/tag preservation. Workflow assertions
+bind cleanup to `DRAFT_READY`, successful completion and prior artifact retention.
+Live GitHub deletion permissions and a complete production release remain manual
+acceptance; source fixtures do not certify those provider operations.
 The hosted policy suite also starts a successor release from a tagged but
 unpublished schema-3 predecessor. Shared in-memory ZIP fixtures feed the real
 coverage loader and verify both the predecessor's FULL integration archive and

@@ -48,7 +48,9 @@
  */
 
 
-import {getGalleryMusicPlayer, stopGalleryMusicViewer} from './gallery-music-player.js?v=20261017-media-applets-v1';
+import {
+    getGalleryMusicPlayer, stopGalleryMusicViewer,
+} from './gallery-music-player.js?v=20261018-presentation-confirm-v1';
 
 /**
  * Return a translated browser string with simple placeholder replacement.
@@ -88,15 +90,30 @@ import {
     zoomLightboxStateAtRenderedAnchor,
 } from './lightbox-zoom-model.js?v=20260817-lightbox-zoom-centered-frame-v5';
 
+import {
+    galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
+} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
+
 const galleryLightboxState = {
     controller: null,
     cleanup: null,
+    present: null,
 };
 
 /**
- * Releases lightbox listeners and viewer-held DOM references before public gallery content is replaced.
+ * Launch the current authorized gallery with the existing viewer scheduler.
+ * @returns {void} Start at photo one, or do nothing without an eligible viewer.
+ */
+export function startGalleryPresentation() {
+    galleryLightboxState.present?.();
+}
+
+/**
+ * Release viewer listeners and DOM references before public content replacement.
+ * @returns {void} Retire the current launch callback, resources and controller.
  */
 export function teardownGalleryLightbox() {
+    galleryLightboxState.present = null;
     if (typeof galleryLightboxState.cleanup === 'function') {
         galleryLightboxState.cleanup();
         galleryLightboxState.cleanup = null;
@@ -130,6 +147,8 @@ export function setupGalleryLightbox() {
     const lightboxNavigation = createLightboxNavigationLifecycle();
     // Variable `overlay` stores this steps working value.
     const overlay = document.querySelector('[data-lightbox]');
+    // Capture link intent once before viewer navigation replaces its URL.
+    const presentationOptions = galleryPresentationOptions(overlay);
     // lightboxConfig stores the server-rendered async metadata settings.
     const lightboxConfig = document.querySelector('[data-lightbox-config]');
     // lightboxEndpoint stores the JSON endpoint used when a requested image is not in the DOM yet.
@@ -762,9 +781,12 @@ export function setupGalleryLightbox() {
     // Resolve the page-wide owner at activation time: an editor/table may have
     // selected a different gallery since this viewer was initialized.
     const musicPlayer = {
-        start: () => getGalleryMusicPlayer()?.start(),
+        start: (force = false, silent = false) =>
+            getGalleryMusicPlayer()?.start(force, silent)
+                || Promise.resolve('silent'),
         stop: () => stopGalleryMusicViewer(),
         closeViewer: () => stopGalleryMusicViewer(true),
+        resumeRequested: () => getGalleryMusicPlayer()?.resumeRequested(),
     };
     // lightboxPreviewPreloadRadius limits how many nearby preview images are warmed after a photo opens.
     const lightboxPreviewPreloadRadius = 4;
@@ -869,6 +891,18 @@ export function setupGalleryLightbox() {
     let fullscreenHideTimer = null;
     // lightboxSlideshowTimer stores the automatic advance timer while slideshow mode is active.
     let lightboxSlideshowTimer = null;
+    /**
+     * Hold black for at least one second while the first authorized image loads.
+     * Type: number. Units: milliseconds. Scope: each explicit presentation launch.
+     * Consumers: presentGalleryFromStart and scheduleLightboxPresentationIntro.
+     * Rationale: 1000 ms gives a calm opening; decoding may extend the hold.
+     */
+    const LIGHTBOX_PRESENTATION_INTRO_MS = 1000;
+    /** @type {{readyAt:number,music:boolean,autoplay:boolean,
+     *     fullscreen:Promise<boolean>,
+     *     phase:'preparing'|'checking'|'consent'|'revealing',
+     *     animation:Animation|null}|null} One cancellable launch, never a slide. */
+    let lightboxPresentationIntro = null;
     // lightboxSlideshowScheduleToken invalidates an automatic cycle when slideshow stops or navigation changes.
     let lightboxSlideshowScheduleToken = 0;
     // lightboxSlideshowPreloadController owns the single detached full-image request prepared for the next slide.
@@ -1066,7 +1100,7 @@ export function setupGalleryLightbox() {
             fetch_transfers: resources.activeFetchTransfers,
             preload_generation: lightboxPreloads.generation,
             slideshow_active: lightboxSlideshowActive,
-            fullscreen_active: document.fullscreenElement === overlay || overlay.classList.contains('is-mobile-fullscreen'),
+            fullscreen_active: isLightboxFullscreen(),
             image: currentImage ? {
                 src_present: currentImage.hasAttribute('src'),
                 complete: currentImage.complete,
@@ -1173,6 +1207,7 @@ export function setupGalleryLightbox() {
             document.exitFullscreen().catch(() => undefined);
         }
         overlay.hidden = true;
+        overlay.classList.remove('is-css-fullscreen');
         overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled', 'is-slideshow', 'is-picture-strip-animating', 'is-3d-carousel-mode');
         overlay.classList.toggle('is-picture-strip-mode', pictureStripEnabled);
         overlay.classList.toggle('is-3d-carousel-mode', threeDCarouselEnabled);
@@ -1623,6 +1658,7 @@ export function setupGalleryLightbox() {
         clearLightboxNavigationPending(token);
         hideInitialLightboxLoader();
         if (!wasDisplayed) {
+            cancelLightboxPresentationIntro();
             activeLightboxTransitionToken += 1;
             removeTransitionImage();
             showLightboxNavigationFailure(index, token, failureReason);
@@ -4334,6 +4370,9 @@ export function setupGalleryLightbox() {
      * @return {void} Opens the selected card or resumes its sparse-metadata transaction.
      */
     function openAt(index, options = {}) {
+        if (lightboxPresentationIntro && index !== 0) {
+            cancelLightboxPresentationIntro();
+        }
         // Keyboard, strip, slideshow, and direct-card navigation supersede a pending popup selection.
         if (options.mapPhotoNavigation !== mapPhotoNavigationController) {
             cancelMapPhotoNavigation();
@@ -4754,6 +4793,10 @@ export function setupGalleryLightbox() {
      */
     function scheduleLightboxSlideshowNext() {
         clearLightboxSlideshowTimer();
+        if (lightboxPresentationIntro) {
+            scheduleLightboxPresentationIntro();
+            return;
+        }
         if (!lightboxSlideshowActive || overlay.hidden || cards.length <= 1 || lightboxNavigation.phase !== 'displayed') {
             return;
         }
@@ -4793,11 +4836,121 @@ export function setupGalleryLightbox() {
         }, lightboxSlideshowVisibleDuration);
     }
 
-        /**
-     * Start fullscreen slideshow mode.
-     * @returns {Promise<void>} Activate slideshow and audio before awaiting fullscreen.
+    /**
+     * Cancel launch-only black/reveal work on stop, close or manual navigation.
+     * @returns {void} Release animation and restore the normal photo stage.
      */
-    async function startLightboxSlideshow() {
+    function cancelLightboxPresentationIntro() {
+        lightboxPresentationIntro?.animation?.cancel();
+        lightboxPresentationIntro = null;
+        overlay.classList.remove('is-presentation-intro', 'is-presentation-launch');
+        const consent = overlay.querySelector('[data-presentation-consent]');
+        if (consent) consent.hidden = true;
+    }
+
+    /**
+     * Reveal the decoded first photo once requested playback has settled.
+     * @returns {void} Fade only this launch, then resume the existing scheduler.
+     */
+    function revealLightboxPresentation() {
+        const intro = lightboxPresentationIntro;
+        if (!intro || overlay.hidden) return;
+        intro.phase = 'revealing';
+        const consent = overlay.querySelector('[data-presentation-consent]');
+        if (consent) consent.hidden = true;
+        overlay.classList.remove('is-presentation-intro');
+        // Motion belongs to this launch, never to gallery order. Reduced motion
+        // and browsers without Web Animations permanently reveal immediately.
+        const animation = stageLink?.animate
+            && !matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? stageLink.animate([{opacity: 0}, {opacity: 1}], {
+                duration: lightboxSlideshowTransitionDuration,
+                easing: 'ease-in-out',
+            }) : null;
+        intro.animation = animation;
+        void (animation?.finished || Promise.resolve()).then(() => {
+            if (intro !== lightboxPresentationIntro) return;
+            lightboxPresentationIntro = null;
+            overlay.classList.remove('is-presentation-launch');
+            scheduleLightboxSlideshowNext();
+        }, () => {});
+    }
+
+    /**
+     * Keep black visible while the visitor grants browser activation.
+     * @returns {void} Focus the launch confirmation even for exclusive links.
+     */
+    function showLightboxPresentationConsent() {
+        const intro = lightboxPresentationIntro;
+        const consent = overlay.querySelector('[data-presentation-consent]');
+        if (!intro || !consent || overlay.hidden) return;
+        intro.phase = 'consent';
+        consent.hidden = false;
+        const confirm = consent.querySelector('[data-presentation-confirm]');
+        if (confirm) {
+            confirm.disabled = false;
+            confirm.focus({preventScroll: true});
+        }
+    }
+
+    /**
+     * Request sound and fullscreen in the same trusted confirmation task.
+     * @returns {void} Settle both requests before revealing, unless cancelled.
+     */
+    function confirmLightboxPresentation() {
+        const intro = lightboxPresentationIntro;
+        if (!intro || intro.phase !== 'consent' || overlay.hidden) return;
+        intro.phase = 'checking';
+        overlay.querySelector('[data-presentation-confirm]').disabled = true;
+        // Call audio first: requesting fullscreen can consume user activation.
+        // Neither native request may sit behind await/import/timer work.
+        const playback = intro.autoplay
+            ? musicPlayer.start(intro.music, !intro.music)
+            : Promise.resolve('silent');
+        const fullscreen = presentationOptions.fullscreen
+            ? enterLightboxFullscreen() : Promise.resolve(true);
+        void Promise.all([playback, fullscreen]).then(() => {
+            if (intro !== lightboxPresentationIntro || overlay.hidden) return;
+            // After explicit consent, unsupported native fullscreen retains the
+            // existing viewport shell. Media failures retain player feedback;
+            // never trap the visitor in a repeated consent request.
+            revealLightboxPresentation();
+        });
+    }
+
+    /**
+     * Check browser activation after the minimum black hold and first decode.
+     * @returns {void} Reuse the slideshow timer; hold photo one on refusal.
+     */
+    function scheduleLightboxPresentationIntro() {
+        const intro = lightboxPresentationIntro;
+        if (!intro || intro.phase !== 'preparing' || overlay.hidden
+            || lightboxNavigation.phase !== 'displayed') return;
+        lightboxSlideshowTimer = window.setTimeout(async () => {
+            lightboxSlideshowTimer = null;
+            if (intro !== lightboxPresentationIntro || overlay.hidden) return;
+            intro.phase = 'checking';
+            const fullscreen = await intro.fullscreen;
+            if (intro !== lightboxPresentationIntro || overlay.hidden) return;
+            if (!fullscreen) {
+                showLightboxPresentationConsent();
+                return;
+            }
+            const playback = intro.autoplay
+                ? await musicPlayer.start(intro.music, !intro.music) : 'silent';
+            if (intro !== lightboxPresentationIntro || overlay.hidden) return;
+            if (playback === 'blocked') showLightboxPresentationConsent();
+            else revealLightboxPresentation();
+        }, Math.max(0, intro.readyAt - performance.now()));
+    }
+
+    /**
+     * Start fullscreen slideshow mode.
+     * @param {boolean|null} musicOverride Explicit on/off for presentation;
+     *     null retains the ordinary slideshow music preference.
+     * @returns {Promise<void>} Activate audio before awaiting fullscreen.
+     */
+    async function startLightboxSlideshow(musicOverride = null) {
         if (lightboxSlideshowActive) {
             scheduleLightboxSlideshowNext();
             return;
@@ -4805,7 +4958,11 @@ export function setupGalleryLightbox() {
         resetLightboxZoom(false);
         lightboxSlideshowActive = true;
         syncLightboxSlideshowControls();
-        musicPlayer.start();
+        if (musicOverride === false) {
+            musicPlayer.start(false, true);
+        } else {
+            musicPlayer.start(musicOverride === true);
+        }
         if (!isLightboxFullscreen()) {
             await enterLightboxFullscreen();
         }
@@ -4820,6 +4977,7 @@ export function setupGalleryLightbox() {
      * @return {void} Cancels automatic work and releases the slider pointer hold.
      */
     function stopLightboxSlideshow(syncControls = true) {
+        cancelLightboxPresentationIntro();
         musicPlayer.stop();
         lightboxSlideshowSpeedPointerActive = false;
         clearLightboxSlideshowTimer();
@@ -4885,6 +5043,7 @@ export function setupGalleryLightbox() {
      * @return {void} Clears active presentation and reusable resources while retaining the selected index.
      */
     function close() {
+        overlay.classList.remove('is-presentation-exclusive');
         if (lightboxBenchmarkDiagnosticsEnabled) {
             lightboxBenchmarkDiagnosticsState.closeCalls += 1;
             const resourceSnapshot = lightboxResources.snapshot();
@@ -5097,8 +5256,75 @@ export function setupGalleryLightbox() {
     document.addEventListener('visibilitychange', handleLightboxVisibilityChange, {signal: controller.signal});
     resetLightboxZoom(false);
 
+    /**
+     * Apply the link snapshot or gallery defaults and open photo one.
+     * @returns {void} Reuse sparse metadata loading, fullscreen and soundtrack.
+     */
+    function presentGalleryFromStart() {
+        if (!lightboxSlideshowEnabled || cards.length === 0) return;
+        stopLightboxSlideshow();
+        const defaults = lightboxSlideshowSpeedPresets;
+        const interval = GALLERY_PRESENTATION_SPEEDS.indexOf(
+            presentationOptions.interval
+        );
+        const transition = GALLERY_PRESENTATION_SPEEDS.indexOf(
+            presentationOptions.transition
+        );
+        lightboxSlideshowVisibleDuration = defaults.interval[interval];
+        lightboxSlideshowTransitionDuration = defaults.transition[transition];
+        const inputs = overlay.querySelectorAll('[data-lightbox-slideshow-speed]');
+        inputs.forEach(input => {
+            const selected = input.dataset.lightboxSlideshowSpeed === 'interval'
+                ? interval : transition;
+            input.value = String(selected);
+            const options = input.closest('label')
+                .querySelectorAll('[data-lightbox-speed-option]');
+            options.forEach((option, index) => {
+                option.classList.toggle('is-selected', index === selected);
+            });
+            input.setAttribute('aria-valuetext', options[selected].textContent.trim());
+        });
+        refreshLightboxOrderFromDom();
+        musicPlayer.start(false, true);
+        lightboxPresentationIntro = {
+            readyAt: performance.now() + LIGHTBOX_PRESENTATION_INTRO_MS,
+            music: presentationOptions.music,
+            autoplay: presentationOptions.autoplay,
+            fullscreen: Promise.resolve(true),
+            phase: 'preparing',
+            animation: null,
+        };
+        overlay.classList.add('is-presentation-intro', 'is-presentation-launch');
+        overlay.classList.toggle('is-presentation-exclusive', presentationOptions.exclusive);
+        lightboxSlideshowActive = presentationOptions.autoplay;
+        syncLightboxSlideshowControls();
+        openAt(0, {telemetryTrigger: 'slideshow'});
+        if (presentationOptions.fullscreen) {
+            lightboxPresentationIntro.fullscreen = enterLightboxFullscreen();
+        }
+        scheduleLightboxSlideshowNext();
+    }
+    galleryLightboxState.present = presentGalleryFromStart;
+
+    // The player consumes Play in document capture. A second listener on that
+    // same owner still receives the original trusted task, so one explicit Play
+    // can satisfy both browser activation boundaries without another prompt.
+    document.addEventListener('click', event => {
+        if (!event.isTrusted || overlay.hidden
+            || !presentationOptions.fullscreen
+            || !overlay.classList.contains('is-css-fullscreen')) return;
+        if (event.target instanceof Element && event.target.closest(
+            '[data-lightbox] [data-music-action="play"]'
+        )) void enterLightboxFullscreen();
+    }, {capture: true, signal: controller.signal});
+
     document.addEventListener('click', (event) => {
         if (controller.signal.aborted || !(event.target instanceof Element)) {
+            return;
+        }
+        if (event.target.closest('[data-gallery-presentation-start]')) {
+            event.preventDefault();
+            presentGalleryFromStart();
             return;
         }
         const card = event.target.closest('[data-lightbox-image], [data-lightbox-source]');
@@ -5146,6 +5372,19 @@ export function setupGalleryLightbox() {
     });
 
     overlay.addEventListener('click', (event) => {
+        const launchTarget = event.target instanceof Element ? event.target : null;
+        if (launchTarget?.closest('[data-presentation-confirm]')) {
+            event.preventDefault();
+            confirmLightboxPresentation();
+            return;
+        }
+        if (launchTarget?.closest('[data-presentation-cancel]')) {
+            event.preventDefault();
+            close();
+            return;
+        }
+        if (lightboxPresentationIntro) return;
+        if (overlay.classList.contains('is-presentation-exclusive')) return;
         // target stores state or configuration for the gallery front-end flow.
         const target = event.target instanceof Element ? event.target : null;
         // actionTarget stores state or configuration for the gallery front-end flow.
@@ -5320,6 +5559,31 @@ export function setupGalleryLightbox() {
         if (overlay.hidden) {
             return;
         }
+        if (lightboxPresentationIntro) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                close();
+            } else if (event.key === 'Tab') {
+                event.preventDefault();
+                const consent = overlay.querySelector('[data-presentation-consent]');
+                const buttons = consent && !consent.hidden
+                    ? [...consent.querySelectorAll('button:not(:disabled)')] : [];
+                const current = buttons.indexOf(document.activeElement);
+                const next = event.shiftKey ? current - 1 : current + 1;
+                buttons[(next + buttons.length) % buttons.length]?.focus();
+            } else if (!event.target.closest?.('[data-presentation-consent]')) {
+                event.preventDefault();
+            }
+            return;
+        }
+        if (overlay.classList.contains('is-presentation-exclusive')) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                close();
+            }
+            if (event.key === 'Tab') event.preventDefault();
+            return;
+        }
         if (event.key === 'Escape') {
             if (isLightboxFullscreen()) {
                 event.preventDefault();
@@ -5431,7 +5695,8 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Handles toggle lightbox fullscreen behavior for the gallery UI.
+     * Toggle native fullscreen or upgrade a shared link's viewport-only shell.
+     * @returns {Promise<void>} Settle native entry/refusal or restore the viewer.
      */
     async function toggleLightboxFullscreen() {
         debugLightbox('toggle:before', {
@@ -5439,6 +5704,12 @@ export function setupGalleryLightbox() {
             fullscreen: isLightboxFullscreen(),
             browserFullscreen: Boolean(document.fullscreenElement),
         });
+        if (overlay.classList.contains('is-css-fullscreen')) {
+            // A shared link fills the viewport without activation. The existing
+            // fullscreen control upgrades that shell on a deliberate click.
+            await enterLightboxFullscreen();
+            return;
+        }
         if (isLightboxFullscreen()) {
             stopLightboxSlideshow();
             await exitLightboxFullscreen();
@@ -5464,37 +5735,62 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Handles enter lightbox fullscreen behavior for the gallery UI.
+     * Enter native fullscreen or retain the device's complete CSS viewer shell.
+     * @returns {Promise<boolean>} True for native entry or the supported mobile
+     *     shell; false when desktop needs its viewport fallback and activation.
      */
     async function enterLightboxFullscreen() {
+        if (navigator.userActivation?.isActive) musicPlayer.resumeRequested();
         overlay.classList.add('is-fullscreen');
+        overlay.classList.remove('is-css-fullscreen');
         overlay.classList.remove('is-ui-visible');
         if (isMobileTouchDevice) {
             enterMobileLightboxFullscreen();
             showLightboxHud();
-            return;
+            return true;
         }
         try {
+            if (document.fullscreenElement) {
+                scheduleLightboxZoomReclamp();
+                return true;
+            }
             if (overlay.requestFullscreen) {
                 await overlay.requestFullscreen();
+                if (overlay.hidden) {
+                    // Close may win while native permission is still pending.
+                    // Release only this viewer's late native entry.
+                    if (document.fullscreenElement === overlay) {
+                        await document.exitFullscreen();
+                    }
+                    return false;
+                }
                 scheduleLightboxZoomReclamp();
                 debugLightbox('enter:native');
-                return;
+                return true;
             }
         } catch {
-            // Browser fullscreen can fail; the CSS fullscreen fallback still applies.
+            // Shared links have no activation gesture. Native fullscreen may
+            // be denied even though normal authorized photo playback works.
         }
-        enterMobileLightboxFullscreen();
+        // Permanent desktop capability fallback, owned by this viewer:
+        // retain desktop stage geometry rather than mobile-only media rules.
+        // Retire only with supported-browser proof that native entry is assured.
+        if (overlay.hidden) return false;
+        overlay.classList.add('is-css-fullscreen');
+        scheduleLightboxZoomReclamp();
         debugLightbox('enter:fallback-css');
         showLightboxHud();
+        return false;
     }
 
         /**
-     * Handles exit lightbox fullscreen behavior for the gallery UI.
+     * Exit native or CSS fullscreen and stop the same slideshow owner.
+     * @returns {Promise<void>} Restore the ordinary viewer and release its shell.
      */
     async function exitLightboxFullscreen() {
         stopLightboxSlideshow();
         overlay.classList.remove('is-fullscreen');
+        overlay.classList.remove('is-css-fullscreen');
         overlay.classList.remove('is-mobile-fullscreen');
         closeLightboxMapSplit();
         document.documentElement.classList.remove('has-mobile-lightbox');
@@ -5512,13 +5808,20 @@ export function setupGalleryLightbox() {
     }
 
         /**
-     * Handles sync lightbox fullscreen state behavior for the gallery UI.
+     * Synchronize native fullscreen changes without dismissing a CSS-only shell.
+     * @returns {void} Stop playback only after an actual native fullscreen exit.
      */
     function syncLightboxFullscreenState() {
         if (isMobileTouchDevice) {
             return;
         }
-        if (!document.fullscreenElement && overlay.classList.contains('is-fullscreen')) {
+        if (!document.fullscreenElement
+            && overlay.classList.contains('is-fullscreen')
+            && !overlay.classList.contains('is-css-fullscreen')) {
+            if (overlay.classList.contains('is-presentation-exclusive')) {
+                close();
+                return;
+            }
             cancelMapPhotoNavigation();
             overlay.classList.remove('is-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
@@ -5533,6 +5836,7 @@ export function setupGalleryLightbox() {
         }
         if (document.fullscreenElement === overlay) {
             overlay.classList.add('is-fullscreen');
+            overlay.classList.remove('is-css-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
             document.documentElement.classList.remove('has-mobile-lightbox');
             document.body.classList.remove('has-mobile-lightbox');

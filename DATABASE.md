@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.135.1. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.136. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -11,6 +11,21 @@ Version 0.104.1 introduces no schema migration, table, column, index, or stored-
 Version 0.120 adds no schema migration, table, column or index. Its database changes are support-policy documentation and direct disposable engine regression coverage; existing schema inspection and interrupted-DDL replay semantics remain unchanged.
 
 ## Gallery music storage
+
+Physical-gallery presentation defaults use nullable `galleries.presentation_json`,
+added by `202610170001_gallery_presentation_settings.php`. Its version-1 object
+contains launcher visibility, default-ON autoplay, presentation music and the slow/medium/fast interval
+and transition presets. Missing, malformed or unknown versions render the prior
+enabled/music/medium defaults. Public reads consume the fetched gallery row without
+new schema probes. Explicit writes require verified column readiness before any
+editor filesystem effects and advance the existing edit revision in the same
+gallery update. Older forms omit the marker and preserve stored settings.
+Gallery sidecars, folder import, Organizer-created children and Trash restoration
+retain the supported preferences. The migration uses ordinary ALTER TABLE only;
+duplicate-column recovery remains owned by the existing migration runner.
+The lazy `presentation_gallery_settings` health resolver shares the same schema
+authority and lightbox capability gate. Link-only fullscreen/exclusive choices
+do not require additional persistence.
 
 PDF/music capability and accounting changes add no tables, columns or migrations.
 The canonical keys `feature_flag.gallery_pdf_documents.enabled` and

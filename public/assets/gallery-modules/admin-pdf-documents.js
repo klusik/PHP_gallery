@@ -8,22 +8,15 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
+import {scanPdfPageCountCells} from './gallery-pdf-metadata.js?v=20261017-media-summary-v1';
 import {createPdfPngUploadStream} from './admin-pdf-conversion.js?v=20261012-pdf-dpi-warning-v3';
-import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261017-media-applets-v1';
+import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261017-media-summary-v1';
 import {beginAdminOperation, finishAdminOperation, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {completeAdminMutation} from './admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 import {i18nForElement, appendUploadProgressLog} from './admin-core.js?v=20261003-scoped-i18n-v1';
 
 /** @type {WeakMap<HTMLFormElement, AbortController>} Active conversion cancellation owners. */
 const conversions = new WeakMap();
-
-/** @type {WeakSet<HTMLElement>} Page-count cells already queued or resolved. */
-const pageCountCells = new WeakSet();
-/** @type {Map<string, Promise<number|null>>} Sequential page-count requests cached by protected URL and exact source version. */
-const pageCountsByUrl = new Map();
-/** @type {HTMLElement[]} Visible table cells waiting for one-at-a-time PDF metadata reads. */
-const pageCountQueue = [];
-let pageCountQueueRunning = false;
 
 /**
  * Retain each selected original and its acknowledged stages for an exact upload retry.
@@ -242,72 +235,6 @@ export function setupGalleryPdfDocuments() {
         }
     });
     observer.observe(document.body, {childList: true, subtree: true});
-}
-
-/**
- * Start metadata-only PDF page-count reads for unprocessed table cells.
- * @param {ParentNode} root Initial document or newly injected fragment to scan.
- * @returns {void} Queue page-count metadata reads without rendering PDF pages.
- */
-function scanPdfPageCountCells(root) {
-    const cells = [];
-    if (root instanceof Element && root.matches('[data-pdf-page-count]')) cells.push(root);
-    cells.push(...root.querySelectorAll('[data-pdf-page-count]'));
-    for (const cell of cells) {
-        if (pageCountCells.has(cell)) continue;
-        pageCountCells.add(cell);
-        const url = String(cell.dataset.pdfUrl || '');
-        if (url === '') continue;
-        const title = cell.dataset.pageCountTitle || cell.getAttribute('title') || 'Page count unavailable';
-        cell.title = title;
-        pageCountQueue.push(cell);
-    }
-    void drainPdfPageCountQueue();
-}
-
-/**
- * Read queued PDF metadata sequentially and reuse counts only for the same source version.
- * @returns {Promise<void>} Resolves when the current visible-cell queue is drained.
- */
-async function drainPdfPageCountQueue() {
-    if (pageCountQueueRunning) return;
-    pageCountQueueRunning = true;
-    try {
-        while (pageCountQueue.length > 0) {
-            const cell = pageCountQueue.shift();
-            if (!cell?.isConnected) continue;
-            const url = String(cell.dataset.pdfUrl || '');
-            if (url === '') continue;
-            const cacheKey = JSON.stringify([url, String(cell.dataset.pdfVersion || '')]);
-            let countPromise = pageCountsByUrl.get(cacheKey);
-            if (!countPromise) {
-                countPromise = readPdfPageCountFromStream(url);
-                pageCountsByUrl.set(cacheKey, countPromise);
-            }
-            const pageCount = await countPromise;
-            if (cell.isConnected) cell.textContent = pageCount === null ? '—' : String(pageCount);
-        }
-    } finally {
-        pageCountQueueRunning = false;
-        if (pageCountQueue.length > 0) void drainPdfPageCountQueue();
-    }
-}
-
-/**
- * Open a PDF through the existing protected-source loader and release it before rendering.
- * @param {string} url Protected same-origin PDF URL from a rendered table cell.
- * @returns {Promise<number|null>} Positive page count, or null when PDF metadata is unavailable.
- */
-async function readPdfPageCountFromStream(url) {
-    let stream = null;
-    try {
-        stream = await createPdfPngUploadStream(url, {});
-        return stream.pageCount;
-    } catch (error) {
-        return null;
-    } finally {
-        if (stream) await stream.dispose();
-    }
 }
 
 /**

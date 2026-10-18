@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.135.1}
-\newcommand{\manualdate}{17.~Oktober~2026}
+\newcommand{\version}{0.136}
+\newcommand{\manualdate}{18.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -498,12 +498,72 @@ Installationen ohne gespeicherte Wahl starten mit beiden Funktionen an;
 eine ausdrückliche Abschaltung bleibt erhalten. OFF verbirgt die zugehörigen
 Tabellen/Player und~sperrt Upload, Auslieferung und~PDF-Konvertierung, auch aus
 alten Formularen. Dateien, Listen und~Einstellungen bleiben erhalten.
-Bei beiden OFF entfällt auch der Medienreiter; alte Reiter-URLs wählen Identität.
+Bei beiden OFF bleiben Präsentationsvorgaben bei~aktivem Lightbox erhalten.
+Ist~auch Lightbox OFF, entfällt der~leere Reiter; alte URLs wählen Identität.
 Bereits erzeugte Seitenfotos behalten ihre normalen Zugriffsregeln.
 SimBrief kann Beschreibungen/Routen weiter aktualisieren und~behält alte PDFs.
 
 \subsubsection{PDF-Dokumente anhängen und umwandeln}
 Aufgeklappte Konvertierungsfelder vergrößern die Dokumentspalte nicht. Fehlt das bisherige Ziel oder wurde es geändert, bestätigen Sie ein neues privates Ergebnis; bisherige Dateien und Galerien bleiben erhalten.
+
+Transparente Karten zeigen ständig PDF-Dateizahl, Gesamtgröße und~Seitenzahl
+sowie Titelzahl und~Gesamtdauer der~Musik. Unbekannte Metadaten bleiben
+ein~Strich; unlesbare Originale werden nicht stillschweigend ausgelassen.
+Die~verfügbare Galeriebreite bestimmt das~Layout: breite Fenster zeigen
+Karten nebeneinander, schmale Fenster untereinander und~unter der~Beschreibung.
+
+Smart-Galerien verwenden dieselben Hero-Karten, \ui{Präsentation} und~das
+Teilen-Panel. PDFs und~OFPs stammen aus~zugänglichen physischen Quellen mit
+passenden Fotos in~der~gesamten Sammlung. Versteckte Dokumente fehlen auch
+für~Administratoren auf~der~öffentlichen Smart-Seite. Quellzugriffe bleiben geprüft.
+Geteilte Links behalten Sprache und~gewählten Quellfilter, entfernen Seitennummern
+und~starten beim ersten passenden Foto. Explizite Starts nutzen Autoplay und~Musik
+ON mit~mittleren Geschwindigkeiten, ohne die~normale Smart-Musikvorgabe zu~ändern.
+Schwarzer Beginn, Startbestätigung und~exklusive Ansicht bleiben gleich.
+
+Unter den~Karten startet \ui{Präsentation} beim ersten Foto mit
+eingestellten Geschwindigkeiten und~Musik für~diesen Start. Die~gespeicherte
+Musikvorgabe bleibt unverändert. Das~Teilen-Symbol öffnet ein~Overlay mit~Galerielink
+mit~aktiver Sprache und~\codeword{presentation=1}, ohne Seitenauswahl
+oder~Administratorvorschau. Nach normalen Zugriffskontrollen startet
+derselbe Ablauf. Browserregeln können \ui{Abspielen} erfordern;
+bei~verweigerter Zwischenablage erscheint ein~markierbarer Link.
+Anonyme Besucher verwenden denselben Link nach normalen Zugriffskontrollen.
+Benötigen Vollbild oder~Ton Aktivierung, wartet der~schwarze Beginn auf
+\ui{Präsentation starten}. Danach füllt der~Ersatz bei~fehlender nativer
+Unterstützung das~Browserfenster; \ui{Abspielen} hilft bei~späteren Tonfehlern.
+Unter \ui{Galerie bearbeiten > PDF / Musik / Präsentation} bietet die~transparente
+Karte \ui{Präsentationseinstellungen} öffentliche Schalter, Musik und~beide
+Geschwindigkeiten. Das~Speichern-Symbol verwendet das~geschützte Galerieformular.
+Vorschau und~Teilen verwenden aktuelle, auch ungespeicherte Werte. Neue Links
+enthalten Musik und~beide Geschwindigkeiten; spätere Galerieänderungen ändern
+diese Vorgaben nicht. Besucher können die~Wiedergabe vorübergehend anpassen.
+Auch \codeword{autoplay=1} startet die~Präsentation. Bei~blockiertem Ton bleibt
+der~Player Teil der~ausblendbaren Steuerung; Bewegung zeigt sie~wieder.
+Ein~Klick auf~\ui{Abspielen} oder~das~Foto versucht Ton und~natives Vollbild.
+Stoppen oder~Schließen verwirft wartende Musik. Verborgene Schalter widerrufen
+keine geteilten Links.
+Vorgaben verwenden versioniertes \codeword{galleries.presentation_json} nach
+der~Spaltenmigration. Explizite Änderungen erfordern verifiziertes Schema;
+alte Galerien behalten aktivierte Präsentation, Musik und~mittlere Geschwindigkeiten.
+Autoplay ist~für~alle Galerien standardmäßig ON und~in~der~Karte abschaltbar.
+Das~Teilen-Overlay bietet Geschwindigkeitsregler und~Schalter für~Autoplay,
+Musik, Vollbild und~\ui{Ohne Bedienelemente}. Kopieren übernimmt die~aktuelle URL;
+Linkänderungen speichern keine Galerieeinstellungen.
+\codeword{autoplay=0} öffnet Foto eins pausiert und~stumm. Vollbild und~exklusive
+Ansicht verwenden \codeword{presentation_fullscreen=1|0}
+und~\codeword{presentation_exclusive=1|0}.
+Ohne Bedienelemente ist~standardmäßig OFF; bei~ON fehlen Schalter, Metadaten
+und~Diagnose. Esc beendet die~Ansicht. Tonregeln des~Browsers gelten weiterhin.
+Jeder Start zeigt mindestens eine Sekunde Schwarz und~wartet auf~das~dekodierte
+erste Foto. Danach werden angefordertes Vollbild und~Musik geprüft.
+Verlangt der~Browser Aktivierung, bleibt Schwarz mit~einer kompakten
+Bestätigung \ui{Präsentation starten}. Ein Klick startet Musik und~fordert
+Vollbild vor~dem~Übergang an. Auch Links ohne Bedienelemente zeigen diese
+Bestätigung einmal. Esc oder~Schließen bricht ab. Autoplay OFF bleibt stumm
+und~pausiert.
+Dieser Anfang wiederholt sich nicht beim Galerieumlauf. Schließen bricht ihn~ab.
+Natives Vollbild kann einen Klick erfordern; sonst wird das~Browserfenster gefüllt.
 
 PDF- und~Musik-Schalter zeigen Dateizahlen neben der~Beschreibung,
 auf~schmalen Bildschirmen darunter. Ein~Klick öffnet ein~kleines Overlay.
@@ -848,6 +908,43 @@ Der installierte Uploader prüft seine eigene stabile GitHub-Installerversion h�
 \ui{Update} lädt den Installer mit Fortschritt und Abbruchmöglichkeit herunter, prüft ihn, sperrt neue Arbeit und wartet bis zu 120 Sekunden auf den sicheren Abschluss der Hintergrundaufgaben. Misslingt dieser Abschluss, wird die Installation verweigert und der Uploader bleibt verfügbar. Ein externer Hilfsprozess prüft die Datei erneut und fordert Windows-UAC-Zustimmung an. Das Selbstupdate beendet keine Arbeiter gewaltsam; normal manuell gestartete Installer behalten ihre bisherige Beendigungsregel. Der tatsächliche Installationsfortschritt kommt über einen lokalen sitzungsspezifischen Kanal. Nach Erfolg startet der Uploader als ursprünglicher Benutzer mit gespeicherten Einstellungen und Aufgaben. Es gibt kein automatisches Rollback. Native Python- oder Quellcode-Ausführungen bieten den geprüften Installer zum manuellen Start an. Wenn Windows einen Neustart verlangt, starten Sie Windows vor dem erneuten Öffnen des Uploaders neu; ein UAC-Abbruch öffnet die vorhandene Installation erneut.
 
 
+\subsection{Flugaufzeichnung und Berichte}
+
+Der Windows-Uploader zeichnet Flugzeugtelemetrie in MSFS 2020 und 2024 über
+einen gemeinsamen, nur lesenden Provider auf. Aufzeichnung und Berichtserstellung
+sind standardmäßig aktiviert; die Aufzeichnung lässt sich unabhängig abschalten,
+und die gespeicherte Sprachauswahl umfasst zunächst Englisch, Tschechisch,
+Deutsch und Schwedisch. Der gebündelte ReportLab-Renderer und DejaVu-Schriften
+erzeugen aus derselben Analyse ein Diagramm-PDF je gewählter Sprache. Berichte
+bleiben lokal und können erneut übertragen werden. Nicht unterstützte Signale
+bleiben nicht verfügbar; die Live-Abnahme für Simulator, Flugzeug und Build
+erfolgt getrennt für jede Generation.
+
+Beide Aktionen nutzen denselben dauerhaften Koordinator. Ein eigenständiges
+Stoppen beendet die Überwachung, die zugehörige UTC-Synchronisierung und die
+Flugaufzeichnung, schließt danach angenommene Fotos und erforderliche
+Berichtübertragungen ab; nicht zugehörige KI-, manuelle Import- und
+Vorprüfungs-Worker laufen weiter. Stoppen lässt den Schlüssel bestehen.
+Ein bestätigter Widerruf führt dasselbe Stoppen aus, beendet zusätzlich andere
+authentisierte Produzenten, schließt angenommene Arbeit ab und fordert den
+galeriegebundenen Serverwiderruf erst nach den erforderlichen Bestätigungen an.
+Der Fortschritt zeigt Phase und verstrichene Zeit; eine Restzeit nur bei
+Messbarkeit. Fehler bewahren Aufgaben und lokale Dateien zur Wiederherstellung;
+eine ausdrücklich lokale Erledigung ist möglich. Nach einem Neustart wird die
+Arbeit wiederhergestellt, aber die Widerrufszustimmung nicht; sie muss erneut
+bestätigt werden. Ohne gültigen Flug entsteht kein leerer Bericht.
+
+Der galeriegebundene Schlüssel kündigt die optionale Fähigkeit
+\texttt{flight\_reports\_v1} an. Die JSON-Aktion
+\texttt{flight\_report\_status} akzeptiert \texttt{report\_id},
+\texttt{language} und \texttt{sha256}; die Multipart-Aktion
+\texttt{flight\_report} akzeptiert diese Felder, \texttt{session\_id} und
+das PDF-Feld \texttt{report}. Der Server beschränkt Schreibzugriffe auf die
+Schlüsselgalerie und nutzt die allgemeine PDF-Prüfung, Speicherung und
+geschützte Anzeige ohne neues Schema erneut. Stabile Identität, Prüfsumme und
+Statusabgleich machen Wiederholungen idempotent. Berichte sind getrennt vom OFP,
+übernehmen die Galeriesichtbarkeit und enthalten keine Rohtelemetrie.
+
 \section{Fotos hinzufügen, beschreiben und organisieren}
 \label{sec:photo-workflow}
 \index{f00106@Fotoarbeitsablauf}
@@ -1129,10 +1226,10 @@ Vertikale Karten zeigen das Foto über dem Text, horizontale daneben. Die normal
 
 Öffentliche Suche ist nur ohne gespeicherte Wahl und bei verfügbarer Funktion standardmäßig an. Updates aktualisieren Versionen, Notizen und API-Zustand gemeinsam; automatische Metadatenprüfung erfolgt höchstens stündlich, deaktivierte automatische Updates lassen alte Hintergrundaufträge pausiert. OurAirports verwendet wöchentliche Aktualität und eine Stunde Fehlerabstand. Der Papierkorb zeigt Restdauer und sichere Löschbarkeit. Auch Präsentationsschema-Probleme verlangen eine Aktion im Systemstatus.
 
-Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.4.1. Ein
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.5.0. Ein
 separat angeforderter Installer-Build legt den Installer und die passenden
 generierten Metadaten \filepath{winapp-update.json} unter
-\filepath{winapp/dist/0.4.1/} ab. Installer und Metadaten gehören zur selben
+\filepath{winapp/dist/0.5.0/} ab. Installer und Metadaten gehören zur selben
 gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
 installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
 einschließlich 0.4.0 bleiben erhalten.
@@ -2945,7 +3042,16 @@ Warten Sie~auf \codeword{DRAFT_READY} und~wählen Sie~manuell
 \ui{Publish release}. \codeword{TAGGED / DRAFT_PENDING} wird für~dasselbe Q
 fortgesetzt; Kandidat und~korrekter Tag werden nicht neu aufgebaut oder~verschoben.
 Paralleles develop blockiert unsichere Synchronisierung, keinen korrekten Tag
-oder~Entwurf. Manuelle Hosting-/Browserprüfung und~Zweigbereinigung bleiben separat.
+oder~Entwurf. Nach \codeword{DRAFT_READY} und~Speicherung der~Abschlussbelege
+entfernt der~letzte Job automatisch den~genauen Release-Zweig mit~einer Q-SHA-Lease.
+Er~prüft erneut Anhang-Hashes, genehmigten Merge/Tag, main/develop-Abstammung
+und~abhängige offene PRs oder~aktive Workflows. Unvollständige Synchronisierung
+behält den~Zweig; fehlerhafte Belege stoppen die~Bereinigung und~erhalten den~Entwurf.
+Nur den~fehlgeschlagenen Bereinigungsjob wiederholen; unveränderliches Q und~gespeicherte
+Belege unterstützen auch einen bereits gelöschten Zweig. Dies gilt ab~dem~ersten
+Release mit~der~Änderung im~qualifizierten develop. Veröffentlichung und~manuelle
+Hosting-/Browserprüfung bleiben separat. Historische Zweige behalten den~gesondert
+genehmigten Stilllegungsworkflow.
 Siehe \filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
 \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} und~\filepath{docs/LATEX_BUILD.md}.
 

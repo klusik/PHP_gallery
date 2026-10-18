@@ -47,7 +47,7 @@ import {synchronizeReleaseTree} from './release-linear-sync.mjs';
  * reviewed_sha:string,merge_commit_sha:string,merged_at:string,approval:{id:number,reviewer:string,commit_sha:string,submitted_at:string,url:string|null}},develop_synchronization?:{state:string,result_sha:string,result_tree:string,develop_base_sha:string}}} CompletionEvidence
  */
 /** Tagged release and independently observed synchronization, including permanent publication proof.
- * @typedef {{state:string,tag:string,main_sha:string,candidate_sha:string,synchronization:string,synchronization_sha?:string,detail:string,evidence:CompletionEvidence,draft_status?:string,draft_url?:string,draft_release_id?:number,draft_error?:string}} CompletionResult
+ * @typedef {{state:string,tag:string,main_sha:string,candidate_sha:string,synchronization:string,synchronization_sha?:string,detail:string,evidence:CompletionEvidence,draft_status?:string,draft_url?:string,draft_release_id?:number,draft_error?:string,draft_assets?:Array<{name:string,size:number,digest:string}>}} CompletionResult
  */
 
 /**
@@ -410,7 +410,7 @@ export function prepareDraftRelease(record,repository,result,adapters={}) {
 }
 
 /** Create and automatically dispatch a qualified PR or complete its server-bound approval and retain evidence.
- * @returns {Promise<void>} Opens/dispatches a PR, waits for approval, or completes verified merge/tag/FF and stages an unpublished draft.
+ * @returns {Promise<void>} Opens/dispatches a PR, waits for approval, or completes merge/tag/FF and retains the verified draft inventory with a ready output for final branch cleanup.
  */
 export async function main() {
     const repository=process.env.GITHUB_REPOSITORY ?? '';
@@ -464,6 +464,12 @@ export async function main() {
             files.set('release-evidence.json',proof);
             files.set('release-evidence.sha256',Buffer.from(createHash('sha256').update(proof).digest('hex')+'  release-evidence.json\n'));
             result.draft_status=fillDraftAssets(record,result,draft.release_id,files).status;
+            // Retain the complete byte-verified inventory before the separate
+            // cleanup job can retire Q's branch. Recovery uses immutable SHAs.
+            result.draft_assets=[...files].map(([name,bytes])=>({
+                name,size:bytes.length,
+                digest:'sha256:'+createHash('sha256').update(bytes).digest('hex')
+            }));
         }
     } catch (error) {
         draftError=error;
@@ -485,6 +491,7 @@ export async function main() {
         output('GITHUB_STEP_SUMMARY',lines.filter(Boolean).join('\n'));
     }
     if (draftError) throw new Error('TAGGED / DRAFT_PENDING: '+draftError.message,{cause:draftError});
+    output('GITHUB_OUTPUT','draft_ready='+(result.draft_status==='DRAFT_READY'));
 }
 if (process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href) {
     main().catch(error=>{process.stderr.write(error.message+'\n');process.exitCode=1;});

@@ -59,6 +59,8 @@ Always complete the entire declaration contract when changing a function body.
 Describe structured `array` parameters with actual collection elements/row
 fields, document every added/defaulted parameter, and state every actual return
 variant including `void`. Review these together with the behavior edit.
+When extending a health registry or label map, complete the enclosing function's
+return description and structured input documentation in the same edit.
 
 Always search production imports, re-export modules and every regression
 assertion for the old cache-busting module URL. Update the complete import chain.

@@ -58,7 +58,10 @@ lightbox_zoom_lifecycle_assert($closeStart !== false && $closeEnd !== false, 'Ca
 $closeSource = substr($lightboxSource, (int) $closeStart, (int) $closeEnd - (int) $closeStart);
 lightbox_zoom_lifecycle_assert(str_contains($closeSource, 'resetLightboxZoom(false);'), 'Closing the lightbox must clear zoom state.');
 
-$slideshowStart = strpos($lightboxSource, 'async function startLightboxSlideshow()');
+$slideshowStart = strpos(
+    $lightboxSource,
+    'async function startLightboxSlideshow(musicOverride = null)'
+);
 $slideshowEnd = strpos($lightboxSource, 'function stopLightboxSlideshow', $slideshowStart === false ? 0 : $slideshowStart);
 lightbox_zoom_lifecycle_assert($slideshowStart !== false && $slideshowEnd !== false, 'Slideshow lifecycle functions are missing.');
 $slideshowSource = substr($lightboxSource, (int) $slideshowStart, (int) $slideshowEnd - (int) $slideshowStart);

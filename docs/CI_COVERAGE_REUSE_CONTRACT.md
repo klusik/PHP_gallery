@@ -108,6 +108,15 @@ attachment filling of an unpublished draft. Manual **Publish release** stays
 separate. Parallel develop work blocks an unsafe synchronization, not a correct
 already completed tag/draft.
 
+After `DRAFT_READY` and retention of the completion artifact, a final same-run
+job automatically retires the exact release ref with a Q lease. It independently
+checks assembly/review, immutable M/tag, retained M ancestry on both protected
+branches, uploaded asset sizes/digests and branch dependencies. Failed or missing
+proof blocks cleanup; incomplete synchronization keeps the ref. Cleanup retries
+use immutable Q and the retained artifact, including after a lost delete response.
+Publication remains manual. The existing separately reviewed retirement path
+continues to serve historical refs; automatic cleanup never sweeps them.
+
 Release preparation links the frozen main history before review without changing
 the prepared tree. Schema-4 completion fast-forwards unchanged selected develop
 to the actual tagged main commit, using verified source ancestry, assembly

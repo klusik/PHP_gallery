@@ -26,6 +26,68 @@ Documents / PDFs tab also retains independent upload and playlist controls.
 
 The music launcher shows the authorized track count. Clicking it opens a small
 overlay with a bounded, scrollable list; closing it leaves playback running.
+Its translucent card also keeps the track count and complete playlist duration
+visible while the list is closed. One silent metadata reader visits all public
+rows in saved order; missing duration produces an explicit unknown total. Cards
+wrap according to the gallery's available width, including a resized window.
+
+Physical galleries with authorized photographs and enabled lightbox controls
+offer **Presentation** below the attachment cards, even without attachments.
+This explicit action opens photo one and applies its configured soundtrack and
+speed defaults. In **Edit gallery → PDF · Music · Presentation**, the translucent
+Presentation card configures public launcher visibility, autoplay, music and both
+speeds. Autoplay defaults ON for every gallery until explicitly changed.
+Its Save icon uses the same protected gallery form and stale-edit checks as the
+other settings. Preview and Share use the current selections, including before
+saving. Hiding public buttons does not revoke authorized links or hide photos.
+It does not change the saved slideshow music preference. Normal viewer slideshow
+controls continue honoring that preference. Photo one can be loaded through the
+existing sparse metadata endpoint when another pagination page is visible.
+
+The adjacent share icon opens a small translucent overlay with a selectable URL,
+two discrete speed sliders and switches for autoplay, music, fullscreen and
+**Without controls**. Copy uses the configured URL; changing a share draft does
+not save gallery settings. Autoplay defaults ON, while Without controls defaults
+OFF. The canonical gallery URL retains the active language and `presentation=1`,
+plus `autoplay=1|0`, `presentation_fullscreen=1|0`,
+`presentation_exclusive=1|0`, `presentation_music=1|0`,
+`presentation_interval=slow|medium|fast` and matching `presentation_transition`.
+The link snapshots these preferences even if the gallery defaults later change.
+`autoplay=1` is an equivalent launch flag. Legacy links without explicit presets
+use current gallery defaults. Pagination and administrator/preview state are
+omitted. The link retains ordinary gallery access requirements and starts
+the same presentation once after loading. Clipboard refusal exposes a selectable
+URL. Browser autoplay/fullscreen refusal holds the black introduction and offers
+**Start presentation**; a link cannot bypass browser policy. The confirmation
+invokes the shared audio owner before requesting native fullscreen in the same
+click task. It is available even with Without controls selected and disappears
+before photo one appears. Esc or the close icon cancels the pending launch.
+With autoplay OFF the link opens photo one paused and silent. Without controls
+hides all viewer controls, metadata and diagnostics; Esc exits. This changes
+presentation only and grants no access. Browser sound blocking still applies.
+
+Each launch holds a black stage for at least one second and until photo one is
+decoded. Requested fullscreen and playback must also settle; activation refusal
+extends black until confirmation. The selected transition then reveals photo one
+with requested music when autoplay is ON. The hold is not part of photo ordering
+and never repeats at a loop.
+Stop, Close and manual navigation cancel pending launch work. The existing
+slideshow timer owns both the opening hold and normal advances.
+The public request guard accepts the presentation flag only on gallery pages.
+Fresh anonymous sessions use the same visibility/password/share/NSFW checks as
+ordinary gallery links. When desktop native fullscreen is denied, the existing
+desktop viewer fills the browser viewport. After explicit confirmation, an
+unsupported native request keeps that shell rather than repeating the prompt.
+Codec/media failures retain normal player feedback. Explicit Play can retry
+later soundtrack failures.
+The pending soundtrack also resumes on a trusted click on the photo. Its glass
+player hides with the idle HUD even while activation is required; movement restores
+the normal controls. A trusted photo/Play click also requests native fullscreen
+when the link requested it and the viewer is using the viewport fallback.
+Stop, Close, explicit silence and teardown cancel pending activation. A silent
+presentation releases already playing page music while preserving manual Play
+ownership during that presentation. No silent-audio trick or browser-policy
+bypass is used; fully automatic audible playback depends on browser permission.
 PDFs use the same disclosure. The existing miniplayer remains visible outside
 the list and retains its four controls. The table shows titles, browser-reported
 durations and one context-sensitive Play/Stop icon **before** each title, with
@@ -200,7 +262,15 @@ Smart Galleries have no audio directory. Their complete canonical grouped photo
 result supplies source IDs, including sources outside the current photo page.
 Temporary source filtering changes photos, not this union. The Smart service
 rechecks public listing and visitor access against the request-cached source
-inventory, and only sources with an index load the existing attachment owner.
+inventory. Music admits sources with an index; PDFs use the existing PDF/OFP
+presence service before loading the established attachment owner.
+The shared `smart_gallery_attachment_sources()` access check also supplies PDF
+membership. PDF/OFP originals from these sources render in the same responsive
+hero applets as physical galleries, beside the description and music summary.
+Hidden PDFs are excluded even for signed-in administrators on the public Smart
+page. Aggregate document lists have no physical mutation forms. Each document
+retains its source delivery URL and version; identical copies in different source
+galleries remain separate documents with independent visibility/access authority.
 A source must contribute a matching accessible photo to the canonical result;
 an unrelated or empty physical gallery contributes no music merely because it
 exists. Protected source URLs recheck access when audio is requested.
@@ -230,3 +300,13 @@ automatic slideshow music and initially defaults false. Enable presentation
 overrides and the music preference in the Smart editor; manual Play remains
 available when music exists. This does not inherit a source's autoplay setting,
 copy originals or alter per-source download permission.
+
+The public Smart hero also offers the shared Presentation button and configurable
+share overlay. Explicit launches use the common autoplay/music ON and medium
+timings; they temporarily request music independently of the ordinary Smart
+slideshow preference above. Shared URLs preserve the active language and selected
+source filter, omit photo pagination/admin preview, and snapshot all playback
+switches/speeds. The existing black introduction, trusted activation confirmation,
+exclusive controls and paused/muted overrides apply unchanged. Global lightbox
+and effective Smart slideshow settings gate discovery/launch; PDF and music
+masters independently control their applets. Sharing grants no source access.

@@ -1158,13 +1158,13 @@ function smart_gallery_accessible_gallery_ids(bool $publicOnly): array
 }
 
 /**
- * Resolve music-bearing physical sources from the complete canonical result.
+ * Resolve physical attachment sources from the complete canonical result.
  * @param list<int> $sourceIds Grouped public-result source IDs, independent of
  *     pagination and the temporary source-gallery filter.
  * @return list<array{id:int,folder_path:string}> Listed sources still accessible
- *     to the current visitor and containing an existing music index.
+ *     to the current visitor, without scanning unrelated galleries or media.
  */
-function smart_gallery_music_sources(array $sourceIds): array
+function smart_gallery_attachment_sources(array $sourceIds): array
 {
     $rows = smart_gallery_all_source_gallery_rows();
     $sources = [];
@@ -1172,12 +1172,26 @@ function smart_gallery_music_sources(array $sourceIds): array
         $source = $rows[$id] ?? null;
         if ($source === null || !gallery_is_public_listed($source)
             || !visitor_can_access_gallery($source)) continue;
-        $folder = (string) $source['folder_path'];
-        if (is_file(gallery_abs_path($folder) . '/.gallery-music/index.json')) {
-            $sources[] = ['id' => $id, 'folder_path' => $folder];
-        }
+        $sources[] = ['id' => $id, 'folder_path' => (string) $source['folder_path']];
     }
     return $sources;
+}
+
+/**
+ * Select music-bearing sources after the shared attachment access check.
+ * @param list<int> $sourceIds Complete canonical result source IDs, independent
+ *     of pagination and the temporary source filter.
+ * @return list<array{id:int,folder_path:string}> Authorized sources with an
+ *     existing music index; corrupt indexes remain the playlist owner's concern.
+ */
+function smart_gallery_music_sources(array $sourceIds): array
+{
+    return array_values(array_filter(
+        smart_gallery_attachment_sources($sourceIds),
+        static fn (array $source): bool => is_file(
+            gallery_abs_path($source['folder_path']) . '/.gallery-music/index.json'
+        )
+    ));
 }
 
 /** Return normalized semantic query inputs without exposing SQL fragments outside the model. */

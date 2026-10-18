@@ -177,7 +177,12 @@ function view_render_public_gallery_preview_toolbar(array $viewModel): void
 /**
  * Render the public gallery title and optional branding assets.
  *
- * @param array{title?:string,description?:string,description_links?:array<string,array{icon_id:?string,cached_url:?string}>,banner_url?:string,logo_url?:string,date_html?:string,pdf_html?:string} $viewModel Controller-prepared branding, description links and protected PDF table markup; omitted presentation fields use their existing empty defaults.
+ * @param array{title?:string,description?:string,
+ *     description_links?:array<string,array{icon_id:?string,cached_url:?string}>,
+ *     banner_url?:string,logo_url?:string,date_html?:string,pdf_html?:string,
+ *     presentation_url?:string,presentation_music?:bool} $viewModel Prepared
+ *     branding, authorized attachments and optional presentation controls;
+ *     omitted fields retain their empty presentation defaults.
  * @param bool $includeContent Whether to append description and documents; defaults to true for direct view consumers.
  * @return void Emits public gallery branding and conditional flight-plan controls.
  */
@@ -208,35 +213,26 @@ function view_render_public_gallery_branding_header(array $viewModel, bool $incl
  * Render description text beside the compact document and playlist launchers.
  * @param array{description?:string,
  *     description_links?:array<string,array{icon_id:?string,cached_url:?string}>,
- *     pdf_html?:string} $viewModel Prepared description, link metadata and
+ *     pdf_html?:string,presentation_url?:string,
+ *     presentation_music?:bool} $viewModel Prepared description, link metadata,
+ *     eligible presentation URL and
  *     protected attachment markup; absent fields render no content.
  * @return void Emit the hero row, standalone text or left-aligned applets.
  */
 function view_render_public_gallery_description_documents(array $viewModel): void
 {
     $description = (string) ($viewModel['description'] ?? '');
-    $pdfHtml = (string) ($viewModel['pdf_html'] ?? '');
-    $hasDescription = trim($description) !== '';
-    if ($hasDescription && $pdfHtml !== '') {
-        echo '<div class="gallery-description-documents">';
-    }
-    if (trim($description) !== '') {
-        echo '<div class="hero-description gallery-description-rich">';
-        if (trim($description) !== '') {
-            echo view_gallery_description_markdown_html(
-                $description,
-                (array) ($viewModel['description_links'] ?? [])
-            );
-        }
-        echo '</div>';
-    }
-    if ($pdfHtml !== '') {
-        echo '<div class="gallery-attachment-applets"'
-            . ' data-gallery-attachment-applets>' . $pdfHtml . '</div>';
-    }
-    if ($hasDescription && $pdfHtml !== '') {
-        echo '</div>';
-    }
+    // Keep rich-description dependencies with physical-gallery presentation.
+    // Smart collections reuse only the shared prepared-HTML layout below.
+    view_render_gallery_media_hero([
+        'description_html' => trim($description) !== ''
+            ? view_gallery_description_markdown_html(
+                $description, (array) ($viewModel['description_links'] ?? [])
+            ) : '',
+        'media_html' => (string) ($viewModel['pdf_html'] ?? ''),
+        'presentation_url' => (string) ($viewModel['presentation_url'] ?? ''),
+        'presentation_music' => !empty($viewModel['presentation_music']),
+    ]);
 }
 
 /**

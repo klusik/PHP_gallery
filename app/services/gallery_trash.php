@@ -694,6 +694,7 @@ function gallery_trash_restorable_gallery_columns(): array
         'description_layout',
         'count_badge_visibility',
         'lightbox_browsing_mode',
+        'presentation_json',
         'grid_columns',
         'grid_rows',
         'grid_use_for_subgalleries',

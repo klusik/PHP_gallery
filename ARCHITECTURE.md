@@ -16,7 +16,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.135.1';
+const CMS_VERSION = '0.136';
 ```
 
 Update-related code uses:
@@ -27,6 +27,51 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 ```
 
 ## Gallery music ownership
+
+The public gallery controller prepares canonical presentation links only when
+authorized photos and lightbox capability are available. Views render translucent
+PDF/music summary cards that wrap with the gallery's available width. The shared
+PDF metadata queue and serialized audio metadata reader complete their totals.
+Deferred presentation activation hands off to the existing lightbox scheduler,
+including sparse photo-one loading and temporary soundtrack enablement. Clipboard
+copy and its selectable-URL fallback belong to the existing media-panel module.
+The SEO guard allows `presentation` on gallery pages while the controller keeps
+ordinary visitor authorization. Desktop native-fullscreen refusal retains the
+desktop CSS shell and image stage; mobile presentation keeps its existing shell.
+Physical-gallery defaults live in nullable versioned `galleries.presentation_json`
+and use the ordinary gallery revision/CSRF writer. The media tab associates its
+controls with that same native form, including in the mounted drawer and without
+JavaScript. Autoplay defaults ON and can be disabled per gallery. A retained native
+share disclosure configures a URL snapshot (autoplay, music, fullscreen, exclusive
+controls and both speed presets) without persistence. Public URLs snapshot these
+options; explicit
+link values override later gallery edits. Missing/unknown settings retain prior
+enabled/music/medium behavior. Media delivery and visitor authorization are unchanged.
+The single slideshow timer also gates a launch-only one-second black hold on
+decoded photo one, then hands off after its reveal. It never adds a synthetic
+gallery item. Exclusive links hide controls by default only when explicitly
+requested and retain Escape exit. Native fullscreen/sound remain browser-owned.
+When either requested capability refuses automatic activation, the same launch
+holds black on photo one and shows a compact confirmation outside the idle HUD.
+Its click calls shared audio first and fullscreen second, before any await.
+Exclusive links allow this initial confirmation, then hide controls normally.
+Only settled launch/reveal work may start the existing advance scheduler;
+close/stop invalidate pending results. No additional viewer or audio is created.
+
+Smart Galleries reuse that hero description/applets view and the same launcher,
+configurable share panel and activation lifecycle. Their URLs retain language and
+an active source filter, omit pagination/preview, and start at matching photo one.
+The existing canonical complete result determines attachment source membership;
+the shared Smart attachment service rechecks public listing and visitor access.
+PDF applets combine visible source documents/OFPs read-only, with source-qualified
+DOM IDs and unchanged protected physical-source delivery URLs. This excludes
+hidden PDFs even for administrators viewing the public Smart collection. Music
+keeps its existing exact-byte union. Global media masters remain independent;
+explicit launch defaults do not alter the ordinary Smart slideshow preference.
+The common prepared-HTML row and launcher live in the existing lightbox/media
+view owner. Physical Markdown/link formatting stays in its original wrapper;
+Smart descriptions retain escaped plain text. This keeps sharing the layout
+from pulling physical-description dependencies into Smart/attached-gallery routes.
 
 Global PDF and music availability uses independent default-ON capabilities
 `gallery_pdf_documents` and `gallery_music` in the canonical feature registry.
@@ -57,6 +102,8 @@ PDF and audio routes share the existing attachment runtime owner under its
 historical `gallery-pdf-documents` machine name. Public presentation loads it
 only when attachments exist. This retains the complete routing/access closure
 without adding a logical module beyond the consumed global allowance.
+Authenticated flight-report actions load this same owner immediately before
+status or attachment work; ordinary photo uploads do not acquire the PDF module.
 
 Shared view helpers render native attachment disclosures;
 `gallery-media-panels.js` owns bounded top-layer presentation without moving
@@ -2056,6 +2103,46 @@ The migration feature exchanges manifests and assets between two gallery install
 The Admin migration endpoint is a JSON-only enhanced workflow. Authentication, CSRF, missing-gallery, expected step failures, and success responses therefore remain JSON and do not redirect the injected editor to a standalone Admin page. `target_pull` is a local persistent mutation as soon as the source manifest is accepted because `gallery_migration_prepare_target_job()` applies gallery metadata before asset transfer finishes. The pull-manifest and pull-complete responses consequently carry the canonical mutation result for the stable local gallery ID plus the current gallery and owning parent/root public render contexts. Imported slug changes use the new canonical render URL while the visible browser URL remains unchanged.
 
 `admin-gallery-migration.js` owns transfer progress, reconnect/status handling, cancellation, and log markup while transfer is active. When it runs inside the gallery side panel, it forwards canonical local pull results through `php-gallery:auxiliary-mutation-success`. The result also identifies the `gallery-edit` panel fragment. Final target-pull completion, and partial failure after manifest acceptance, explicitly request a server-rendered editor refresh through `admin-side-panel.js`; the active API tab and drawer remain mounted while stale Identity/Access/Display/Media values are replaced. This prevents a later Save from writing pre-import form values back over imported metadata. Public invalidation and panel refresh remain separate coordinator responsibilities, and a partial transfer failure is reported in the persistent drawer status after already-applied local state is synchronized. Source-push completion emits a typed remote mutation result but declares no local public contexts.
+
+## Flight recording and protected report delivery
+
+The WinApp flight subsystem is local-first and read-only. `flight_recorder.py`
+subscribes through the persistent `simconnect_flight.py` provider for both
+MSFS 2020 and MSFS 2024. It records aircraft coordinates independently from
+the per-photo camera/location client. `flight_data.py` normalizes available
+samples into one analysis model; unavailable generation/build/aircraft fields
+remain unavailable rather than being fabricated. `flight_report.py` renders
+the same immutable analysis into one PDF per selected language using the bundled
+ReportLab/DejaVu assets and shared translations.
+
+`flight_jobs.py` owns persisted preferences, session plans and workspace leases.
+`flight_workflow.py` owns durable finalization tasks and progress. Standalone
+Stop ends the watcher, its owned UTC synchronizer and flight recorder, then
+drains accepted photographs and completes required report delivery; unrelated
+AI, manual-import and preflight workers keep running. It leaves the key
+configured. Confirmed Revoke uses the same Stop flow, also stops other
+authenticated producers and finishes accepted work before requesting scoped
+server revocation. Restart recovery never silently resumes irreversible revoke
+consent. Failures remain durable, retain local telemetry/reports and expose retry
+or an explicit local-only resolution. Unknown waits have indeterminate progress;
+elapsed time is shown and ETA appears only when measured work supports it.
+
+Recording defaults on and can be disabled independently of screenshot watching
+and Sync UTC time. Automatic report creation defaults on with EN, CS, DE and SV
+selected; both settings and language selection are persisted. A per-flight
+opt-out is explicit. No empty report is generated without a valid session.
+
+The gallery-scoped WinApp token negotiates `flight_reports_v1` through the
+existing inventory response. `flight_report_status` accepts JSON
+`report_id`, `language` and `sha256`; `flight_report` accepts those fields
+plus `session_id` and a multipart field named `report`. Both actions derive
+gallery identity from the authenticated token, never require Admin access, and
+reuse the general PDF validation, protected storage and viewer delivery path.
+The stable report identity plus language and checksum makes retries
+idempotent. After an ambiguous upload result the client checks status before
+retrying. These documents remain separate from OFP attachments, inherit the
+gallery's existing visibility/access policy, and contain no raw telemetry.
+The capability adds no database schema.
 
 ## Upload Automation and Windows Watcher
 

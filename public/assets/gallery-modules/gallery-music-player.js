@@ -14,6 +14,12 @@ let currentPlayer = null;
 let currentSignature = '';
 
 /**
+ * @typedef {'playing'|'silent'|'blocked'|'failed'|'cancelled'} MusicPlaybackResult
+ * Settled native playback, deliberate silence, activation refusal, exhausted
+ * originals or a superseded request. No result grants browser permissions.
+ */
+
+/**
  * Build one exclusive player for a trusted gallery playlist.
  * @param {Document|HTMLElement} root Document or isolated fixture control
  *     owner.
@@ -22,8 +28,11 @@ let currentSignature = '';
  *     in saved order.
  * @param {HTMLAudioElement} audio Native audio instance, injectable for
  *     lifecycle fixtures.
- * @returns {{refresh:function():void,start:function():void, stop:function():void,
+ * @returns {{refresh:function():void,
+ *     start:function(boolean=, boolean=):Promise<MusicPlaybackResult>,
+ *     stop:function():void,
  *     closeViewer:function():void, destroy:function():void,
+ *     resumeRequested:function():void,
  *     command:function(string, string=, boolean=):void}} Shared activation,
  *     slideshow boundaries, disposal and explicit control actions.
  */
@@ -44,6 +53,7 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     let generation = 0;
     let handledFailure = -1;
     let message = '';
+    let awaitingGesture = false;
     const failed = new Set();
     audio.preload = 'none';
 
@@ -54,6 +64,8 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
      *     selected track.
      */
     function release() {
+        awaitingGesture = false;
+        message = '';
         generation += 1;
         playing = false;
         audio.pause();
@@ -76,6 +88,8 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
             const own = card ? card.dataset.musicGallery === String(playlist.galleryId)
                 : group.dataset.musicGallery === String(playlist.galleryId);
             group.hidden = card ? false : !group.dataset.musicGallery;
+            group.classList.toggle('is-awaiting-gesture', own
+                && awaitingGesture && owner === 'slideshow' && slideshow);
             const title = group.querySelector('[data-music-current-title]');
             if (title) title.textContent = own ? tracks[index]?.title || '' : '';
             const status = group.querySelector('[data-music-playback-status]');
@@ -120,48 +134,57 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
      *     gesture retry.
      * @param {Error|DOMException|null} error Native rejection or media error.
      * @param {number} token Source generation associated with the failure.
-     * @returns {void} Continue within the bounded playlist or release
-     *     failed audio.
+     * @returns {MusicPlaybackResult|Promise<MusicPlaybackResult>} Report refusal,
+     *     exhaustion or cancellation, or adopt the next original's result.
      */
     function failure(error, token) {
-        if (token !== generation || handledFailure === token || disposed || !playing) return;
+        if (token !== generation || handledFailure === token
+            || disposed || !playing) return 'cancelled';
         handledFailure = token;
-        message = root.querySelector(
+        const failureMessage = root.querySelector(
             '[data-music-playback-error]'
         )?.dataset.musicPlaybackError || '';
         if (error?.name === 'NotAllowedError') {
             release();
+            awaitingGesture = true;
+            message = root.querySelector('[data-music-activation-required]')
+                ?.dataset.musicActivationRequired || failureMessage;
             sync();
-            return;
+            return 'blocked';
         }
         failed.add(index);
         if (failed.size >= tracks.length) {
             release();
+            message = failureMessage;
             sync();
-            return;
+            return 'failed';
         }
         do { index = (index + 1) % tracks.length; } while (failed.has(index));
-        play();
+        return play();
     }
 
     /**
      * Start the selected original synchronously within the triggering
      *     user task.
-     * @returns {void} Reuse the same audio element and contain native
-     *     rejections.
+     * @returns {Promise<MusicPlaybackResult>} Settle playback, activation refusal,
+     *     exhaustion or cancellation without leaking native rejections.
      */
     function play() {
-        if (disposed || tracks.length === 0) return;
+        if (disposed || tracks.length === 0) return Promise.resolve('cancelled');
+        awaitingGesture = false;
         audio.pause();
         const token = ++generation;
         audio.src = tracks[index].url;
         playing = true;
         sync();
         try {
-            Promise.resolve(audio.play()).then(() => {
-                if (token === generation) { message = ''; sync(); }
+            return Promise.resolve(audio.play()).then(() => {
+                if (token !== generation || disposed) return 'cancelled';
+                message = '';
+                sync();
+                return 'playing';
             }).catch(error => failure(error, token));
-        } catch (error) { failure(error, token); }
+        } catch (error) { return Promise.resolve(failure(error, token)); }
     }
 
     audio.addEventListener('ended', () => {
@@ -182,16 +205,37 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
          */
         refresh: sync,
         /**
-         * Apply the gallery's saved default when slideshow starts.
-         * @returns {void} Replace existing playback only when
-         *     automatic music is on.
+         * Apply the saved default or the visitor's explicit soundtrack launch.
+         * @param {boolean} force Whether this launch explicitly requests music.
+         * @param {boolean} silent Whether an explicit presentation mutes even
+         *     default-on or already playing page music while retaining its owner.
+         * @returns {Promise<MusicPlaybackResult>} Report native playback, silence,
+         *     activation refusal, exhaustion or cancellation to the launch owner.
          */
-        start() {
+        start(force = false, silent = false) {
             slideshow = true;
-            if (disposed || playlist.enabled !== true) return;
+            if (silent) {
+                owner = 'slideshow';
+                release();
+                sync();
+                return Promise.resolve('silent');
+            }
+            if (disposed) return Promise.resolve('cancelled');
+            if (!force && playlist.enabled !== true) return Promise.resolve('silent');
             owner = 'slideshow';
             index = 0;
             failed.clear();
+            message = '';
+            return play();
+        },
+        /**
+         * Retry only a requested slideshow soundtrack after visitor activation.
+         * @returns {void} Preserve track/owner; stopped or closed music stays off.
+         */
+        resumeRequested() {
+            if (disposed || !awaitingGesture || !slideshow
+                || owner !== 'slideshow') return;
+            awaitingGesture = false;
             message = '';
             play();
         },
@@ -308,6 +352,15 @@ export function setupGalleryMusicPlayback() {
     if (document.body.dataset.musicPlaybackBound === '1') return;
     document.body.dataset.musicPlaybackBound = '1';
     document.addEventListener('click', event => {
+        const target = event.target instanceof Element ? event.target : null;
+        const viewer = target?.closest('[data-lightbox]');
+        const control = target?.closest(
+            'button,a,input,select,textarea,[role="button"]'
+        );
+        if (event.isTrusted && viewer && !viewer.hidden
+            && control?.matches('[data-lightbox-stage]')) {
+            currentPlayer?.resumeRequested();
+        }
         const button = event.target instanceof Element
             ? event.target.closest('[data-music-action]') : null;
         if (!button || button.disabled) return;
@@ -442,12 +495,34 @@ export function scanGalleryMusicDurations(root = document) {
     for (const cell of root.querySelectorAll('[data-music-duration]')) {
         if (durationSeen.has(cell)) continue;
         durationSeen.add(cell);
-        if (durationObserver) durationObserver.observe(cell);
+        // Public totals need the complete authorized list while its disclosure
+        // is closed. Keep one silent reader; editor-only rows stay viewport-led.
+        const summary = cell.closest('[data-gallery-music]')
+            ?.querySelector('[data-music-duration-total]');
+        if (summary) durationQueue.push(cell);
+        else if (durationObserver) durationObserver.observe(cell);
         else durationQueue.push(cell);
     }
     // Permanent support for browsers without IntersectionObserver: metadata
     // remains serialized and bounded by the same per-row deadline.
-    if (!durationObserver) void drainMusicDurations();
+    void drainMusicDurations();
+}
+
+/**
+ * Show a complete playlist duration without treating missing tracks as zero.
+ * @param {Element} card Authorized public music section containing its rows.
+ * @returns {void} Show the total, pending ellipsis or explicit unknown dash.
+ */
+function updateMusicDurationTotal(card) {
+    const total = card.querySelector('[data-music-duration-total]');
+    if (!total) return;
+    const cells = [...card.querySelectorAll('[data-music-duration]')];
+    const ready = cells.every(cell => cell.dataset.musicDurationLoaded === '1');
+    const known = cells.every(cell => cell.dataset.musicDurationValue !== undefined);
+    total.textContent = !ready ? '…' : !known ? '—' : formatMusicDuration(
+        cells.reduce((sum, cell) => sum + Number(cell.dataset.musicDurationValue), 0)
+    );
+    if (ready && known) total.removeAttribute('title');
 }
 
 /**
@@ -520,9 +595,14 @@ async function drainMusicDurations() {
             const duration = await readMusicDuration(cell.dataset.musicSrc || '');
             if (cell.isConnected) {
                 cell.textContent = formatMusicDuration(duration);
+                cell.dataset.musicDurationLoaded = '1';
+                delete cell.dataset.musicDurationValue;
                 if (Number.isFinite(duration) && duration >= 0) {
+                    cell.dataset.musicDurationValue = String(duration);
                     cell.removeAttribute('title');
                 }
+                const card = cell.closest('[data-gallery-music]');
+                if (card) updateMusicDurationTotal(card);
             }
         }
     } finally { durationRunning = false; }

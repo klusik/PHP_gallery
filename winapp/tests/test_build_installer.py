@@ -120,6 +120,10 @@ class InstallerBuildTests(unittest.TestCase):
                     raise subprocess.CalledProcessError(1, command)
                 if "PyInstaller" in command:
                     self.assertIn("--onefile", command)
+                    self.assertIn(["--collect-all", "reportlab"], [
+                        command[index:index + 2]
+                        for index in range(len(command) - 1)
+                    ])
                     binary = command[command.index("--add-binary") + 1]
                     self.assertTrue(binary.endswith("runtime/simconnect"))
                     app = work / "app" / BUILD.APP_EXE
@@ -279,30 +283,86 @@ class InstallerBuildTests(unittest.TestCase):
         """A dependency refusal cleans staging and preserves an older installer."""
         self.exercise_build(fail_at=1, use_installed_dependencies=True)
 
-    def test_installed_dependency_preflight_rejects_missing_and_old_packages(self):
+    def test_installed_dependency_preflight_rejects_missing_and_old_packages(self) -> None:
         """Enforce package bounds without installing packages or requiring Tkinter.
 
         Linux audit runners need no GUI runtime for these negative cases. Stub
         only the initial Tkinter import; package refusal must happen before Tcl
         creation or imports of the actual installer build dependencies.
+
+        Returns:
+            None: Asserts unsupported versions and missing packages are refused.
         """
         tkinter_stub = types.ModuleType("tkinter")
         for versions in (
-            {"PyInstaller": "6.18.0", "Pillow": "12.2.0", "pystray": "0.19.5"},
-            {"PyInstaller": "7.0.0", "Pillow": "12.2.0", "pystray": "0.19.5"},
-            {"PyInstaller": "6.19.0", "Pillow": "9.0.0", "pystray": "0.19.5"},
-            {"PyInstaller": "6.19.0", "Pillow": "12.2.0", "pystray": "0.19.4"},
+            {
+                "PyInstaller": "6.18.0",
+                "Pillow": "12.2.0",
+                "pystray": "0.19.5",
+                "reportlab": "5.0.1",
+            },
+            {
+                "PyInstaller": "7.0.0",
+                "Pillow": "12.2.0",
+                "pystray": "0.19.5",
+                "reportlab": "5.0.1",
+            },
+            {
+                "PyInstaller": "6.19.0",
+                "Pillow": "9.0.0",
+                "pystray": "0.19.5",
+                "reportlab": "5.0.1",
+            },
+            {
+                "PyInstaller": "6.19.0",
+                "Pillow": "12.2.0",
+                "pystray": "0.19.4",
+                "reportlab": "5.0.1",
+            },
+            {
+                "PyInstaller": "6.19.0",
+                "Pillow": "12.2.0",
+                "pystray": "0.19.5",
+                "reportlab": "5.0.0",
+            },
+            {
+                "PyInstaller": "6.19.0",
+                "Pillow": "12.2.0",
+                "pystray": "0.19.5",
+                "reportlab": "6.0.0",
+            },
         ):
             with self.subTest(versions=versions), mock.patch(
                 "importlib.metadata.version", side_effect=versions.__getitem__
             ), mock.patch.dict(sys.modules, {"tkinter": tkinter_stub}):
                 with self.assertRaises(SystemExit):
                     exec(BUILD.installed_dependencies_code(), {})
-        with mock.patch("importlib.metadata.version", side_effect=PackageNotFoundError("pystray")), mock.patch.dict(
-            sys.modules, {"tkinter": tkinter_stub}
-        ):
-            with self.assertRaises(PackageNotFoundError):
-                exec(BUILD.installed_dependencies_code(), {})
+        for missing_package in ("pystray", "reportlab"):
+            versions = {
+                "PyInstaller": "6.19.0",
+                "Pillow": "12.2.0",
+                "pystray": "0.19.5",
+                "reportlab": "5.0.1",
+            }
+
+            def package_version(package_name: str) -> str:
+                """Return a fixture package version or the requested missing error.
+
+                Args:
+                    package_name (str): Package requested by the preflight.
+
+                Returns:
+                    str: Supported fixture version when installed.
+                """
+                if package_name == missing_package:
+                    raise PackageNotFoundError(missing_package)
+                return versions[package_name]
+
+            with self.subTest(missing_package=missing_package), mock.patch(
+                "importlib.metadata.version", side_effect=package_version
+            ), mock.patch.dict(sys.modules, {"tkinter": tkinter_stub}):
+                with self.assertRaises(PackageNotFoundError):
+                    exec(BUILD.installed_dependencies_code(), {})
 
     def test_missing_explicit_compiler_does_not_silently_use_another(self):
         """Honor an explicit compiler selection by refusing an unavailable path."""

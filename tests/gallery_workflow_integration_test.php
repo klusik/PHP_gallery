@@ -241,13 +241,57 @@ try {
     $smartRoute = '/index.php?page=smart_gallery&slug=smart-music-workflow';
     $sourceAudioUrl = '';
     foreach (['', '&photo_page=2', '&source_gallery_id=' . $id] as $view) {
-        $smartPage = $anonymous->request($smartRoute . $view);
+        $smartPage = $anonymous->request($smartRoute . $view . '&lang=cs');
         check($smartPage['status'] === 200,
             'Real runtime Smart music page did not render.');
         $document = new DOMDocument();
         check(@$document->loadHTML($smartPage['body']),
             'Smart music page HTML cannot be parsed.');
         $xpath = new DOMXPath($document);
+        check($xpath->query(
+            '//section[contains(@class,"hero")]'
+                . '//div[@data-gallery-attachment-applets]'
+        )->length === 1
+            && $xpath->query('//*[@data-music-duration-total]')->length === 1,
+            'Smart hero must use the shared responsive music summary applet.');
+        $launchers = $xpath->query('//a[@data-gallery-presentation-start]');
+        $share = $xpath->query('//*[@data-presentation-url]');
+        check($launchers->length === 1 && $share->length === 1,
+            'Smart gallery is missing its presentation launcher/share applet.');
+        $launchUrl = $launchers->item(0)->getAttribute('href');
+        parse_str((string) parse_url($launchUrl, PHP_URL_QUERY), $launchQuery);
+        check($launchQuery['lang'] === 'cs'
+            && $launchQuery['presentation'] === '1'
+            && $launchQuery['autoplay'] === '1'
+            && $launchQuery['presentation_music'] === '1'
+            && $launchQuery['presentation_fullscreen'] === '1'
+            && $launchQuery['presentation_interval'] === 'medium'
+            && $launchQuery['presentation_transition'] === 'medium'
+            && !isset($launchQuery['photo_page'])
+            && (int) ($launchQuery['source_gallery_id'] ?? 0)
+                === (str_contains($view, 'source_gallery_id') ? $id : 0)
+            && $share->item(0)->getAttribute('data-presentation-url') === $launchUrl,
+            'Smart share must snapshot playback, locale and selected source only.');
+        check($anonymous->request($launchUrl)['status'] === 200,
+            'Fresh anonymous Smart presentation link was rejected.');
+        if ($view === '') {
+            foreach ([
+                '/smart/smart-music-workflow?unexpected=1',
+                '/smart/smart-music-workflow?presentation=1&presentation=1',
+                '/smart/smart-music-workflow?presentation_music[]=1',
+                '/smart/smart-music-workflow?source_gallery_id=-1',
+                '//example.invalid/smart/smart-music-workflow?presentation=1',
+            ] as $unsafeRoute) {
+                $refused = false;
+                try {
+                    $anonymous->request($unsafeRoute);
+                } catch (RuntimeException $error) {
+                    $refused = str_contains($error->getMessage(),
+                        'supported same-origin application route');
+                }
+                check($refused, 'Smart-link transport accepted an unsafe route.');
+            }
+        }
         $scripts = $xpath->query('//script[@data-gallery-music-playlist]');
         check($scripts->length === 1, 'Smart page must own one merged playlist.');
         $playlist = json_decode($scripts->item(0)->textContent, true,
@@ -306,6 +350,58 @@ try {
         'format' => 'php_gallery_simbrief_ofp_manifest_v1',
         'ofp_pdf_file' => 'simbrief-ofp.pdf',
     ], JSON_THROW_ON_ERROR));
+    $stage = 'Smart PDF applets, protected originals and presentation sharing';
+    foreach (['', '&photo_page=2', '&source_gallery_id=' . $id] as $view) {
+        $smartPdfPage = $anonymous->request($smartRoute . $view);
+        $smartPdfDom = new DOMDocument();
+        check($smartPdfPage['status'] === 200
+            && @$smartPdfDom->loadHTML($smartPdfPage['body']),
+            'Smart PDF hero did not render through the production runtime.');
+        $smartPdfXpath = new DOMXPath($smartPdfDom);
+        check($smartPdfXpath->query(
+            '//section[contains(@class,"hero")]//div[@data-gallery-attachment-applets]'
+                . '/section[@data-gallery-pdf-documents]'
+        )->length === 1
+            && $smartPdfXpath->query('//*[@data-pdf-page-total]')->length === 1
+            && str_contains($smartPdfPage['body'], 'Stored attachment')
+            && str_contains($smartPdfPage['body'], 'SimBrief OFP'),
+            'Pagination/filtering lost source PDF summaries or the OFP.');
+        foreach ($smartPdfXpath->query(
+            '//section[@data-gallery-pdf-documents]//a[@data-simbrief-ofp-open]'
+        ) as $pdfLink) {
+            $pdfOriginal = $anonymous->request($pdfLink->getAttribute('href'));
+            check($pdfOriginal['status'] === 200
+                && str_starts_with($pdfOriginal['body'], '%PDF-'),
+                'Smart PDF link did not retain protected physical delivery.');
+        }
+        check($smartPdfXpath->query(
+            '//section[@data-gallery-pdf-documents]//form'
+        )->length === 0, 'Smart PDF aggregate exposed physical mutation controls.');
+    }
+    foreach (['1', '0'] as $hidden) {
+        envelope($admin->request($mediaEditRoute, [
+            'csrf_token' => $csrf, 'id' => $id, 'pdf_action' => 'visibility',
+            'document_id' => $mediaDocumentId, 'hidden' => $hidden,
+        ], true), 'Toggle source PDF visibility');
+        foreach ([$anonymous, $admin] as $audience) {
+            $smartPdfPage = $audience->request($smartRoute);
+            check($smartPdfPage['status'] === 200
+                && str_contains($smartPdfPage['body'], 'Stored attachment')
+                    === ($hidden === '0'),
+                'Smart public discovery leaked hidden PDFs to an audience.');
+        }
+        check($anonymous->request($mediaPdfRoute)['status']
+            === ($hidden === '1' ? 404 : 200),
+            'Physical PDF delivery ignored visibility after Smart discovery.');
+    }
+    $pdo->prepare('UPDATE galleries SET visibility = ? WHERE id = ?')
+        ->execute(['private', $id]);
+    check($anonymous->request($mediaPdfRoute)['status'] === 404
+        && !str_contains($anonymous->request($smartRoute)['body'],
+            'Stored attachment'),
+        'Smart PDF metadata or original survived source-access revocation.');
+    $pdo->prepare('UPDATE galleries SET visibility = ? WHERE id = ?')
+        ->execute(['public', $id]);
     $mediaMusicSettings = envelope($admin->request($mediaEditRoute, [
         'csrf_token' => $csrf, 'id' => $id, 'music_action' => 'settings',
         'music_revision' => str_repeat('a', 32), 'music_enabled' => '1',
@@ -354,6 +450,75 @@ try {
     };
     $mediaGalleryRoute = '/index.php?page=gallery&gallery_path='
         . rawurlencode($gallery['folder_path']);
+    $stage = 'physical gallery presentation preferences';
+    $presentationBefore = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$id]);
+    $presentationEdit = [
+        'csrf_token' => $csrf, 'id' => $id,
+        'title' => $presentationBefore['title'],
+        'description' => $presentationBefore['description'],
+        'parent_id' => $presentationBefore['parent_id'] ?? 0,
+        'slug' => $presentationBefore['slug'], 'visibility' => 'public',
+        'folder_name' => basename($presentationBefore['folder_path']),
+        'edit_revision' => (string) $presentationBefore['edit_revision'],
+        'gallery_presentation_present' => '1',
+        'gallery_presentation_enabled' => '1',
+        'gallery_presentation_autoplay' => '1',
+        'gallery_presentation_interval' => 'fast',
+        'gallery_presentation_transition' => 'slow',
+        'return_tab' => 'admin-edit-documents',
+    ];
+    check($anonymous->request($mediaEditRoute, $presentationEdit, true)['status']
+        === 401, 'Anonymous presentation settings write must be refused.');
+    envelope($admin->request($mediaEditRoute, $presentationEdit, true),
+        'Save presentation defaults');
+    $presentationSaved = row($pdo,
+        'SELECT presentation_json, edit_revision FROM galleries WHERE id = ?', [$id]);
+    $presentationState = json_decode($presentationSaved['presentation_json'],
+        true, 512, JSON_THROW_ON_ERROR);
+    check($presentationState['music'] === false
+        && $presentationState['autoplay'] === true
+        && $presentationState['interval'] === 'fast'
+        && $presentationState['transition'] === 'slow',
+        'Presentation preferences did not persist in their gallery row.');
+    $presentationSidecar = json_decode((string) file_get_contents(
+        $folder . '/gallery.json'
+    ), true, 512, JSON_THROW_ON_ERROR);
+    check($presentationSidecar['presentation'] === $presentationState,
+        'Gallery export lost presentation preferences.');
+    check($admin->request($mediaEditRoute, $presentationEdit, true)['status'] === 409,
+        'Stale presentation changes must not overwrite a newer revision.');
+    $presentationMarkup = $anonymous->request($mediaGalleryRoute)['body'];
+    check(str_contains($presentationMarkup, 'presentation_music=0')
+        && str_contains($presentationMarkup, 'presentation_interval=fast')
+        && str_contains($presentationMarkup, 'presentation_transition=slow')
+        && str_contains($presentationMarkup, 'data-presentation-music="0"'),
+        'Public launch/share URLs did not snapshot stored presentation defaults.');
+    $presentationEdit['edit_revision'] = (string) $presentationSaved['edit_revision'];
+    $presentationEdit['gallery_presentation_enabled'] = '0';
+    unset($presentationEdit['gallery_presentation_autoplay']);
+    $presentationEdit['gallery_presentation_music'] = '1';
+    envelope($admin->request($mediaEditRoute, $presentationEdit, true),
+        'Hide public presentation actions');
+    check(json_decode(row($pdo,
+        'SELECT presentation_json FROM galleries WHERE id = ?', [$id]
+    )['presentation_json'], true)['autoplay'] === false,
+        'Explicit default autoplay-off did not persist.');
+    check(!str_contains($anonymous->request($mediaGalleryRoute)['body'],
+        'data-gallery-presentation-start'), 'Hidden presentation action remained.');
+    $presentationEdit['edit_revision'] = (string) row($pdo,
+        'SELECT edit_revision FROM galleries WHERE id = ?', [$id])['edit_revision'];
+    $presentationEdit['gallery_presentation_enabled'] = '1';
+    $presentationEdit['gallery_presentation_autoplay'] = '1';
+    envelope($admin->request($mediaEditRoute, $presentationEdit, true),
+        'Restore public presentation actions');
+    $presentationPage = $anonymous->request(
+        $mediaGalleryRoute . '&lang=en&autoplay=1&presentation_music=0'
+            . '&presentation_interval=fast&presentation_transition=slow'
+    );
+    check($presentationPage['status'] === 200
+        && str_contains($presentationPage['body'],
+            'data-gallery-presentation-start'),
+        'Fresh anonymous presentation link must reach the public gallery.');
     foreach ([[false, true], [true, false], [false, false]]
         as [$pdfEnabled, $musicEnabled]) {
         $mediaSetCapabilities($pdfEnabled, $musicEnabled);
@@ -366,22 +531,30 @@ try {
                 === $musicEnabled,
             'Public PDF/music presentation ignored independent master state.');
         if (!$pdfEnabled && !$musicEnabled) {
-            check(!str_contains($mediaPage['body'],
-                'data-gallery-attachment-applets'),
-                'Both masters OFF must leave no empty media column.');
+            check(str_contains($mediaPage['body'],
+                'data-gallery-presentation-start')
+                && !str_contains($mediaPage['body'], 'data-pdf-page-total')
+                && !str_contains($mediaPage['body'], 'data-music-duration-total'),
+                'Both masters OFF must retain photo presentation without'
+                    . ' attachment summaries or players.');
         }
         $mediaSmartPage = $anonymous->request($smartRoute);
         check($mediaSmartPage['status'] === 200
             && str_contains($mediaSmartPage['body'],
-                'data-gallery-music-playlist') === $musicEnabled,
-            'Smart music presentation ignored the global master.');
+                'data-gallery-pdf-documents') === $pdfEnabled
+            && str_contains($mediaSmartPage['body'],
+                'data-gallery-music-playlist') === $musicEnabled
+            && str_contains($mediaSmartPage['body'],
+                'data-gallery-presentation-start'),
+            'Smart hero ignored independent media masters or lost presentation.');
         $mediaEditor = $admin->request($mediaEditRoute
             . '&tab=admin-edit-documents&panel=1');
         check($mediaEditor['status'] === 200
             && str_contains($mediaEditor['body'],
                 'data-admin-tab-target="admin-edit-documents"')
-                === ($pdfEnabled || $musicEnabled),
-            'Both masters OFF left an empty editor tab or broke its fallback.');
+                && str_contains($mediaEditor['body'],
+                    'data-gallery-presentation-editor'),
+            'Core presentation settings must survive both attachment masters OFF.');
         check(str_contains($mediaEditor['body'], 'data-gallery-pdf-documents')
             === $pdfEnabled
             && str_contains($mediaEditor['body'], 'data-gallery-music-playlist')

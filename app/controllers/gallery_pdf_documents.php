@@ -14,11 +14,21 @@ namespace Gallery\Controllers;
 
 /**
  * Prepare documents without exposing local paths or remote source URLs.
- * @param array<string,mixed> $gallery Authorized physical gallery with id and folder_path.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
  * @param bool $editor Whether attachment management is being rendered in the editor.
- * @return array{gallery_id:int,admin:bool,editor:bool,action_url:string,csrf_html:string,operation_key:string,dpi:int,browser_config:string,language:string,documents:list<array{id:string,title:string,filename:string,size:int,hidden:bool,version:string,view_url:string,download_url:string}>} Safe gallery document presentation.
+ * @param bool $publicOnly Whether a public aggregate must omit hidden documents
+ *     and administrator controls even for an authenticated administrator.
+ * @return array{gallery_id:int,admin:bool,editor:bool,action_url:string,
+ *     csrf_html:string,operation_key:string,dpi:int,browser_config:string,
+ *     language:string,documents:list<array{id:string,title:string,
+ *     filename:string,size:int,hidden:bool,version:string,view_url:string,
+ *     download_url:string}>} Safe gallery document presentation.
  */
-function gallery_pdf_documents_view_model(array $gallery, bool $editor = false): array
+function gallery_pdf_documents_view_model(
+    array $gallery,
+    bool $editor = false,
+    bool $publicOnly = false
+): array
 {
     require_once __DIR__ . '/../services/gallery_pdf_documents.php';
     require_once __DIR__ . '/../services/simbrief_ofp_attachments.php';
@@ -26,7 +36,8 @@ function gallery_pdf_documents_view_model(array $gallery, bool $editor = false):
     $id = (int) $gallery['id'];
     $base = rtrim(\Gallery\Core\request_script_base_path(), '/') . '/index.php';
     $documents = [];
-    $user = \Gallery\Core\current_user();
+    $editor = $editor && !$publicOnly;
+    $user = $publicOnly ? null : \Gallery\Core\current_user();
     $admin = is_array($user) && ($user['role'] ?? '') === 'admin' && !\Gallery\Core\admin_anonymous_preview_active();
     try {
         $entries = \Gallery\Services\gallery_pdf_documents_list($gallery);
@@ -66,6 +77,48 @@ function gallery_pdf_documents_view_model(array $gallery, bool $editor = false):
         'browser_config' => $controls['browser_config'],
         'language' => \Gallery\Services\translation_active_language(),
         'documents' => $documents];
+}
+
+/**
+ * Combine visible source PDFs without copying files or granting source access.
+ * @param int $smartGalleryId Authorized Smart Gallery identity.
+ * @param list<array{id:int,folder_path:string}> $sources Complete canonical
+ *     matching sources already checked for public listing and visitor access.
+ * @return array{gallery_id:int,admin:bool,editor:bool,action_url:string,
+ *     csrf_html:string,operation_key:string,dpi:int,browser_config:string,
+ *     language:string,documents:list<array{id:string,title:string,
+ *     filename:string,size:int,hidden:bool,version:string,view_url:string,
+ *     download_url:string}>} Read-only shared applet; protected links retain
+ *     positive physical IDs while DOM identities are source-qualified.
+ */
+function gallery_pdf_documents_smart_view_model(
+    int $smartGalleryId,
+    array $sources
+): array {
+    $documents = [];
+    usort($sources, static fn (array $left, array $right): int =>
+        $left['id'] <=> $right['id']);
+    foreach ($sources as $source) {
+        $model = gallery_pdf_documents_view_model($source, false, true);
+        foreach ($model['documents'] as $document) {
+            // Distinct physical attachments retain their own delivery/visibility
+            // authority even when their names or original bytes happen to match.
+            $document['id'] = $source['id'] . ':' . $document['id'];
+            $documents[] = $document;
+        }
+    }
+    return [
+        'gallery_id' => -$smartGalleryId,
+        'admin' => false,
+        'editor' => false,
+        'action_url' => '',
+        'csrf_html' => '',
+        'operation_key' => '',
+        'dpi' => \Gallery\Services\gallery_pdf_render_dpi(),
+        'browser_config' => '{}',
+        'language' => \Gallery\Services\translation_active_language(),
+        'documents' => $documents,
+    ];
 }
 
 /**

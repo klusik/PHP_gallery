@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.135.1}
-\newcommand{\manualdate}{17.~října~2026}
+\newcommand{\version}{0.136}
+\newcommand{\manualdate}{18.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -493,12 +493,68 @@ galerií} nezávislé přepínače. Nové i~aktualizované instalace bez uložen
 mají oba zapnuté; výslovné vypnutí zůstane uložené. Vypnutí skryje příslušné
 tabulky či~přehrávače a~zakáže nahrávání, přístup k~souborům i~převod PDF,
 včetně starých otevřených formulářů. Soubory, playlisty a~předvolby zůstanou
-pro opětovné zapnutí. Při vypnutí obou funkcí zmizí také záložka médií;
+pro opětovné zapnutí. Při vypnutí obou funkcí zůstává nastavení prezentace,
+pokud je~zapnutý lightbox. Při jeho vypnutí zmizí prázdná záložka;
 starý odkaz vybere Identitu. Vytvořené fotografie stránek zachovají přístupová
 pravidla. SimBrief může dál aktualizovat popis a~trasu a~zachová staré PDF.
 
 \subsubsection{Připojení a~převod dokumentu PDF}
 Rozbalení převodu nezvětší sloupec dokumentů. Pokud předchozí cíl chybí nebo byl změněn, potvrďte nový soukromý výsledek; dřívější soubory a galerie zůstanou zachovány.
+
+Průhledné karty stále ukazují počet PDF souborů, celkovou velikost
+a~počet stran, u~hudby počet skladeb a~celkovou stopáž. Neznámý údaj
+zůstává pomlčkou; nečitelný soubor se~ze~součtu tiše nevynechá.
+Rozložení sleduje skutečnou šířku galerie: v~širokém okně jsou karty
+vedle sebe, při zúžení se~skládají pod sebe a~pod popis.
+
+Smart galerie používají stejné karty v~hero panelu, tlačítko \ui{Prezentace}
+a~panel sdílení. PDF a~OFP pocházejí z~přístupných fyzických galerií, které
+přispívají fotografiemi do~celého výsledku. Skryté dokumenty se~ve~veřejné
+Smart galerii neukážou ani správci. Odkazy zachovávají přístupová pravidla zdroje.
+Sdílení zachová jazyk i~vybraný filtr zdroje, vynechá stránkování a~spustí první
+odpovídající fotografii. Výslovný start má výchozí autoplay i~hudbu zapnuté
+se~středními rychlostmi a~nemění hudbu běžné Smart prezentace. Platí stejný
+černý úvod, potvrzení spuštění i~režim bez ovládání.
+
+Pod kartami tlačítko \ui{Prezentace} spustí první fotografii, nastavené
+rychlosti a~hudbu pro toto spuštění. Uloženou předvolbu běžné prezentace nezmění.
+Ikona sdílení otevře panel s~odkazem na~galerii s~aktuálním jazykem
+a~\codeword{presentation=1}, bez stránkování či~náhledu administrátora.
+Otevření odkazu spustí stejnou prezentaci po~běžné kontrole přístupu.
+Prohlížeč může vyžadovat kliknutí na~\ui{Přehrát}; odmítnutí schránky
+zobrazí označitelný odkaz pro ruční kopírování.
+Stejný odkaz funguje i~anonymně po~běžné kontrole přístupu.
+Pokud celá obrazovka či~zvuk vyžadují souhlas, černý úvod čeká na
+\ui{Spustit prezentaci}. Po~potvrzení zůstane při nepodporovaném fullscreen
+vyplněné okno; \ui{Přehrát} umožní opakovat pozdější selhání zvuku.
+V~\ui{Upravit galerii > PDF / Hudba / Prezentace} najdete průhlednou kartu
+\ui{Nastavení prezentace}: viditelnost tlačítek, hudbu a~obě rychlosti.
+Ikona uložení používá běžný chráněný formulář galerie. Náhled a~sdílení
+použijí aktuální volby i~před uložením. Nové odkazy obsahují hudbu i~rychlosti;
+pozdější úpravy galerie je~nezmění. Návštěvník může ovládání dočasně změnit.
+Také \codeword{autoplay=1} spouští prezentaci. Při blokování zvuku zůstane
+přehrávač součástí mizejícího ovládání; pohyb jej opět ukáže.
+Kliknutí na~\ui{Přehrát} nebo fotografii zkusí zvuk i~požadovaný fullscreen.
+Zastavení či~zavření čekající hudbu zruší. Skrytí tlačítek neruší sdílené odkazy.
+Předvolby ukládá verzované \codeword{galleries.presentation_json} po~migraci
+sloupce. Výslovný zápis vyžaduje ověřené schéma; staré galerie mají zapnutou
+prezentaci, hudbu a~střední rychlosti, dokud je~nenastavíte.
+Autoplay je~ve~všech galeriích výchozí zapnutý; v~kartě jej lze vypnout.
+Panel sdílení obsahuje šoupátka rychlostí a~přepínače autoplay, hudby,
+celé obrazovky a~\ui{Bez ovládacích prvků}. Ikona kopírování zkopíruje aktuální
+adresu. Změny odkazu neukládají galerii. \codeword{autoplay=0} otevře první
+fotografii pozastavenou a~bez hudby. Volby celé obrazovky a~čistého režimu jsou
+\codeword{presentation_fullscreen=1|0} a~\codeword{presentation_exclusive=1|0}.
+Režim bez ovládání je~výchozí vypnutý; po~zapnutí skryje tlačítka, metadata
+i~diagnostiku. Ukončuje jej Esc. Omezení zvuku prohlížečem zůstávají platná.
+Každý start drží černou plochu alespoň sekundu a~do~dekódování první fotografie,
+poté ověří požadovaný fullscreen a~hudbu. Pokud prohlížeč potřebuje souhlas,
+černá plocha zůstane s~malým potvrzením \ui{Spustit prezentaci}.
+Jedno kliknutí spustí hudbu a~vyžádá fullscreen před odhalením fotografie.
+Potvrzení se~objeví i~u~odkazu bez ovládání a~poté zmizí.
+Esc či~křížek start zruší. Vypnutý autoplay zůstane pozastavený a~tichý.
+Úvod se~při opakování galerie nevrací. Zavření čekající práci zruší.
+Nativní fullscreen může vyžadovat kliknutí; náhradní režim vyplní okno prohlížeče.
 
 Spouštěče PDF a~Hudba ukazují počty souborů vedle popisu, na~úzké
 obrazovce pod ním. Kliknutí otevře malý překryvný panel. Seznam má
@@ -827,6 +883,40 @@ Nainstalovaný nahrávač kontroluje vlastní stabilní verzi instalátoru na Gi
 Volba \ui{Update} stáhne instalátor s~průběhem a~možností zrušení, ověří jej, zastaví novou práci a~nejvýše 120 sekund počká na bezpečné dokončení úloh. Neúspěšné dokončení odmítne instalaci a~nahrávač zůstane dostupný. Externí pomocný proces soubor znovu ověří a~vyžádá souhlas Windows UAC. Vlastní aktualizace pracovní procesy násilně neukončuje; běžně ručně spuštěný instalátor zachovává dosavadní pravidla ukončení. Skutečný průběh instalace přichází místním kanálem konkrétní relace. Po úspěchu se nahrávač spustí pod původním uživatelem s~uloženými nastaveními a~úlohami. Automatický návrat předchozí verze není k~dispozici. Spuštění z~Pythonu či zdrojových souborů nabídne ověřený instalátor k~ručnímu spuštění. Pokud Windows požaduje restart, před opětovným spuštěním nahrávače restartujte Windows; zrušení UAC znovu otevře stávající instalaci.
 
 
+\subsection{Záznam letů a zprávy}
+
+Windows uploader zaznamenává telemetrii letadla v MSFS 2020 i 2024 společným
+poskytovatelem pouze pro čtení. Záznam i tvorba zpráv jsou ve výchozím stavu
+zapnuté; záznam lze nezávisle vypnout a uložený výběr jazyků zpočátku zahrnuje
+angličtinu, češtinu, němčinu a švédštinu. Přibalený renderer ReportLab a písma
+DejaVu vytvoří z jedné analýzy samostatné PDF s grafy pro každý zvolený jazyk.
+Zprávy zůstávají místně uložené pro opakované odeslání. Nepodporované signály
+zůstávají nedostupné, nikoli vymyšlené; živé ověření simulátoru, letadla a
+sestavení se provádí zvlášť pro každou generaci.
+
+Obě akce používají jediný trvalý koordinátor. Samostatné Zastavení ukončí
+sledování složky, jeho vlastní synchronizaci UTC a záznam letu, poté dokončí
+přijaté fotografie a povinné doručení zpráv; nesouvisející pracovníci AI,
+ručního importu a předběžné kontroly zůstávají spuštěni. Zastavení ponechá klíč
+nastavený. Potvrzené Zrušení klíče provede stejné Zastavení, navíc zastaví další
+autentizované producenty, dokončí přijatou práci a požádá server o zrušení klíče
+omezeného na galerii teprve po povinných potvrzeních. Průběh ukazuje fázi a
+uplynulý čas; zbývající dobu pouze tehdy, lze-li ji měřit. Chyby zachovají úlohy
+a místní soubory pro obnovu; dostupné je výslovné dokončení pouze místně. Po
+restartu se práce obnoví, ale souhlas se zrušením klíče se neobnoví; je nutné
+nové potvrzení. Prázdná zpráva nevznikne.
+
+Klíč omezený na galerii oznamuje volitelnou schopnost
+\texttt{flight\_reports\_v1}. JSON akce
+\texttt{flight\_report\_status} přijímá \texttt{report\_id},
+\texttt{language} a \texttt{sha256}; multipart akce
+\texttt{flight\_report} přijímá tato pole, \texttt{session\_id} a PDF pole
+\texttt{report}. Server omezuje zápis na galerii klíče a znovu používá obecnou
+validaci, ukládání a chráněné prohlížení PDF bez nového schématu. Stabilní
+identita, kontrolní součet a ověření stavu umožňují bezpečné opakování.
+Zprávy jsou oddělené od OFP, dědí viditelnost galerie a neobsahují surovou
+telemetrii.
+
 \section{Přidávání, popisování a~uspořádání fotografií}
 \label{sec:photo-workflow}
 \index{p00157@práce s fotografiemi}
@@ -1108,9 +1198,9 @@ Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migr
 
 Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
-Zdroj samostatného uploaderu nyní cílí na verzi 0.4.1. Samostatně vyžádané
+Zdroj samostatného uploaderu nyní cílí na verzi 0.5.0. Samostatně vyžádané
 sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
-\filepath{winapp-update.json} do \filepath{winapp/dist/0.4.1/}. Instalátor
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.0/}. Instalátor
 a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
 ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
 verzí včetně 0.4.0 zůstávají zachovány.
@@ -2905,8 +2995,16 @@ Chybějící ověřené přílohy doplní, totožné existující zachová.
 Počkejte na~\codeword{DRAFT_READY}, potom ručně zvolte \ui{Publish release}.
 \codeword{TAGGED / DRAFT_PENDING} lze obnovit pro~stejné Q; nepřestavujte
 kandidáta ani neposouvejte správný tag. Souběžný develop brání nebezpečné
-synchronizaci, nikoli správnému tagu nebo draftu. Ruční kontrola hostingu
-a~prohlížeče i~úklid větví zůstávají samostatné.
+synchronizaci, nikoli správnému tagu nebo draftu.
+Po~\codeword{DRAFT_READY} a~uložení dokladů dokončení závěrečný job
+automaticky smaže přesnou release větev s~podmínkou nezměněného SHA Q.
+Znovu ověří hashe příloh, schválený merge/tag, historii main/develop
+a~závislá otevřená PR či~běžící workflow. Neúplná synchronizace větev zachová;
+chybný doklad zastaví úklid a~ponechá draft. Opakujte pouze neúspěšný úklidový
+job; neměnné Q a~uložené doklady podporují i~již smazanou větev.
+Chování začne prvním releasem obsahujícím změnu v~kvalifikovaném develop.
+Publikace a~ruční kontrola hostingu či~prohlížeče zůstávají samostatné.
+Historické větve ponechávají zvlášť schvalované workflow odstranění.
 Viz~\filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
 \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} a~\filepath{docs/LATEX_BUILD.md}.
 

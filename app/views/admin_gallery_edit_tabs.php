@@ -522,7 +522,10 @@ function view_render_admin_gallery_images_tab(array $viewModel): void
  */
 function view_render_admin_gallery_editor_form_open(array $viewModel): void
 {
-    echo '<form method="post" enctype="multipart/form-data" class="admin-edit-gallery-form" autocomplete="off" data-admin-gallery-settings-form>' . (string) ($viewModel['csrf_html'] ?? '');
+    // Native form association keeps presentation controls in the media tab
+    // attached to the same guarded settings submit, including without JS.
+    $formId = 'admin-gallery-settings-' . (int) ($viewModel['gallery_id'] ?? 0);
+    echo '<form id="' . $formId . '" method="post" enctype="multipart/form-data" class="admin-edit-gallery-form" autocomplete="off" data-admin-gallery-settings-form>' . (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '">';
     echo '<input type="hidden" name="edit_revision" value="' . e((string) ($viewModel['edit_revision'] ?? '')) . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-identity">';
@@ -531,13 +534,95 @@ function view_render_admin_gallery_editor_form_open(array $viewModel): void
 /**
  * Render the save bar and closing tag for the shared gallery editor form.
  *
- * @param array<string, mixed> $viewModel Controller-prepared labels.
+ * @param array{save_label?:string,help?:string} $viewModel Prepared save labels.
  * @return void Emits the persistent save control and closes the shared settings form.
  */
 function view_render_admin_gallery_editor_form_close(array $viewModel): void
 {
-    echo '<div class="admin-edit-gallery-savebar" data-admin-gallery-savebar><button type="submit">' . e((string) ($viewModel['save_label'] ?? 'Save gallery')) . '</button><span class="muted">' . e((string) ($viewModel['help'] ?? '')) . '</span></div>';
+    $saveLabel = (string) ($viewModel['save_label'] ?? 'Save gallery');
+    echo '<div class="admin-edit-gallery-savebar" data-admin-gallery-savebar>'
+        . '<button type="submit" class="music-icon" aria-label="'
+        . e($saveLabel) . '" title="' . e($saveLabel) . '">'
+        . view_music_control_icon('save') . '</button><span class="muted">'
+        . e((string) ($viewModel['help'] ?? '')) . '</span></div>';
     echo '</form>';
+}
+
+/**
+ * Render the media tab from already authorized independent form fragments.
+ * @param array{active:bool,presentation_html:string,documents_html:string,
+ *     music_html:string,simbrief_html:string} $model Trusted escaped fragments
+ *     prepared by their controllers, retaining native form ownership.
+ * @return void Emit the responsive card wrapper and the existing tab panel.
+ */
+function view_render_admin_gallery_media_tab(array $model): void
+{
+    $html = '<div class="gallery-editor-media-grid">'
+        . $model['presentation_html'] . $model['documents_html']
+        . $model['music_html'] . $model['simbrief_html'] . '</div>';
+    view_render_admin_tab_panel('admin-edit-documents', $html, $model['active']);
+}
+
+/**
+ * Render discoverable presentation preferences beside the media applets.
+ * @param array{gallery_id:int,ready:bool,settings:array{version:int,enabled:bool,autoplay:bool,
+ *     music:bool,interval:string,transition:string},url:string} $model
+ *     Controller-prepared preferences and localized public snapshot URL.
+ * @return void Emit native controls associated with the guarded gallery form.
+ */
+function view_render_admin_gallery_presentation(array $model): void
+{
+    $settings = $model['settings'];
+    $form = 'admin-gallery-settings-' . $model['gallery_id'];
+    echo '<section class="gallery-presentation-settings"'
+        . ' data-gallery-presentation data-gallery-presentation-editor>'
+        . '<header><span class="music-icon" aria-hidden="true">'
+        . view_music_control_icon('play') . '</span><h3>'
+        . e(t('presentation.settings')) . '</h3></header>';
+    if (!$model['ready']) {
+        echo '<p class="muted">' . e(t('presentation.migration')) . '</p>';
+    } else {
+        echo '<input type="hidden" name="gallery_presentation_present"'
+            . ' value="1" form="' . $form . '">';
+        foreach (['enabled' => 'presentation.visible',
+            'autoplay' => 'presentation.autoplay',
+            'music' => 'presentation.music'] as $key => $label) {
+            echo '<label class="gallery-presentation-setting"><span>'
+                . e(t($label)) . '</span><input type="checkbox" role="switch"'
+                . ' name="gallery_presentation_' . $key . '" value="1"'
+                . ' form="' . $form . '"'
+                . ($settings[$key] ? ' checked' : '') . '></label>';
+        }
+        foreach (['interval' => 'lightbox.slideshow_photo_speed',
+            'transition' => 'lightbox.slideshow_transition_speed'] as $key => $label) {
+            echo '<label class="gallery-presentation-setting"><span>'
+                . e(t($label)) . '</span><select name="gallery_presentation_'
+                . $key . '" form="' . $form . '">';
+            foreach (['slow', 'medium', 'fast'] as $speed) {
+                echo '<option value="' . $speed . '"'
+                    . ($settings[$key] === $speed ? ' selected' : '') . '>'
+                    . e(t('lightbox.slideshow_speed_' . $speed)) . '</option>';
+            }
+            echo '</select></label>';
+        }
+    }
+    echo '<p class="muted">' . e(t('presentation.link_help')) . '</p>'
+        . '<div class="gallery-presentation-actions">';
+    if ($model['ready']) {
+        echo '<button type="submit" class="music-icon" form="' . $form
+            . '" title="' . e(t('presentation.save')) . '" aria-label="'
+            . e(t('presentation.save')) . '">' . view_music_control_icon('save')
+            . '</button>';
+    }
+    foreach (['play' => 'presentation.preview'] as $icon => $label) {
+        echo '<a class="music-icon" href="' . e($model['url'])
+            . '" data-presentation-preview'
+            . ($icon === 'play' ? ' target="_blank" rel="noopener"' : '')
+            . ' title="' . e(t($label)) . '" aria-label="' . e(t($label))
+            . '">' . view_music_control_icon($icon) . '</a>';
+    }
+    echo view_presentation_share($model['url'], 'editor-' . $model['gallery_id'])
+        . '</div></section>';
 }
 
 /**
@@ -584,7 +669,11 @@ function view_render_admin_gallery_editor_notices(array $viewModel): void
  * the admin side panel. No control mutates dates, route geometry, descriptions,
  * the original imported OFP JSON, or gallery images.
  *
- * @param array<string,mixed> $viewModel Source gallery and validated document state.
+ * @param array{gallery?:array{id?:int,title?:string},has_pdf?:bool,occupied?:bool,
+ *     prefill?:array{has_snapshot?:bool,fields?:array<string,array{value?:string,
+ *     source?:string}>},action_url?:string,csrf_html?:string,provenance?:string,
+ *     pdf_view_url?:string,pdf_download_url?:string} $viewModel Prepared gallery,
+ *     safe dispatch values and validated document actions.
  * @return void Safe, accessible admin-only document controls.
  */
 function view_render_admin_simbrief_legacy_panel(array $viewModel): void
@@ -634,8 +723,16 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
         ];
         echo '<p class="admin-simbrief-legacy-present">' . e(t('admin.legacy_ofp.pdf_present', 'A valid PDF is attached to this gallery.')) . ' <small>' . e($provenanceLabels[$provenance] ?? t('admin.legacy_ofp.provenance_unspecified', 'Existing attachment, origin not recorded')) . '</small></p>';
         echo '<div class="admin-simbrief-legacy-actions">';
-        echo '<a class="button secondary" target="_blank" rel="noopener noreferrer" href="' . e((string) ($viewModel['pdf_view_url'] ?? '')) . '">' . e(t('admin.legacy_ofp.view', 'View OFP')) . '</a>';
-        echo '<a class="button secondary" href="' . e((string) ($viewModel['pdf_download_url'] ?? '')) . '" download="simbrief-ofp.pdf">' . e(t('admin.legacy_ofp.download', 'Download PDF')) . '</a>';
+        foreach (['document' => ['pdf_view_url', 'admin.legacy_ofp.view'],
+            'download' => ['pdf_download_url', 'admin.legacy_ofp.download']]
+            as $icon => [$urlKey, $labelKey]) {
+            echo '<a class="music-icon" href="'
+                . e((string) ($viewModel[$urlKey] ?? '')) . '" aria-label="'
+                . e(t($labelKey)) . '" title="' . e(t($labelKey)) . '"'
+                . ($icon === 'download' ? ' download="simbrief-ofp.pdf"'
+                    : ' target="_blank" rel="noopener noreferrer"')
+                . '>' . view_music_control_icon($icon) . '</a>';
+        }
         echo '</div>';
     } elseif ($occupied) {
         echo '<p class="admin-simbrief-legacy-warning">' . e(t('admin.legacy_ofp.pdf_invalid', 'A PDF file exists but failed validation. It will not be served; repair requires explicit replacement.')) . '</p>';
@@ -653,7 +750,10 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
     $reviewHelp = $hasPdf
         ? t('admin.legacy_ofp.revise_existing_help', 'Review or change the flight details, then generate a new plan on the SimBrief site. The current PDF remains unchanged until you explicitly upload and confirm a replacement.')
         : t('admin.legacy_ofp.dispatch_no_generation', 'You will review the fields here first. SimBrief opens in a new tab, where you must sign in if required and select Generate yourself.');
-    echo '<div class="admin-simbrief-legacy-actions"><button type="button" class="button secondary" data-simbrief-dispatch-open>' . e($reviewLabel) . '</button></div>';
+    echo '<div class="admin-simbrief-legacy-actions"><button type="button"'
+        . ' class="music-icon" data-simbrief-dispatch-open title="'
+        . e($reviewLabel) . '" aria-label="' . e($reviewLabel) . '">'
+        . view_music_control_icon('document') . '</button></div>';
     echo '<p class="muted">' . e($reviewHelp) . '</p>';
 
     $uploadAction = $occupied ? 'replace_pdf' : 'upload_pdf';
@@ -676,8 +776,12 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
         echo '<label class="checkbox-label"><input type="checkbox" name="confirm_replace" value="1" required> '
             . e(t('admin.legacy_ofp.confirm_replace', 'I confirm I want to replace the existing PDF. This does not modify the saved SimBrief JSON or gallery details.')) . '</label>';
     }
-    echo '<div class="admin-simbrief-legacy-actions"><button type="submit" class="button secondary">'
-        . e($occupied ? t('admin.legacy_ofp.replace_button', 'Confirm PDF replacement') : t('admin.legacy_ofp.upload_button', 'Attach PDF to this gallery'))
+    $uploadLabel = $occupied
+        ? t('admin.legacy_ofp.replace_button', 'Confirm PDF replacement')
+        : t('admin.legacy_ofp.upload_button', 'Attach PDF to this gallery');
+    echo '<div class="admin-simbrief-legacy-actions"><button type="submit"'
+        . ' class="music-icon" title="' . e($uploadLabel) . '" aria-label="'
+        . e($uploadLabel) . '">' . view_music_control_icon('upload')
         . '</button></div><output role="status" aria-live="polite" data-simbrief-ofp-upload-status></output></form>';
     if ($hasPdf) {
         echo '</details>';

@@ -149,8 +149,33 @@ verified installer/update pair. Never replace an old published installer.
 
 Only complete verified assets permit **DRAFT_READY**. **DRAFT_CREATED** and
 **TAGGED / DRAFT_PENDING** are intermediate states. The maintainer manually clicks
-**Publish release**. Production smoke tests, Pages deployment and separately
-approved branch retirement remain distinct operations.
+**Publish release**. Production smoke tests and Pages deployment remain distinct.
+
+## Automatic ready draft branch retirement
+
+The final completion job runs only after `DRAFT_READY` and successful retention
+of the original `release-completion-record` artifact. Its inventory records each
+byte-verified attachment's name, size and SHA-256 digest. The cleanup job uses
+immutable Q and that same-run artifact; it does not need a mutable branch to
+recover an already accepted deletion. Retry only the failed cleanup job.
+
+Current schema-4 completion requires `RECONCILED_FF` and the permanent receipt
+binding actual M/tree/A. Missing synchronization skips deletion and retains the
+branch. Before deletion, independently authenticate assembly and exact owner
+review, [P,Q]/tree(Q), immutable tag, M ancestry in current main and develop,
+the complete uploaded draft inventory, no dependent open PRs and no other active
+release operations. Exclude only the authenticated current completion run from
+activity checks. Changed refs, unknown/incomplete inventories or failed proof
+block cleanup without undoing successful draft preparation.
+
+Delete only `refs/heads/release/v_X.Y[.Z]` with an exact Q Git lease and read the
+remote ref afterward. A lost write response followed by confirmed absence is
+success; a surviving or advanced ref stays blocked. Never repeat an ambiguous
+delete blindly. Published releases, tags, protected refs and original assets are
+unchanged. Manual publication needs the tag and draft, not the release branch.
+Legacy/manual retirement retains its separate publication and approval controls.
+No historical refs are swept. This job executes from the first qualified release
+Q containing it; registration of the existing completion workflow on main suffices.
 
 ## Acceptance and reporting
 

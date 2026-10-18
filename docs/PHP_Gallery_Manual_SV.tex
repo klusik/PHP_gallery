@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.135.1}
-\newcommand{\manualdate}{17~oktober~2026}
+\newcommand{\version}{0.136}
+\newcommand{\manualdate}{18~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -493,12 +493,70 @@ och~\ui{Gallerimusik} separata reglage. Båda är på för nya och~uppdaterade
 installationer utan sparat val; ett uttryckligt OFF bevaras. OFF döljer
 motsvarande tabeller/spelare och~stoppar uppladdning, leverans och~PDF-konvertering,
 även från gamla formulär. Filer, spellistor och~inställningar bevaras.
-Med båda OFF döljs även mediefliken; gamla fliklänkar väljer Identitet.
+Med båda OFF finns presentationsval kvar om~Lightbox är~aktivt.
+Är~även Lightbox OFF döljs den~tomma fliken; gamla länkar väljer Identitet.
 Redan skapade sidfoton behåller sina vanliga åtkomstregler. SimBrief kan
 fortsätta uppdatera beskrivningar/rutter och~behåller gamla PDF-original.
 
 \subsubsection{Bifoga och konvertera ett PDF-dokument}
 Öppnade konverteringskontroller gör inte dokumentkolumnen bredare. Om det tidigare målet saknas eller har ändrats, bekräfta ett nytt privat resultat; tidigare filer och gallerier bevaras.
+
+Genomskinliga kort visar alltid antal PDF-filer, total storlek och~sidantal,
+samt musikens spårantal och~sammanlagda speltid. Okända metadata visas
+som~ett~streck; oläsbara original utelämnas inte tyst från summan.
+Galleriets tillgängliga bredd styr layouten: breda fönster visar korten
+bredvid varandra, smalare fönster staplar dem~och~flyttar dem~under texten.
+
+Smarta gallerier använder samma hero-kort, \ui{Presentation} och~delningspanel.
+PDF:er och~OFP:er kommer från tillgängliga fysiska källor med~matchande foton
+i~hela samlingen. Dolda dokument visas inte heller för~administratörer på~den
+publika Smart-sidan. Dokumentlänkar behåller källans åtkomstkontroller.
+Delade länkar behåller språk och~valt källfilter, tar~bort sidnummer och~börjar
+vid~första matchande fotot. Explicit start använder autoplay och~musik PÅ med
+medelhastigheter utan att~ändra vanlig Smart-bildspelsmusik. Svart inledning,
+startbekräftelse och~exklusivt läge fungerar på~samma sätt.
+
+Under korten startar \ui{Presentation} från första fotot med
+inställda hastigheter och~musik för~denna start. Den~sparade musikinställningen
+ändras inte. Delningsikonen öppnar en~överlagring med~gallerilänk med~aktivt språk
+och~\codeword{presentation=1}, utan sidval eller~administratörsförhandsvisning.
+Länken startar samma presentation efter vanliga åtkomstkontroller.
+Webbläsaren kan~kräva \ui{Spela}; nekad urklippsåtkomst visar
+en~markerbar länk för~manuell kopiering.
+Anonyma besökare använder samma länk efter vanliga åtkomstkontroller.
+Kräver helskärm eller~ljud aktivering väntar den~svarta inledningen på
+\ui{Starta presentationen}. Efter bekräftelse fyller reservläget fönstret
+om~äkta helskärm saknar stöd; \ui{Spela} kan~försöka igen vid~senare ljudfel.
+I~\ui{Redigera galleri > PDF / Musik / Presentation} finns det~genomskinliga
+kortet \ui{Presentationsinställningar} för~offentliga knappar, musik och~båda
+hastigheterna. Sparaikonen använder det~skyddade galleriformuläret.
+Förhandsvisning och~delning använder aktuella, även osparade val. Nya länkar
+innehåller musik och~båda hastigheterna; senare galleriändringar ändrar inte
+dessa förval. Besökare kan~ändra uppspelningen tillfälligt.
+Även \codeword{autoplay=1} startar presentationen. Vid~blockerat ljud förblir
+spelaren med~de~kontroller som~döljs vid~inaktivitet; rörelse visar dem~igen.
+Klicka på~\ui{Spela} eller~fotot för~ljud och~önskad äkta helskärm.
+Stopp eller~stängning avbryter väntande musik. Dolda knappar återkallar inte
+delade länkar.
+Förval använder versionerat \codeword{galleries.presentation_json} efter
+kolumnmigreringen. Uttryckliga ändringar kräver verifierat schema;
+äldre gallerier behåller aktiv presentation, musik och~medelhastigheter.
+Autoplay är~på~som standard för~alla gallerier och~kan~stängas av~i~kortet.
+Delningspanelen har~hastighetsreglage och~val för~autoplay, musik, helskärm
+och~\ui{Utan kontroller}. Kopiera använder den~aktuella länken; länkändringar
+sparar inga galleriinställningar. \codeword{autoplay=0} öppnar första fotot
+pausat och~tyst. Helskärm och~exklusivt läge använder
+\codeword{presentation_fullscreen=1|0} och~\codeword{presentation_exclusive=1|0}.
+Utan kontroller är~av~som standard; när det~aktiveras döljs kontroller,
+metadata och~diagnostik. Esc avslutar. Webbläsarens ljudregler gäller fortfarande.
+Varje start håller svart minst en~sekund och~tills första fotot är~avkodat.
+Sedan kontrolleras önskad helskärm och~musik. Kräver webbläsaren aktivering
+förblir det~svart med~en~liten bekräftelse, \ui{Starta presentationen}.
+Ett klick startar musik och~begär helskärm före övergången. Även länkar utan
+kontroller visar bekräftelsen en~gång; sedan döljs den. Esc eller~stängikonen
+avbryter. Autoplay AV förblir pausat och~tyst. Inledningen upprepas inte vid~varv.
+Stängning avbryter väntande arbete. Äkta helskärm kan~kräva ett~klick;
+reservläget fyller webbläsarfönstret.
 
 PDF- och~musikknappar visar filantal bredvid beskrivningen,
 eller~under den~på~smala skärmar. Ett~klick öppnar en~liten överlagring.
@@ -828,6 +886,40 @@ Den installerade uppladdaren kontrollerar sin egen stabila GitHub-installationsv
 \ui{Update} hämtar installationsprogrammet med förlopp och avbrottsmöjlighet, verifierar det, stoppar nytt arbete och väntar högst 120 sekunder på att bakgrundsuppgifter avslutas säkert. Ett misslyckat avslut nekar installationen och uppladdaren förblir tillgänglig. En extern hjälpprocess kontrollerar filen igen och begär Windows UAC-godkännande. Självuppdateringen tvångsavslutar aldrig arbetare; vanliga manuellt startade installationsprogram behåller sin avslutningspolicy. Det verkliga installationsförloppet kommer genom en lokal kanal för den aktuella sessionen. Efter framgång startar uppladdaren som ursprunglig användare med sparade inställningar och uppgifter. Ingen automatisk återställning till tidigare version finns. Körning från Python eller källkod erbjuder det verifierade installationsprogrammet för manuell start. Om Windows kräver omstart ska Windows startas om innan uppladdaren öppnas igen; avbruten UAC öppnar den befintliga installationen på nytt.
 
 
+\subsection{Flygregistrering och rapporter}
+
+Windows-uppladdaren registrerar flygplanstelemetri i MSFS 2020 och 2024 genom
+en gemensam skrivskyddad provider. Registrering och rapportskapande är aktiverade
+som standard; registreringen kan stängas av separat och de sparade språkvalen
+omfattar först engelska, tjeckiska, tyska och svenska. Den medföljande
+ReportLab-renderaren och DejaVu-teckensnitten skapar en separat diagram-PDF per
+valt språk från samma analys. Rapporter sparas lokalt för nytt försök. Signaler
+som saknas förblir otillgängliga; liveverifiering av simulator, flygplan och
+build görs separat för varje generation.
+
+Båda åtgärderna använder samma beständiga samordnare. Ett fristående Stop
+avslutar mappbevakningen, dess egen UTC-synkronisering och flygregistreringen,
+och slutför sedan accepterade fotografier och nödvändig rapportleverans;
+oberoende AI-, manuella import- och förhandsgranskningsarbetare fortsätter.
+Stop lämnar nyckeln kvar. En bekräftad återkallelse utför samma Stop, avslutar
+även andra autentiserade producenter, slutför accepterat arbete och begär
+återkallelse av den galleribundna servernyckeln först efter nödvändiga kvittenser.
+Förloppet visar fas och förfluten tid; återstående tid visas bara när den kan
+mätas. Fel bevarar uppgifter och lokala filer för återhämtning; uttryckligt
+lokalt slutförande finns som val. Efter omstart återställs arbetet, men inte
+samtycket till återkallelse; en ny bekräftelse krävs. Ingen tom rapport skapas.
+
+Den galleriavgränsade nyckeln annonserar den valfria funktionen
+\texttt{flight\_reports\_v1}. JSON-åtgärden
+\texttt{flight\_report\_status} tar \texttt{report\_id},
+\texttt{language} och \texttt{sha256}; multipart-åtgärden
+\texttt{flight\_report} tar dessa fält, \texttt{session\_id} och
+PDF-fältet \texttt{report}. Servern begränsar skrivningen till nyckelns galleri
+och återanvänder allmän PDF-validering, lagring och skyddad visning utan nytt
+schema. Identitet, kontrollsumma och statusavstämning gör återförsök idempotenta.
+Rapporter är skilda från OFP, följer galleriets synlighet och innehåller ingen
+råtelemetri.
+
 \section{Lägga till, beskriva och organisera fotografier}
 \label{sec:photo-workflow}
 \index{f00084@fotografiarbetsflöde}
@@ -1109,10 +1201,10 @@ Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanlig
 
 Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.4.1. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.5.0. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.4.1/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.5.0/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.
@@ -2911,7 +3003,15 @@ Vänta på~\codeword{DRAFT_READY} och~välj manuellt \ui{Publish release}.
 \codeword{TAGGED / DRAFT_PENDING} fortsätter för~samma Q;
 bygg inte om~kandidaten och~flytta inte en korrekt tagg.
 Parallell develop blockerar osäker synkronisering, inte korrekt tagg eller~utkast.
-Manuell hosting-/webbläsarkontroll och~grenstädning är~separata.
+Efter \codeword{DRAFT_READY} och~sparade slutförandebevis tar~det sista jobbet
+automatiskt bort exakt release-gren med~ett villkor på~oförändrat Q-SHA.
+Det kontrollerar åter bilagornas hashvärden, godkänd merge/tagg, main/develop-historik
+och~beroende öppna PR:er eller~aktiva arbetsflöden. Ofullständig synkronisering
+behåller grenen; felaktiga bevis stoppar städningen och~bevarar utkastet.
+Kör endast om~det misslyckade städjobbet; oföränderligt Q och~sparade bevis
+stöder även en~redan borttagen gren. Detta börjar med~första releasen som~innehåller
+ändringen i~kvalificerad develop. Publicering och~manuell hosting-/webbläsarkontroll
+är~separata. Historiska grenar behåller det separat godkända pensioneringsflödet.
 Se~\filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
 \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} och~\filepath{docs/LATEX_BUILD.md}.
 

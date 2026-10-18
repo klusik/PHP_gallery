@@ -383,10 +383,15 @@ function gallery_metadata_organizer_build_date_plan(int $galleryId, array $input
 /**
  * Create one child gallery for a date group, inheriting safe defaults from the parent.
  *
- * @param array $sourceGallery Source gallery value.
- * @param array $group Organizer group value.
+ * @param array{id?:int,visibility?:string,voting_enabled?:int|string,
+ *     show_filenames?:int|string|null,count_badge_visibility?:string|null,
+ *     lightbox_browsing_mode?:string|null,presentation_json?:string|null}
+ *     $sourceGallery Parent row supplying safe inherited display preferences.
+ * @param array{title?:string,folder_name?:string,date?:string} $group Date group
+ *     supplying the child title, relative folder name and optional date.
  * @param int $sortOrder Sort order value.
- * @return array<string,mixed> Structured result data for the caller.
+ * @return array{id:int,folder_path:string,title:string,parent_id:int|null,
+ *     visibility:string} Created physical-gallery row including its identity.
  */
 function gallery_metadata_organizer_create_child_gallery(array $sourceGallery, array $group, int $sortOrder): array
 {
@@ -416,6 +421,9 @@ function gallery_metadata_organizer_create_child_gallery(array $sourceGallery, a
         $input['lightbox_browsing_mode'] = gallery_lightbox_browsing_mode_storage_value($sourceGallery['lightbox_browsing_mode'] ?? null) ?? 'inherit';
     }
 
+    if (($sourceGallery['presentation_json'] ?? null) !== null) {
+        $input['presentation'] = gallery_presentation_settings($sourceGallery);
+    }
     return create_empty_gallery($input);
 }
 

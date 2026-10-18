@@ -63,6 +63,17 @@ Wait for **DRAFT_READY**, then review notes and all original attachments and
 manually choose **Publish release**. A green assembly is not publication approval.
 There is no normal manual ZIP extraction, artifact copying or upload step.
 
+After the complete draft and completion artifact are retained, a final job
+automatically deletes only the exact `release/v_X.Y[.Z]` ref at reviewed Q.
+It rechecks original asset sizes/digests, merge/tag identity, main/develop ancestry,
+open PR dependencies and other active release work, then uses a server-side SHA
+lease. Missing synchronization keeps the branch. A moved ref or failed proof
+blocks cleanup while preserving the ready draft. Retry only the failed cleanup
+job; it uses the retained artifact and immutable Q even if the branch was already
+deleted after a lost response. Publication stays manual and needs no release ref.
+Completion executes Q's workflow, so this behavior starts with the first release
+containing it in qualified develop, without a preliminary main installation.
+
 On **TAGGED / DRAFT_PENDING**, resume completion for the same Q: retain M/tag,
 reconcile any lost response against the complete server inventory, and add only
 missing verified assets. Conflicting or already published assets are not replaced.
@@ -82,8 +93,10 @@ referenced diagnostics, repair the cause and resume only the necessary stage.
 
 Preserve stable tags, published assets, old origins and original evidence.
 Never directly update protected main/develop or weaken server protections.
-Human browser/hosting smoke checks and separately approved branch cleanup remain
-distinct from assembly. See the [lifecycle](docs/RELEASE_LIFECYCLE.md) and
+Human browser/hosting smoke checks remain distinct from assembly. Historical
+release refs retain the separately approved retirement workflow; automatic cleanup
+only targets the current ready schema-4 draft. See the
+[lifecycle](docs/RELEASE_LIFECYCLE.md) and
 [maintainer checklist](docs/MAINTAINER_RELEASE_CHECKLIST.md).
 
 The reviewed develop history policy must admit main's release merges while

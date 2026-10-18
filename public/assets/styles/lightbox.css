@@ -53,6 +53,14 @@
     grid-template-columns: 1fr;
     grid-template-areas: "stage";
 }
+/* Keep denied native fullscreen above Admin UI using the mobile viewer's layer.
+   Type: integer. Units: stacking order. Scope: CSS desktop fullscreen.
+   Consumers: .lightbox.is-css-fullscreen z-index.
+   Rationale: 1400 matches the supported CSS mobile overlay and covers Admin UI. */
+.lightbox.is-css-fullscreen {
+    --lightbox-css-fullscreen-layer: 1400;
+    z-index: var(--lightbox-css-fullscreen-layer);
+}
 .lightbox.is-fullscreen figure {
     width: 100%;
     height: 100%;
@@ -1564,7 +1572,18 @@
 .gallery-pdf-icon svg { width: 1em; height: 1em; }
 .gallery-pdf-icon:is(:hover, :focus-visible) { background: var(--color-border); outline: 1px solid currentColor; }
 .gallery-pdf-table [data-pdf-controls] > td { padding: 0.5rem; }
-.gallery-description-documents { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, min(50%, 36rem)); align-items: start; gap: 1.25rem; margin-block: 0.65rem; }
+.gallery-description-documents {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    align-items: start;
+    gap: 1.25rem;
+    margin-block: 0.65rem;
+}
+.gallery-description-documents > .gallery-description-rich {
+    flex: 1 1 28rem;
+    max-width: none;
+}
 .gallery-description-documents > .gallery-pdf-documents { justify-self: end; margin-top: 0; }
 .gallery-description-documents .gallery-description-rich { min-width: 0; margin-top: 0; }
 @media (max-width: 760px) {
@@ -2167,21 +2186,111 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     }
 }
 
+/* Keep useful facts in the hero column while attachment lists stay collapsed. */
+.gallery-media-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    margin: 0.55rem 0 0;
+    padding: 0.5rem 0 0;
+    border-top: 1px solid var(--line);
+    font-size: 0.85rem;
+}
+.gallery-media-summary > div { flex: 1 1 auto; }
+.gallery-media-summary dt { color: var(--muted); }
+.gallery-media-summary dd {
+    margin: 0.15rem 0 0;
+    font-weight: 700;
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.gallery-presentation-caption {
+    margin: 0 0 0.55rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+.gallery-presentation-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.gallery-presentation-actions .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.85rem;
+    flex: 1;
+    justify-content: center;
+}
+.gallery-presentation-actions svg { width: 1rem; height: 1rem; }
+.gallery-presentation-actions .button svg { fill: currentColor; }
+.gallery-presentation output { display: block; font-size: 0.8rem; }
+.gallery-presentation input { width: 100%; box-sizing: border-box; }
+
 /* Attachment lists occupy one launcher row until explicitly disclosed. */
 .gallery-attachment-applets {
     display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
+    flex-wrap: wrap;
+    /* Intrinsic wrapping follows gallery space, including a resized window
+       or an open side panel. Fourteen rem keeps each compact card readable. */
+    gap: 0.65rem;
     min-width: 0;
     align-items: stretch;
 }
 .gallery-description-documents > .gallery-attachment-applets {
-    grid-column: 2;
-    justify-self: end;
-    width: min(36rem, 100%);
+    flex: 1 1 28rem;
+    width: 100%;
 }
 .gallery-attachment-applets > :is(.gallery-music, .gallery-pdf-documents) {
     margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* Use the real theme tokens so glass remains visible across saved themes. */
+.gallery-attachment-applets > :is(
+    .gallery-music, .gallery-pdf-documents, .gallery-presentation
+) {
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 0.7rem;
+    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    box-shadow: 0 0.2rem 0.7rem #00000008;
+    min-width: 0;
+    flex: 1 1 14rem;
+    width: auto;
+}
+.gallery-attachment-applets > .gallery-presentation { flex-basis: 100%; }
+.gallery-attachment-applets .gallery-media-widget { order: -1; }
+.gallery-attachment-applets .gallery-media-widget > summary {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    color: var(--ink);
+    gap: 0.5rem;
+}
+.gallery-attachment-applets .gallery-media-widget > summary svg:first-child {
+    width: 1.15rem;
+    height: 1.15rem;
+    color: var(--accent);
+}
+.gallery-attachment-applets .gallery-media-widget > summary svg:last-child {
+    margin-left: auto;
+}
+.gallery-attachment-applets .music-player {
+    margin-top: 0.65rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--line);
+}
+.gallery-presentation-actions > .music-icon {
+    border: 1px solid var(--line);
+    border-radius: 0.45rem;
+    width: 2rem;
+    height: 2rem;
+}
+.gallery-attachment-applets .gallery-media-count {
+    background: color-mix(in srgb, var(--line) 50%, transparent);
 }
 .gallery-pdf-documents { overflow: visible; }
 .gallery-media-widget { min-width: 0; }
@@ -2192,7 +2301,7 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     width: fit-content;
     max-width: 100%;
     padding: 0.3rem 0.5rem;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--line);
     border-radius: 0.45rem;
     font-size: 0.85rem;
     font-weight: 600;
@@ -2201,12 +2310,12 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
 }
 .gallery-media-widget > summary::-webkit-details-marker { display: none; }
 .gallery-media-widget > summary:is(:hover, :focus-visible) {
-    background: var(--color-border);
+    background: color-mix(in srgb, var(--line) 40%, transparent);
 }
 .gallery-media-count {
     padding: 0 0.3rem;
     border-radius: 0.3rem;
-    background: var(--color-border);
+    background: var(--line);
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
 }
@@ -2217,7 +2326,9 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     stroke: currentColor;
     stroke-width: 1.7;
 }
-.gallery-media-widget[open] > summary svg { transform: rotate(90deg); }
+.gallery-media-widget[open] > summary svg:last-child {
+    transform: rotate(90deg);
+}
 .gallery-media-panel {
     box-sizing: border-box;
     display: flex;
@@ -2226,10 +2337,10 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     width: 100%;
     margin-top: 0.4rem;
     padding: 0;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--line);
     border-radius: 0.65rem;
-    background: var(--color-surface, #fff);
-    color: var(--color-text, #181818);
+    background: var(--panel);
+    color: var(--ink);
     box-shadow: 0 0.5rem 1.75rem #0003;
     overflow: hidden;
 }
@@ -2246,7 +2357,7 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     justify-content: space-between;
     gap: 0.5rem;
     padding: 0.35rem 0.5rem;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--line);
     flex: 0 0 auto;
 }
 .gallery-media-panel > header h3 {
@@ -2345,3 +2456,225 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
 }
 
 body:not([data-media-panels-bound]) .gallery-media-close { display: none; }
+
+/* Media editor cards wrap with their container, including the narrow drawer. */
+.gallery-editor-media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+.gallery-editor-media-grid > section {
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0.4rem 1.5rem rgba(0, 0, 0, 0.07);
+    backdrop-filter: blur(16px);
+}
+.gallery-presentation-settings header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.gallery-presentation-settings h3 { margin: 0; }
+.gallery-presentation-setting {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding-block: 0.5rem;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.15);
+}
+.gallery-presentation-setting select {
+    width: auto;
+    min-width: 7rem;
+    background: rgba(255, 255, 255, 0.16);
+}
+.gallery-presentation-setting input[role="switch"] {
+    appearance: none;
+    flex: 0 0 auto;
+    position: relative;
+    width: 2.4rem;
+    height: 1.4rem;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 2rem;
+    background: color-mix(in srgb, var(--ink) 22%, transparent);
+    cursor: pointer;
+}
+.gallery-presentation-setting input[role="switch"]::after {
+    content: '';
+    position: absolute;
+    top: 0.1rem;
+    left: 0.1rem;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0.1rem 0.25rem #0003;
+}
+.gallery-presentation-setting input[role="switch"]:checked {
+    background: var(--accent, #4664df);
+}
+.gallery-presentation-setting input[role="switch"]:checked::after {
+    left: auto;
+    right: 0.1rem;
+}
+.gallery-presentation-settings .music-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 0.65rem;
+    background: rgba(255, 255, 255, 0.16);
+}
+.gallery-presentation-settings .music-icon svg,
+.admin-edit-gallery-savebar .music-icon svg {
+    width: 1.2rem;
+    height: 1.2rem;
+}
+.admin-edit-gallery-savebar .music-icon {
+    min-width: 0;
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0.5rem;
+}
+/* Share uses the same retained native disclosure and top-layer lifecycle. */
+.gallery-presentation-actions > .presentation-share-widget { order: initial; }
+.presentation-share-widget > summary.music-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0.5rem;
+    box-sizing: border-box;
+}
+.presentation-share-widget > summary.music-icon svg {
+    width: 1.2rem;
+    height: 1.2rem;
+    margin: 0;
+}
+.presentation-share-widget[open] > summary svg:last-child { transform: none; }
+.presentation-share-panel.gallery-media-panel {
+    width: min(21rem, calc(100vw - 1rem));
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--panel) 80%, transparent);
+    backdrop-filter: blur(24px);
+    box-shadow: 0 0.75rem 3rem #0003;
+    text-align: left;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+.presentation-share-panel .gallery-media-body {
+    max-height: none;
+    padding: 0.45rem 0.65rem;
+}
+.presentation-share-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.15rem 0.8rem;
+}
+.presentation-share-options .gallery-presentation-setting {
+    gap: 0.35rem;
+    padding-block: 0.3rem;
+    border: 0;
+    font-size: 0.75rem;
+}
+.presentation-share-options input[role="switch"] {
+    width: 2.1rem;
+    height: 1.4rem;
+}
+.presentation-share-speed {
+    display: grid;
+    grid-template-columns: 4.8rem minmax(0, 1fr) 3.6rem;
+    align-items: center;
+    gap: 0.35rem;
+    padding-block: 0.35rem;
+    margin: 0;
+    font-size: 0.75rem;
+}
+.presentation-share-speed input {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    accent-color: var(--accent);
+}
+.presentation-share-speed output { text-align: right; }
+.presentation-share-link-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem;
+    align-items: center;
+    margin-top: 0.35rem;
+}
+.presentation-share-link { min-width: 0; margin: 0; }
+.presentation-share-link input { width: 100%; min-width: 0; box-sizing: border-box; }
+.presentation-share-panel .presentation-share-help {
+    font-size: 0.7rem;
+    margin: 0.3rem 0 0;
+}
+.presentation-share-panel [data-presentation-status]:empty { display: none; }
+/* The launch hold never enters gallery ordering or repeats with the last slide.
+   Keep geometry and decode active behind black; Close/HUD remain accessible. */
+.lightbox.is-presentation-intro :is(.lightbox-stage-link, .lightbox-picture-strip) {
+    opacity: 0;
+    pointer-events: none;
+}
+.lightbox.is-presentation-exclusive :is(
+    .lightbox-hud, .lightbox-controls, .lightbox-strip, .lightbox-picture-strip,
+    .lightbox-meta, .gallery-dev-overlay,
+    [data-lightbox-action], [data-lightbox-dev-dashboard], .lightbox-dev-dashboard
+) { display: none !important; }
+.lightbox.is-presentation-exclusive .lightbox-stage-link { pointer-events: none; }
+
+/* The launch confirmation stays available before exclusive playback begins. */
+.lightbox.is-presentation-launch { background: #000; }
+.lightbox.is-presentation-launch :is(
+    .lightbox-hud, .lightbox-controls, .lightbox-meta, .lightbox-picture-strip,
+    [data-lightbox-action], [data-lightbox-dev-dashboard], .lightbox-dev-dashboard
+) { visibility: hidden !important; pointer-events: none; }
+.presentation-consent[hidden] { display: none; }
+.presentation-consent {
+    position: absolute;
+    z-index: 50;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(22rem, calc(100% - 2rem));
+    box-sizing: border-box;
+    padding: 1.15rem;
+    border: 1px solid rgb(255 255 255 / 20%);
+    border-radius: 1rem;
+    color: #fff;
+    background: rgb(255 255 255 / 9%);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 1rem 3rem rgb(0 0 0 / 35%);
+    text-align: center;
+}
+.presentation-consent h2 { margin: 0; font-size: 1rem; }
+.presentation-consent p {
+    margin: 0.5rem 0 1rem;
+    color: rgb(255 255 255 / 75%);
+    font-size: 0.85rem;
+}
+.presentation-consent-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+}
+.presentation-consent-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+}
+.presentation-consent-actions svg { width: 1rem; height: 1rem; fill: currentColor; }
+.presentation-consent-actions button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+}

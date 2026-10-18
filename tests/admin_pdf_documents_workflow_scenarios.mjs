@@ -221,6 +221,8 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
         window: {location},
         document,
         fetch,
+        // Shared PDF metadata has its own production-closure scenarios below.
+        scanPdfPageCountCells: () => {},
         createPdfPngUploadStream,
         uploadBrowserFileStream,
         beginAdminOperation,
@@ -434,18 +436,23 @@ const editorSources = await Promise.all(editorSourcePaths.map(path =>
 const [overviewSource, editorSource, documentsSource, apiSource, entrySource,
     editActionsSource, pdfPostSource, ofpPostSource] = editorSources;
 assert.match(overviewSource,
-    /'id' => 'admin-edit-documents',\s*'label' => t\('pdf\.documents'/,
-    'A dedicated, already localized Documents / PDFs tab must exist.');
+    /'id' => 'admin-edit-documents',\s*'label' => t\('presentation\.media_tab'/,
+    'A dedicated localized PDF/Music/Presentation tab must exist.');
 assert.match(entrySource, /require_once __DIR__ \. '\/admin_galleries_edit_page\/tab_documents\.php'/,
     'The gallery editor must load the Documents tab controller.');
 assert.match(editActionsSource, /'admin-edit-documents'/,
     'The server must recognize Documents as a valid redirect/selected tab.');
-assert.match(documentsSource, /echo admin_gallery_pdf_documents_html\(\$gallery\)/,
+assert.match(documentsSource, /'documents_html' => admin_gallery_pdf_documents_html\(\$gallery\)/,
     'The document manager must belong to the Documents tab.');
-assert.match(documentsSource, /echo admin_edit_gallery_simbrief_legacy_panel_html\(\$gallery\)/,
+assert.match(documentsSource, /'simbrief_html' => admin_edit_gallery_simbrief_legacy_panel_html\(\$gallery\)/,
     'The historical SimBrief PDF attachment must also belong to Documents.');
-assert.match(documentsSource, /render_admin_tab_panel\('admin-edit-documents'/,
-    'The Documents contents must be enclosed in their own tab panel.');
+assert.match(documentsSource, /view_render_admin_gallery_media_tab\(/,
+    'The prepared media fragments must use the presentation-owned tab wrapper.');
+const mediaView = await readFile(new URL(
+    '../app/views/admin_gallery_edit_tabs.php', import.meta.url
+), 'utf8');
+assert.match(mediaView, /view_render_admin_tab_panel\('admin-edit-documents'/,
+    'The media view must retain its existing native tab identity.');
 assert.doesNotMatch(apiSource, /admin_gallery_pdf_documents_html|admin_edit_gallery_simbrief_legacy_panel_html/,
     'The API tab must not render PDF or SimBrief document forms.');
 const closeSettingsFormAt = editorSource.indexOf('    view_render_admin_gallery_editor_form_close([');
@@ -456,5 +463,76 @@ assert.match(pdfPostSource, /'tab' => 'admin-edit-documents'/,
     'PDF mutation redirect/panel metadata must return to the Documents tab.');
 assert.match(ofpPostSource, /redirect_to\(admin_edit_gallery_tab_url\(\$galleryId, 'admin-edit-documents'\)\)/,
     'Legacy OFP non-JavaScript upload fallback must return to Documents.');
+
+// Exercise the actual shared metadata queue independently of upload adapters.
+// Two equal sources share one read; a changed version must reopen the original.
+const metadataSource = await readFile(new URL(
+    '../public/assets/gallery-modules/gallery-pdf-metadata.js', import.meta.url
+), 'utf8');
+let metadataActive = 0;
+let metadataPeak = 0;
+const metadataReads = [];
+const metadataDisposals = [];
+const pageTotal = {
+    textContent: '…', removeAttribute: () => {},
+};
+const metadataSection = {
+    querySelector: () => pageTotal,
+    querySelectorAll: () => metadataCells,
+};
+const metadataCells = ['/one', '/one', '/two'].map(pdfUrl => ({
+    dataset: {pdfUrl, pdfVersion: 'v1'}, isConnected: true, textContent: '…',
+    closest: () => metadataSection, removeAttribute: () => {},
+}));
+const metadataRoot = {
+    matches: () => false, querySelectorAll: () => metadataCells,
+};
+const metadataContext = vm.createContext({
+    Element: Object,
+    createPdfPngUploadStream: async url => {
+        metadataReads.push(url);
+        metadataActive += 1;
+        metadataPeak = Math.max(metadataPeak, metadataActive);
+        return {
+            pageCount: url === '/one' ? 3 : 5,
+            dispose: async () => {
+                metadataActive -= 1;
+                metadataDisposals.push(url);
+            },
+        };
+    },
+});
+vm.runInContext(metadataSource
+    .replace(/^import[^]*?;\s*$/m, '')
+    .replace(/^export /gm, '')
+    .replace('void drainPdfPageCounts();',
+        'globalThis.metadataWork = drainPdfPageCounts();'), metadataContext);
+metadataContext.scanPdfPageCountCells(metadataRoot);
+assert.equal(pageTotal.textContent, '…', 'Pending pages must not become zero.');
+await metadataContext.metadataWork;
+assert.equal(pageTotal.textContent, '11', 'Sum all three authorized PDF rows.');
+assert.deepEqual(metadataReads, ['/one', '/two'], 'Reuse exact-version metadata.');
+assert.equal(metadataPeak, 1, 'PDF streams must never overlap.');
+assert.deepEqual(metadataDisposals, ['/one', '/two'], 'Release every stream.');
+
+const changedCell = {
+    ...metadataCells[0], dataset: {pdfUrl: '/one', pdfVersion: 'v2'},
+};
+metadataCells.splice(0, metadataCells.length, changedCell);
+metadataContext.scanPdfPageCountCells(metadataRoot);
+await metadataContext.metadataWork;
+assert.equal(metadataReads.length, 3, 'Changed source version must be reread.');
+assert.equal(pageTotal.textContent, '3');
+
+metadataContext.createPdfPngUploadStream = async () => {
+    throw new Error('Denied or malformed original');
+};
+metadataCells.push({
+    ...changedCell, dataset: {pdfUrl: '/denied', pdfVersion: 'v1'},
+});
+metadataContext.scanPdfPageCountCells(metadataRoot);
+await metadataContext.metadataWork;
+assert.equal(pageTotal.textContent, '—', 'Unknown pages must not be omitted.');
+assert.equal(metadataCells[1].textContent, '—');
 
 console.log('Admin PDF document workflow tests passed.');

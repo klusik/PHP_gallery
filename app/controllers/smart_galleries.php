@@ -1107,25 +1107,64 @@ function cms_smart_gallery(): void
     $lightboxEndpointParams = ['id' => (int) $gallery['id']];
     if ($sourceGalleryId > 0) $lightboxEndpointParams['source_gallery_id'] = $sourceGalleryId;
 
-    $musicHtml = '';
+    $mediaHtml = '';
+    $hasMusic = false;
+    // Membership belongs to the complete canonical result. Page/source filters
+    // change photographs while the existing source-attachment union stays stable.
+    $sourceIds = array_map(
+        static fn (array $item): int => (int) $item['gallery_id'],
+        $sourceSummary['items']
+    );
+    $pdfSources = \Gallery\Services\feature_capability_effective_enabled(
+        'gallery_pdf_documents'
+    ) ? array_values(array_filter(
+        \Gallery\Services\smart_gallery_attachment_sources($sourceIds),
+        static fn (array $source): bool =>
+            \Gallery\Services\gallery_pdf_documents_present($source)
+    )) : [];
+    if ($pdfSources !== []) {
+        \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
+        $documents = gallery_pdf_documents_smart_view_model(
+            (int) $gallery['id'],
+            $pdfSources
+        );
+        $mediaHtml .= smart_gallery_capture_html(
+            static function () use ($documents): void {
+                \Gallery\Views\view_render_gallery_pdf_documents($documents);
+            }
+        );
+    }
     $musicSources = \Gallery\Services\feature_capability_effective_enabled(
         'gallery_music'
     )
-        ? \Gallery\Services\smart_gallery_music_sources(array_map(
-            static fn(array $item): int => (int) $item['gallery_id'],
-            $sourceSummary['items']
-        )) : [];
+        ? \Gallery\Services\smart_gallery_music_sources($sourceIds) : [];
     if ($musicSources !== []) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         $musicModel = gallery_music_smart_view_model(
             (int) $gallery['id'], $musicSources,
             !empty($presentation['music_enabled'])
         );
-        ob_start();
-        \Gallery\Views\view_render_gallery_music($musicModel);
-        $musicHtml = (string) ob_get_clean();
+        $hasMusic = $musicModel['tracks'] !== [] && $musicModel['error'] === '';
+        $mediaHtml .= smart_gallery_capture_html(
+            static function () use ($musicModel): void {
+                \Gallery\Views\view_render_gallery_music($musicModel);
+            }
+        );
     }
 
+    // Explicit presentation is a playback snapshot, independent of the Smart
+    // editor's ordinary S-key soundtrack preference. Reuse physical defaults.
+    $launch = \Gallery\Services\gallery_presentation_normalize(null);
+    $presentationUrl = '';
+    if ($lightboxEnabled && !empty($presentation['slideshow_enabled'])) {
+        $launchParams = ['slug' => (string) $gallery['slug'],
+            'lang' => $contentLanguage];
+        if ($sourceGalleryId > 0) {
+            $launchParams['source_gallery_id'] = $sourceGalleryId;
+        }
+        $presentationUrl = url_for('smart_gallery', $launchParams
+            + \Gallery\Services\gallery_presentation_query($launch));
+    }
     $cardsViewModel = smart_gallery_image_cards_view_model($images, $sourceGalleries, $presentation, $votes, $tags, $offset, true);
     $sourceContextCardCount = 0;
     foreach ((array) ($cardsViewModel['cards'] ?? []) as $card) {
@@ -1155,7 +1194,9 @@ function cms_smart_gallery(): void
         'lightbox_browsing_mode' => (string) $presentation['lightbox_browsing_mode'],
         'cards' => $cardsViewModel,
         'lightbox_html' => $lightboxHtml,
-        'music_html' => $musicHtml,
+        'media_html' => $mediaHtml,
+        'presentation_url' => $presentationUrl,
+        'presentation_music' => $hasMusic,
     ]);
 
     if ($testRunActive) {

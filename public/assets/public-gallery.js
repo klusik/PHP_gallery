@@ -30,7 +30,7 @@
  *   2026-09-05
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261003-scoped-i18n-v2';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261018-presentation-confirm-v1';
 
 const optionalPublicModules = {
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',
@@ -45,8 +45,8 @@ const optionalPublicModules = {
     galleryDownload: './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1',
     ofpViewer: './gallery-modules/simbrief-ofp-viewer.js?v=20261008-ofp-keyboard-repeat',
     publicContentWidgets: './gallery-modules/public-content-widgets.js?v=20261011-widget-size-observer-v1',
-    music: './gallery-modules/gallery-music-player.js?v=20261017-media-applets-v1',
-    mediaPanels: './gallery-modules/gallery-media-panels.js?v=20261017-media-applets-v2',
+    music: './gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1',
+    mediaPanels: './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1',
 };
 
 /**
@@ -134,7 +134,7 @@ function bootPublicGalleryBrowserFeatures() {
         setupOptionalPublicFeature(
             optionalPublicModules.mediaPanels,
             'setupGalleryMediaPanels',
-            '[data-gallery-media-widget]'
+            '[data-gallery-media-widget], [data-gallery-presentation]'
         );
     });
 }

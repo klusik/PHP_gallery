@@ -8,6 +8,7 @@
 #   - Finish tagging in the same job and support reruns after an interrupted merge
 #   - Preserve server protections, immutable tags and linear develop history
 #   - Fill the verified draft with authenticated assets; publication remains manual
+#   - Retain completion evidence before retiring the exact fully synchronized release ref
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 name: Automatic reviewed release completion
@@ -60,6 +61,8 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'release/v_') &&
       github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     name: Complete exact reviewed release and safe develop FF
+    outputs:
+      draft_ready: ${{ steps.completion.outputs.draft_ready }}
     runs-on: ubuntu-24.04
     # Four-hour review observation plus bounded qualification/transport retries;
     # pending reviews dispatch the same Q again without another human action.
@@ -144,6 +147,7 @@ jobs:
           node-version: '22'
           package-manager-cache: false
       - name: Revalidate qualification and review, then protected merge, tag and FF
+        id: completion
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/release-completion.mjs
@@ -158,6 +162,40 @@ jobs:
             ${{ runner.temp }}/release-evidence.sha256
           if-no-files-found: ignore
           retention-days: 90
+
+  retire-draft-branch:
+    needs: complete
+    if: ${{ needs.complete.outputs.draft_ready == 'true' }}
+    name: Retire release branch after verified draft and retained evidence
+    runs-on: ubuntu-24.04
+    # Type: number. Units: minutes. Scope: this final cleanup job.
+    # Consumers: Actions job timeout. Rationale: ten minutes covers read-only
+    # proof checks and one leased deletion without an unbounded cleanup worker.
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Download this run's retained completion before cleanup
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-completion-record
+          path: ${{ runner.temp }}/retained-completion
+      - name: Recheck ready draft, ancestry, dependencies and exact deletion lease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_COMPLETION_FILE: ${{ runner.temp }}/retained-completion/release-completion.json
+        run: node .github/scripts/release-draft-retirement.mjs
 
   transport-probe:
     if: >-

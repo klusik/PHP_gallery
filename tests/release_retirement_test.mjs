@@ -19,6 +19,7 @@ import {lifecycleFixture} from './support/release_lifecycle_fixture.mjs';
 import {startNewRelease} from '../.github/scripts/start-new-release.mjs';
 import {openQualifiedPullRequest,completeRelease} from '../.github/scripts/release-completion.mjs';
 import {validateRetirementRequest,planRetirement,retireBranch,verifyRetirementControls} from '../.github/scripts/release-retirement.mjs';
+import './support/release_draft_retirement_scenarios.mjs';
 const request={branch:'release/v_1.2.3',mode:'plan',manualReview:''};
 const approved={...request,mode:'retire',manualReview:'Separate owner cleanup acceptance #101'};
 {

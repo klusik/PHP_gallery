@@ -159,6 +159,7 @@ namespace {
     require_once dirname(__DIR__) . '/app/services/simbrief_ofp_attachments.php';
     require_once dirname(__DIR__) . '/app/services/simbrief_ofp_conversion.php';
     require_once dirname(__DIR__) . '/app/views/admin_gallery_edit_tabs.php';
+    require_once dirname(__DIR__) . '/app/views/public_gallery_lightbox.php';
 
     /**
      * Fail loudly if one OFP access or isolation postcondition fails.

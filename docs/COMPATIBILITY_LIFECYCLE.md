@@ -20,8 +20,9 @@ default ON when no preference exists, including upgrades; fresh seeding preserve
 explicit OFF. OFF retains files, indexes, preferences and the incomplete-PDF-child
 publication guard. The historical `media&ofp=1` alias remains supported and applies
 the same PDF master. Stored page photos retain their normal image ownership.
-Both masters OFF omit the shared editor media tab; an old selected-tab URL
-normalizes to the available Identity default rather than an empty panel.
+Both attachment masters OFF retain the core Presentation card when lightbox is
+enabled. The tab is omitted only when all three capabilities are OFF; an old
+selected-tab URL then normalizes to Identity rather than an empty panel.
 
 Photo-only cached snapshots/jobs are derived state and cannot establish complete
 attachment coverage. The new v3 snapshot/v2 job keys do not rewrite original data
@@ -68,6 +69,19 @@ The music model also owns permanent v1 compatibility: a missing download flag
 means false. New tracks always start locked; bulk permission affects current
 tracks only. This prevents old indexes or later uploads inheriting permission.
 
+Public media cards retain native disclosure support while their always-visible
+totals use the same authorized rows. An unreadable PDF or audio duration leaves
+the full total unknown. The shared PDF metadata owner releases each original
+before opening the next; no page rendering or database migration is introduced.
+Real-host metadata latency and device coverage remain unknown.
+
+Explicit presentation launches temporarily override default-off music without
+changing persisted preferences. Deferred activation starts audio in the original
+click task; shared-link autoplay can still require the existing Play gesture.
+The media-panel copy owner permanently supports denied/unavailable clipboard
+access through a selectable URL. Retain these browser capability paths until
+deployment and supported-device evidence establishes safe retirement.
+
 ## Smart Gallery music and visibility compatibility
 
 Owners: music model/service/controller and existing Smart source/presentation
@@ -87,7 +101,58 @@ acoustic equality across encodings/tags is unknown and is not inferred from
 filenames or duration. Hosted service, actual HTTP/DB and browser owners cover
 these boundaries; real codecs/devices and large deployed unions remain manual.
 
+Smart hero media/presentation parity uses the existing source-policy, attachment
+controller/view and shared lightbox owners without schema or format changes.
+PDF/OFP discovery uses canonical complete matching sources, excludes hidden
+documents for all audiences and keeps physical endpoint access checks. Existing
+ordinary Smart `music_enabled` defaults remain unchanged; explicit presentation
+links snapshot common autoplay/music ON and medium speeds without persisting.
+This permanent shared path preserves pagination-independent media, current source
+filter/language in share links and the established activation fallback. Adoption
+and large deployed PDF unions remain unknown; no retirement is inferred.
+
 ## Compact attachment browser presentation
+
+The physical-gallery presentation settings owner is the existing lightbox service,
+gallery model and guarded editor writer. Nullable version-1 JSON keeps pre-feature
+galleries enabled with autoplay, music and medium timings. Unknown versions/types render
+those compatible defaults. Public reads need no new schema probes; explicit
+editor/import writes fail before filesystem effects on missing or unknown schema.
+Older forms preserve the stored field. Sidecars, Organizer children and Trash
+retain preferences. Live usage statistics for the new settings are unknown.
+
+New links snapshot all supported playback options. Legacy `presentation=1` links
+remain supported and `autoplay=1` is an alias. Invalid values cannot introduce
+arbitrary timers or change gallery/media grants. Requested automatic fullscreen
+or audible playback refusal now holds the decoded first photo behind black and
+offers one Start presentation confirmation, including exclusive links. Its trusted
+click requests shared audio before fullscreen without an asynchronous boundary.
+After confirmation the existing viewport fallback protects unsupported native
+fullscreen; media failures keep player feedback without a repeated prompt.
+The glass player still follows ordinary HUD hiding; Photo/Play can retry later.
+Stop/Close/explicit silence cancel it. This permanent shared-player fallback
+protects browsers requiring activation; retire only with supported-browser and
+deployment evidence that audible autoplay is assured. Required Chromium covers
+allowed/refused/muted starts and idle-HUD hiding with controlled audio; real
+codecs, Safari and physical devices remain manual acceptance.
+Autoplay defaults ON until explicitly changed. Share applets snapshot it alongside
+music, speeds and link-only fullscreen/exclusive choices. Exclusive mode defaults
+OFF, hides controls/metadata/diagnostics when selected, and retains Escape exit;
+it grants no access and does not bypass browser sound policy. A one-second minimum
+black opening also waits for first-photo decode, uses the existing slideshow timer
+and never repeats as a gallery item. These are permanent supported behaviors;
+live usage statistics and real-device permission behavior remain unknown.
+
+The gallery-only `presentation` query flag is allowed through the SEO guard;
+it grants no visitor authority. Public direct links must reach the same gallery
+controller in a fresh anonymous session. Desktop native fullscreen rejection
+keeps `.is-fullscreen` geometry with `.is-css-fullscreen` stacking rather than
+entering a mobile-only CSS shell. This permanent viewer-owned capability fallback
+protects links without user activation. Retire only with supported-browser proof
+that native fullscreen is assured. Actual Chromium regressions decode synthetic
+images, assert nonzero stage geometry, advance from photo one and close/release
+audio after controlled native fullscreen/autoplay rejection. Live browser policy,
+codec and mobile-device coverage remains manual; adoption statistics are unknown.
 
 Owners: `gallery-media-panels.js`, shared lightbox view helpers and music player.
 Native details is the permanent no-JavaScript and missing-Popover fallback: the
@@ -104,6 +169,40 @@ scroll-preserving replacement and missing-Popover presentation. Native
 no-JavaScript use, assistive technology, Safari/mobile and reduced-motion
 acceptance remain manual coverage. Retain these capability fallbacks permanently
 unless deployed support and regression evidence justify a deliberate retirement.
+
+## Windows flight recorder, report delivery and revocation lifecycle
+
+Owners: `winapp/uploader/flight_jobs.py`, `flight_workflow.py`,
+`flight_ui.py`, `flight_recorder.py`, `simconnect_flight.py`,
+`flight_data.py`, `flight_report.py`, `flight_delivery.py`, and the
+gallery-scoped upload automation controller/service.
+
+Recording and analysis support the shared MSFS 2020/2024 provider path; missing
+aircraft/build signals remain explicit unavailable data. Recording defaults on
+with an independent opt-out. Report creation defaults on and language selection
+defaults to EN/CS/DE/SV; local output uses bundled ReportLab and DejaVu fonts.
+The gallery report capability is optional and negotiated. Reports are separate
+protected PDF documents, inherit gallery visibility and do not replace OFP.
+Stable report identity/language/checksum and status reconciliation protect
+retries; no raw telemetry is uploaded and no database schema is added.
+
+Standalone Stop uses the durable coordinator to stop the watcher, its owned UTC
+synchronizer and flight recorder, then drain accepted photographs and complete
+required report delivery. Unrelated AI, manual-import and preflight workers
+remain active, and the key stays configured. Confirmed Revoke uses that same
+Stop flow, additionally stops other authenticated producers and finishes
+accepted work before requesting scoped server revocation. Failures retain local
+data and task state; the UI shows phase, elapsed time and an ETA only when
+remaining work is measurable. After restart the app restores work but requires
+renewed confirmation before irreversible Revoke. Local-only resolution is
+explicit and does not count as server delivery.
+
+Automated provider and transport fixtures are not live qualification. Actual
+MSFS 2020 and 2024 simulator/aircraft/build coverage, achieved sampling cadence,
+installed-app recovery and report rendering acceptance remain pending until
+recorded separately for each generation. Retain both provider paths and local
+report recovery unless live evidence and deployed-usage evidence support a
+deliberate retirement.
 
 ## Watch-folder UTC synchronization and packaged Python
 
@@ -1296,6 +1395,19 @@ clients discover the companion through each release's assets; retirement require
 migration of that discovery contract and supported-client acceptance evidence.
 
 ## Interrupted GitHub release transfers
+
+Ready-draft automatic cleanup is owned by
+`.github/scripts/release-draft-retirement.mjs`. It requires a schema-4 synchronized
+completion with the retained complete byte inventory. Historical schema-1--3
+completions and published/manual retirement keep their existing approval and
+publication controls; automatic cleanup skips unsupported/incomplete completion
+instead of inventing proof. The manual retirement path remains supported for
+retained historical refs. Usage of automatic cleanup is unknown until the first
+production release containing this change. The registered retirement fixture
+exercises real leased deletion, active/open dependencies, changed assets, lost
+responses and retries without a branch. Live GitHub deletion permissions remain
+unperformed coverage. Removing the manual compatibility path requires proof that
+all retained historical refs were retired through their existing controls.
 
 Owner: `.github/scripts/release-completion.mjs` and
 `.github/scripts/release-draft-assets.mjs`. A failed create response may follow a

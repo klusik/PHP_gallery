@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.135.1}
-\newcommand{\manualdate}{17 October 2026}
+\newcommand{\version}{0.136}
+\newcommand{\manualdate}{18 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -496,12 +496,69 @@ are~independent switches. Both default ON for~new installations and~upgrades
 without a~saved choice; an~explicit OFF remains saved. OFF hides the~matching
 tables/players and~prevents uploads, delivery and~PDF conversion, including
 stale forms. Files, playlists and~preferences remain stored for~re-enabling.
-With both OFF, the~editor omits its~media tab; old tab URLs select Identity.
+With both OFF, core Presentation settings remain when lightbox is~enabled.
+With lightbox also OFF, the~empty tab is~omitted; old tab URLs select Identity.
 Existing converted page photographs keep their normal access rules. SimBrief
 can~still refresh descriptions/routes with PDF OFF and~keeps an~old original.
 
 \subsubsection{Attach and~convert a~PDF document}
 Expanded conversion controls keep the document column bounded. If the previous target is missing or changed, confirm a new private result; earlier files and galleries are preserved.
+
+Translucent cards keep PDF file count, total size and~total pages visible,
+along with the~music track count and~combined duration. Unknown metadata
+remains a~dash; totals never silently omit an~unreadable original.
+Cards use~the~gallery's available width: wide windows place them beside
+each other, narrower windows stack them and~move them below the~description.
+
+Smart Galleries use the~same hero cards, \ui{Presentation} button and~share
+panel. PDFs and~OFPs come from accessible physical sources contributing matching
+photos to~the~complete collection; hidden documents stay absent even for~an
+administrator on~the~public Smart page. PDF links retain source access checks.
+The~shared link preserves language and~a~selected source filter, omits page
+numbers, and~starts at~matching photo one. Explicit launch defaults to~autoplay
+and~music ON with medium speeds without changing ordinary Smart slideshow music.
+The~same black introduction, activation confirmation and~exclusive mode apply.
+
+Below the~cards, \ui{Presentation} starts at~the~first photo with configured
+speeds and~soundtrack for~that launch. The~saved slideshow music preference stays
+unchanged. The~share icon opens an~overlay with a~gallery link with the~active language
+and~\codeword{presentation=1}, omitting pagination and~preview state.
+Opening it~starts the~same presentation after ordinary access checks.
+Browser autoplay restrictions may~require \ui{Play}; denied clipboard
+access reveals a~selectable link for~manual copying.
+Anonymous visitors can~use~the~same link after ordinary access checks.
+If~native fullscreen or~sound needs activation, the~black opening waits for
+\ui{Start presentation}. After confirmation, unsupported native fullscreen
+retains the~browser viewport; \ui{Play} can~retry later audio failures.
+Use~\ui{Edit gallery > PDF / Music / Presentation} and~its~transparent
+\ui{Presentation settings} card to~choose public button visibility, music,
+photo speed and~transition speed. The~Save icon uses the~ordinary guarded
+gallery form. Preview and~Share use current selections, including unsaved ones.
+New links embed music and~both speeds; later gallery edits do~not~change
+those snapshots. Visitors can~change playback controls temporarily.
+\codeword{autoplay=1} also starts a~presentation. If~sound needs activation,
+the~player hides with the~idle HUD; movement shows it~again.
+Click \ui{Play} or~the~photo to~retry sound and~requested native fullscreen.
+Stop or~Close cancels pending audio. Hiding public buttons does~not~revoke links.
+Defaults use versioned \codeword{galleries.presentation_json} after the~column
+migration. Explicit writes require verified schema; older galleries retain
+enabled, music and~medium defaults until configured.
+Autoplay defaults ON for~every gallery until explicitly disabled in~the~card.
+The~share overlay has~speed sliders and~switches for~autoplay, music,
+fullscreen and~\ui{Without controls}; its~Copy icon copies the~current URL.
+Share drafts do~not~save gallery settings. \codeword{autoplay=0} opens photo
+one paused and~silent. Fullscreen and~exclusive choices use
+\codeword{presentation_fullscreen=1|0} and~\codeword{presentation_exclusive=1|0}.
+Without controls defaults OFF; enabling it~hides controls, metadata
+and~diagnostics while Esc exits. Browser sound restrictions still apply.
+Each launch holds black for~at~least one second and~until photo one decodes,
+then checks requested fullscreen and~music. If~the~browser needs activation,
+black remains with~a~compact \ui{Start presentation} confirmation.
+One click starts music and~requests fullscreen before the~selected reveal.
+This confirmation also appears for~links without controls; it~then disappears.
+Esc or~the~close icon cancels. Autoplay OFF stays paused and~silent.
+This opening never repeats at~the~gallery loop. Closing cancels pending work.
+Native fullscreen may~need a~click; the~fallback fills the~browser viewport.
 
 PDF and~Music launchers show file counts beside the~description,
 or~below it~on~narrow screens. Click a~launcher to~open a~small overlay.
@@ -832,6 +889,39 @@ The~installed uploader checks its own stable GitHub installer version at~most on
 Choose \ui{Update} to~download with progress and~optional cancellation, verify the~installer, stop new work and~wait up~to~120 seconds for~background tasks to~finish safely. An~unsuccessful drain refuses installation and~keeps the~uploader available. An~external helper rechecks the~download and~requests Windows UAC approval. Self-update never force-closes workers; normal manually launched installers retain their existing shutdown policy. Actual installation progress comes through a~local session-specific channel. After success, the~helper restarts the~uploader as~the~original user with saved settings and~jobs. There is~no~automatic rollback. Native Python/source runs offer the~verified installer for~manual launch. If~Windows reports that a~restart is~required, restart Windows before reopening the~uploader; cancelling UAC reopens the~existing installation.
 
 
+\subsection{Flight recording and reports}
+
+The~Windows uploader records MSFS 2020 and~2024 aircraft telemetry through
+a~shared read-only provider. Recording and~report creation are enabled by
+default; recording can~be opted out independently, and~the~saved language
+choices initially include English, Czech, German, and~Swedish. The~bundled
+ReportLab renderer and~DejaVu fonts create a~separate chart PDF for each
+selected language from one analysis. Reports remain local for retry.
+Unsupported signals stay unavailable rather than invented; live simulator,
+aircraft, and~build acceptance remains separate for each generation.
+
+Both actions use one durable coordinator. Standalone Stop stops the~watcher,
+its~owned UTC synchronizer, and~flight recorder, then drains accepted
+photographs and~completes required report delivery; unrelated AI, manual-import,
+and~preflight workers remain running. Stop leaves the~key configured.
+Confirmed Revoke runs the~same Stop, also stops other authenticated producers,
+finishes accepted work, and~requests scoped server revocation only after required
+receipts. Progress shows phase and~elapsed time; ETA appears only when measurable.
+Failures retain tasks and~local files for recovery, with explicit local-only
+resolution available. Restart restores work but~never restores Revoke consent;
+a~new confirmation is~required. No~empty report is~created.
+
+The~gallery-scoped token advertises the~optional
+\texttt{flight\_reports\_v1} capability. The~JSON
+\texttt{flight\_report\_status} action accepts \texttt{report\_id},
+\texttt{language}, and~\texttt{sha256}; the~multipart
+\texttt{flight\_report} action accepts those fields plus
+\texttt{session\_id} and~the~PDF field \texttt{report}. The~server confines
+writes to the~token gallery and~reuses general PDF validation, storage, and
+protected viewing without adding schema. Stable identity, checksum, and~status
+reconciliation make retries idempotent. Reports are separate from OFP,
+inherit gallery visibility, and~contain no~raw telemetry.
+
 \section{Adding, describing, and~organizing photographs}
 \label{sec:photo-workflow}
 \index{photo workflow}
@@ -1115,9 +1205,9 @@ Vertical cards place the~photograph above the~description; horizontal cards plac
 
 Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
 
-The~independent uploader source targets 0.4.1. A~separately requested installer
+The~independent uploader source targets 0.5.0. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.4.1/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.5.0/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.
@@ -2944,7 +3034,15 @@ Wait for~\codeword{DRAFT_READY}, then manually choose \ui{Publish release}.
 \codeword{TAGGED / DRAFT_PENDING} is~recoverable for~the~same Q;
 do~not~rebuild the~candidate or~move a~correct tag. Parallel develop work
 blocks unsafe synchronization, not~a~correct completed tag or~draft.
-Human browser/hosting smoke tests and~branch cleanup remain separate.
+After \codeword{DRAFT_READY} and~retention of~completion evidence, the~final job
+automatically removes the~exact release branch with a~Q SHA lease.
+It~rechecks uploaded asset hashes, reviewed merge/tag, main/develop ancestry
+and~active PR/workflow dependencies. Incomplete synchronization keeps the~branch;
+failed proof blocks cleanup while preserving the~draft. Retry only the~failed
+cleanup job; immutable Q and~retained evidence support an~already deleted branch.
+This starts with the~first release containing the~change in~qualified develop.
+Manual publication and~browser/hosting smoke tests remain separate. Historical
+branches retain the~separately approved retirement workflow.
 See \filepath{RELEASE.md}, \filepath{docs/RELEASE_LIFECYCLE.md},
 \filepath{docs/CI_COVERAGE_REUSE_CONTRACT.md} and~\filepath{docs/LATEX_BUILD.md}.
 

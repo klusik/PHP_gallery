@@ -33,6 +33,10 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+import {galleryPresentationOptions} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
+import {
+    stopGalleryMusicViewer,
+} from './gallery-music-player.js?v=20261018-presentation-confirm-v1';
 
 const lightboxModuleUrl = (() => {
     const moduleUrl = new URL('./lightbox.js', import.meta.url);
@@ -53,6 +57,8 @@ const deferredLightboxState = {
     modulePromise: null,
     module: null,
     active: false,
+    presentationConsumed: false,
+    presentationPending: false,
 };
 
 /**
@@ -197,6 +203,7 @@ function replayDeferredClick(target) {
  *
  * @param {number} setupToken Token for the current server-rendered page state.
  * @param {Element|null} replayTarget Optional element to click again after setup.
+ * @returns {Promise<void>} Activate only the current page and replay its action.
  */
 async function activateFullLightbox(setupToken, replayTarget = null) {
     const module = await loadLightboxModule();
@@ -204,8 +211,10 @@ async function activateFullLightbox(setupToken, replayTarget = null) {
         return;
     }
     cancelDeferredActivation();
-    module.setupGalleryLightbox();
-    deferredLightboxState.active = true;
+    if (!deferredLightboxState.active) {
+        module.setupGalleryLightbox();
+        deferredLightboxState.active = true;
+    }
     replayDeferredClick(replayTarget);
 }
 
@@ -222,7 +231,10 @@ function deferredActivationTarget(target) {
     if (target.closest('form, [data-admin-inline-editor], [data-public-admin-card-action], [data-gallery-side-panel-link]')) {
         return null;
     }
-    return target.closest('[data-photo-map], [data-gallery-map-url], [data-lightbox-image], [data-lightbox-source]');
+    return target.closest(
+        '[data-photo-map], [data-gallery-map-url], [data-lightbox-image], '
+        + '[data-lightbox-source], [data-gallery-presentation-start]'
+    );
 }
 
 /**
@@ -275,6 +287,7 @@ function scheduleIdleLightboxActivation(setupToken) {
  * The full viewer still starts automatically after the page is loaded and idle,
  * which keeps keyboard navigation and deep-link behavior available after the
  * initial render settles. A direct photo or map click starts it immediately.
+ * @returns {void} Bind deferred actions and consume an eligible launch link once.
  */
 export function setupGalleryLightbox() {
     teardownGalleryLightbox();
@@ -295,9 +308,22 @@ export function setupGalleryLightbox() {
         }
         event.preventDefault();
         event.stopPropagation();
+        if (target.matches('[data-gallery-presentation-start]')) {
+            if (deferredLightboxState.presentationPending) return;
+            deferredLightboxState.presentationPending = true;
+            const intent = galleryPresentationOptions();
+            // Native fullscreen needs this original trusted click, before the
+            // deferred import. Audio waits for the decoded first-photo reveal.
+            if (intent.fullscreen && document.documentElement.requestFullscreen) {
+                void document.documentElement.requestFullscreen().catch(() => {});
+            }
+        }
         showDeferredLightboxLoader(target);
         activateFullLightbox(setupToken, target).catch(() => {
             hideDeferredLightboxLoader();
+            stopGalleryMusicViewer();
+        }).finally(() => {
+            deferredLightboxState.presentationPending = false;
         });
     }, {capture: true, signal: deferredLightboxState.controller.signal});
 
@@ -306,6 +332,17 @@ export function setupGalleryLightbox() {
     }, {signal: deferredLightboxState.controller.signal});
 
     scheduleIdleLightboxActivation(setupToken);
+    if (!deferredLightboxState.presentationConsumed
+        && ['presentation', 'autoplay'].some(key =>
+            new URLSearchParams(location.search).get(key) === '1')
+        && document.querySelector('[data-lightbox]')) {
+        deferredLightboxState.presentationConsumed = true;
+        void activateFullLightbox(setupToken).then(() => {
+            if (setupToken === deferredLightboxState.setupToken) {
+                deferredLightboxState.module.startGalleryPresentation();
+            }
+        }).catch(() => hideDeferredLightboxLoader());
+    }
 }
 
 /**

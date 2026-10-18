@@ -15,8 +15,131 @@ import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 import vm from 'node:vm';
 import {createLightboxNavigationLifecycle} from '../public/assets/gallery-modules/lightbox-navigation-lifecycle.js';
+import {
+    galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
+} from '../public/assets/gallery-modules/gallery-presentation.js';
 
 const source = readFileSync(new URL('../public/assets/gallery-modules/lightbox.js', import.meta.url), 'utf8');
+
+test('presentation resets timing and prepares photo one before music', () => {
+    const opened = [];
+    const music = [];
+    const context = vm.createContext({
+        presentationOptions: {music: true, autoplay: true, fullscreen: true,
+            exclusive: false, interval: 'medium', transition: 'medium'},
+        LIGHTBOX_PRESENTATION_INTRO_MS: 1000, performance: {now: () => 0},
+        lightboxPresentationIntro: null, lightboxSlideshowActive: false,
+        GALLERY_PRESENTATION_SPEEDS,
+        cards: [{}, {}, {}], lightboxSlideshowEnabled: true,
+        // Deliberately different live settings prove the launch resets them.
+        lightboxSlideshowVisibleDuration: 4000,
+        lightboxSlideshowTransitionDuration: 500,
+        lightboxSlideshowSpeedPresets: {
+            interval: [4000, 2000, 1000], transition: [2000, 1000, 500],
+        },
+        overlay: {querySelectorAll: () => [],
+            classList: {add: () => {}, toggle: () => {}}},
+        musicPlayer: {start: (...args) => music.push(args)},
+        enterLightboxFullscreen: () => Promise.resolve(true),
+        syncLightboxSlideshowControls: () => {},
+        scheduleLightboxSlideshowNext: () => {},
+        stopLightboxSlideshow: () => {}, refreshLightboxOrderFromDom: () => {},
+        openAt: index => opened.push(index),
+        startLightboxSlideshow: force => music.push(force),
+    });
+    vm.runInContext(productionFunction('presentGalleryFromStart'), context);
+    context.presentGalleryFromStart();
+    assert.deepEqual(opened, [0]);
+    assert.deepEqual(music, [[false, true]], 'Opening must hold music silent.');
+    assert.equal(context.lightboxPresentationIntro.music, true);
+    assert.equal(context.lightboxPresentationIntro.readyAt, 1000);
+    assert.equal(context.lightboxSlideshowVisibleDuration, 2000);
+    assert.equal(context.lightboxSlideshowTransitionDuration, 1000);
+    context.presentationOptions = {music: false, autoplay: false, fullscreen: false,
+        exclusive: false, interval: 'fast', transition: 'slow'};
+    context.presentGalleryFromStart();
+    assert.equal(context.lightboxSlideshowVisibleDuration, 1000);
+    assert.equal(context.lightboxSlideshowTransitionDuration, 2000);
+    assert.equal(context.lightboxPresentationIntro.music, false);
+    assert.equal(context.lightboxSlideshowActive, false, 'Paused link must stay paused.');
+    context.lightboxSlideshowEnabled = false;
+    context.presentGalleryFromStart();
+    assert.deepEqual(opened, [0, 0], 'Disabled slideshow must remain unavailable.');
+});
+
+test('presentation links launch once and require an authorized viewer', async () => {
+    const deferred = readFileSync(new URL(
+        '../public/assets/gallery-modules/lightbox-deferred.js', import.meta.url
+    ), 'utf8');
+    const setup = deferred.match(
+        /^export function setupGalleryLightbox\([^]*?^}/m
+    );
+    assert.ok(setup, 'Deferred setup owner must remain available.');
+    const launches = [];
+    let eligible = true;
+    const state = {
+        setupToken: 0, presentationConsumed: false,
+        module: {startGalleryPresentation: () => launches.push('start')},
+    };
+    const context = vm.createContext({
+        AbortController, URLSearchParams,
+        deferredLightboxState: state,
+        location: {search: '?lang=cs&presentation=1'}, window: {},
+        document: {
+            querySelector: selector => selector === '[data-lightbox]'
+                ? (eligible ? {} : null) : {},
+            addEventListener: () => {},
+        },
+        teardownGalleryLightbox: () => {},
+        scheduleIdleLightboxActivation: () => {},
+        activateFullLightbox: async () => { launches.push('activate'); },
+    });
+    vm.runInContext(setup[0].replace('export ', ''), context);
+    context.setupGalleryLightbox();
+    await Promise.resolve();
+    assert.deepEqual(launches, ['activate', 'start']);
+    context.setupGalleryLightbox();
+    await Promise.resolve();
+    assert.equal(launches.length, 2, 'Fragment refresh must not replay a link.');
+    state.presentationConsumed = false;
+    eligible = false;
+    context.setupGalleryLightbox();
+    await Promise.resolve();
+    assert.equal(launches.length, 2, 'Missing authorized viewer must not launch.');
+});
+
+test('link snapshots override saved defaults with a closed playback vocabulary', () => {
+    const original = globalThis.location;
+    globalThis.location = {href: 'https://gallery.test/album/'};
+    try {
+        const overlay = {dataset: {presentationMusic: '1',
+            presentationInterval: 'slow', presentationTransition: 'medium'}};
+        const intent = galleryPresentationOptions(overlay,
+            '?autoplay=1&presentation_music=0&presentation_interval=fast'
+                + '&presentation_transition=slow');
+        assert.deepEqual(intent, {autoplay: true, fullscreen: true, exclusive: false,
+            music: false, interval: 'fast', transition: 'slow'});
+        const invalid = galleryPresentationOptions(overlay,
+            '?presentation=1&presentation_music=invalid'
+                + '&presentation_interval=-1&presentation_transition=999999');
+        assert.deepEqual(invalid, {autoplay: true, fullscreen: true, exclusive: false,
+            music: true, interval: 'slow', transition: 'medium'});
+        const paused = galleryPresentationOptions(overlay,
+            '?presentation=1&autoplay=0&presentation_fullscreen=0'
+                + '&presentation_exclusive=1');
+        assert.equal(paused.autoplay, false);
+        assert.equal(paused.fullscreen, false);
+        assert.equal(paused.exclusive, true);
+        assert.deepEqual(galleryPresentationOptions(overlay,
+            '?presentation_music=0&presentation_interval=fast'),
+        {autoplay: true, fullscreen: true, exclusive: false,
+            music: true, interval: 'slow', transition: 'medium'},
+        'Ordinary gallery parameters must not change playback defaults.');
+    } finally {
+        if (original === undefined) delete globalThis.location;
+        else globalThis.location = original;
+    }
+});
 
 /**
  * Extract one production declaration at its actual viewer-closure indentation.
@@ -96,6 +219,8 @@ class SpeedPanel {
  */
 function fixture() {
     const panel = new SpeedPanel();
+    const confirm = {disabled: false, focus: () => {}};
+    const consent = {hidden: true, querySelector: () => confirm};
     const classes = new Set(['is-ui-visible']);
     const context = vm.createContext({
         AbortController, HTMLInputElement: Slider, HTMLElement: SpeedPanel,
@@ -103,11 +228,22 @@ function fixture() {
         cards: [{}, {}, {}], lightboxNavigation: createLightboxNavigationLifecycle(),
         lightboxSlideshowTimer: null, lightboxSlideshowScheduleToken: 0,
         lightboxSlideshowPreloadController: null, lightboxSlideshowActive: true,
-        musicPlayer: {stop: () => {}},
+        musicPlayer: {stop: () => {}, start: () => Promise.resolve('playing')},
+        presentationOptions: {fullscreen: true},
+        enterLightboxFullscreen: () => Promise.resolve(true),
+        consent, confirm,
+        syncLightboxSlideshowControls: () => {},
+        lightboxPresentationIntro: null, stageLink: null,
+        performance: {now: () => 0},
         lightboxDefaultTransitionDuration: 160,
         overlay: {
-            hidden: false, dataset: {}, querySelector: () => panel,
-            classList: {contains: name => classes.has(name), remove: name => classes.delete(name), add: name => classes.add(name)},
+            hidden: false, dataset: {},
+            querySelector: selector => selector === '[data-presentation-consent]'
+                ? consent : selector === '[data-presentation-confirm]'
+                    ? confirm : panel,
+            classList: {contains: name => classes.has(name),
+                remove: (...names) => names.forEach(name => classes.delete(name)),
+                add: (...names) => names.forEach(name => classes.add(name))},
         },
         document: {activeElement: null},
         isLightboxFullscreen: () => true,
@@ -133,7 +269,11 @@ function fixture() {
     assert.ok(start >= 0 && end > start, 'Production timing state must be extracted intact.');
     const declarations = ['readLightboxTimingSetting', 'currentLightboxTransitionDuration',
         'updateLightboxSlideshowSpeed', 'clearLightboxSlideshowTimer', 'scheduleLightboxSlideshowNext',
-        'stopLightboxSlideshow', 'shouldKeepLightboxHudVisible', 'finishLightboxSlideshowSpeedPointer'].map(productionFunction).join('\n');
+        'stopLightboxSlideshow', 'cancelLightboxPresentationIntro',
+        'showLightboxPresentationConsent', 'confirmLightboxPresentation',
+        'revealLightboxPresentation',
+        'scheduleLightboxPresentationIntro', 'shouldKeepLightboxHudVisible',
+        'finishLightboxSlideshowSpeedPointer'].map(productionFunction).join('\n');
     vm.runInContext(`${declarations}\n${source.slice(start, end)}`, context);
     const transaction = context.lightboxNavigation.begin(0, '0');
     context.lightboxNavigation.settle(0, transaction.generation, 'displayed');
@@ -151,16 +291,127 @@ async function settle() {
     await Promise.resolve();
 }
 
+test('black intro waits for decode and never becomes a repeated slide', async () => {
+    const context = fixture();
+    const started = [];
+    context.musicPlayer.start = (...args) => started.push(args);
+    context.lightboxPresentationIntro = {
+        readyAt: 1000, music: true, autoplay: true, animation: null,
+        fullscreen: Promise.resolve(true), phase: 'preparing',
+    };
+    context.lightboxNavigation.begin(0, '0');
+    context.scheduleLightboxSlideshowNext();
+    assert.equal(context.timers.size, 0, 'Decode must gate the opening hold.');
+    context.lightboxNavigation.settle(0, context.lightboxNavigation.generation, 'displayed');
+    context.scheduleLightboxSlideshowNext();
+    const [id, hold] = [...context.timers][0];
+    assert.equal(hold.duration, 1000);
+    assert.equal(started.length, 0, 'Audio must wait for the reveal.');
+    context.timers.delete(id);
+    await hold.callback();
+    await settle();
+    assert.deepEqual(started, [[true, false]]);
+    assert.equal(context.lightboxPresentationIntro, null);
+    assert.equal(context.loads.length, 1, 'Reveal must hand off to the existing scheduler.');
+    context.lightboxPresentationIntro = {
+        readyAt: 1000, music: true, autoplay: true, animation: null,
+        fullscreen: Promise.resolve(true), phase: 'preparing',
+    };
+    context.scheduleLightboxSlideshowNext();
+    const cancelled = [...context.timers.values()][0];
+    context.stopLightboxSlideshow();
+    await cancelled.callback();
+    await settle();
+    assert.equal(started.length, 1, 'Cancelled intro must not restart audio.');
+});
+
+test('activation refusal holds black until one synchronous confirmation', async () => {
+    for (const refusal of ['fullscreen', 'music']) {
+        const context = fixture();
+        const calls = [];
+        let firstPlay = true;
+        context.musicPlayer.start = () => {
+            calls.push('audio');
+            const result = firstPlay && refusal === 'music' ? 'blocked' : 'playing';
+            firstPlay = false;
+            return Promise.resolve(result);
+        };
+        context.enterLightboxFullscreen = () => {
+            calls.push('fullscreen');
+            // Unsupported fullscreen may retain the viewport after confirmation.
+            return Promise.resolve(false);
+        };
+        context.lightboxPresentationIntro = {
+            readyAt: 1000, music: true, autoplay: true, animation: null,
+            fullscreen: Promise.resolve(refusal !== 'fullscreen'), phase: 'preparing',
+        };
+        context.overlay.classList.add('is-presentation-intro');
+        context.scheduleLightboxSlideshowNext();
+        // The timer's async callback owns both permission checks. Await that
+        // completion across VM realms rather than guessing microtask depth.
+        await expire(context);
+        await settle();
+        assert.equal(context.lightboxPresentationIntro.phase, 'consent');
+        assert.equal(context.consent.hidden, false);
+        assert.equal(context.loads.length, 0, 'Waiting must never advance photo one.');
+        assert.equal(context.overlay.classList.contains('is-presentation-intro'), true);
+        if (refusal === 'fullscreen') assert.deepEqual(calls, []);
+        calls.length = 0;
+        context.confirmLightboxPresentation();
+        assert.deepEqual(calls, ['audio', 'fullscreen'],
+            'Both native requests must precede any asynchronous continuation.');
+        context.confirmLightboxPresentation();
+        assert.equal(calls.length, 2, 'Double confirmation must not restart music.');
+        await settle();
+        assert.equal(context.consent.hidden, true);
+        assert.equal(context.lightboxPresentationIntro, null);
+        assert.equal(context.loads.length, 1);
+    }
+});
+
+test('closing during confirmation cancels late reveal and paused links stay silent', async () => {
+    const context = fixture();
+    const calls = [];
+    let finish;
+    context.musicPlayer.start = () => {
+        calls.push('audio');
+        return new Promise(resolve => { finish = resolve; });
+    };
+    context.lightboxPresentationIntro = {
+        readyAt: 1000, music: true, autoplay: true, animation: null,
+        fullscreen: Promise.resolve(false), phase: 'consent',
+    };
+    context.consent.hidden = false;
+    context.confirmLightboxPresentation();
+    context.stopLightboxSlideshow();
+    context.overlay.hidden = true;
+    finish('playing');
+    await settle();
+    assert.equal(context.lightboxPresentationIntro, null);
+    assert.equal(context.consent.hidden, true);
+    assert.equal(context.loads.length, 0);
+    context.overlay.hidden = false;
+    context.lightboxPresentationIntro = {
+        readyAt: 1000, music: true, autoplay: false, animation: null,
+        fullscreen: Promise.resolve(false), phase: 'consent',
+    };
+    context.confirmLightboxPresentation();
+    await settle();
+    assert.deepEqual(calls, ['audio'], 'Paused confirmation must not start music.');
+    assert.equal(context.loads.length, 0, 'Paused link must not schedule advances.');
+});
+
 /**
  * Open exactly one timer gate without letting an older timer run twice.
  * @param {import('node:vm').Context} context Fixture containing the controlled production timers.
- * @return {void} Executes and removes the sole active slideshow timeout.
+ * @return {void|Promise<void>} Synchronous tick or completion of the async
+ *     launch gate, after removing the sole active slideshow timeout.
  */
 function expire(context) {
     assert.equal(context.timers.size, 1);
     const [id, timer] = [...context.timers][0];
     context.timers.delete(id);
-    timer.callback();
+    return timer.callback();
 }
 
 test('presets remain independent and changing interval replaces the pending cycle', () => {

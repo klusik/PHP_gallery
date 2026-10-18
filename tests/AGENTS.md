@@ -15,6 +15,15 @@ require a browser/database only when the behavior needs one.
   PHP namespaces, including negative branches.
 - Model each provider endpoint's actual response separately, including omitted
   fields; creation, collection and combined responses need not share a shape.
+  Seed request-guard probes with each route's own valid base query. Compare
+  semantic allowlists and exercise generated same-origin public URLs through
+  the confined transport, retaining unknown/repeated-value rejection.
+  Use resource-specific names for response bodies and retained original paths
+  in long workflow fixtures; preserve later phases' owned values across loops.
+- When an owner exposes a filtered verified list, assert its actual
+  unavailable result (for example, no receipt) separately from exceptions raised
+  when a listed item fails a later integrity read. Keep missing/corrupt payloads
+  as explicit negative cases and verify recovery through the owning retry path.
 - Give every independent child its own explicit minimal bootstrap, including
   Core path-policy dependencies for passive services. Parent-loaded functions
   do not establish child dependencies. Assert the child's real exit status,
@@ -34,6 +43,9 @@ require a browser/database only when the behavior needs one.
 - Preserve strict literal expectations when runtime/owner matrices or browser
   import URLs change. For covered Admin import relationships use the existing
   relational contract, as explained in the authoring reference.
+- Always search fixtures for both complete imports and bare revision tokens,
+  plus the old callable signature, when changing a browser module interface.
+  Update every affected extraction/assertion while retaining behavioral checks.
 - Always use single namespace separators in executable fully qualified PHP
   fixture calls. Double separators belong only to escaped string literals;
   review the executable and string layers separately before committing adapters.
@@ -42,12 +54,15 @@ require a browser/database only when the behavior needs one.
   ordered-list or row-field shapes.
 - For each async phase, identify the in-flight operation, terminal success/error
   and next permitted action. Await failed reads before changing mocked connectivity;
-  await the released write's expected revision before owner teardown. Serve the
+  await returned async timer callbacks before asserting their terminal phase,
+  including across VM realms, rather than guessing a fixed microtask count.
+  Await the released write's expected revision before owner teardown. Serve the
   coordinator's visible URL with the real method/envelope and owner generation.
   Capture layout immediately before each operation; preserve exact revision, node
   and scroll assertions after completion, accounting for prior validation reflow.
 - Audit every source-extraction dependency against its adapter table, including
   single/bulk owned delegates and argument shapes. Name missing adapters safely.
+  Include stop/cleanup delegates reached only by a newly added terminal path.
 - Assert negative HTTP status, error contract and unchanged persistence separately;
   report safe test-authored expected/actual values and assertion call sites.
 
@@ -71,6 +86,12 @@ renewed TTL after permission changes. Keep current manual-operation counters
 separate from retained regional observations and lifetime removal receipts.
 
 ## Browser and isolated rendering fixtures
+
+After a production media swap, query the currently owned image node again before
+asserting decode or geometry. Keep identity/source assertions: a detached initial
+placeholder cannot establish the state of its decoded replacement.
+When a counter announces navigation intent before media commit, await the target
+image identity and completed decode before asserting its final geometry.
 
 Hold a follow-up passive read while asserting a mutation response, then release
 it separately to test refresh without racing snapshots. For live filtering,
