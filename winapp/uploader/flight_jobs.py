@@ -15,6 +15,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO
 
@@ -26,6 +27,17 @@ from uploader.state_store import atomic_write_json
 # Consumers: FlightPreferences and SessionPlan.
 # Rationale: all four editions are requested unless the user deselects them.
 REPORT_LANGUAGES = ("en", "cs", "de", "sv")
+
+# Purpose: Admit the same stable report identities as the gallery transport.
+# Type: int; Units: characters; Scope: saved report revision catalog.
+# Consumers: report_revisions. Rationale: the server and delivery client accept
+# at most 80 ASCII identifier characters, including manual session prefixes.
+REPORT_REVISION_MAX_CHARS = 80
+# Purpose: Keep human PDF basenames below ordinary Windows path limits.
+# Type: int; Units: characters; Scope: aircraft component in PDF filenames.
+# Consumers: readable_pdf_name. Rationale: 64 characters retain aircraft identity
+# while reserving space for date, edition and version in the profile directory.
+REPORT_AIRCRAFT_NAME_CHARS = 64
 
 
 def connection_binding(url: str, key: str) -> str:
@@ -251,6 +263,403 @@ def pending_sessions(root: Path, binding: str) -> list[SessionPlan]:
         if plan.binding == binding and not plan.completed:
             result.append(plan)
     return result
+
+
+@dataclass
+class ReportRevision:
+    """Describe one retained PDF revision and its available language files."""
+
+    report_id: str
+    files: dict[str, Path]
+    modified_utc: str = ""
+
+
+@dataclass
+class ReportFileDetails:
+    """Expose PDF page count and actual render time or a marked legacy file time."""
+
+    pages: int | None
+    created_utc: str
+    estimated_time: bool
+
+
+def report_file_details(pdf: Path) -> ReportFileDetails:
+    """Inspect a retained PDF without modifying its bytes or private metadata.
+
+    Args:
+        pdf (Path): Confined report file selected by report_revisions.
+
+    Returns:
+        ReportFileDetails: Actual page count when readable, render timestamp
+            when recorded, otherwise file modification time marked as estimated.
+
+    Raises:
+        OSError: The file cannot be inspected.
+        ValueError: The selected file or private metadata redirects elsewhere.
+    """
+    from pypdf import PdfReader
+    from pypdf.errors import PyPdfError
+
+    if pdf.is_symlink() or pdf.parent.is_symlink():
+        raise ValueError("Saved PDF cannot redirect.")
+    stat = pdf.stat()
+    created = datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()
+    estimated = True
+    metadata = pdf.parent / ".metadata"
+    manifest = metadata / (pdf.name + ".manifest.json")
+    if metadata.is_symlink() or manifest.is_symlink():
+        raise ValueError("PDF metadata cannot redirect.")
+    if manifest.is_file():
+        recorded = read_document(manifest).get("created_utc")
+        if isinstance(recorded, str):
+            try:
+                stamp = datetime.fromisoformat(recorded.replace("Z", "+00:00"))
+                if stamp.tzinfo is not None:
+                    created, estimated = stamp.astimezone(timezone.utc).isoformat(), False
+            except ValueError:
+                pass
+    pages = None
+    try:
+        with pdf.open("rb") as stream:
+            pages = len(PdfReader(stream, strict=False).pages)
+    except (PyPdfError, ValueError, TypeError, RecursionError):
+        # Old or damaged PDFs remain visible and openable for recovery. Unknown
+        # page counts must not hide a retained document or claim it is valid.
+        pass
+    return ReportFileDetails(pages, created, estimated)
+
+
+def _report_catalog(directory: Path) -> tuple[Path, dict[str, JsonValue]]:
+    """Read the private filename journal after confining its storage paths.
+
+    Args:
+        directory (Path): Owned stopped-flight session directory.
+
+    Returns:
+        tuple[Path, dict[str, JsonValue]]: Catalog path and revision-ID mapping;
+            each row contains number, language filenames and original sources.
+
+    Raises:
+        ValueError: Catalog paths redirect or the revision mapping is malformed.
+    """
+    reports = directory / "reports"
+    metadata = reports / ".metadata"
+    path = metadata / "catalog.json"
+    for item in (directory, reports, metadata, path, path.with_name("catalog.json.tmp")):
+        if item.is_symlink() or not item.resolve().is_relative_to(directory.resolve()):
+            raise ValueError("PDF metadata cannot redirect outside its session.")
+    rows = read_document(path).get("revisions", {}) if path.exists() else {}
+    if not isinstance(rows, dict):
+        raise ValueError("PDF filename catalog needs recovery.")
+    for identity, row in rows.items():
+        if not isinstance(row, dict) or not isinstance(row.get("files"), dict):
+            raise ValueError("Invalid PDF revision catalog entry.")
+        if re.fullmatch(r"[A-Za-z0-9_-]+", identity) is None:
+            raise ValueError("Invalid PDF revision identity.")
+        for language, name in row["files"].items():
+            if (
+                language not in REPORT_LANGUAGES or not isinstance(name, str)
+                or Path(name).name != name or not name.lower().endswith(".pdf")
+            ):
+                raise ValueError("Unsafe PDF catalog filename.")
+    return path, rows
+
+
+def readable_pdf_name(recorded_utc: str, aircraft: str, language: str, number: int) -> str:
+    """Name a PDF by recorded date, aircraft, edition and retained version.
+
+    Args:
+        recorded_utc (str): Recorded flight start in ISO UTC or an unknown label.
+        aircraft (str): Recorded aircraft identity or a neutral unknown label.
+        language (str): Supported report language code.
+        number (int): One-based retained revision number within this flight.
+
+    Returns:
+        str: Windows-safe human-readable PDF basename without opaque identities.
+    """
+    # ISO date/time through whole seconds is the human identifier, not a digest.
+    stamp = recorded_utc[:19].replace("T", " ").replace(":", "-")
+    stamp = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", stamp)
+    aircraft = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", aircraft)
+    name = aircraft[:REPORT_AIRCRAFT_NAME_CHARS].rstrip(" .")
+    return f"{stamp} UTC - {name} - {language.upper()} - v{number:02d}.pdf"
+
+
+def _report_filename(directory: Path, language: str, number: int) -> str:
+    """Adapt stored session metadata to the common readable PDF naming policy.
+
+    Args:
+        directory (Path): Owned session containing recorded UTC and aircraft.
+        language (str): Supported report edition.
+        number (int): One-based retained version number.
+
+    Returns:
+        str: Safe PDF basename shared by catalog migration and new generation.
+    """
+    meta = read_document(directory / "session.json")
+    return readable_pdf_name(
+        str(meta.get("started_utc") or "Flight"),
+        str(meta.get("aircraft") or "Aircraft"), language, number,
+    )
+
+
+def organize_reports(directory: Path) -> None:
+    """Flatten retained PDFs using a restartable filename journal and safe moves.
+
+    Args:
+        directory (Path): Owned session; raw data and completion plans stay intact.
+
+    Returns:
+        None: PDFs receive readable filenames in reports; JSON sidecars move to
+            .metadata. Existing report identities and bytes remain unchanged.
+
+    Raises:
+        ValueError: Paths redirect, the journal is corrupt or destinations differ.
+        OSError: Journal persistence or an atomic rename cannot complete.
+    """
+    path, rows = _report_catalog(directory)
+    reports = directory / "reports"
+    for revision in reversed(report_revisions(directory)):
+        if revision.report_id not in rows:
+            number = len(rows) + 1
+            rows[revision.report_id] = {
+                "number": number,
+                "files": {code: _report_filename(directory, code, number) for code in revision.files},
+                "sources": {code: str(pdf.relative_to(reports)) for code, pdf in revision.files.items()},
+            }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Journal every source/destination before the first move, so interrupted
+    # migrations can finish without changing report identity or losing an edition.
+    atomic_write_json(path, {"revisions": rows})
+    for row in rows.values():
+        sources = row.get("sources", {})
+        if not isinstance(sources, dict):
+            raise ValueError("Invalid PDF migration source mapping.")
+        for code, name in row["files"].items():
+            target = reports / name
+            source = reports / str(sources.get(code, name))
+            if (
+                source.is_symlink() or source.parent.is_symlink() or target.is_symlink()
+                or not source.resolve().is_relative_to(reports.resolve())
+            ):
+                raise ValueError("Unsafe retained PDF migration path.")
+            if source != target and source.is_file():
+                if target.exists():
+                    raise ValueError("PDF destination already exists; original retained.")
+                source.replace(target)
+            manifest = source.with_suffix(source.suffix + ".manifest.json")
+            destination = path.parent / (target.name + ".manifest.json")
+            if manifest.is_symlink() or destination.is_symlink():
+                raise ValueError("PDF manifest cannot redirect.")
+            if manifest.is_file() and manifest != destination:
+                if destination.exists() and manifest.read_bytes() != destination.read_bytes():
+                    raise ValueError("Conflicting PDF metadata; original retained.")
+                manifest.replace(destination)
+            if source.parent != reports and source.parent.is_dir() and not any(source.parent.iterdir()):
+                source.parent.rmdir()
+
+
+def allocate_report_revision(
+    directory: Path, report_id: str, languages: tuple[str, ...],
+) -> ReportRevision:
+    """Reserve readable flat filenames while retaining stable delivery identity.
+
+    Args:
+        directory (Path): Owned flight session with immutable recorded metadata.
+        report_id (str): Existing automatic identity or a fresh manual identity.
+        languages (tuple[str, ...]): Supported editions to reserve.
+
+    Returns:
+        ReportRevision: Stable identity with allocated language-to-PDF paths.
+
+    Raises:
+        ValueError: Existing catalog or requested edition/identity is unsafe.
+        OSError: The revision journal cannot be saved atomically.
+    """
+    if not languages or any(code not in REPORT_LANGUAGES for code in languages):
+        raise ValueError("Select supported PDF languages.")
+    if re.fullmatch(r"[A-Za-z0-9_-]{1," + str(REPORT_REVISION_MAX_CHARS) + "}", report_id) is None:
+        raise ValueError("Invalid report revision identity.")
+    organize_reports(directory)
+    path, rows = _report_catalog(directory)
+    row = rows.get(report_id)
+    if row is None:
+        row = {"number": len(rows) + 1, "files": {}, "sources": {}}
+        rows[report_id] = row
+    number = row.get("number")
+    if type(number) is not int or number < 1:
+        raise ValueError("Invalid retained PDF version number.")
+    for code in languages:
+        row["files"].setdefault(code, _report_filename(directory, code, number))
+    atomic_write_json(path, {"revisions": rows})
+    return ReportRevision(report_id, {code: directory / "reports" / row["files"][code] for code in languages})
+
+
+def report_file_label(directory: Path, revision: ReportRevision, language: str) -> str:
+    """Give historical opaque filenames the same readable label as new PDFs.
+
+    Args:
+        directory (Path): Owned session whose recorded date/aircraft are shown.
+        revision (ReportRevision): Retained revision and selected PDF mapping.
+        language (str): Edition in the selected revision.
+
+    Returns:
+        str: Actual readable basename or its future normalized display name;
+            this passive lookup never renames files.
+    """
+    filename = revision.files[language].name
+    if " - v" in filename:
+        return filename
+    revisions = list(reversed(report_revisions(directory)))
+    number = next((
+        index + 1 for index, row in enumerate(revisions)
+        if row.report_id == revision.report_id
+    ), None)
+    if number is None:
+        raise ValueError("Saved PDF changed; refresh the file list.")
+    return _report_filename(directory, language, number)
+
+
+def report_revisions(directory: Path) -> list[ReportRevision]:
+    """Catalog retained automatic and manual PDF editions without rendering.
+
+    Args:
+        directory (Path): Owned session directory with a reports child.
+
+    Returns:
+        list[ReportRevision]: Newest revisions first, with stable report identity,
+            language-to-file mappings and UTC modification timestamp; absent
+            reports produce an empty list.
+
+    Raises:
+        ValueError: A report path redirects outside its session or has an
+            unsupported revision identity.
+        OSError: Report files cannot be inspected.
+    """
+    reports = directory / "reports"
+    if directory.is_symlink() or reports.is_symlink():
+        raise ValueError("Flight reports cannot use redirected directories.")
+    if not reports.exists():
+        return []
+    groups: dict[str, dict[str, Path]] = {}
+    modified: dict[str, float] = {}
+    _path, catalog = _report_catalog(directory)
+    catalog_paths: set[Path] = set()
+    for identity, row in catalog.items():
+        files = {code: reports / name for code, name in row["files"].items()}
+        for code, pdf in files.items():
+            catalog_paths.add(pdf)
+            if pdf.is_symlink():
+                raise ValueError("Saved PDF cannot redirect.")
+            if pdf.is_file():
+                groups.setdefault(identity, {})[code] = pdf
+                modified[identity] = max(modified.get(identity, 0.0), pdf.stat().st_mtime)
+    paths = list(reports.glob("*.pdf")) + list(reports.glob("manual-*/*.pdf"))
+    for path in paths:
+        if path in catalog_paths:
+            continue
+        if " - v" in path.name:
+            raise ValueError("Readable PDF has no identity catalog; restore reports/.metadata before upload.")
+        if (
+            path.is_symlink() or path.parent.is_symlink()
+            or not path.resolve().is_relative_to(reports.resolve())
+        ):
+            raise ValueError("Flight PDF redirects outside its report directory.")
+        if not path.is_file():
+            continue
+        if path.parent == reports:
+            revision, separator, language = path.stem.rpartition("-")
+            if not separator:
+                continue
+        else:
+            revision = directory.name + "-" + path.parent.name
+            language = path.stem
+        if language not in REPORT_LANGUAGES:
+            continue
+        pattern = r"[A-Za-z0-9_-]{1," + str(REPORT_REVISION_MAX_CHARS) + r"}"
+        if re.fullmatch(pattern, revision) is None:
+            raise ValueError("Unsupported saved PDF revision identity.")
+        groups.setdefault(revision, {})[language] = path
+        modified[revision] = max(modified.get(revision, 0.0), path.stat().st_mtime)
+    return [
+        ReportRevision(
+            identity, groups[identity],
+            datetime.fromtimestamp(modified[identity], timezone.utc).isoformat(
+                timespec="seconds"
+            ),
+        )
+        for identity in sorted(
+            groups, key=lambda item: (modified[item], item), reverse=True
+        )
+    ]
+
+
+@dataclass
+class SavedFlight:
+    """Describe one local session for the passive report browser."""
+
+    directory: Path
+    started_utc: str = ""
+    aircraft: str = ""
+    sample_count: int = 0
+    recording_ended: bool = False
+    completed: bool = False
+    report_count: int = 0
+    error: str = ""
+
+
+def saved_flights(root: Path) -> list[SavedFlight]:
+    """List local sessions without analysis, native queries or remote requests.
+
+    Args:
+        root (Path): App-owned flight workspace, independent of the current key.
+
+    Returns:
+        list[SavedFlight]: Newest checkpoints first, with aircraft, stored sample
+            count, ended/completed flags, local PDF count and recovery error.
+            Corrupt or redirected sessions remain visible as error rows.
+    """
+    result: list[SavedFlight] = []
+    if not root.exists():
+        return result
+    for directory in root.iterdir():
+        if not directory.is_dir():
+            continue
+        row = SavedFlight(directory=directory)
+        try:
+            if directory.is_symlink() or directory.resolve().parent != root.resolve():
+                raise ValueError("Flight session redirects outside its workspace.")
+            if not (directory / "session.json").exists():
+                continue
+            meta = read_document(directory / "session.json")
+            plan = SessionPlan.load(directory)
+            row.started_utc = str(meta.get("started_utc", ""))
+            row.aircraft = str(meta.get("aircraft") or "")
+            count = meta.get("sample_count", 0)
+            row.sample_count = count if type(count) is int and count >= 0 else 0
+            row.recording_ended = meta.get("recording_ended") is True
+            row.completed = plan.completed
+            row.error = plan.error
+            reports = directory / "reports"
+            if reports.is_symlink() or not reports.resolve().is_relative_to(directory.resolve()):
+                raise ValueError("Flight report folder redirects outside its session.")
+            # Automatic PDFs are direct children; manual revisions add exactly
+            # one directory level. Never traverse arbitrary nested directories.
+            paths = list(reports.glob("*.pdf")) + list(reports.glob("manual-*/*.pdf"))
+            row.report_count = sum(
+                path.is_file() and not path.is_symlink()
+                and path.resolve().is_relative_to(reports.resolve())
+                for path in paths
+            )
+            state = directory / "manual-report.json"
+            if state.exists():
+                manual = read_document(state)
+                if manual.get("phase") == "error":
+                    row.error = str(manual.get("error", "Local PDF creation failed."))
+        except (OSError, ValueError) as exc:
+            row.error = f"{type(exc).__name__}: {exc}"
+        result.append(row)
+    return sorted(result, key=lambda row: row.started_utc, reverse=True)
 
 
 class WorkspaceLease:

@@ -23,16 +23,18 @@ import math
 import os
 import re
 import tempfile
-from datetime import datetime
+from dataclasses import replace
+from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.lib.utils import simpleSplit
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
@@ -40,12 +42,16 @@ from reportlab.platypus import (
     Flowable,
     KeepTogether,
     Paragraph,
+    PageBreak,
     SimpleDocTemplate,
     Spacer,
     Table,
     TableStyle,
 )
-from reportlab.graphics.shapes import Circle, Drawing, Line, PolyLine, String
+from reportlab.graphics.shapes import (
+    Circle, Drawing, Group, Line, Path as ShapePath,
+    PolyLine, Polygon, Rect, String,
+)
 
 from .diagnostics import redact_text
 from .flight_data import (
@@ -58,20 +64,36 @@ from .flight_data import (
     Landing,
 )
 from .flight_report_translations import supported_languages, tr
+from .flight_jobs import readable_pdf_name, read_document
 
 
 # Template identity is included in every manifest and output filename so a
 # future layout revision does not silently reuse a prior rendering.
-REPORT_TEMPLATE_VERSION = "1"
+REPORT_TEMPLATE_VERSION = "4"
 
+# Purpose: Share true A4 landscape geometry across document and page chrome.
+# Type: tuple[float, float]; Units: PDF points; Scope: rendered report pages.
+# Consumers: render_report, _draw_page and all landscape panel owners.
+# Rationale: 297 x 210 mm provides wide plots and tablet-friendly reading.
+REPORT_PAGE_SIZE = landscape(A4)
+# Purpose: Align page content, chart panels and running furniture.
+# Type: float; Units: PDF points; Scope: horizontal report margins.
+# Consumers: render_report and _draw_page. Rationale: fourteen millimetres
+# leaves a printable margin without sacrificing the landscape content area.
+REPORT_SIDE_MARGIN = 14 * mm
+# Purpose: Leave room for the navy header and quiet bottom furniture.
+# Type: tuple[float, float]; Units: PDF points; Scope: page frame.
+# Consumers: render_report. Rationale: 22/16 mm separates content from chrome.
+REPORT_VERTICAL_MARGINS = (22 * mm, 16 * mm)
+
+# Type: float; Units: PDF points; Scope: landscape chart geometry.
+# Consumers: _profile_chart, _route_chart and panel layout owners.
+# Rationale: use the full printable width of A4 landscape, inside shared margins.
+CHART_WIDTH = REPORT_PAGE_SIZE[0] - 2 * REPORT_SIDE_MARGIN
 # Type: int; Units: PDF points; Scope: chart drawing geometry;
-# Consumers: _profile_chart and _route_chart; Rationale: compact charts fit
-# the printable A4 content width while retaining legible axes; value: 470.
-CHART_WIDTH = 470
-# Type: int; Units: PDF points; Scope: chart drawing geometry;
-# Consumers: _profile_chart and _route_chart; Rationale: three profiles fit
-# with flight/version metadata in the A4 frame; value: 144 (two inches).
-CHART_HEIGHT = 144
+# Consumers: _profile_chart and _route_chart; Rationale: two full-width
+# profiles fit one landscape page with larger labels and a short legend.
+CHART_HEIGHT = 184
 # Type: float; Units: knots per metre per second; Scope: displayed speeds;
 # Consumers: _format_speed; Rationale: convert SI capture values to aviation
 # units without changing source data; value: 1.9438444924406.
@@ -118,14 +140,117 @@ PRECONTACT_WINDOW_SECONDS = 60.0
 # value: 120.0.
 ROLLOUT_WINDOW_SECONDS = 120.0
 
+# Purpose: Pad constant sensor ranges to keep a visible enclosing axis.
+# Type: float; Units: fraction; Scope: chart axes; Consumers: _axis_limits.
+# Rationale: five percent avoids a zero-height range without changing readings.
+AXIS_FLAT_PADDING = 0.05
+# Purpose: Keep log/tick rounding defined at zero and avoid floating grid noise.
+# Type: float; Units: display units or tick-ratio tolerance; Scope: chart axes.
+# Consumers: _nice_step and _profile_chart. Rationale: one millionth is below
+# captured display precision while giving a positive logarithm argument.
+AXIS_EPSILON = 0.000001
+# Purpose: Keep aviation minor ticks fine but bounded.
+# Type: int; Units: intervals; Scope: Y grids; Consumers: _axis_limits.
+# Rationale: forty minor divisions allow readable thousand-foot altitude ticks.
+AXIS_MINOR_DIVISIONS = 40
+# Purpose: Use familiar descent/climb grid spacing.
+# Type: float; Units: fpm; Scope: V/S charts; Consumers: _axis_limits.
+# Rationale: 200 fpm minor lines and five-times major lines match aviation reading.
+VERTICAL_SPEED_GRID_FPM = 200.0
+# Purpose: Bound vector grid density for unusually long/extreme captures.
+# Type: int; Units: lines per axis; Scope: profiles; Consumers: _axis_limits,
+# _profile_chart. Rationale: two hundred lines keep output size predictable.
+MAX_GRID_LINES = 200
+# Purpose: Distinguish minor and emphasized tick levels.
+# Type: int; Units: minor intervals; Scope: chart axes; Consumers: _axis_limits,
+# _profile_chart. Rationale: five minor ticks make one labeled major interval.
+AXIS_MAJOR_MULTIPLE = 5
+# Purpose: Share a fine elapsed grid across short contact windows.
+# Type: int; Units: intervals; Scope: short-time axes; Consumers: _profile_chart.
+# Rationale: eighteen desired divisions gives ten-second ticks over three minutes.
+CONTACT_TIME_DIVISIONS = 18
+# Purpose: Use ten-minute context through ordinary and long flights.
+# Type: float; Units: seconds; Scope: full-flight grids; Consumers: _profile_chart.
+# Rationale: 600 seconds stays subtle while hourly lines receive emphasis.
+TIME_GRID_SECONDS = 600.0
+# Purpose: Label long-flight major ticks as elapsed hours.
+# Type: int; Units: seconds; Scope: profile axes; Consumers: _profile_chart.
+# Rationale: one hour contains 3600 seconds.
+HOUR_SECONDS = 3600
+# Purpose: Select a finer grid for short recordings.
+# Type: int; Units: seconds; Scope: time axes; Consumers: _profile_chart.
+# Rationale: below twenty minutes a ten-minute minor grid would be too sparse.
+SHORT_FLIGHT_SECONDS = 1200
+# Purpose: Keep summary cards legible within A4 width.
+# Type: int; Units: columns; Scope: dashboards; Consumers: _visual_metrics,
+# _configuration_graphic. Rationale: three cards fit readable labels and values.
+METRIC_COLUMNS = 3
+# Purpose: Reserve consistent dashboard card height.
+# Type: int; Units: PDF points; Scope: metric grids; Consumers: _visual_metrics.
+# Rationale: 74 points fits two label lines and one or two large value lines.
+METRIC_ROW_HEIGHT = 74
+# Purpose: Wrap observed phases without long evidence tables.
+# Type: int; Units: columns; Scope: phase timeline; Consumers: _phase_infographic.
+# Rationale: fourteen small milestones keep an ordinary flight on one line.
+PHASE_COLUMNS = 14
+# Purpose: Keep phase icons and elapsed times vertically separated.
+# Type: int; Units: PDF points; Scope: phase timeline; Consumers: _phase_infographic.
+# Rationale: 54 points fits readable labels and a larger aircraft symbol.
+PHASE_ROW_HEIGHT = 54
+# Purpose: Fill small chart-only omissions without changing measured evidence.
+# Type: float; Units: seconds; Scope: scalar profile drawing.
+# Consumers: _profile_chart. Rationale: up to five seconds uses the series color;
+# longer bounded gaps use an amber dashed estimate and an explicit legend.
+PROFILE_SHORT_BRIDGE_SECONDS = 5.0
+# Purpose: Refuse long-range extrapolation disguised as a continuous flight.
+# Type: float; Units: seconds; Scope: missing scalar plot segments.
+# Consumers: _profile_chart. Rationale: five minutes bridges a short
+# interruption in a long flight;
+# longer losses, reloads, pauses and position jumps remain visibly separated.
+PROFILE_MAX_BRIDGE_SECONDS = 300.0
+# Purpose: Fit four readable landing profiles beside concise analysis on A4.
+# Type: int; Units: PDF points; Scope: paired landing charts.
+# Consumers: _landing_visuals. Rationale: 174 points fits two chart rows on
+# a dedicated detail page with nine-point axis labels.
+LANDING_CHART_HEIGHT = 174
+# Purpose: Describe observed delivery cadence close to touchdown.
+# Type: float; Units: seconds; Scope: pre-contact cadence summary.
+# Consumers: _landing_visuals. Rationale: ten seconds smooths frame jitter
+# while exposing substantial sampling gaps within the landing window.
+LANDING_CADENCE_WINDOW_SECONDS = 10.0
+# Purpose: Keep noisy configuration changes from becoming an unreadable wall.
+# Type: int; Units: event cards; Scope: one landing infographic.
+# Consumers: _configuration_events. Rationale: show up to eighteen first/last
+# changes and disclose the displayed/total count; raw observations remain intact.
+MAX_CONFIGURATION_EVENTS = 18
+# Purpose: Offer explicitly estimated historical fuel mass when density was absent.
+# Type: float; Units: kg per US gallon; Scope: old fuel captures.
+# Consumers: _fuel_profile. Rationale: assume 0.80 kg/L and 3.785411784 L/US gal;
+# always mark this display conversion as estimated, never alter source telemetry.
+ASSUMED_KG_PER_US_GALLON = 0.80 * 3.785411784
+# Purpose: Convert measured fuel mass for Boeing-style displays.
+# Type: float; Units: lb/kg; Scope: fuel display; Consumers: _fuel_profile.
+# Rationale: reciprocal of the exact international pound conversion.
+POUNDS_PER_KG = 1.0 / 0.45359237
+# Purpose: Show observed rollout distance using familiar runway-distance units.
+# Type: int; Units: metres/NM; Scope: landing cards; Consumers: _landing_visuals.
+# Rationale: one nautical mile equals exactly 1852 metres.
+METRES_PER_NM = 1852
+
 _COLOR_INK = colors.HexColor("#17324D")
 _COLOR_BLUE = colors.HexColor("#1677A8")
 _COLOR_GREEN = colors.HexColor("#25836B")
 _COLOR_RED = colors.HexColor("#C64A45")
 _COLOR_MUTED = colors.HexColor("#637381")
 _COLOR_GRID = colors.HexColor("#D9E2E8")
+_COLOR_MINOR_GRID = colors.HexColor("#F0F3F6")
 _COLOR_PANEL = colors.HexColor("#F2F6F8")
+_COLOR_PAGE = colors.HexColor("#F4F7FC")
+_COLOR_NAVY = colors.HexColor("#0E1B2E")
+_COLOR_TEAL = colors.HexColor("#00A8AC")
+_COLOR_INTERPOLATED = colors.HexColor("#C58A22")
 _FONT_NAME = "FlightReportSans"
+_FONT_BOLD = "FlightReportSansBold"
 _REQUIRED_GLYPHS = "Příliš žluťoučký kůň åäö üß"
 
 
@@ -139,32 +264,34 @@ def _resource_directory() -> Path:
 
 
 def _register_font() -> None:
-    """Register the bundled DejaVu font with required European glyphs.
+    """Register bundled regular and bold DejaVu faces with multilingual coverage.
 
     Returns:
-        None: Register the regular font family for ReportLab paragraphs.
+        None: Both faces are available for paragraphs and vector labels.
+
+    Raises:
+        FileNotFoundError: A required bundled face is missing.
+        ValueError: A bundled face lacks required European glyphs.
     """
-    if _FONT_NAME in pdfmetrics.getRegisteredFontNames():
-        return
-    font_path = _resource_directory() / "DejaVuSans.ttf"
-    if not font_path.is_file():
-        raise FileNotFoundError(
-            "Postflight font asset is missing: " + str(font_path)
-        )
-    font = TTFont(_FONT_NAME, str(font_path))
-    char_to_glyph = font.face.charToGlyph
-    missing = [
-        char
-        for char in _REQUIRED_GLYPHS
-        if char not in " "
-        and char_to_glyph.get(ord(char), 0) == 0
-    ]
-    if missing:
-        raise ValueError(
-            "Bundled postflight font lacks required glyphs: "
-            + ", ".join(sorted(set(missing)))
-        )
-    pdfmetrics.registerFont(font)
+    for name, filename in ((_FONT_NAME, "DejaVuSans.ttf"),
+                           (_FONT_BOLD, "DejaVuSans-Bold.ttf")):
+        if name in pdfmetrics.getRegisteredFontNames():
+            continue
+        font_path = _resource_directory() / filename
+        if not font_path.is_file():
+            raise FileNotFoundError(
+                "Postflight font asset is missing: " + str(font_path)
+            )
+        font = TTFont(name, str(font_path))
+        char_to_glyph = font.face.charToGlyph
+        missing = [char for char in _REQUIRED_GLYPHS
+                   if char != " " and char_to_glyph.get(ord(char), 0) == 0]
+        if missing:
+            raise ValueError(
+                "Bundled postflight font lacks required glyphs: "
+                + ", ".join(sorted(set(missing)))
+            )
+        pdfmetrics.registerFont(font)
 
 
 def _analysis_identity(analysis: FlightAnalysis) -> Tuple[Dict[str, object], str]:
@@ -221,15 +348,19 @@ def _atomic_write(path: Path, content: bytes) -> None:
 
 
 def _manifest_path(destination: Path) -> Path:
-    """Return the adjacent manifest path for one PDF destination.
+    """Return private metadata storage beside the user-facing PDF folder.
 
     Args:
         destination (Path): PDF output path.
 
     Returns:
-        Path: Sidecar JSON path with the PDF suffix retained.
+        Path: JSON sidecar under .metadata with the PDF basename retained.
     """
-    return destination.with_suffix(destination.suffix + ".manifest.json")
+    metadata = destination.parent / ".metadata"
+    path = metadata / (destination.name + ".manifest.json")
+    if metadata.is_symlink() or path.is_symlink():
+        raise ValueError("PDF metadata cannot redirect outside its directory.")
+    return path
 
 
 def _reusable_report(
@@ -399,29 +530,29 @@ def _styles() -> Dict[str, ParagraphStyle]:
         "title": ParagraphStyle(
             "FlightTitle",
             parent=base["Title"],
-            fontName=_FONT_NAME,
-            fontSize=23,
-            leading=27,
+            fontName=_FONT_BOLD,
+            fontSize=28,
+            leading=34,
             textColor=_COLOR_INK,
             alignment=TA_LEFT,
-            spaceAfter=3 * mm,
+            spaceAfter=2 * mm,
         ),
         "subtitle": ParagraphStyle(
             "FlightSubtitle",
             parent=base["Normal"],
             fontName=_FONT_NAME,
-            fontSize=9,
-            leading=13,
+            fontSize=12,
+            leading=16,
             textColor=_COLOR_MUTED,
-            spaceAfter=6 * mm,
+            spaceAfter=2 * mm,
         ),
         "heading": ParagraphStyle(
             "FlightHeading",
             parent=base["Heading2"],
             keepWithNext=True,
-            fontName=_FONT_NAME,
-            fontSize=13,
-            leading=17,
+            fontName=_FONT_BOLD,
+            fontSize=17,
+            leading=21,
             textColor=_COLOR_INK,
             spaceBefore=4 * mm,
             spaceAfter=2 * mm,
@@ -430,40 +561,40 @@ def _styles() -> Dict[str, ParagraphStyle]:
             "FlightBody",
             parent=base["BodyText"],
             fontName=_FONT_NAME,
-            fontSize=9,
-            leading=13,
+            fontSize=12,
+            leading=16,
             textColor=_COLOR_INK,
         ),
         "small": ParagraphStyle(
             "FlightSmall",
             parent=base["BodyText"],
             fontName=_FONT_NAME,
-            fontSize=7.5,
-            leading=10,
+            fontSize=9.5,
+            leading=13,
             textColor=_COLOR_MUTED,
         ),
         "label": ParagraphStyle(
             "FlightLabel",
             parent=base["BodyText"],
             fontName=_FONT_NAME,
-            fontSize=7.5,
-            leading=10,
+            fontSize=9.5,
+            leading=13,
             textColor=_COLOR_MUTED,
         ),
         "value": ParagraphStyle(
             "FlightValue",
             parent=base["BodyText"],
             fontName=_FONT_NAME,
-            fontSize=11,
-            leading=14,
+            fontSize=16,
+            leading=20,
             textColor=_COLOR_INK,
         ),
         "center": ParagraphStyle(
             "FlightCenter",
             parent=base["BodyText"],
             fontName=_FONT_NAME,
-            fontSize=8,
-            leading=11,
+            fontSize=10,
+            leading=14,
             alignment=TA_CENTER,
             textColor=_COLOR_INK,
         ),
@@ -642,6 +773,45 @@ def _precise_elapsed(
     return sign + number + " s"
 
 
+def _nice_step(value: float) -> float:
+    """Round a positive spacing up to a readable decimal interval.
+
+    Args:
+        value (float): Desired positive tick spacing in displayed units.
+
+    Returns:
+        float: A spacing of one, two, five or ten times a decimal power.
+    """
+    exponent = 10 ** math.floor(math.log10(max(value, AXIS_EPSILON)))
+    return next(item * exponent for item in (1, 2, 5, 10) if item * exponent >= value)
+
+
+def _axis_limits(minimum: float, maximum: float, attribute: str) -> Tuple[float, float, float, float]:
+    """Choose enclosing readable limits and faint minor/major grid intervals.
+
+    Args:
+        minimum (float): Lowest finite measurement in displayed units.
+        maximum (float): Highest finite measurement in displayed units.
+        attribute (str): Sensor name selecting aviation-specific spacing.
+
+    Returns:
+        Tuple[float, float, float, float]: Lower bound, upper bound, minor step
+            and emphasized major step; all measurements remain inside the range.
+    """
+    span = max(maximum - minimum, abs(maximum) * AXIS_FLAT_PADDING, 1.0)
+    if attribute == "vertical_speed_mps":
+        minor = max(VERTICAL_SPEED_GRID_FPM, _nice_step(span / MAX_GRID_LINES))
+    else:
+        minor = _nice_step(span / AXIS_MINOR_DIVISIONS)
+    major = minor * AXIS_MAJOR_MULTIPLE
+    lower = math.floor(minimum / minor) * minor
+    upper = math.ceil(maximum / minor) * minor
+    if lower == upper:
+        lower -= minor
+        upper += minor
+    return lower, upper, minor, major
+
+
 def _profile_chart(
     analysis: FlightAnalysis,
     attribute: str,
@@ -654,197 +824,142 @@ def _profile_chart(
     x_bounds: Optional[Tuple[float, float]] = None,
     zero_time: float = 0.0,
     contact_bounds: Optional[Tuple[float, float]] = None,
+    chart_width: float = CHART_WIDTH,
+    chart_height: float = CHART_HEIGHT,
 ) -> Drawing:
-    """Draw a vector sensor profile without connecting missing observations.
+    """Draw aviation axes with bounded, explicitly identified plot interpolation.
 
     Args:
-        analysis (FlightAnalysis): Source session for default samples.
-        attribute (str): Numeric FlightSample attribute for the vertical axis.
-        label (str): Localized chart title.
-        color (colors.Color): Line color for the plotted series.
-        scale (float): Multiplier converting source SI values to display units.
-        unit (str): Display unit appended to the chart title.
-        language (str): Language used for chart labels and missing-state text.
-        samples (Optional[Sequence[FlightSample]]): Optional landing window.
-        x_bounds (Optional[Tuple[float, float]]): Fixed session-second bounds
-            shared by synchronized approach charts.
-        zero_time (float): Session-second origin shown as T+0.
-        contact_bounds (Optional[Tuple[float, float]]): Exact detected contact
-            start and end times marked on landing-window charts.
+        analysis (FlightAnalysis): Immutable source and full captured duration.
+        attribute (str): Numeric sample field for this profile.
+        label (str): Localized heading, including AGL/AMSL where appropriate.
+        color (colors.Color): Observed-series stroke color.
+        scale (float): Conversion from recorded SI to displayed units.
+        unit (str): Display unit, including an estimate marker when necessary.
+        language (str): Supported label language.
+        samples (Optional[Sequence[FlightSample]]): Dedicated landing-window
+            observations or None for the bounded full-flight series.
+        x_bounds (Optional[Tuple[float, float]]): Shared exact elapsed limits.
+        zero_time (float): Elapsed seconds defining contact-relative zero.
+        contact_bounds (Optional[Tuple[float, float]]): Recorded contact markers.
+        chart_width (float): Drawing width in PDF points.
+        chart_height (float): Drawing height in PDF points.
 
     Returns:
-        Drawing: Vector chart with all observed gaps left visually open.
+        Drawing: Rounded enclosing Y range, aligned labels, timed grids and
+            measured segments and bounded linear bridges; no inferred samples
+            enter landing analysis, raw storage or measured extrema.
     """
-    drawing = Drawing(CHART_WIDTH, CHART_HEIGHT)
-    left, bottom = 48, 30
-    plot_width, plot_height = CHART_WIDTH - 62, CHART_HEIGHT - 52
-    chart_title = label
-    unit_suffix = " (" + unit + ")"
-    if not chart_title.rstrip().endswith(unit_suffix):
-        chart_title += unit_suffix
-    drawing.add(
-        String(
-            0,
-            CHART_HEIGHT - 12,
-            chart_title,
-            fontName=_FONT_NAME,
-            fontSize=8,
-            fillColor=_COLOR_INK,
-        )
-    )
-    chosen_samples = analysis.samples if samples is None else samples
-    points = _chart_series(chosen_samples, attribute)
-    valid_points = [
-        (time_value, value)
-        for time_value, value, _ in points
-        if time_value is not None and value is not None
-    ]
-    if x_bounds is not None:
-        min_x, max_x = x_bounds
-    elif valid_points:
-        min_x = min(point[0] for point in valid_points)
-        max_x = max(point[0] for point in valid_points)
-    else:
-        min_x, max_x = 0.0, 1.0
+    drawing = Drawing(chart_width, chart_height)
+    drawing.add(Rect(0, 4, chart_width - 1, chart_height - 8,
+                     fillColor=colors.white, strokeColor=_COLOR_GRID,
+                     strokeWidth=0.6, rx=8))
+    left, bottom = 61, 37
+    width, height = chart_width - 81, chart_height - 79
+    suffix = " (" + unit + ")"
+    title = label if label.endswith(suffix) else label + suffix
+    drawing.add(String(15, chart_height - 23, title,
+                       fontName=_FONT_BOLD,
+                       fontSize=min(11, (chart_width - 30) / max(pdfmetrics.stringWidth(title, _FONT_BOLD, 1), 1)),
+                       fillColor=_COLOR_INK))
+    chosen = analysis.samples if samples is None else samples
+    points = _chart_series(chosen, attribute)
+    valid = [(t, v * scale) for t, v, _gap in points if t is not None and v is not None]
+    min_x, max_x = x_bounds if x_bounds else (0.0, max(analysis.duration_seconds, 1.0))
     if max_x <= min_x:
         max_x = min_x + 1.0
-    if valid_points:
-        scaled_values = [value * scale for _, value in valid_points]
-        min_y = min(scaled_values)
-        max_y = max(scaled_values)
-    else:
-        min_y, max_y = 0.0, 1.0
-        drawing.add(
-            String(
-                left,
-                bottom + plot_height / 2,
-                tr(language, "unavailable"),
-                fontName=_FONT_NAME,
-                fontSize=8,
-                fillColor=_COLOR_MUTED,
-            )
-        )
-    if max_y == min_y:
-        max_y += 1.0
-        min_y -= 1.0
-    for fraction in (0.0, 0.5, 1.0):
-        y = bottom + fraction * plot_height
-        drawing.add(
-            Line(
-                left,
-                y,
-                left + plot_width,
-                y,
-                strokeColor=_COLOR_GRID,
-                strokeWidth=0.5,
-            )
-        )
-    drawing.add(
-        Line(
-            left,
-            bottom,
-            left,
-            bottom + plot_height,
-            strokeColor=_COLOR_MUTED,
-            strokeWidth=0.6,
-        )
+    low, high, minor, major = _axis_limits(
+        min((v for _t, v in valid), default=0.0),
+        max((v for _t, v in valid), default=1.0), attribute,
     )
-    drawing.add(
-        Line(
-            left,
-            bottom,
-            left + plot_width,
-            bottom,
-            strokeColor=_COLOR_MUTED,
-            strokeWidth=0.6,
-        )
-    )
-    drawing.add(
-        String(
-            left,
-            7,
-            _relative_time(min_x, zero_time),
-            fontName=_FONT_NAME,
-            fontSize=6,
-            fillColor=_COLOR_MUTED,
-        )
-    )
-    drawing.add(
-        String(
-            left + plot_width - 38,
-            7,
-            _relative_time(max_x, zero_time),
-            fontName=_FONT_NAME,
-            fontSize=6,
-            fillColor=_COLOR_MUTED,
-        )
-    )
-    drawing.add(
-        String(
-            left + plot_width / 2 - 35,
-            18,
-            tr(
-                language,
-                "contact_relative" if contact_bounds is not None else "elapsed",
-            ),
-            fontName=_FONT_NAME,
-            fontSize=5.5,
-            fillColor=_COLOR_MUTED,
-        )
-    )
-    drawing.add(
-        String(
-            2,
-            bottom + plot_height - 2,
-            _number(max_y, language),
-            fontName=_FONT_NAME,
-            fontSize=5.5,
-            fillColor=_COLOR_MUTED,
-        )
-    )
-    drawing.add(
-        String(
-            2,
-            bottom - 2,
-            _number(min_y, language),
-            fontName=_FONT_NAME,
-            fontSize=5.5,
-            fillColor=_COLOR_MUTED,
-        )
-    )
+    count = int(round((high - low) / minor))
+    for index in range(count + 1):
+        value = low + index * minor
+        y = bottom + (value - low) / (high - low) * height
+        emphasized = math.isclose(value / major, round(value / major), abs_tol=AXIS_EPSILON)
+        drawing.add(Line(left, y, left + width, y,
+                         strokeColor=_COLOR_GRID if emphasized else _COLOR_MINOR_GRID,
+                         strokeWidth=0.5 if emphasized else 0.25))
+        # Label the enclosing limits; omit nearby major labels that would
+        # collide with them in this compact chart geometry (twelve PDF points).
+        if index in (0, count) or (emphasized and min(y - bottom, bottom + height - y) >= 12):
+            decimals = max(0, -math.floor(math.log10(minor)))
+            text = format(value, "." + str(decimals) + "f")
+            if language != "en":
+                text = text.replace(".", ",")
+            drawing.add(String(left - 6, y - 2, text, textAnchor="end",
+                               fontName=_FONT_NAME, fontSize=9, fillColor=_COLOR_MUTED))
+    span = max_x - min_x
     if contact_bounds is not None:
-        for contact_time in dict.fromkeys(contact_bounds):
-            if min_x <= contact_time <= max_x:
-                x = left + (contact_time - min_x) / (max_x - min_x) * plot_width
-                drawing.add(
-                    Line(
-                        x,
-                        bottom,
-                        x,
-                        bottom + plot_height,
-                        strokeColor=_COLOR_RED,
-                        strokeWidth=1.0,
-                    )
-                )
+        time_minor = _nice_step(span / CONTACT_TIME_DIVISIONS)
+        time_major = time_minor * AXIS_MAJOR_MULTIPLE
+    elif span >= SHORT_FLIGHT_SECONDS:
+        time_minor = max(TIME_GRID_SECONDS, _nice_step(span / MAX_GRID_LINES))
+        time_major = HOUR_SECONDS if span >= HOUR_SECONDS else TIME_GRID_SECONDS
+    else:
+        time_minor = _nice_step(span / CONTACT_TIME_DIVISIONS)
+        time_major = time_minor * AXIS_MAJOR_MULTIPLE
+    first = math.ceil((min_x - zero_time) / time_minor)
+    last = math.floor((max_x - zero_time) / time_minor)
+    for index in range(first, last + 1):
+        relative = index * time_minor
+        x = left + (relative + zero_time - min_x) / span * width
+        emphasized = math.isclose(relative / time_major, round(relative / time_major), abs_tol=AXIS_EPSILON)
+        drawing.add(Line(x, bottom, x, bottom + height,
+                         strokeColor=_COLOR_GRID if emphasized else _COLOR_MINOR_GRID,
+                         strokeWidth=0.5 if emphasized else 0.25))
+        if emphasized:
+            if contact_bounds is None and span >= HOUR_SECONDS:
+                text = "{:d}:{:02d}".format(int(relative // HOUR_SECONDS), int(relative % HOUR_SECONDS // 60))
+            else:
+                text = _relative_time(relative + zero_time, zero_time)
+            drawing.add(String(x, bottom - 15, text, textAnchor="middle",
+                               fontName=_FONT_NAME, fontSize=9, fillColor=_COLOR_MUTED))
+    drawing.add(String(left + width / 2, 9,
+                       tr(language, "contact_relative" if contact_bounds else "elapsed"),
+                       textAnchor="middle", fontName=_FONT_NAME, fontSize=9, fillColor=_COLOR_MUTED))
+    drawing.add(Line(left, bottom, left, bottom + height, strokeColor=_COLOR_MUTED, strokeWidth=0.5))
+    drawing.add(Line(left, bottom, left + width, bottom, strokeColor=_COLOR_MUTED, strokeWidth=0.5))
+    if contact_bounds:
+        for elapsed in dict.fromkeys(contact_bounds):
+            if min_x <= elapsed <= max_x:
+                x = left + (elapsed - min_x) / span * width
+                drawing.add(Line(x, bottom, x, bottom + height, strokeColor=_COLOR_RED, strokeWidth=0.8, strokeDashArray=[3, 3]))
     segment: List[float] = []
-    previous_time: Optional[float] = None
-    for elapsed, value, break_before in points:
-        if (
-            break_before
-            or elapsed is None
-            or value is None
-            or (previous_time is not None and elapsed <= previous_time)
-        ):
+    prior: Optional[Tuple[float, float, float]] = None
+    missing, hard_break = False, False
+    for sample in chosen:
+        elapsed, value = sample.session_elapsed_seconds, getattr(sample, attribute)
+        reason = sample.discontinuity_before
+        if reason:
+            missing = True
+            # Only an ordinary clock/cadence gap may be connected. A pause,
+            # flight/aircraft reload or teleport must stay an explicit break.
+            hard_break = hard_break or reason != "simulator clock gap"
+        if value is None or not math.isfinite(value):
+            missing = True
+            continue
+        if not min_x <= elapsed <= max_x:
+            continue
+        x = left + (elapsed - min_x) / span * width
+        y = bottom + (value * scale - low) / (high - low) * height
+        if prior and (missing or elapsed <= prior[0]):
             _draw_profile_segment(drawing, segment, color)
             segment = []
-            previous_time = None
-            if elapsed is None or value is None:
-                continue
-        x = left + (elapsed - min_x) / (max_x - min_x) * plot_width
-        y = bottom + (value * scale - min_y) / (max_y - min_y) * plot_height
+            delta = elapsed - prior[0]
+            if not hard_break and 0 < delta <= PROFILE_MAX_BRIDGE_SECONDS:
+                estimated = delta > PROFILE_SHORT_BRIDGE_SECONDS
+                drawing.add(Line(prior[1], prior[2], x, y,
+                                 strokeColor=_COLOR_INTERPOLATED if estimated else color,
+                                 strokeWidth=1.25,
+                                 strokeDashArray=[3, 2] if estimated else None))
         segment.extend([x, y])
-        previous_time = elapsed
+        prior = (elapsed, x, y)
+        missing, hard_break = False, False
     _draw_profile_segment(drawing, segment, color)
+    if not valid:
+        drawing.add(String(left + 8, bottom + height / 2, tr(language, "unavailable"),
+                           fontName=_FONT_NAME, fontSize=10, fillColor=_COLOR_MUTED))
     return drawing
 
 
@@ -877,24 +992,32 @@ def _draw_profile_segment(
         )
 
 
-def _route_chart(analysis: FlightAnalysis, language: str) -> Drawing:
+def _route_chart(
+    analysis: FlightAnalysis, language: str,
+    chart_width: float = CHART_WIDTH, chart_height: float = CHART_HEIGHT,
+) -> Drawing:
     """Draw only captured aircraft positions and preserve all coordinate gaps.
 
     Args:
         analysis (FlightAnalysis): Ordered user-aircraft position samples.
         language (str): Language used for the route heading.
+        chart_width (float): Landscape panel width in PDF points.
+        chart_height (float): Landscape panel height in PDF points.
 
     Returns:
         Drawing: Recorded aircraft-position chart; no camera route is inferred.
     """
-    drawing = Drawing(CHART_WIDTH, CHART_HEIGHT)
+    drawing = Drawing(chart_width, chart_height)
+    drawing.add(Rect(0, 4, chart_width - 1, chart_height - 8,
+                     fillColor=colors.white, strokeColor=_COLOR_GRID,
+                     strokeWidth=0.6, rx=8))
     drawing.add(
         String(
-            0,
-            CHART_HEIGHT - 12,
+            15,
+            chart_height - 23,
             tr(language, "aircraft_track"),
-            fontName=_FONT_NAME,
-            fontSize=8,
+            fontName=_FONT_BOLD,
+            fontSize=11,
             fillColor=_COLOR_INK,
         )
     )
@@ -936,8 +1059,8 @@ def _route_chart(analysis: FlightAnalysis, language: str) -> Drawing:
         for longitude, latitude, _ in coordinates
         if longitude is not None and latitude is not None
     ]
-    left, bottom = 32, 18
-    width, height = CHART_WIDTH - 48, CHART_HEIGHT - 38
+    left, bottom = 61, 38
+    width, height = chart_width - 80, chart_height - 108
     if not valid_coordinates:
         drawing.add(
             String(
@@ -954,11 +1077,27 @@ def _route_chart(analysis: FlightAnalysis, language: str) -> Drawing:
     max_x = max(point[0] for point in valid_coordinates)
     min_y = min(point[1] for point in valid_coordinates)
     max_y = max(point[1] for point in valid_coordinates)
-    span_x = max(max_x - min_x, 0.0001)
+    longitude_scale = max(0.01, math.cos(math.radians((min_y + max_y) / 2)))
+    span_x = max((max_x - min_x) * longitude_scale, 0.0001)
     span_y = max(max_y - min_y, 0.0001)
     scale = min(width / span_x, height / span_y)
     offset_x = left + (width - span_x * scale) / 2
     offset_y = bottom + (height - span_y * scale) / 2
+    for fraction in (0.0, 0.25, 0.5, 0.75, 1.0):
+        x = offset_x + fraction * span_x * scale
+        y = offset_y + fraction * span_y * scale
+        drawing.add(Line(x, bottom, x, bottom + height, strokeColor=_COLOR_MINOR_GRID, strokeWidth=0.4))
+        drawing.add(Line(left, y, left + width, y, strokeColor=_COLOR_MINOR_GRID, strokeWidth=0.4))
+        longitude = (min_x + (max_x - min_x) * fraction + 180) % 360 - 180
+        drawing.add(String(x, bottom - 14, format(longitude, ".2f") + "°", textAnchor="middle", fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
+        drawing.add(String(left - 5, y - 2, format(min_y + (max_y - min_y) * fraction, ".2f") + "°", textAnchor="end", fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
+    drawing.add(String(left + width / 2, 10, tr(language, "longitude"), textAnchor="middle", fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
+    drawing.add(String(15, chart_height - 44, tr(language, "latitude"), fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
+    drawing.add(String(chart_width - 15, chart_height - 23, "N ↑", textAnchor="end", fontName=_FONT_NAME, fontSize=9, fillColor=_COLOR_MUTED))
+    drawing.add(Circle(20, chart_height - 60, 2, fillColor=_COLOR_GREEN, strokeColor=None))
+    drawing.add(String(27, chart_height - 63, tr(language, "track_start"), fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
+    drawing.add(Circle(chart_width / 2 + 8, chart_height - 60, 2, fillColor=_COLOR_INK, strokeColor=None))
+    drawing.add(String(chart_width / 2 + 15, chart_height - 63, tr(language, "track_end"), fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
     drawing.add(
         Line(
             left,
@@ -987,7 +1126,7 @@ def _route_chart(analysis: FlightAnalysis, language: str) -> Drawing:
             segment = []
             if longitude is None or latitude is None:
                 continue
-        x = offset_x + (longitude - min_x) * scale
+        x = offset_x + (longitude - min_x) * longitude_scale * scale
         y = offset_y + (latitude - min_y) * scale
         segment.extend([x, y])
         drawn_points.append((x, y))
@@ -1051,7 +1190,9 @@ def _landing_samples(
     Returns:
         Tuple[List[FlightSample], Tuple[float, float], Tuple[float, float]]:
             Captured samples in range, fixed display bounds, and exact contact
-            bounds in session elapsed seconds.
+            bounds in session elapsed seconds. Original retained landing detail
+            takes priority; older in-memory analyses without it keep their
+            bounded overview series as a permanently supported display fallback.
     """
     contact_start = float(landing.first_contact_elapsed_seconds)
     contact_end = float(landing.last_contact_elapsed_seconds)
@@ -1059,7 +1200,7 @@ def _landing_samples(
     window_end = contact_end + ROLLOUT_WINDOW_SECONDS
     samples = [
         sample
-        for sample in analysis.samples
+        for sample in (landing.profile_samples or analysis.samples)
         if window_start <= sample.session_elapsed_seconds <= window_end
     ]
     return samples, (window_start, window_end), (contact_start, contact_end)
@@ -1958,154 +2099,531 @@ def _quality_notes(
 
 
 def _draw_page(
-    canvas: Canvas,
-    document: SimpleDocTemplate,
-    language: str,
-    analysis_sha256: str,
+    canvas: Canvas, document: SimpleDocTemplate,
+    language: str, analysis_sha256: str,
 ) -> None:
-    """Draw the page footer and full source hash on every page.
+    """Draw landscape page furniture in navy, teal and a pale reading surface.
 
     Args:
-        canvas (Canvas): ReportLab PDF canvas supplied by SimpleDocTemplate.
-        document (SimpleDocTemplate): ReportLab document with current page number.
-        language (str): Language used for the footer.
-        analysis_sha256 (str): Full canonical checksum identifying source data.
+        canvas (Canvas): ReportLab canvas supplied by the document owner.
+        document (SimpleDocTemplate): Owner with current page number.
+        language (str): Supported header/footer language.
+        analysis_sha256 (str): Private source identity retained in PDF metadata.
 
     Returns:
-        None: Draw the footer without changing document flow.
+        None: Paints the background, running header and footer before content.
     """
     canvas.saveState()
+    width, height = REPORT_PAGE_SIZE
+    canvas.setFillColor(_COLOR_PAGE)
+    canvas.rect(0, 0, width, height, fill=1, stroke=0)
+    canvas.setFillColor(_COLOR_NAVY)
+    canvas.rect(0, height - 30, width, 30, fill=1, stroke=0)
+    canvas.setFillColor(_COLOR_TEAL)
+    canvas.rect(0, height - 32, width, 2, fill=1, stroke=0)
+    canvas.setFont(_FONT_BOLD, 10)
+    canvas.setFillColor(colors.white)
+    canvas.drawString(REPORT_SIDE_MARGIN, height - 20, tr(language, "title"))
+    canvas.setFont(_FONT_NAME, 9)
+    canvas.drawRightString(width - REPORT_SIDE_MARGIN, height - 20, "PHP GALLERY")
     canvas.setStrokeColor(_COLOR_GRID)
-    canvas.setLineWidth(0.5)
-    canvas.line(18 * mm, 14 * mm, A4[0] - 18 * mm, 14 * mm)
-    canvas.setFont(_FONT_NAME, 7)
+    canvas.setLineWidth(0.6)
+    canvas.line(REPORT_SIDE_MARGIN, 29, width - REPORT_SIDE_MARGIN, 29)
+    canvas.setFont(_FONT_NAME, 8.5)
     canvas.setFillColor(_COLOR_MUTED)
-    canvas.drawString(
-        18 * mm,
-        9 * mm,
-        tr(language, "footer"),
-    )
-    canvas.drawRightString(
-        A4[0] - 18 * mm,
-        9 * mm,
-        analysis_sha256[:12] + "  ·  " + str(document.page),
-    )
-    canvas.setFont(_FONT_NAME, 5.5)
-    canvas.drawString(
-        18 * mm,
-        4 * mm,
-        tr(language, "shared_checksum") + ": " + analysis_sha256,
-    )
+    canvas.drawString(REPORT_SIDE_MARGIN, 16, tr(language, "footer"))
+    canvas.setFont(_FONT_BOLD, 10)
+    canvas.drawRightString(width - REPORT_SIDE_MARGIN, 16, f"{document.page:02d}")
     canvas.restoreState()
 
 
-def _build_story(
-    analysis: FlightAnalysis,
-    language: str,
-    analysis_sha256: str,
+def _plane_icon(
+    drawing: Drawing, x: float, y: float, phase: str, color: colors.Color,
+    size: float = 1.0, angle_degrees: Optional[float] = None,
+) -> None:
+    """Draw a rounded aircraft silhouette with swept wings and tail surfaces.
+
+    Args:
+        drawing (Drawing): Destination vector infographic.
+        x (float): Symbol center in PDF points.
+        y (float): Symbol center in PDF points.
+        phase (str): Observed phase selecting climb/descent orientation.
+        color (colors.Color): Semantic aircraft color.
+        size (float): Scale of the native thirty-point silhouette.
+        angle_degrees (Optional[float]): Counterclockwise orientation from east,
+            or None for a phase-specific tilt.
+
+    Returns:
+        None: Adds one self-contained vector aircraft without bitmap assets.
+    """
+    if angle_degrees is None:
+        angle_degrees = 18.0 if phase in {"takeoff", "climb", "goaround"} else (
+            -14.0 if phase in {"descent", "approach", "flare", "touchdown"} else 0.0
+        )
+    path = ShapePath(fillColor=color, strokeColor=None)
+    path.moveTo(15, 0)
+    path.curveTo(15, 1.3, 11, 1.8, 5, 1.8)
+    for px, py in ((2, 2), (-4, 10), (-7, 10), (-3, 2),
+                   (-10, 1.4), (-13, 5), (-15, 5), (-13, 0),
+                   (-15, -5), (-13, -5), (-10, -1.4), (-3, -2),
+                   (-7, -10), (-4, -10), (2, -2), (5, -1.8)):
+        path.lineTo(px, py)
+    path.curveTo(11, -1.8, 15, -1.3, 15, 0)
+    path.closePath()
+    radians = math.radians(angle_degrees)
+    cosine, sine = math.cos(radians) * size, math.sin(radians) * size
+    group = Group(path)
+    group.transform = (cosine, sine, -sine, cosine, x, y)
+    drawing.add(group)
+
+
+def _visual_metrics(
+    items: Sequence[Tuple[str, str]], language: str,
+    panel_width: float = CHART_WIDTH, columns: int = METRIC_COLUMNS,
+) -> Drawing:
+    """Lay out factual values in landscape cards with large readable typography.
+
+    Args:
+        items (Sequence[Tuple[str, str]]): Localized labels and factual values.
+        language (str): Supported edition retained as the common view input.
+        panel_width (float): Available row width in PDF points.
+        columns (int): Positive number of equal-width cards per row.
+
+    Returns:
+        Drawing: White rounded cards with teal accents, wrapped labels and
+            fitted bold values; every supplied label/value remains visible.
+    """
+    rows = math.ceil(len(items) / columns)
+    drawing = Drawing(panel_width, rows * METRIC_ROW_HEIGHT)
+    width = panel_width / columns
+    for index, (label, value) in enumerate(items):
+        x = index % columns * width
+        y = (rows - 1 - index // columns) * METRIC_ROW_HEIGHT
+        drawing.add(Rect(x + 1, y + 4, width - 9, METRIC_ROW_HEIGHT - 8,
+                         fillColor=colors.white, strokeColor=_COLOR_GRID,
+                         strokeWidth=0.6, rx=7))
+        drawing.add(Rect(x + 12, y + METRIC_ROW_HEIGHT - 24, 2, 11,
+                         fillColor=_COLOR_TEAL, strokeColor=None, rx=1))
+        label_size = 9.0
+        lines = simpleSplit(label, _FONT_NAME, label_size, width - 36)
+        if len(lines) > 2:
+            label_size *= 2 / len(lines)
+            lines = simpleSplit(label, _FONT_NAME, label_size, width - 36)
+        for line_index, line in enumerate(lines):
+            drawing.add(String(x + 21, y + METRIC_ROW_HEIGHT - 19 - line_index * 11,
+                               line, fontName=_FONT_NAME, fontSize=label_size,
+                               fillColor=_COLOR_MUTED))
+        value_size = 18.0
+        value_lines = simpleSplit(value, _FONT_BOLD, value_size, width - 30)
+        if len(value_lines) > 1:
+            value_size = min(16, (width - 30) / max(
+                (pdfmetrics.stringWidth(word, _FONT_BOLD, 1) for word in value.split()),
+                default=1,
+            ))
+            value_lines = simpleSplit(value, _FONT_BOLD, value_size, width - 30)
+        for line_index, line in enumerate(value_lines):
+            baseline = 14 if len(value_lines) == 1 else 27 - line_index * 18
+            drawing.add(String(x + 13, y + baseline, line, fontName=_FONT_BOLD,
+                               fontSize=value_size, fillColor=_COLOR_INK))
+    return drawing
+
+
+def _panel_row(
+    panels: Sequence[Union[Flowable, List[Flowable]]],
+    widths: Sequence[float],
+    gap: float = 0.0,
+) -> Table:
+    """Align presentation panels in one row without default table padding.
+
+    Args:
+        panels (Sequence[Union[Flowable, List[Flowable]]]): Prepared cards or
+            lists of prepared paragraphs/drawings stacked inside a table cell.
+        widths (Sequence[float]): Corresponding positive column widths in points.
+        gap (float): Right padding between neighboring cells in PDF points.
+
+    Returns:
+        Table: A top-aligned row preserving every child's dimensions and content.
+    """
+    table = Table([list(panels)], colWidths=list(widths), hAlign="LEFT")
+    table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    if len(panels) > 1 and gap:
+        table.setStyle(TableStyle([
+            ("RIGHTPADDING", (0, 0), (-2, -1), gap),
+        ]))
+    return table
+
+
+def _phase_infographic(analysis: FlightAnalysis, language: str) -> Drawing:
+    """Present observed phase milestones as a compact, normally single-row strip.
+
+    Args:
+        analysis (FlightAnalysis): Original phase changes; repeated phases remain.
+        language (str): Supported localized labels and elapsed times.
+
+    Returns:
+        Drawing: Up to fourteen milestones per fifty-four-point row; exceptional
+            longer timelines wrap without dropping changes or inventing phases.
+    """
+    events = [event for event in analysis.events
+              if event.phase not in {"unknown", "discontinuity", "ended"}]
+    columns = min(PHASE_COLUMNS, max(1, len(events)))
+    rows = max(1, math.ceil(len(events) / columns))
+    drawing = Drawing(CHART_WIDTH, rows * PHASE_ROW_HEIGHT)
+    width = CHART_WIDTH / columns
+    for index, event in enumerate(events):
+        x = index % columns * width
+        y = (rows - 1 - index // columns) * PHASE_ROW_HEIGHT
+        _plane_icon(drawing, x + width / 2, y + 40, event.phase, _COLOR_BLUE, size=0.6)
+        key = "strip_" + event.phase
+        label = tr(language, key)
+        if label == key:
+            label = _translate_phase_event(event.phase, language)
+        label_size = min(8.5, (width - 2) / max(pdfmetrics.stringWidth(label, _FONT_NAME, 1), 1))
+        drawing.add(String(x + width / 2, y + 21, label, textAnchor="middle",
+                           fontName=_FONT_NAME, fontSize=label_size, fillColor=_COLOR_INK))
+        drawing.add(String(x + width / 2, y + 6, _format_duration(event.elapsed_seconds, language),
+                           textAnchor="middle", fontName=_FONT_NAME, fontSize=8, fillColor=_COLOR_MUTED))
+        if index % columns < columns - 1 and index < len(events) - 1:
+            drawing.add(Line(x + width / 2 + 9, y + 40, x + width * 1.5 - 9, y + 40,
+                             strokeColor=_COLOR_GRID, strokeWidth=0.5))
+    if not events:
+        drawing.add(String(0, 15, tr(language, "no_phase_events"), fontName=_FONT_NAME,
+                           fontSize=8, fillColor=_COLOR_MUTED))
+    return drawing
+
+
+def _fuel_profile(analysis: FlightAnalysis) -> Tuple[FlightAnalysis, str, float, str, bool]:
+    """Select aircraft-aware fuel units while separating measured and estimated mass.
+
+    Args:
+        analysis (FlightAnalysis): Recorded aircraft identity and optional fuel data.
+
+    Returns:
+        Tuple[FlightAnalysis, str, float, str, bool]: Display samples, numeric
+            field, unit scale, unit label and whether a density assumption was
+            needed. Raw analysis and telemetry are never modified.
+    """
+    aircraft = (analysis.aircraft or "").lower()
+    if any(name in aircraft for name in ("cessna", "piper", "beech")):
+        return analysis, "fuel_gallons", 1.0, "US gal", False
+    unit = "lb" if any(name in aircraft for name in ("boeing", "pmdg", "737", "747", "757", "767", "777", "787")) else "kg"
+    estimated = any(sample.fuel_weight_kg is None and sample.fuel_gallons is not None for sample in analysis.samples)
+    samples = [replace(sample, fuel_weight_kg=(
+        sample.fuel_weight_kg if sample.fuel_weight_kg is not None else
+        sample.fuel_gallons * ASSUMED_KG_PER_US_GALLON if sample.fuel_gallons is not None else None
+    )) for sample in analysis.samples]
+    return replace(analysis, samples=samples), "fuel_weight_kg", (POUNDS_PER_KG if unit == "lb" else 1.0), unit, estimated
+
+
+def _configuration_graphic(sample: Optional[FlightSample], language: str) -> Drawing:
+    """Show touchdown gear, flap, autopilot and lights in two readable landscape lines.
+
+    Args:
+        sample (Optional[FlightSample]): First retained contact, or None.
+        language (str): Supported state and sensor labels.
+
+    Returns:
+        Drawing: Sixty-four-point configuration strip with compact light indicators.
+    """
+    drawing = Drawing(CHART_WIDTH, 64)
+    drawing.add(Rect(0, 3, CHART_WIDTH - 1, 58, fillColor=colors.white,
+                     strokeColor=_COLOR_GRID, strokeWidth=0.6, rx=8))
+    for index, (attribute, label) in enumerate((("gear_position", "gear"), ("flaps_position", "flaps"), ("autopilot_master", "autopilot"))):
+        x = index * CHART_WIDTH / METRIC_COLUMNS
+        value = getattr(sample, attribute, None)
+        text = tr(language, "unavailable") if value is None else (
+            tr(language, "state_on" if value else "state_off") if isinstance(value, bool)
+            else _number(value, language) + "%"
+        )
+        drawing.add(Circle(x + 15, 42, 3, fillColor=_COLOR_GREEN if value else _COLOR_GRID, strokeColor=None))
+        drawing.add(String(x + 24, 38, tr(language, label) + "  " + text,
+                           fontName=_FONT_NAME, fontSize=10, fillColor=_COLOR_INK))
+    lights = ("beacon", "landing", "nav", "strobe", "taxi", "wing")
+    for index, name in enumerate(lights):
+        x = index * CHART_WIDTH / len(lights)
+        state = sample.lights.get(name) if sample else None
+        drawing.add(Circle(x + 15, 18, 2.5, fillColor=_COLOR_GREEN if state else _COLOR_GRID, strokeColor=None))
+        drawing.add(String(x + 24, 15, name.upper() + (" ?" if state is None else ""),
+                           fontName=_FONT_NAME, fontSize=8.5, fillColor=_COLOR_MUTED))
+    return drawing
+
+
+def _configuration_events(
+    samples: Sequence[FlightSample], landing: Landing, language: str,
+) -> Drawing:
+    """Summarize observed configuration changes in compact three-column lines.
+
+    Args:
+        samples (Sequence[FlightSample]): Ordered approach/rollout observations.
+        landing (Landing): Contact reference for signed event timestamps.
+        language (str): Supported configuration labels.
+
+    Returns:
+        Drawing: Observed ground, gear, flap and grouped light transitions;
+            first/last entries and displayed/total counts bound noisy captures.
+    """
+    events: List[Tuple[float, str, str]] = []
+    for prior, sample in zip(samples, samples[1:]):
+        if sample.discontinuity_before:
+            continue
+        for attribute, label in (("gear_position", "gear"), ("flaps_position", "flaps")):
+            value, previous = getattr(sample, attribute), getattr(prior, attribute)
+            if value is not None and previous is not None and value != previous:
+                events.append((sample.session_elapsed_seconds, tr(language, label), _number(value, language) + "%"))
+        if sample.on_ground is not None and prior.on_ground is not None and sample.on_ground != prior.on_ground:
+            events.append((sample.session_elapsed_seconds, tr(language, "on_ground") if sample.on_ground else tr(language, "airborne"), ""))
+        lights = [name for name in ("landing", "strobe", "taxi") if sample.lights.get(name) is not None and prior.lights.get(name) is not None and sample.lights[name] != prior.lights[name]]
+        if lights:
+            value = " / ".join(name.upper() + (" +" if sample.lights[name] else " -") for name in lights)
+            events.append((sample.session_elapsed_seconds, tr(language, "light"), value))
+    half = MAX_CONFIGURATION_EVENTS // 2
+    shown = events if len(events) <= MAX_CONFIGURATION_EVENTS else events[:half] + events[-half:]
+    # Three concise text cells per line keep this secondary information small.
+    columns = METRIC_COLUMNS
+    rows = max(1, math.ceil(len(shown) / columns))
+    drawing = Drawing(CHART_WIDTH, 22 + rows * 17)
+    drawing.add(String(0, drawing.height - 10, str(len(shown)) + "/" + str(len(events)),
+                       fontName=_FONT_NAME, fontSize=9, fillColor=_COLOR_MUTED))
+    for index, (elapsed, label, value) in enumerate(shown):
+        text = _precise_elapsed(elapsed, landing.first_contact_elapsed_seconds, language) + " · " + label + " " + value
+        width = CHART_WIDTH / columns
+        font_size = min(9, (width - 8) / max(pdfmetrics.stringWidth(text, _FONT_NAME, 1), 1))
+        drawing.add(String(index % columns * width, drawing.height - 28 - index // columns * 17,
+                           text, fontName=_FONT_NAME, fontSize=font_size, fillColor=_COLOR_MUTED))
+    return drawing
+
+
+def _wind_graphic(
+    sample: Optional[FlightSample], language: str,
+    panel_width: float = CHART_WIDTH,
+) -> Drawing:
+    """Present the recorded wind/heading comparison in a readable compass card.
+
+    Args:
+        sample (Optional[FlightSample]): First-contact telemetry, or None.
+        language (str): Supported wind/component and heading labels.
+        panel_width (float): Available sidebar width in PDF points.
+
+    Returns:
+        Drawing: The same recorded true-heading compass, HDG/KT wind and
+            heading-relative components, with no runway or measurement changes.
+    """
+    drawing = Drawing(panel_width, 220)
+    drawing.add(Rect(1, 4, panel_width - 3, 212, fillColor=colors.white,
+                     strokeColor=_COLOR_GRID, strokeWidth=0.6, rx=8))
+    available = tr(language, "unavailable")
+    heading = sample.heading_deg if sample else None
+    direction = sample.wind_direction_deg if sample else None
+    velocity = sample.wind_velocity_mps if sample else None
+    speed = velocity * KNOTS_PER_MPS if velocity is not None else None
+    wind = f"{round(direction) % 360:03d}/{round(speed):02d} kt" if direction is not None and speed is not None else available
+    drawing.add(String(16, 197, tr(language, "wind_standard"),
+                       fontName=_FONT_NAME, fontSize=10, fillColor=_COLOR_MUTED))
+    drawing.add(String(16, 172, wind, fontName=_FONT_BOLD,
+                       fontSize=18, fillColor=_COLOR_INK))
+    cx, cy = panel_width / 2, 123
+    drawing.add(Circle(cx, cy, 32, fillColor=None, strokeColor=_COLOR_GRID, strokeWidth=0.8))
+    for angle in range(0, 360, 30):
+        radians = math.radians(angle)
+        dx, dy = math.sin(radians), math.cos(radians)
+        drawing.add(Line(cx + dx * 29, cy + dy * 29, cx + dx * 33, cy + dy * 33,
+                         strokeColor=_COLOR_MUTED, strokeWidth=0.6))
+        if angle % 90 == 0:
+            drawing.add(String(cx + dx * 42, cy - 3 + dy * 42, f"{angle:03d}", textAnchor="middle",
+                               fontName=_FONT_NAME, fontSize=8, fillColor=_COLOR_MUTED))
+    if heading is not None:
+        _plane_icon(drawing, cx, cy, "landing", _COLOR_BLUE, size=0.85,
+                    angle_degrees=90 - heading)
+    if direction is not None and speed is not None:
+        radians = math.radians(direction)
+        dx, dy = math.sin(radians), math.cos(radians)
+        drawing.add(Line(cx + dx * 29, cy + dy * 29, cx + dx * 12, cy + dy * 12,
+                         strokeColor=_COLOR_INTERPOLATED, strokeWidth=1.5))
+        drawing.add(Polygon([cx + dx * 9, cy + dy * 9,
+                             cx + dx * 15 + dy * 3, cy + dy * 15 - dx * 3,
+                             cx + dx * 15 - dy * 3, cy + dy * 15 + dx * 3],
+                            fillColor=_COLOR_INTERPOLATED, strokeColor=None))
+        if heading is not None:
+            relative = math.radians(direction - heading)
+            head, cross = speed * math.cos(relative), speed * math.sin(relative)
+            drawing.add(String(16, 55, tr(language, "headwind" if head >= 0 else "tailwind")
+                               + f"  {abs(head):.0f} kt", fontName=_FONT_NAME,
+                               fontSize=10, fillColor=_COLOR_INK))
+            drawing.add(String(16, 39, tr(language, "crosswind") + f"  {abs(cross):.0f} kt "
+                               + tr(language, "from_right" if cross >= 0 else "from_left"),
+                               fontName=_FONT_NAME, fontSize=10, fillColor=_COLOR_INK))
+    drawing.add(String(16, 72, tr(language, "aircraft_heading") + "  " +
+                       (f"{round(heading) % 360:03d}°T" if heading is not None else available),
+                       fontName=_FONT_NAME, fontSize=9.5, fillColor=_COLOR_MUTED))
+    if sample:
+        drawing.add(String(16, 19, tr(language, "pitch") + " " + _number(sample.pitch_deg, language)
+                           + "° · " + tr(language, "bank") + " " + _number(sample.bank_deg, language) + "°",
+                           fontName=_FONT_NAME, fontSize=9, fillColor=_COLOR_MUTED))
+    return drawing
+
+
+def _landing_visuals(
+    analysis: FlightAnalysis, landing: Landing,
+    language: str, styles: Dict[str, ParagraphStyle],
 ) -> List[Flowable]:
-    """Assemble the translated, vector-based report document flow.
+    """Lay out unchanged landing evidence as a summary page and large plot page.
+
+    Args:
+        analysis (FlightAnalysis): Immutable overview and retained raw windows.
+        landing (Landing): Verified airborne-to-ground transition and evidence.
+        language (str): Supported report language.
+        styles (Dict[str, ParagraphStyle]): Heading and concise note typography.
+
+    Returns:
+        List[Flowable]: Landscape summary and detail pages, separately labeled fitted/measured
+            rates, observed cadence, heading/wind compass and paired profiles.
+            Missing rates never receive an interpolated or inferred measurement.
+    """
+    samples, bounds, contacts = _landing_samples(analysis, landing)
+    contact = landing.contact_samples[0] if landing.contact_samples else None
+    loads = [sample.load_factor_g for sample in samples
+             if sample.load_factor_g is not None
+             and abs(sample.session_elapsed_seconds - landing.first_contact_elapsed_seconds) <= MAX_DESCENT_FIT_SECONDS]
+    rate = _number(landing.descent_rate_fpm, language) + " fpm" if landing.descent_rate_fpm is not None else tr(language, "unavailable")
+    observed_rate = (f"{contact.vertical_speed_mps * FEET_PER_MINUTE_PER_MPS:.0f} fpm"
+                     if contact and contact.vertical_speed_mps is not None else tr(language, "unavailable"))
+    items = [
+        (tr(language, "landing_descent"), rate),
+        (tr(language, "simulator_contact_vs"), observed_rate),
+        (tr(language, "load_factor"), _number(max(loads), language) + " g" if loads else tr(language, "unavailable")),
+        (tr(language, "contacts"), str(landing.contact_count)),
+        (tr(language, "contact_time"), _format_duration(landing.first_contact_elapsed_seconds, language)),
+        (tr(language, "rollout_distance"), _number(landing.rollout_distance_nm * METRES_PER_NM, language) + " m" if landing.rollout_distance_nm is not None else tr(language, "unavailable")),
+    ]
+    title = tr(language, "landing") + (" " + str(landing.index) if len(analysis.landings) > 1 else "")
+    story: List[Flowable] = [
+        PageBreak(), _paragraph(title, styles["title"]),
+        _paragraph(tr(language, "landing_detected") + " · "
+                   + _translate_confidence(landing.confidence, language), styles["small"]),
+        Spacer(1, 2 * mm),
+    ]
+    summary_width = CHART_WIDTH * 2 / 3
+    summary: List[Flowable] = [
+        _visual_metrics(items, language, panel_width=summary_width - 12),
+    ]
+    # Report actual pre-contact timing rather than advertise the target as achieved.
+    recent = [sample for sample in samples if landing.first_contact_elapsed_seconds - LANDING_CADENCE_WINDOW_SECONDS <= sample.session_elapsed_seconds <= landing.first_contact_elapsed_seconds]
+    deltas = [right.simulator_elapsed_seconds - left.simulator_elapsed_seconds
+              for left, right in zip(recent, recent[1:])
+              if not right.discontinuity_before and left.simulator_elapsed_seconds is not None
+              and right.simulator_elapsed_seconds is not None
+              and right.simulator_elapsed_seconds > left.simulator_elapsed_seconds]
+    if deltas:
+        cadence = f"{len(deltas) / sum(deltas):.1f}" + " Hz · " + tr(language, "largest_gap") + f" {max(deltas):.2f} s"
+        summary.append(_paragraph(tr(language, "observed_cadence") + " " + cadence, styles["small"]))
+    if landing.descent_rate_fpm is None:
+        summary.append(_paragraph(tr(language, "landing_fit_missing"), styles["small"]))
+    if landing.profile_truncated:
+        summary.append(_paragraph(tr(language, "landing_detail_limited"), styles["small"]))
+    if not landing.rollout_complete:
+        summary.append(_paragraph(tr(language, "rollout_partial"), styles["small"]))
+    story.extend([
+        _panel_row([summary, _wind_graphic(contact, language, CHART_WIDTH - summary_width)],
+                   [summary_width, CHART_WIDTH - summary_width], gap=12),
+        Spacer(1, 2 * mm), _configuration_graphic(contact, language),
+        _paragraph(tr(language, "configuration_changes"), styles["small"]),
+        _configuration_events(samples, landing, language),
+        PageBreak(), _paragraph(title + " · " + tr(language, "approach_rollout"), styles["title"]),
+    ])
+    charts = []
+    for attribute, label, scale, unit, color in (
+        ("agl_m", "height_agl_ft", METRES_TO_FEET, "ft AGL", _COLOR_BLUE),
+        ("vertical_speed_mps", "vertical_speed", FEET_PER_MINUTE_PER_MPS, "fpm", _COLOR_RED),
+        ("load_factor_g", "load_factor", 1.0, "g", _COLOR_GREEN),
+        ("indicated_airspeed_mps", "indicated_airspeed", KNOTS_PER_MPS, "kt IAS", _COLOR_BLUE),
+    ):
+        charts.append(_profile_chart(analysis, attribute, tr(language, label), color,
+            scale, unit, language, samples, bounds, contacts[0], contacts,
+            chart_width=CHART_WIDTH / 2 - 4, chart_height=LANDING_CHART_HEIGHT))
+    story.extend([
+        _panel_row(charts[:2], [CHART_WIDTH / 2] * 2),
+        Spacer(1, 2 * mm),
+        _panel_row(charts[2:], [CHART_WIDTH / 2] * 2),
+        _paragraph(tr(language, "profile_legend"), styles["small"]),
+    ])
+    return story
+
+
+def _build_story(analysis: FlightAnalysis, language: str, analysis_sha256: str) -> List[Flowable]:
+    """Arrange unchanged report content into landscape overview and paired profiles.
 
     Args:
         analysis (FlightAnalysis): Immutable shared flight-analysis model.
         language (str): Supported output language.
-        analysis_sha256 (str): Canonical source analysis checksum.
+        analysis_sha256 (str): Private canonical identity retained in PDF metadata.
 
     Returns:
-        List[Flowable]: ReportLab flowables in the final reading order.
+        List[Flowable]: Wide overview, two profiles per page and landing spreads;
+            technical identities and algorithm versions stay outside body prose.
     """
     styles = _styles()
+    available = tr(language, "unavailable")
+    altitude = max((sample.altitude_m for sample in analysis.samples if sample.altitude_m is not None), default=None)
+    speed = max((sample.indicated_airspeed_mps for sample in analysis.samples if sample.indicated_airspeed_mps is not None), default=None)
     story: List[Flowable] = [
         _paragraph(tr(language, "title"), styles["title"]),
-        _paragraph(
-            tr(language, "subtitle")
-            + "  ·  "
-            + _safe_source_text(analysis.simulator)
-            + "  ·  "
-            + _safe_source_text(analysis.session_id[:16]),
-            styles["subtitle"],
-        ),
-        _paragraph(
-            tr(language, "flight_date") + ": "
-            + _recorded_flight_date(analysis, language)
-            + "  ·  " + tr(language, "simulator_build") + ": "
-            + _safe_source_text(
-                getattr(analysis, "simulator_build", None)
-                or tr(language, "unavailable")
-            ),
-            styles["small"],
-        ),
-        _paragraph(
-            tr(language, "report_template") + ": "
-            + REPORT_TEMPLATE_VERSION + " · "
-            + tr(language, "analysis_version") + ": "
-            + str(ANALYSIS_VERSION),
-            styles["small"],
-        ),
-        _paragraph(tr(language, "summary"), styles["heading"]),
-        _metric_grid(analysis, language, styles),
+        _paragraph(_safe_source_text(analysis.aircraft or available), styles["subtitle"]),
+        _paragraph(_recorded_flight_date(analysis, language) + " UTC · " + _safe_source_text(analysis.simulator) + " · " + _safe_source_text(analysis.simulator_build or available), styles["small"]),
         Spacer(1, 2 * mm),
-        _paragraph(tr(language, "charts"), styles["heading"]),
-        _profile_chart(
-            analysis,
-            "altitude_m",
-            tr(language, "altitude"),
-            _COLOR_BLUE,
-            1.0,
-            "m",
-            language,
-        ),
-        _profile_chart(
-            analysis,
-            "ground_speed_mps",
-            tr(language, "ground_speed"),
-            _COLOR_GREEN,
-            KNOTS_PER_MPS,
-            "kt",
-            language,
-        ),
-        _profile_chart(
-            analysis,
-            "vertical_speed_mps",
-            tr(language, "vertical_speed"),
-            _COLOR_RED,
-            FEET_PER_MINUTE_PER_MPS,
-            "ft/min",
-            language,
-        ),
-        *(
-            [
-                _profile_chart(
-                    analysis,
-                    "fuel_gallons",
-                    tr(language, "fuel"),
-                    _COLOR_BLUE,
-                    1.0,
-                    "gal",
-                    language,
-                )
-            ]
-            if any(sample.fuel_gallons is not None for sample in analysis.samples)
-            else []
-        ),
-        _route_chart(analysis, language),
-        _paragraph(tr(language, "phase_timeline"), styles["heading"]),
-        _phase_event_table(analysis, language, styles),
-        _paragraph(tr(language, "landing_detail"), styles["heading"]),
-        _landing_table(analysis, language, styles),
-        _paragraph(tr(language, "events"), styles["heading"]),
     ]
+    metric_width = CHART_WIDTH * 0.4
+    overview = _visual_metrics([
+            (tr(language, "duration_short"), _format_duration(analysis.duration_seconds, language)),
+            (tr(language, "distance"), _number(analysis.distance_nm, language) + " NM" if analysis.distance_nm is not None else available),
+            (tr(language, "landings"), str(len(analysis.landings))),
+            (tr(language, "altitude_amsl"), _number(altitude * METRES_TO_FEET, language) + " ft" if altitude is not None else available),
+            (tr(language, "indicated_airspeed"), _format_speed(speed, language)),
+            (tr(language, "status"), tr(language, "capture_closed" if analysis.completed else "capture_partial")),
+        ], language, panel_width=metric_width - 8, columns=2)
+    story.extend([
+        _panel_row([
+            overview,
+            _route_chart(analysis, language, CHART_WIDTH - metric_width - 8, 240),
+        ], [metric_width, CHART_WIDTH - metric_width]),
+        _paragraph(tr(language, "phase_timeline"), styles["heading"]),
+        _phase_infographic(analysis, language),
+        _paragraph(tr(language, "capture_scope"), styles["small"]),
+        PageBreak(), _paragraph(tr(language, "charts"), styles["title"]),
+    ])
+    for attribute, label, scale, unit, color in (
+        ("altitude_m", "altitude_amsl", METRES_TO_FEET, "ft AMSL", _COLOR_BLUE),
+        ("indicated_airspeed_mps", "indicated_airspeed", KNOTS_PER_MPS, "kt IAS", _COLOR_GREEN),
+        ("vertical_speed_mps", "vertical_speed", FEET_PER_MINUTE_PER_MPS, "fpm", _COLOR_RED),
+    ):
+        if attribute == "vertical_speed_mps":
+            story.extend([
+                _paragraph(tr(language, "profile_legend"), styles["small"]),
+                PageBreak(), _paragraph(tr(language, "charts"), styles["title"]),
+            ])
+        story.append(_profile_chart(analysis, attribute, tr(language, label), color, scale, unit, language))
+    fuel, attribute, scale, unit, estimated = _fuel_profile(analysis)
+    story.append(_profile_chart(fuel, attribute, tr(language, "fuel_quantity"), _COLOR_BLUE, scale, unit + (" *" if estimated else ""), language))
+    story.append(Spacer(1, 2 * mm))
+    if estimated:
+        story.append(_paragraph(tr(language, "fuel_estimate"), styles["small"]))
+    story.append(_paragraph(tr(language, "profile_legend"), styles["small"]))
     for landing in analysis.landings:
-        story.extend(_landing_section(analysis, landing, language, styles))
-    story.append(
-        KeepTogether([
-            _paragraph(tr(language, "method_notes"), styles["heading"]),
-            *_methodology_notes(language, styles),
-        ])
-    )
+        story.extend(_landing_visuals(analysis, landing, language, styles))
+    notes = []
+    if any(sample.discontinuity_before for sample in analysis.samples):
+        notes.append(tr(language, "discontinuity"))
+    if not analysis.completed:
+        notes.append(tr(language, "estimate"))
     if analysis.warnings:
-        story.append(_paragraph(tr(language, "warnings"), styles["small"]))
-    story.extend(_quality_notes(analysis, language, styles))
+        notes.append(tr(language, "capture_warning"))
+    if notes:
+        story.append(_paragraph(" · ".join(notes), styles["small"]))
     return story
 
 
@@ -2159,11 +2677,11 @@ def render_report(
         handle.close()
         document = SimpleDocTemplate(
             str(temporary_path),
-            pagesize=A4,
-            rightMargin=18 * mm,
-            leftMargin=18 * mm,
-            topMargin=16 * mm,
-            bottomMargin=20 * mm,
+            pagesize=REPORT_PAGE_SIZE,
+            rightMargin=REPORT_SIDE_MARGIN,
+            leftMargin=REPORT_SIDE_MARGIN,
+            topMargin=REPORT_VERTICAL_MARGINS[0],
+            bottomMargin=REPORT_VERTICAL_MARGINS[1],
             # Type: int; Units: none (boolean-compatible flag).
             # Scope: generated PDF; Consumers: SimpleDocTemplate._makeCanvas.
             # Rationale: keep identifiers and timestamps stable across retries.
@@ -2213,6 +2731,8 @@ def render_report(
         "pdf_sha256": pdf_sha256,
         "session_id": analysis.session_id,
         "template_version": REPORT_TEMPLATE_VERSION,
+        "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "page_count": document.page,
     }
     _atomic_write(
         _manifest_path(target),
@@ -2264,16 +2784,23 @@ def render_reports(
         safe_session = hashlib.sha256(analysis.session_id.encode("utf-8")).hexdigest()[:16]
     outputs: List[Path] = []
     entries: List[Dict[str, str]] = []
+    group_path = output_directory / ".metadata" / (
+        "postflight-manifest-" + safe_session + "-" + analysis_sha256[:16]
+        + "-v" + REPORT_TEMPLATE_VERSION + ".json"
+    )
+    if group_path.parent.is_symlink():
+        raise ValueError("PDF group metadata cannot redirect.")
+    previous = read_document(group_path) if group_path.exists() else {}
+    number = previous.get("number")
+    if type(number) is not int or number < 1:
+        versions = [re.search(r" - v(\d+)\.pdf$", path.name) for path in output_directory.glob("*.pdf")]
+        number = max((int(match.group(1)) for match in versions if match), default=0) + 1
     for language in normalized:
         target = output_directory / (
-            safe_session
-            + "-"
-            + analysis_sha256[:16]
-            + "-v"
-            + REPORT_TEMPLATE_VERSION
-            + "-"
-            + language
-            + ".pdf"
+            readable_pdf_name(
+                analysis.samples[0].recorded_utc if analysis.samples else "Flight",
+                analysis.aircraft or "Aircraft", language, number,
+            )
         )
         rendered = render_report(analysis, language, target)
         pdf_sha256 = hashlib.sha256(rendered.read_bytes()).hexdigest()
@@ -2286,22 +2813,14 @@ def render_reports(
             }
         )
     group_manifest = {
+        "number": number,
         "analysis_sha256": analysis_sha256,
         "reports": entries,
         "session_id": analysis.session_id,
         "template_version": REPORT_TEMPLATE_VERSION,
     }
     _atomic_write(
-        output_directory
-        / (
-            "postflight-manifest-"
-            + safe_session
-            + "-"
-            + analysis_sha256[:16]
-            + "-v"
-            + REPORT_TEMPLATE_VERSION
-            + ".json"
-        ),
+        group_path,
         json.dumps(
             group_manifest,
             ensure_ascii=False,

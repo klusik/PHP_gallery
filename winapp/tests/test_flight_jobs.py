@@ -23,6 +23,10 @@ from uploader.flight_jobs import (
     WorkspaceLease,
     connection_binding,
     pending_sessions,
+    saved_flights,
+    report_revisions,
+    organize_reports,
+    allocate_report_revision,
 )
 
 
@@ -35,6 +39,116 @@ OTHER_RECEIPT_DIGEST = "b" * 64
 
 class FlightJobsTests(unittest.TestCase):
     """Verify manifests recover only when every identity check is sound."""
+
+    def test_report_organization_preserves_bytes_identity_and_restarts_safely(self) -> None:
+        """Flatten automatic/manual editions with private metadata and stable IDs.
+
+        Returns:
+            None: Repeated organization and a resumed catalog journal preserve
+                all PDF bytes and completion state; new editions use flat names.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "flight"
+            reports = directory / "reports"
+            manual = reports / "manual-old"
+            manual.mkdir(parents=True)
+            (directory / "session.json").write_text(json.dumps({
+                "started_utc": "2026-10-18T09:46:05Z", "aircraft": "Fenix A320",
+            }), encoding="utf-8")
+            first = reports / "auto-en.pdf"
+            second = manual / "cs.pdf"
+            first.write_bytes(b"first exact PDF")
+            second.write_bytes(b"second exact PDF")
+            first.with_suffix(".pdf.manifest.json").write_text('{"receipt":"unchanged"}', encoding="utf-8")
+            organize_reports(directory)
+            organize_reports(directory)
+            revisions = {item.report_id: item for item in report_revisions(directory)}
+            self.assertEqual(b"first exact PDF", revisions["auto"].files["en"].read_bytes())
+            self.assertEqual(b"second exact PDF", revisions["flight-manual-old"].files["cs"].read_bytes())
+            self.assertFalse(manual.exists())
+            self.assertEqual([], list(reports.glob("*.json")))
+            self.assertTrue((reports / ".metadata" / (revisions["auto"].files["en"].name + ".manifest.json")).is_file())
+            newest = allocate_report_revision(directory, "new-revision", ("en", "cs"))
+            self.assertTrue(all(pdf.parent == reports and "Fenix A320" in pdf.name for pdf in newest.files.values()))
+            self.assertEqual(newest.files, allocate_report_revision(directory, "new-revision", ("en", "cs")).files)
+            # Simulate interruption after the journal but before one PDF rename.
+            moved = revisions["auto"].files["en"]
+            moved.replace(first)
+            organize_reports(directory)
+            self.assertEqual(b"first exact PDF", moved.read_bytes())
+
+    def test_report_revisions_keep_language_sets_and_stable_manual_identity(self) -> None:
+        """Catalog automatic and manual editions separately for explicit upload.
+
+        Returns:
+            None: Revision selection never mixes languages across generations
+                and manual identities retain the originating session prefix.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "flight"
+            reports = directory / "reports"
+            manual = reports / "manual-test"
+            manual.mkdir(parents=True)
+            (reports / "auto-en.pdf").write_bytes(b"automatic")
+            (manual / "cs.pdf").write_bytes(b"manual")
+            rows = {row.report_id: row.files for row in report_revisions(directory)}
+            self.assertEqual({"en": reports / "auto-en.pdf"}, rows["auto"])
+            self.assertEqual({"cs": manual / "cs.pdf"}, rows["flight-manual-test"])
+
+    def test_revision_catalog_refuses_redirected_pdf_files(self) -> None:
+        """Reject a retained edition redirected outside its session directory.
+
+        Returns:
+            None: File symlinks are refused; runners lacking symlink privileges
+                report this filesystem-specific case as skipped.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reports = root / "flight" / "reports"
+            reports.mkdir(parents=True)
+            external = root / "external.pdf"
+            external.write_bytes(b"external PDF")
+            try:
+                (reports / "auto-en.pdf").symlink_to(external)
+            except OSError:
+                self.skipTest("Symlink creation is unavailable on this runner.")
+            with self.assertRaises(ValueError):
+                report_revisions(reports.parent)
+
+    def test_saved_catalog_keeps_other_keys_and_corrupt_rows_visible(self) -> None:
+        """List local artifacts without conflating them with pending delivery.
+
+        Returns:
+            None: Historical-key flights and old/manual PDFs remain discoverable;
+                corrupt sessions have an explicit error without hiding good rows.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binding = connection_binding("https://gallery.test/api", "old-key")
+            plan = self._plan(root / "good", binding, reports_enabled=False)
+            (plan.directory / "session.json").write_text(json.dumps({
+                "started_utc": "2026-10-18T10:00:00+00:00",
+                "sample_count": 123,
+                "aircraft": "Fenix A320",
+                "recording_ended": True,
+            }), encoding="utf-8")
+            reports = plan.directory / "reports"
+            manual = reports / "manual-fixture"
+            manual.mkdir(parents=True)
+            (reports / "old.pdf").write_bytes(b"old PDF")
+            (manual / "cs.pdf").write_bytes(b"local PDF")
+            corrupt = root / "corrupt"
+            corrupt.mkdir()
+            (corrupt / "session.json").write_text("{broken", encoding="utf-8")
+            rows = saved_flights(root)
+            self.assertEqual(2, len(rows))
+            good = next(row for row in rows if row.directory.name == "good")
+            bad = next(row for row in rows if row.directory.name == "corrupt")
+            self.assertEqual(123, good.sample_count)
+            self.assertEqual(2, good.report_count)
+            self.assertTrue(good.recording_ended)
+            self.assertIn("ValueError", bad.error)
+            self.assertEqual(binding, SessionPlan.load(plan.directory).binding)
 
     def _plan(
         self,

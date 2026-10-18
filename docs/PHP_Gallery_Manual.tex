@@ -939,6 +939,83 @@ unknown codes stay explicit. Changed failure reasons stay in session warnings.
 Connection, first valid frame, and first saved sample have separate log messages.
 Missing historical samples cannot be recreated.
 
+The~Record flight row also shows a~single compact IAS/ALT/V/S line in knots,
+feet, and feet per minute. It reads the~existing recorder cache without another
+SimConnect connection. Paused, stopped, unavailable, or more-than-three-second-old
+values become dashes. The~adjacent \ui{PDF} shortcut opens saved flights.
+
+\ui{Saved flights and PDFs} lists start time, aircraft, checkpoint sample count,
+local PDF count, state, and retained errors. Refresh reads checkpoints only;
+Open app log uses the~existing log. \ui{Finish flight and create PDFs} confirms
+ordinary Stop and enables the~selected editions for pending sessions, even with
+automatic creation off. It retains the~key and uses existing delivery rules.
+
+For a~stopped flight, \ui{Create local PDF} or \ui{Re-create local PDF} creates
+a~numbered version under \filepath{reports/}. Earlier PDFs, raw samples,
+and upload receipts remain intact. No key is~required, no upload/revoke occurs,
+and another running flight continues. Partial reports remain incomplete; active,
+unclosed, and empty recordings are~refused. Local progress/errors are~retained
+in \filepath{manual-report.json}; local creation does not resolve pending
+remote delivery. Cancellation retains finished editions. Shutdown/update drains
+this worker. Windows layout and live acceptance remain a~separate manual check.
+
+The~\ui{Finish flight} button sits below \ui{Target gallery}; its~confirmation
+includes key revocation. After failure, \ui{Keep locally and revoke key} and
+Retry retain the~same connection's confirmed intent in~this app session.
+Cancelling revocation, changing credentials, or~restarting clears that consent.
+Ordinary Stop keeps the~key. Recovery buttons wrap into two rows.
+
+To~upload retained PDFs, save and test a~valid gallery key, including a~new key
+for~the~same gallery. In~the~report browser select a~stopped flight and~PDF
+files with Ctrl/Shift, then choose \ui{Upload saved PDFs}. Confirm the~gallery and~files;
+server inventory verifies the~exact target before transfer. Existing PDFs are
+sent without rendering, stopping another flight, or~revoking the~key. Separate
+\filepath{upload-receipts.json} retains acknowledged checksums; retries reconcile
+server status. Old plans, bindings, and~raw data remain intact. Cancellation
+retains finished editions. Protocol errors include redacted HTTP/action/type
+context and~a~bounded response excerpt.
+
+Without a~saved key the~main action reads \ui{Begin flight} and opens API
+settings. Expand a~flight to~see individual PDFs; double-click opens the~default
+viewer. \ui{Open folder with PDFs} opens only the~PDF folder. Filenames contain
+recorded UTC, aircraft, language, and~version. A~restartable private catalog
+normalizes older layouts without changing bytes or~upload identity; JSONs are
+in~\filepath{reports/.metadata/}. Keep that folder with backups.
+
+New reports use A4 landscape (297 by~210~mm), with a~navy header,
+teal accents, pale background, and~white panels. Embedded regular/bold DejaVu
+uses larger type: 28~pt titles, 12~pt body, 9.5~pt notes, and~9~pt plot axes.
+The~overview places value cards beside the~route; full-flight charts appear
+in~pairs. Each landing has a~summary and~a~separate detail page with four plots.
+Earlier PDF editions remain available; this layout changes no~measurements,
+recording, transfer, or~flight completion.
+
+Reports use value cards and~vector phase/configuration icons. Technical versions
+remain metadata; simulator build/date use small header text. Rounded Y~axes and
+subtle grids show feet AMSL, feet AGL on~approach, IAS knots, and~fpm with
+200/1,000 minor/major spacing. Long-flight time grids use ten minutes/hours.
+Route axes label coordinates, north, and~first/last captured points. Scalar
+profiles bridge gaps up~to~5~s in~curve color and~5--300~s in~amber dashes;
+pauses, reloads, and~longer losses remain breaks. This display interpolation
+never enters landing measurements. No~runway, score, or~missing rate is~invented.
+
+Expanded PDF rows show page count and~local creation date/time, with version
+and~language first. A~star marks legacy file modification time when creation
+metadata is~unknown. Phase milestones normally fit one row. Landing profiles
+retain original samples before overview thinning; fitted touchdown rate and
+the~simulator V/S are~separate, with actual cadence and~partial rollout disclosed.
+The~compass compares true aircraft heading with wind-from HDG/KT, such~as
+020/05, and~heading-relative components; it~does not~infer runway alignment.
+Descending below 100~ft AGL latches every acquired frame through rollout until
+10~s at~15~kt or~less on~the~ground. Earlier dense capture below 300~m remains;
+a~climb above 500~m exits for~a~go-around. Target acquisition remains 20~Hz.
+PDF requests use the~established uploader identification; gateway HTML 401/403
+is~reported separately from Gallery authentication. Completion requires
+server receipt IDs/checksums, not~activity alone. Fuel defaults to~kg,
+uses lb~for~Boeing/PMDG and~gallons for~common light GA. Measured simulator mass
+takes priority; old volume-only mass uses a~visible 0.80 kg/L estimate. Raw data
+stays unchanged. Landing rollout cannot produce a~false rejected-takeoff event.
+
 Both actions use one durable coordinator. Standalone Stop stops the~watcher,
 its~owned UTC synchronizer, and~flight recorder, then drains accepted
 photographs and~completes required report delivery; unrelated AI, manual-import,
@@ -1244,9 +1321,9 @@ Vertical cards place the~photograph above the~description; horizontal cards plac
 
 Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
 
-The~independent uploader source targets 0.5.2. A~separately requested installer
+The~independent uploader source targets 0.5.3. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.5.2/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.5.3/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.

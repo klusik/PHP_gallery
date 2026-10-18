@@ -47,6 +47,12 @@ FLIGHT_RECONNECT_MAX_SECONDS = 30.0
 # Consumers: FlightRecorder.run. Rationale: preserve touchdown evidence while
 # bounding file growth below the simulator's native visual-frame frequency.
 FLIGHT_SAMPLE_INTERVAL_SECONDS = 0.05
+# Expire compact live readings when acquisition stalls rather than show stale
+# instrument values as current flight data.
+# Type: float. Units: seconds. Scope: recorder telemetry display snapshot.
+# Consumers: FlightRecorder.telemetry_snapshot and FlightUI.refresh_telemetry.
+# Rationale: three seconds tolerates dispatch jitter and bounds stale display.
+LIVE_TELEMETRY_MAX_AGE_SECONDS = 3.0
 # Treat this host elapsed gap as a pause or lost cadence.
 # Type: float. Units: seconds. Scope: consecutive samples.
 # Consumers: FlightRecorder._discontinuity.
@@ -77,10 +83,21 @@ FLIGHT_APPROACH_CAPTURE_AGL_METRES = 300.0
 # Type: float. Units: metres AGL. Scope: approach/go-around detection.
 # Consumers: FlightRecorder.run. Rationale: keep go-around capture bounded.
 FLIGHT_APPROACH_EXIT_AGL_METRES = 500.0
-# Keep dense touchdown and initial rollout frames for one minute.
-# Type: float. Units: seconds. Scope: each landing rollout.
-# Consumers: FlightRecorder.run. Rationale: preserve contact context and early rollout.
-FLIGHT_ROLLOUT_CAPTURE_SECONDS = 60.0
+# Purpose: Explicitly arm the final-approach detail latch before touchdown.
+# Type: float; Units: metres AGL; Scope: one approach.
+# Consumers: _FlightPersistencePolicy. Rationale: 30.48 m is 100 ft; descent
+# here retains every acquired frame through landing, including slow rollout.
+FLIGHT_FINAL_APPROACH_AGL_METRES = 30.48
+# Purpose: Recognize sustained taxi speed after a landing without runway data.
+# Type: float; Units: metres/second; Scope: dense rollout retention.
+# Consumers: _FlightPersistencePolicy. Rationale: 15 kt is a conservative proxy
+# for leaving the landing roll, never a claimed runway-exit detection.
+FLIGHT_ROLLOUT_TAXI_MPS = 15.0 / 1.9438444924406
+# Purpose: Avoid ending dense retention on a brief slow or false ground frame.
+# Type: float; Units: seconds; Scope: post-contact taxi state.
+# Consumers: _FlightPersistencePolicy. Rationale: ten seconds of consecutive
+# on-ground taxi-speed observations confirm the transition to normal retention.
+FLIGHT_ROLLOUT_TAXI_CONFIRM_SECONDS = 10.0
 # Global ceiling for raw flight samples; existing PDFs are excluded.
 # Type: int. Units: bytes. Scope: one recorder storage root.
 # Consumers: FlightRecorder._initialize_storage_budget and _write_sample.
@@ -118,9 +135,10 @@ class _FlightPersistencePolicy:
         self.airborne_seen = False
         self.high_resolution = False
         self.last_cruise_persist = -FLIGHT_CRUISE_PERSIST_INTERVAL_SECONDS
-        self.ground_fullrate_until: float | None = None
         self.rollout_capture_active = False
         self.rollout_capture_done = False
+        self.final_approach = False
+        self.taxi_since: float | None = None
         self.last_persisted_elapsed = -1.0
 
     def samples_to_persist(self, sample: FlightSample) -> list[FlightSample]:
@@ -131,7 +149,8 @@ class _FlightPersistencePolicy:
 
         Returns:
             list[FlightSample]: Zero or more frames to append in chronological
-                order; cruise is sparse and approach/contact windows are dense.
+                order; every acquired approach/landing frame is retained until
+                sustained taxi speed or a climb away. No 20 Hz frame is thinned.
         """
         self.raw_ring.append(sample)
         if (
@@ -151,20 +170,37 @@ class _FlightPersistencePolicy:
         touchdown = self.airborne_seen and sample.on_ground is True
         if sample.on_ground is False:
             self.rollout_capture_done = False
-        if touchdown and not self.rollout_capture_active and not self.rollout_capture_done:
-            self.ground_fullrate_until = (
-                sample.session_elapsed_seconds + FLIGHT_ROLLOUT_CAPTURE_SECONDS
-            )
+            self.taxi_since = None
+        if (
+            sample.on_ground is False and sample.agl_m is not None
+            and sample.agl_m <= FLIGHT_FINAL_APPROACH_AGL_METRES
+            and sample.vertical_speed_mps is not None
+            and sample.vertical_speed_mps < 0.0
+        ):
+            self.final_approach = True
+        if (
+            touchdown and not self.rollout_capture_active
+            and not self.rollout_capture_done
+        ):
             self.rollout_capture_active = True
             self.rollout_capture_done = True
-        if (
-            self.high_resolution
-            and self.ground_fullrate_until is not None
-            and sample.session_elapsed_seconds > self.ground_fullrate_until
-        ):
-            self.high_resolution = False
-            self.rollout_capture_active = False
-            self.ground_fullrate_until = None
+        if self.rollout_capture_active:
+            if (
+                sample.on_ground is True and sample.ground_speed_mps is not None
+                and sample.ground_speed_mps <= FLIGHT_ROLLOUT_TAXI_MPS
+                and not sample.discontinuity_before
+            ):
+                if self.taxi_since is None:
+                    self.taxi_since = sample.session_elapsed_seconds
+                if (
+                    sample.session_elapsed_seconds - self.taxi_since
+                    >= FLIGHT_ROLLOUT_TAXI_CONFIRM_SECONDS
+                ):
+                    self.high_resolution = False
+                    self.rollout_capture_active = False
+                    self.final_approach = False
+            else:
+                self.taxi_since = None
         if (
             self.high_resolution
             and sample.on_ground is False
@@ -173,12 +209,9 @@ class _FlightPersistencePolicy:
         ):
             self.high_resolution = False
             self.rollout_capture_active = False
-            self.ground_fullrate_until = None
-        preserve_rollout = (
-            self.rollout_capture_active
-            and self.ground_fullrate_until is not None
-            and sample.session_elapsed_seconds <= self.ground_fullrate_until
-        )
+            self.final_approach = False
+            self.taxi_since = None
+        preserve_rollout = self.rollout_capture_active
         persisted: list[FlightSample] = []
         if near_surface or preserve_rollout:
             if not self.high_resolution:
@@ -241,8 +274,13 @@ class FlightRecorder(threading.Thread):
         self.completed = False
         self.warnings: list[str] = []
         self._sample_count = 0
+        self._capture_mode = "normal"
+        self._detail_sample_count = 0
+        self._detail_max_gap_seconds = 0.0
         self._global_remaining_bytes = MAX_GLOBAL_RAW_SESSION_BYTES
         self._last_sample: FlightSample | None = None
+        self._latest_sample: FlightSample | None = None
+        self._latest_sample_received: float | None = None
         self._last_simulator_elapsed: float | None = None
         self._last_utc: datetime | None = None
         self._checkpoint_lock = threading.Lock()
@@ -266,6 +304,7 @@ class FlightRecorder(threading.Thread):
             None: Resumption begins a discontinuous track segment.
         """
         self.pause_event.set()
+        self._latest_sample = None
 
     def resume(self) -> None:
         """Resume acquisition and mark the next sample as discontinuous.
@@ -277,13 +316,14 @@ class FlightRecorder(threading.Thread):
             self.pause_event.clear()
             self._pending_discontinuity = "recorder resumed after pause"
 
-    def diagnostics_snapshot(self) -> dict[str, str | int | bool | None]:
+    def diagnostics_snapshot(self) -> dict[str, str | int | float | bool | None]:
         """Read current recorder progress without querying the simulator.
 
         Returns:
-            dict[str, str | int | bool | None]: Session ID, worker running and
+            dict[str, str | int | float | bool | None]: Session ID, worker running and
                 paused flags, saved sample_count, simulator/build/aircraft
-                identity, and last_warning or None. Values are a best-effort
+                identity, capture_mode, retained detail_samples, largest
+                detail_max_gap_seconds and last_warning or None. Values are a best-effort
                 snapshot of the independent worker's current progress.
         """
         return {
@@ -291,10 +331,36 @@ class FlightRecorder(threading.Thread):
             "running": self.is_alive(),
             "paused": self.pause_event.is_set(),
             "sample_count": self._sample_count,
+            "capture_mode": self._capture_mode,
+            "detail_samples": self._detail_sample_count,
+            "detail_max_gap_seconds": self._detail_max_gap_seconds,
             "simulator": self.simulator,
             "simulator_build": self.simulator_build,
             "aircraft": self.aircraft,
             "last_warning": self.warnings[-1] if self.warnings else None,
+        }
+
+    def telemetry_snapshot(self) -> dict[str, float | None] | None:
+        """Copy fresh instrument values from the existing recorder connection.
+
+        Returns:
+            dict[str, float | None] | None: indicated_airspeed_mps, altitude_m
+                and vertical_speed_mps from the latest valid acquisition;
+                None while stopped, paused, disconnected or older than three
+                seconds. No native request is made by the UI reader.
+        """
+        sample = self._latest_sample
+        received = self._latest_sample_received
+        if (
+            sample is None or received is None or not self.is_alive()
+            or self.pause_event.is_set() or self.stop_event.is_set()
+            or time.monotonic() - received > LIVE_TELEMETRY_MAX_AGE_SECONDS
+        ):
+            return None
+        return {
+            "indicated_airspeed_mps": sample.indicated_airspeed_mps,
+            "altitude_m": sample.altitude_m,
+            "vertical_speed_mps": sample.vertical_speed_mps,
         }
 
     def _checkpoint(self, ended: bool = False) -> None:
@@ -323,6 +389,9 @@ class FlightRecorder(threading.Thread):
             "recording_ended": ended,
             "warnings": self.warnings[-MAX_SESSION_WARNINGS:],
             "sample_count": self._sample_count,
+            "capture_mode": self._capture_mode,
+            "detail_samples": self._detail_sample_count,
+            "detail_max_gap_seconds": self._detail_max_gap_seconds,
         }
         path = self.directory / "session.json"
         temp = path.with_suffix(".json.tmp")
@@ -545,6 +614,7 @@ class FlightRecorder(threading.Thread):
                 try:
                     observation = client.sample()
                     if observation is None:
+                        self._latest_sample = None
                         if client.last_error or not client.handle.value:
                             failure_count += 1
                             message = client.last_error or (
@@ -568,6 +638,13 @@ class FlightRecorder(threading.Thread):
                         failure_count = 0
                         retry_delay = FLIGHT_RECONNECT_INITIAL_SECONDS
                         sample, identity = observation
+                        self._latest_sample = (
+                            sample if not self.pause_event.is_set()
+                            and not self.stop_event.is_set()
+                            and client.running is not False
+                            and client.pause_flags in (None, 0) else None
+                        )
+                        self._latest_sample_received = time.monotonic()
                         sample.session_elapsed_seconds = max(
                             0.0, time.monotonic() - self.started_monotonic
                         )
@@ -579,8 +656,30 @@ class FlightRecorder(threading.Thread):
                         self.aircraft = identity.get("aircraft") or self.aircraft
                         if identity.get("discontinuity"):
                             sample.discontinuity_before = identity["discontinuity"]
-                        for persisted_sample in persistence.samples_to_persist(sample):
+                        retained = persistence.samples_to_persist(sample)
+                        mode = "rollout" if persistence.rollout_capture_active else (
+                            "final approach" if persistence.final_approach else (
+                                "approach" if persistence.high_resolution else "normal"
+                            )
+                        )
+                        if mode != self._capture_mode:
+                            self.emit("info", f"Flight capture: {mode}; " + (
+                                "target=20 Hz; every acquired frame is retained."
+                                if mode != "normal" else
+                                "normal 1 Hz storage after sustained taxi or climb away."
+                            ))
+                            self._capture_mode = mode
+                        for persisted_sample in retained:
+                            previous = self._last_sample
                             if self._write_sample(persisted_sample):
+                                if persistence.high_resolution:
+                                    self._detail_sample_count += 1
+                                    if previous is not None:
+                                        self._detail_max_gap_seconds = max(
+                                            self._detail_max_gap_seconds,
+                                            persisted_sample.session_elapsed_seconds
+                                            - previous.session_elapsed_seconds,
+                                        )
                                 self._emit_phase_change(persisted_sample)
                             else:
                                 self.stop_event.set()

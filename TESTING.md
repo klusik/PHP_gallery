@@ -2,6 +2,87 @@
 
 ## Flight recording and report delivery
 
+Landscape formatting uses a frozen recorded flight in an ignored workspace
+copy. Inspect every page in EN/CS/DE/SV for true 297 x 210 mm geometry, large
+regular/bold glyphs, unclipped metric labels, chart axes, wind card and footer.
+Check five pages for the supplied single-landing capture, including translated
+notes and the two-page landing spread. This is focused visual diagnosis, not
+FULL qualification or an instruction to run routine local suites. The current
+formatting-only batch changes no telemetry, landing calculations, upload or
+finish controls. The maintainer reported successful hosting PDF upload and
+repeat flight closure on 2026-10-18; actual future native cadence remains a
+separate live acceptance check. Only hosted BASIC is requested for this batch.
+
+Current feedback acceptance adds creation time/page counts, version-first PDF
+labels, compact phase/landing/configuration drawings and a true-heading wind
+compass. Check 020/05 formatting, signed wind components, original landing-window
+frames before plot thinning and chart-only short/amber interpolation. Reloads,
+pauses and long gaps must stay separate; fitted rates never use bridges. A
+sparse historical touchdown must show its actual cadence and measured simulator
+V/S separately from an unavailable fit, with partial rollout clearly marked.
+
+On live MSFS, descend through 100 ft AGL, inspect final-approach/rollout mode,
+retain every acquired frame at a 20 Hz target, and verify return to normal after
+sustained on-ground taxi speed (15 kt for ten seconds), including a go-around
+and unknown-speed case. An empty native dispatch queue ends its drain promptly.
+This source/BASIC batch does not qualify actual native cadence. Upload diagnosis
+on the reported host observed WEDOS HTML 401 without User-Agent and Gallery JSON
+with the established client identification. Confirm real replacement-key upload
+and gallery PDF visibility manually; no successful live upload is claimed from
+that read-only invalid-key probe. Portable image/PDF CI also installs pypdf.
+
+PDF/browser refinements cover readable flat filenames, private manifests,
+restartable automatic/manual-folder migration and exact file selection across
+versions. Fixtures retain bytes, IDs, receipts and original completion plans,
+open selected files through the desktop owner, and keep missing-key Begin flight
+available. Plot fixtures cover rounded altitude/fpm limits, decimal tick
+precision, no duplicate units, missing-series breaks and private hash metadata.
+Fuel tests separate measured mass from historical estimates and aircraft-aware
+units. Landing analysis rejects false rejected-takeoff events during rollout.
+Replay phases supply required V/S explicitly: fixed-altitude airborne and ground
+rows use zero without relaxing the sample builder or lifecycle assertions.
+Visual diagnosis uses the supplied closed flight in an ignored workspace copy,
+without launching the GUI or touching live data; inspect all four languages for
+clipping, axes, state cards and phase/configuration diagrams. Hosted BASIC/FULL
+owns automated qualification. Windows tree expansion, Ctrl/Shift selection,
+default PDF viewing, replacement-key upload, migration and live fuel mass remain
+manual acceptance checks.
+
+Recovery fixtures preserve confirmed Revoke through local retention and Retry,
+but reject consent after cancellation or a credential change. Saved-PDF tests
+catalog revision/language sets, confirm the exact server gallery, use replacement
+credentials without changing historical plans, persist partial receipts and retry
+the captured revision after catalog selection changes. Progress drops stale
+edition rows. Retry avoids rendering, draining live workers or revoking. Transport
+fixtures retain HTTP/action/media-type context while redacting the key. Manual
+Windows acceptance must check **Finish flight…** below Target gallery at narrow
+widths, contextual local-completion confirmations and wrapped recovery buttons.
+After a local-only finish, test a replacement gallery key, select a saved revision,
+upload from the report browser and verify the actual gallery PDFs. Exercise a
+lost response, wrong/stale target, unsupported capability and cancellation; an
+ongoing different flight must continue. These live checks remain pending while
+the maintainer forbids launching the local application.
+
+Manual report regressions cover explicit Finish while automatic reports are
+disabled, retained gallery credentials, and creation from stopped partial
+sessions. Repeated local actions must use distinct numbered filenames and preserve raw
+bytes, old PDFs, completion plans and receipts. Assert no worker-drain, capability,
+upload or revoke call; reject active/empty sources, retain completed editions on
+cancellation, and keep watcher status independent of local render completion.
+Catalog fixtures retain historical-key sessions and corrupt-state error rows.
+The compact instrument tests check IAS/feet/fpm conversion, missing readings,
+pause/stop clearing and the three-second freshness boundary without Tk or native
+connections. They do not establish visual fit or live sampling.
+
+For Windows acceptance after the flight, inspect the single-line IAS/ALT/V/S
+strip at compact and resized widths, stopped/paused/disconnected states, and the
+PDF shortcut. Exercise saved-flight selection, explicit Finish with automatic
+reports off, local re-creation of a delivered and a stopped partial flight,
+cancellation and log inspection. Verify previous PDFs/receipts survive, no extra
+instance or SimConnect handle starts, and local generation leaves current
+watching and credentials intact. Keep this manual check pending when instructed
+to prepare source without launching the app.
+
 The SimConnect flight fixture independently rejects the RPN-only
 `E:ABSOLUTE TIME` name and invalid `G FORCE` units with asynchronous SDK
 exception 7. Both simulator generations must record with `ABSOLUTE TIME` and

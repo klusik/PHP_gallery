@@ -932,6 +932,83 @@ zůstávají výslovně nerozpoznané. Změny důvodu chyby zůstávají ve~varo
 session. Připojení, první platný rámec a~první uložený vzorek mají vlastní log.
 Chybějící historické vzorky nelze zpětně vytvořit.
 
+Řádek Record flight obsahuje také kompaktní proužek IAS/ALT/V/S v~uzlech,
+stopách a~stopách za~minutu. Čte existující cache recorderu bez dalšího spojení
+SimConnect. Při pauze, zastavení, nedostupnosti nebo stáří nad tři sekundy
+zobrazí pomlčky. Sousední zkratka \ui{PDF} otevře uložené lety.
+
+\ui{Uložené lety a~PDF} ukazují začátek, letadlo, počet vzorků z~checkpointu,
+počet místních PDF, stav a~uchované chyby. Obnovit čte pouze checkpointy;
+Otevřít log aplikace používá existující log. \ui{Dokončit let a~vytvořit PDF}
+potvrdí běžné Zastavení a~zapne vybrané jazyky čekajících zpráv i~při vypnuté
+automatické tvorbě. Klíč zachová a~použije stávající pravidla doručení.
+
+Pro zastavený let vytvoří \ui{Vytvořit místní PDF} nebo \ui{Znovu vytvořit
+místní PDF} novou číslovanou verzi v~\filepath{reports/}. Starší PDF, surové
+vzorky i~potvrzení uploadu zůstanou zachované. Klíč není potřeba, nedojde
+k~uploadu ani zrušení klíče a~jiný běžící let pokračuje. Částečné zprávy
+zůstanou neúplné; aktivní, neuzavřené a~prázdné záznamy jsou odmítnuty.
+Místní průběh a~chyby zůstávají v~\filepath{manual-report.json}; místní tvorba
+neuzavírá čekající doručení na~server. Zrušení zachová hotové jazykové verze.
+Ukončení aplikace a~aktualizace tohoto pracovníka bezpečně dokončí nebo zruší.
+Rozložení ve~Windows a~živé ověření zůstávají samostatnou ruční kontrolou.
+
+Tlačítko \ui{Dokončit let} je přímo pod \ui{Cílovou galerií}; potvrzení zahrnuje
+zrušení klíče. Po~chybě zachová \ui{Ponechat místně a~zrušit klíč} i~Opakovat
+již potvrzený záměr pro stejné připojení v~této instanci aplikace. Zrušení
+revokace, změna klíče nebo restart souhlas nepřenáší. Běžné Zastavení klíč
+zachová. Tlačítka obnovy jsou ve~dvou řádcích.
+
+Pro dodatečný upload uložte a~otestujte platný klíč galerie, případně nový klíč
+ke~stejné galerii. V~přehledu rozbalte zastavený let a~vyberte PDF pomocí Ctrl/Shift, poté
+\ui{Nahrát uložená PDF}. Potvrďte galerii a~jazyky; server před přenosem ověří
+přesný cíl. Odešlou se existující PDF bez opětovného generování, zastavení
+jiného letu či~revokace. Samostatný \filepath{upload-receipts.json} zachová
+potvrzené kontrolní součty; opakování ověřuje stav na~serveru. Staré plány,
+vazby klíčů a~surová data zůstanou zachované. Zrušení ponechá dokončené verze.
+Chyby protokolu uvádějí anonymizovanou akci, HTTP stav, typ obsahu a~krátký
+výpis odpovědi.
+
+Bez uloženého klíče se hlavní akce změní na~\ui{Zahájit let} a~otevře nastavení
+API. Rozbalený let ukazuje jednotlivá PDF, dvojklik otevře výchozí prohlížeč.
+\ui{Otevřít složku s~PDF} vede pouze do~složky PDF. Názvy obsahují zaznamenané
+UTC, letadlo, jazyk a~verzi. Obnovitelný soukromý katalog sjednotí starší
+rozložení beze změny obsahu nebo uploadové identity; JSONy jsou v~
+\filepath{reports/.metadata/}. Tuto podsložku zachovejte v~zálohách.
+
+Nové reporty používají A4 na~šířku (297 krát 210~mm), tmavě modré záhlaví,
+tyrkysové akcenty, světlé pozadí a~bílé panely. Vložené běžné a~tučné DejaVu
+má větší sazbu: nadpisy 28~pt, text 12~pt, poznámky 9,5~pt a~osy grafů 9~pt.
+Přehled má karty vedle trasy; grafy celého letu jsou po~dvojicích. Každé
+přistání má souhrn a~samostatný detail se čtyřmi grafy. Starší PDF zůstávají
+zachována; sazba nemění měření, záznam, přenos ani ukončení letu.
+
+Report používá hodnotové karty a~vektorové ikony fází a~konfigurace. Technické
+verze zůstávají v~metadatech; datum a~verze simulátoru jsou malým písmem
+v~záhlaví. Zaokrouhlené osy a~jemná mřížka ukazují ft AMSL, při přiblížení
+ft AGL, uzly IAS a~fpm s~dělením 200/1\,000. Dlouhé lety mají časové dělení
+deset minut/hodina. Trasa má souřadnice, sever a~první/poslední zachycený bod.
+Ve skalárních grafech se mezery do~5~s překlenou barvou křivky, 5--300~s
+oranžově a~čárkovaně. Pauzy, načtení letu a~delší výpadky zůstávají oddělené.
+Interpolace slouží pouze grafu a~nevstupuje do~měření přistání. Dráha, skóre
+ani chybějící rychlost dosednutí se nevymýšlejí.
+
+Rozbalené soubory PDF ukazují počet stran a~místní datum a~čas vytvoření;
+verze a~jazyk jsou na~začátku řádku. Hvězdička označuje starší PDF, u~něhož
+je znám jen čas poslední změny souboru. Fáze obvykle tvoří jeden řádek.
+Detail přistání zachovává původní vzorky před redukcí přehledu letu. Výpočet
+rychlosti dosednutí je oddělen od~V/S simulátoru; uvedena je skutečná frekvence
+a~neúplný dojezd. Kompas porovnává skutečný kurz letadla s~větrem HDG/KT,
+například 020/05, a~jeho složkami; neodhaduje osu dráhy. Klesání pod~100~ft
+AGL aktivuje uložení každého přijatého vzorku až~do~10~s souvislého pojíždění
+na~zemi rychlostí nejvýše 15~kt. Dřívější hustý záznam pod~300~m zůstává;
+stoupání nad~500~m ukončí detail při nezdařeném přiblížení. Cíl zůstává 20~Hz.
+PDF klient používá zavedenou identifikaci uploaderu; HTML 401/403 od~ochranné
+brány se hlásí zvlášť. Úspěch vyžaduje potvrzené ID a~checksum serveru. Palivo je výchozí v~kg, Boeing/PMDG v~lb a~běžné lehké GA
+v~galonech. Přednost má hmotnost ze simulátoru; převod starého objemu používá
+viditelný odhad 0,80 kg/l. Surová data se nemění. Dojezd po~přistání se
+nesmí chybně označit jako přerušený vzlet.
+
 Obě akce používají jediný trvalý koordinátor. Samostatné Zastavení ukončí
 sledování složky, jeho vlastní synchronizaci UTC a záznam letu, poté dokončí
 přijaté fotografie a povinné doručení zpráv; nesouvisející pracovníci AI,
@@ -1236,9 +1313,9 @@ Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migr
 
 Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
-Zdroj samostatného uploaderu nyní cílí na verzi 0.5.2. Samostatně vyžádané
+Zdroj samostatného uploaderu nyní cílí na verzi 0.5.3. Samostatně vyžádané
 sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
-\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.2/}. Instalátor
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.3/}. Instalátor
 a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
 ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
 verzí včetně 0.4.0 zůstávají zachovány.

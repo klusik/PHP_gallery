@@ -193,12 +193,12 @@ jobs:
               for line in Path("winapp/requirements.txt")
               .read_text(encoding="utf-8")
               .splitlines()
-              if line.strip().lower().startswith(("pillow", "reportlab"))
+              if line.strip().lower().startswith(("pillow", "reportlab", "pypdf"))
           ]
-          # Two declared packages are required by the portable image/PDF owner.
-          if len(runtime_requirements) != 2:
+          # Three declared packages serve image rendering and PDF inspection.
+          if len(runtime_requirements) != 3:
               raise SystemExit(
-                  "Expected one Pillow and one ReportLab requirement in "
+                  "Expected Pillow, ReportLab and pypdf requirements in "
                   "winapp/requirements.txt."
               )
           subprocess.run(

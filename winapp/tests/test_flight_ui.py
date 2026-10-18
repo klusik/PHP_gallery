@@ -22,7 +22,9 @@ from unittest.mock import Mock, patch
 
 import uploader.flight_ui as flight_ui
 import uploader.flight_workflow as flight_workflow
-from uploader.flight_jobs import FlightPreferences, SessionPlan, connection_binding
+from uploader.flight_jobs import (
+    FlightPreferences, SavedFlight, SessionPlan, connection_binding,
+)
 
 
 # Type: float; Units: seconds; Scope: flight UI worker race tests.
@@ -65,6 +67,8 @@ class FlightUITests(unittest.TestCase):
             api_key_request_blockers=Mock(return_value=[]),
             refresh_connection_controls=Mock(),
             open_local_path=Mock(),
+            open_log_file=Mock(),
+            gallery_label_var=Mock(get=Mock(return_value="Target gallery: Test gallery")),
         )
 
     def _ui(self, host: SimpleNamespace) -> flight_ui.FlightUI:
@@ -89,6 +93,15 @@ class FlightUITests(unittest.TestCase):
         ui.recorder = None
         ui.plan = None
         ui.dialog = None
+        ui.report_dialog = None
+        ui.report_tree = None
+        ui.report_rows = {}
+        ui.report_files = {}
+        ui.report_button = None
+        ui.keep_local_button = None
+        ui.report_detail_var = Mock()
+        ui.telemetry_var = Mock()
+        ui._progress_local_mode = False
         ui.bar = None
         ui.lease = None
         ui.load_error = ""
@@ -124,6 +137,173 @@ class FlightUITests(unittest.TestCase):
             ui, flight_ui.FlightUI
         )
         return ui
+
+    def test_keep_local_preserves_confirmed_revoke_without_second_confirmation(self) -> None:
+        """Carry the failed workflow's existing consent through local completion.
+
+        Returns:
+            None: Local completion resumes Revoke, while its confirmation states
+                that the key will be removed and no second consent prompt appears.
+        """
+        ui = self._ui(self._host())
+        worker = flight_workflow.FinalizationWorker(
+            [], ui.host.config.gallery_url, ui.host.config.api_key,
+            Mock(), Mock(), True,
+        )
+        worker.update("error", "delivery failed")
+        ui.operation = worker
+        ui.begin = Mock()
+        with patch.object(flight_ui.messagebox, "askyesno", return_value=True) as confirm:
+            ui.keep_local()
+        ui.begin.assert_called_once_with(True)
+        self.assertEqual("confirm_local_revoke", confirm.call_args.args[1])
+        ui.begin = flight_ui.FlightUI.begin.__get__(ui, flight_ui.FlightUI)
+        with (
+            patch.object(flight_ui.messagebox, "askyesno") as confirm,
+            patch.object(flight_ui, "FinalizationWorker") as factory,
+        ):
+            ui.begin(True)
+        confirm.assert_not_called()
+        self.assertTrue(factory.call_args.args[-1])
+
+    def test_retry_never_restores_cancelled_or_another_keys_revoke_consent(self) -> None:
+        """Bind retained consent to the same process, endpoint and credential.
+
+        Returns:
+            None: Retry retains existing consent, but cancellation or a changed
+                key causes ordinary completion with no implicit revocation.
+        """
+        ui = self._ui(self._host())
+        worker = flight_workflow.FinalizationWorker(
+            [], ui.host.config.gallery_url, ui.host.config.api_key,
+            Mock(), Mock(), True,
+        )
+        worker.update("error", "delivery failed")
+        ui.operation = worker
+        ui.begin = Mock()
+        ui.retry_finalization()
+        ui.begin.assert_called_with(True)
+        worker.cancel_revoke()
+        ui.retry_finalization()
+        ui.begin.assert_called_with(False)
+        worker.wants_revoke = True
+        ui.host.config.api_key = "replacement-key"
+        ui.retry_finalization()
+        ui.begin.assert_called_with(False)
+
+    def test_saved_pdf_upload_uses_current_key_without_stopping_live_flight(self) -> None:
+        """Upload an old local revision with a new explicitly confirmed key.
+
+        Returns:
+            None: Captures destination and exact files without rewriting the
+                old binding or stopping recorder, watcher, UTC or revoking.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            ui = self._ui(self._host())
+            ui.lease = object()
+            directory = Path(temporary) / "old-flight"
+            directory.mkdir()
+            plan = SessionPlan(directory, "a" * 64, ("en",), False, local_only=True)
+            plan.save()
+            original = (directory / "completion.json").read_bytes()
+            revision = flight_ui.ReportRevision("manual-test", {"en": directory / "en.pdf"})
+            ui.report_tree = Mock()
+            ui.report_tree.selection.return_value = ("selected-pdf",)
+            ui.report_files = {"selected-pdf": (directory.name, revision, "en")}
+            ui.report_rows = {directory.name: SavedFlight(directory, recording_ended=True)}
+            ui.recorder = Mock(directory=Path(temporary) / "current-flight")
+            with (
+                patch.object(flight_ui.messagebox, "askyesno", return_value=True),
+                patch.object(flight_ui, "FinalizationWorker") as factory,
+            ):
+                ui.upload_saved_pdf()
+            self.assertEqual("test-key", factory.call_args.args[2])
+            self.assertEqual(revision.files, factory.call_args.kwargs["saved_revision"].files)
+            self.assertEqual("Test gallery", factory.call_args.kwargs["target_gallery"])
+            self.assertFalse(factory.call_args.args[-1])
+            ui.stop.assert_not_called()
+            ui.host.utc_sync.stop.assert_not_called()
+            ui.revoke_transport.assert_not_called()
+            self.assertEqual(original, (directory / "completion.json").read_bytes())
+
+    def test_upload_selects_exact_files_across_multiple_revisions(self) -> None:
+        """Keep PDF edition selection separate from the flight's retained set.
+
+        Returns:
+            None: Two selected EN files from different versions upload together;
+                an unselected CS edition is never added implicitly.
+        """
+        ui = self._ui(self._host())
+        row = SavedFlight(Path("flight"), recording_ended=True)
+        first = flight_ui.ReportRevision("first", {"en": Path("one-en.pdf"), "cs": Path("one-cs.pdf")})
+        second = flight_ui.ReportRevision("second", {"en": Path("two-en.pdf")})
+        ui.report_rows = {"flight": row}
+        ui.report_files = {"one": ("flight", first, "en"), "two": ("flight", second, "en")}
+        ui.report_tree = Mock()
+        ui.report_tree.selection.return_value = ("one", "two")
+        ui.start_saved_upload = Mock()
+        ui.upload_saved_pdf()
+        selected_row, selected, extra = ui.start_saved_upload.call_args.args
+        self.assertIs(row, selected_row)
+        self.assertEqual({"en": Path("one-en.pdf")}, selected.files)
+        self.assertEqual({"en": Path("two-en.pdf")}, extra[0].files)
+
+    def test_selected_pdf_opens_in_default_viewer(self) -> None:
+        """Open the selected PDF itself rather than a log or another session.
+
+        Returns:
+            None: The existing desktop owner receives exactly the chosen file.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            ui = self._ui(self._host())
+            directory = Path(temporary) / "flight"
+            pdf = directory / "reports" / "Flight EN v01.pdf"
+            pdf.parent.mkdir(parents=True)
+            pdf.write_bytes(b"%PDF-test")
+            revision = flight_ui.ReportRevision("one", {"en": pdf})
+            ui.report_rows = {"flight": SavedFlight(directory, recording_ended=True)}
+            ui.report_files = {"selected": ("flight", revision, "en")}
+            ui.report_tree = Mock()
+            ui.report_tree.selection.return_value = ("selected",)
+            ui.open_selected_pdf()
+            ui.host.open_local_path.assert_called_once_with(pdf)
+
+    def test_saved_upload_retry_uses_captured_revision_after_selection_changes(self) -> None:
+        """Keep a failed upload's Retry tied to the exact originally chosen PDFs.
+
+        Returns:
+            None: Retry ignores a different currently selected history row.
+        """
+        ui = self._ui(self._host())
+        plan = SessionPlan(Path("original"), ui.binding(), ("en",), False)
+        row = SavedFlight(plan.directory, recording_ended=True)
+        revision = flight_ui.ReportRevision("original-revision", {"en": Path("original.pdf")})
+        ui.report_rows = {"original": row}
+        ui.selected_saved_flight = Mock(return_value=SavedFlight(Path("another-flight")))
+        ui.operation = SimpleNamespace(saved_upload=True, saved_revision=revision, saved_revisions=(revision,), plans=[plan])
+        ui.start_saved_upload = Mock()
+        ui.retry_saved_upload()
+        ui.start_saved_upload.assert_called_once_with(row, revision, ())
+        ui.selected_saved_flight.assert_not_called()
+
+    def test_report_progress_discards_rows_from_previous_revision(self) -> None:
+        """Show only current edition tasks when a progress dialog is reused.
+
+        Returns:
+            None: Stale language rows are removed while the selected revision's
+                completed uploads remain visible.
+        """
+        ui = self._ui(self._host())
+        plan = SessionPlan(Path("original"), ui.binding(), ("en",), False)
+        ui.operation = SimpleNamespace(
+            local_reports=False, saved_upload=True, plans=[plan],
+            saved_revisions=(flight_ui.ReportRevision("original", {"en": Path("original-en.pdf")}),),
+            snapshot=lambda: SimpleNamespace(done=2, detail="", phase="completed"),
+        )
+        ui.task_tree = Mock()
+        ui.task_tree.get_children.return_value = ("original-en", "original-cs")
+        ui.refresh_tasks()
+        ui.task_tree.delete.assert_called_once_with("original-cs")
 
     def test_watcher_automatically_arms_one_shared_session(self) -> None:
         """Arm recording at watcher start, including a dormant opted-out worker.
@@ -266,7 +446,7 @@ class FlightUITests(unittest.TestCase):
         host.ai_worker.is_alive.return_value = True
         host.preflight_worker = Mock()
         host.preflight_worker.is_alive.return_value = True
-        operation = SimpleNamespace(wants_revoke=False, start=Mock())
+        operation = SimpleNamespace(wants_revoke=False, local_reports=False, saved_upload=False, start=Mock())
         with patch.object(
             flight_ui, "FinalizationWorker", return_value=operation
         ) as worker_factory:
@@ -301,7 +481,7 @@ class FlightUITests(unittest.TestCase):
         host.ai_worker.is_alive.return_value = True
         host.preflight_worker = Mock()
         host.preflight_worker.is_alive.return_value = True
-        operation = SimpleNamespace(wants_revoke=True, start=Mock())
+        operation = SimpleNamespace(wants_revoke=True, local_reports=False, saved_upload=False, start=Mock())
         with (
             patch.object(
                 flight_ui.messagebox, "askyesno", return_value=True
@@ -332,6 +512,8 @@ class FlightUITests(unittest.TestCase):
         ui = self._ui(host)
         ui.operation = SimpleNamespace(
             wants_revoke=True,
+            local_reports=False,
+            saved_upload=False,
             plans=[],
             update=Mock(),
         )
@@ -441,7 +623,7 @@ class FlightUITests(unittest.TestCase):
             phase_started=now - 3,
             eta_seconds=None,
         )
-        ui.operation = SimpleNamespace(snapshot=lambda: progress)
+        ui.operation = SimpleNamespace(snapshot=lambda: progress, local_reports=False, saved_upload=False)
         with patch.object(flight_ui.time, "monotonic", return_value=now):
             flight_ui.FlightUI.tick(ui)
         activity_bar.start.assert_called_once()
@@ -464,6 +646,8 @@ class FlightUITests(unittest.TestCase):
         ui.activity_bar = activity_bar
         ui._animation_running = True
         ui.operation = SimpleNamespace(
+            local_reports=False,
+            saved_upload=False,
             snapshot=lambda: SimpleNamespace(
                 phase="completed",
                 detail="",
@@ -486,6 +670,163 @@ class FlightUITests(unittest.TestCase):
         self.assertIsNone(host.api_key_revoke_thread)
         host.refresh_connection_controls.assert_called_once()
         host.root.after.assert_called_once()
+
+
+    def test_manual_finish_enables_reports_without_revoking(self) -> None:
+        """Enable this flight's PDFs even when automatic creation was disabled.
+
+        Returns:
+            None: The explicit action saves selected languages and invokes only
+                ordinary Stop, preserving automatic preferences and credentials.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            ui = self._ui(self._host())
+            directory = Path(temporary) / "flight"
+            directory.mkdir()
+            ui.preferences.reports = False
+            plan = SessionPlan(directory, ui.binding(), ("en",), False)
+            ui.pending.return_value = [plan]
+            ui.begin = Mock()
+            with patch.object(flight_ui.messagebox, "askyesno", return_value=True):
+                ui.finish_report()
+            saved = SessionPlan.load(directory)
+            self.assertTrue(saved.reports_enabled)
+            self.assertEqual(("en", "cs", "de", "sv"), saved.languages)
+            ui.begin.assert_called_once_with(False)
+            ui.revoke_transport.assert_not_called()
+            self.assertEqual("test-key", ui.host.config.api_key)
+            self.assertFalse(ui.preferences.reports)
+
+    def test_compact_telemetry_converts_units_and_clears_missing_values(self) -> None:
+        """Format one cached line without initiating any simulator acquisition.
+
+        Returns:
+            None: IAS, feet and signed vertical speed convert correctly; absent
+                snapshots replace every value with a dash.
+        """
+        ui = self._ui(self._host())
+        ui.recorder = Mock()
+        ui.recorder.telemetry_snapshot.return_value = {
+            "indicated_airspeed_mps": 100 * flight_ui.METRES_PER_SECOND_PER_KNOT,
+            "altitude_m": 10000 * flight_ui.METRES_PER_FOOT,
+            "vertical_speed_mps": -500 * flight_ui.METRES_PER_SECOND_PER_FPM,
+        }
+        ui.refresh_telemetry()
+        self.assertEqual(
+            "IAS 100 kt · ALT 10,000 ft · V/S -500 fpm",
+            ui.telemetry_var.set.call_args.args[0],
+        )
+        ui.recorder.telemetry_snapshot.return_value = None
+        ui.refresh_telemetry()
+        self.assertEqual(
+            "IAS — kt · ALT — ft · V/S — fpm",
+            ui.telemetry_var.set.call_args.args[0],
+        )
+
+    def test_local_pdf_does_not_block_recording_pause_preferences(self) -> None:
+        """Allow active capture controls while an older local report renders.
+
+        Returns:
+            None: A local render keeps its captured languages while changing
+                recording preferences still pauses the independent recorder.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            ui = self._ui(self._host())
+            ui.directory = Path(temporary)
+            ui.operation = SimpleNamespace(local_reports=True, saved_upload=False)
+            ui.busy.return_value = True
+            ui.recorder = Mock()
+            ui.plan = SessionPlan(
+                Path(temporary) / "current", ui.binding(), ("en",), True
+            )
+            ui.record_var.get.return_value = False
+            self.assertTrue(ui.save_preferences())
+            ui.recorder.pause.assert_called_once()
+            ui.show_progress.assert_not_called()
+
+    def test_local_report_retry_survives_closed_catalog_window(self) -> None:
+        """Keep the last local report available after its history window closes.
+
+        Returns:
+            None: Retry/open resolve the captured session without querying a
+                destroyed Tk Treeview or switching to another active flight.
+        """
+        ui = self._ui(self._host())
+        plan = SessionPlan(Path("saved-flight"), ui.binding(), ("en",), True)
+        row = SavedFlight(plan.directory, recording_ended=True)
+        ui.report_rows = {plan.session_id: row}
+        ui.report_tree = Mock()
+        ui.report_tree.winfo_exists.return_value = False
+        ui.operation = SimpleNamespace(local_reports=True, saved_upload=False, plans=[plan])
+        self.assertIs(row, ui.selected_saved_flight())
+        ui.report_tree.selection.assert_not_called()
+
+    def test_local_pdf_action_never_stops_current_photos_or_reveals_key(self) -> None:
+        """Render an older flight with empty transport credentials off Tk.
+
+        Returns:
+            None: The saved plan is copied, receipts remain unchanged, and no
+                current recorder, watcher, UTC or revoke action is requested.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            ui = self._ui(self._host())
+            ui.lease = object()
+            directory = Path(temporary) / "older-flight"
+            directory.mkdir()
+            plan = SessionPlan(directory, ui.binding(), ("en",), False)
+            plan.save()
+            original = (directory / "completion.json").read_bytes()
+            ui.report_tree = Mock()
+            ui.report_tree.selection.return_value = (directory.name,)
+            ui.report_rows = {
+                directory.name: SavedFlight(directory, recording_ended=True)
+            }
+            ui.recorder = Mock(directory=Path(temporary) / "current-flight")
+            ui.select_report = Mock()
+            operation = Mock(local_reports=True)
+            with patch.object(flight_ui, "FinalizationWorker", return_value=operation) as factory:
+                ui.create_local_pdf()
+            self.assertEqual(("", ""), factory.call_args.args[1:3])
+            self.assertTrue(factory.call_args.kwargs["local_reports"])
+            self.assertEqual(original, (directory / "completion.json").read_bytes())
+            operation.start.assert_called_once()
+            ui.stop.assert_not_called()
+            ui.host.utc_sync.stop.assert_not_called()
+            ui.revoke_transport.assert_not_called()
+
+    def test_local_pdf_completion_does_not_replace_live_watcher_status(self) -> None:
+        """Keep report completion independent of running photo/recording state.
+
+        Returns:
+            None: Local completion leaves watcher status and credential flags
+                untouched while refreshing the passive report catalog.
+        """
+        ui = self._ui(self._host())
+        now = time.monotonic()
+        ui.operation = SimpleNamespace(
+            local_reports=True,
+            saved_upload=False,
+            snapshot=lambda: SimpleNamespace(
+                phase="completed", detail="saved", error="", done=2, total=2,
+                bytes_done=0, bytes_total=0, started=now, phase_started=now,
+                eta_seconds=None,
+            ),
+        )
+        ui.host.api_key_revoke_running = True
+        ui.refresh_tasks = Mock()
+        ui.refresh_reports = Mock()
+        ui.tick()
+        self.assertTrue(ui.host.api_key_revoke_running)
+        ui.host.watcher_activity_var.set.assert_not_called()
+        ui.host.status_var.set.assert_not_called()
+        ui.refresh_reports.assert_called_once()
+        ui.operation.local_reports = False
+        ui.operation.saved_upload = True
+        ui._last_terminal = ""
+        ui.tick()
+        self.assertTrue(ui.host.api_key_revoke_running)
+        ui.host.watcher_activity_var.set.assert_not_called()
+        ui.host.status_var.set.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -5618,6 +5618,14 @@ class WatcherApp:
             blockers.append("AI metadata worker is running")
         if self.connection_test_running:
             blockers.append("connection test is running")
+        flights = getattr(self, "flights", None)
+        operation = getattr(flights, "operation", None)
+        if (
+            operation is not None
+            and getattr(operation, "saved_upload", False) is True
+            and operation.is_alive()
+        ):
+            blockers.append("saved flight PDF upload is running")
         return blockers
 
     def background_work_active(self) -> bool:
@@ -5714,17 +5722,24 @@ class WatcherApp:
         hero.grid(row=0, column=0, sticky="ew", padx=6, pady=(4, 4))
         hero.columnconfigure(0, weight=1)
         target = ttk.Frame(hero, style="Card.TFrame")
-        target.grid(row=0, column=0, sticky="w")
+        target.grid(row=0, column=0, sticky="ew")
+        target.columnconfigure(0, weight=1)
         ttk.Label(
             target, textvariable=self.gallery_label_var, style="Section.TLabel",
-        ).pack(side="left")
+            width=1,
+        ).grid(row=0, column=0, sticky="ew")
         icon_button(
             target, "settings", self.open_connection_dialog,
             "Gallery connection and API key",
-        ).pack(side="left", padx=(8, 0))
+        ).grid(row=0, column=1, padx=(8, 0))
         ttk.Label(
             hero, textvariable=self.connection_status_var, style="Muted.TLabel",
         ).grid(row=0, column=1, sticky="e", padx=(16, 0))
+        self.finish_flight_button = ttk.Button(
+            hero, text=self.flights.text("finish_flight"),
+            command=self.flight_action,
+        )
+        self.finish_flight_button.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
         card = GlassCard(parent, padding=(14, 10))
         card.grid(row=1, column=0, sticky="ew", padx=6, pady=4)
@@ -5985,23 +6000,25 @@ class WatcherApp:
         target.grid(row=0, column=0, sticky="ew")
         target.columnconfigure(0, weight=1)
         identity = ttk.Frame(target, style="Card.TFrame")
-        identity.grid(row=0, column=0, sticky="w")
+        identity.grid(row=0, column=0, sticky="ew")
+        identity.columnconfigure(0, weight=1)
         ttk.Label(
             identity, textvariable=self.gallery_label_var, style="Section.TLabel",
-        ).pack(side="left")
+            width=1,
+        ).grid(row=0, column=0, sticky="ew")
         icon_button(
             identity, "settings", self.open_connection_dialog,
             "Gallery connection and API key",
-        ).pack(side="left", padx=(8, 0))
+        ).grid(row=0, column=1, padx=(8, 0))
         ttk.Label(target, textvariable=self.api_key_status_var, style="Muted.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(2, 0)
+            row=2, column=0, sticky="w", pady=(2, 0)
         )
         self.import_revoke_button = ttk.Button(
             target,
-            text="Revoke key…",
-            command=self.revoke_api_key,
+            text=self.flights.text("finish_flight"),
+            command=self.flight_action,
         )
-        self.import_revoke_button.grid(row=0, column=1, rowspan=2, padx=(8, 0))
+        self.import_revoke_button.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
         ttk.Label(card, text="CHOOSE SOURCE", style="Eyebrow.TLabel").grid(
             row=2, column=0, sticky="w", pady=(17, 5)
@@ -7330,10 +7347,17 @@ class WatcherApp:
             blocker_text = "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
         self.revoke_blocker_var.set(blocker_text)
         enabled = key_present and credentials_saved
-        for attr in ("revoke_button", "import_revoke_button"):
+        for attr in ("revoke_button",):
             button = getattr(self, attr, None)
             if button is not None:
                 button.state(["!disabled"] if enabled else ["disabled"])
+        for attr in ("finish_flight_button", "import_revoke_button"):
+            button = getattr(self, attr, None)
+            if button is not None:
+                button.configure(text=self.flights.text(
+                    "finish_flight" if saved_key else "begin_flight"
+                ))
+                button.state(["!disabled"])
         entry_state = "disabled" if self.api_key_revoke_running else "normal"
         for attr in ("api_key_entry", "gallery_url_entry"):
             entry = getattr(self, attr, None)
@@ -7530,6 +7554,20 @@ class WatcherApp:
         else:
             url_entry.focus_set()
         dialog.grab_set()
+
+    def flight_action(self) -> None:
+        """Open connection setup without a saved key, otherwise finish the flight.
+
+        Returns:
+            None: Begin flight opens API settings; Finish flight retains the
+                existing explicitly confirmed completion/revocation workflow.
+        """
+        if self.updates.blocked():
+            return
+        if not self.config.api_key.strip():
+            self.open_connection_dialog()
+            return
+        self.revoke_api_key()
 
     def revoke_api_key(self) -> None:
         """Confirm one combined stop, finish, upload and key-revocation action.

@@ -143,7 +143,7 @@ def installed_dependencies_code() -> str:
     """Check existing build packages without installing or changing anything.
 
     Return subprocess source that enforces the supported PyInstaller range and
-    minimum Pillow/pystray and supported ReportLab versions, imports those
+    minimum Pillow/pystray/pypdf and supported ReportLab versions, imports those
     packages, and creates a Tcl
     interpreter without opening a window. Missing packages, unsupported versions,
     or broken imports fail before PyInstaller starts. This probe never invokes
@@ -155,12 +155,12 @@ def installed_dependencies_code() -> str:
     return (
         "import re, tkinter; from importlib.metadata import version; "
         "requirements = [('PyInstaller', (6, 19), (7,)), ('Pillow', (10,), None), "
-        "('pystray', (0, 19, 5), None), ('reportlab', (5, 0, 1), (6,))]; "
+        "('pystray', (0, 19, 5), None), ('reportlab', (5, 0, 1), (6,)), ('pypdf', (6,), None)]; "
         "versions = [(name, tuple(int(p) for p in re.match(r'^([0-9]+(?:\\.[0-9]+)*)', version(name)).group(1).split('.')), low, high) "
         "for name, low, high in requirements]; "
         "invalid = [name for name, value, low, high in versions if value < low or (high is not None and value >= high)]; "
         "not invalid or __import__('sys').exit('Unsupported installed build dependencies: ' + ', '.join(invalid)); "
-        "import PIL.Image, pystray, PyInstaller, reportlab; root = tkinter.Tcl(); print('Installed build dependencies OK')"
+        "import PIL.Image, pystray, PyInstaller, reportlab, pypdf; root = tkinter.Tcl(); print('Installed build dependencies OK')"
     )
 
 

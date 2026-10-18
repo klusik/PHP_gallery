@@ -962,6 +962,89 @@ Fehlergründe bleiben in Sitzungswarnungen. Verbindung, erster gültiger Datensa
 und erster gespeicherter Messpunkt werden getrennt protokolliert.
 Fehlende historische Messpunkte sind nicht rekonstruierbar.
 
+Die Zeile Record flight zeigt zusätzlich eine kompakte IAS/ALT/V/S-Anzeige
+in Knoten, Fuß und Fuß pro Minute. Sie liest den bestehenden Recordercache
+ohne weitere SimConnect-Verbindung. Bei Pause, Stopp, fehlenden oder mehr als
+drei Sekunden alten Daten erscheinen Striche. Daneben öffnet \ui{PDF}
+die gespeicherten Flüge.
+
+\ui{Gespeicherte Flüge und PDFs} zeigt Beginn, Flugzeug, Messpunktzahl des
+Checkpoints, lokale PDFs, Status und erhaltene Fehler. Aktualisieren liest nur
+Checkpoints; App-Protokoll öffnen verwendet das bestehende Protokoll.
+\ui{Flug beenden und PDFs erstellen} bestätigt normales Stoppen und aktiviert
+die gewählten Berichtssprachen auch bei ausgeschalteter Automatik. Der
+Schlüssel bleibt gespeichert; die bestehenden Übertragungsregeln gelten.
+
+Für einen gestoppten Flug erzeugt \ui{Lokale PDF erstellen} oder
+\ui{Lokale PDF neu erstellen} eine neue Revision in
+\filepath{reports/}. Frühere PDFs, Rohdaten und Uploadbestätigungen
+bleiben erhalten. Kein Schlüssel, Upload oder Widerruf ist beteiligt; ein
+anderer laufender Flug bleibt aktiv. Teilberichte bleiben unvollständig;
+aktive, nicht geschlossene und leere Aufzeichnungen werden abgelehnt.
+\filepath{manual-report.json} speichert lokalen Fortschritt und Fehler;
+lokale Erstellung erledigt keine ausstehende Serverübertragung. Abbruch
+behält fertige Sprachfassungen. Beenden und Update berücksichtigen den Worker.
+Windows-Layout und Live-Abnahme bleiben eine gesonderte manuelle Prüfung.
+
+\ui{Flug abschließen} steht direkt unter der Zielgalerie; die Bestätigung
+umfasst den Schlüsselwiderruf. Nach Fehlern behalten \ui{Lokal behalten und
+Schlüssel widerrufen} und Wiederholen die bereits bestätigte Absicht für
+dieselbe Verbindung in dieser App-Sitzung. Widerrufsabbruch, Schlüsselwechsel
+oder Neustart übernehmen keine Zustimmung. Normales Stoppen behält den
+Schlüssel. Wiederherstellungsaktionen stehen in zwei Zeilen.
+
+Für spätere Uploads einen gültigen Galerieschlüssel speichern und testen,
+auch einen neuen Schlüssel derselben Galerie. Im Berichtbrowser gestoppten
+Flug aufklappen und PDF-Dateien mit Strg/Umschalt auswählen, dann \ui{Gespeicherte PDFs hochladen} wählen.
+Galerie und Sprachen bestätigen; das Serverinventar prüft das genaue Ziel.
+Vorhandene PDFs werden ohne Neurendern, Stoppen eines anderen Flugs oder
+Widerruf gesendet. \filepath{upload-receipts.json} speichert getrennte
+bestätigte Prüfsummen; Wiederholen gleicht den Serverstatus ab. Alte Pläne,
+Schlüsselbindungen und Rohdaten bleiben erhalten. Abbruch behält fertige
+Fassungen. Protokollfehler nennen bereinigte Aktion, HTTP-Status, Inhaltstyp
+und einen begrenzten Antwortauszug.
+
+Ohne gespeicherten Schlüssel öffnet \ui{Flug beginnen} die API-Einstellungen.
+Aufgeklappte Flüge zeigen einzelne PDFs; Doppelklick öffnet den Standardviewer.
+\ui{Ordner mit PDFs öffnen} führt direkt zum PDF-Ordner. Namen enthalten UTC,
+Flugzeug, Sprache und Version. Ein wiederaufnehmbarer privater Katalog ordnet
+ältere Layouts ohne Änderung von Bytes oder Uploadidentitäten; JSON-Dateien
+liegen in \filepath{reports/.metadata/}. Diesen Ordner mitsichern.
+
+Neue Berichte nutzen A4 quer (297 mal 210~mm), marineblaue Kopfzeilen,
+türkise Akzente, hellen Hintergrund und weiße Karten. Eingebettetes DejaVu in
+Normal/Fett verwendet größere Schrift: Titel 28~pt, Text 12~pt, Hinweise
+9,5~pt und Diagrammachsen 9~pt. Die Übersicht zeigt Kennzahlen neben der Route;
+Flugdiagramme erscheinen paarweise. Jede Landung hat eine Zusammenfassung und
+eine Detailseite mit vier Diagrammen. Ältere PDFs bleiben erhalten; Messung,
+Aufzeichnung, Übertragung und Flugabschluss ändern sich nicht.
+
+Berichte nutzen Kennzahlkarten und Vektorsymbole für Phasen/Konfiguration.
+Technische Versionen bleiben Metadaten; Datum und Simulatorbuild stehen klein
+im Kopf. Gerundete Achsen und dezente Raster zeigen ft AMSL, im Anflug ft AGL,
+IAS-Knoten und fpm mit 200/1\,000er Teilung; lange Zeitachsen zehn Minuten/Stunde.
+Die Route zeigt Koordinaten, Norden und erste/letzte erfasste Position.
+Skalare Diagramme verbinden Lücken bis 5~s in Kurvenfarbe und 5--300~s orange
+gestrichelt. Pausen, Neuladen und längere Ausfälle bleiben getrennt. Diese
+Interpolation beeinflusst keine Landemessung; Piste oder Werte werden nicht erfunden.
+
+Aufgeklappte PDF-Zeilen zeigen Seitenzahl und lokale Erstellungszeit; Version
+und Sprache stehen zuerst. Ein Stern markiert alte Dateiänderungszeiten ohne
+bekannte Erstellungsmetadaten. Flugphasen passen normalerweise in eine Zeile.
+Landedetails behalten Originalproben vor der Übersichtsreduktion. Berechnete
+Aufsetzrate und Simulator-V/S sind getrennt, tatsächliche Frequenz und
+unvollständiges Ausrollen ausgewiesen. Der Kompass zeigt wahren Flugzeugkurs,
+Wind HDG/KT (etwa 020/05) und kursbezogene Komponenten, keine vermutete Pistenachse.
+Sinken unter 100~ft AGL hält jedes erfasste Bild bis zu zehn Sekunden Bodentaxi
+mit höchstens 15~kt fest. Die frühere dichte Erfassung unter 300~m bleibt;
+Steigen über 500~m beendet sie beim Durchstarten. Das Ziel bleibt 20~Hz.
+PDF-Anfragen nutzen dieselbe Uploaderkennung; HTML 401/403 einer Schutzschicht
+wird gesondert gemeldet. Erfolg erfordert bestätigte Server-IDs und Prüfsummen.
+Kraftstoff nutzt standardmäßig kg, bei Boeing/PMDG lb und üblicher leichter GA
+Gallonen. Gemessene Simulatormasse hat Vorrang; alte Volumenwerte nutzen eine
+sichtbare Schätzung mit 0,80 kg/l. Rohdaten bleiben unverändert. Ausrollen nach
+der Landung darf keinen falschen Startabbruch erzeugen.
+
 Beide Aktionen nutzen denselben dauerhaften Koordinator. Ein eigenständiges
 Stoppen beendet die Überwachung, die zugehörige UTC-Synchronisierung und die
 Flugaufzeichnung, schließt danach angenommene Fotos und erforderliche
@@ -1268,10 +1351,10 @@ Vertikale Karten zeigen das Foto über dem Text, horizontale daneben. Die normal
 
 Öffentliche Suche ist nur ohne gespeicherte Wahl und bei verfügbarer Funktion standardmäßig an. Updates aktualisieren Versionen, Notizen und API-Zustand gemeinsam; automatische Metadatenprüfung erfolgt höchstens stündlich, deaktivierte automatische Updates lassen alte Hintergrundaufträge pausiert. OurAirports verwendet wöchentliche Aktualität und eine Stunde Fehlerabstand. Der Papierkorb zeigt Restdauer und sichere Löschbarkeit. Auch Präsentationsschema-Probleme verlangen eine Aktion im Systemstatus.
 
-Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.5.2. Ein
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.5.3. Ein
 separat angeforderter Installer-Build legt den Installer und die passenden
 generierten Metadaten \filepath{winapp-update.json} unter
-\filepath{winapp/dist/0.5.2/} ab. Installer und Metadaten gehören zur selben
+\filepath{winapp/dist/0.5.3/} ab. Installer und Metadaten gehören zur selben
 gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
 installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
 einschließlich 0.4.0 bleiben erhalten.

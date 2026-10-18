@@ -130,6 +130,7 @@ OPTIONAL_SIMVARS = (
     ("gear", b"GEAR HANDLE POSITION", b"percent"),
     ("flaps", b"FLAPS HANDLE PERCENT", b"percent"),
     ("fuel", b"FUEL TOTAL QUANTITY", b"gallons"),
+    ("fuel_weight", b"FUEL TOTAL QUANTITY WEIGHT", b"pounds"),
     ("wind_velocity", b"AMBIENT WIND VELOCITY", b"knots"),
     ("wind_direction", b"AMBIENT WIND DIRECTION", b"degrees"),
     ("total_weight", b"TOTAL WEIGHT", b"pounds"),
@@ -317,6 +318,7 @@ class SimConnectFlightClient:
         self.unavailable: set[str] = set()
         self.latest_core: tuple[float, ...] | None = None
         self.core_sequence = 0
+        self.dispatch_sequence = 0
         self.started_monotonic = time.monotonic()
         self.pending_discontinuity: str | None = None
         self.last_rate: float | None = None
@@ -442,6 +444,7 @@ class SimConnectFlightClient:
                 raise OSError("Simulator disconnected.")
             new_core = False
             for _index in range(FLIGHT_DISPATCH_DRAIN_LIMIT):
+                before_dispatch = self.dispatch_sequence
                 result = self.dll.SimConnect_CallDispatch(
                     self.handle, self.callback, None
                 )
@@ -456,6 +459,11 @@ class SimConnectFlightClient:
                 if self.core_sequence > previous:
                     new_core = True
                     previous = self.core_sequence
+                # Stop at the first empty native queue read. The old fixed
+                # 64-call drain kept polling after the queue was empty. Avoid
+                # that overhead; achieved cadence still needs live measurement.
+                if self.dispatch_sequence == before_dispatch:
+                    break
             if stop_on_core and new_core:
                 return
             time.sleep(min(
@@ -848,6 +856,7 @@ class SimConnectFlightClient:
         Returns:
             None: Updates this connection's state only.
         """
+        self.dispatch_sequence += 1
         header = self._header(data, size)
         if header is None:
             return
@@ -935,7 +944,9 @@ class SimConnectFlightClient:
             elapsed (float): Monotonic connection elapsed seconds.
 
         Returns:
-            FlightSample | None: Normalized telemetry, or None without a core frame.
+            FlightSample | None: Normalized SI telemetry including optional fuel
+                mass in kg, or None without a core frame. Missing optional mass
+                stays unknown rather than being inferred from gallons.
         """
         values = self.latest_core
         if values is None:
@@ -1032,6 +1043,10 @@ class SimConnectFlightClient:
                 self.values.get(f"engine_{index}") for index in range(1, 5)
             ),
             fuel_gallons=self.values.get("fuel"),
+            fuel_weight_kg=(
+                self.values["fuel_weight"] * POUNDS_TO_KILOGRAMS
+                if self.values.get("fuel_weight") is not None else None
+            ),
             wind_velocity_mps=(
                 self.values["wind_velocity"] * METRES_PER_SECOND_PER_KNOT
                 if "wind_velocity" in self.values else None

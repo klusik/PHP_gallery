@@ -589,6 +589,9 @@ class SimConnectFlightTests(unittest.TestCase):
                         if arguments[1] == b"TOTAL WEIGHT"
                     )
                     self.assertEqual(b"pounds", total_weight[2])
+                    fuel_weight = next(arguments for arguments in definitions
+                                       if arguments[1] == b"FUEL TOTAL QUANTITY WEIGHT")
+                    self.assertEqual(b"pounds", fuel_weight[2])
                     provider.stop()
                 self.assertEqual(1, dll.closed)
 
@@ -733,6 +736,25 @@ class SimConnectFlightTests(unittest.TestCase):
         self.assertEqual({}, provider.values)
         self.assertEqual({}, provider.value_timestamps)
         self.assertEqual(set(), provider.unavailable)
+
+    def test_optional_fuel_mass_converts_pounds_without_inference(self) -> None:
+        """Keep optional measured fuel mass distinct from recorded volume.
+
+        Returns:
+            None: Pounds convert to exact SI mass; absent mass remains unknown
+                even when the volume channel is available.
+        """
+        provider, _dll = self.provider(2024)
+        provider.latest_core = (
+            49.0, 14.0, 1000.0, 850.0, 120.0, 1.0,
+            110.0, 130.0, 105.0, 0.0, 0.0, 0.0, 90.0,
+        )
+        provider.values.update({"fuel": 200.0, "fuel_weight": 1400.0})
+        sample = provider._sample_from_core(4.0)
+        self.assertAlmostEqual(1400.0 * flight.POUNDS_TO_KILOGRAMS, sample.fuel_weight_kg)
+        self.assertEqual(200.0, sample.fuel_gallons)
+        provider.values.pop("fuel_weight")
+        self.assertIsNone(provider._sample_from_core(4.0).fuel_weight_kg)
 
     def test_optional_values_expire_without_fresh_native_packets(self) -> None:
         """Expose stale optional values as unknown when their feed stops.

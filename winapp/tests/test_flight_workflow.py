@@ -12,6 +12,7 @@
 """Regression coverage for recoverable Stop and Revoke finalization."""
 
 import hashlib
+import json
 import tempfile
 import threading
 import unittest
@@ -20,7 +21,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 import uploader.flight_workflow as workflow
-from uploader.flight_jobs import SessionPlan, connection_binding
+from uploader.flight_jobs import SessionPlan, connection_binding, report_revisions
 
 
 # Type: float; Units: seconds; Scope: worker synchronization regression tests.
@@ -35,6 +36,70 @@ PDF_FIXTURE_PREFIX = b"%PDF-test-"
 
 class FlightWorkflowTests(unittest.TestCase):
     """Verify finalization only acknowledges work after durable boundaries."""
+
+    def test_saved_upload_preserves_old_plan_and_retries_with_replacement_key(self) -> None:
+        """Retain acknowledged saved editions across an upload failure and retry.
+
+        Returns:
+            None: New credentials upload exact retained files, persist separate
+                receipts and never render, drain, mutate the old plan or revoke.
+        """
+        import uploader.flight_delivery as delivery
+
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = self._plan(Path(temporary) / "flight", ("en", "cs"), local_only=True)
+            plan.completed = True
+            plan.save()
+            original = (plan.directory / "completion.json").read_bytes()
+            (plan.directory / "session.json").write_text(json.dumps({"recording_ended": True}), encoding="utf-8")
+            reports = plan.directory / "reports" / "manual-test"
+            reports.mkdir(parents=True)
+            for language in plan.languages:
+                (reports / (language + ".pdf")).write_bytes(b"%PDF-saved-" + language.encode("ascii"))
+            revision = report_revisions(plan.directory)[0]
+            drain = Mock()
+            revoke = Mock()
+            receipt = {"id": "a" * 32, "sha256": "b" * 64}
+            first = workflow.FinalizationWorker(
+                [plan], "https://gallery.test/api", "replacement-key", drain,
+                revoke, False, saved_revision=revision, target_gallery="Flights/A320",
+            )
+            with (
+                patch.object(delivery, "saved_report_destination") as destination,
+                patch.object(delivery, "deliver_report", side_effect=[receipt, OSError("offline")]),
+                patch.object(workflow, "analyze_session") as analyze,
+            ):
+                first.run()
+            self.assertEqual("error", first.snapshot().phase)
+            destination.assert_called_once_with("https://gallery.test/api", "replacement-key", "Flights/A320")
+            receipt_path = plan.directory / "upload-receipts.json"
+            self.assertEqual(1, len(json.loads(receipt_path.read_text(encoding="utf-8"))["receipts"]))
+            retry = workflow.FinalizationWorker(
+                [plan], "https://gallery.test/api", "replacement-key", drain,
+                revoke, False, saved_revision=revision, target_gallery="Flights/A320",
+            )
+            with (
+                patch.object(delivery, "saved_report_destination"),
+                patch.object(delivery, "deliver_report", return_value=receipt) as upload,
+            ):
+                retry.run()
+            self.assertEqual("completed", retry.snapshot().phase)
+            self.assertEqual(2, upload.call_count)
+            self.assertEqual(2, len(json.loads(receipt_path.read_text(encoding="utf-8"))["receipts"]))
+            self.assertEqual(original, (plan.directory / "completion.json").read_bytes())
+            drain.assert_not_called()
+            revoke.assert_not_called()
+            analyze.assert_not_called()
+            cancelled = workflow.FinalizationWorker(
+                [plan], "https://gallery.test/api", "replacement-key", drain,
+                revoke, False, saved_revision=revision, target_gallery="Flights/A320",
+            )
+            cancelled.cancel.set()
+            with patch.object(delivery, "saved_report_destination") as destination:
+                cancelled.run()
+            self.assertEqual("cancelled", cancelled.snapshot().phase)
+            destination.assert_not_called()
+            self.assertEqual(original, (plan.directory / "completion.json").read_bytes())
 
     def _plan(
         self,
@@ -55,6 +120,10 @@ class FlightWorkflowTests(unittest.TestCase):
             SessionPlan: Pending plan with the current connection fingerprint.
         """
         directory.mkdir(parents=True, exist_ok=True)
+        (directory / "session.json").write_text(json.dumps({
+            "recording_ended": True, "started_utc": "2026-10-18T09:46:05Z",
+            "aircraft": "Fixture aircraft",
+        }), encoding="utf-8")
         return SessionPlan(
             directory=directory,
             binding=connection_binding("https://gallery.test/api", "test-key"),
@@ -448,6 +517,155 @@ class FlightWorkflowTests(unittest.TestCase):
         with patch("uploader.flight_workflow.time.monotonic", return_value=30.0):
             worker.transfer_progress(0, 100)
         self.assertIsNone(worker.snapshot().eta_seconds)
+
+
+    def test_local_regeneration_preserves_delivery_and_every_prior_pdf(self) -> None:
+        """Re-render a stopped partial flight into distinct local revisions.
+
+        Returns:
+            None: Both editions are produced without drain/network/revoke;
+                earlier PDFs, raw telemetry and completion bytes stay identical.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = self._plan(Path(temporary) / "flight", ("en", "cs"), False)
+            plan.receipts["en"] = "a" * 64
+            plan.save()
+            (plan.directory / "session.json").write_text(
+                json.dumps({"recording_ended": True}), encoding="utf-8"
+            )
+            raw = plan.directory / "samples.jsonl"
+            raw.write_text("raw telemetry fixture\n", encoding="utf-8")
+            old = plan.directory / "reports" / "previous.pdf"
+            old.parent.mkdir()
+            old.write_bytes(b"previous verified PDF")
+            before = (plan.directory / "completion.json").read_bytes()
+            delivery, report = self._report_modules()
+            wait, revoke = Mock(), Mock()
+            for _attempt in range(2):  # Two deliberate independent render actions.
+                worker = workflow.FinalizationWorker(
+                    [plan], "", "", wait, revoke, False, local_reports=True,
+                )
+                with (
+                    patch.object(workflow, "analyze_session", return_value=self._analysis(True, False)),
+                    patch.dict("sys.modules", {
+                        "uploader.flight_delivery": delivery,
+                        "uploader.flight_report": report,
+                    }),
+                ):
+                    worker.run()
+                self.assertEqual("completed", worker.snapshot().phase)
+                self.assertEqual(worker.snapshot().total, worker.snapshot().done)
+                self.assertFalse(worker.request_revoke())
+            self.assertEqual(0, len(list(old.parent.glob("manual-*"))))
+            self.assertEqual(4, len(list(old.parent.glob("* - v*.pdf"))))
+            self.assertEqual(b"previous verified PDF", old.read_bytes())
+            self.assertEqual("raw telemetry fixture\n", raw.read_text(encoding="utf-8"))
+            self.assertEqual(before, (plan.directory / "completion.json").read_bytes())
+            self.assertFalse(plan.completed)
+            wait.assert_not_called()
+            revoke.assert_not_called()
+            delivery.check_report_capability.assert_not_called()
+            delivery.deliver_report.assert_not_called()
+
+    def test_local_generation_refuses_active_or_empty_session(self) -> None:
+        """Preserve live data and reject an empty stopped report explicitly.
+
+        Returns:
+            None: No renderer runs and no completion receipt changes; only a
+                validated stopped session may retain a local failure document.
+        """
+        for ended in (False, True):
+            with self.subTest(ended=ended), tempfile.TemporaryDirectory() as temporary:
+                plan = self._plan(Path(temporary) / "flight")
+                plan.save()
+                (plan.directory / "session.json").write_text(
+                    json.dumps({"recording_ended": ended}), encoding="utf-8"
+                )
+                before = (plan.directory / "completion.json").read_bytes()
+                worker = workflow.FinalizationWorker(
+                    [plan], "", "", Mock(), Mock(), False, local_reports=True,
+                )
+                with patch.object(workflow, "analyze_session", return_value=self._analysis(False)) as analyze:
+                    worker.run()
+                self.assertEqual("error", worker.snapshot().phase)
+                self.assertEqual(before, (plan.directory / "completion.json").read_bytes())
+                self.assertFalse((plan.directory / "reports").exists())
+                if ended:
+                    state = json.loads((plan.directory / "manual-report.json").read_text(encoding="utf-8"))
+                    self.assertIn("No recorded telemetry", state["error"])
+                else:
+                    analyze.assert_not_called()
+                    self.assertFalse((plan.directory / "manual-report.json").exists())
+
+    def test_local_cancellation_keeps_completed_editions(self) -> None:
+        """Cancel between report editions without removing a finished PDF.
+
+        Returns:
+            None: One rendered edition remains recoverable, cancellation is
+                recorded, and remote completion remains pending.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = self._plan(Path(temporary) / "flight", ("en", "cs"))
+            plan.save()
+            (plan.directory / "session.json").write_text(
+                json.dumps({"recording_ended": True}), encoding="utf-8"
+            )
+            worker = workflow.FinalizationWorker(
+                [plan], "", "", Mock(), Mock(), False, local_reports=True,
+            )
+            _delivery, report = self._report_modules()
+
+            def render_then_cancel(
+                analysis: SimpleNamespace, language: str, destination: Path
+            ) -> Path:
+                """Write the first edition and cancel before the next starts.
+
+                Args:
+                    analysis (SimpleNamespace): Normalized fixture analysis.
+                    language (str): Current requested edition.
+                    destination (Path): Unique revision PDF destination.
+
+                Returns:
+                    Path: The completed first edition, retained after cancellation.
+                """
+                result = self._render_report(analysis, language, destination)
+                worker.cancel.set()
+                return result
+
+            report.render_report.side_effect = render_then_cancel
+            with (
+                patch.object(workflow, "analyze_session", return_value=self._analysis()),
+                patch.dict("sys.modules", {"uploader.flight_report": report}),
+            ):
+                worker.run()
+            self.assertEqual("cancelled", worker.snapshot().phase)
+            self.assertEqual(1, len(list(plan.directory.glob("reports/* - v*.pdf"))))
+            self.assertFalse(SessionPlan.load(plan.directory).completed)
+
+    def test_local_reports_refuse_redirected_output_without_touching_target(self) -> None:
+        """Reject a report-folder symlink before any local result is persisted.
+
+        Returns:
+            None: A redirected output remains untouched; systems without
+                symlink privileges skip this filesystem-specific fixture.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plan = self._plan(root / "flight")
+            external = root / "external"
+            external.mkdir()
+            try:
+                (plan.directory / "reports").symlink_to(external, target_is_directory=True)
+            except OSError:
+                self.skipTest("Symlink creation is unavailable on this runner.")
+            worker = workflow.FinalizationWorker(
+                [plan], "", "", Mock(), Mock(), False, local_reports=True,
+            )
+            worker.run()
+            self.assertEqual("error", worker.snapshot().phase)
+            self.assertIn("redirect", worker.snapshot().error)
+            self.assertEqual([], list(external.iterdir()))
+            self.assertFalse((plan.directory / "manual-report.json").exists())
 
 
 if __name__ == "__main__":
