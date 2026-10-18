@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.136.3
+
+Fixed Windows flight telemetry definitions for MSFS 2020 and 2024, improved recorder progress and failure diagnostics, and updated the standalone uploader version to 0.5.2.
+
+### Highlights
+
+#### Flight telemetry and recorder diagnostics
+- Requested simulator time in seconds using `ABSOLUTE TIME` and load factor using `GForce`.
+- Kept core flight recording available when optional load-factor data was rejected; rejected core telemetry definitions prevented samples from being recorded.
+- Distinguished simulator connection, first valid telemetry, and first saved sample in recorder activity messages.
+- Improved copied diagnostics with the app version, recorder state, saved sample count, simulator details, and last warning.
+- Preserved changing consecutive failure reasons in session data. Missing flight samples were not recreated, and successful photo-camera acquisition did not establish that flight telemetry had been recorded.
+
+#### Release records
+- Added immutable origin and predecessor records for `v_0.136.3`. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Technical Details
+
+#### Windows uploader
+- Updated `winapp/VERSION` and the documented standalone uploader version to `0.5.2`; this did not build or publish an installer.
+- Updated `winapp/uploader/simconnect_flight.py` to report rejected SDK operations with the operation, variable, units, send ID, and parameter index. Native errors included decoded HRESULT details, and unknown codes remained explicitly unknown.
+- Updated `winapp/uploader/flight_recorder.py` and `winapp/gallery_watch_upload.pyw` for recorder warnings and progress diagnostics.
+
+#### Tests
+- Added coverage in `winapp/tests/test_simconnect_flight.py` for invalid SDK definitions in both simulator generations, optional-signal rejection, native HRESULT reporting, and unknown SDK exceptions.
+- Added recorder diagnostic coverage in `winapp/tests/test_flight_recorder.py`.
+
+#### Documentation and compatibility
+- Updated `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, `winapp/README.md`, and all four TeX manuals.
+- No database or authentication changes were included.
+
+### User Impact
+
+#### For visitors
+- No direct visitor behavior changed.
+
+#### For administrators
+- Windows uploader users received clearer flight-recorder progress and failure diagnostics. Rejected optional load-factor telemetry no longer prevented core flight recording.
+
+#### For maintainers
+- Regression coverage was added for telemetry definition failures and recorder diagnostics. Installed-simulator acceptance remained unverified.
+
 ## Version 0.136.2
 
 Redesigned the Windows uploader interface and updated flight recording controls. Added a GitHub Actions workflow to create release branches, and updated related testing, compatibility, and release documentation.
