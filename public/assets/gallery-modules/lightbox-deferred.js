@@ -33,10 +33,10 @@
  */
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
-import {galleryPresentationOptions} from './gallery-presentation.js?v=20261017-presentation-sharing-v3';
+import {galleryPresentationOptions} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
 import {
     stopGalleryMusicViewer,
-} from './gallery-music-player.js?v=20261017-presentation-sharing-v3';
+} from './gallery-music-player.js?v=20261018-presentation-confirm-v1';
 
 const lightboxModuleUrl = (() => {
     const moduleUrl = new URL('./lightbox.js', import.meta.url);

@@ -13,7 +13,7 @@ import {
 } from './gallery-pdf-metadata.js?v=20261017-media-summary-v1';
 import {
     galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
-} from './gallery-presentation.js?v=20261017-presentation-sharing-v3';
+} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
 
 /**
  * Keep attachment disclosure motion brief without delaying media controls.

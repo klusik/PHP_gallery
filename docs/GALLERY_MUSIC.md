@@ -57,22 +57,29 @@ The link snapshots these preferences even if the gallery defaults later change.
 use current gallery defaults. Pagination and administrator/preview state are
 omitted. The link retains ordinary gallery access requirements and starts
 the same presentation once after loading. Clipboard refusal exposes a selectable
-URL. Browser autoplay/fullscreen refusal keeps photo playback available with the
-existing explicit Play/fullscreen controls; a link cannot bypass browser policy.
+URL. Browser autoplay/fullscreen refusal holds the black introduction and offers
+**Start presentation**; a link cannot bypass browser policy. The confirmation
+invokes the shared audio owner before requesting native fullscreen in the same
+click task. It is available even with Without controls selected and disappears
+before photo one appears. Esc or the close icon cancels the pending launch.
 With autoplay OFF the link opens photo one paused and silent. Without controls
 hides all viewer controls, metadata and diagnostics; Esc exits. This changes
 presentation only and grants no access. Browser sound blocking still applies.
 
 Each launch holds a black stage for at least one second and until photo one is
-decoded. The selected transition then reveals it and starts requested music when
-autoplay is ON. The hold is not part of photo ordering and never repeats at a loop.
+decoded. Requested fullscreen and playback must also settle; activation refusal
+extends black until confirmation. The selected transition then reveals photo one
+with requested music when autoplay is ON. The hold is not part of photo ordering
+and never repeats at a loop.
 Stop, Close and manual navigation cancel pending launch work. The existing
 slideshow timer owns both the opening hold and normal advances.
 The public request guard accepts the presentation flag only on gallery pages.
 Fresh anonymous sessions use the same visibility/password/share/NSFW checks as
 ordinary gallery links. When desktop native fullscreen is denied, the existing
-desktop viewer fills the browser viewport and continues displaying photographs.
-Explicit Play retries a soundtrack blocked by browser autoplay rules.
+desktop viewer fills the browser viewport. After explicit confirmation, an
+unsupported native request keeps that shell rather than repeating the prompt.
+Codec/media failures retain normal player feedback. Explicit Play can retry
+later soundtrack failures.
 The pending soundtrack also resumes on a trusted click on the photo. Its glass
 player hides with the idle HUD even while activation is required; movement restores
 the normal controls. A trusted photo/Play click also requests native fullscreen

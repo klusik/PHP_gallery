@@ -1283,6 +1283,8 @@ return [
     'media_summary.tracks' => 'Skladby',
     'media_summary.duration' => 'Celková stopáž',
     'presentation.start' => 'Prezentace',
+    'presentation.confirm_start' => 'Spustit prezentaci',
+    'presentation.activation_help' => 'Prohlížeč potřebuje vaše kliknutí pro spuštění podle nastavení odkazu.',
     'presentation.share' => 'Sdílet prezentaci',
     'presentation.copied' => 'Odkaz na prezentaci byl zkopírován.',
     'presentation.copy_manually' => 'Zkopírujte tento odkaz na prezentaci ručně.',

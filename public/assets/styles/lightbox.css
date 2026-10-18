@@ -2631,3 +2631,50 @@ body:not([data-media-panels-bound]) .gallery-media-close { display: none; }
     [data-lightbox-action], [data-lightbox-dev-dashboard], .lightbox-dev-dashboard
 ) { display: none !important; }
 .lightbox.is-presentation-exclusive .lightbox-stage-link { pointer-events: none; }
+
+/* The launch confirmation stays available before exclusive playback begins. */
+.lightbox.is-presentation-launch { background: #000; }
+.lightbox.is-presentation-launch :is(
+    .lightbox-hud, .lightbox-controls, .lightbox-meta, .lightbox-picture-strip,
+    [data-lightbox-action], [data-lightbox-dev-dashboard], .lightbox-dev-dashboard
+) { visibility: hidden !important; pointer-events: none; }
+.presentation-consent[hidden] { display: none; }
+.presentation-consent {
+    position: absolute;
+    z-index: 50;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(22rem, calc(100% - 2rem));
+    box-sizing: border-box;
+    padding: 1.15rem;
+    border: 1px solid rgb(255 255 255 / 20%);
+    border-radius: 1rem;
+    color: #fff;
+    background: rgb(255 255 255 / 9%);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 1rem 3rem rgb(0 0 0 / 35%);
+    text-align: center;
+}
+.presentation-consent h2 { margin: 0; font-size: 1rem; }
+.presentation-consent p {
+    margin: 0.5rem 0 1rem;
+    color: rgb(255 255 255 / 75%);
+    font-size: 0.85rem;
+}
+.presentation-consent-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+}
+.presentation-consent-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+}
+.presentation-consent-actions svg { width: 1rem; height: 1rem; fill: currentColor; }
+.presentation-consent-actions button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+}

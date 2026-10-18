@@ -1231,6 +1231,8 @@ return [
     'media_summary.tracks' => 'Titel',
     'media_summary.duration' => 'Gesamtdauer',
     'presentation.start' => 'Präsentation',
+    'presentation.confirm_start' => 'Präsentation starten',
+    'presentation.activation_help' => 'Ihr Browser benötigt einen Klick, um mit den Linkeinstellungen zu starten.',
     'presentation.share' => 'Präsentation teilen',
     'presentation.copied' => 'Präsentationslink kopiert.',
     'presentation.copy_manually' => 'Kopieren Sie diesen Präsentationslink manuell.',

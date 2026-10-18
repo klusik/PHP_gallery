@@ -1288,6 +1288,8 @@ return [
     'media_summary.tracks' => 'Tracks',
     'media_summary.duration' => 'Total duration',
     'presentation.start' => 'Presentation',
+    'presentation.confirm_start' => 'Start presentation',
+    'presentation.activation_help' => 'Your browser needs a click to start with the link settings.',
     'presentation.share' => 'Share presentation',
     'presentation.copied' => 'Presentation link copied.',
     'presentation.copy_manually' => 'Copy this presentation link manually.',

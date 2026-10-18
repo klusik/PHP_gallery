@@ -178,6 +178,20 @@ function view_render_lightbox(array $viewModel): void
     $helpShortcuts = $slideshowAllowed ? t('lightbox.help_shortcuts', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, S slideshow, X close') : t('lightbox.help_shortcuts_no_slideshow', '←/→ photos, Shift+←/→ ±10 photos, +/− zoom, 0 reset, F fullscreen, M map, X close');
 
     echo '<div class="lightbox" data-lightbox data-lightbox-browsing-mode="' . e($lightboxBrowsingMode) . '" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-slideshow-enabled="' . ($slideshowAllowed ? '1' : '0') . '"' . $galleryMapAttributes . $presentationAttributes . ' data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" data-lightbox-zoom-status-template="' . e(t('lightbox.zoom_status', 'Zoom {percent}')) . '" hidden>';
+    // Activation needs an explicit action even when the link hides its HUD.
+    echo '<section class="presentation-consent" data-presentation-consent'
+        . ' role="group" aria-labelledby="presentation-consent-title" hidden>'
+        . '<h2 id="presentation-consent-title">'
+        . e(t('presentation.confirm_start', 'Start presentation')) . '</h2>'
+        . '<p>' . e(t('presentation.activation_help',
+            'Your browser needs a click to start with the link settings.')) . '</p>'
+        . '<div class="presentation-consent-actions"><button type="button"'
+        . ' data-presentation-confirm>' . view_music_control_icon('play')
+        . '<span>' . e(t('presentation.confirm_start', 'Start presentation'))
+        . '</span></button><button type="button" data-presentation-cancel'
+        . ' aria-label="' . e(t('lightbox.close', 'Close')) . '"'
+        . ' title="' . e(t('lightbox.close', 'Close')) . '">×</button>'
+        . '</div></section>';
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';
     echo '<span class="lightbox-mobile-counter lightbox-hud" data-lightbox-counter aria-hidden="true"></span>';
     echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="' . e(t('lightbox.previous_image', 'Previous image')) . '">&lt;</button>';

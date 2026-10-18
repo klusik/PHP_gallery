@@ -113,13 +113,17 @@ retain preferences. Live usage statistics for the new settings are unknown.
 
 New links snapshot all supported playback options. Legacy `presentation=1` links
 remain supported and `autoplay=1` is an alias. Invalid values cannot introduce
-arbitrary timers or change gallery/media grants. Browser autoplay refusal retains
-a glass player that follows ordinary HUD hiding and a trusted-photo-click retry
-of the requested soundtrack. Photo/Play activation can also request native fullscreen.
+arbitrary timers or change gallery/media grants. Requested automatic fullscreen
+or audible playback refusal now holds the decoded first photo behind black and
+offers one Start presentation confirmation, including exclusive links. Its trusted
+click requests shared audio before fullscreen without an asynchronous boundary.
+After confirmation the existing viewport fallback protects unsupported native
+fullscreen; media failures keep player feedback without a repeated prompt.
+The glass player still follows ordinary HUD hiding; Photo/Play can retry later.
 Stop/Close/explicit silence cancel it. This permanent shared-player fallback
 protects browsers requiring activation; retire only with supported-browser and
 deployment evidence that audible autoplay is assured. Required Chromium covers
-allowed/refused/muted starts and idle-HUD hiding/restoration with controlled audio; real
+allowed/refused/muted starts and idle-HUD hiding with controlled audio; real
 codecs, Safari and physical devices remain manual acceptance.
 Autoplay defaults ON until explicitly changed. Share applets snapshot it alongside
 music, speeds and link-only fullscreen/exclusive choices. Exclusive mode defaults

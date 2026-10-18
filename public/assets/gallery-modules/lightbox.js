@@ -50,7 +50,7 @@
 
 import {
     getGalleryMusicPlayer, stopGalleryMusicViewer,
-} from './gallery-music-player.js?v=20261017-presentation-sharing-v3';
+} from './gallery-music-player.js?v=20261018-presentation-confirm-v1';
 
 /**
  * Return a translated browser string with simple placeholder replacement.
@@ -92,7 +92,7 @@ import {
 
 import {
     galleryPresentationOptions, GALLERY_PRESENTATION_SPEEDS,
-} from './gallery-presentation.js?v=20261017-presentation-sharing-v3';
+} from './gallery-presentation.js?v=20261018-presentation-confirm-v1';
 
 const galleryLightboxState = {
     controller: null,
@@ -782,7 +782,8 @@ export function setupGalleryLightbox() {
     // selected a different gallery since this viewer was initialized.
     const musicPlayer = {
         start: (force = false, silent = false) =>
-            getGalleryMusicPlayer()?.start(force, silent),
+            getGalleryMusicPlayer()?.start(force, silent)
+                || Promise.resolve('silent'),
         stop: () => stopGalleryMusicViewer(),
         closeViewer: () => stopGalleryMusicViewer(true),
         resumeRequested: () => getGalleryMusicPlayer()?.resumeRequested(),
@@ -898,6 +899,8 @@ export function setupGalleryLightbox() {
      */
     const LIGHTBOX_PRESENTATION_INTRO_MS = 1000;
     /** @type {{readyAt:number,music:boolean,autoplay:boolean,
+     *     fullscreen:Promise<boolean>,
+     *     phase:'preparing'|'checking'|'consent'|'revealing',
      *     animation:Animation|null}|null} One cancellable launch, never a slide. */
     let lightboxPresentationIntro = null;
     // lightboxSlideshowScheduleToken invalidates an automatic cycle when slideshow stops or navigation changes.
@@ -4840,38 +4843,104 @@ export function setupGalleryLightbox() {
     function cancelLightboxPresentationIntro() {
         lightboxPresentationIntro?.animation?.cancel();
         lightboxPresentationIntro = null;
-        overlay.classList.remove('is-presentation-intro');
+        overlay.classList.remove('is-presentation-intro', 'is-presentation-launch');
+        const consent = overlay.querySelector('[data-presentation-consent]');
+        if (consent) consent.hidden = true;
     }
 
     /**
-     * Reveal photo one after the minimum hold and the current decode settle.
-     * @returns {void} Reuse the slideshow timer, then its normal advance cycle.
+     * Reveal the decoded first photo once requested playback has settled.
+     * @returns {void} Fade only this launch, then resume the existing scheduler.
+     */
+    function revealLightboxPresentation() {
+        const intro = lightboxPresentationIntro;
+        if (!intro || overlay.hidden) return;
+        intro.phase = 'revealing';
+        const consent = overlay.querySelector('[data-presentation-consent]');
+        if (consent) consent.hidden = true;
+        overlay.classList.remove('is-presentation-intro');
+        // Motion belongs to this launch, never to gallery order. Reduced motion
+        // and browsers without Web Animations permanently reveal immediately.
+        const animation = stageLink?.animate
+            && !matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? stageLink.animate([{opacity: 0}, {opacity: 1}], {
+                duration: lightboxSlideshowTransitionDuration,
+                easing: 'ease-in-out',
+            }) : null;
+        intro.animation = animation;
+        void (animation?.finished || Promise.resolve()).then(() => {
+            if (intro !== lightboxPresentationIntro) return;
+            lightboxPresentationIntro = null;
+            overlay.classList.remove('is-presentation-launch');
+            scheduleLightboxSlideshowNext();
+        }, () => {});
+    }
+
+    /**
+     * Keep black visible while the visitor grants browser activation.
+     * @returns {void} Focus the launch confirmation even for exclusive links.
+     */
+    function showLightboxPresentationConsent() {
+        const intro = lightboxPresentationIntro;
+        const consent = overlay.querySelector('[data-presentation-consent]');
+        if (!intro || !consent || overlay.hidden) return;
+        intro.phase = 'consent';
+        consent.hidden = false;
+        const confirm = consent.querySelector('[data-presentation-confirm]');
+        if (confirm) {
+            confirm.disabled = false;
+            confirm.focus({preventScroll: true});
+        }
+    }
+
+    /**
+     * Request sound and fullscreen in the same trusted confirmation task.
+     * @returns {void} Settle both requests before revealing, unless cancelled.
+     */
+    function confirmLightboxPresentation() {
+        const intro = lightboxPresentationIntro;
+        if (!intro || intro.phase !== 'consent' || overlay.hidden) return;
+        intro.phase = 'checking';
+        overlay.querySelector('[data-presentation-confirm]').disabled = true;
+        // Call audio first: requesting fullscreen can consume user activation.
+        // Neither native request may sit behind await/import/timer work.
+        const playback = intro.autoplay
+            ? musicPlayer.start(intro.music, !intro.music)
+            : Promise.resolve('silent');
+        const fullscreen = presentationOptions.fullscreen
+            ? enterLightboxFullscreen() : Promise.resolve(true);
+        void Promise.all([playback, fullscreen]).then(() => {
+            if (intro !== lightboxPresentationIntro || overlay.hidden) return;
+            // After explicit consent, unsupported native fullscreen retains the
+            // existing viewport shell. Media failures retain player feedback;
+            // never trap the visitor in a repeated consent request.
+            revealLightboxPresentation();
+        });
+    }
+
+    /**
+     * Check browser activation after the minimum black hold and first decode.
+     * @returns {void} Reuse the slideshow timer; hold photo one on refusal.
      */
     function scheduleLightboxPresentationIntro() {
         const intro = lightboxPresentationIntro;
-        if (!intro || intro.animation || overlay.hidden
+        if (!intro || intro.phase !== 'preparing' || overlay.hidden
             || lightboxNavigation.phase !== 'displayed') return;
-        lightboxSlideshowTimer = window.setTimeout(() => {
+        lightboxSlideshowTimer = window.setTimeout(async () => {
             lightboxSlideshowTimer = null;
             if (intro !== lightboxPresentationIntro || overlay.hidden) return;
-            overlay.classList.remove('is-presentation-intro');
-            if (intro.autoplay) musicPlayer.start(intro.music, !intro.music);
-            // Native motion belongs to this one launch, not to gallery order.
-            // Reduced motion and older browsers reveal immediately, permanently
-            // supported by this viewer without another scheduler or media path.
-            const animation = stageLink?.animate
-                && !matchMedia('(prefers-reduced-motion: reduce)').matches
-                ? stageLink.animate([{opacity: 0}, {opacity: 1}], {
-                    duration: lightboxSlideshowTransitionDuration,
-                    easing: 'ease-in-out',
-                }) : null;
-            intro.animation = animation;
-            const finished = animation?.finished || Promise.resolve();
-            void finished.then(() => {
-                if (intro !== lightboxPresentationIntro) return;
-                lightboxPresentationIntro = null;
-                scheduleLightboxSlideshowNext();
-            }, () => {});
+            intro.phase = 'checking';
+            const fullscreen = await intro.fullscreen;
+            if (intro !== lightboxPresentationIntro || overlay.hidden) return;
+            if (!fullscreen) {
+                showLightboxPresentationConsent();
+                return;
+            }
+            const playback = intro.autoplay
+                ? await musicPlayer.start(intro.music, !intro.music) : 'silent';
+            if (intro !== lightboxPresentationIntro || overlay.hidden) return;
+            if (playback === 'blocked') showLightboxPresentationConsent();
+            else revealLightboxPresentation();
         }, Math.max(0, intro.readyAt - performance.now()));
     }
 
@@ -5221,14 +5290,18 @@ export function setupGalleryLightbox() {
             readyAt: performance.now() + LIGHTBOX_PRESENTATION_INTRO_MS,
             music: presentationOptions.music,
             autoplay: presentationOptions.autoplay,
+            fullscreen: Promise.resolve(true),
+            phase: 'preparing',
             animation: null,
         };
-        overlay.classList.add('is-presentation-intro');
+        overlay.classList.add('is-presentation-intro', 'is-presentation-launch');
         overlay.classList.toggle('is-presentation-exclusive', presentationOptions.exclusive);
         lightboxSlideshowActive = presentationOptions.autoplay;
         syncLightboxSlideshowControls();
         openAt(0, {telemetryTrigger: 'slideshow'});
-        if (presentationOptions.fullscreen) void enterLightboxFullscreen();
+        if (presentationOptions.fullscreen) {
+            lightboxPresentationIntro.fullscreen = enterLightboxFullscreen();
+        }
         scheduleLightboxSlideshowNext();
     }
     galleryLightboxState.present = presentGalleryFromStart;
@@ -5299,6 +5372,18 @@ export function setupGalleryLightbox() {
     });
 
     overlay.addEventListener('click', (event) => {
+        const launchTarget = event.target instanceof Element ? event.target : null;
+        if (launchTarget?.closest('[data-presentation-confirm]')) {
+            event.preventDefault();
+            confirmLightboxPresentation();
+            return;
+        }
+        if (launchTarget?.closest('[data-presentation-cancel]')) {
+            event.preventDefault();
+            close();
+            return;
+        }
+        if (lightboxPresentationIntro) return;
         if (overlay.classList.contains('is-presentation-exclusive')) return;
         // target stores state or configuration for the gallery front-end flow.
         const target = event.target instanceof Element ? event.target : null;
@@ -5474,6 +5559,23 @@ export function setupGalleryLightbox() {
         if (overlay.hidden) {
             return;
         }
+        if (lightboxPresentationIntro) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                close();
+            } else if (event.key === 'Tab') {
+                event.preventDefault();
+                const consent = overlay.querySelector('[data-presentation-consent]');
+                const buttons = consent && !consent.hidden
+                    ? [...consent.querySelectorAll('button:not(:disabled)')] : [];
+                const current = buttons.indexOf(document.activeElement);
+                const next = event.shiftKey ? current - 1 : current + 1;
+                buttons[(next + buttons.length) % buttons.length]?.focus();
+            } else if (!event.target.closest?.('[data-presentation-consent]')) {
+                event.preventDefault();
+            }
+            return;
+        }
         if (overlay.classList.contains('is-presentation-exclusive')) {
             if (event.key === 'Escape') {
                 event.preventDefault();
@@ -5634,7 +5736,8 @@ export function setupGalleryLightbox() {
 
         /**
      * Enter native fullscreen or retain the device's complete CSS viewer shell.
-     * @returns {Promise<void>} Preserve visible photos if native entry is denied.
+     * @returns {Promise<boolean>} True for native entry or the supported mobile
+     *     shell; false when desktop needs its viewport fallback and activation.
      */
     async function enterLightboxFullscreen() {
         if (navigator.userActivation?.isActive) musicPlayer.resumeRequested();
@@ -5644,18 +5747,26 @@ export function setupGalleryLightbox() {
         if (isMobileTouchDevice) {
             enterMobileLightboxFullscreen();
             showLightboxHud();
-            return;
+            return true;
         }
         try {
             if (document.fullscreenElement) {
                 scheduleLightboxZoomReclamp();
-                return;
+                return true;
             }
             if (overlay.requestFullscreen) {
                 await overlay.requestFullscreen();
+                if (overlay.hidden) {
+                    // Close may win while native permission is still pending.
+                    // Release only this viewer's late native entry.
+                    if (document.fullscreenElement === overlay) {
+                        await document.exitFullscreen();
+                    }
+                    return false;
+                }
                 scheduleLightboxZoomReclamp();
                 debugLightbox('enter:native');
-                return;
+                return true;
             }
         } catch {
             // Shared links have no activation gesture. Native fullscreen may
@@ -5664,10 +5775,12 @@ export function setupGalleryLightbox() {
         // Permanent desktop capability fallback, owned by this viewer:
         // retain desktop stage geometry rather than mobile-only media rules.
         // Retire only with supported-browser proof that native entry is assured.
+        if (overlay.hidden) return false;
         overlay.classList.add('is-css-fullscreen');
         scheduleLightboxZoomReclamp();
         debugLightbox('enter:fallback-css');
         showLightboxHud();
+        return false;
     }
 
         /**

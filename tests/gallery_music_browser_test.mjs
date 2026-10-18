@@ -66,7 +66,7 @@ body { margin: 8px; font: 16px sans-serif; }
 import {
     createGalleryMusicPlayer, setupGalleryMusicPlayback,
     getGalleryMusicPlayer, formatMusicDuration,
-} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261017-presentation-sharing-v3';
+} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
 import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 /**
@@ -176,9 +176,11 @@ try {
     const silent = createGalleryMusicPlayer(
         overlay, {galleryId: 42, enabled: false, tracks}, silentAudio
     );
-    silent.start();
+    check(await silent.start() === 'silent',
+        'Default-off start did not report deliberate silence');
     check(silentAudio.calls.length === 0, 'Default-off gallery started music');
-    silent.start(true);
+    check(await silent.start(true) === 'playing',
+        'Explicit launch did not report settled playback');
     check(silentAudio.src === '/track-one',
         'Explicit presentation did not enable the default-off soundtrack');
     silent.stop();
@@ -198,8 +200,8 @@ try {
     silentAudio.results.push(Promise.reject(
         new DOMException('Gesture required', 'NotAllowedError')
     ));
-    silent.start(true);
-    await turn();
+    check(await silent.start(true) === 'blocked',
+        'Presentation owner could not distinguish activation refusal');
     silent.stop();
     const stoppedCalls = silentAudio.calls.length;
     silent.resumeRequested();
@@ -225,8 +227,8 @@ try {
     const broken = createGalleryMusicPlayer(
         overlay, {galleryId: 42, enabled: true, tracks}, brokenAudio
     );
-    broken.start();
-    await turn();
+    check(await broken.start() === 'failed',
+        'Exhausted playlist did not report its terminal failure');
     check(brokenAudio.calls.length === tracks.length && brokenAudio.src === '',
         'Unsupported playlist did not stop after one bounded pass');
     broken.destroy();

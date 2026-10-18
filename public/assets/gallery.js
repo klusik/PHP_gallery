@@ -71,10 +71,10 @@ import {
 import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261017-music-v3';
 import {
     setupGalleryMusicPlayback,
-} from './gallery-modules/gallery-music-player.js?v=20261017-presentation-sharing-v3';
+} from './gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
 import {
     setupGalleryMediaPanels,
-} from './gallery-modules/gallery-media-panels.js?v=20261017-presentation-sharing-v3';
+} from './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1';
 import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261016-three-state-covers-v1';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261016-three-state-covers-v1';
@@ -104,7 +104,7 @@ import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-v
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261003-images-v4';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261017-presentation-sharing-v3';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261018-presentation-confirm-v1';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -124,7 +124,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261017-presentation-sharing-v3';
+} from './gallery-modules/admin-operations.js?v=20261018-presentation-confirm-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

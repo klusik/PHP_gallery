@@ -54,13 +54,14 @@ slideshow behavior. Hosted central integration owns execution.
 The same Chromium fixture opens a fresh presentation iframe through the public
 entrypoint with production desktop/mobile CSS and real decoded synthetic images.
 It rejects native fullscreen, checks nonzero photo-stage geometry and photo-one
-startup, waits for scheduled photo two, retries controlled autoplay refusal and
+startup, waits for scheduled photo two, confirms controlled activation refusal and
 asserts close/audio cleanup. This covers desktop and narrow viewport dimensions.
 The real anonymous HTTP gallery workflow accepts `presentation=1`; guard probes
 retain unknown-parameter and non-gallery-route rejection.
 The music browser fixture runs denied, allowed, muted, paused and exclusive URL launches,
-asserts that link presets override saved defaults, and verifies blocked-audio controls
-hide with the HUD and return on movement. It also checks that explicit silence stops existing page
+asserts that link presets override saved defaults, and verifies that blocked
+launches hold black on photo one until the focused confirmation, even exclusive.
+Settled music controls hide with the HUD. It also checks that explicit silence stops existing page
 music and that Stop cancels pending activation. The production slideshow closure
 covers independent link-selected timing presets and bounded invalid-value fallback.
 The database workflow persists versioned preferences, checks stale/anonymous
@@ -71,10 +72,13 @@ preview/copy after changing values, window resizing, and real sound activation.
 The configurable share disclosure must open before copy, preserve the locale,
 default autoplay ON/exclusive OFF, serialize every control, and retain selectable
 clipboard fallback. The production closure checks decode-gated black hold,
-audio timing, scheduler handoff and cancellation. Browser coverage checks initial
+audio timing, synchronous audio-before-fullscreen confirmation, double-click
+suppression, scheduler handoff and late-result cancellation. Browser coverage checks initial
 silence, fullscreen geometry, paused launch, hidden exclusive controls, Escape
 cleanup and no repeated black hold on loop. Native browser-chrome fullscreen and
-real audible autoplay permissions remain manual device checks.
+real audible autoplay permissions remain manual device checks. For a fresh direct
+URL, check that one trusted confirmation starts sound and requests native fullscreen;
+cancel with Esc/close, and repeat with autoplay OFF, music OFF and exclusive ON.
 
 Manual acceptance for physical galleries: compare authorized PDF count/bytes/pages
 and music count/duration against the opened lists, including unknown metadata;

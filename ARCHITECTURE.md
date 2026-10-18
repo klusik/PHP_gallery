@@ -51,6 +51,12 @@ The single slideshow timer also gates a launch-only one-second black hold on
 decoded photo one, then hands off after its reveal. It never adds a synthetic
 gallery item. Exclusive links hide controls by default only when explicitly
 requested and retain Escape exit. Native fullscreen/sound remain browser-owned.
+When either requested capability refuses automatic activation, the same launch
+holds black on photo one and shows a compact confirmation outside the idle HUD.
+Its click calls shared audio first and fullscreen second, before any await.
+Exclusive links allow this initial confirmation, then hide controls normally.
+Only settled launch/reveal work may start the existing advance scheduler;
+close/stop invalidate pending results. No additional viewer or audio is created.
 
 Global PDF and music availability uses independent default-ON capabilities
 `gallery_pdf_documents` and `gallery_music` in the canonical feature registry.

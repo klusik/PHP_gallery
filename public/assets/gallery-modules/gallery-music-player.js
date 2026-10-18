@@ -14,6 +14,12 @@ let currentPlayer = null;
 let currentSignature = '';
 
 /**
+ * @typedef {'playing'|'silent'|'blocked'|'failed'|'cancelled'} MusicPlaybackResult
+ * Settled native playback, deliberate silence, activation refusal, exhausted
+ * originals or a superseded request. No result grants browser permissions.
+ */
+
+/**
  * Build one exclusive player for a trusted gallery playlist.
  * @param {Document|HTMLElement} root Document or isolated fixture control
  *     owner.
@@ -22,7 +28,8 @@ let currentSignature = '';
  *     in saved order.
  * @param {HTMLAudioElement} audio Native audio instance, injectable for
  *     lifecycle fixtures.
- * @returns {{refresh:function():void,start:function(boolean=, boolean=):void,
+ * @returns {{refresh:function():void,
+ *     start:function(boolean=, boolean=):Promise<MusicPlaybackResult>,
  *     stop:function():void,
  *     closeViewer:function():void, destroy:function():void,
  *     resumeRequested:function():void,
@@ -127,11 +134,12 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
      *     gesture retry.
      * @param {Error|DOMException|null} error Native rejection or media error.
      * @param {number} token Source generation associated with the failure.
-     * @returns {void} Continue within the bounded playlist or release
-     *     failed audio.
+     * @returns {MusicPlaybackResult|Promise<MusicPlaybackResult>} Report refusal,
+     *     exhaustion or cancellation, or adopt the next original's result.
      */
     function failure(error, token) {
-        if (token !== generation || handledFailure === token || disposed || !playing) return;
+        if (token !== generation || handledFailure === token
+            || disposed || !playing) return 'cancelled';
         handledFailure = token;
         const failureMessage = root.querySelector(
             '[data-music-playback-error]'
@@ -142,27 +150,27 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
             message = root.querySelector('[data-music-activation-required]')
                 ?.dataset.musicActivationRequired || failureMessage;
             sync();
-            return;
+            return 'blocked';
         }
         failed.add(index);
         if (failed.size >= tracks.length) {
             release();
             message = failureMessage;
             sync();
-            return;
+            return 'failed';
         }
         do { index = (index + 1) % tracks.length; } while (failed.has(index));
-        play();
+        return play();
     }
 
     /**
      * Start the selected original synchronously within the triggering
      *     user task.
-     * @returns {void} Reuse the same audio element and contain native
-     *     rejections.
+     * @returns {Promise<MusicPlaybackResult>} Settle playback, activation refusal,
+     *     exhaustion or cancellation without leaking native rejections.
      */
     function play() {
-        if (disposed || tracks.length === 0) return;
+        if (disposed || tracks.length === 0) return Promise.resolve('cancelled');
         awaitingGesture = false;
         audio.pause();
         const token = ++generation;
@@ -170,10 +178,13 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
         playing = true;
         sync();
         try {
-            Promise.resolve(audio.play()).then(() => {
-                if (token === generation) { message = ''; sync(); }
+            return Promise.resolve(audio.play()).then(() => {
+                if (token !== generation || disposed) return 'cancelled';
+                message = '';
+                sync();
+                return 'playing';
             }).catch(error => failure(error, token));
-        } catch (error) { failure(error, token); }
+        } catch (error) { return Promise.resolve(failure(error, token)); }
     }
 
     audio.addEventListener('ended', () => {
@@ -198,7 +209,8 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
          * @param {boolean} force Whether this launch explicitly requests music.
          * @param {boolean} silent Whether an explicit presentation mutes even
          *     default-on or already playing page music while retaining its owner.
-         * @returns {void} Start the first track without persisting preferences.
+         * @returns {Promise<MusicPlaybackResult>} Report native playback, silence,
+         *     activation refusal, exhaustion or cancellation to the launch owner.
          */
         start(force = false, silent = false) {
             slideshow = true;
@@ -206,14 +218,15 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
                 owner = 'slideshow';
                 release();
                 sync();
-                return;
+                return Promise.resolve('silent');
             }
-            if (disposed || (!force && playlist.enabled !== true)) return;
+            if (disposed) return Promise.resolve('cancelled');
+            if (!force && playlist.enabled !== true) return Promise.resolve('silent');
             owner = 'slideshow';
             index = 0;
             failed.clear();
             message = '';
-            play();
+            return play();
         },
         /**
          * Retry only a requested slideshow soundtrack after visitor activation.

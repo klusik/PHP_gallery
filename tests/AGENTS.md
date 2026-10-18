@@ -49,7 +49,9 @@ require a browser/database only when the behavior needs one.
   ordered-list or row-field shapes.
 - For each async phase, identify the in-flight operation, terminal success/error
   and next permitted action. Await failed reads before changing mocked connectivity;
-  await the released write's expected revision before owner teardown. Serve the
+  await returned async timer callbacks before asserting their terminal phase,
+  including across VM realms, rather than guessing a fixed microtask count.
+  Await the released write's expected revision before owner teardown. Serve the
   coordinator's visible URL with the real method/envelope and owner generation.
   Capture layout immediately before each operation; preserve exact revision, node
   and scroll assertions after completion, accounting for prior validation reflow.

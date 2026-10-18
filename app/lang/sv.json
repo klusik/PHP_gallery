@@ -7601,6 +7601,8 @@
     "media_summary.tracks": "Spår",
     "media_summary.duration": "Total speltid",
     "presentation.start": "Presentation",
+    "presentation.confirm_start": "Starta presentationen",
+    "presentation.activation_help": "Din webbläsare behöver ett klick för att starta med länkens inställningar.",
     "presentation.share": "Dela presentation",
     "presentation.copied": "Presentationslänken har kopierats.",
     "presentation.copy_manually": "Kopiera presentationslänken manuellt.",

@@ -7,7 +7,7 @@ Module Type: Browser Test Fixture
 Purpose: Verify direct presentation links with native fullscreen refusal.
 Responsibilities:
   - Use production entrypoint, viewer geometry and slideshow scheduling.
-  - Decode real synthetic images and retain explicit audio retry after refusal.
+  - Decode real synthetic images and confirm blocked launches before revealing.
 Author: Rudolf Klusal
 License: MIT License (see LICENSE file in repository)
 -->
@@ -34,6 +34,13 @@ License: MIT License (see LICENSE file in repository)
 <div class="lightbox" data-lightbox data-lightbox-slideshow-enabled="1"
  data-presentation-music="0" data-presentation-interval="slow"
  data-presentation-transition="slow" hidden>
+ <section class="presentation-consent" data-presentation-consent hidden>
+  <h2>Start presentation</h2>
+  <div class="presentation-consent-actions">
+   <button data-presentation-confirm>Start presentation</button>
+   <button data-presentation-cancel>Close</button>
+  </div>
+ </section>
  <div class="lightbox-slideshow-speeds lightbox-hud" data-lightbox-slideshow-speeds>
   <label>Interval<input type="range" min="0" max="2" value="1"
    data-lightbox-slideshow-speed="interval">
@@ -106,6 +113,9 @@ class PresentationAudio extends parent.Audio {
 }
 window.Audio = PresentationAudio;
 overlay.requestFullscreen = async () => {
+    // These two cases isolate audio refusal from fullscreen refusal. No adapter
+    // claims to establish actual browser permission or native fullscreen entry.
+    if (fixtureMode === 'allowed' || fixtureMode === 'blocked') return;
     throw new DOMException('Gesture', 'NotAllowedError');
 };
 try {
@@ -121,6 +131,20 @@ try {
     await until(() => activeImage().dataset.lightboxImageId === '1'
         && activeImage().complete && activeImage().naturalWidth > 0,
         'first decoded photo');
+    const consent = overlay.querySelector('[data-presentation-consent]');
+    if (fixtureMode !== 'allowed') {
+        await until(() => !consent.hidden, 'activation confirmation');
+        check(counter.textContent === '1 / 2'
+            && overlay.classList.contains('is-presentation-intro')
+            && getComputedStyle(consent).visibility === 'visible'
+            && PresentationAudio.instances.every(item => item.paused),
+            'Refused launch must hold photo one black and silent, even exclusive');
+        const confirm = consent.querySelector('[data-presentation-confirm]');
+        check(document.activeElement === confirm, 'Confirmation was not focused');
+        // This controlled audio/fullscreen adapter tests production routing.
+        // Actual trusted activation is a separate local browser acceptance.
+        confirm.click();
+    }
     await until(() => !overlay.classList.contains('is-presentation-intro'),
         'decoded first-photo reveal');
     await Promise.all(overlay.querySelector('[data-lightbox-stage]')
@@ -131,6 +155,7 @@ try {
     const stage = overlay.querySelector('[data-lightbox-stage]');
     check(overlay.classList.contains('is-fullscreen')
         && overlay.classList.contains('is-css-fullscreen')
+            === !['allowed', 'blocked'].includes(fixtureMode)
         && !overlay.classList.contains('is-mobile-fullscreen')
         && !document.fullscreenElement,
         'Native refusal did not retain the desktop CSS shell');
@@ -144,19 +169,10 @@ try {
     )).every(input => input.value === '2'),
         'Link did not override the saved slow speeds');
     const music = overlay.querySelector('[data-lightbox-music]');
-    if (fixtureMode === 'blocked') {
-        await until(() => status.textContent === 'Press Play to retry',
-            'autoplay refusal');
-        overlay.classList.remove('is-ui-visible');
-        check(music.classList.contains('is-awaiting-gesture')
-            && getComputedStyle(music).visibility === 'hidden',
-            'Blocked audio player did not hide with the idle HUD');
-        overlay.dispatchEvent(new MouseEvent('mousemove', {bubbles: true}));
-        check(getComputedStyle(music).visibility === 'visible',
-            'HUD activity did not restore the requested audio controls');
-        overlay.querySelector('[data-music-action="play"]').click();
-        await until(() => status.textContent === '', 'explicit Play retry');
-    }
+    await until(() => status.textContent === '', 'settled launch feedback');
+    overlay.classList.remove('is-ui-visible');
+    check(getComputedStyle(music).visibility === 'hidden',
+        'Soundtrack controls did not hide with the idle HUD');
     const ownedAudio = PresentationAudio.instances.filter(
         item => item instanceof PresentationAudio
     );
