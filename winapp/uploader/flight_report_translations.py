@@ -20,6 +20,8 @@ from typing import Dict
 
 _TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "en": {
+        "flight_settings": "Flight settings",
+        "report_languages": "Report languages",
         "detail": "Details",
         "confidence_high": "High",
         "confidence_medium": "Medium",
@@ -185,6 +187,8 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "phase_event": "Phase",
     },
     "cs": {
+        "flight_settings": "Nastavení letu",
+        "report_languages": "Jazyky reportů",
         "detail": "Podrobnosti",
         "confidence_high": "Vysoká",
         "confidence_medium": "Střední",
@@ -350,6 +354,8 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "phase_event": "Fáze",
     },
     "de": {
+        "flight_settings": "Flugeinstellungen",
+        "report_languages": "Berichtssprachen",
         "detail": "Details",
         "confidence_high": "Hoch",
         "confidence_medium": "Mittel",
@@ -515,6 +521,8 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "phase_event": "Phase",
     },
     "sv": {
+        "flight_settings": "Flyginställningar",
+        "report_languages": "Rapportspråk",
         "detail": "Detaljer",
         "confidence_high": "Hög",
         "confidence_medium": "Medel",

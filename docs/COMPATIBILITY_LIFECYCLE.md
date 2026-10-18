@@ -1,5 +1,27 @@
 # Compatibility lifecycle and retirement register
 
+## Windows uploader dark interface and recording switch (0.5.1)
+
+Owners: `winapp/uploader/ui_theme.py`, `flight_ui.py` and the existing
+`FlightRecorder` pause/resume lifecycle. The watcher automatically arms one
+shared photo/flight session. An opted-out recorder waits without opening
+SimConnect; enabling it later admits acquisition in that same session.
+Pauses preserve captured data and mark the resumed track discontinuity.
+The independent report policy still decides whether captured data produces PDFs.
+Stop, Revoke, tray shutdown and update drain retain their existing owners.
+Saved paths, connection and feature preferences retain their existing per-user
+locations and schemas; the redesign requires no re-entry or configuration reset.
+
+The shared theme permanently composites glass panels into opaque RGB pixels
+with a matching uniform exterior matte. This avoids Windows Tk black/rectangular
+corner artifacts without changing application opacity. Optional-Pillow source
+mode retains native controls so dependency repair remains usable; packaged
+installers include Pillow. Retire this fallback only with evidence that all
+supported launch/repair entrypoints require Pillow. Live source-mode usage is
+unknown. Hosted adapter tests cover automatic admission, switch gating,
+preference persistence, finalization exclusion and scrollbar overflow. Actual
+simulator/aircraft/build and installed-upgrade acceptance remain separate.
+
 ## Media-renamer long original filenames
 
 Owner: `app/services/media_renamer.php`. Same-directory staging permanently uses

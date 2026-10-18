@@ -2,6 +2,18 @@
 
 ## Flight recording and report delivery
 
+The WinApp adapter regressions also cover watcher-owned automatic session
+admission, an initially dormant recorder, live recording pause/resume without
+stopping photo uploads, rejected switch changes during finalization, and invalid
+report-language rollback. Configuration fixtures save through one store and
+reload through a new store to preserve existing paths and local choices.
+Scrollable-page fixtures cover showing a scrollbar for overflow and reclaiming
+its width when the whole page fits. During Windows visual acceptance, inspect
+borderless contextual icons and readable tooltips, matching rounded-panel
+corners, the flight settings sheet, compact and resized windows, keyboard focus,
+and the hidden/visible scrollbar transition. These UI observations do not prove
+live simulator sampling or an installed upgrade.
+
 The PHP flight-report service regression exercises gallery-token confinement,
 separate report identity, checksum idempotency/conflicts, PDF MIME/size rejection
 and same-gallery status reconciliation. Missing or corrupt physical PDFs must

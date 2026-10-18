@@ -898,6 +898,24 @@ Den installerade uppladdaren kontrollerar sin egen stabila GitHub-installationsv
 
 \subsection{Flygregistrering och rapporter}
 
+Uppladdaren använder mörka glaspaneler, symbolnavigering och skjutreglage.
+Pekaren eller tangentbordsfokus visar symbolens beskrivning. Autopilottexten
+står vid PHP Gallery i sidhuvudet. Kugghjul sitter direkt vid galleri,
+bevakningsmapp eller flygregistrering. Flygets kugghjul öppnar lokala
+inställningar för automatiska rapporter, rapport- och gränssnittsspråk,
+förlopp och rapportmapp. Bevakaren aktiverar registrering automatiskt utan
+en separat startåtgärd. Record flight pausar eller återupptar insamling i
+samma session och markerar luckan i spåret. Avstängd registrering öppnar
+ingen SimConnect-anslutning. Bilduppladdning fortsätter oberoende.
+Att stänga inställningarna startar ingen åtgärd. Ogenomskinliga RGB-bilder
+ger säker Windows Tk-visning; utan Pillow finns fungerande inbyggda
+kontroller kvar i källäget för att reparera beroenden.
+
+Mappsökväg och mappval finns tillsammans under Watch folder. Sparade
+sökvägar, galleri-URL och funktionsval återställs efter omstart. Fyra synliga
+val väljer gränssnittsspråk. Rullningslister visas bara när innehållet är
+större än vyn; hjälpfönster och verktygstips använder samma mörka färger.
+
 Windows-uppladdaren registrerar flygplanstelemetri i MSFS 2020 och 2024 genom
 en gemensam skrivskyddad provider. Registrering och rapportskapande är aktiverade
 som standard; registreringen kan stängas av separat och de sparade språkvalen
@@ -1211,10 +1229,10 @@ Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanlig
 
 Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.5.0. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.5.1. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.5.0/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.5.1/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.

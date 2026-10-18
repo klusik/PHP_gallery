@@ -13,7 +13,6 @@
 import queue
 import threading
 import time
-import uuid
 from pathlib import Path
 from typing import Callable, Protocol
 import tkinter as tk
@@ -33,6 +32,7 @@ from uploader.flight_report_translations import tr
 from uploader.flight_workflow import FinalizationWorker
 from uploader.models import ImportJob, JsonValue
 from uploader.state_store import JobStateStore
+from uploader.ui_theme import GlassCard, icon_button
 
 # Update time labels without polling at frame/render frequency.
 # Type: int; Units: milliseconds; Scope: the Tk progress adapter.
@@ -158,6 +158,7 @@ class FlightUI:
         self.recorder: FlightRecorder | None = None
         self.plan: SessionPlan | None = None
         self.dialog: tk.Toplevel | None = None
+        self.settings_dialog: tk.Toplevel | None = None
         self.bar: ttk.Progressbar | None = None
         self.activity_bar: ttk.Progressbar | None = None
         self.task_tree: ttk.Treeview | None = None
@@ -197,49 +198,100 @@ class FlightUI:
         return tr(self.ui_language.get(), key)
 
     def controls(self, parent: tk.Misc) -> None:
-        """Add compact recording/report settings beside existing watcher actions.
+        """Place the recording switch and its contextual settings together.
 
         Args:
             parent (tk.Misc): Existing watcher card with rows through six.
 
         Returns:
-            None: Adds a compact flight section without a new application tab.
+            None: Report preferences remain inside the feature settings sheet.
         """
-        frame = ttk.Frame(parent)
-        frame.grid(row=7, column=0, sticky="ew", pady=(10, 0))
+        frame = ttk.Frame(parent, style="Card.TFrame")
+        frame.grid(row=7, column=0, sticky="ew", pady=(4, 0))
         ttk.Checkbutton(
             frame, text=self.text("record_flight"), variable=self.record_var,
             command=self.save_preferences,
         ).grid(row=0, column=0, sticky="w")
+        icon_button(
+            frame, "settings", self.open_settings, self.text("flight_settings"),
+        ).grid(row=0, column=1, padx=(6, 0))
+
+    def open_settings(self) -> None:
+        """Open one contextual sheet for automatic reports and language choices.
+
+        Returns:
+            None: Reuses the existing sheet; closing it starts no flight work.
+        """
+        if self.settings_dialog is not None and self.settings_dialog.winfo_exists():
+            self.settings_dialog.lift()
+            self.settings_dialog.focus_set()
+            return
+        dialog = tk.Toplevel(self.host.root)
+        self.settings_dialog = dialog
+        dialog.title(self.text("flight_settings"))
+        dialog.transient(self.host.root)
+        dialog.configure(background="#131B26")
+        dialog.resizable(False, False)
+        panel = GlassCard(dialog, padding=(24, 20))
+        panel.pack(fill="both", expand=True, padx=12, pady=12)
+        ttk.Label(
+            panel, text=self.text("flight_settings"), style="Section.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        icon_button(
+            panel, "close", dialog.destroy, self.text("hide"),
+        ).grid(row=0, column=1, sticky="e", padx=(24, 0))
         ttk.Checkbutton(
-            frame, text=self.text("auto_report"), variable=self.report_var,
+            panel, text=self.text("auto_report"), variable=self.report_var,
             command=self.save_preferences,
-        ).grid(row=1, column=0, sticky="w")
-        editions = ttk.Frame(frame)
-        editions.grid(row=1, column=1, sticky="w", padx=(8, 0))
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(18, 10))
+        ttk.Label(
+            panel, text=self.text("report_languages"), style="Muted.TLabel",
+        ).grid(row=2, column=0, sticky="w", pady=(6, 4))
+        editions = ttk.Frame(panel, style="Card.TFrame")
+        editions.grid(row=3, column=0, columnspan=2, sticky="w")
         for code, variable in self.language_vars.items():
             ttk.Checkbutton(
                 editions, text=code.upper(), variable=variable,
                 command=self.save_preferences,
-            ).pack(side="left")
-        ttk.Button(
-            frame, text=self.text("flight_progress"),
-            command=self.show_progress,
-        ).grid(row=0, column=1, sticky="w", padx=(8, 0))
-        language = ttk.Combobox(
-            frame, textvariable=self.ui_language,
-            values=("en", "cs", "de", "sv"), state="readonly", width=4,
-        )
-        language.grid(row=0, column=2, sticky="e", padx=(8, 0))
-        language.bind("<<ComboboxSelected>>", lambda _event: self.save_preferences())
+            ).pack(side="left", padx=(0, 8))
+        ttk.Label(
+            panel, text=self.text("ui_language"), style="Muted.TLabel",
+        ).grid(row=4, column=0, sticky="w", pady=(16, 4))
+        language = ttk.Frame(panel, style="Card.TFrame")
+        language.grid(row=5, column=0, columnspan=2, sticky="w")
+        for code in ("en", "cs", "de", "sv"):
+            ttk.Radiobutton(
+                language, text=code.upper(), value=code,
+                variable=self.ui_language, command=self.save_preferences,
+                style="Language.TRadiobutton", takefocus=True,
+            ).pack(side="left", padx=(0, 6))
+        actions = ttk.Frame(panel, style="Card.TFrame")
+        actions.grid(row=6, column=0, columnspan=2, sticky="w", pady=(20, 0))
+        icon_button(
+            actions, "≡", self.show_progress, self.text("flight_progress"),
+        ).pack(side="left")
+        icon_button(
+            actions, "↗", self.open_reports, self.text("open_reports"),
+        ).pack(side="left", padx=(6, 0))
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.update_idletasks()
+        # Center this small sheet inside its owning app rather than the desktop.
+        x = max(0, self.host.root.winfo_rootx()
+                + (self.host.root.winfo_width() - dialog.winfo_reqwidth()) // 2)
+        y = max(0, self.host.root.winfo_rooty()
+                + (self.host.root.winfo_height() - dialog.winfo_reqheight()) // 2)
+        dialog.geometry(f"+{x}+{y}")
+        dialog.focus_set()
 
     def save_preferences(self) -> bool:
-        """Persist selected editions and apply pre-finalization report opt-out.
+        """Persist feature choices and immediately gate active acquisition.
 
         Returns:
-            bool: True after saving; False when busy or validation fails.
+            bool: True after saving and pausing/resuming the recorder; False
+                after rejected changes restore the previously saved controls.
         """
         if self.busy():
+            self.restore_preferences()
             self.show_progress()
             return False
         try:
@@ -254,14 +306,35 @@ class FlightUI:
             )
             preferences.save(self.directory)
             self.preferences = preferences
-            if self.plan is not None and self.is_alive():
+            if (
+                self.plan is not None and self.recorder is not None
+                and self.recorder.is_alive()
+            ):
+                # Honor capture opt-out before any report-plan write can fail.
+                if preferences.recording:
+                    self.recorder.resume()
+                else:
+                    self.recorder.pause()
                 self.plan.reports_enabled = preferences.reports
                 self.plan.languages = preferences.languages
                 self.plan.save()
             return True
         except (OSError, ValueError) as exc:
+            self.restore_preferences()
             messagebox.showerror(self.text("flight_progress"), str(exc))
             return False
+
+    def restore_preferences(self) -> None:
+        """Restore saved switch states when a local preference change is denied.
+
+        Returns:
+            None: The controls again represent the last accepted preferences.
+        """
+        self.record_var.set(self.preferences.recording)
+        self.report_var.set(self.preferences.reports)
+        self.ui_language.set(self.preferences.ui_language)
+        for code, variable in self.language_vars.items():
+            variable.set(code in self.preferences.languages)
 
     def binding(self) -> str:
         """Fingerprint the current saved connection.
@@ -310,10 +383,12 @@ class FlightUI:
         return True
 
     def start_session(self) -> Path:
-        """Persist a task plan before the screenshot watcher may become active.
+        """Prepare automatic acquisition before the photo watcher becomes active.
 
         Returns:
-            Path: Session directory to own the durable photograph queue.
+            Path: Shared session directory for the photograph queue and recorder.
+                An opted-out recorder waits without opening SimConnect, allowing
+                the recording switch to admit acquisition later in this session.
 
         Raises:
             ValueError: Exclusive ownership or preferences cannot be saved.
@@ -322,16 +397,14 @@ class FlightUI:
             raise ValueError(self.load_error or "Flight workspace unavailable.")
         if not self.save_preferences():
             raise ValueError("Flight preferences must be saved before starting.")
-        if self.preferences.recording:
-            self.recorder = FlightRecorder(
-                self.directory, self.normalize(self.host.config.gallery_url),
-                self.host.config.simconnect_dll_path,
-                lambda level, message: self.host.events.put((level, message)),
-            )
-            directory = self.recorder.directory
-        else:
-            self.recorder = None
-            directory = self.directory / uuid.uuid4().hex
+        self.recorder = FlightRecorder(
+            self.directory, self.normalize(self.host.config.gallery_url),
+            self.host.config.simconnect_dll_path,
+            lambda level, message: self.host.events.put((level, message)),
+        )
+        if not self.preferences.recording:
+            self.recorder.pause()
+        directory = self.recorder.directory
         directory.mkdir(parents=True, exist_ok=True)
         self.plan = SessionPlan(
             directory=directory,
@@ -340,8 +413,7 @@ class FlightUI:
             reports_enabled=self.preferences.reports and self.preferences.recording,
         )
         self.plan.save()
-        if self.recorder is not None:
-            self.recorder.start()
+        self.recorder.start()
         return directory
 
     def busy(self) -> bool:

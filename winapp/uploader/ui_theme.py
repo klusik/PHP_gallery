@@ -11,30 +11,16 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from math import exp
 import tkinter as tk
 from tkinter import ttk
-from typing import TYPE_CHECKING, TypeAlias, cast
-from weakref import WeakKeyDictionary
+from typing import TYPE_CHECKING, TypeAlias
 
 if TYPE_CHECKING:
-    from PIL import Image
     from PIL import ImageTk
 
     ThemeImage: TypeAlias = tk.PhotoImage | ImageTk.PhotoImage
-    ThemeBitmap: TypeAlias = Image.Image
 else:
     ThemeImage: TypeAlias = tk.PhotoImage
-    ThemeBitmap: TypeAlias = object
-
-
-@dataclass(slots=True)
-class _BackdropState:
-    """Retain one opaque ambient canvas and its resize callback state."""
-
-    canvas: tk.Canvas
-    timer: str | None = None
-    photo: ThemeImage | None = None
 
 
 # Purpose: Set the shared delay before hover or focus help appears.
@@ -52,8 +38,8 @@ _HELP_MIN_WIDTH = 380
 # Purpose: Choose the source size for stretchable glass button assets.
 # Type: tuple[int, int]; Units: pixels; Scope: nine-slice button artwork.
 # Consumers: Pillow image generation and ttk image elements.
-# Rationale: 64 by 36 px keeps pill ends smooth without oversized controls.
-_BUTTON_IMAGE_SIZE = (64, 36)
+# Rationale: 52 by 30 px gives compact buttons a lightly rounded silhouette.
+_BUTTON_IMAGE_SIZE = (52, 30)
 
 # Purpose: Choose the source size for softly rounded frosted panel assets.
 # Type: tuple[int, int]; Units: pixels; Scope: nine-slice frame artwork.
@@ -79,23 +65,11 @@ _ICON_BORDER = 6
 # Rationale: 5 px stays inside the 6 px nine-slice rim on every side.
 _ICON_CORNER_RADIUS = 5
 
-# Purpose: Choose the source size for the ambient backdrop material.
-# Type: tuple[int, int]; Units: pixels; Scope: resize-aware ambient canvas.
-# Consumers: source gradient generation used by paint_backdrop.
-# Rationale: 320 by 200 px keeps the cached source compact before resizing.
-_BACKDROP_IMAGE_SIZE = (320, 200)
-
-# Purpose: Coalesce backdrop regeneration during a live window resize.
-# Type: int; Units: milliseconds; Scope: each painted backdrop canvas.
-# Consumers: paint_backdrop resize scheduling.
-# Rationale: 45 ms keeps resizing responsive without repeated large resamples.
-_BACKDROP_RESIZE_DELAY_MS = 45
-
-# Purpose: Preserve rounded ends while stretching pill button images.
+# Purpose: Preserve lightly rounded corners while stretching button images.
 # Type: int; Units: pixels; Scope: nine-slice button artwork.
 # Consumers: ttk button image element borders.
-# Rationale: 17 px insets keep each end circular at the 36 px button height.
-_BUTTON_BORDER = 17
+# Rationale: 8 px insets preserve corners without inflating button heights.
+_BUTTON_BORDER = 8
 
 # Purpose: Preserve rounded panel corners while stretching card images.
 # Type: int; Units: pixels; Scope: nine-slice frame artwork.
@@ -103,11 +77,11 @@ _BUTTON_BORDER = 17
 # Rationale: 12 px protects the card radius without inflating compact frames.
 _PANEL_BORDER = 12
 
-# Purpose: Keep pill ends fully rounded at the source button height.
+# Purpose: Lightly round compact buttons without a tall capsule silhouette.
 # Type: int; Units: pixels; Scope: generated button artwork.
 # Consumers: Pillow rounded rectangle drawing.
-# Rationale: 16 px is near half the 36 px button source height.
-_BUTTON_CORNER_RADIUS = 16
+# Rationale: 6 px softens the rectangle while retaining compact toolbars.
+_BUTTON_CORNER_RADIUS = 6
 
 # Purpose: Give cards a softer silhouette than standard ttk frames.
 # Type: int; Units: pixels; Scope: generated frosted panel artwork.
@@ -120,24 +94,6 @@ _PANEL_CORNER_RADIUS = 10
 # Consumers: button and panel resampling before Tk image creation.
 # Rationale: 3x provides clean rounded edges at ordinary Windows DPI.
 _ARTWORK_SCALE = 3
-
-# Purpose: Limit the peak of each ambient color bloom in the backdrop.
-# Type: float; Units: normalized color contribution; Scope: backdrop pixels.
-# Consumers: Pillow ambient background renderer.
-# Rationale: 0.34 makes ambient blue/lavender blooms visible between cards.
-_BACKDROP_GLOW_STRENGTH = 0.34
-
-# Purpose: Place broad colored blooms across the app's cooling backdrop.
-# Type: tuple[tuple[float, float, float], ...]; Units: normalized coordinates
-#     and squared-radius units; Scope: ambient 2D backdrop composition.
-# Consumers: _install_glossy_elements gradient pixel composer.
-# Rationale: The three centers spread blue, lavender and aqua light across
-#     open surfaces; broad radii avoid sharp spots behind controls.
-_BACKDROP_GLOW_LAYOUT = (
-    (0.05, 0.05, 0.40),
-    (0.98, 0.24, 0.33),
-    (0.88, 1.04, 0.34),
-)
 
 # Purpose: Bound help text and window geometry to comfortable dimensions.
 # Type: int; Units: pixels; Scope: help overlay sizing.
@@ -183,28 +139,27 @@ _PANEL_SHADOW_BLEND = 0.10
 # Rationale: 2 px yields a quiet halo after 3x source rendering.
 _PANEL_SHADOW_BLUR = 2
 
-# Purpose: Define shared colors for the uploader's light visual hierarchy.
+# Purpose: Define shared colors for the uploader's dark glass hierarchy.
 # Type: dict[str, str]; Units: color strings; Scope: uploader widget palette.
 # Consumers: ttk style registration and card defaults.
-# Rationale: darker muted and semantic tones maintain contrast on the tinted
-#     card surface while retaining their established cool, warning and success
-#     color roles.
+# Rationale: light text and cyan actions remain legible on slate panels;
+#     semantic colors distinguish success, attention and failures.
 _PALETTE = {
-    "background": "#E8F1FB",
-    "surface": "#FDFEFF",
-    "surface_alt": "#F2F7FD",
-    "card_surface": "#D0E6F9",
-    "card_surface_alt": "#C9E2F6",
-    "ink": "#18263D",
-    "muted": "#52627A",
-    "line": "#D9E3F0",
-    "primary": "#4F46E5",
-    "primary_hover": "#4338CA",
-    "primary_pressed": "#3730A3",
-    "focus": "#818CF8",
-    "success": "#126B4B",
-    "warning": "#8A4C0D",
-    "danger": "#B42335",
+    "background": "#131B26",
+    "surface": "#182330",
+    "surface_alt": "#223344",
+    "card_surface": "#253443",
+    "card_surface_alt": "#2B3D4D",
+    "ink": "#F2F6FA",
+    "muted": "#AABCCB",
+    "line": "#3D5264",
+    "primary": "#08AED0",
+    "primary_hover": "#22C3E2",
+    "primary_pressed": "#008AA8",
+    "focus": "#8BE4F2",
+    "success": "#46D68C",
+    "warning": "#F2C581",
+    "danger": "#FF91A2",
 }
 
 # Purpose: Map common actions to consistent single-line icon glyphs.
@@ -232,22 +187,11 @@ _ICON_GLYPHS = {
 # Rationale: Tk image handles must stay referenced for the widget lifetime.
 _THEME_IMAGES: dict[str, ThemeImage] = {}
 
-# Purpose: Retain the source bitmap used to repaint stretched canvas backdrops.
-# Type: ThemeBitmap | None; Units: RGB pixels; Scope: one configured UI module.
-# Consumers: paint_backdrop resizing callbacks.
-# Rationale: Keep Pillow's source pixels available without rebuilding each
-#     window-sized gradient on every resize event.
-_BACKDROP_BITMAP: ThemeBitmap | None = None
-
-# Purpose: Reuse a single painted ambient canvas per live parent frame.
-# Type: WeakKeyDictionary[tk.Misc, _BackdropState]; Units: widget bindings.
-# Scope: frames opting in through paint_backdrop.
-# Consumers: background resize, image lifetime and destroy cleanup.
-# Rationale: Widget keys are released when their frame is destroyed.
-_BACKDROP_STATES: WeakKeyDictionary[tk.Misc, _BackdropState] = (
-    WeakKeyDictionary()
-)
-
+# Purpose: Give all boolean controls the same compact sliding-switch shape.
+# Type: tuple[int, int]; Units: pixels; Scope: shared ttk switch artwork.
+# Consumers: _install_switch_elements.
+# Rationale: 38 by 22 px leaves a visible thumb and comfortable label spacing.
+_SWITCH_IMAGE_SIZE = (38, 22)
 
 def configure_theme(root: tk.Tk) -> None:
     """Apply the uploader palette and shared ttk widget styles.
@@ -266,9 +210,21 @@ def configure_theme(root: tk.Tk) -> None:
     colors = _PALETTE
     _install_glossy_elements(root, style)
     root.configure(background=colors["background"])
+    # Secondary Tk windows and native menu/popdown surfaces do not inherit ttk
+    # frame colors. Set their defaults before any settings sheets are created.
+    root.option_add("*Toplevel.background", colors["background"])
+    root.option_add("*Menu.background", colors["surface"])
+    root.option_add("*Menu.foreground", colors["ink"])
+    root.option_add("*Menu.activeBackground", colors["surface_alt"])
+    root.option_add("*Menu.activeForeground", colors["ink"])
+    root.option_add("*TCombobox*Listbox.background", colors["surface"])
+    root.option_add("*TCombobox*Listbox.foreground", colors["ink"])
     style.configure(".", background=colors["background"],
                     foreground=colors["ink"], font=("Segoe UI", 10))
-    style.configure("TFrame", background=colors["background"])
+    # Unqualified inner frames live inside cards. App/page containers select
+    # App.TFrame or Backdrop.TFrame explicitly so toolbars never cut dark strips
+    # through an otherwise continuous panel surface.
+    style.configure("TFrame", background=colors["card_surface"])
     style.configure("TLabel", background=colors["card_surface"],
                     foreground=colors["ink"])
     style.configure("App.TLabel", background=colors["background"],
@@ -333,7 +289,7 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("GlassInset.TFrame",
                     background=colors["card_surface_alt"],
                     relief="flat", borderwidth=0)
-    style.configure("TButton", padding=(12, 8), borderwidth=0,
+    style.configure("TButton", padding=(12, 6), borderwidth=0,
                     background=colors["card_surface"],
                     foreground=colors["ink"])
     style.configure("Card.TFrame", background=colors["card_surface"],
@@ -343,7 +299,7 @@ def configure_theme(root: tk.Tk) -> None:
                           ("active", colors["surface_alt"])],
               foreground=[("disabled", colors["muted"])])
     style.configure("Primary.TButton", padding=(12, 6), borderwidth=0,
-                    background=colors["primary"], foreground="#FFFFFF",
+                    background=colors["primary"], foreground="#F2F6FA",
                     font=("Segoe UI Semibold", 10))
     style.map("Primary.TButton",
               background=[("pressed", colors["primary_pressed"]),
@@ -355,7 +311,7 @@ def configure_theme(root: tk.Tk) -> None:
                     foreground=colors["ink"])
     style.configure("IconPrimary.TButton", padding=(3, 3),
                     font=("Segoe UI Symbol", 12),
-                    background=colors["primary"], foreground="#FFFFFF")
+                    background=colors["primary"], foreground="#F2F6FA")
     style.map("IconPrimary.TButton",
               foreground=[("disabled", "#F0EFFC")],
               background=[("pressed", colors["primary_pressed"]),
@@ -364,11 +320,22 @@ def configure_theme(root: tk.Tk) -> None:
               foreground=[("disabled", colors["muted"])])
     style.configure("TEntry", fieldbackground=colors["surface"],
                     foreground=colors["ink"], insertcolor=colors["ink"],
-                    bordercolor=colors["line"], padding=(9, 7))
+                    bordercolor=colors["line"], lightcolor=colors["line"],
+                    darkcolor=colors["line"], padding=(9, 7))
     style.map("TEntry", bordercolor=[("focus", colors["focus"])])
     style.configure("TCombobox", fieldbackground=colors["surface"],
                     background=colors["surface"], foreground=colors["ink"],
-                    padding=(8, 6), arrowcolor=colors["muted"])
+                    padding=(8, 6), arrowcolor=colors["muted"],
+                    bordercolor=colors["line"], lightcolor=colors["line"],
+                    darkcolor=colors["line"])
+    style.map("TCombobox",
+              fieldbackground=[("readonly", colors["surface"])],
+              foreground=[("readonly", colors["ink"])],
+              selectbackground=[("readonly", colors["surface_alt"])],
+              selectforeground=[("readonly", colors["ink"])])
+    style.configure("TMenubutton", background=colors["surface"],
+                    foreground=colors["ink"], arrowcolor=colors["muted"],
+                    padding=(8, 6), borderwidth=0, relief="flat")
     style.configure("TCheckbutton", background=colors["card_surface"],
                     foreground=colors["ink"], padding=4)
     style.configure("App.TCheckbutton",
@@ -378,6 +345,9 @@ def configure_theme(root: tk.Tk) -> None:
                     background=colors["card_surface"],
                     foreground=colors["ink"], padding=4)
     style.map("TCheckbutton", foreground=[("disabled", colors["muted"])])
+    _install_switch_elements(root, style)
+    # The icon rail owns app navigation; nested Activity tabs stay visible.
+    style.layout("App.TNotebook.Tab", [])
     style.configure("TRadiobutton", background=colors["card_surface"],
                     foreground=colors["ink"], padding=4)
     style.configure("App.TRadiobutton",
@@ -386,6 +356,26 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("Card.TRadiobutton",
                     background=colors["card_surface"],
                     foreground=colors["ink"], padding=4)
+    style.configure(
+        "Language.TRadiobutton", padding=(10, 5),
+        background=colors["card_surface"], foreground=colors["muted"],
+        font=("Segoe UI Semibold", 9),
+    )
+    style.map("Language.TRadiobutton", foreground=[
+        ("disabled", colors["muted"]),
+        ("selected", colors["ink"]),
+        ("focus", colors["focus"]),
+        ("active", colors["focus"]),
+    ])
+    segment_content = [("Radiobutton.padding", {
+        "sticky": "nswe", "children": [
+            ("Radiobutton.label", {"sticky": "nswe"}),
+        ],
+    })]
+    style.layout("Language.TRadiobutton", (
+        [("Gloss.segment", {"sticky": "nswe", "children": segment_content})]
+        if "Gloss.segment" in style.element_names() else segment_content
+    ))
     style.configure("TLabelframe", background=colors["card_surface"],
                     bordercolor=colors["line"], relief="flat")
     style.configure("TLabelframe.Label",
@@ -412,17 +402,22 @@ def configure_theme(root: tk.Tk) -> None:
                     background=colors["surface"],
                     fieldbackground=colors["surface"],
                     foreground=colors["ink"],
-                    bordercolor=colors["line"],
-                    lightcolor=colors["line"],
-                    darkcolor=colors["line"])
+                    bordercolor=colors["surface"],
+                    lightcolor=colors["surface"],
+                    darkcolor=colors["surface"])
     style.configure("Treeview.Heading", padding=(9, 7),
                     background=colors["surface_alt"],
                     foreground=colors["muted"],
-                    bordercolor=colors["line"],
-                    lightcolor=colors["line"],
-                    darkcolor=colors["line"],
+                    bordercolor=colors["surface_alt"],
+                    lightcolor=colors["surface_alt"],
+                    darkcolor=colors["surface_alt"], borderwidth=0,
+                    relief="flat",
                     font=("Segoe UI Semibold", 9))
-    style.map("Treeview", background=[("selected", "#E0E7FF")],
+    style.map("Treeview.Heading",
+              background=[("active", colors["line"])],
+              foreground=[("active", colors["ink"])],
+              relief=[("active", "flat"), ("!active", "flat")])
+    style.map("Treeview", background=[("selected", colors["surface_alt"])],
               foreground=[("selected", colors["ink"])])
     style.configure("Horizontal.TProgressbar",
                     background=colors["primary"],
@@ -438,132 +433,56 @@ def configure_theme(root: tk.Tk) -> None:
                     troughcolor=colors["background"],
                     bordercolor=colors["background"], borderwidth=0,
                     arrowsize=12, arrowcolor=colors["muted"])
+    for orientation, sticky in (("Vertical", "ns"), ("Horizontal", "ew")):
+        name = orientation + ".TScrollbar"
+        style.configure(
+            name, arrowsize=10, relief="flat", gripcount=0,
+            lightcolor=colors["line"], darkcolor=colors["line"],
+        )
+        style.map(name, background=[
+            ("active", colors["muted"]),
+            ("!active", colors["line"]),
+        ])
+        style.layout(name, [(orientation + ".Scrollbar.trough", {
+            "sticky": sticky, "children": [
+                (orientation + ".Scrollbar.thumb", {
+                    "sticky": "nswe", "expand": True,
+                }),
+            ],
+        })])
     _install_focus_styles(style)
+    # Context actions are glyphs, not miniature boxed buttons. Preserve ttk
+    # keyboard activation and focus while painting only a quiet hover surface.
+    for name in ("Icon.TButton", "App.Icon.TButton", "IconPrimary.TButton"):
+        style.layout(name, [("Button.padding", {
+            "sticky": "nswe", "children": [
+                ("Button.label", {"sticky": "nswe"}),
+            ],
+        })])
+        style.configure(name, padding=(3, 3), borderwidth=0, relief="flat")
+        style.map(name, foreground=[
+            ("disabled", colors["muted"]),
+            ("focus", colors["focus"]),
+            ("active", colors["focus"]),
+        ])
+    style.configure("App.Icon.TButton", background=colors["background"])
+    style.map("App.Icon.TButton", background=[
+        ("active", colors["surface_alt"]),
+        ("pressed", colors["surface"]),
+    ])
 
 
-def paint_backdrop(widget: tk.Misc) -> None:
-    """Paint a resize-aware ambient image behind a frame's child widgets.
-
-    The hook places one canvas behind existing children and updates an opaque
-    RGB Pillow bitmap to the frame's current size. It does not change the
-    frame's geometry manager, child layout or window opacity.
+def paint_backdrop(widget: ttk.Frame) -> None:
+    """Match the container to the rounded artwork's opaque exterior matte.
 
     Args:
-        widget (tk.Misc): Existing container whose open background should show
-            the ambient blue, cyan and lavender material.
+        widget (ttk.Frame): App, page or scrolling-content container.
 
     Returns:
-        None: A canvas is installed once and repainted on size changes, or no
-            visual child is added when optional Pillow artwork is unavailable.
+        None: Applies the uniform backing color without resize canvases or
+            rectangular color tiles around rounded card corners.
     """
-    bitmap_source = _BACKDROP_BITMAP
-    if bitmap_source is None:
-        return
-    created = False
-    try:
-        if not widget.winfo_exists():
-            return
-        state = _BACKDROP_STATES.get(widget)
-        if state is None:
-            canvas = tk.Canvas(
-                widget,
-                background=_PALETTE["background"],
-                highlightthickness=0,
-                borderwidth=0,
-                takefocus=False,
-            )
-            canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
-            # Canvas.lower means lower canvas items, so invoke Tk's window
-            # stacking command to put this child behind sibling controls.
-            canvas.tk.call("lower", str(canvas))
-            state = _BackdropState(canvas=canvas)
-            _BACKDROP_STATES[widget] = state
-            created = True
-        canvas = state.canvas
-    except tk.TclError:
-        return
-
-    def repaint(_event: tk.Event | None = None) -> None:
-        """Resize the ambient bitmap to the current canvas dimensions.
-
-        Args:
-            _event (tk.Event | None): Optional configure event from the canvas.
-
-        Returns:
-            None: The canvas image is updated when both dimensions are usable.
-        """
-        current = _BACKDROP_STATES.get(widget)
-        if current is None:
-            return
-        current.timer = None
-        try:
-            width = canvas.winfo_width()
-            height = canvas.winfo_height()
-            if width <= 1 or height <= 1:
-                return
-            from PIL import Image, ImageTk
-
-            source = cast(ThemeBitmap, bitmap_source)
-            resized = source.resize(
-                (width, height), Image.Resampling.LANCZOS
-            )
-            current.photo = ImageTk.PhotoImage(resized, master=canvas)
-            canvas.delete("ambient-backdrop")
-            canvas.create_image(
-                0, 0, anchor="nw", image=current.photo,
-                tags=("ambient-backdrop",),
-            )
-        except (ImportError, tk.TclError):
-            return
-
-    def schedule_repaint(_event: tk.Event | None = None) -> None:
-        """Coalesce canvas configure events into one ambient resample.
-
-        Args:
-            _event (tk.Event | None): Optional canvas size-change event.
-
-        Returns:
-            None: One delayed repaint replaces any pending resize callback.
-        """
-        current = _BACKDROP_STATES.get(widget)
-        if current is None:
-            return
-        try:
-            if current.timer is not None:
-                canvas.after_cancel(current.timer)
-            current.timer = canvas.after(
-                _BACKDROP_RESIZE_DELAY_MS, repaint
-            )
-        except tk.TclError:
-            current.timer = None
-
-    def cleanup(event: tk.Event) -> None:
-        """Cancel resize work and release the canvas image on destruction.
-
-        Args:
-            event (tk.Event): Destroy event sent by the requested frame.
-
-        Returns:
-            None: State is released only when the owner frame is destroyed.
-        """
-        if event.widget is not widget:
-            return
-        current = _BACKDROP_STATES.pop(widget, None)
-        if current is None or current.timer is None:
-            return
-        try:
-            current.canvas.after_cancel(current.timer)
-        except tk.TclError:
-            pass
-
-    try:
-        if created:
-            canvas.bind("<Configure>", schedule_repaint, add="+")
-            widget.bind("<Destroy>", cleanup, add="+")
-        else:
-            schedule_repaint()
-    except tk.TclError:
-        _BACKDROP_STATES.pop(widget, None)
+    widget.configure(style="Backdrop.TFrame")
 
 
 def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
@@ -577,8 +496,6 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         None: Material elements and image references are installed, or ttk
             uses readable flat styles when optional Pillow is unavailable.
     """
-    global _BACKDROP_BITMAP
-
     if "Gloss.card" in style.element_names():
         return
     try:
@@ -589,123 +506,84 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         return
 
     scale = _ARTWORK_SCALE
-    backdrop_width, backdrop_height = _BACKDROP_IMAGE_SIZE
-    base = _hex_rgb("#E8F1FB")
-    blue = _hex_rgb("#A8D8FF")
-    lavender = _hex_rgb("#D4C9FF")
-    aqua = _hex_rgb("#A6E9E7")
-    blue_layout, violet_layout, aqua_layout = _BACKDROP_GLOW_LAYOUT
-    backdrop = Image.new("RGB", _BACKDROP_IMAGE_SIZE)
-    pixels = backdrop.load()
-    for y in range(backdrop_height):
-        vertical = y / max(1, backdrop_height - 1)
-        for x in range(backdrop_width):
-            horizontal = x / max(1, backdrop_width - 1)
-            # Broad overlapping blooms make the hue shift visible in open
-            # frame gaps while keeping the background quiet behind small text.
-            blue_glow = _BACKDROP_GLOW_STRENGTH * exp(
-                -((horizontal - blue_layout[0]) ** 2
-                  + (vertical - blue_layout[1]) ** 2) / blue_layout[2]
-            )
-            violet_glow = _BACKDROP_GLOW_STRENGTH * exp(
-                -((horizontal - violet_layout[0]) ** 2
-                  + (vertical - violet_layout[1]) ** 2) / violet_layout[2]
-            )
-            aqua_glow = _BACKDROP_GLOW_STRENGTH * exp(
-                -((horizontal - aqua_layout[0]) ** 2
-                  + (vertical - aqua_layout[1]) ** 2) / aqua_layout[2]
-            )
-            channels = []
-            for channel in range(3):
-                value = base[channel]
-                for tint, amount in (
-                    (blue, blue_glow),
-                    (lavender, violet_glow),
-                    (aqua, aqua_glow),
-                ):
-                    value = value * (1.0 - amount) + tint[channel] * amount
-                channels.append(round(value))
-            pixels[x, y] = tuple(channels)
-    _BACKDROP_BITMAP = backdrop
-
     # Material artwork is composited into opaque RGB images before Tk sees it.
     # That keeps Windows ttk from treating transparent image pixels as black.
-    frost_tint = _hex_rgb("#B8D9F8")
+    frost_tint = _hex_rgb("#2A4353")
     glass_top = _blend_rgb(
-        _hex_rgb("#FBFDFF"), frost_tint, _FROST_TINT_BLEND
+        _hex_rgb("#243442"), frost_tint, _FROST_TINT_BLEND
     )
     glass_bottom = _blend_rgb(
-        _hex_rgb("#F0F7FF"), _hex_rgb("#A9D1F0"), _FROST_TINT_BLEND
+        _hex_rgb("#263541"), _hex_rgb("#233544"), _FROST_TINT_BLEND
     )
     inset_top = _blend_rgb(
-        _hex_rgb("#F3FAFF"), frost_tint, _FROST_TINT_BLEND
+        _hex_rgb("#2B3D4D"), frost_tint, _FROST_TINT_BLEND
     )
     inset_bottom = _blend_rgb(
-        _hex_rgb("#E6F2FC"), _hex_rgb("#9FC9E9"), _FROST_TINT_BLEND
+        _hex_rgb("#293B4A"), _hex_rgb("#2A4050"), _FROST_TINT_BLEND
     )
     asset_specs = {
-        "button": (("#FFFFFF", "#EAF2FD"), _PALETTE["card_surface"],
+        "button": (("#2B4051", "#263A4B"), _PALETTE["card_surface"],
                    _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                    _BUTTON_IMAGE_SIZE),
-        "button_active": (("#FFFFFF", "#DDEBFC"), _PALETTE["card_surface"],
+        "button_active": (("#3A556A", "#33536A"), _PALETTE["card_surface"],
                           _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                           _BUTTON_IMAGE_SIZE),
-        "button_pressed": (("#DDEAF8", "#CFDFF1"), _PALETTE["card_surface"],
+        "button_pressed": (("#1E3445", "#1B3040"), _PALETTE["card_surface"],
                            _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                            _BUTTON_IMAGE_SIZE),
-        "button_focus": (("#FFFFFF", "#EAF2FD"), _PALETTE["card_surface"],
+        "button_focus": (("#2B4051", "#263A4B"), _PALETTE["card_surface"],
                          _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                          _BUTTON_IMAGE_SIZE),
-        "button_disabled": (("#EBF0F7", "#DDE5F0"), _PALETTE["card_surface"],
+        "button_disabled": (("#2B3742", "#26333E"), _PALETTE["card_surface"],
                              _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                              _BUTTON_IMAGE_SIZE),
-        "primary": (("#786FFB", "#5148DC"), _PALETTE["card_surface"],
+        "primary": (("#16BBDC", "#089ABA"), _PALETTE["card_surface"],
                     _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                     _BUTTON_IMAGE_SIZE),
-        "primary_active": (("#8A83FF", "#5E55EE"), _PALETTE["card_surface"],
+        "primary_active": (("#39CDE8", "#0EAACB"), _PALETTE["card_surface"],
                            _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                            _BUTTON_IMAGE_SIZE),
-        "primary_pressed": (("#5D54E8", "#4139C8"), _PALETTE["card_surface"],
+        "primary_pressed": (("#079AB9", "#007F9D"), _PALETTE["card_surface"],
                             _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                             _BUTTON_IMAGE_SIZE),
-        "primary_focus": (("#786FFB", "#5148DC"), _PALETTE["card_surface"],
+        "primary_focus": (("#16BBDC", "#089ABA"), _PALETTE["card_surface"],
                           _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                           _BUTTON_IMAGE_SIZE),
-        "primary_disabled": (("#BDB9F3", "#A7A4E7"), _PALETTE["card_surface"],
+        "primary_disabled": (("#446C79", "#345764"), _PALETTE["card_surface"],
                              _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                              _BUTTON_IMAGE_SIZE),
-        "icon": (("#FFFFFF", "#EAF2FD"), _PALETTE["card_surface"],
+        "icon": (("#2B4051", "#263A4B"), _PALETTE["card_surface"],
                  _ICON_BORDER, _ICON_CORNER_RADIUS, _ICON_IMAGE_SIZE),
-        "icon_active": (("#FFFFFF", "#DDEBFC"), _PALETTE["card_surface"],
+        "icon_active": (("#3A556A", "#33536A"), _PALETTE["card_surface"],
                         _ICON_BORDER, _ICON_CORNER_RADIUS, _ICON_IMAGE_SIZE),
-        "icon_pressed": (("#DDEAF8", "#CFDFF1"), _PALETTE["card_surface"],
+        "icon_pressed": (("#1E3445", "#1B3040"), _PALETTE["card_surface"],
                          _ICON_BORDER, _ICON_CORNER_RADIUS, _ICON_IMAGE_SIZE),
-        "icon_focus": (("#FFFFFF", "#EAF2FD"), _PALETTE["card_surface"],
+        "icon_focus": (("#2B4051", "#263A4B"), _PALETTE["card_surface"],
                        _ICON_BORDER, _ICON_CORNER_RADIUS, _ICON_IMAGE_SIZE),
-        "icon_disabled": (("#EBF0F7", "#DDE5F0"), _PALETTE["card_surface"],
+        "icon_disabled": (("#2B3742", "#26333E"), _PALETTE["card_surface"],
                           _ICON_BORDER, _ICON_CORNER_RADIUS, _ICON_IMAGE_SIZE),
-        "icon_primary": (("#786FFB", "#5148DC"), _PALETTE["card_surface"],
+        "icon_primary": (("#16BBDC", "#089ABA"), _PALETTE["card_surface"],
                          _ICON_BORDER, _ICON_CORNER_RADIUS, _ICON_IMAGE_SIZE),
-        "icon_primary_active": (("#8A83FF", "#5E55EE"), _PALETTE["card_surface"],
+        "icon_primary_active": (("#39CDE8", "#0EAACB"), _PALETTE["card_surface"],
                                 _ICON_BORDER, _ICON_CORNER_RADIUS,
                                 _ICON_IMAGE_SIZE),
-        "icon_primary_pressed": (("#5D54E8", "#4139C8"), _PALETTE["card_surface"],
+        "icon_primary_pressed": (("#079AB9", "#007F9D"), _PALETTE["card_surface"],
                                  _ICON_BORDER, _ICON_CORNER_RADIUS,
                                  _ICON_IMAGE_SIZE),
-        "icon_primary_focus": (("#786FFB", "#5148DC"), _PALETTE["card_surface"],
+        "icon_primary_focus": (("#16BBDC", "#089ABA"), _PALETTE["card_surface"],
                                _ICON_BORDER, _ICON_CORNER_RADIUS,
                                _ICON_IMAGE_SIZE),
-        "icon_primary_disabled": (("#BDB9F3", "#A7A4E7"), _PALETTE["card_surface"],
+        "icon_primary_disabled": (("#446C79", "#345764"), _PALETTE["card_surface"],
                                   _ICON_BORDER, _ICON_CORNER_RADIUS,
                                   _ICON_IMAGE_SIZE),
-        "tab": (("#EFF5FC", "#DBE8F8"), _PALETTE["background"],
+        "tab": (("#243745", "#213241"), _PALETTE["background"],
                 _BUTTON_BORDER, _BUTTON_CORNER_RADIUS, _BUTTON_IMAGE_SIZE),
-        "tab_active": (("#FFFFFF", "#D4E3FF"), _PALETTE["background"],
+        "tab_active": (("#365768", "#2B485C"), _PALETTE["background"],
                        _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                        _BUTTON_IMAGE_SIZE),
-        "panel": ((glass_top, glass_bottom), "#E8F1FB",
+        "panel": ((glass_top, glass_bottom), "#131B26",
                   _PANEL_BORDER, _PANEL_CORNER_RADIUS, _PANEL_IMAGE_SIZE),
-        "inset": ((inset_top, inset_bottom), "#E8F1FB",
+        "inset": ((inset_top, inset_bottom), "#131B26",
                   _PANEL_BORDER, _PANEL_CORNER_RADIUS, _PANEL_IMAGE_SIZE),
     }
     for name, (gradient, matte, border, radius, size) in asset_specs.items():
@@ -715,7 +593,7 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         artwork = Image.new("RGB", scaled_size, matte_rgb)
         if name in ("panel", "inset"):
             shadow = _blend_rgb(
-                matte_rgb, _hex_rgb("#7188AB"), _PANEL_SHADOW_BLEND
+                matte_rgb, _hex_rgb("#0D131C"), _PANEL_SHADOW_BLEND
             )
             shadow_mask = Image.new("L", scaled_size, 0)
             shadow_draw = ImageDraw.Draw(shadow_mask)
@@ -747,7 +625,13 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
             gradient[1] if isinstance(gradient[1], tuple)
             else _hex_rgb(gradient[1])
         )
-        center = _blend_rgb(top, bottom, _MATERIAL_CENTER_BLEND)
+        center = (
+            _hex_rgb(_PALETTE["card_surface"])
+            if name == "panel" else
+            _hex_rgb(_PALETTE["card_surface_alt"])
+            if name == "inset" else
+            _blend_rgb(top, bottom, _MATERIAL_CENTER_BLEND)
+        )
         gradient_image = Image.new("RGB", scaled_size, center)
         gradient_draw = ImageDraw.Draw(gradient_image)
         scaled_border = border * scale
@@ -771,10 +655,10 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
             (scale, scale, scaled_size[0] - scale - 1,
              scaled_size[1] - scale - 1),
             radius=scaled_radius,
-            outline=_hex_rgb("#FFFFFF"),
+            outline=_hex_rgb(_PALETTE["line"]),
             width=max(1, scale),
         )
-        # The white rounded edge supplies the specular rim. Keep every
+        # The quiet slate edge supplies the rounded rim. Keep every
         # stretchable slice uniform to avoid dashed highlights from tiling.
         if name in (
             "button_focus", "primary_focus", "icon_focus",
@@ -814,6 +698,14 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         ("pressed", _THEME_IMAGES["primary_pressed"]),
         ("active", _THEME_IMAGES["primary_active"]),
         ("focus", _THEME_IMAGES["primary_focus"]), **button_options,
+    )
+    style.element_create(
+        "Gloss.segment", "image", _THEME_IMAGES["button"],
+        ("disabled", _THEME_IMAGES["button_disabled"]),
+        ("selected", "focus", _THEME_IMAGES["primary_focus"]),
+        ("selected", _THEME_IMAGES["primary"]),
+        ("focus", _THEME_IMAGES["button_focus"]),
+        ("active", _THEME_IMAGES["button_active"]), **button_options,
     )
     style.element_create(
         "Gloss.icon", "image", _THEME_IMAGES["icon"],
@@ -870,6 +762,80 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
                 ]}),
             ]},
         )])
+
+
+def _install_switch_elements(root: tk.Tk, style: ttk.Style) -> None:
+    """Replace square checkbox indicators with keyboard-native pill switches.
+
+    Args:
+        root (tk.Tk): Interpreter owning the retained switch images.
+        style (ttk.Style): Registry shared by all uploader boolean controls.
+
+    Returns:
+        None: Registers selected, disabled and focused switch states. Without
+            Pillow, the existing ttk indicator remains usable in source mode.
+    """
+    if "Switch.indicator" in style.element_names():
+        return
+    try:
+        from PIL import Image, ImageDraw, ImageTk
+    except ImportError:
+        # Presentation owner: source-mode dependency repair must stay usable
+        # without Pillow. Retire only if Pillow becomes mandatory at launch.
+        return
+    width, height = _SWITCH_IMAGE_SIZE
+    scale = _ARTWORK_SCALE
+    for selected in (False, True):
+        for state in ("normal", "focus", "disabled"):
+            name = f"switch_{selected}_{state}"
+            artwork = Image.new(
+                "RGB", (width * scale, height * scale),
+                _PALETTE["card_surface"],
+            )
+            draw = ImageDraw.Draw(artwork)
+            track = _PALETTE["success"] if selected else "#607182"
+            if state == "disabled":
+                track = "#40525F"
+            # Two-pixel inset leaves room for the keyboard-focus outline.
+            draw.rounded_rectangle(
+                (2 * scale, 2 * scale,
+                 (width - 2) * scale, (height - 2) * scale),
+                radius=(height // 2) * scale, fill=track,
+            )
+            thumb = height - 8
+            left = width - thumb - 4 if selected else 4
+            draw.ellipse(
+                (left * scale, 4 * scale,
+                 (left + thumb) * scale, (height - 4) * scale),
+                fill="#F1F6FA" if state != "disabled" else "#8B9AA6",
+            )
+            if state == "focus":
+                draw.rounded_rectangle(
+                    (0, 0, width * scale - 1, height * scale - 1),
+                    radius=(height // 2) * scale,
+                    outline=_PALETTE["focus"], width=scale,
+                )
+            _THEME_IMAGES[name] = ImageTk.PhotoImage(
+                artwork.resize((width, height), Image.Resampling.LANCZOS),
+                master=root,
+            )
+    style.element_create(
+        "Switch.indicator", "image", _THEME_IMAGES["switch_False_normal"],
+        ("disabled", "selected", _THEME_IMAGES["switch_True_disabled"]),
+        ("disabled", _THEME_IMAGES["switch_False_disabled"]),
+        ("focus", "selected", _THEME_IMAGES["switch_True_focus"]),
+        ("focus", _THEME_IMAGES["switch_False_focus"]),
+        ("selected", _THEME_IMAGES["switch_True_normal"]),
+        width=width + 6, sticky="w",
+    )
+    for name in ("TCheckbutton", "App.TCheckbutton", "Card.TCheckbutton"):
+        style.layout(name, [("Checkbutton.padding", {
+            "sticky": "nswe", "children": [
+                ("Switch.indicator", {"side": "left", "sticky": "w"}),
+                ("Checkbutton.label", {"side": "left", "sticky": "w"}),
+            ],
+        })])
+        style.map(name, background=[("active", _PALETTE["card_surface"])])
 
 
 def _hex_rgb(value: str) -> tuple[int, int, int]:
@@ -932,7 +898,7 @@ def icon_button(parent: tk.Misc, icon: str,
         icon (str): Semantic icon key, single glyph or short visible label.
         command (Callable[[], None]): Action invoked by mouse or keyboard.
         tooltip (str): Concise accessible description shown on hover/focus.
-        primary (bool): Whether to use the indigo primary button style.
+        primary (bool): Whether to use the cyan primary action style.
 
     Returns:
         ttk.Button: The themed, bound button widget.
@@ -945,6 +911,11 @@ def icon_button(parent: tk.Misc, icon: str,
     style = (
         "IconPrimary.TButton" if primary else "Icon.TButton"
     ) if icon_only else ("Primary.TButton" if primary else "TButton")
+    if icon_only and not primary:
+        container_style = str(parent.cget("style"))
+        background = ttk.Style(parent).lookup(container_style, "background")
+        if background == _PALETTE["background"]:
+            style = "App.Icon.TButton"
     button = ttk.Button(parent, text=glyph, command=command, style=style,
                         takefocus=True,
                         width=_ICON_BUTTON_COLUMNS if icon_only else -1)
@@ -1073,8 +1044,8 @@ def _attach_tooltip(widget: ttk.Button, message: str) -> None:
             label = tk.Label(
                 popup,
                 text=message,
-                bg=_PALETTE["ink"],
-                fg="#FFFFFF",
+                bg=_PALETTE["surface"],
+                fg=_PALETTE["ink"],
                 padx=9,
                 pady=6,
                 font=("Segoe UI", 9),
