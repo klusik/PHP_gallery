@@ -814,6 +814,136 @@ class NavigationTests(unittest.TestCase):
         app.notebook.select.assert_called_once_with(2)
 
 
+class FlightDeliveryCoordinationTests(unittest.TestCase):
+    """Preserve accepted import and connection state during finalization."""
+
+    def test_watcher_run_reports_inventory_and_camera_startup_state(self) -> None:
+        """Keep the original endpoint and SimConnect startup diagnostics visible.
+
+        Returns:
+            None: Confirms enabled and disabled metadata configurations are logged.
+        """
+        for camera_metadata_enabled in (True, False):
+            with self.subTest(camera_metadata_enabled=camera_metadata_enabled):
+                config = types.SimpleNamespace(
+                    watched_folder=str(WINAPP_DIR),
+                    gallery_url="https://gallery.example/",
+                    api_key="gallery-key",
+                    watch_recursive=False,
+                    inventory_refresh_seconds=17.0,
+                    attach_sim_camera_metadata=camera_metadata_enabled,
+                )
+                worker = object.__new__(MAIN.WatcherThread)
+                worker.config = config
+                worker.stop_event = mock.Mock()
+                worker.stop_event.is_set.return_value = True
+                worker.initial_captured = True
+                worker.initial_paths = set()
+                worker.emit = mock.Mock()
+                worker.persist_drain = mock.Mock()
+                worker.simconnect_client = mock.Mock()
+                worker.simconnect_client.dll_resolution_message.return_value = (
+                    "SimConnect.dll resolved"
+                )
+
+                MAIN.WatcherThread.run(worker)
+
+                messages = [
+                    call.args[1]
+                    for call in worker.emit.call_args_list
+                    if call.args[0] == "info"
+                ]
+                self.assertIn(
+                    "Remote inventory reconnect interval: 17 seconds.",
+                    messages,
+                )
+                if camera_metadata_enabled:
+                    self.assertIn(
+                        "[simconnect] Flight Simulator location metadata enabled. "
+                        "SimConnect.dll resolved",
+                        messages,
+                    )
+                    worker.simconnect_client.dll_resolution_message.assert_called_once_with()
+                else:
+                    self.assertIn(
+                        "[simconnect] Flight Simulator location metadata disabled.",
+                        messages,
+                    )
+                    worker.simconnect_client.dll_resolution_message.assert_not_called()
+
+    def test_manual_job_admission_refuses_during_key_revocation(self) -> None:
+        """Keep durable import work unbound until key revocation finishes.
+
+        Returns:
+            None: Confirms no endpoint binding or upload worker starts.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.api_key_revoke_running = True
+        app.flights = mock.Mock()
+        app.write_log = mock.Mock()
+        job = types.SimpleNamespace(id="pending-job")
+        paths = [Path("photo.jpg")]
+        config = types.SimpleNamespace()
+
+        with mock.patch.object(MAIN, "ManualUploadThread") as worker_factory:
+            MAIN.WatcherApp.launch_manual_job(app, job, paths, config)
+
+        app.flights.import_bindings.bind.assert_not_called()
+        app.flights.binding.assert_not_called()
+        worker_factory.assert_not_called()
+        app.write_log.assert_called_once()
+        log_message = app.write_log.call_args.args[0].lower()
+        self.assertIn("finishing", log_message)
+        self.assertNotIn("revocation", log_message)
+
+    def test_late_connection_ready_does_not_persist_during_revocation(self) -> None:
+        """Do not replace the captured connection while accepted work drains.
+
+        Returns:
+            None: Confirms a late resolved URL remains display-only during revoke.
+        """
+        saved_url = "https://gallery.example/old"
+        resolved_url = "https://gallery.example/new"
+        api_key = "gallery-key"
+        app = object.__new__(MAIN.WatcherApp)
+        app.exiting = False
+        app.api_key_revoke_running = True
+        app.connection_test_running = True
+        app.events = MAIN.queue.Queue()
+        app.events.put({
+            "kind": "connection_ready",
+            "payload": {
+                "gallery_label": "Gallery",
+                "normalized_url": resolved_url,
+                "explicit_test": True,
+            },
+        })
+        app.config = types.SimpleNamespace(gallery_url=saved_url, api_key=api_key)
+        app.config_store = mock.Mock()
+        app.gallery_label_var = mock.Mock()
+        app.connection_status_var = mock.Mock()
+        app.connection_detail_var = mock.Mock()
+        app.gallery_url_var = mock.Mock()
+        app.gallery_url_var.get.return_value = saved_url
+        app.api_key_var = mock.Mock()
+        app.api_key_var.get.return_value = api_key
+        app.write_log = mock.Mock()
+        app.record_activity = mock.Mock()
+        app.refresh_revoke_button_state = mock.Mock()
+        app.refresh_activity_monitor_state = mock.Mock()
+        app.utc_sync = mock.Mock()
+        app.utc_sync.status.return_value = "Idle"
+        app.utc_sync_status_var = mock.Mock()
+        app.root = mock.Mock()
+
+        MAIN.WatcherApp.drain_events(app)
+
+        app.config_store.save.assert_not_called()
+        self.assertEqual(saved_url, app.config.gallery_url)
+        app.gallery_url_var.set.assert_not_called()
+        app.connection_status_var.set.assert_called_once_with("Connected")
+        app.root.after.assert_called_once()
+
 class WatcherActionTests(unittest.TestCase):
     """Keep the primary watcher action aligned with worker state."""
 
@@ -1192,6 +1322,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms a rejected close retains the available version.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.flights = mock.Mock()
+        app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
         app.updates = mock.Mock()
         app.updates.request_close.return_value = False
@@ -1204,6 +1336,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
 
         with mock.patch.object(MAIN, "messagebox") as dialogs:
             MAIN.WatcherApp.close(app)
+        app.flights.stop.assert_called_once_with()
 
         self.assertFalse(app.exiting)
         self.assertEqual("0.4.1", app.update_available_version)
@@ -1216,6 +1349,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms the keep-running choice leaves app and offer active.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.flights = mock.Mock()
+        app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
         app.utc_sync.is_alive.return_value = False
         app.updates = mock.Mock()
@@ -1239,6 +1374,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         with mock.patch.object(MAIN, "messagebox") as dialogs:
             dialogs.askyesno.return_value = True
             MAIN.WatcherApp.close(app)
+        app.flights.stop.assert_called_once_with()
 
         self.assertFalse(app.exiting)
         self.assertEqual("0.4.1", app.update_available_version)
@@ -1253,6 +1389,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms confirmed shutdown clears the version and destroys Tk.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app.flights = mock.Mock()
+        app.flights.is_alive.return_value = False
         app.utc_sync = mock.Mock()
         app.utc_sync.is_alive.return_value = False
         app.updates = mock.Mock()
@@ -1278,6 +1416,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         )
 
         MAIN.WatcherApp.close(app)
+        app.flights.stop.assert_called_once_with()
 
         self.assertTrue(app.exiting)
         self.assertIsNone(app.update_available_version)

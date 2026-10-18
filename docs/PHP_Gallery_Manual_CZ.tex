@@ -869,6 +869,40 @@ Nainstalovaný nahrávač kontroluje vlastní stabilní verzi instalátoru na Gi
 Volba \ui{Update} stáhne instalátor s~průběhem a~možností zrušení, ověří jej, zastaví novou práci a~nejvýše 120 sekund počká na bezpečné dokončení úloh. Neúspěšné dokončení odmítne instalaci a~nahrávač zůstane dostupný. Externí pomocný proces soubor znovu ověří a~vyžádá souhlas Windows UAC. Vlastní aktualizace pracovní procesy násilně neukončuje; běžně ručně spuštěný instalátor zachovává dosavadní pravidla ukončení. Skutečný průběh instalace přichází místním kanálem konkrétní relace. Po úspěchu se nahrávač spustí pod původním uživatelem s~uloženými nastaveními a~úlohami. Automatický návrat předchozí verze není k~dispozici. Spuštění z~Pythonu či zdrojových souborů nabídne ověřený instalátor k~ručnímu spuštění. Pokud Windows požaduje restart, před opětovným spuštěním nahrávače restartujte Windows; zrušení UAC znovu otevře stávající instalaci.
 
 
+\subsection{Záznam letů a zprávy}
+
+Windows uploader zaznamenává telemetrii letadla v MSFS 2020 i 2024 společným
+poskytovatelem pouze pro čtení. Záznam i tvorba zpráv jsou ve výchozím stavu
+zapnuté; záznam lze nezávisle vypnout a uložený výběr jazyků zpočátku zahrnuje
+angličtinu, češtinu, němčinu a švédštinu. Přibalený renderer ReportLab a písma
+DejaVu vytvoří z jedné analýzy samostatné PDF s grafy pro každý zvolený jazyk.
+Zprávy zůstávají místně uložené pro opakované odeslání. Nepodporované signály
+zůstávají nedostupné, nikoli vymyšlené; živé ověření simulátoru, letadla a
+sestavení se provádí zvlášť pro každou generaci.
+
+Obě akce používají jediný trvalý koordinátor. Samostatné Zastavení ukončí
+sledování složky, jeho vlastní synchronizaci UTC a záznam letu, poté dokončí
+přijaté fotografie a povinné doručení zpráv; nesouvisející pracovníci AI,
+ručního importu a předběžné kontroly zůstávají spuštěni. Zastavení ponechá klíč
+nastavený. Potvrzené Zrušení klíče provede stejné Zastavení, navíc zastaví další
+autentizované producenty, dokončí přijatou práci a požádá server o zrušení klíče
+omezeného na galerii teprve po povinných potvrzeních. Průběh ukazuje fázi a
+uplynulý čas; zbývající dobu pouze tehdy, lze-li ji měřit. Chyby zachovají úlohy
+a místní soubory pro obnovu; dostupné je výslovné dokončení pouze místně. Po
+restartu se práce obnoví, ale souhlas se zrušením klíče se neobnoví; je nutné
+nové potvrzení. Prázdná zpráva nevznikne.
+
+Klíč omezený na galerii oznamuje volitelnou schopnost
+\texttt{flight\_reports\_v1}. JSON akce
+\texttt{flight\_report\_status} přijímá \texttt{report\_id},
+\texttt{language} a \texttt{sha256}; multipart akce
+\texttt{flight\_report} přijímá tato pole, \texttt{session\_id} a PDF pole
+\texttt{report}. Server omezuje zápis na galerii klíče a znovu používá obecnou
+validaci, ukládání a chráněné prohlížení PDF bez nového schématu. Stabilní
+identita, kontrolní součet a ověření stavu umožňují bezpečné opakování.
+Zprávy jsou oddělené od OFP, dědí viditelnost galerie a neobsahují surovou
+telemetrii.
+
 \section{Přidávání, popisování a~uspořádání fotografií}
 \label{sec:photo-workflow}
 \index{p00157@práce s fotografiemi}
@@ -1150,9 +1184,9 @@ Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migr
 
 Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
-Zdroj samostatného uploaderu nyní cílí na verzi 0.4.1. Samostatně vyžádané
+Zdroj samostatného uploaderu nyní cílí na verzi 0.5.0. Samostatně vyžádané
 sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
-\filepath{winapp-update.json} do \filepath{winapp/dist/0.4.1/}. Instalátor
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.0/}. Instalátor
 a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
 ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
 verzí včetně 0.4.0 zůstávají zachovány.

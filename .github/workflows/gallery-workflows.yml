@@ -5,7 +5,7 @@
 # Purpose: Run isolated database, HTTP, source, WinApp and Chromium coverage.
 # Responsibilities:
 #   - Provision disposable services and execute the central audit with required runtime capabilities.
-#   - Run portable WinApp coverage with its declared Pillow test dependency.
+#   - Run portable WinApp coverage with its declared image and PDF dependencies.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 # Runtime lifecycle policy: docs/RUNTIME_SUPPORT.md.
@@ -161,6 +161,7 @@ jobs:
       PHP_GALLERY_BROWSER: disabled
       GALLERY_WORKFLOW_BROWSER: disabled
       PHP_GALLERY_REQUIRE_PILLOW: '1'
+      PHP_GALLERY_FLIGHT_REPORT_QA_DIR: cache/test-audit/flight-report-samples
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -180,27 +181,28 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.14'
-      - name: Install the declared Pillow test dependency
+      - name: Install the declared image and PDF test dependencies
         run: |
           python - <<'PY'
           from pathlib import Path
           import subprocess
           import sys
 
-          pillow_requirements = [
+          runtime_requirements = [
               line.strip()
               for line in Path("winapp/requirements.txt")
               .read_text(encoding="utf-8")
               .splitlines()
-              if line.strip().lower().startswith("pillow")
+              if line.strip().lower().startswith(("pillow", "reportlab"))
           ]
-          if len(pillow_requirements) != 1:
+          # Two declared packages are required by the portable image/PDF owner.
+          if len(runtime_requirements) != 2:
               raise SystemExit(
-                  "Expected exactly one Pillow requirement in "
+                  "Expected one Pillow and one ReportLab requirement in "
                   "winapp/requirements.txt."
               )
           subprocess.run(
-              [sys.executable, "-m", "pip", "install", pillow_requirements[0]],
+              [sys.executable, "-m", "pip", "install", *runtime_requirements],
               check=True,
           )
           PY

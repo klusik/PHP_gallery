@@ -15,6 +15,10 @@ require a browser/database only when the behavior needs one.
   PHP namespaces, including negative branches.
 - Model each provider endpoint's actual response separately, including omitted
   fields; creation, collection and combined responses need not share a shape.
+- When an owner exposes a filtered verified list, assert its actual
+  unavailable result (for example, no receipt) separately from exceptions raised
+  when a listed item fails a later integrity read. Keep missing/corrupt payloads
+  as explicit negative cases and verify recovery through the owning retry path.
 - Give every independent child its own explicit minimal bootstrap, including
   Core path-policy dependencies for passive services. Parent-loaded functions
   do not establish child dependencies. Assert the child's real exit status,

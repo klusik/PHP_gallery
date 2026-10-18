@@ -755,13 +755,26 @@ class WatchedUploadLocationTests(unittest.TestCase):
         """Load the entry point once without starting the GUI or persistent workers."""
         cls.main = load_main_module()
 
-    def watcher(self):
-        """Create an isolated watcher without reading or writing persisted state."""
+    def watcher(self) -> threading.Thread:
+        """Create an isolated watcher without reading or writing persisted state.
+
+        Returns:
+            threading.Thread: An unstarted production WatcherThread with
+                network and native work replaced by test doubles.
+        """
         watcher = object.__new__(self.main.WatcherThread)
         watcher.config = self.main.WatcherConfig(gallery_url="https://example.test", api_key="test-key", delete_uploaded_files=False)
         watcher.events = queue.Queue()
         watcher.stop_event = threading.Event()
         watcher.initial_paths = set()
+        watcher.accepted_paths = set()
+        watcher._admission_lock = threading.RLock()
+        watcher.drain_event = threading.Event()
+        watcher.drain_only = False
+        watcher.drain_requested_at = 0.0
+        watcher.drain_started_monotonic = 0.0
+        watcher.drain_error = ""
+        watcher.drain_manifest = None
         watcher.remote_skipped_paths = set()
         watcher.stability = mock.Mock()
         watcher.stability.stable.return_value = True

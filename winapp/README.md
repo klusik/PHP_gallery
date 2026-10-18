@@ -4,6 +4,62 @@ The Windows companion app is a desktop import client for one PHP Gallery target 
 
 The application keeps the existing `gallery_watch_upload.pyw` launcher, `run_gallery_watcher.bat`, and `--once` compatibility. Normal operation needs only Python plus the lightweight dependencies in `requirements.txt`.
 
+## Flight recording and reports (source target 0.5.0)
+
+The uploader supports a shared, read-only flight-recording/reporting workflow for
+MSFS 2020 and MSFS 2024. Recording is enabled by default and has an independent
+opt-out; it does not change screenshot watching or Sync UTC time. The simulator
+provider records aircraft telemetry, while per-photo camera coordinates remain
+owned by the existing location feature. Unavailable signals are labelled and
+degrade the affected metric/chart without disabling basic recording or reports.
+Live simulator/aircraft/build qualification remains a separate acceptance step.
+
+Read-only acquisition targets 20 Hz, but the observed rate can be lower. Cruise
+samples persist at 1 Hz; below 300 m AGL, approach capture uses high-resolution
+sampling with a five-second prebuffer (up to 100 samples). Raw storage is capped
+at 256 MiB per session and 2 GiB in aggregate. Reaching a cap stops flight
+recording with a warning while photo capture and report delivery remain usable.
+Raw flight data and reports stay in the app-owned
+`%APPDATA%\\PHPGalleryUploader\\flights` workspace; the Gallery API key is
+not copied there. PDFs are never deleted automatically. Clean the app-owned
+workspace manually only after keeping any reports you want to retain.
+
+Derived rates use a fit over the latest second of simulator time, require at
+least 0.3 seconds of valid data and reject sample gaps over 0.25 seconds. Landing
+position uses the aircraft reference point, not a gear-impact point; the report
+does not guess an airport.
+
+Automatic report creation is enabled by default. The persisted language choices
+initially select English, Czech, German and Swedish (EN/CS/DE/SV). Each selected
+language renders from one immutable analysis into a separate chart PDF using
+bundled ReportLab and DejaVu assets. Reports are retained locally and can be
+opened or retried. No raw telemetry is sent to the Gallery.
+
+Standalone Stop and confirmed Revoke use one durable stop/finalize coordinator.
+Stop ends the watcher, its owned UTC synchronizer and flight recorder, then
+drains accepted photographs and completes required report delivery. It leaves
+unrelated AI, manual-import and preflight workers running and keeps the key
+configured. Confirmed Revoke runs that same Stop, also stops other authenticated
+producers and finishes accepted work before requesting scoped server revocation.
+The shared progress view shows phase and elapsed time; remaining time is shown
+only when measurable. Finalization drains accepted work for up to 300 seconds;
+after timeout, pending work and the API key are retained for recovery. Failures
+retain pending tasks and local artifacts. After restart, pending work is restored,
+but Revoke requires renewed explicit confirmation. No simulator or valid flight
+means no empty report.
+
+Gallery delivery is an optional `flight_reports_v1` capability on the existing
+gallery-scoped upload token. Inventory advertises the capability. The
+`flight_report_status` JSON action takes `report_id`, `language` and
+`sha256`; `flight_report` takes those values plus `session_id` and a
+multipart `report` PDF. Authentication fixes the destination gallery. Server
+validation, safe storage and protected PDF viewer access reuse the general
+document services. Stable report identity/language/checksum plus a status check
+before retry make delivery idempotent after ambiguous network outcomes. Each
+report request has a 180-second HTTP timeout. Reports are distinct from OFP
+documents, inherit existing gallery visibility and add no database schema.
+Unsupported servers leave reports local and retryable.
+
 ## Updating the Windows application
 
 The application checks public GitHub releases at startup and at most once hourly
@@ -68,17 +124,18 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.4.1)
+## Windows installer (next version: 0.5.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
-Gallery CMS release. The current source targets **0.4.1**; this source version
+Gallery CMS release. The current source targets **0.5.0**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.4.1/`. Existing 0.4.0 outputs and other version folders remain
+`winapp/dist/0.5.0/`. Existing version outputs and other version folders remain
 preserved.
 
-The installer includes Python, Tkinter, Pillow, pystray,
-the tray icons, and an embedded `SimConnect.dll` inside one application EXE.
+The installer includes Python, Tkinter, Pillow, pystray, ReportLab,
+the bundled DejaVu font and its license, the tray icons, and an embedded
+`SimConnect.dll` inside one application EXE.
 There is no separate DLL to install or distribute. End users do not
 need Python. Installation requests administrator rights and defaults to
 `Program Files\PHP Gallery Uploader`, with a Start Menu shortcut, an optional
@@ -128,8 +185,8 @@ The build script produces the installer and its matching update metadata togethe
 in a folder named after the independent WinApp version:
 
 ```text
-winapp/dist/0.4.1/PHPGalleryUploader-0.4.1-Setup.exe
-winapp/dist/0.4.1/winapp-update.json
+winapp/dist/0.5.0/PHPGalleryUploader-0.5.0-Setup.exe
+winapp/dist/0.5.0/winapp-update.json
 ```
 
 Attach both files from that folder to the same GitHub release as the CMS release.
@@ -141,8 +198,8 @@ metadata when GitHub's asset digest is unavailable. Its schema is:
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.4.1-Setup.exe",
-      "version": "0.4.1",
+      "name": "PHPGalleryUploader-0.5.0-Setup.exe",
+      "version": "0.5.0",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }
@@ -262,15 +319,18 @@ The API key is masked by default. Reveal and Copy require explicit button presse
 
 **Revoke API key...** is available in the connection dialog, **Settings > Connection**, and the tray menu. Revocation uses the existing saved key to authenticate an `action=revoke` JSON request through the same upload API used by connection/inventory operations, so no Admin credential or token ID is required in the Windows app. If the canonical `index.php?page=upload_automation_upload` endpoint is rejected by the hosting layer with a non-JSON HTTP 404, revocation may retry the corresponding `/api/upload` alias as a compatibility fallback. A gateway 502/503/504 is treated as an ambiguous upstream failure: the client waits briefly and retries exactly once. If that retry reports that the key is already invalid/revoked, the desired server state is accepted as confirmed. Otherwise the local key is retained and the app reports that server revocation could not be confirmed.
 
-Revocation is deliberately guarded:
+Revoke remains available while authenticated work is active. Choosing it starts
+the shared Stop flow: the watcher, its owned UTC synchronizer and flight recorder
+stop, accepted photographs and reports finish, and Revoke additionally stops
+other authenticated producers before requesting server-side key revocation.
+Accepted manual imports are allowed to finish; other requests must settle before
+the revocation call. The UI shows active work and the current phase.
 
-- it is disabled while the watch-folder uploader, manual import, import preflight, AI metadata worker, or connection test can still issue authenticated requests;
-- the UI states the exact activity preventing revocation;
-- unsaved URL/API-key edits must be saved or reverted before revocation;
-- the network request runs off the Tkinter UI thread;
-- the local API key is cleared only after the gallery confirms server-side revocation;
-- if the request fails, the local key is retained so the user can retry;
-- closing the app is blocked while revocation is awaiting the server response, preventing a server-revoked key from remaining silently stored locally.
+Unsaved URL/API-key edits must be saved or reverted before revocation. The
+request runs off the Tkinter UI thread. The local API key is cleared only after
+the gallery confirms server-side revocation; if the request fails, the key is
+retained for retry. Closing is blocked while the server response is pending, so
+a server-revoked key cannot remain silently stored locally.
 
 Revocation is permanent for that key. To reconnect afterwards, generate a new gallery-scoped upload automation key in PHP Gallery Admin and insert it with **Set / replace API key...**.
 
