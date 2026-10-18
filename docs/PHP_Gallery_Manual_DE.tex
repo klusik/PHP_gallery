@@ -893,6 +893,43 @@ Der installierte Uploader prüft seine eigene stabile GitHub-Installerversion h�
 \ui{Update} lädt den Installer mit Fortschritt und Abbruchmöglichkeit herunter, prüft ihn, sperrt neue Arbeit und wartet bis zu 120 Sekunden auf den sicheren Abschluss der Hintergrundaufgaben. Misslingt dieser Abschluss, wird die Installation verweigert und der Uploader bleibt verfügbar. Ein externer Hilfsprozess prüft die Datei erneut und fordert Windows-UAC-Zustimmung an. Das Selbstupdate beendet keine Arbeiter gewaltsam; normal manuell gestartete Installer behalten ihre bisherige Beendigungsregel. Der tatsächliche Installationsfortschritt kommt über einen lokalen sitzungsspezifischen Kanal. Nach Erfolg startet der Uploader als ursprünglicher Benutzer mit gespeicherten Einstellungen und Aufgaben. Es gibt kein automatisches Rollback. Native Python- oder Quellcode-Ausführungen bieten den geprüften Installer zum manuellen Start an. Wenn Windows einen Neustart verlangt, starten Sie Windows vor dem erneuten Öffnen des Uploaders neu; ein UAC-Abbruch öffnet die vorhandene Installation erneut.
 
 
+\subsection{Flugaufzeichnung und Berichte}
+
+Der Windows-Uploader zeichnet Flugzeugtelemetrie in MSFS 2020 und 2024 über
+einen gemeinsamen, nur lesenden Provider auf. Aufzeichnung und Berichtserstellung
+sind standardmäßig aktiviert; die Aufzeichnung lässt sich unabhängig abschalten,
+und die gespeicherte Sprachauswahl umfasst zunächst Englisch, Tschechisch,
+Deutsch und Schwedisch. Der gebündelte ReportLab-Renderer und DejaVu-Schriften
+erzeugen aus derselben Analyse ein Diagramm-PDF je gewählter Sprache. Berichte
+bleiben lokal und können erneut übertragen werden. Nicht unterstützte Signale
+bleiben nicht verfügbar; die Live-Abnahme für Simulator, Flugzeug und Build
+erfolgt getrennt für jede Generation.
+
+Beide Aktionen nutzen denselben dauerhaften Koordinator. Ein eigenständiges
+Stoppen beendet die Überwachung, die zugehörige UTC-Synchronisierung und die
+Flugaufzeichnung, schließt danach angenommene Fotos und erforderliche
+Berichtübertragungen ab; nicht zugehörige KI-, manuelle Import- und
+Vorprüfungs-Worker laufen weiter. Stoppen lässt den Schlüssel bestehen.
+Ein bestätigter Widerruf führt dasselbe Stoppen aus, beendet zusätzlich andere
+authentisierte Produzenten, schließt angenommene Arbeit ab und fordert den
+galeriegebundenen Serverwiderruf erst nach den erforderlichen Bestätigungen an.
+Der Fortschritt zeigt Phase und verstrichene Zeit; eine Restzeit nur bei
+Messbarkeit. Fehler bewahren Aufgaben und lokale Dateien zur Wiederherstellung;
+eine ausdrücklich lokale Erledigung ist möglich. Nach einem Neustart wird die
+Arbeit wiederhergestellt, aber die Widerrufszustimmung nicht; sie muss erneut
+bestätigt werden. Ohne gültigen Flug entsteht kein leerer Bericht.
+
+Der galeriegebundene Schlüssel kündigt die optionale Fähigkeit
+\texttt{flight\_reports\_v1} an. Die JSON-Aktion
+\texttt{flight\_report\_status} akzeptiert \texttt{report\_id},
+\texttt{language} und \texttt{sha256}; die Multipart-Aktion
+\texttt{flight\_report} akzeptiert diese Felder, \texttt{session\_id} und
+das PDF-Feld \texttt{report}. Der Server beschränkt Schreibzugriffe auf die
+Schlüsselgalerie und nutzt die allgemeine PDF-Prüfung, Speicherung und
+geschützte Anzeige ohne neues Schema erneut. Stabile Identität, Prüfsumme und
+Statusabgleich machen Wiederholungen idempotent. Berichte sind getrennt vom OFP,
+übernehmen die Galeriesichtbarkeit und enthalten keine Rohtelemetrie.
+
 \section{Fotos hinzufügen, beschreiben und organisieren}
 \label{sec:photo-workflow}
 \index{f00106@Fotoarbeitsablauf}
@@ -1174,10 +1211,10 @@ Vertikale Karten zeigen das Foto über dem Text, horizontale daneben. Die normal
 
 Öffentliche Suche ist nur ohne gespeicherte Wahl und bei verfügbarer Funktion standardmäßig an. Updates aktualisieren Versionen, Notizen und API-Zustand gemeinsam; automatische Metadatenprüfung erfolgt höchstens stündlich, deaktivierte automatische Updates lassen alte Hintergrundaufträge pausiert. OurAirports verwendet wöchentliche Aktualität und eine Stunde Fehlerabstand. Der Papierkorb zeigt Restdauer und sichere Löschbarkeit. Auch Präsentationsschema-Probleme verlangen eine Aktion im Systemstatus.
 
-Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.4.1. Ein
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.5.0. Ein
 separat angeforderter Installer-Build legt den Installer und die passenden
 generierten Metadaten \filepath{winapp-update.json} unter
-\filepath{winapp/dist/0.4.1/} ab. Installer und Metadaten gehören zur selben
+\filepath{winapp/dist/0.5.0/} ab. Installer und Metadaten gehören zur selben
 gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
 installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
 einschließlich 0.4.0 bleiben erhalten.

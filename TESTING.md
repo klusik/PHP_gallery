@@ -1,5 +1,27 @@
 # Testing Guide
 
+## Flight recording and report delivery
+
+The PHP flight-report service regression exercises gallery-token confinement,
+separate report identity, checksum idempotency/conflicts, PDF MIME/size rejection
+and same-gallery status reconciliation. The WinApp delivery fixture exercises
+capability negotiation, status-before-upload deduplication, multipart field
+contract, progress events and recovery after an ambiguous transport outcome.
+These focused tests use controlled inputs/transports; they do not prove behavior
+against a live Gallery installation.
+
+The native Windows fixtures must separately drive both MSFS 2020 and MSFS 2024
+provider identities through normalized analysis, selected-language PDF jobs,
+delivery and shared Stop/Revoke progress/recovery. Verify that standalone Stop
+ends only the watcher, owned UTC synchronization and flight recorder while
+unrelated AI, manual-import and preflight workers remain active; confirmed
+Revoke must additionally stop other authenticated producers and wait for
+accepted work before the scoped server request. Renderer fixtures should check
+all four languages, embedded DejaVu glyphs, pagination and chart gaps.
+No live simulator/aircraft/build evidence is claimed here: record that matrix
+during Windows acceptance. Central hosted audit owns test execution.
+
+
 ## Media-renamer staging and continued uploads
 
 `media_renamer_staging_test.php` runs actual same-directory staging and rollback

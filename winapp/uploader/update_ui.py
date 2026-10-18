@@ -478,7 +478,8 @@ class UpdateController:
         self.action.configure(state="disabled")
         self.set_status("Preparing installation: stopping new work and waiting for active operations...")
         for attr in (
-            "utc_sync", "preflight_worker", "worker", "manual_worker", "ai_worker"
+            "flights", "utc_sync", "preflight_worker", "worker",
+            "manual_worker", "ai_worker"
         ):
             worker = getattr(self.app, attr, None)
             if worker is not None and worker.is_alive():

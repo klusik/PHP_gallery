@@ -875,6 +875,39 @@ The~installed uploader checks its own stable GitHub installer version at~most on
 Choose \ui{Update} to~download with progress and~optional cancellation, verify the~installer, stop new work and~wait up~to~120 seconds for~background tasks to~finish safely. An~unsuccessful drain refuses installation and~keeps the~uploader available. An~external helper rechecks the~download and~requests Windows UAC approval. Self-update never force-closes workers; normal manually launched installers retain their existing shutdown policy. Actual installation progress comes through a~local session-specific channel. After success, the~helper restarts the~uploader as~the~original user with saved settings and~jobs. There is~no~automatic rollback. Native Python/source runs offer the~verified installer for~manual launch. If~Windows reports that a~restart is~required, restart Windows before reopening the~uploader; cancelling UAC reopens the~existing installation.
 
 
+\subsection{Flight recording and reports}
+
+The~Windows uploader records MSFS 2020 and~2024 aircraft telemetry through
+a~shared read-only provider. Recording and~report creation are enabled by
+default; recording can~be opted out independently, and~the~saved language
+choices initially include English, Czech, German, and~Swedish. The~bundled
+ReportLab renderer and~DejaVu fonts create a~separate chart PDF for each
+selected language from one analysis. Reports remain local for retry.
+Unsupported signals stay unavailable rather than invented; live simulator,
+aircraft, and~build acceptance remains separate for each generation.
+
+Both actions use one durable coordinator. Standalone Stop stops the~watcher,
+its~owned UTC synchronizer, and~flight recorder, then drains accepted
+photographs and~completes required report delivery; unrelated AI, manual-import,
+and~preflight workers remain running. Stop leaves the~key configured.
+Confirmed Revoke runs the~same Stop, also stops other authenticated producers,
+finishes accepted work, and~requests scoped server revocation only after required
+receipts. Progress shows phase and~elapsed time; ETA appears only when measurable.
+Failures retain tasks and~local files for recovery, with explicit local-only
+resolution available. Restart restores work but~never restores Revoke consent;
+a~new confirmation is~required. No~empty report is~created.
+
+The~gallery-scoped token advertises the~optional
+\texttt{flight\_reports\_v1} capability. The~JSON
+\texttt{flight\_report\_status} action accepts \texttt{report\_id},
+\texttt{language}, and~\texttt{sha256}; the~multipart
+\texttt{flight\_report} action accepts those fields plus
+\texttt{session\_id} and~the~PDF field \texttt{report}. The~server confines
+writes to the~token gallery and~reuses general PDF validation, storage, and
+protected viewing without adding schema. Stable identity, checksum, and~status
+reconciliation make retries idempotent. Reports are separate from OFP,
+inherit gallery visibility, and~contain no~raw telemetry.
+
 \section{Adding, describing, and~organizing photographs}
 \label{sec:photo-workflow}
 \index{photo workflow}
@@ -1158,9 +1191,9 @@ Vertical cards place the~photograph above the~description; horizontal cards plac
 
 Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
 
-The~independent uploader source targets 0.4.1. A~separately requested installer
+The~independent uploader source targets 0.5.0. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.4.1/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.5.0/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.

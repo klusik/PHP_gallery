@@ -139,24 +139,28 @@ def archive_verification_code():
     )
 
 
-def installed_dependencies_code():
+def installed_dependencies_code() -> str:
     """Check existing build packages without installing or changing anything.
 
     Return subprocess source that enforces the supported PyInstaller range and
-    minimum Pillow/pystray versions, imports those packages, and creates a Tcl
+    minimum Pillow/pystray and supported ReportLab versions, imports those
+    packages, and creates a Tcl
     interpreter without opening a window. Missing packages, unsupported versions,
     or broken imports fail before PyInstaller starts. This probe never invokes
     pip, creates a venv, downloads packages, or alters installed dependencies.
+
+    Returns:
+        str: Subprocess source validating the declared frozen-runtime packages.
     """
     return (
         "import re, tkinter; from importlib.metadata import version; "
         "requirements = [('PyInstaller', (6, 19), (7,)), ('Pillow', (10,), None), "
-        "('pystray', (0, 19, 5), None)]; "
+        "('pystray', (0, 19, 5), None), ('reportlab', (5, 0, 1), (6,))]; "
         "versions = [(name, tuple(int(p) for p in re.match(r'^([0-9]+(?:\\.[0-9]+)*)', version(name)).group(1).split('.')), low, high) "
         "for name, low, high in requirements]; "
         "invalid = [name for name, value, low, high in versions if value < low or (high is not None and value >= high)]; "
         "not invalid or __import__('sys').exit('Unsupported installed build dependencies: ' + ', '.join(invalid)); "
-        "import PIL.Image, pystray, PyInstaller; root = tkinter.Tcl(); print('Installed build dependencies OK')"
+        "import PIL.Image, pystray, PyInstaller, reportlab; root = tkinter.Tcl(); print('Installed build dependencies OK')"
     )
 
 
@@ -311,6 +315,9 @@ def build_installer(
             "--specpath", work, "--paths", source,
             "--icon", source / "assets" / "tray-icon.ico", "--version-file", version_file,
             "--add-data", f"{source / 'assets'}{os.pathsep}assets",
+            "--add-data",
+            f"{source / 'uploader' / 'resources'}{os.pathsep}uploader/resources",
+            "--collect-all", "reportlab",
             "--add-data", f"{source / 'VERSION'}{os.pathsep}.",
             "--add-binary", f"{source / 'SimConnect.dll'}{os.pathsep}runtime/simconnect",
             "--hidden-import", "pystray._win32",

@@ -182,6 +182,22 @@ return [
         ],
         // Historical media&ofp=1 links select the PDF route module before its handler runs.
         'Gallery\\Controllers\\cms_media' => ['Gallery\\Controllers\\cms_gallery_ofp_pdf'],
+        // The request bridge is loaded before route dispatch; its request-local kernel
+        // explicitly loads the attachment owner at the authenticated report boundary.
+        'Gallery\\Controllers\\upload_automation_handle_flight_report_action' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+        ],
+        // The authenticated flight-report handler loads the existing attachment module
+        // immediately before either service action; defer these edges to avoid duplicating
+        // gallery_pdf_documents.php in the upload route closure.
+        'Gallery\\Services\\upload_flight_report_status' => [
+            'Gallery\\Services\\gallery_pdf_documents_list',
+            'Gallery\\Services\\gallery_pdf_documents_read',
+        ],
+        'Gallery\\Services\\upload_flight_report_attach' => [
+            'Gallery\\Services\\gallery_pdf_documents_validate_pdf_source',
+            'Gallery\\Services\\gallery_pdf_documents_attach',
+        ],
         // Reserved PDF children and attached documents load these modules before use.
         'Gallery\\Services\\gallery_effective_visibility' => [
             'Gallery\\Services\\gallery_pdf_publication_forces_private',
