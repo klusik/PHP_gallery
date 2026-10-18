@@ -1081,8 +1081,6 @@
         "winapp/uploader/flight_workflow.py",
         "winapp/uploader/media.py",
         "winapp/uploader/models.py",
-        "winapp/uploader/resources/DejaVuSans.ttf",
-        "winapp/uploader/resources/LICENSE_DEJAVU",
         "winapp/uploader/runtime_check.py",
         "winapp/uploader/self_update.py",
         "winapp/uploader/simconnect_flight.py",
@@ -1092,6 +1090,10 @@
         "winapp/uploader/ui_theme.py",
         "winapp/uploader/update_helper.py",
         "winapp/uploader/update_ui.py"
+    ],
+    "companion_resource_files": [
+        "winapp/uploader/resources/DejaVuSans.ttf",
+        "winapp/uploader/resources/LICENSE_DEJAVU"
     ],
     "updater_files": [
         ".agents/.htaccess",
@@ -2272,6 +2274,7 @@
         "tests/fixtures/theme_language.html",
         "tests/fixtures/theme_layout.html",
         "tests/fixtures/theme_media.html",
+        "tests/fixtures/updater_inventory_before_resources.php",
         "tests/fixtures/updater_inventory_before_winapp.php",
         "tests/floating_scroll_controls_scenarios.mjs",
         "tests/floating_scroll_controls_test.php",

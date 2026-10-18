@@ -270,6 +270,15 @@ Interní adresáře aplikace, nástrojů, dokumentace, mezipaměti, dat a~logů 
 
 Vyžádané produkční adresáře nebo ZIPy vytvářejte pomocí \filepath{scripts/package_production.php}. Nástroj pro PHP 8.1+ používá \filepath{app/production-files.json}, vyžaduje aktuální manifest integrity a~před zveřejněním ověřuje přesné členství i~úplný obsah SHA-256. Odmítá existující výstupy, nebezpečné cesty a~odkazy souborového systému. Testy, soukromá média, místní konfigurace a~běhová data do balíčku nepatří. Zdroje WinApp mají samostatný doprovodný inventář. Historické interaktivní skripty a~nasazování pomocí FTP byly odstraněny. Viz \filepath{docs/PRODUCTION_FILES.md}.
 
+Font a~licence doprovodné aplikace patří do~volitelného pole inventáře
+\codeword{companion_resource_files}. Starší čteče toto rozšíření přeskočí,
+aktuální pravidla balíčku ověřují přesné povolené cesty. Původní doprovodné pole
+zůstává čitelné pro~starší updatery; žádné z~polí nerozšiřuje oprávnění k~náhradě
+souborů CMS. Přímá aktualizace používá úplný novější balíček a~všechny chybějící
+migrace bez~instalace každé meziverze. To~nepotvrzuje libovolné historické stavy
+hostingu či~databáze. Před výběrem opraveného novějšího balíčku zrušte neúspěšný
+job před aktivací; opakování stejného nekompatibilního sestavení inventář neopraví.
+
 \subsection{Instalace v~prohlížeči}
 
 \subsubsection{Pořadí instalace}

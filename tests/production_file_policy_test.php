@@ -122,8 +122,12 @@ try {
         'winapp/uploader/media.py',
     ];
     $updater = ['app/.htaccess', 'app/example.php', 'app/production-files.json', 'public/assets/styles.css', 'tests/.htaccess'];
+    $resources = [
+        'winapp/uploader/resources/DejaVuSans.ttf',
+        'winapp/uploader/resources/LICENSE_DEJAVU',
+    ];
     $sourceReview = ['tests/policy_fixture.php'];
-    $packagePaths = array_merge($production, $companion);
+    $packagePaths = array_merge($production, $companion, $resources);
     sort($packagePaths, SORT_STRING);
     foreach (array_merge($packagePaths, $sourceReview) as $relative) {
         production_file_policy_mkdir(dirname($source . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative)));
@@ -134,6 +138,7 @@ try {
         'schema_version' => 1,
         'production_files' => $production,
         'companion_files' => $companion,
+        'companion_resource_files' => $resources,
         'updater_files' => $updater,
         'source_review_files' => $sourceReview,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
@@ -141,6 +146,15 @@ try {
     production_file_policy_assert(release_file_policy_paths($source) === $packagePaths, 'Production profile omitted canonical CMS or companion inventory.');
     production_file_policy_assert(release_file_policy_read($source)['source_review_files'] === $sourceReview,
         'Schema-1 source-review metadata is no longer readable by compatible installed updater clients.');
+    production_file_policy_assert(
+        release_file_policy_read($source)['companion_resource_files']
+            === $resources,
+        'The additive resource inventory lost exact font/license membership.'
+    );
+    foreach ($resources as $resource) {
+        production_file_policy_assert(!\Gallery\Core\release_file_policy_is_updater_path($resource),
+            'Companion resources entered CMS replacement or deletion ownership.');
+    }
     production_file_policy_expect_refusal(static function () use ($source): void {
         release_file_policy_paths($source, 'source-review');
     }, 'The retired deploy-only source-review packaging profile remained active.');
@@ -206,13 +220,46 @@ try {
     production_file_policy_assert(!in_array('deploy.sh', $previousOwned, true), 'Historical name alone promoted an unowned root wrapper into deletion ownership.');
     file_put_contents($inventoryPath, $inventoryBytes);
     $oldInventory = $original;
-    unset($oldInventory['companion_files']);
+    unset($oldInventory['companion_files'], $oldInventory['companion_resource_files']);
     $oldInventory['production_files'] = $packagePaths;
     file_put_contents($inventoryPath, json_encode($oldInventory, JSON_THROW_ON_ERROR));
     production_file_policy_assert(release_file_policy_read($source)['companion_files'] === [],
         'An already-published schema-1 inventory without companion_files was refused.');
     production_file_policy_assert(release_file_policy_paths($source) === $packagePaths,
         'Already-published WinApp membership was lost when reading an older sidecar.');
+    $publishedResources = $original;
+    $publishedResources['companion_files'] = array_merge($companion, $resources);
+    sort($publishedResources['companion_files'], SORT_STRING);
+    unset($publishedResources['companion_resource_files']);
+    file_put_contents($inventoryPath, json_encode($publishedResources, JSON_THROW_ON_ERROR));
+    production_file_policy_assert(release_file_policy_paths($source) === $packagePaths,
+        'The published 0.136 companion-list shape became unreadable.');
+    foreach ([null, 'winapp/uploader/resources/DejaVuSans.ttf', false,
+        [$resources[1], $resources[0]], [$resources[0], $resources[0]],
+        ['app/example.php'], ['tests/policy_fixture.php'], ['winapp/uploader/media.py'],
+        ['winapp/uploader/resources/unknown.ttf'], ['winapp/uploader/resources/../private.php'],
+        ['winapp/settings.json']] as $invalidResources) {
+        $tampered = $original;
+        $tampered['companion_resource_files'] = $invalidResources;
+        file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
+        production_file_policy_expect_refusal(static function () use ($source): void {
+            release_file_policy_read($source);
+        }, 'A malformed, unapproved or unordered resource inventory was accepted.');
+    }
+    $tampered = $original;
+    $tampered['companion_files'][] = $resources[0];
+    sort($tampered['companion_files'], SORT_STRING);
+    file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
+    production_file_policy_expect_refusal(static function () use ($source): void {
+        release_file_policy_read($source);
+    }, 'The same font entered both companion inventory fields.');
+    $tampered = $original;
+    $tampered['updater_files'][] = $resources[0];
+    sort($tampered['updater_files'], SORT_STRING);
+    file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
+    production_file_policy_expect_refusal(static function () use ($source): void {
+        release_file_policy_read($source);
+    }, 'A resource field expanded CMS activation ownership.');
     foreach ([null, 'winapp/SimConnect.dll', false] as $invalidList) {
         $tampered = $original;
         $tampered['companion_files'] = $invalidList;

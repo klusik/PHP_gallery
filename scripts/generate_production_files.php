@@ -151,13 +151,21 @@ function production_files_git_index(string $root): array
  * Build deterministic CMS, companion and source-review path arrays from the Git index.
  *
  * @param string $root Project root.
- * @return array{schema_version:int,production_files:list<string>,companion_files:list<string>,updater_files:list<string>,source_review_files:list<string>} Refreshed inventory.
+ * @return array{
+ *     schema_version:int,
+ *     production_files:list<string>,
+ *     companion_files:list<string>,
+ *     companion_resource_files:list<string>,
+ *     updater_files:list<string>,
+ *     source_review_files:list<string>
+ * } Refreshed inventory with additive resources readable by installed updaters.
  * @throws RuntimeException When an approved path is missing or is a symlink/submodule.
  */
 function production_files_build_inventory(string $root): array
 {
     $production = [];
     $companion = [];
+    $companionResources = [];
     $updater = [];
     $sourceReview = [];
     foreach (production_files_git_index($root) as $record) {
@@ -194,7 +202,10 @@ function production_files_build_inventory(string $root): array
             throw new RuntimeException('A tracked production file is missing, unreadable, or unsafe: ' . $relative);
         }
         // Keep the schema-1 base readable by installed CMS updaters with the older allowlist.
-        if (\Gallery\Core\release_file_policy_is_winapp_source_path($relative)) {
+        if (\Gallery\Core\release_file_policy_is_winapp_resource_path($relative)) {
+            // Do not extend companion_files beyond installed readers' allowlist.
+            $companionResources[] = $relative;
+        } elseif (\Gallery\Core\release_file_policy_is_winapp_source_path($relative)) {
             $companion[] = $relative;
         } else {
             $production[] = $relative;
@@ -206,19 +217,22 @@ function production_files_build_inventory(string $root): array
 
     sort($production, SORT_STRING);
     sort($companion, SORT_STRING);
+    sort($companionResources, SORT_STRING);
     sort($updater, SORT_STRING);
     sort($sourceReview, SORT_STRING);
     $production = \Gallery\Core\release_file_policy_validate_path_list($production);
     $companion = \Gallery\Core\release_file_policy_validate_path_list($companion);
+    $companionResources = \Gallery\Core\release_file_policy_validate_path_list($companionResources);
     $updater = \Gallery\Core\release_file_policy_validate_path_list($updater);
     $sourceReview = \Gallery\Core\release_file_policy_validate_path_list($sourceReview);
-    $all = array_merge($production, $companion, $sourceReview);
+    $all = array_merge($production, $companion, $companionResources, $sourceReview);
     sort($all, SORT_STRING);
     \Gallery\Core\release_file_policy_validate_path_list($all);
     return [
         'schema_version' => 1,
         'production_files' => array_values(array_unique($production)),
         'companion_files' => array_values(array_unique($companion)),
+        'companion_resource_files' => array_values(array_unique($companionResources)),
         'updater_files' => array_values(array_unique($updater)),
         'source_review_files' => array_values(array_unique($sourceReview)),
     ];
@@ -290,8 +304,12 @@ try {
     if (is_link($output) || file_put_contents($output, $content, LOCK_EX) === false) {
         throw new RuntimeException('Could not write app/production-files.json.');
     }
-    echo 'Wrote app/production-files.json (' . (count($inventory['production_files']) + count($inventory['companion_files'])) . ' production files including '
-        . count($inventory['companion_files']) . ' companion files, '
+    $companionCount = count($inventory['companion_files'])
+        + count($inventory['companion_resource_files']);
+    echo 'Wrote app/production-files.json ('
+        . (count($inventory['production_files']) + $companionCount)
+        . ' production files including '
+        . $companionCount . ' companion files/resources, '
         . count($inventory['source_review_files']) . " source-review files).\n";
 } catch (RuntimeException $exception) {
     fwrite(STDERR, $exception->getMessage() . "\n");

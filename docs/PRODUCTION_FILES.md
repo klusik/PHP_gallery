@@ -27,9 +27,30 @@ Before publication it verifies the current core manifest against source bytes, c
 
 ## Inventory and updater compatibility
 
-Production packaging uses the sorted union of `production_files` and `companion_files`. Companion entries are approved WinApp sources and assets, disjoint from the other lists and outside updater ownership. WinApp private settings, logs, caches, tests, unlisted modules and build/dist outputs are excluded. Installers retain their independent build and version ownership.
+Production packaging uses the sorted union of `production_files`,
+`companion_files` and optional `companion_resource_files`. Companion resources
+currently admit only the reviewed DejaVu font and its license. All lists are
+disjoint; neither companion field grants CMS updater ownership. WinApp private
+settings, logs, caches, tests, unlisted modules and build/dist outputs are
+excluded. Installers retain their independent build and version ownership.
 
 `updater_files` is a sorted subset of `production_files`. Installed custom CSS presets remain protected. The schema-1 `source_review_files` field remains for installed-reader compatibility; it does not enable source-review packaging. The additive companion field remains readable by the frozen pre-WinApp reader, which ignores it before installing the new reader. Malformed present fields fail closed; no incoming archive PHP is executed to obtain a newer validator.
+
+Keep the serialized `companion_files` vocabulary readable by installed
+companion-aware validators. Newly approved resources belong in the separate
+optional field; current readers validate its exact paths, ordering, collisions
+and non-updater scope, while older readers ignore it. Current readers also retain
+the previously published shape with resources in `companion_files`. A present
+invalid resource field never behaves as an absent one. The compatibility fixture
+reproduces the reported resource rejection with trusted installed-reader code;
+the fix adds no runtime version table and does not execute incoming PHP.
+
+The updater supports direct upgrades using a complete newer package and all
+pending migrations, rather than requiring every intermediate release. This
+inventory compatibility proof does not qualify every historical database or
+hosting environment. A failed pre-activation job can be cancelled before
+selecting a corrected newer release; retrying a pinned incompatible package
+cannot repair its inventory. Published releases remain immutable.
 
 Historical deploy path spellings remain parseable where necessary to read previous installed ownership evidence. They do not ship in new inventories. Updater-owned retired paths are removed only through the existing prior `updater_files`/core-manifest ownership proof and protected rollback path. Root `deploy.sh` was not updater-owned, so its name alone cannot authorize deletion. Unknown/user files are preserved. See [the compatibility register](COMPATIBILITY_LIFECYCLE.md).
 

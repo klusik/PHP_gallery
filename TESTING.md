@@ -587,7 +587,32 @@ by AGENTS.md and cannot replace hosted CI.
 
 ### Clean PHP include-phase probes
 
-`production_file_policy_test.php` validates canonical positive membership, private-path exclusion, safe contained paths, additive companion membership and source-archive activation. `updater_inventory_compatibility_test.php` retains the frozen installed pre-WinApp reader and old/current activation proof. `updates_path_safety_test.php` checks updater destination ancestors. The compact `production_package_test.php` uses the real canonical PHP builder with a minimal isolated payload: folder and ZIP membership, complete SHA-256 content, deterministic output, missing/stale/unsafe inputs, links, destination protection, no-clobber and cleanup. The central packaging owner runs it independently of the SQL engine. The `production-package` CI matrix additionally builds a complete production folder and ZIP on Ubuntu, Windows and macOS and verifies every file against its source bytes. Windows owns real junction/reparse-point rejection. A missing required capability or incomplete proof fails that owner. Legacy FTP, interactive collision naming and source-review/media packaging options have been removed with their implementation; their old tests are retired.
+`production_file_policy_test.php` validates canonical positive membership,
+private-path exclusion, safe contained paths, additive companion membership and
+source-archive activation. `updater_inventory_compatibility_test.php` retains
+the frozen pre-WinApp reader and a trusted companion-aware reader from 0.135.1.
+It reproduces reference `C35BC3B622B0` for resources in the historical field,
+then proves that the real incoming inventory and additive resource fixture
+preserve installed CMS activation ownership. The archive check uses an isolated
+snapshot of the complete real package inventory; the running checkout can
+contain scanner bytecode and other test artifacts. It retains exact unexpected
+file rejection in that owned snapshot. This is a schema-generation
+regression, not a matrix of all historical releases or a complete database
+upgrade certification. Policy cases reject malformed, unordered, duplicate,
+private and updater-owned resource entries, while retaining published resource
+placement. Compact real folder/ZIP fixtures preserve the exact font/license
+bytes. `updates_path_safety_test.php` checks updater destination ancestors. The
+compact `production_package_test.php` uses the real canonical PHP builder with
+a minimal isolated payload: folder and ZIP membership, complete SHA-256
+content, deterministic output, missing/stale/unsafe inputs, links, destination
+protection, no-clobber and cleanup. The central packaging owner runs it
+independently of the SQL engine. The `production-package` CI matrix
+additionally builds a complete production folder and ZIP on Ubuntu, Windows and
+macOS and verifies every file against its source bytes. Windows owns real
+junction/reparse-point rejection. A missing required capability or incomplete
+proof fails that owner. Legacy FTP, interactive collision naming and
+source-review/media packaging options have been removed with their
+implementation; their old tests are retired.
 
 `tests/cli_http_boundary_test.php` exercises real direct HTTP requests to CLI
 entrypoints through a PHP server without rewrite rules, checks empty refusals

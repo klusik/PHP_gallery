@@ -272,6 +272,16 @@ Internal application, tooling, documentation, cache, data, and~log directories c
 
 Build requested production folders or~ZIPs with \filepath{scripts/package_production.php}. The~PHP 8.1+ builder uses \filepath{app/production-files.json}, requires current integrity data, and~verifies exact membership and~complete SHA-256 content before publication. Existing outputs, unsafe paths and~filesystem links are~refused. Tests, private media, installed configuration and~runtime state cannot enter the~package. WinApp sources retain their separate companion inventory. Historical interactive and~FTP deployment scripts have been removed. See \filepath{docs/PRODUCTION_FILES.md}.
 
+Companion font/license resources use the~optional
+\codeword{companion_resource_files} inventory field. Installed readers can~ignore
+this addition while the~current package policy validates its~exact allowed paths.
+The~original companion field stays readable by~older companion-aware updaters;
+neither field grants CMS replacement ownership. Direct updates use a~complete
+newer package and~all pending migrations, without requiring each intermediate
+release. This does~not~qualify arbitrary historical hosting or~database states.
+Cancel a~failed pre-activation job before selecting a~corrected newer package;
+retrying the~same incompatible build cannot repair its~inventory.
+
 \subsection{Browser installation}
 
 \subsubsection{Installation sequence}
