@@ -1,5 +1,56 @@
 # Patch notes
 
+## Version 0.136
+
+Added configurable, shareable gallery presentations and media summaries, Windows flight recording with multilingual PDF reports, and guarded release-draft branch retirement. The release also added the gallery presentation settings migration and expanded regression coverage and documentation.
+
+### Highlights
+
+#### Gallery presentations and media summaries
+- Added configurable presentation defaults for visibility, autoplay, music, slideshow interval, and transition. Administrators could preview and share links carrying playback settings and language. [#255](https://github.com/klusik/PHP_gallery/issues/255)
+- Added presentation launch flows for physical and Smart Galleries, including first-photo startup, fullscreen and controls-free options, and a confirmation when browser activation was refused.
+- Added public PDF and music summaries. Smart Gallery links preserved the selected source filter, and PDF summaries excluded hidden documents while retaining source access checks. [#256](https://github.com/klusik/PHP_gallery/issues/256)
+- Made media panels wrap responsively and added accessible controls and localized presentation and summary labels.
+
+#### Windows flight recording and reports
+- Added optional flight recording and multilingual chart-PDF reports for MSFS 2020 and 2024 to the Windows companion, which changed from version `0.4.1` to `0.5.0`. Recording and report generation were enabled by default, with independent preferences. [#254](https://github.com/klusik/PHP_gallery/issues/254)
+- Added durable Stop and confirmed Revoke finalization that drained accepted work, retained unresolved tasks for recovery, and revoked the API key only after required work was acknowledged.
+- Added gallery report delivery with checksum-based status reconciliation and retry handling. Reports remained separate from OFP documents and used existing protected PDF storage.
+
+#### Release draft cleanup
+- Added guarded automatic retirement of the exact release branch after a verified ready draft and main/develop synchronization. Failed proof preserved the draft and branch; release publication remained manual.
+
+### Technical Details
+
+#### Backend and database
+- Added nullable, versioned `galleries.presentation_json` through migration `202610170001_gallery_presentation_settings.php`. Presentation-setting writes required the schema; missing or unsupported settings retained existing defaults.
+- Updated physical gallery and Smart Gallery routes and controllers for presentation links, playback parameters, and source-filter preservation. Existing access checks and protected media delivery remained in place.
+- Added gallery-scoped `flight_reports_v1` status and upload actions. Report identity, language, PDF content, size, and checksum were validated; matching retries were reconciled, and conflicts were reported. Flight-report delivery added no database schema changes.
+
+#### Frontend and Windows companion
+- Added `public/assets/gallery-modules/gallery-presentation.js` and `public/assets/gallery-modules/gallery-pdf-metadata.js`; updated the lightbox, music player, media panels, presentation controls, and responsive styling.
+- Added Windows flight recording, session analysis, report generation, delivery, progress UI, and recovery workflows under `winapp/uploader/`. Installer packaging added ReportLab and the bundled DejaVu font resource.
+
+#### Tests and documentation
+- Added regression coverage for presentation defaults, schema readiness, sharing, launch and activation behavior, Smart Gallery access and summaries, and PDF/music metadata handling.
+- Added Windows companion coverage for telemetry recording and analysis, report generation and delivery, durable work draining, retries, and Stop/Revoke behavior.
+- Added release-retirement scenarios covering proof checks, exact-lease deletion, concurrent updates, and recovery after a lost response.
+- Updated architecture, database, testing, compatibility, release, gallery media, WinApp, and all four manual sources. The documentation identified live simulator acceptance as separate from automated regression coverage.
+
+### User Impact
+
+#### For visitors
+- Visitors could launch and share gallery presentations with playback options and see PDF and music summaries. Smart Gallery presentation links retained the selected source filter.
+- Existing visitor authorization and protected media delivery remained unchanged.
+
+#### For administrators
+- Administrators could configure gallery presentation defaults and preview or share presentation links. Saving those settings required the new database migration.
+- Windows companion users could record flights and create multilingual PDF reports. Unsupported report servers left reports local and retryable; unresolved work was retained for recovery.
+
+#### For maintainers
+- Release draft cleanup rechecked release identity, retained evidence, ancestry, and active dependencies before deleting an unchanged release branch. Publication remained a separate manual step.
+- Regression coverage and permanent documentation were added for the new workflows.
+
 ## Version 0.135.1
 
 Fixed media renamer staging for long original filenames while preserving readable final names, rollback behavior, and upload ordering and numbering. Added regression coverage and updated testing, compatibility, concurrency, and manual documentation.
