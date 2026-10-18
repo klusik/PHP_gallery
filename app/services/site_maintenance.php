@@ -117,7 +117,12 @@ function site_maintenance_normalize_utc_time(string $value): string
  */
 function site_maintenance_window_minutes(): int
 {
-    return site_maintenance_normalize_window_minutes((int) app_setting('site_maintenance_window_minutes', (string) SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES));
+    return site_maintenance_normalize_window_minutes(
+        (int) app_setting(
+            'site_maintenance_window_minutes',
+            (string) SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES
+        )
+    );
 }
 
 /**
@@ -289,8 +294,16 @@ function site_maintenance_request_trigger_interval_seconds(): int
  * @param int $timeBudgetSeconds Time budget seconds value.
  * @param bool $requestTriggerEnabled Request trigger enabled value.
  * @param int $windowMinutes Window minutes value.
+ * @return void Saves the normalized maintenance preferences.
  */
-function set_site_maintenance_settings(bool $enabled, string $utcTime, int $batchSize, int $timeBudgetSeconds, bool $requestTriggerEnabled = true, int $windowMinutes = SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES): void
+function set_site_maintenance_settings(
+    bool $enabled,
+    string $utcTime,
+    int $batchSize,
+    int $timeBudgetSeconds,
+    bool $requestTriggerEnabled = true,
+    int $windowMinutes = SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES
+): void
 {
     set_app_setting('site_maintenance_enabled', $enabled ? '1' : '0');
     set_app_setting('site_maintenance_utc_time', site_maintenance_normalize_utc_time($utcTime));
@@ -648,7 +661,9 @@ function site_maintenance_new_state(string $cycleDate, string $source): array
         'totals' => site_maintenance_empty_totals(),
         'cleanup' => [],
         'cleanup_diagnostics' => [],
-        'thumbnail_metadata_start_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
+        'thumbnail_metadata_start_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot')
+            ? thumbnail_metadata_storage_snapshot()
+            : [],
     ];
 }
 
@@ -891,8 +906,20 @@ function site_maintenance_fire_cache_chain(string $ticket): bool
     if ($port < 1 || $port > 65535) return false;
     $body = http_build_query(['cache_only'=>1,'cache_ticket'=>$ticket], '', '&', PHP_QUERY_RFC3986);
     $target = rtrim((string) ($parts['path'] ?? ''), '/') . '/index.php?page=site_maintenance_cron';
-    $hostHeader = $host . (($parts['scheme'] === 'https' && $port === 443) || ($parts['scheme'] === 'http' && $port === 80) ? '' : ':' . $port);
-    $context = stream_context_create(['ssl'=>['verify_peer'=>true,'verify_peer_name'=>true,'allow_self_signed'=>false,'peer_name'=>$host]]);
+    $hostHeader = $host . (
+        ($parts['scheme'] === 'https' && $port === 443)
+            || ($parts['scheme'] === 'http' && $port === 80)
+            ? ''
+            : ':' . $port
+    );
+    $context = stream_context_create([
+        'ssl' => [
+            'verify_peer'=>true,
+            'verify_peer_name'=>true,
+            'allow_self_signed'=>false,
+            'peer_name'=>$host
+        ],
+    ]);
     // Bound each connection and the complete write admission.
     // Type: int. Units: seconds. Scope: one asynchronous cache handoff.
     // Consumers: stream connection, write timeout and write deadline. Rationale: a one-second limit prevents a stalled loopback from turning the public kickoff into a long network wait.
@@ -1738,21 +1765,46 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
 
     if (image_uses_dng_display_derivatives($image)) {
         if ($fullRepairSource) {
-            return ['allowed' => true, 'reason' => 'scheduled_dng_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+            return [
+                'allowed' => true,
+                'reason' => 'scheduled_dng_repair_allowed',
+                'source_bytes' => $sourceBytes,
+                'pixels' => $sourcePixels
+            ];
         }
-        return ['allowed' => false, 'reason' => 'dng_repair_requires_scheduled_or_cli_maintenance', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        return [
+            'allowed' => false,
+            'reason' => 'dng_repair_requires_scheduled_or_cli_maintenance',
+            'source_bytes' => $sourceBytes,
+            'pixels' => $sourcePixels
+        ];
     }
 
     if ($fullRepairSource) {
-        return ['allowed' => true, 'reason' => 'scheduled_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        return [
+            'allowed' => true,
+            'reason' => 'scheduled_repair_allowed',
+            'source_bytes' => $sourceBytes,
+            'pixels' => $sourcePixels
+        ];
     }
 
     if ($sourceBytes > SITE_MAINTENANCE_WEB_REPAIR_MAX_BYTES) {
-        return ['allowed' => false, 'reason' => 'source_file_too_large_for_web_repair', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        return [
+            'allowed' => false,
+            'reason' => 'source_file_too_large_for_web_repair',
+            'source_bytes' => $sourceBytes,
+            'pixels' => $sourcePixels
+        ];
     }
 
     if ($sourcePixels > SITE_MAINTENANCE_WEB_REPAIR_MAX_PIXELS) {
-        return ['allowed' => false, 'reason' => 'source_dimensions_too_large_for_web_repair', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        return [
+            'allowed' => false,
+            'reason' => 'source_dimensions_too_large_for_web_repair',
+            'source_bytes' => $sourceBytes,
+            'pixels' => $sourcePixels
+        ];
     }
 
     return ['allowed' => true, 'reason' => 'web_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];

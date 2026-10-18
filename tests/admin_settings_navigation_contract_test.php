@@ -77,7 +77,14 @@ $expectations = [
     ['dashboard_sections', "admin_settings_url('privacy')", 'Dashboard privacy/maintenance to central Privacy link'],
 ];
 foreach ($expectations as [$file, $needle, $label]) {
-    if (!str_contains($files[$file], $needle)) {
+    $matches = $file === 'registry'
+        && $needle === "'site_name' => admin_settings_entry('site_name', 'general'"
+        ? preg_match(
+            "/'site_name'\\s*=>\\s*admin_settings_entry\\s*\\(\\s*'site_name'\\s*,\\s*'general'/",
+            $files[$file]
+        ) === 1
+        : str_contains($files[$file], $needle);
+    if (!$matches) {
         throw new RuntimeException('Missing navigation contract: ' . $label);
     }
 }

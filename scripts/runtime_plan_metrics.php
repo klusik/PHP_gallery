@@ -35,7 +35,10 @@ function runtime_plan_route_metrics(array $plan, array $routes): array
     $closures = [];
     $roots = [];
     foreach ($routes as $probeId => $routeName) {
-        if (!is_string($probeId) || $probeId === '' || !is_string($routeName) || $routeName === '') {
+        if (!is_string($probeId)
+            || $probeId === ''
+            || !is_string($routeName)
+            || $routeName === '') {
             throw new \UnexpectedValueException('Runtime route metric identities must be non-empty strings.');
         }
         $root = $plan['route_modules'][$routeName] ?? null;
@@ -43,8 +46,11 @@ function runtime_plan_route_metrics(array $plan, array $routes): array
             throw new \UnexpectedValueException('Runtime route has no valid root module: ' . $routeName . '.');
         }
         $closure = \Gallery\Tools\RuntimeModules\runtime_module_transitive_closure($plan, $root);
-        if (!is_array($closure) || !is_array($closure['modules'] ?? null) || !is_array($closure['files'] ?? null)
-            || !array_is_list($closure['modules']) || !array_is_list($closure['files'])) {
+        if (!is_array($closure)
+            || !is_array($closure['modules'] ?? null)
+            || !is_array($closure['files'] ?? null)
+            || !array_is_list($closure['modules'])
+            || !array_is_list($closure['files'])) {
             throw new \UnexpectedValueException('Runtime module closure helper returned an invalid result.');
         }
         $closures[$probeId] = ['modules' => $closure['modules'], 'files' => $closure['files']];
@@ -73,7 +79,9 @@ function runtime_plan_route_metrics(array $plan, array $routes): array
         }
         foreach ($closure['modules'] as $moduleName) {
             $module = $plan['modules'][$moduleName] ?? null;
-            if (!is_array($module) || !is_array($module['files'] ?? null) || !array_is_list($module['files'])) {
+            if (!is_array($module)
+                || !is_array($module['files'] ?? null)
+                || !array_is_list($module['files'])) {
                 throw new \UnexpectedValueException('Runtime module closure references malformed direct file ownership.');
             }
             $directEntries += count($module['files']);
@@ -145,7 +153,12 @@ function runtime_plan_inventory_metrics(array $plan): array
 function runtime_plan_ratchet_problems(array $current, array $baseline): array
 {
     $problems = [];
-    foreach (['plan_file_count', 'included_php_files', 'peak_memory_bytes', 'shared_file_count'] as $field) {
+    foreach ([
+        'plan_file_count',
+        'included_php_files',
+        'peak_memory_bytes',
+        'shared_file_count',
+    ] as $field) {
         if (!array_key_exists($field, $current)) {
             continue;
         }
@@ -163,7 +176,11 @@ function runtime_plan_ratchet_problems(array $current, array $baseline): array
             $problems[] = $field . '=' . $value . ' exceeds baseline ' . $old . ' plus allowance ' . $allowance . '.';
         }
     }
-    foreach (['root_count', 'transitive_module_count', 'direct_duplicate_file_entries'] as $field) {
+    foreach ([
+        'root_count',
+        'transitive_module_count',
+        'direct_duplicate_file_entries',
+    ] as $field) {
         if (array_key_exists($field, $current)) {
             if (!is_int($current[$field]) || $current[$field] < 0
                 || !is_int($baseline[$field] ?? null) || $baseline[$field] < 0) {
@@ -171,7 +188,9 @@ function runtime_plan_ratchet_problems(array $current, array $baseline): array
             }
         }
     }
-    if (isset($current['root_module']) && (!is_string($current['root_module']) || $current['root_module'] === '')) {
+    if (isset($current['root_module'])
+        && (!is_string($current['root_module'])
+            || $current['root_module'] === '')) {
         $problems[] = 'root_module must be a non-empty string.';
     }
     if (isset($current['root_module']) && isset($baseline['root_module'])
@@ -224,16 +243,29 @@ function runtime_plan_baseline_routes(mixed $baseline, array $probeIds): array
         if (!is_string($probeId) || !is_array($metrics)) {
             throw new \UnexpectedValueException('Runtime plan ratchet baseline route entry is malformed.');
         }
-        foreach (['root_count', 'transitive_module_count', 'plan_file_count', 'shared_file_count', 'direct_file_entries', 'direct_duplicate_file_entries', 'included_php_files', 'peak_memory_bytes'] as $field) {
+        foreach ([
+            'root_count',
+            'transitive_module_count',
+            'plan_file_count',
+            'shared_file_count',
+            'direct_file_entries',
+            'direct_duplicate_file_entries',
+            'included_php_files',
+            'peak_memory_bytes',
+        ] as $field) {
             if (!is_int($metrics[$field] ?? null) || $metrics[$field] < 0) {
                 throw new \UnexpectedValueException('Runtime plan ratchet baseline metric is invalid: ' . $probeId . '.' . $field . '.');
             }
         }
-        if ($metrics['plan_file_count'] < 1 || $metrics['included_php_files'] < 1 || $metrics['peak_memory_bytes'] < 1
-            || $metrics['root_count'] !== 1 || $metrics['transitive_module_count'] < 1
+        if ($metrics['plan_file_count'] < 1
+            || $metrics['included_php_files'] < 1
+            || $metrics['peak_memory_bytes'] < 1
+            || $metrics['root_count'] !== 1
+            || $metrics['transitive_module_count'] < 1
             || $metrics['direct_file_entries'] < $metrics['direct_duplicate_file_entries']
             || $metrics['direct_file_entries'] - $metrics['direct_duplicate_file_entries'] !== $metrics['plan_file_count']
-            || !is_string($metrics['root_module'] ?? null) || $metrics['root_module'] === '') {
+            || !is_string($metrics['root_module'] ?? null)
+            || $metrics['root_module'] === '') {
             throw new \UnexpectedValueException('Runtime plan ratchet baseline route entry is incomplete: ' . $probeId . '.');
         }
     }
@@ -252,12 +284,18 @@ function runtime_plan_baseline_inventory(mixed $baseline): array
         throw new \UnexpectedValueException('Runtime plan ratchet baseline has no plan inventory.');
     }
     $plan = $baseline['plan'];
-    foreach (['module_count', 'direct_file_entries', 'unique_direct_file_count', 'direct_duplicate_file_entries'] as $field) {
+    foreach ([
+        'module_count',
+        'direct_file_entries',
+        'unique_direct_file_count',
+        'direct_duplicate_file_entries',
+    ] as $field) {
         if (!is_int($plan[$field] ?? null) || $plan[$field] < 0) {
             throw new \UnexpectedValueException('Runtime plan baseline inventory metric is invalid: ' . $field . '.');
         }
     }
-    if ($plan['module_count'] < 1 || $plan['unique_direct_file_count'] < 1
+    if ($plan['module_count'] < 1
+        || $plan['unique_direct_file_count'] < 1
         || $plan['direct_file_entries'] < $plan['unique_direct_file_count']
         || $plan['direct_duplicate_file_entries'] !== $plan['direct_file_entries'] - $plan['unique_direct_file_count']) {
         throw new \UnexpectedValueException('Runtime plan baseline inventory metrics are inconsistent.');
@@ -274,7 +312,12 @@ function runtime_plan_baseline_inventory(mixed $baseline): array
  */
 function runtime_plan_inventory_problems(array $current, array $baseline): array
 {
-    foreach (['module_count', 'direct_file_entries', 'unique_direct_file_count', 'direct_duplicate_file_entries'] as $field) {
+    foreach ([
+        'module_count',
+        'direct_file_entries',
+        'unique_direct_file_count',
+        'direct_duplicate_file_entries',
+    ] as $field) {
         if (!is_int($current[$field] ?? null) || $current[$field] < 0
             || !is_int($baseline[$field] ?? null) || $baseline[$field] < 0) {
             return ['Plan inventory metric is invalid: ' . $field . '.'];

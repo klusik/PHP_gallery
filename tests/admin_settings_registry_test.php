@@ -245,7 +245,8 @@ foreach (['admin_legacy_upload_navigation_enabled', 'admin_upload_client_format_
 }
 
 foreach (['theme_accent', 'theme_favicon', 'theme_custom_css_editor', 'telemetry_raw_retention_days', 'thumbnail_exact_scan', 'site_maintenance_time_budget_seconds', 'navigation_data_update', 'database_optimize', 'password_reset_transport', 'google_account_linking', 'openai_model'] as $discoveryId) {
-    if (!str_contains($registrySource, "['{$discoveryId}',")) {
+    $discoveryPattern = '/\\[\\s*\'' . preg_quote($discoveryId, '/') . '\'\\s*,/';
+    if (preg_match($discoveryPattern, $registrySource) !== 1) {
         throw new RuntimeException('Specialized Settings discovery entry missing: ' . $discoveryId);
     }
 }

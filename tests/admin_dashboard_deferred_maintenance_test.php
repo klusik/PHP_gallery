@@ -36,7 +36,9 @@ $bootstrapSource = (string) file_get_contents(__DIR__ . '/../app/bootstrap.php')
     . (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
 
 assert_admin_dashboard_deferred_contains($serviceSource, "function admin_dashboard_view_model(bool \$includeMaintenance = false, string \$surface = 'complete'): array", 'dashboard model preserves complete callers and explicit deferred surfaces');
-assert_admin_dashboard_deferred_contains($serviceSource, '$databaseUsage = $includeMaintenance &&', 'database usage is maintenance-only');
+if (!preg_match('/\$databaseUsage\s*=\s*\$includeMaintenance\s*&&/', $serviceSource)) {
+    throw new RuntimeException('database usage is maintenance-only is missing.');
+}
 assert_admin_dashboard_deferred_contains($controllerSource, 'function cms_admin_dashboard_maintenance(): void', 'deferred maintenance controller exists');
 assert_admin_dashboard_deferred_contains($controllerSource, 'use function Gallery\\Views\\view_render_admin_dashboard_maintenance_panel;', 'deferred maintenance controller imports its panel renderer');
 assert_admin_dashboard_deferred_contains($controllerSource, 'admin_dashboard_view_model($maintenanceLoaded, $surface)', 'explicit Maintenance deep links render maintenance during the main request');

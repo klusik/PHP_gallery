@@ -94,20 +94,40 @@ function gallery_migration_install_asset_file_owned(string $jobId, int $targetGa
     );
     $job = gallery_migration_load_job($jobId);
     if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.job_target_mismatch',
+                'Migration job does not belong to this target gallery.'
+            )
+        );
     }
     $manifest = (array) ($job['manifest'] ?? []);
     $asset = gallery_migration_manifest_asset($manifest, $request);
     if ($asset === null) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_not_in_manifest', 'Submitted asset is not part of this migration manifest.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.asset_not_in_manifest',
+                'Submitted asset is not part of this migration manifest.'
+            )
+        );
     }
     if (!is_file($sourcePath)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_upload_missing', 'Uploaded migration asset is not available.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.asset_upload_missing',
+                'Uploaded migration asset is not available.'
+            )
+        );
     }
 
     $checksum = (string) ($asset['checksum_sha256'] ?? '');
     if ($checksum !== '' && (hash_file('sha256', $sourcePath) ?: '') !== $checksum) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_checksum_failed', 'Migration asset checksum does not match the manifest.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.asset_checksum_failed',
+                'Migration asset checksum does not match the manifest.'
+            )
+        );
     }
 
     $assetTargetGalleryId = gallery_migration_target_gallery_id($job, (int) ($asset['source_gallery_id'] ?? 0));
@@ -175,7 +195,12 @@ function gallery_migration_sync_received_assets_owned(array $job): array
     // an asset. Reload the durable job; never overwrite progress from that array.
     $job = gallery_migration_load_job((string) ($job['job_id'] ?? ''));
     if ($targetGalleryId <= 0 || (int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.job_target_mismatch',
+                'Migration job does not belong to this target gallery.'
+            )
+        );
     }
     $manifest = (array) ($job['manifest'] ?? []);
     if ($targetGalleryId <= 0 || !$manifest) {
@@ -236,7 +261,12 @@ function gallery_migration_install_gallery_asset(int $targetGalleryId, array $as
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_invalid', 'Requested migration asset is invalid.'));
     }
     if (!mutation_schema_optional_column_available('mutation.gallery_migration_gallery_asset', 'galleries', $column, 'gallery_migration.install_gallery_asset')) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_invalid', 'Requested migration asset is not supported by the current database schema.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.asset_invalid',
+                'Requested migration asset is not supported by the current database schema.'
+            )
+        );
     }
 
     $relativePath = normalize_relative_path((string) ($asset['relative_path'] ?? ''));
@@ -250,10 +280,20 @@ function gallery_migration_install_gallery_asset(int $targetGalleryId, array $as
     $targetPath = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     $targetDir = dirname($targetPath);
     if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_dir_failed', 'Could not create the target asset folder.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.asset_dir_failed',
+                'Could not create the target asset folder.'
+            )
+        );
     }
     if (!path_inside($galleryRoot, $targetDir)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_path_unsafe', 'Migration asset path is outside the target gallery.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.asset_path_unsafe',
+                'Migration asset path is outside the target gallery.'
+            )
+        );
     }
     gallery_migration_copy_if_same_or_missing($sourcePath, $targetPath, (string) ($asset['checksum_sha256'] ?? ''));
 
@@ -279,7 +319,12 @@ function gallery_migration_install_image_asset(int $targetGalleryId, array $mani
     $sourceImageId = (int) ($asset['source_image_id'] ?? 0);
     $imageManifest = gallery_migration_manifest_image($manifest, $sourceImageId);
     if ($imageManifest === null) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_missing_manifest', 'Migration image metadata is missing.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.image_missing_manifest',
+                'Migration image metadata is missing.'
+            )
+        );
     }
 
     $kind = (string) ($asset['kind'] ?? '');
@@ -298,11 +343,23 @@ function gallery_migration_install_image_asset(int $targetGalleryId, array $mani
         $imageId = $targetImage ? (int) $targetImage['id'] : 0;
     }
     if ($imageId <= 0) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.original_required', 'Install the original image before its thumbnails.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.original_required',
+                'Install the original image before its thumbnails.'
+            )
+        );
     }
 
     gallery_migration_install_thumbnail($targetGalleryId, $imageId, $asset, $sourcePath);
-    return ['scope' => 'image', 'kind' => 'thumbnail', 'source_image_id' => $sourceImageId, 'image_id' => $imageId, 'size' => (int) ($asset['size'] ?? 0), 'format' => (string) ($asset['format'] ?? '')];
+    return [
+        'scope' => 'image',
+        'kind' => 'thumbnail',
+        'source_image_id' => $sourceImageId,
+        'image_id' => $imageId,
+        'size' => (int) ($asset['size'] ?? 0),
+        'format' => (string) ($asset['format'] ?? '')
+    ];
 }
 
 /**
@@ -396,25 +453,72 @@ function gallery_migration_install_original(int $targetGalleryId, array $imageMa
 
     $relativePath = normalize_relative_path((string) ($imageManifest['relative_path'] ?? $asset['relative_path'] ?? $asset['filename'] ?? ''));
     if ($relativePath === '' || str_contains($relativePath, '/')) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_path_invalid', 'Migration supports direct gallery images only for now.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.image_path_invalid',
+                'Migration supports direct gallery images only for now.'
+            )
+        );
     }
     if (!is_supported_image_path($relativePath)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_type_invalid', 'Migration original uses an unsupported image type.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.image_type_invalid',
+                'Migration original uses an unsupported image type.'
+            )
+        );
     }
 
     $info = scan_image_file_metadata($sourcePath, $relativePath);
     if ($info === null) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_invalid', 'Migration original is not a valid image.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.image_invalid',
+                'Migration original is not a valid image.'
+            )
+        );
     }
 
-    foreach (['filename', 'title', 'description', 'width', 'height', 'mime_type', 'file_size', 'modified_at', 'checksum_sha256', 'sort_order', 'visibility', 'exif_taken_at', 'exif_camera_make', 'exif_camera_model', 'exif_lens_model', 'exif_focal_length', 'exif_aperture', 'exif_exposure_time', 'exif_iso', 'gps_lat', 'gps_lng', 'gps_altitude', 'gps_extracted_at', 'nsfw_enabled', 'thumbnail_min_size', 'thumbnail_max_size'] as $column) {
+    foreach ([
+        'filename',
+        'title',
+        'description',
+        'width',
+        'height',
+        'mime_type',
+        'file_size',
+        'modified_at',
+        'checksum_sha256',
+        'sort_order',
+        'visibility',
+        'exif_taken_at',
+        'exif_camera_make',
+        'exif_camera_model',
+        'exif_lens_model',
+        'exif_focal_length',
+        'exif_aperture',
+        'exif_exposure_time',
+        'exif_iso',
+        'gps_lat',
+        'gps_lng',
+        'gps_altitude',
+        'gps_extracted_at',
+        'nsfw_enabled',
+        'thumbnail_min_size',
+        'thumbnail_max_size'
+    ] as $column) {
         mutation_schema_optional_column_available('mutation.gallery_migration_image_metadata', 'images', $column, 'gallery_migration.install_original');
     }
 
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     $targetPath = $galleryRoot . DIRECTORY_SEPARATOR . $relativePath;
     if (!path_inside($galleryRoot, dirname($targetPath))) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.image_path_unsafe', 'Migration image path is outside the target gallery.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.image_path_unsafe',
+                'Migration image path is outside the target gallery.'
+            )
+        );
     }
     gallery_migration_copy_if_same_or_missing($sourcePath, $targetPath, (string) ($asset['checksum_sha256'] ?? ''));
 
@@ -527,19 +631,39 @@ function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId,
     $size = (int) ($asset['size'] ?? 0);
     $format = (string) ($asset['format'] ?? '');
     if (!in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.thumbnail_invalid', 'Migration thumbnail has an unsupported size or format.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.thumbnail_invalid',
+                'Migration thumbnail has an unsupported size or format.'
+            )
+        );
     }
 
     $info = @getimagesize($sourcePath);
     if ($info === false || empty($info['mime'])) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.thumbnail_invalid', 'Migration thumbnail is not a valid image.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.thumbnail_invalid',
+                'Migration thumbnail is not a valid image.'
+            )
+        );
     }
     $mime = (string) $info['mime'];
     if (($format === 'jpg' && !in_array($mime, ['image/jpeg', 'image/pjpeg'], true)) || ($format === 'webp' && $mime !== 'image/webp')) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.thumbnail_mime_mismatch', 'Migration thumbnail MIME type does not match its manifest format.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.thumbnail_mime_mismatch',
+                'Migration thumbnail MIME type does not match its manifest format.'
+            )
+        );
     }
     if (max((int) ($info[0] ?? 0), (int) ($info[1] ?? 0)) > $size + 4) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.thumbnail_size_mismatch', 'Migration thumbnail is larger than its declared size.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.thumbnail_size_mismatch',
+                'Migration thumbnail is larger than its declared size.'
+            )
+        );
     }
     thumbnail_metadata_preflight_write_schema('gallery_migration.install_thumbnail');
 
@@ -547,7 +671,12 @@ function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId,
     $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
     $targetDir = dirname($targetPath);
     if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.thumbnail_dir_failed', 'Could not create the target thumbnail folder.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.thumbnail_dir_failed',
+                'Could not create the target thumbnail folder.'
+            )
+        );
     }
     gallery_migration_copy_if_same_or_missing($sourcePath, $targetPath, (string) ($asset['checksum_sha256'] ?? ''));
     if (function_exists('Gallery\\Services\\thumbnail_maintenance_summary_cache_clear')) {

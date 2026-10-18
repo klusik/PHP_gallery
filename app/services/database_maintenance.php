@@ -114,42 +114,224 @@ function database_maintenance_table_policies(): array
     return [
         'galleries' => $protected('gallery/content data', 'Filesystem gallery folder and gallery metadata', 'Valid gallery content is always protected.'),
         'images' => $protected('gallery/content data', 'Gallery and source image', 'Valid image content is always protected.'),
-        'duplicate_photo_ledger_pairs' => $protected('administrator workflow state', 'Per-administrator reviewed duplicate image relationships', 'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.'),
-        'duplicate_photo_ledger_galleries' => $protected('administrator workflow state', 'Per-administrator exact-gallery duplicate suppression rules', 'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.'),
-        'tags' => $protected('gallery/content data', 'Administrator-defined taxonomy', 'Unused tags may be intentional and are not removed automatically.'),
-        'gallery_tags' => $derived('gallery/content data', 'Gallery and tag link', 'Remove only links whose gallery or tag parent is missing.', 'No retention rule.', 'Composite primary key defines one gallery/tag link.', 'automatic'),
-        'image_tags' => $derived('gallery/content data', 'Image and tag link', 'Remove only links whose image or tag parent is missing.', 'No retention rule.', 'Composite primary key defines one image/tag link.', 'automatic'),
-        'image_votes' => $derived('gallery/content data', 'Image vote', 'Remove only votes whose image parent is missing.', 'No retention rule.', 'Existing user/visitor unique keys define identity.', 'automatic'),
-        'picture_game_votes' => $derived('gallery/content data', 'Gallery picture-game vote', 'Remove only votes whose gallery or referenced image is missing.', 'No retention rule.', 'Gallery, voter, and image-pair unique key defines identity.', 'automatic'),
-        'zip_archives' => $derived('caches and temporary state', 'Generated ZIP metadata', 'Remove only gallery-scoped rows whose gallery parent is missing. Never delete ZIP files from this workflow.', 'No age-based deletion.', 'Content signature participates in lookup identity.', 'automatic'),
-        'gallery_upload_tokens' => $derived('authentication and accounts', 'Gallery upload credential', 'Remove only tokens whose gallery parent is missing.', 'Revoked tokens are preserved unless a separate credential policy removes them.', 'Token hash is unique.', 'automatic'),
-        'gallery_flight_maps' => $derived('external integration data', 'Gallery flight-map metadata', 'Remove only rows whose gallery parent is missing.', 'No retention rule.', 'One row per gallery primary key.', 'automatic'),
-        'image_ai_metadata' => $derived('gallery/content data', 'Image AI-derived metadata', 'Remove only rows whose image parent is missing.', 'No age-based deletion.', 'Image, model name, and model version define identity.', 'automatic'),
-        'image_ai_analysis_jobs' => $derived('caches and temporary state', 'Gallery image analysis queue', 'Remove only jobs whose gallery or image parent is missing.', 'Completed jobs are not deleted by age in this workflow.', 'Job key is unique.', 'automatic'),
-        'image_thumbnail_variants' => $derived('caches and temporary state', 'Generated thumbnail metadata only, never image bytes', 'Remove only rows whose image parent is missing.', 'Unsupported sizes and formats are reported, not deleted automatically.', 'Image, size, and format define identity; deterministic duplicate survivor is the lowest id.', 'automatic'),
-        'flight_map_nav_points' => $protected('external integration data', 'Imported navigation dataset', 'Data lifecycle is owned by the navigation-data refresh workflow.'),
-        'navigation_data_accounts' => $derived('external integration data', 'User navigation provider credential', 'Remove only rows whose user parent is missing.', 'Token expiry does not imply account deletion.', 'User and provider define identity.', 'automatic'),
-        'navigation_data_cache' => $derived('caches and temporary state', 'Navigation lookup cache', 'No parent relationship.', 'Rows are eligible only when expires_at is explicitly in the past.', 'cache_key is unique; deterministic duplicate survivor is the lowest id.', 'automatic'),
+        'duplicate_photo_ledger_pairs' => $protected(
+            'administrator workflow state',
+            'Per-administrator reviewed duplicate image relationships',
+            'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.',
+        ),
+        'duplicate_photo_ledger_galleries' => $protected(
+            'administrator workflow state',
+            'Per-administrator exact-gallery duplicate suppression rules',
+            'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.',
+        ),
+        'tags' => $protected(
+            'gallery/content data',
+            'Administrator-defined taxonomy',
+            'Unused tags may be intentional and are not removed automatically.',
+        ),
+        'gallery_tags' => $derived(
+            'gallery/content data',
+            'Gallery and tag link',
+            'Remove only links whose gallery or tag parent is missing.',
+            'No retention rule.',
+            'Composite primary key defines one gallery/tag link.',
+            'automatic',
+        ),
+        'image_tags' => $derived(
+            'gallery/content data',
+            'Image and tag link',
+            'Remove only links whose image or tag parent is missing.',
+            'No retention rule.',
+            'Composite primary key defines one image/tag link.',
+            'automatic',
+        ),
+        'image_votes' => $derived(
+            'gallery/content data',
+            'Image vote',
+            'Remove only votes whose image parent is missing.',
+            'No retention rule.',
+            'Existing user/visitor unique keys define identity.',
+            'automatic',
+        ),
+        'picture_game_votes' => $derived(
+            'gallery/content data',
+            'Gallery picture-game vote',
+            'Remove only votes whose gallery or referenced image is missing.',
+            'No retention rule.',
+            'Gallery, voter, and image-pair unique key defines identity.',
+            'automatic',
+        ),
+        'zip_archives' => $derived(
+            'caches and temporary state',
+            'Generated ZIP metadata',
+            'Remove only gallery-scoped rows whose gallery parent is missing. Never delete ZIP files from this workflow.',
+            'No age-based deletion.',
+            'Content signature participates in lookup identity.',
+            'automatic',
+        ),
+        'gallery_upload_tokens' => $derived(
+            'authentication and accounts',
+            'Gallery upload credential',
+            'Remove only tokens whose gallery parent is missing.',
+            'Revoked tokens are preserved unless a separate credential policy removes them.',
+            'Token hash is unique.',
+            'automatic',
+        ),
+        'gallery_flight_maps' => $derived(
+            'external integration data',
+            'Gallery flight-map metadata',
+            'Remove only rows whose gallery parent is missing.',
+            'No retention rule.',
+            'One row per gallery primary key.',
+            'automatic',
+        ),
+        'image_ai_metadata' => $derived(
+            'gallery/content data',
+            'Image AI-derived metadata',
+            'Remove only rows whose image parent is missing.',
+            'No age-based deletion.',
+            'Image, model name, and model version define identity.',
+            'automatic',
+        ),
+        'image_ai_analysis_jobs' => $derived(
+            'caches and temporary state',
+            'Gallery image analysis queue',
+            'Remove only jobs whose gallery or image parent is missing.',
+            'Completed jobs are not deleted by age in this workflow.',
+            'Job key is unique.',
+            'automatic',
+        ),
+        'image_thumbnail_variants' => $derived(
+            'caches and temporary state',
+            'Generated thumbnail metadata only, never image bytes',
+            'Remove only rows whose image parent is missing.',
+            'Unsupported sizes and formats are reported, not deleted automatically.',
+            'Image, size, and format define identity; deterministic duplicate survivor is the lowest id.',
+            'automatic',
+        ),
+        'flight_map_nav_points' => $protected(
+            'external integration data',
+            'Imported navigation dataset',
+            'Data lifecycle is owned by the navigation-data refresh workflow.',
+        ),
+        'navigation_data_accounts' => $derived(
+            'external integration data',
+            'User navigation provider credential',
+            'Remove only rows whose user parent is missing.',
+            'Token expiry does not imply account deletion.',
+            'User and provider define identity.',
+            'automatic',
+        ),
+        'navigation_data_cache' => $derived(
+            'caches and temporary state',
+            'Navigation lookup cache',
+            'No parent relationship.',
+            'Rows are eligible only when expires_at is explicitly in the past.',
+            'cache_key is unique; deterministic duplicate survivor is the lowest id.',
+            'automatic',
+        ),
         'users' => $protected('authentication and accounts', 'Administrator account', 'Accounts are never removed by database maintenance.'),
-        'admin_remember_tokens' => $derived('authentication and accounts', 'Administrator persistent login token', 'Remove only rows whose user parent is missing.', 'Expired or explicitly revoked credentials are eligible.', 'Selector is unique.', 'automatic'),
-        'password_reset_tokens' => $derived('authentication and accounts', 'One-time password reset credential', 'Remove only rows whose user parent is missing.', 'Expired or already-used credentials are eligible.', 'Selector is unique.', 'automatic'),
-        'auth_rate_limits' => $derived('authentication and accounts', 'Authentication throttle state', 'No parent relationship.', 'Use the application policy: inactive rows older than 24 hours and expired locks older than 24 hours.', 'Bucket and subject hash define identity.', 'automatic'),
-        'mobile_webdav_upload_tokens' => $derived('authentication and accounts', 'User and gallery WebDAV credential', 'Remove only rows whose user or gallery parent is missing.', 'Disabled credentials are preserved.', 'Path token is unique.', 'automatic'),
-        'user_google_accounts' => $derived('authentication and accounts', 'User Google account link', 'Remove only rows whose user parent is missing.', 'No retention rule.', 'User id and Google subject are unique identities.', 'automatic'),
-        'user_openai_text_settings' => $derived('settings', 'User OpenAI text profile', 'Remove only rows whose user parent is missing.', 'No retention rule.', 'One row per user.', 'automatic'),
-        'app_settings' => $protected('settings', 'Application configuration', 'Unknown and compatibility settings are retained. Dedicated migrations may remove proven obsolete keys.'),
-        'admin_logs' => $protected('audit logs', 'Administrator audit and diagnostics history', 'Generic database cleanup never deletes Admin logs. Admin Logs archival maintenance removes historical rows only after a verified daily filesystem ZIP has been created.'),
-        'database_maintenance_audit_log' => $protected('audit logs', 'Transactional database cleanup audit trail', 'Immutable row-identifier audit records are never deleted by generic database cleanup.'),
-        'maintenance_jobs' => $protected('maintenance/system state', 'Maintenance Center persisted job history', 'Retention is owned only by the Maintenance Center history policy; active checkpoints are never generic-cleanup candidates.'),
+        'admin_remember_tokens' => $derived(
+            'authentication and accounts',
+            'Administrator persistent login token',
+            'Remove only rows whose user parent is missing.',
+            'Expired or explicitly revoked credentials are eligible.',
+            'Selector is unique.',
+            'automatic',
+        ),
+        'password_reset_tokens' => $derived(
+            'authentication and accounts',
+            'One-time password reset credential',
+            'Remove only rows whose user parent is missing.',
+            'Expired or already-used credentials are eligible.',
+            'Selector is unique.',
+            'automatic',
+        ),
+        'auth_rate_limits' => $derived(
+            'authentication and accounts',
+            'Authentication throttle state',
+            'No parent relationship.',
+            'Use the application policy: inactive rows older than 24 hours and expired locks older than 24 hours.',
+            'Bucket and subject hash define identity.',
+            'automatic',
+        ),
+        'mobile_webdav_upload_tokens' => $derived(
+            'authentication and accounts',
+            'User and gallery WebDAV credential',
+            'Remove only rows whose user or gallery parent is missing.',
+            'Disabled credentials are preserved.',
+            'Path token is unique.',
+            'automatic',
+        ),
+        'user_google_accounts' => $derived(
+            'authentication and accounts',
+            'User Google account link',
+            'Remove only rows whose user parent is missing.',
+            'No retention rule.',
+            'User id and Google subject are unique identities.',
+            'automatic',
+        ),
+        'user_openai_text_settings' => $derived(
+            'settings',
+            'User OpenAI text profile',
+            'Remove only rows whose user parent is missing.',
+            'No retention rule.',
+            'One row per user.',
+            'automatic',
+        ),
+        'app_settings' => $protected(
+            'settings',
+            'Application configuration',
+            'Unknown and compatibility settings are retained. Dedicated migrations may remove proven obsolete keys.',
+        ),
+        'admin_logs' => $protected(
+            'audit logs',
+            'Administrator audit and diagnostics history',
+            'Generic database cleanup never deletes Admin logs. Admin Logs archival maintenance removes historical rows only after a verified daily filesystem ZIP has been created.',
+        ),
+        'database_maintenance_audit_log' => $protected(
+            'audit logs',
+            'Transactional database cleanup audit trail',
+            'Immutable row-identifier audit records are never deleted by generic database cleanup.',
+        ),
+        'maintenance_jobs' => $protected(
+            'maintenance/system state',
+            'Maintenance Center persisted job history',
+            'Retention is owned only by the Maintenance Center history policy; active checkpoints are never generic-cleanup candidates.',
+        ),
         'telemetry_settings' => $protected('telemetry/analytics', 'Telemetry configuration', 'Never deleted by generic database cleanup.'),
-        'telemetry_sessions' => $protected('telemetry/analytics', 'Anonymous telemetry session data', 'Retention is owned by the separate telemetry maintenance workflow.'),
-        'telemetry_events' => $protected('telemetry/analytics', 'Raw telemetry events', 'Retention is owned by the separate telemetry maintenance workflow.'),
-        'telemetry_hourly_metrics' => $protected('telemetry/analytics', 'Hourly telemetry aggregates', 'Retention is owned by the separate telemetry maintenance workflow.'),
-        'telemetry_daily_metrics' => $protected('telemetry/analytics', 'Daily telemetry aggregates', 'Retention is owned by the separate telemetry maintenance workflow.'),
-        'telemetry_db_query_metrics' => $protected('telemetry/analytics', 'Database query aggregates', 'Retention is owned by the separate telemetry maintenance workflow.'),
+        'telemetry_sessions' => $protected(
+            'telemetry/analytics',
+            'Anonymous telemetry session data',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
+        'telemetry_events' => $protected(
+            'telemetry/analytics',
+            'Raw telemetry events',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
+        'telemetry_hourly_metrics' => $protected(
+            'telemetry/analytics',
+            'Hourly telemetry aggregates',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
+        'telemetry_daily_metrics' => $protected(
+            'telemetry/analytics',
+            'Daily telemetry aggregates',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
+        'telemetry_db_query_metrics' => $protected(
+            'telemetry/analytics',
+            'Database query aggregates',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
         'telemetry_job_runs' => $protected('telemetry/analytics', 'Telemetry maintenance job history', 'Never deleted by generic database cleanup.'),
         'schema_migrations' => $protected('migration/system tables', 'Current migration audit trail', 'Migration audit rows are immutable.'),
-        'migrations' => $protected('migration/system tables', 'Legacy migration audit trail when present', 'Legacy audit rows are preserved for old installations.'),
+        'migrations' => $protected(
+            'migration/system tables',
+            'Legacy migration audit trail when present',
+            'Legacy audit rows are preserved for old installations.',
+        ),
     ];
 }
 
@@ -1368,13 +1550,24 @@ function database_maintenance_log_cleanup_batch(array $rule, int $deletedCount, 
 
 /**
  * Record cleanup summary without logging secrets or row payloads.
+ *
+ * @param array{failed?:bool,dry_run?:bool,deleted_rows?:int,candidate_rows?:int,...} $state
+ *     Resumable cleanup snapshot; the flags select audit severity and event type,
+ *     while the remaining bounded state is emitted unchanged.
+ * @return void Emits the Admin event when the logger is installed; otherwise no-op.
  */
 function database_maintenance_log_cleanup(array $state): void
 {
     if (!function_exists('Gallery\\Services\\admin_log_event')) {
         return;
     }
-    admin_log_event(!empty($state['failed']) ? 'error' : 'info', 'database_maintenance.cleanup_' . (!empty($state['dry_run']) ? 'dry_run' : 'completed'), !empty($state['dry_run']) ? 'Admin ran a database cleanup dry-run.' : 'Admin ran bounded safe database cleanup.', $state, ['category' => 'database', 'severity' => !empty($state['failed']) ? 'error' : 'notice']);
+    admin_log_event(
+        !empty($state['failed']) ? 'error' : 'info',
+        'database_maintenance.cleanup_' . (!empty($state['dry_run']) ? 'dry_run' : 'completed'),
+        !empty($state['dry_run']) ? 'Admin ran a database cleanup dry-run.' : 'Admin ran bounded safe database cleanup.',
+        $state,
+        ['category' => 'database', 'severity' => !empty($state['failed']) ? 'error' : 'notice'],
+    );
 }
 
 /**
@@ -1602,7 +1795,13 @@ function database_maintenance_run_table_operation(string $operation, array $sele
         'finished_at_utc' => gmdate('c'),
     ];
     if (function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event($failed === 0 ? 'info' : 'warning', 'database_maintenance.' . strtolower($operation), 'Admin ran ' . $operation . ' TABLE for selected tables.', $result, ['category' => 'database', 'severity' => $failed === 0 ? 'notice' : 'warning']);
+        admin_log_event(
+            $failed === 0 ? 'info' : 'warning',
+            'database_maintenance.' . strtolower($operation),
+            'Admin ran ' . $operation . ' TABLE for selected tables.',
+            $result,
+            ['category' => 'database', 'severity' => $failed === 0 ? 'notice' : 'warning'],
+        );
     }
     return $result;
 }

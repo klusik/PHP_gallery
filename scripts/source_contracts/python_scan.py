@@ -236,9 +236,13 @@ def executable_fingerprint(node: ast.AST) -> str:
     """
     executable = copy.deepcopy(node)
     for child in ast.walk(executable):
-        if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and ast.get_docstring(child) is not None:
+        if (
+            isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and ast.get_docstring(child) is not None
+        ):
             child.body = child.body[1:]
-    return hashlib.sha256(ast.dump(executable, include_attributes=False).encode("utf-8")).hexdigest()
+    executable_dump = ast.dump(executable, include_attributes=False)
+    return hashlib.sha256(executable_dump.encode("utf-8")).hexdigest()
 
 
 class DeclarationScanner(ast.NodeVisitor):
@@ -277,16 +281,29 @@ class DeclarationScanner(ast.NodeVisitor):
             None: Appends callable evidence and visits nested definitions.
         """
         arguments = list(node.args.posonlyargs) + list(node.args.args)
-        decorators = {ast.unparse(decorator).split("(", 1)[0] for decorator in node.decorator_list}
+        decorators = {
+            ast.unparse(decorator).split("(", 1)[0]
+            for decorator in node.decorator_list
+        }
         is_method = bool(self.owner_kinds and self.owner_kinds[-1] == "class")
-        if is_method and not decorators.intersection({"staticmethod", "builtins.staticmethod"}) and arguments:
+        if (
+            is_method
+            and not decorators.intersection({"staticmethod", "builtins.staticmethod"})
+            and arguments
+        ):
             arguments = arguments[1:]  # Bound self/cls is implicit in a method's API.
         arguments += list(node.args.kwonlyargs)
         if node.args.vararg:
             arguments.append(node.args.vararg)
         if node.args.kwarg:
             arguments.append(node.args.kwarg)
-        parameters = [{"name": argument.arg, "type": annotation_text(argument.annotation)} for argument in arguments]
+        parameters = [
+            {
+                "name": argument.arg,
+                "type": annotation_text(argument.annotation),
+            }
+            for argument in arguments
+        ]
         self.collect(node, "callable", parameters, annotation_text(node.returns))
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
@@ -395,7 +412,10 @@ def scan_sources(sources: dict[str, str]) -> dict[str, dict[str, list[dict[str, 
         scanner = DeclarationScanner()
         tree = ast.parse(source.removeprefix("\ufeff"))
         scanner.visit(tree)
-        result[identity] = {"snapshots": scanner.snapshots, "import_findings": import_findings(tree)}
+        result[identity] = {
+            "snapshots": scanner.snapshots,
+            "import_findings": import_findings(tree),
+        }
     return result
 
 

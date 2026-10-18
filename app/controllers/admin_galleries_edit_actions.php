@@ -986,11 +986,16 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // Resolve feature masters before optional schema work. Stale forms may still
     // submit fields for a feature that was disabled after the form was opened;
     // those values are ignored without probing or rewriting preserved feature data.
-    $pictureGameFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('picture_game');
-    $gpsMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('gallery_maps');
-    $flightMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('flight_maps');
-    $votingFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('image_voting');
-    $lightboxModeFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('lightbox_modes');
+    $pictureGameFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        || feature_capability_effective_enabled('picture_game');
+    $gpsMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        || feature_capability_effective_enabled('gallery_maps');
+    $flightMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        || feature_capability_effective_enabled('flight_maps');
+    $votingFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        || feature_capability_effective_enabled('image_voting');
+    $lightboxModeFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+        || feature_capability_effective_enabled('lightbox_modes');
     // Stale admin forms must not turn a Phase 11 inspection outage into an implicit
     // field omission. Only effectively enabled fields that were actually submitted
     // are preflighted so unrelated or disabled-feature edits remain schema-lazy.
@@ -1065,7 +1070,9 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // $gpsMapDefault stores the current value for partial update preservation.
     $gpsMapDefault = !$completeForm && (int) ($gallery['gps_map_enabled'] ?? 0) === 1;
     // $gpsMapOverride stores the inherited or explicit EXIF/GPS display state for nullable override installs.
-    $gpsMapOverride = $gpsMapOverrideReady ? gallery_gps_map_storage_value($input['gps_map_enabled'] ?? ($completeForm ? 'inherit' : ($gallery['gps_map_enabled'] ?? null))) : null;
+    $gpsMapOverride = $gpsMapOverrideReady
+        ? gallery_gps_map_storage_value($input['gps_map_enabled'] ?? ($completeForm ? 'inherit' : ($gallery['gps_map_enabled'] ?? null)))
+        : null;
     // $votingDefault stores the current value for partial update preservation.
     $votingDefault = !$completeForm && (int) ($gallery['voting_enabled'] ?? 0) === 1;
     // $showFilenamesDefault stores the current value for partial update preservation.
@@ -1077,13 +1084,21 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // Variable $gpsMapEnabled stores this steps working value.
     $gpsMapEnabled = $gpsMapReady && !$gpsMapOverrideReady ? admin_gallery_checkbox_input($input, 'gps_map_enabled', $gpsMapDefault) : 0;
     // Variable $votingEnabled stores this steps working value.
-    $votingEnabled = $votingReady ? admin_gallery_checkbox_input($input, 'voting_enabled', $votingDefault) : (int) ($gallery['voting_enabled'] ?? 0);
+    $votingEnabled = $votingReady
+        ? admin_gallery_checkbox_input($input, 'voting_enabled', $votingDefault)
+        : (int) ($gallery['voting_enabled'] ?? 0);
     // Variable $showFilenames stores this steps working value.
-    $showFilenames = gallery_filename_display_schema_ready() ? admin_gallery_checkbox_input($input, 'show_filenames', $showFilenamesDefault) : 0;
+    $showFilenames = gallery_filename_display_schema_ready()
+        ? admin_gallery_checkbox_input($input, 'show_filenames', $showFilenamesDefault)
+        : 0;
     // $countBadgeVisibility stores the optional gallery-card count badge override for this gallery.
-    $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($input['count_badge_visibility'] ?? ($gallery['count_badge_visibility'] ?? 'inherit')) : null;
+    $countBadgeVisibility = gallery_count_badge_schema_ready()
+        ? gallery_count_badge_storage_value($input['count_badge_visibility'] ?? ($gallery['count_badge_visibility'] ?? 'inherit'))
+        : null;
     // $lightboxBrowsingMode stores the optional gallery-level lightbox browsing-mode override.
-    $lightboxBrowsingMode = $lightboxModeReady ? gallery_lightbox_browsing_mode_storage_value($input['lightbox_browsing_mode'] ?? ($completeForm ? 'inherit' : ($gallery['lightbox_browsing_mode'] ?? 'inherit'))) : null;
+    $lightboxBrowsingMode = $lightboxModeReady
+        ? gallery_lightbox_browsing_mode_storage_value($input['lightbox_browsing_mode'] ?? ($completeForm ? 'inherit' : ($gallery['lightbox_browsing_mode'] ?? 'inherit')))
+        : null;
     // Variable $nsfwEnabled stores whether this gallery requires the NSFW Guard confirmation.
     $nsfwEnabled = nsfw_guard_schema_ready() ? admin_gallery_checkbox_input($input, 'nsfw_enabled', $nsfwDefault) : 0;
     if ($pictureGameEnabled) {
@@ -1248,31 +1263,50 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     if (gallery_background_source_schema_ready() && $shouldUpdateBackgroundSource) {
         // $submittedBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
         $submittedBackgroundSource = (string) ($input['background_source'] ?? '');
-        $backgroundSource = in_array($submittedBackgroundSource, ['upload', 'existing', 'collage'], true) ? $submittedBackgroundSource : null;
+        $backgroundSource = in_array($submittedBackgroundSource, ['upload', 'existing', 'collage'], true)
+            ? $submittedBackgroundSource
+            : null;
     }
 
     // Variable $slug stores this steps working value.
     $slug = gallery_editor_unique_slug($slug !== '' ? $slug : $title, $galleryId);
     // $descriptionLayoutOverride stores the optional gallery-card layout override for this gallery.
-    $descriptionLayoutOverride = gallery_description_layout_schema_ready() ? gallery_description_layout_storage_value($input['description_layout'] ?? ($completeForm ? 'inherit' : ($gallery['description_layout'] ?? 'inherit'))) : null;
+    $descriptionLayoutOverride = gallery_description_layout_schema_ready()
+        ? gallery_description_layout_storage_value($input['description_layout'] ?? ($completeForm ? 'inherit' : ($gallery['description_layout'] ?? 'inherit')))
+        : null;
     // $shouldUpdateGrid stores whether grid fields are part of this request.
     $shouldUpdateGrid = $completeForm || admin_gallery_input_has_any_key($input, ['grid_override_enabled', 'grid_columns', 'grid_rows', 'grid_use_for_subgalleries']);
     // $gridUsesCustomSettings stores whether this gallery should stop inheriting the display grid.
     $gridUsesCustomSettings = admin_gallery_checkbox_input($input, 'grid_override_enabled', !$completeForm && ((int) ($gallery['grid_columns'] ?? 0) > 0 || (int) ($gallery['grid_rows'] ?? 0) > 0)) === 1;
     // $gridColumns stores the optional custom column count for public cards/photos in this gallery.
-    $gridColumns = $gridUsesCustomSettings ? pagination_dimension_value($input['grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS) : null;
+    $gridColumns = $gridUsesCustomSettings
+        ? pagination_dimension_value($input['grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS)
+        : null;
     // $gridRows stores the optional custom row count used when pagination slices this gallery.
-    $gridRows = $gridUsesCustomSettings ? pagination_dimension_value($input['grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
+    $gridRows = $gridUsesCustomSettings
+        ? pagination_dimension_value($input['grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS)
+        : null;
     // $gridUseForSubgalleries stores whether descendants may inherit this gallery grid.
     $gridUseForSubgalleries = admin_gallery_checkbox_input($input, 'grid_use_for_subgalleries', !$completeForm && (int) ($gallery['grid_use_for_subgalleries'] ?? 0) === 1);
     // $shouldUpdateThumbnailBounds stores whether thumbnail-bound fields are part of this request.
     $shouldUpdateThumbnailBounds = $completeForm || admin_gallery_input_has_any_key($input, ['gallery_thumbnail_min_size', 'gallery_thumbnail_max_size', 'gallery_thumbnail_bounds_recursive']);
     // $thumbnailBounds stores the optional minimum and maximum responsive thumbnail sizes for this gallery.
-    $thumbnailBounds = thumbnail_bounds_schema_ready() && $shouldUpdateThumbnailBounds ? thumbnail_bound_pair_from_post('gallery_thumbnail', $_POST) : [($gallery['thumbnail_min_size'] ?? null), ($gallery['thumbnail_max_size'] ?? null)];
+    $thumbnailBounds = thumbnail_bounds_schema_ready() && $shouldUpdateThumbnailBounds
+        ? thumbnail_bound_pair_from_post('gallery_thumbnail', $_POST)
+        : [($gallery['thumbnail_min_size'] ?? null), ($gallery['thumbnail_max_size'] ?? null)];
     // $thumbnailBoundsRecursive stores whether descendants should receive the same saved thumbnail bounds.
     $thumbnailBoundsRecursive = thumbnail_bounds_schema_ready() && !empty($input['gallery_thumbnail_bounds_recursive']);
     // $shouldUpdateAccess stores whether password/share access controls are part of this request.
-    $accessInputPresent = admin_gallery_input_has_any_key($input, ['access_action', 'access_type', 'clear_access_password', 'access_password', 'access_token_expires_at']);
+    $accessInputPresent = admin_gallery_input_has_any_key(
+        $input,
+        [
+            'access_action',
+            'access_type',
+            'clear_access_password',
+            'access_password',
+            'access_token_expires_at'
+        ]
+    );
     $shouldUpdateAccess = $accessInputPresent || ($completeForm && $accessReady);
     // $shouldUpdateAccessListing keeps the legacy access_listing compatibility flag in lockstep
     // with an explicitly submitted visibility value. This is intentionally separate from
@@ -1310,7 +1344,9 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
         $accessPasswordHash = null;
     }
     // Variable $accessMode stores this steps working value.
-    $accessMode = $accessReady && ($accessType === 'password' || !empty($gallery['access_token_hash']) || $accessAction === 'generate_link') ? 'password' : 'normal';
+    $accessMode = $accessReady && ($accessType === 'password' || !empty($gallery['access_token_hash']) || $accessAction === 'generate_link')
+        ? 'password'
+        : 'normal';
     if ($accessAction === 'revoke_link' && $accessType !== 'password') {
         // $accessMode stores an intermediate value used by the surrounding gallery workflow.
         $accessMode = 'normal';

@@ -232,7 +232,29 @@ function cms_admin_settings(): void
         $sections[$sectionId]['tab_url'] = admin_settings_url($sectionId, null, false);
     }
     $registry = admin_settings_registry(true);
-    $entryOrder = array_flip(['base_url', 'site_name', 'admin_language', 'public_language', 'public_language_selector_enabled', 'public_language_selector_languages', 'public_language_selector_design', 'url_rewrite_enabled', 'public_home_search_enabled', 'admin_upload_client_format_mode', 'admin_upload_auto_rename_enabled', 'browser_upload_enabled', 'browser_upload_default_worker_count', 'browser_upload_max_worker_count', 'browser_upload_hard_worker_cap', 'browser_upload_batch_size_policy', 'browser_upload_zip_size_threshold_ratio', 'browser_upload_max_items_per_batch', 'browser_upload_max_zip_batch_bytes', 'browser_thumbnail_rebuild_source_chunk_bytes', 'admin_legacy_upload_navigation_enabled']);
+    $entryOrder = array_flip([
+        'base_url',
+        'site_name',
+        'admin_language',
+        'public_language',
+        'public_language_selector_enabled',
+        'public_language_selector_languages',
+        'public_language_selector_design',
+        'url_rewrite_enabled',
+        'public_home_search_enabled',
+        'admin_upload_client_format_mode',
+        'admin_upload_auto_rename_enabled',
+        'browser_upload_enabled',
+        'browser_upload_default_worker_count',
+        'browser_upload_max_worker_count',
+        'browser_upload_hard_worker_cap',
+        'browser_upload_batch_size_policy',
+        'browser_upload_zip_size_threshold_ratio',
+        'browser_upload_max_items_per_batch',
+        'browser_upload_max_zip_batch_bytes',
+        'browser_thumbnail_rebuild_source_chunk_bytes',
+        'admin_legacy_upload_navigation_enabled',
+    ]);
     uksort($registry, /** Present paired General controls before other registry entries. @param string $left First identifier. @param string $right Second identifier. @return int Presentation order. */ static fn (string $left, string $right): int => ($entryOrder[$left] ?? 100) <=> ($entryOrder[$right] ?? 100));
     $languagePresentations = translation_language_presentation();
     foreach ($registry as $id => $entry) {
@@ -241,11 +263,22 @@ function cms_admin_settings(): void
         $registry[$id]['view_group'] = $group;
         $registry[$id]['view_edit_group'] = match ($id) {
             'base_url', 'site_name' => 'website',
-            'admin_language', 'public_language', 'public_language_selector_enabled', 'public_language_selector_languages', 'public_language_selector_design' => 'languages',
+            'admin_language',
+            'public_language',
+            'public_language_selector_enabled',
+            'public_language_selector_languages',
+            'public_language_selector_design' => 'languages',
             'url_rewrite_enabled', 'public_home_search_enabled' => 'navigation',
             'admin_legacy_upload_navigation_enabled' => 'uploads_legacy',
             'admin_upload_client_format_mode', 'admin_upload_auto_rename_enabled' => 'uploads_general',
-            'browser_upload_enabled', 'browser_upload_default_worker_count', 'browser_upload_max_worker_count', 'browser_upload_hard_worker_cap', 'browser_upload_batch_size_policy', 'browser_upload_zip_size_threshold_ratio', 'browser_upload_max_items_per_batch', 'browser_upload_max_zip_batch_bytes' => 'uploads_browser',
+            'browser_upload_enabled',
+            'browser_upload_default_worker_count',
+            'browser_upload_max_worker_count',
+            'browser_upload_hard_worker_cap',
+            'browser_upload_batch_size_policy',
+            'browser_upload_zip_size_threshold_ratio',
+            'browser_upload_max_items_per_batch',
+            'browser_upload_max_zip_batch_bytes' => 'uploads_browser',
             'browser_thumbnail_rebuild_source_chunk_bytes' => 'uploads_thumbnail',
             default => 'preferences',
         };
@@ -287,8 +320,10 @@ function cms_admin_settings(): void
     if ($activeSection === 'uploads') {
         $model['upload_workflow_url'] = url_for('home');
         $model['upload_support'] = [
-            'heic' => function_exists('Gallery\\Services\\heic_conversion_supported') && \Gallery\Services\heic_conversion_supported(),
-            'raw' => function_exists('Gallery\\Services\\raw_conversion_supported') && \Gallery\Services\raw_conversion_supported(),
+            'heic' => function_exists('Gallery\\Services\\heic_conversion_supported')
+                && \Gallery\Services\heic_conversion_supported(),
+            'raw' => function_exists('Gallery\\Services\\raw_conversion_supported')
+                && \Gallery\Services\raw_conversion_supported(),
         ];
         if (function_exists(__NAMESPACE__ . '\\admin_mobile_uploads_settings_view_model')) {
             $model['mobile_uploads'] = admin_mobile_uploads_settings_view_model();

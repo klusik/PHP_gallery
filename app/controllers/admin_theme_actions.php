@@ -482,10 +482,16 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
                     if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
                         throw new RuntimeException('The uploaded theme background is not a valid image.');
                     }
-                    store_uploaded_theme_background($_FILES['theme_background'], theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null));
+                    store_uploaded_theme_background(
+                        $_FILES['theme_background'],
+                        theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null)
+                    );
                 }
             }
-            set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
+            set_app_setting(
+                'theme_background_opacity',
+                (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65)))
+            );
             $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
             $previousBackgroundMaxSide = theme_background_optimized_max_side_value(app_setting('theme_background_optimized_max_side', '1920'));
             set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
@@ -493,7 +499,10 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
                 theme_background_regenerate_optimized($backgroundMaxSide);
             }
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
-            set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
+            set_app_setting(
+                'theme_background_source',
+                in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : ''
+            );
         });
         foreach (array_keys(theme_branding_asset_types()) as $themeBrandingKind) {
             // $uploadField stores the file input name for one global Theme fallback branding asset.
@@ -504,9 +513,18 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         }
         if ($gpsMapsFeatureEnabled) {
             theme_layout_safe_save('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
-            theme_layout_safe_save('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
-            theme_layout_safe_save('theme_gps_pin_size', (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null));
-            theme_layout_safe_save('theme_gps_pin_background_size', (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null));
+            theme_layout_safe_save(
+                'theme_gps_pin_background_enabled',
+                !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0'
+            );
+            theme_layout_safe_save(
+                'theme_gps_pin_size',
+                (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null)
+            );
+            theme_layout_safe_save(
+                'theme_gps_pin_background_size',
+                (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null)
+            );
             if (!empty($_POST['reset_gps_pin_size'])) {
                 theme_layout_safe_save('theme_gps_pin_enabled', '1');
                 theme_layout_safe_save('theme_gps_pin_background_enabled', '1');
@@ -515,10 +533,18 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             }
             // The GPS pin controls are part of the theme editor even when no color/font override changed.
             // Mark the form as changed so the save flow consistently persists the full appearance state.
-            $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
+            $themeControlsChanged = $themeControlsChanged
+                || isset($_POST['theme_gps_pin_enabled'])
+                || isset($_POST['theme_gps_pin_background_enabled'])
+                || isset($_POST['theme_gps_pin_size'])
+                || isset($_POST['theme_gps_pin_background_size'])
+                || !empty($_POST['reset_gps_pin_size']);
         }
         set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
-        set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
+        set_app_setting(
+            'theme_page_width_custom',
+            (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null)
+        );
         // Hero-tag controls change public HTML ordering and disclosure data attributes, so compare them before saving.
         $previousHeroTagSettings = [
             'visible_limit' => theme_hero_tag_visible_limit(),
@@ -540,8 +566,14 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         set_app_setting('theme_hero_tag_scrollbar_enabled', $nextHeroTagSettings['scrollbar_enabled'] ? '1' : '0');
         set_app_setting('theme_hero_tag_scrollbar_rows', (string) $nextHeroTagSettings['scrollbar_rows']);
         set_app_setting('theme_hero_tag_sort_mode', $nextHeroTagSettings['sort_mode']);
-        set_app_setting('theme_gallery_info_motion_ms', (string) theme_gallery_info_motion_ms_value($_POST['theme_gallery_info_motion_ms'] ?? null));
-        set_app_setting('theme_admin_side_panel_motion_ms', (string) theme_admin_side_panel_motion_ms_value($_POST['theme_admin_side_panel_motion_ms'] ?? null));
+        set_app_setting(
+            'theme_gallery_info_motion_ms',
+            (string) theme_gallery_info_motion_ms_value($_POST['theme_gallery_info_motion_ms'] ?? null)
+        );
+        set_app_setting(
+            'theme_admin_side_panel_motion_ms',
+            (string) theme_admin_side_panel_motion_ms_value($_POST['theme_admin_side_panel_motion_ms'] ?? null)
+        );
         if ($nextHeroTagSettings !== $previousHeroTagSettings) {
             // Sorting changes server-rendered tag order while the remaining values change public disclosure metadata.
             set_app_setting('theme_public_content_revision', (string) time());
@@ -551,8 +583,14 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         } elseif (function_exists('Gallery\\Services\\save_theme_favorite_gallery_ids')) {
             save_theme_favorite_gallery_ids($_POST['theme_favorite_gallery_ids'] ?? []);
         }
-        set_app_setting('theme_branding_separator_width', (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null));
-        set_app_setting('theme_branding_separator_height', (string) theme_branding_separator_height_value($_POST['theme_branding_separator_height'] ?? null));
+        set_app_setting(
+            'theme_branding_separator_width',
+            (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null)
+        );
+        set_app_setting(
+            'theme_branding_separator_height',
+            (string) theme_branding_separator_height_value($_POST['theme_branding_separator_height'] ?? null)
+        );
         set_app_setting('theme_branding_separator_stretch', !empty($_POST['theme_branding_separator_stretch']) ? '1' : '0');
         // The shared Theme owner preserves the same public-content revision side effect for card-layout changes.
         theme_layout_safe_save(
@@ -562,8 +600,14 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         if (array_key_exists('theme_breadcrumb_style', $_POST)) {
             theme_layout_safe_save('theme_breadcrumb_style', $_POST['theme_breadcrumb_style']);
         }
-        theme_layout_safe_save('theme_gallery_count_badge_mode', $_POST['theme_gallery_count_badge_mode'] ?? theme_gallery_count_badge_mode());
-        theme_layout_safe_save('theme_gallery_count_badge_icons_enabled', !empty($_POST['theme_gallery_count_badge_icons_enabled']) ? '1' : '0');
+        theme_layout_safe_save(
+            'theme_gallery_count_badge_mode',
+            $_POST['theme_gallery_count_badge_mode'] ?? theme_gallery_count_badge_mode()
+        );
+        theme_layout_safe_save(
+            'theme_gallery_count_badge_icons_enabled',
+            !empty($_POST['theme_gallery_count_badge_icons_enabled']) ? '1' : '0'
+        );
         // Public thumbnail renderer values and their public-content revision side effect share one service path.
         public_thumbnail_rendering_mode_save_with_revision($_POST['public_thumbnail_rendering_mode'] ?? null);
         if ($lightboxModesFeatureEnabled) {
@@ -575,12 +619,54 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         }
         // Pagination and grid values use the shared safe Theme owner so the Setup Wizard and Theme editor cannot drift.
         theme_layout_safe_save('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
-        theme_layout_safe_save('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
-        theme_layout_safe_save('pagination_rows', (string) pagination_dimension_value($_POST['pagination_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
-        theme_layout_safe_save('home_gallery_grid_columns', (string) pagination_dimension_value($_POST['home_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
-        theme_layout_safe_save('home_gallery_grid_rows', (string) pagination_dimension_value($_POST['home_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
-        theme_layout_safe_save('tag_page_gallery_grid_columns', (string) pagination_dimension_value($_POST['tag_page_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
-        theme_layout_safe_save('tag_page_gallery_grid_rows', (string) pagination_dimension_value($_POST['tag_page_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
+        theme_layout_safe_save(
+            'pagination_columns',
+            (string) pagination_dimension_value(
+                $_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
+                CMS_PAGINATION_DEFAULT_COLUMNS,
+                CMS_PAGINATION_MAX_COLUMNS
+            )
+        );
+        theme_layout_safe_save(
+            'pagination_rows',
+            (string) pagination_dimension_value(
+                $_POST['pagination_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS,
+                CMS_PAGINATION_DEFAULT_ROWS,
+                CMS_PAGINATION_MAX_ROWS
+            )
+        );
+        theme_layout_safe_save(
+            'home_gallery_grid_columns',
+            (string) pagination_dimension_value(
+                $_POST['home_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
+                CMS_PAGINATION_DEFAULT_COLUMNS,
+                CMS_PAGINATION_MAX_COLUMNS
+            )
+        );
+        theme_layout_safe_save(
+            'home_gallery_grid_rows',
+            (string) pagination_dimension_value(
+                $_POST['home_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS,
+                CMS_PAGINATION_DEFAULT_ROWS,
+                CMS_PAGINATION_MAX_ROWS
+            )
+        );
+        theme_layout_safe_save(
+            'tag_page_gallery_grid_columns',
+            (string) pagination_dimension_value(
+                $_POST['tag_page_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
+                CMS_PAGINATION_DEFAULT_COLUMNS,
+                CMS_PAGINATION_MAX_COLUMNS
+            )
+        );
+        theme_layout_safe_save(
+            'tag_page_gallery_grid_rows',
+            (string) pagination_dimension_value(
+                $_POST['tag_page_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS,
+                CMS_PAGINATION_DEFAULT_ROWS,
+                CMS_PAGINATION_MAX_ROWS
+            )
+        );
         theme_layout_safe_save(
             'tag_page_gallery_description_layout',
             gallery_description_layout_normalize($_POST['tag_page_gallery_description_layout'] ?? theme_gallery_description_layout(), theme_gallery_description_layout())
@@ -594,7 +680,10 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             set_app_setting('theme_header_text', sanitize_hex_color((string) $_POST['theme_header_text'], '#0f172a'));
             set_app_setting('theme_hero_text', sanitize_hex_color((string) $_POST['theme_hero_text'], '#0f172a'));
             set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
-            set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
+            set_app_setting(
+                'theme_font',
+                in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif'
+            );
         }
     }
     $activeThemeTab = (string) ($_POST['theme_active_tab'] ?? 'admin-theme-tab-appearance');

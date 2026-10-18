@@ -125,7 +125,9 @@ function cache_lifecycle_assert_path(string $path): void
 {
     $prefix = str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/';
     $normalized = str_replace('\\', '/', $path);
-    if (!str_starts_with($normalized, $prefix)) throw new \RuntimeException('Cache lifecycle path is outside its owner.');
+    if (!str_starts_with($normalized, $prefix)) {
+        throw new \RuntimeException('Cache lifecycle path is outside its owner.');
+    }
     cache_lifecycle_path(substr($normalized, strlen($prefix)));
 }
 
@@ -135,7 +137,10 @@ function cache_lifecycle_assert_path(string $path): void
  */
 function cache_lifecycle_now(): int
 {
-    if (defined('CACHE_LIFECYCLE_TEST_ROOT') && isset($GLOBALS['cache_lifecycle_test_now'])) return (int) $GLOBALS['cache_lifecycle_test_now'];
+    if (defined('CACHE_LIFECYCLE_TEST_ROOT')
+        && isset($GLOBALS['cache_lifecycle_test_now'])) {
+        return (int) $GLOBALS['cache_lifecycle_test_now'];
+    }
     return defined('CACHE_LIFECYCLE_TEST_NOW') ? (int) constant('CACHE_LIFECYCLE_TEST_NOW') : time();
 }
 
@@ -147,12 +152,18 @@ function cache_lifecycle_now(): int
 function cache_lifecycle_read_json(string $path): array
 {
     cache_lifecycle_assert_path($path);
-    if (cache_lifecycle_registry_state_path($path)) return cache_lifecycle_registry_checkpoint();
-    if (!is_file($path) || is_link($path)) return [];
+    if (cache_lifecycle_registry_state_path($path)) {
+        return cache_lifecycle_registry_checkpoint();
+    }
+    if (!is_file($path) || is_link($path)) {
+        return [];
+    }
     $json = @file_get_contents($path, false, null, 0, CACHE_LIFECYCLE_STATE_BYTES + 1);
     $control = str_replace('\\', '/', $path) === str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/cache-lifecycle/state.json';
     if (!is_string($json) || strlen($json) > CACHE_LIFECYCLE_STATE_BYTES) {
-        if ($control) throw new \RuntimeException('Cache lifecycle checkpoint is unreadable.');
+        if ($control) {
+            throw new \RuntimeException('Cache lifecycle checkpoint is unreadable.');
+        }
         return [];
     }
     $decoded = json_decode($json, true);
@@ -171,10 +182,15 @@ function cache_lifecycle_read_json(string $path): array
 function cache_lifecycle_write_json(string $path, array $record): void
 {
     cache_lifecycle_assert_path($path);
-    if (cache_lifecycle_registry_state_path($path)) { cache_lifecycle_registry_store($record); return; }
+    if (cache_lifecycle_registry_state_path($path)) {
+        cache_lifecycle_registry_store($record);
+        return;
+    }
     cache_lifecycle_assert_path($path . '.tmp');
     $json = json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-    if (strlen($json) > CACHE_LIFECYCLE_STATE_BYTES) throw new \RuntimeException('Cache lifecycle state exceeded its bound.');
+    if (strlen($json) > CACHE_LIFECYCLE_STATE_BYTES) {
+        throw new \RuntimeException('Cache lifecycle state exceeded its bound.');
+    }
     $temporary = $path . '.tmp';
     if (file_put_contents($temporary, $json, LOCK_EX) !== strlen($json) || !@rename($temporary, $path)) {
         throw new \RuntimeException('Cache lifecycle checkpoint could not be committed.');
@@ -251,11 +267,17 @@ function cache_lifecycle_download_lease(string $path): mixed
 {
     $prefix = str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/';
     $normalized = str_replace('\\', '/', $path);
-    if (!str_starts_with($normalized, $prefix)) return null;
+    if (!str_starts_with($normalized, $prefix)) {
+        return null;
+    }
     $identity = cache_lifecycle_flat_download_identity(substr($normalized, strlen($prefix)));
-    if ($identity === null) return null;
+    if ($identity === null) {
+        return null;
+    }
     $lease = cache_lifecycle_producer_lease($identity['base']);
-    if (!is_resource($lease)) throw new \RuntimeException('Download cache reclamation owns this archive.');
+    if (!is_resource($lease)) {
+        throw new \RuntimeException('Download cache reclamation owns this archive.');
+    }
     return $lease;
 }
 
@@ -280,42 +302,73 @@ function cache_lifecycle_status(): array
     $previous = (int) ($scheduler['previous_attempt_at'] ?? 0);
     $progress = (int) ($scheduler['last_progress_at'] ?? 0);
     $pending = max(0, (int) ($state['candidate_bytes'] ?? 0) - (int) ($state['settled_bytes'] ?? 0));
-    if (is_array($state['current'] ?? null)) $pending = max(0, $pending - min((int) ($state['current']['bytes'] ?? 0), (int) ($state['bytes_removed'] ?? 0) - (int) ($state['current']['removed_before'] ?? $state['bytes_removed'] ?? 0)));
+    if (is_array($state['current'] ?? null)) {
+        $pending = max(
+            0,
+            $pending - min(
+                (int) ($state['current']['bytes'] ?? 0),
+                (int) ($state['bytes_removed'] ?? 0)
+                    - (int) ($state['current']['removed_before'] ?? $state['bytes_removed'] ?? 0)
+            )
+        );
+    }
     $scheduled = !empty($state['scheduled']);
-    if (($state['phase'] ?? '') === 'complete') $pending = 0;
-    $summary = ['ok'=>true,'id'=>(string) ($state['id'] ?? ''),'phase'=>(string) ($state['phase'] ?? 'idle'),
-        'complete'=>in_array($state['phase'] ?? '', ['preview','cleanup','complete'], true),'partial'=>!empty($state['errors']) || !empty($state['blocked']),
-        'bytes'=>$bytes,'files'=>$files,'dirs'=>$dirs,'candidates'=>(int) ($state['candidates'] ?? 0),
-        'candidate_bytes'=>(int) ($state['candidate_bytes'] ?? 0),'removed'=>(int) ($state['removed'] ?? 0),
-        'bytes_removed'=>(int) ($state['bytes_removed'] ?? 0),'skipped'=>(int) ($state['skipped'] ?? 0),
-        'errors'=>(int) ($state['errors'] ?? 0),'blocked'=>(int) ($state['blocked'] ?? 0),
-        'last_error'=>(string) ($state['last_error'] ?? ''),'excluded'=>'cache-lifecycle',
-        'scheduled'=>$scheduled,'pending_bytes'=>$pending,
-        'pending_candidates'=>($state['phase'] ?? '') === 'complete' ? 0 : max(0, (int) ($state['candidates'] ?? 0) - (int) ($state['settled_candidates'] ?? 0)),
-        'last_attempt_at'=>$attempt,'last_progress_at'=>$progress,
-        'last_observed_at'=>(int) ($state['last_observed_at'] ?? 0),'next_due'=>($state['phase'] ?? '') === 'complete'
+    if (($state['phase'] ?? '') === 'complete') {
+        $pending = 0;
+    }
+    $summary = [
+        'ok' => true,
+        'id' => (string) ($state['id'] ?? ''),
+        'phase' => (string) ($state['phase'] ?? 'idle'),
+        'complete' => in_array($state['phase'] ?? '', ['preview','cleanup','complete'], true),
+        'partial' => !empty($state['errors']) || !empty($state['blocked']),
+        'bytes' => $bytes,
+        'files' => $files,
+        'dirs' => $dirs,
+        'candidates' => (int) ($state['candidates'] ?? 0),
+        'candidate_bytes' => (int) ($state['candidate_bytes'] ?? 0),
+        'removed' => (int) ($state['removed'] ?? 0),
+        'bytes_removed' => (int) ($state['bytes_removed'] ?? 0),
+        'skipped' => (int) ($state['skipped'] ?? 0),
+        'errors' => (int) ($state['errors'] ?? 0),
+        'blocked' => (int) ($state['blocked'] ?? 0),
+        'last_error' => (string) ($state['last_error'] ?? ''),
+        'excluded' => 'cache-lifecycle',
+        'scheduled' => $scheduled,
+        'pending_bytes' => $pending,
+        'pending_candidates' => ($state['phase'] ?? '') === 'complete' ? 0 : max(0, (int) ($state['candidates'] ?? 0) - (int) ($state['settled_candidates'] ?? 0)),
+        'last_attempt_at' => $attempt,
+        'last_progress_at' => $progress,
+        'last_observed_at' => (int) ($state['last_observed_at'] ?? 0),
+        'next_due' => ($state['phase'] ?? '') === 'complete'
             ? (int) ($state['completed_at'] ?? 0) + CACHE_LIFECYCLE_REFRESH_SECONDS : (int) ($state['next_due'] ?? 0),
-        'stale'=>empty($state['last_observed_at']) || $now - (int) $state['last_observed_at'] > CACHE_LIFECYCLE_HEALTH_SECONDS,
-        'stalled'=>$attempt > 0 && !in_array($state['phase'] ?? '', ['complete','preview'], true)
+        'stale' => empty($state['last_observed_at']) || $now - (int) $state['last_observed_at'] > CACHE_LIFECYCLE_HEALTH_SECONDS,
+        'stalled' => $attempt > 0 && !in_array($state['phase'] ?? '', ['complete','preview'], true)
             && $now - ($progress ?: (int) ($scheduler['first_attempt_at'] ?? $attempt)) > CACHE_LIFECYCLE_HEALTH_SECONDS,
-        'scheduler_health'=>$attempt === 0 ? 'unobserved' : ($now - $attempt > CACHE_LIFECYCLE_HEALTH_SECONDS ? 'missing'
+        'scheduler_health' => $attempt === 0 ? 'unobserved' : ($now - $attempt > CACHE_LIFECYCLE_HEALTH_SECONDS ? 'missing'
             : ($previous > 0 && $attempt > $previous && $attempt - $previous <= CACHE_LIFECYCLE_HEALTH_SECONDS ? 'arrivals_observed' : 'single_arrival')),
-        'scheduler_reason'=>(string) app_setting('feature_flag.automatic_cache_cleanup.enabled', '1') === '0'
-            ? 'automatic_cache_cleanup_disabled' : ((string) ($chain['last_error'] ?? '') ?: (string) ($scheduler['reason'] ?? '')),'scheduler_source'=>(string) ($scheduler['source'] ?? ''),
-        'chain_health'=>$chain === [] ? 'unstarted' : ((int) ($chain['queued_until'] ?? 0) > $now
+        'scheduler_reason' => (string) app_setting('feature_flag.automatic_cache_cleanup.enabled', '1') === '0'
+            ? 'automatic_cache_cleanup_disabled' : ((string) ($chain['last_error'] ?? '') ?: (string) ($scheduler['reason'] ?? '')),
+        'scheduler_source' => (string) ($scheduler['source'] ?? ''),
+        'chain_health' => $chain === [] ? 'unstarted' : ((int) ($chain['queued_until'] ?? 0) > $now
             ? (!empty($chain['running']) ? 'waiting' : 'queued') : 'stalled'),
-        'chain_arrival_at'=>(int) ($chain['last_arrival_at'] ?? 0),'chain_next_start_at'=>(int) ($chain['next_start_at'] ?? 0),
-        'interrupted'=>!empty($scheduler['interrupted']),
-        'superseded_manual_at'=>(int) ($state['superseded_manual_at'] ?? 0),
-        'sample'=>array_slice(is_array($state['sample'] ?? null) ? $state['sample'] : [], 0, CACHE_LIFECYCLE_PREVIEW_SAMPLES),
-        'policies'=>cache_lifecycle_policies(),'totals'=>$totals,'measurement_available'=>(int) ($state['last_observed_at'] ?? 0) > 0];
+        'chain_arrival_at' => (int) ($chain['last_arrival_at'] ?? 0),
+        'chain_next_start_at' => (int) ($chain['next_start_at'] ?? 0),
+        'interrupted' => !empty($scheduler['interrupted']),
+        'superseded_manual_at' => (int) ($state['superseded_manual_at'] ?? 0),
+        'sample' => array_slice(is_array($state['sample'] ?? null) ? $state['sample'] : [], 0, CACHE_LIFECYCLE_PREVIEW_SAMPLES),
+        'policies' => cache_lifecycle_policies(),
+        'totals' => $totals,
+        'measurement_available' => (int) ($state['last_observed_at'] ?? 0) > 0,
+    ];
     if (!$scheduled && ($state['id'] ?? '') !== '') {
         // Keep manual-cycle progress separate from retained regional/lifetime measurements.
         $summary['operation'] = array_intersect_key($summary, array_flip(['id','phase','files','bytes','candidates','candidate_bytes','pending_bytes','removed','bytes_removed','skipped','errors','blocked','partial']));
     }
     if (cache_lifecycle_registry_enabled()) {
-        try { $registry = cache_lifecycle_registry_summary(); }
-        catch (\Throwable) {
+        try {
+            $registry = cache_lifecycle_registry_summary();
+        } catch (\Throwable) {
             return array_replace($summary, ['ok'=>false,'partial'=>true,'registry_unavailable'=>true,'last_error'=>'cache_registry_unavailable']);
         }
         // Manual previews retain their explicit controls; registry findings never grant approval.

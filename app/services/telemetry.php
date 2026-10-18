@@ -255,11 +255,23 @@ function telemetry_record_event(array $event): void
     // $durationMs stores capped visible-time style duration.
     $durationMs = isset($event['duration_ms']) ? min(max(0, (int) $event['duration_ms']), telemetry_max_photo_view_ms()) : null;
     // $browserFamily stores the normalized browser family bucket.
-    $browserFamily = telemetry_enum($event['browser_family'] ?? 'unknown', ['chrome', 'edge', 'firefox', 'safari', 'opera', 'other', 'unknown'], 'unknown');
+    $browserFamily = telemetry_enum(
+        $event['browser_family'] ?? 'unknown',
+        ['chrome', 'edge', 'firefox', 'safari', 'opera', 'other', 'unknown'],
+        'unknown'
+    );
     // $osFamily stores the normalized operating system family bucket.
-    $osFamily = telemetry_enum($event['os_family'] ?? 'unknown', ['windows', 'macos', 'ios', 'android', 'linux', 'chromeos', 'other', 'unknown'], 'unknown');
+    $osFamily = telemetry_enum(
+        $event['os_family'] ?? 'unknown',
+        ['windows', 'macos', 'ios', 'android', 'linux', 'chromeos', 'other', 'unknown'],
+        'unknown'
+    );
     // $deviceType stores the normalized device type bucket.
-    $deviceType = telemetry_enum($event['device_type'] ?? 'unknown', ['desktop', 'tablet', 'phone', 'bot', 'unknown'], 'unknown');
+    $deviceType = telemetry_enum(
+        $event['device_type'] ?? 'unknown',
+        ['desktop', 'tablet', 'phone', 'bot', 'unknown'],
+        'unknown'
+    );
     // $viewportClass stores a coarse viewport width bucket.
     $viewportClass = telemetry_viewport_class(isset($event['viewport_width']) ? (int) $event['viewport_width'] : null);
     // $galleryId stores a nullable local gallery identifier.
@@ -267,7 +279,12 @@ function telemetry_record_event(array $event): void
     // $imageId stores a nullable local image identifier.
     $imageId = telemetry_nullable_positive_int($event['image_id'] ?? null);
     // $referrerCategory stores a normalized referrer category.
-    $referrerCategory = telemetry_enum($event['referrer_category'] ?? telemetry_referrer_category(request_data('server')['HTTP_REFERER'] ?? null), ['direct', 'internal', 'search', 'social', 'external', 'unknown'], 'unknown');
+    $referrerCategory = telemetry_enum(
+        $event['referrer_category']
+            ?? telemetry_referrer_category(request_data('server')['HTTP_REFERER'] ?? null),
+        ['direct', 'internal', 'search', 'social', 'external', 'unknown'],
+        'unknown'
+    );
 
     telemetry_ensure_current_semantics_marker();
 
@@ -280,7 +297,14 @@ function telemetry_record_event(array $event): void
             $sessionHash,
             telemetry_request_id(),
             telemetry_short_identifier($event['route_name'] ?? (request_data('query')['page'] ?? 'unknown'), 80),
-            telemetry_enum($event['page_kind'] ?? 'unknown', ['home', 'gallery', 'subgallery', 'photo', 'media', 'admin', 'download', 'api', 'other', 'unknown'], 'unknown'),
+            telemetry_enum(
+                $event['page_kind'] ?? 'unknown',
+                [
+                    'home', 'gallery', 'subgallery', 'photo', 'media',
+                    'admin', 'download', 'api', 'other', 'unknown',
+                ],
+                'unknown'
+            ),
             $galleryId,
             $imageId,
             $referrerCategory,
@@ -297,14 +321,44 @@ function telemetry_record_event(array $event): void
             telemetry_nullable_positive_int($event['value_ms'] ?? null),
             telemetry_value_bucket($event['value_bucket'] ?? null),
             telemetry_enum($event['cache_result'] ?? 'unknown', ['hit', 'miss', 'bypass', 'stale', 'evicted', 'discarded', 'unknown'], 'unknown'),
-            telemetry_enum($event['media_variant'] ?? 'unknown', ['original', 'thumb_300', 'thumb_600', 'thumb_800', 'thumb_960', 'thumb_1200', 'thumb_1280', 'thumb_1600', 'webp', 'jpg', 'unknown'], 'unknown'),
+            telemetry_enum(
+                $event['media_variant'] ?? 'unknown',
+                [
+                    'original', 'thumb_300', 'thumb_600', 'thumb_800',
+                    'thumb_960', 'thumb_1200', 'thumb_1280',
+                    'thumb_1600', 'webp', 'jpg', 'unknown',
+                ],
+                'unknown'
+            ),
             telemetry_nullable_positive_int($event['http_status'] ?? null),
             telemetry_error_kind($event['error_kind'] ?? null),
             telemetry_sample_rate($event['sampled_rate'] ?? 1),
             telemetry_context_json($eventName, $event['context'] ?? []),
         ]);
-        telemetry_touch_session($sessionHash, $eventName, $event, $galleryId, $imageId, $referrerCategory, $browserFamily, $osFamily, $deviceType, $viewportClass);
-        telemetry_record_hourly_metric($eventName, $event, $galleryId, $imageId, $referrerCategory, $browserFamily, $osFamily, $deviceType, $viewportClass, $durationMs);
+        telemetry_touch_session(
+            $sessionHash,
+            $eventName,
+            $event,
+            $galleryId,
+            $imageId,
+            $referrerCategory,
+            $browserFamily,
+            $osFamily,
+            $deviceType,
+            $viewportClass
+        );
+        telemetry_record_hourly_metric(
+            $eventName,
+            $event,
+            $galleryId,
+            $imageId,
+            $referrerCategory,
+            $browserFamily,
+            $osFamily,
+            $deviceType,
+            $viewportClass,
+            $durationMs
+        );
     } catch (Throwable $exception) {
         admin_log_event('warning', 'telemetry.ingest_failed', 'Anonymous telemetry event could not be stored.', [
             'event_name' => $eventName,
@@ -412,7 +466,12 @@ function telemetry_hourly_metric_dimensions(string $metricName, array $dimension
         $allowed = ['route_name', 'gallery_id', 'image_id', 'device_type'];
     } elseif ($metricName === 'client.errors') {
         $allowed = ['route_name', 'device_type'];
-    } elseif (str_starts_with($metricName, 'web_vital.') || in_array($metricName, ['client.page_load_ms', 'client.image_decode_ms', 'client.image_display_ms'], true)) {
+    } elseif (str_starts_with($metricName, 'web_vital.')
+        || in_array($metricName, [
+            'client.page_load_ms',
+            'client.image_decode_ms',
+            'client.image_display_ms',
+        ], true)) {
         $allowed = ['route_name', 'page_kind', 'device_type'];
     } elseif (str_starts_with($metricName, 'media.')) {
         $allowed = ['route_name', 'gallery_id', 'device_type', 'media_variant'];

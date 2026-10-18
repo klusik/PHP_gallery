@@ -354,32 +354,54 @@ function simbrief_description_build_localized_markdown(array $details, string $l
         'cs' => [
             'opening' => '**{route}** je plánován jako let {aircraft} z letiště {origin} na letiště {destination}.',
             'opening_empty_aircraft' => '**{route}** je plánován jako let v simulátoru z letiště {origin} na letiště {destination}.',
-            'flight' => 'let {value}', 'cruise' => 'plánovaná cestovní hladina `{value}`', 'ete' => 'odhadovaná doba letu {value}',
+            'flight' => 'let {value}',
+            'cruise' => 'plánovaná cestovní hladina `{value}`',
+            'ete' => 'odhadovaná doba letu {value}',
             'context' => 'Letový plán uvádí {values}.', 'route' => 'SimBrief podal trasu `{value}`.',
-            'origin_runway' => 'odletovou dráhu {value}', 'destination_runway' => 'příletovou dráhu {value}',
+            'origin_runway' => 'odletovou dráhu {value}',
+            'destination_runway' => 'příletovou dráhu {value}',
             'runways' => 'Plán uvádí také {values}.', 'alternate' => 'Záložním letištěm je `{value}`.',
-            'distance' => 'plánovanou vzdálenost {value}', 'passengers' => '{value} cestujících', 'fuel' => 'palivo {value}', 'airac' => 'AIRAC {value}',
-            'dispatch_open' => 'Pro galerii tvoří letový plán přehledný záznam: ', 'dispatch_close' => '. Fotografie tak doplní plánovaný příběh letu.',
+            'distance' => 'plánovanou vzdálenost {value}',
+            'passengers' => '{value} cestujících',
+            'fuel' => 'palivo {value}',
+            'airac' => 'AIRAC {value}',
+            'dispatch_open' => 'Pro galerii tvoří letový plán přehledný záznam: ',
+            'dispatch_close' => '. Fotografie tak doplní plánovaný příběh letu.',
         ],
         'de' => [
             'opening' => '**{route}** ist als Flug mit {aircraft} von {origin} nach {destination} geplant.',
             'opening_empty_aircraft' => '**{route}** ist als Flugsimulationsflug von {origin} nach {destination} geplant.',
-            'flight' => 'Flug {value}', 'cruise' => 'geplante Reiseflughöhe `{value}`', 'ete' => 'voraussichtliche Flugzeit {value}',
-            'context' => 'Der OFP nennt {values}.', 'route' => 'SimBrief hat die Route als `{value}` eingereicht.',
+            'flight' => 'Flug {value}',
+            'cruise' => 'geplante Reiseflughöhe `{value}`',
+            'ete' => 'voraussichtliche Flugzeit {value}',
+            'context' => 'Der OFP nennt {values}.',
+            'route' => 'SimBrief hat die Route als `{value}` eingereicht.',
             'origin_runway' => 'Startbahn {value}', 'destination_runway' => 'Landebahn {value}',
-            'runways' => 'Der Plan nennt außerdem {values}.', 'alternate' => 'Der angegebene Ausweichflughafen ist `{value}`.',
-            'distance' => 'geplante Entfernung {value}', 'passengers' => '{value} Passagiere', 'fuel' => 'Treibstoff {value}', 'airac' => 'AIRAC {value}',
-            'dispatch_open' => 'Für die Galerie bietet der Flug einen klaren Planungsrahmen: ', 'dispatch_close' => '. Die Fotos ergänzen so die geplante Fluggeschichte.',
+            'runways' => 'Der Plan nennt außerdem {values}.',
+            'alternate' => 'Der angegebene Ausweichflughafen ist `{value}`.',
+            'distance' => 'geplante Entfernung {value}',
+            'passengers' => '{value} Passagiere',
+            'fuel' => 'Treibstoff {value}',
+            'airac' => 'AIRAC {value}',
+            'dispatch_open' => 'Für die Galerie bietet der Flug einen klaren Planungsrahmen: ',
+            'dispatch_close' => '. Die Fotos ergänzen so die geplante Fluggeschichte.',
         ],
         'sv' => [
             'opening' => '**{route}** planerades som en flygning med {aircraft} från {origin} till {destination}.',
             'opening_empty_aircraft' => '**{route}** planerades som en flygsimuleringsflygning från {origin} till {destination}.',
-            'flight' => 'flygning {value}', 'cruise' => 'planerad marschhöjd `{value}`', 'ete' => 'beräknad flygtid {value}',
+            'flight' => 'flygning {value}',
+            'cruise' => 'planerad marschhöjd `{value}`',
+            'ete' => 'beräknad flygtid {value}',
             'context' => 'OFP:n anger {values}.', 'route' => 'SimBrief lämnade rutten som `{value}`.',
             'origin_runway' => 'startbana {value}', 'destination_runway' => 'landningsbana {value}',
-            'runways' => 'Planen anger även {values}.', 'alternate' => 'Alternativflygplatsen är `{value}`.',
-            'distance' => 'planerad distans {value}', 'passengers' => '{value} passagerare', 'fuel' => 'bränsle {value}', 'airac' => 'AIRAC {value}',
-            'dispatch_open' => 'För galleriet ger detta en tydlig planeringsram: ', 'dispatch_close' => '. Bilderna kompletterar flygningens planerade berättelse.',
+            'runways' => 'Planen anger även {values}.',
+            'alternate' => 'Alternativflygplatsen är `{value}`.',
+            'distance' => 'planerad distans {value}',
+            'passengers' => '{value} passagerare',
+            'fuel' => 'bränsle {value}',
+            'airac' => 'AIRAC {value}',
+            'dispatch_open' => 'För galleriet ger detta en tydlig planeringsram: ',
+            'dispatch_close' => '. Bilderna kompletterar flygningens planerade berättelse.',
         ],
     ];
     $template = $templates[$language] ?? $templates['sv'];
@@ -554,13 +576,25 @@ function simbrief_description_save_ofp_for_gallery(
         ? normalize_relative_path((string) ($gallery['folder_path'] ?? ''))
         : trim(str_replace('\\', '/', (string) ($gallery['folder_path'] ?? '')), '/');
     if ($folderPath === '' || !function_exists('Gallery\\Services\\gallery_abs_path') || !function_exists('Gallery\\Core\\path_inside')) {
-        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'Gallery path helpers are unavailable.'];
+        return [
+            'saved' => false,
+            'path' => '',
+            'manifest_path' => '',
+            'filename' => 'simbrief-ofp.json',
+            'error' => 'Gallery path helpers are unavailable.',
+        ];
     }
 
     $galleryRoot = gallery_abs_path($folderPath);
     $galleriesRoot = function_exists('Gallery\\Services\\galleries_root') ? galleries_root() : dirname($galleryRoot);
     if (!is_dir($galleryRoot) || !path_inside($galleriesRoot, $galleryRoot)) {
-        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'Gallery folder is unavailable.'];
+        return [
+            'saved' => false,
+            'path' => '',
+            'manifest_path' => '',
+            'filename' => 'simbrief-ofp.json',
+            'error' => 'Gallery folder is unavailable.',
+        ];
     }
 
     $ofpPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.json';
@@ -590,7 +624,13 @@ function simbrief_description_save_ofp_for_gallery(
     $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT;
     $ofpJson = json_encode($payload, $jsonFlags);
     if (!is_string($ofpJson)) {
-        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'SimBrief payload could not be encoded.'];
+        return [
+            'saved' => false,
+            'path' => '',
+            'manifest_path' => '',
+            'filename' => 'simbrief-ofp.json',
+            'error' => 'SimBrief payload could not be encoded.',
+        ];
     }
 
     $now = function_exists('Gallery\\Core\\now_sql') ? now_sql() : gmdate('Y-m-d H:i:s');
@@ -616,11 +656,23 @@ function simbrief_description_save_ofp_for_gallery(
     ];
     $manifestJson = json_encode($manifest, $jsonFlags);
     if (!is_string($manifestJson)) {
-        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'SimBrief manifest could not be encoded.'];
+        return [
+            'saved' => false,
+            'path' => '',
+            'manifest_path' => '',
+            'filename' => 'simbrief-ofp.json',
+            'error' => 'SimBrief manifest could not be encoded.',
+        ];
     }
 
     if (file_put_contents($ofpPath, $ofpJson . "\n", LOCK_EX) === false) {
-        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'Could not write simbrief-ofp.json.'];
+        return [
+            'saved' => false,
+            'path' => '',
+            'manifest_path' => '',
+            'filename' => 'simbrief-ofp.json',
+            'error' => 'Could not write simbrief-ofp.json.',
+        ];
     }
     if (file_put_contents($manifestPath, $manifestJson . "\n", LOCK_EX) === false) {
         return [
@@ -809,17 +861,35 @@ function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targe
     }
 
     if (strlen($body) < 8 || strlen($body) > SIMBRIEF_DESCRIPTION_PDF_MAX_BYTES || !str_starts_with($body, '%PDF-')) {
-        return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'SimBrief PDF was invalid or exceeded the size limit.'];
+        return [
+            'saved' => false,
+            'path' => '',
+            'filename' => 'simbrief-ofp.pdf',
+            'url' => $safeUrl,
+            'error' => 'SimBrief PDF was invalid or exceeded the size limit.',
+        ];
     }
 
     // Never overwrite a valid existing document with a partial download.
     $temp = dirname($targetPath) . DIRECTORY_SEPARATOR . '.simbrief-ofp-' . bin2hex(random_bytes(8)) . '.tmp';
     try {
         if (@file_put_contents($temp, $body, LOCK_EX) !== strlen($body)) {
-            return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'Could not stage the downloaded PDF.'];
+            return [
+                'saved' => false,
+                'path' => '',
+                'filename' => 'simbrief-ofp.pdf',
+                'url' => $safeUrl,
+                'error' => 'Could not stage the downloaded PDF.',
+            ];
         }
         if (!@rename($temp, $targetPath)) {
-            return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'Could not atomically replace the saved PDF.'];
+            return [
+                'saved' => false,
+                'path' => '',
+                'filename' => 'simbrief-ofp.pdf',
+                'url' => $safeUrl,
+                'error' => 'Could not atomically replace the saved PDF.',
+            ];
         }
     } finally {
         if (is_file($temp)) {

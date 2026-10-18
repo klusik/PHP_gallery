@@ -155,7 +155,13 @@ function cms_admin_smart_galleries(): void
                 $beforeDefinition = $deletedId > 0 ? smart_gallery_find($deletedId) : null;
                 $beforePlacements = $deletedId > 0 ? smart_gallery_placement_galleries($deletedId) : [];
                 smart_gallery_delete($deletedId);
-                admin_log_event('info', 'smart_gallery.deleted', 'Admin deleted a Smart Gallery definition.', ['action' => 'delete'], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $deletedId]);
+                admin_log_event(
+                    'info',
+                    'smart_gallery.deleted',
+                    'Admin deleted a Smart Gallery definition.',
+                    ['action' => 'delete'],
+                    ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $deletedId]
+                );
                 $message = t('smart_gallery.deleted', 'Smart Gallery deleted.');
                 if ($wantsJson) {
                     smart_gallery_admin_json_response(
@@ -173,7 +179,13 @@ function cms_admin_smart_galleries(): void
             if ($action === 'duplicate') {
                 $sourceId = max(0, (int) ($_POST['id'] ?? 0));
                 $copy = smart_gallery_duplicate($sourceId);
-                admin_log_event('info', 'smart_gallery.duplicated', 'Admin duplicated a Smart Gallery definition.', ['action' => 'duplicate', 'source_id' => $sourceId], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => (int) $copy['id']]);
+                admin_log_event(
+                    'info',
+                    'smart_gallery.duplicated',
+                    'Admin duplicated a Smart Gallery definition.',
+                    ['action' => 'duplicate', 'source_id' => $sourceId],
+                    ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => (int) $copy['id']]
+                );
                 $message = t('smart_gallery.duplicated', 'A private disabled copy was created.');
                 $redirectUrl = url_for('admin_smart_galleries', ['id' => $copy['id']]);
                 if ($wantsJson) {
@@ -196,7 +208,18 @@ function cms_admin_smart_galleries(): void
                 $placement = (string) ($_POST['attachment_placement'] ?? 'bottom');
                 $placementOrder = (int) ($_POST['attachment_order'] ?? 0);
                 smart_gallery_update_placement($smartGalleryId, $galleryId, $placement, $placementOrder);
-                admin_log_event('info', 'smart_gallery.placement_updated', 'Admin updated one physical Smart Gallery placement.', ['action' => 'update_placement', 'gallery_id' => $galleryId, 'placement' => $placement === 'top' ? 'top' : 'bottom', 'placement_order' => $placementOrder], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $smartGalleryId]);
+                admin_log_event(
+                    'info',
+                    'smart_gallery.placement_updated',
+                    'Admin updated one physical Smart Gallery placement.',
+                    [
+                        'action' => 'update_placement',
+                        'gallery_id' => $galleryId,
+                        'placement' => $placement === 'top' ? 'top' : 'bottom',
+                        'placement_order' => $placementOrder
+                    ],
+                    ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $smartGalleryId]
+                );
                 $message = t('smart_gallery.placement_updated', 'Smart Gallery placement updated.');
                 $redirectUrl = url_for('admin_smart_galleries', ['id' => $smartGalleryId]);
                 if ($wantsJson) {
@@ -225,7 +248,13 @@ function cms_admin_smart_galleries(): void
                 // Load the physical context before deleting the relationship row.
                 $physicalGallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
                 $removed = smart_gallery_remove_from_gallery($smartGalleryId, $galleryId);
-                admin_log_event('info', 'smart_gallery.placement_removed', 'Admin removed one physical Smart Gallery placement.', ['action' => 'remove_placement', 'gallery_id' => $galleryId, 'removed' => $removed], ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $smartGalleryId]);
+                admin_log_event(
+                    'info',
+                    'smart_gallery.placement_removed',
+                    'Admin removed one physical Smart Gallery placement.',
+                    ['action' => 'remove_placement', 'gallery_id' => $galleryId, 'removed' => $removed],
+                    ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $smartGalleryId]
+                );
                 $message = t('smart_gallery.hidden_from_gallery', 'Smart Gallery hidden from that physical gallery.');
                 $redirectUrl = url_for('admin_smart_galleries', ['id' => $smartGalleryId]);
                 if ($wantsJson) {
@@ -255,7 +284,20 @@ function cms_admin_smart_galleries(): void
                 $previewCount = smart_gallery_count_images($preview, false);
                 $previewImages = $previewCount > 0 ? smart_gallery_query_images($preview, false, min(12, $previewCount), 0) : [];
                 $selected = array_merge($preview, ['id' => $id]);
-                admin_log_event('info', 'smart_gallery.previewed', 'Admin previewed Smart Gallery rules.', array_merge(smart_gallery_admin_log_context($input, 'preview'), ['matched_images' => $previewCount]), ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
+                admin_log_event(
+                    'info',
+                    'smart_gallery.previewed',
+                    'Admin previewed Smart Gallery rules.',
+                    array_merge(
+                        smart_gallery_admin_log_context($input, 'preview'),
+                        ['matched_images' => $previewCount]
+                    ),
+                    [
+                        'category' => 'gallery',
+                        'subject_type' => 'smart_gallery',
+                        'subject_id' => $id > 0 ? $id : null
+                    ]
+                );
             } else {
                 $saveAction = $id > 0 ? 'update' : 'create';
                 // Preserve the previous placement state so mode changes invalidate both old and new public contexts.
@@ -263,7 +305,17 @@ function cms_admin_smart_galleries(): void
                 $beforePlacements = $id > 0 ? smart_gallery_placement_galleries($id) : [];
                 $selected = smart_gallery_save($input, $id);
                 $afterPlacements = smart_gallery_placement_galleries((int) $selected['id']);
-                admin_log_event('info', 'smart_gallery.saved', 'Admin saved a Smart Gallery definition.', smart_gallery_admin_log_context($input, $saveAction), ['category' => 'gallery', 'subject_type' => 'smart_gallery', 'subject_id' => (int) $selected['id']]);
+                admin_log_event(
+                    'info',
+                    'smart_gallery.saved',
+                    'Admin saved a Smart Gallery definition.',
+                    smart_gallery_admin_log_context($input, $saveAction),
+                    [
+                        'category' => 'gallery',
+                        'subject_type' => 'smart_gallery',
+                        'subject_id' => (int) $selected['id']
+                    ]
+                );
                 $message = t('smart_gallery.saved', 'Smart Gallery saved.');
                 $redirectUrl = url_for('admin_smart_galleries', ['id' => $selected['id']]);
                 if ($wantsJson) {
@@ -285,26 +337,93 @@ function cms_admin_smart_galleries(): void
                 redirect_to($redirectUrl);
             }
         } catch (InvalidArgumentException $exception) {
-            admin_log_event('warning', 'smart_gallery.validation_failed', 'Smart Gallery Admin action failed validation.', array_merge(smart_gallery_admin_log_context(smart_gallery_admin_input(), $action), ['reason' => substr($exception->getMessage(), 0, 240)]), ['category' => 'gallery', 'severity' => 'warning', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
+            admin_log_event(
+                'warning',
+                'smart_gallery.validation_failed',
+                'Smart Gallery Admin action failed validation.',
+                array_merge(
+                    smart_gallery_admin_log_context(smart_gallery_admin_input(), $action),
+                    ['reason' => substr($exception->getMessage(), 0, 240)]
+                ),
+                [
+                    'category' => 'gallery',
+                    'severity' => 'warning',
+                    'subject_type' => 'smart_gallery',
+                    'subject_id' => $id > 0 ? $id : null
+                ]
+            );
             if ($wantsJson) {
-                smart_gallery_admin_json_error($exception->getMessage(), 'smart_gallery_validation_failed', $action, max($id, (int) ($_POST['id'] ?? 0)), 422);
+                smart_gallery_admin_json_error(
+                    $exception->getMessage(),
+                    'smart_gallery_validation_failed',
+                    $action,
+                    max($id, (int) ($_POST['id'] ?? 0)),
+                    422
+                );
                 return;
             }
             $error = $exception->getMessage();
             if (in_array($action, ['save', 'preview'], true)) $selected = array_merge($selected ?: [], smart_gallery_admin_input(), ['id' => $id]);
         } catch (MutationSchemaUnavailableException $exception) {
-            admin_log_event('warning', 'smart_gallery.schema_unavailable', 'Smart Gallery Admin action was refused because required schema was unavailable.', array_merge(smart_gallery_admin_log_context(smart_gallery_admin_input(), $action), ['feature' => $exception->feature, 'schema_state' => $exception->state, 'operation' => $exception->operation]), ['category' => 'database', 'severity' => 'warning', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
+            admin_log_event(
+                'warning',
+                'smart_gallery.schema_unavailable',
+                'Smart Gallery Admin action was refused because required schema was unavailable.',
+                array_merge(
+                    smart_gallery_admin_log_context(smart_gallery_admin_input(), $action),
+                    [
+                        'feature' => $exception->feature,
+                        'schema_state' => $exception->state,
+                        'operation' => $exception->operation
+                    ]
+                ),
+                [
+                    'category' => 'database',
+                    'severity' => 'warning',
+                    'subject_type' => 'smart_gallery',
+                    'subject_id' => $id > 0 ? $id : null
+                ]
+            );
             if ($wantsJson) {
-                smart_gallery_admin_json_error($exception->getMessage(), 'smart_gallery_schema_unavailable', $action, max($id, (int) ($_POST['id'] ?? 0)), 503);
+                smart_gallery_admin_json_error(
+                    $exception->getMessage(),
+                    'smart_gallery_schema_unavailable',
+                    $action,
+                    max($id, (int) ($_POST['id'] ?? 0)),
+                    503
+                );
                 return;
             }
             $error = $exception->getMessage();
             if (in_array($action, ['save', 'preview'], true)) $selected = array_merge($selected ?: [], smart_gallery_admin_input(), ['id' => $id]);
         } catch (Throwable $exception) {
-            admin_log_event('error', 'smart_gallery.action_failed', 'Smart Gallery Admin action failed unexpectedly.', array_merge(smart_gallery_admin_log_context(smart_gallery_admin_input(), $action), ['exception_class' => get_class($exception), 'exception_code' => (string) $exception->getCode()]), ['category' => 'gallery', 'severity' => 'error', 'subject_type' => 'smart_gallery', 'subject_id' => $id > 0 ? $id : null]);
+            admin_log_event(
+                'error',
+                'smart_gallery.action_failed',
+                'Smart Gallery Admin action failed unexpectedly.',
+                array_merge(
+                    smart_gallery_admin_log_context(smart_gallery_admin_input(), $action),
+                    [
+                        'exception_class' => get_class($exception),
+                        'exception_code' => (string) $exception->getCode()
+                    ]
+                ),
+                [
+                    'category' => 'gallery',
+                    'severity' => 'error',
+                    'subject_type' => 'smart_gallery',
+                    'subject_id' => $id > 0 ? $id : null
+                ]
+            );
             $error = t('smart_gallery.unexpected_error', 'The Smart Gallery could not be saved. Check Admin Logs for the request diagnostic.');
             if ($wantsJson) {
-                smart_gallery_admin_json_error($error, 'smart_gallery_action_failed', $action, max($id, (int) ($_POST['id'] ?? 0)), 500);
+                smart_gallery_admin_json_error(
+                    $error,
+                    'smart_gallery_action_failed',
+                    $action,
+                    max($id, (int) ($_POST['id'] ?? 0)),
+                    500
+                );
                 return;
             }
             if (in_array($action, ['save', 'preview'], true)) $selected = array_merge($selected ?: [], smart_gallery_admin_input(), ['id' => $id]);
