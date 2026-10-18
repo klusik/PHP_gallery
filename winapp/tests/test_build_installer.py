@@ -300,36 +300,42 @@ class InstallerBuildTests(unittest.TestCase):
                 "Pillow": "12.2.0",
                 "pystray": "0.19.5",
                 "reportlab": "5.0.1",
+                "pypdf": "6.0.0",
             },
             {
                 "PyInstaller": "7.0.0",
                 "Pillow": "12.2.0",
                 "pystray": "0.19.5",
                 "reportlab": "5.0.1",
+                "pypdf": "6.0.0",
             },
             {
                 "PyInstaller": "6.19.0",
                 "Pillow": "9.0.0",
                 "pystray": "0.19.5",
                 "reportlab": "5.0.1",
+                "pypdf": "6.0.0",
             },
             {
                 "PyInstaller": "6.19.0",
                 "Pillow": "12.2.0",
                 "pystray": "0.19.4",
                 "reportlab": "5.0.1",
+                "pypdf": "6.0.0",
             },
             {
                 "PyInstaller": "6.19.0",
                 "Pillow": "12.2.0",
                 "pystray": "0.19.5",
                 "reportlab": "5.0.0",
+                "pypdf": "6.0.0",
             },
             {
                 "PyInstaller": "6.19.0",
                 "Pillow": "12.2.0",
                 "pystray": "0.19.5",
                 "reportlab": "6.0.0",
+                "pypdf": "6.0.0",
             },
         ):
             with self.subTest(versions=versions), mock.patch(
@@ -337,12 +343,13 @@ class InstallerBuildTests(unittest.TestCase):
             ), mock.patch.dict(sys.modules, {"tkinter": tkinter_stub}):
                 with self.assertRaises(SystemExit):
                     exec(BUILD.installed_dependencies_code(), {})
-        for missing_package in ("pystray", "reportlab"):
+        for missing_package in ("pystray", "reportlab", "pypdf"):
             versions = {
                 "PyInstaller": "6.19.0",
                 "Pillow": "12.2.0",
                 "pystray": "0.19.5",
                 "reportlab": "5.0.1",
+                "pypdf": "6.0.0",
             }
 
             def package_version(package_name: str) -> str:

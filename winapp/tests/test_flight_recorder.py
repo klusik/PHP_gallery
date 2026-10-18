@@ -13,6 +13,7 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from uploader.flight_data import (
@@ -26,6 +27,7 @@ from uploader.flight_data import (
 )
 from uploader.flight_recorder import (
     FlightRecorder,
+    LIVE_TELEMETRY_MAX_AGE_SECONDS,
     _FlightPersistencePolicy,
 )
 
@@ -142,6 +144,37 @@ def write_session(
 
 class FlightAnalysisReplayTests(unittest.TestCase):
     """Verify full-resolution event extraction independently from chart sampling."""
+
+    def test_live_display_expires_and_pause_never_exposes_old_values(self) -> None:
+        """Keep compact instrument snapshots passive and bounded in freshness.
+
+        Returns:
+            None: Fresh acquired values appear without disk persistence; stale,
+                paused and stopped recorder states expose no live readings.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            recorder = FlightRecorder(Path(temporary), "gallery", "", lambda *_args: None)
+            sample = FlightSample(
+                session_elapsed_seconds=0.0, recorded_utc="2026-10-18T10:00:00+00:00",
+                indicated_airspeed_mps=100.0, altitude_m=3000.0,
+                vertical_speed_mps=5.0,
+            )
+            recorder._latest_sample = sample
+            recorder._latest_sample_received = 0.0
+            with (
+                patch.object(recorder, "is_alive", return_value=True),
+                patch("uploader.flight_recorder.time.monotonic", return_value=0.0),
+            ):
+                self.assertEqual(3000.0, recorder.telemetry_snapshot()["altitude_m"])
+                recorder.pause()
+                self.assertIsNone(recorder.telemetry_snapshot())
+                recorder.resume()
+                self.assertIsNone(recorder.telemetry_snapshot())
+                recorder._latest_sample = sample
+                with patch("uploader.flight_recorder.time.monotonic", return_value=LIVE_TELEMETRY_MAX_AGE_SECONDS + 0.1):
+                    self.assertIsNone(recorder.telemetry_snapshot())
+                recorder.stop()
+                self.assertIsNone(recorder.telemetry_snapshot())
 
     def test_diagnostics_distinguish_saved_frames_from_paused_recorder(self) -> None:
         """Expose actual durable progress without opening a native connection.
@@ -904,6 +937,33 @@ class FlightAnalysisReplayTests(unittest.TestCase):
         self.assertFalse(result.completed)
         self.assertIn("touchandgo", [event.phase for event in result.events])
         self.assertEqual("ended", result.events[-1].phase)
+
+    def test_landing_rollout_does_not_generate_a_rejected_takeoff(self) -> None:
+        """Keep observed post-contact deceleration in the landing lifecycle.
+
+        Returns:
+            None: A confirmed landing followed by high-speed rollout and taxi
+                produces touchdown/rollout without a false rejected-takeoff event.
+        """
+        # Fixed-altitude airborne and ground rows explicitly use zero V/S;
+        # this vector isolates lifecycle classification from descent-rate fitting.
+        rows = [make_sample(
+            float(index), on_ground=False, agl_m=50.0, altitude_m=150.0,
+            vertical_speed_mps=0.0,
+            ground_speed_mps=60.0, simulator_elapsed=float(index),
+        ) for index in range(4)]
+        rows.extend(make_sample(
+            float(index), on_ground=True, agl_m=0.0, altitude_m=100.0,
+            vertical_speed_mps=0.0,
+            ground_speed_mps=60.0 if index < 9 else 5.0,
+            simulator_elapsed=float(index),
+        ) for index in range(4, 18))
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_session(directory, rows, recording_ended=True)
+            result = analyze_session(directory)
+        self.assertEqual(1, len(result.landings))
+        self.assertNotIn("rejectedtakeoff", [event.phase for event in result.events])
 
     def test_rejected_takeoff_and_goaround_are_evidence_gated(self) -> None:
         """Label high-speed aborted ground roll and corroborated go-around.

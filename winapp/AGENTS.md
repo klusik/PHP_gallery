@@ -36,6 +36,11 @@ Scope simulated Windows platform attributes to the tested transport module's
 namespace so host pathlib/profile lookup and diagnostic redaction retain the
 runner's actual platform during portable native fixtures.
 
+Supply every required sample-builder field in each replay phase, including
+explicit zero vertical speed for fixed-altitude airborne and ground rows.
+Review all related builder calls when adding vectors; keep the helper's required
+arguments and behavioral assertions strict.
+
 PHP Gallery remains authoritative for server authentication, validation, storage
 and access policy; preserve the companion's documented compatibility entrypoints.
 Keep permanent Markdown and affected sections in all four TeX sources synchronized.

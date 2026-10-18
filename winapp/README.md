@@ -33,7 +33,14 @@ restart from `%APPDATA%\PHPGalleryUploader\config.json`. Flight switches and
 languages use the existing `flights/preferences.json` in the same app profile.
 Saving feature preferences never resets unrelated settings.
 
-## Flight recording and reports (source target 0.5.2)
+The Record flight row includes a single compact, background-matched instrument
+line: IAS in knots, altitude in feet and signed V/S in feet per minute. It reads
+the recorder's existing acquisition cache; it creates no second SimConnect
+connection and performs no disk or network work on a display tick. Stopped,
+paused, disconnected or more-than-three-second-old values become dashes.
+The adjacent **PDF** shortcut opens saved flights and reports.
+
+## Flight recording and reports (source target 0.5.3)
 
 The uploader supports a shared, read-only flight-recording/reporting workflow for
 MSFS 2020 and MSFS 2024. Recording is enabled by default and has an independent
@@ -69,7 +76,16 @@ no failed interval is recreated. The code meanings follow the
 
 Read-only acquisition targets 20 Hz, but the observed rate can be lower. Cruise
 samples persist at 1 Hz; below 300 m AGL, approach capture uses high-resolution
-sampling with a five-second prebuffer (up to 100 samples). Raw storage is capped
+sampling with a five-second prebuffer (up to 100 samples). Descending below
+100 ft AGL explicitly latches final-approach detail. Every acquired frame is
+retained through touchdown and rollout until ten seconds continuously on the
+ground at 15 kt or less; climbing above 500 m AGL exits for a go-around. Taxi
+speed is an exit proxy, not a claim that a runway boundary is known. Unknown
+speed keeps dense capture active. The native queue drain stops on an empty
+read instead of spending a fixed 64 dispatch calls per frame. This removes
+queue-poll overhead, but does not guarantee 20 Hz on a busy simulator. Diagnostics
+and session metadata expose capture mode, retained detail count and largest
+gap. Raw storage is capped
 at 256 MiB per session and 2 GiB in aggregate. Reaching a cap stops flight
 recording with a warning while photo capture and report delivery remain usable.
 Raw flight data and reports stay in the app-owned
@@ -112,6 +128,137 @@ before retry make delivery idempotent after ambiguous network outcomes. Each
 report request has a 180-second HTTP timeout. Reports are distinct from OFP
 documents, inherit existing gallery visibility and add no database schema.
 Unsupported servers leave reports local and retryable.
+
+### Manual completion and saved PDFs
+
+**Finish flight…** sits directly below **Target gallery** in Watcher and Import;
+long gallery names shrink inside their own row. Its confirmation explicitly
+includes key revocation. Settings retains the direct key-management action.
+Without a saved key the enabled button reads **Begin flight…** and opens
+connection/API-key settings.
+If report delivery fails, **Keep locally and revoke key** finishes accepted work
+and continues the already-confirmed revocation. Ordinary Stop uses a separate
+local-retention confirmation that keeps the key. Retry preserves only the same
+process's unsubmitted consent for the same endpoint/key; cancellation, changed
+credentials and restart never restore it. Recovery actions wrap into two rows.
+
+Open **PDF > Saved flights and PDFs**, or the same action in Flight settings.
+The passive tree shows session start, aircraft, checkpoint sample count, local
+PDF count and state. Expand a flight to see every retained PDF as a file,
+newest versions first. File rows begin with version/language and show actual
+page count (pypdf) and creation date/time including seconds in local time.
+New renders retain creation UTC in their private manifest. Older PDFs use a
+star-marked file modification timestamp; deterministic embedded PDF dates are
+not mistaken for creation time. Unknown page counts remain visible as `?`.
+Double-click or **Open selected PDF** uses the system's default PDF viewer.
+Ctrl/Shift selects files across versions of one flight for upload. **Refresh** reloads
+checkpoints without analyzing samples; **Open app log** opens the existing
+rotating log. Report work logs its session, phase, edition and failure details.
+
+**Finish flight and create PDFs** confirms ordinary Stop, enables the currently
+selected report languages for pending sessions and retains the configured key.
+It drains accepted photographs and uses existing report delivery. This explicit
+action also works when automatic creation was disabled, without changing that
+saved preference. Existing valid-landing requirements still govern delivery.
+
+Select a stopped session and choose **Create local PDF** or **Re-create local
+PDF**. This reads saved raw data without requiring its former gallery key. It
+does not stop another active flight or upload/revoke anything. Each action
+creates a fresh numbered version in the common `reports/` folder, preserving all earlier PDFs,
+checksums and delivery receipts. A stopped partial flight may render, but remains
+explicitly incomplete; empty recordings create no blank PDF. Active or
+interrupted-unclosed recordings must first finish recording.
+
+Local work has independent `manual-report.json` phase, edition paths and error
+state. Cancellation between editions retains already completed PDFs. Local
+creation never resolves pending remote delivery or changes `completion.json`.
+Shutdown/update cancels and joins local rendering through existing worker
+ownership. Windows layout, installed-app recovery and live simulator acceptance
+remain pending when this work is prepared without launching the local app.
+
+To send previously generated PDFs, save a valid gallery key (a new key for the
+same gallery is supported), test the connection and open **Saved flights and
+PDFs**. Expand the stopped flight and select specific PDF files, including
+edition subsets from several versions. Choose **Upload saved PDFs…** and confirm
+the displayed gallery and exact file list. Server inventory must confirm that gallery and
+`flight_reports_v1` before transfer. The selected revision is uploaded as saved;
+it is not rendered again. A different ongoing flight continues, and the key
+stays configured. Old plans and key bindings are preserved; separate
+`upload-receipts.json` records acknowledged identities/checksums. Retry checks
+server status before sending any missing edition, including after a lost reply.
+Retry retains the original revision even after another history row is selected.
+Cancelling stops between editions and retains completed uploads and local PDFs.
+This action sends only the chosen PDFs, never raw telemetry or photographs.
+
+Report protocol errors include the action, HTTP status, Content-Type and a
+bounded response excerpt with configured keys and local paths redacted. An
+inventory/HTML failure therefore identifies the failed negotiation instead of
+implying that the PDF renderer itself failed. Requests carry the same
+`PHPGalleryUploader/1.4` User-Agent as the established working client. A
+non-JSON 401/403 is classified as an access/protection gateway rejection; a
+WEDOS challenge is named explicitly. TLS verification remains enabled. Log
+entries identify each selected PDF/revision, confirmed receipt ID/checksum and
+acknowledged count/gallery; activity alone never means upload success.
+
+**Open folder with PDFs** opens the actual PDF directory, never the log or
+raw-session root. Filenames contain recorded UTC date/time, aircraft, language
+and a numbered version, for example `2026-10-18 09-46-05 UTC - FenixA320 IAE SL - CS - v03.pdf`.
+Private checksums and identities live in `reports/.metadata/`. Explicit
+generation/folder opening organizes older automatic and nested manual editions
+with a restartable journal and atomic renames. Report bytes, delivery IDs, raw
+recordings and completion receipts are retained; a destination collision or
+redirected path stops migration. Browsing history never renames files. Keep
+`.metadata` when backing up the PDFs.
+
+New report editions use A4 landscape (297 x 210 mm), a navy running header,
+teal accents, pale background and white rounded panels. Embedded regular/bold
+DejaVu supports every edition. Titles use 28 pt, normal text 12 pt, secondary
+notes 9.5 pt and plot axes 9 pt. Overview cards sit beside the captured route;
+full-flight profiles appear two per page. Each landing has a summary with its
+wind card/configuration, followed by a separate page of four larger profiles.
+The template identity advances to 4 so older PDFs are retained as earlier
+editions; recording, analysis, report upload and completion remain unchanged.
+
+The bundled bold face is the DejaVu font distributed by the official
+[Matplotlib project](https://github.com/matplotlib/matplotlib/blob/main/lib/matplotlib/mpl-data/fonts/ttf/DejaVuSans-Bold.ttf),
+Git blob `1f22f07c99bd4d4b8fba9e00094df4e58e69def1`, SHA-256
+`b184b89e3c1075f22f6b71575b6fc20d4972b3cfd3b23322ca6fd596dcaef167`.
+The existing `uploader/resources/LICENSE_DEJAVU` accompanies both faces; the
+installer's existing resource-folder inclusion bundles them together.
+
+Reports use vector metric cards, aircraft-state symbols and observed phase
+icons in a normally single-row phase strip. Date/simulator build appears in
+small header text; technical versions
+and full hashes remain private metadata. Altitude is feet AMSL, approach height
+feet AGL, and speed IAS knots. Rounded enclosing axes use subtle minor/major
+grids: V/S normally uses 200/1,000 fpm, long flights ten-minute/hourly references.
+Scalar plots linearly bridge omitted values/ordinary cadence gaps up to five
+seconds in the series color; gaps of five to 300 seconds use amber dashed
+segments and an explicit legend. Longer losses, pauses, reloads and position
+jumps remain breaks. This is presentation only: raw data, rate fits and measured
+statistics never use interpolated values. The coordinate
+plot labels latitude/longitude, north and first/last captured positions; these
+are not inferred airport locations. Contact/configuration cards replace dense
+raw sensor tables. Noisy change lists disclose displayed/total counts. No runway,
+touchdown score or missing descent measurement is invented. Landing rollout
+deceleration cannot arm a rejected-takeoff event. Landing profiles preserve
+the original samples in a one-minute pre-contact/two-minute post-contact window
+before overview reduction (4,000 per landing, 20,000 per analysis; truncation is
+disclosed). Landing detection and fitted descent are distinguished from the
+simulator V/S at first contact. Actual pre-contact cadence/largest interval and
+incomplete rollout are disclosed. A true-heading compass compares aircraft
+heading with wind-from HDG/KT (for example `020/05`), including heading-relative
+head/tailwind and crosswind; it does not infer a runway or magnetic heading.
+Single landings have an unnumbered heading and compact paired charts/configuration.
+
+Fuel defaults to kg (including Airbus); Boeing/PMDG names select lb and common
+Cessna/Piper/Beech names select US gallons. This display heuristic does not
+identify every aircraft. New recordings request optional `FUEL TOTAL QUANTITY
+WEIGHT` in pounds and retain `fuel_weight_kg`, independently of core telemetry.
+The [SDK fuel reference](https://docs.flightsimulator.com/msfs2024/retail/programming-apis/simvars/aircraft-simvars/aircraft-fuel-variables/)
+defines this mass signal. Old volume-only captures use a visibly marked
+0.80 kg/L estimate for mass display; measured values take priority. Raw gallons
+are never overwritten and unavailable fuel stays unavailable.
 
 ## Updating the Windows application
 
@@ -177,13 +324,13 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.5.2)
+## Windows installer (next version: 0.5.3)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
-Gallery CMS release. The current source targets **0.5.2**; this source version
+Gallery CMS release. The current source targets **0.5.3**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.5.2/`. Existing version outputs and other version folders remain
+`winapp/dist/0.5.3/`. Existing version outputs and other version folders remain
 preserved.
 
 The installer includes Python, Tkinter, Pillow, pystray, ReportLab,
@@ -238,8 +385,8 @@ The build script produces the installer and its matching update metadata togethe
 in a folder named after the independent WinApp version:
 
 ```text
-winapp/dist/0.5.2/PHPGalleryUploader-0.5.2-Setup.exe
-winapp/dist/0.5.2/winapp-update.json
+winapp/dist/0.5.3/PHPGalleryUploader-0.5.3-Setup.exe
+winapp/dist/0.5.3/winapp-update.json
 ```
 
 Attach both files from that folder to the same GitHub release as the CMS release.
@@ -251,8 +398,8 @@ metadata when GitHub's asset digest is unavailable. Its schema is:
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.5.2-Setup.exe",
-      "version": "0.5.2",
+      "name": "PHPGalleryUploader-0.5.3-Setup.exe",
+      "version": "0.5.3",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }
@@ -773,7 +920,9 @@ The log uses rotation instead of growing without a bound.
 
 ## Dependency installation
 
-`install.bat` installs `requirements.txt` into the Python runtime used by the Windows shortcut. Current normal dependencies are Pillow and pystray.
+`install.bat` installs `requirements.txt` into the Python runtime used by the Windows shortcut. Current normal dependencies are Pillow, pystray, ReportLab and pypdf. Portable
+CI installs the three image/PDF requirements; installer preflight requires
+pypdf 6 or newer and the frozen application includes its ordinary import.
 
 Manual install:
 

@@ -22,7 +22,7 @@ from uploader.models import JsonValue
 # Type: str. Units: schema version. Scope: one analysis payload.
 # Consumers: FlightAnalysis.to_payload and report rendering.
 # Rationale: downstream consumers can distinguish compatible payload shapes.
-ANALYSIS_VERSION = "1"
+ANALYSIS_VERSION = "3"
 
 # Bound displayed trajectory points.
 # Type: int. Units: points. Scope: one analysis payload.
@@ -34,8 +34,25 @@ CHART_SAMPLE_LIMIT = 2000
 ANALYSIS_SAMPLE_WINDOW = 8000
 # Retain recent full-resolution approach samples for descent fit.
 # Type: int. Units: samples. Scope: landing detector.
-# Consumers: _LandingTracker. Rationale: hold dense pre-contact evidence.
-LANDING_CONTEXT_SAMPLES = 120
+# Consumers: _LandingTracker. Rationale: 1200 frames retain one minute at 20 Hz
+# before plot reduction, while the descent fit still uses only the last second.
+LANDING_CONTEXT_SAMPLES = 1200
+# Purpose: Retain raw approach/rollout frames before whole-flight plot thinning.
+# Type: int; Units: samples; Scope: one detected landing.
+# Consumers: _LandingTracker. Rationale: 4000 covers a three-minute 20 Hz window
+# with confirmation margin; exhaustion is disclosed, never silently resampled.
+LANDING_PROFILE_SAMPLE_LIMIT = 4000
+# Purpose: Bound all retained landing detail in one long or pathological session.
+# Type: int; Units: samples; Scope: one analysis.
+# Consumers: _LandingTracker. Rationale: 20000 retains several detailed landings
+# without letting a 1000-event cap multiply full-rate memory without bound.
+LANDING_PROFILE_TOTAL_LIMIT = 20000
+# Purpose: Share the raw context window around detected contact.
+# Type: float; Units: seconds; Scope: landing detail retention.
+# Consumers: _LandingTracker. Rationale: a minute before and two minutes after
+# contact reveal approach, flare and rollout, independently of overview thinning.
+LANDING_PROFILE_BEFORE_SECONDS = 60.0
+LANDING_PROFILE_AFTER_SECONDS = 120.0
 # Bound warning records from malformed or implausible input.
 # Type: int. Units: messages. Scope: analysis payload.
 # Consumers: analyze_session. Rationale: corrupt input cannot grow memory.
@@ -166,7 +183,8 @@ class FlightSample:
 
     Positions use degrees, altitude/AGL use metres, motion uses metres per
     second, and attitude uses degrees. Gear, flap and brake positions use
-    SimConnect percentages from 0 to 100; fuel uses US gallons, mass kilograms,
+    SimConnect percentages from 0 to 100; fuel volume uses US gallons, optional
+    fuel mass and total aircraft mass use kilograms,
     engines RPM and load factor g. Host monotonic receipt seconds and host UTC
     remain distinct from normalized simulator elapsed seconds and rate.
     """
@@ -193,6 +211,7 @@ class FlightSample:
     flaps_position: float | None = None
     engine_rpm: tuple[float | None, ...] = ()
     fuel_gallons: float | None = None
+    fuel_weight_kg: float | None = None
     wind_velocity_mps: float | None = None
     wind_direction_deg: float | None = None
     total_weight_kg: float | None = None
@@ -249,6 +268,9 @@ class Landing:
     contact_descent_rates_fpm: list[float | None] = field(default_factory=list)
     rollout_seconds: float | None = None
     rollout_distance_nm: float | None = None
+    profile_samples: list[FlightSample] = field(default_factory=list)
+    profile_truncated: bool = False
+    rollout_complete: bool = False
 
 
 @dataclass
@@ -275,8 +297,10 @@ class FlightAnalysis:
                 completed, duration_seconds, distance_nm, sample dictionaries,
                 landing dictionaries, warnings and phase event dictionaries.
                 Each phase event has phase, elapsed_seconds, confidence and
-                evidence fields. Contact samples preserve full telemetry;
-                descent rates and rollout measurements may be null.
+                evidence fields. Contact and profile_samples preserve original
+                telemetry before overview reduction; profile_truncated marks
+                bounded detail and rollout_complete confirms a measured taxi
+                end. Descent rates and rollout measurements may be null.
         """
         return {
             "analysis_version": ANALYSIS_VERSION,
@@ -392,6 +416,7 @@ def _sample(row: dict[str, Any]) -> FlightSample | None:
         flaps_position=_number(row.get("flaps_position")),
         engine_rpm=tuple(_number(value) for value in engines) if isinstance(engines, list) else (),
         fuel_gallons=_number(row.get("fuel_gallons")),
+        fuel_weight_kg=_number(row.get("fuel_weight_kg")),
         wind_velocity_mps=_number(row.get("wind_velocity_mps")),
         wind_direction_deg=_number(row.get("wind_direction_deg")),
         total_weight_kg=_number(row.get("total_weight_kg")),
@@ -513,6 +538,32 @@ class _LandingTracker:
         self.rollout_taxi_seconds = 0.0
         self.contacts_truncated = False
         self.truncated = False
+        self.profile_sample_count = 0
+
+    def _retain_profile(self, landing: Landing, sample: FlightSample) -> None:
+        """Keep one original frame within the bounded landing evidence window.
+
+        Args:
+            landing (Landing): Confirmed contact receiving unthinned evidence.
+            sample (FlightSample): Original chronological recorder observation.
+
+        Returns:
+            None: Appends once or marks truncated detail when a cap is reached.
+        """
+        if (
+            landing.profile_samples
+            and sample.session_elapsed_seconds
+            <= landing.profile_samples[-1].session_elapsed_seconds
+        ):
+            return
+        if (
+            len(landing.profile_samples) >= LANDING_PROFILE_SAMPLE_LIMIT
+            or self.profile_sample_count >= LANDING_PROFILE_TOTAL_LIMIT
+        ):
+            landing.profile_truncated = True
+            return
+        landing.profile_samples.append(sample)
+        self.profile_sample_count += 1
 
     def _strong_airborne(self, sample: FlightSample) -> bool:
         """Require altitude separation or climb alongside the airborne flag.
@@ -586,6 +637,12 @@ class _LandingTracker:
             ),
         ))
         landing = self.landings[-1]
+        for observed in self.context:
+            if (
+                observed.session_elapsed_seconds
+                >= first.session_elapsed_seconds - LANDING_PROFILE_BEFORE_SECONDS
+            ):
+                self._retain_profile(landing, observed)
         self._append_contact_measurement(landing, first)
         landing.rollout_seconds = (
             0.0 if first.simulator_elapsed_seconds is not None else None
@@ -676,6 +733,7 @@ class _LandingTracker:
             self.rollout_taxi_seconds += simulator_delta
             if self.rollout_taxi_seconds >= ROLLOUT_TAXI_CONFIRM_SECONDS:
                 self.rollout_active = False
+                landing.rollout_complete = True
         else:
             self.rollout_taxi_seconds = 0.0
         self.rollout_previous_sample = sample
@@ -700,6 +758,12 @@ class _LandingTracker:
             self.air_gap_started = None
             self.context.clear()
         self.context.append(sample)
+        if (
+            self.landings and sample.session_elapsed_seconds
+            <= self.landings[-1].last_contact_elapsed_seconds
+            + LANDING_PROFILE_AFTER_SECONDS
+        ):
+            self._retain_profile(self.landings[-1], sample)
         strong_air = self._strong_airborne(sample)
         if strong_air:
             self.airborne_count += 1
@@ -948,7 +1012,12 @@ class _FlightPhaseTracker:
             else:
                 self.slow_ground_count = 0
                 self.taxi_motion_count += 1
-            if sample.ground_speed_mps >= PHASE_TAKEOFF_ROLL_SPEED_MPS:
+            # Deceleration after touchdown belongs to rollout. Only a ground
+            # roll outside that established landing phase can arm RTO evidence.
+            if (
+                sample.ground_speed_mps >= PHASE_TAKEOFF_ROLL_SPEED_MPS
+                and self.phase not in ("touchdown", "rollout")
+            ):
                 self.high_speed_seen = True
         else:
             self.slow_ground_count = 0

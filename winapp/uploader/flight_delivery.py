@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.parse import urlsplit
 
+from uploader.diagnostics import redact_text
+
 
 # Purpose: Bound one report to the existing gallery PDF service policy.
 # Type: int; Units: bytes; Scope: one generated report PDF.
@@ -43,6 +45,12 @@ FLIGHT_DELIVERY_TIMEOUT_SECONDS = 180
 # Consumers: _perform_request.
 # Rationale: Receipts and errors are small metadata and need no large body.
 FLIGHT_DELIVERY_RESPONSE_MAX_BYTES = 64 * 1024
+
+# Purpose: Keep malformed-response diagnostics useful and bounded after redaction.
+# Type: int; Units: characters; Scope: one report HTTP error message.
+# Consumers: _perform_request. Rationale: 320 characters identify HTML/PHP errors
+# without copying an entire hosting response into logs or durable session state.
+FLIGHT_DELIVERY_ERROR_PREVIEW_CHARS = 320
 
 # Purpose: Keep opaque report identities compact in upload fields.
 # Type: int; Units: characters; Scope: report and session identifiers.
@@ -230,6 +238,10 @@ def _perform_request(
         "X-Gallery-Api-Key": api_key.strip(),
         "Accept": "application/json",
         "X-Content-Type-Options": "nosniff",
+        # Match the established photograph/inventory client's identification.
+        # Hosting protection rejects unidentified http.client requests before
+        # Gallery authentication; no browser challenge or TLS bypass is used.
+        "User-Agent": "PHPGalleryUploader/1.4",
     }
     try:
         if pdf_path is None:
@@ -292,26 +304,57 @@ def _perform_request(
 
         response = connection.getresponse()
         body = response.read(FLIGHT_DELIVERY_RESPONSE_MAX_BYTES + 1)
+        action = str((payload or fields or {}).get("action", "unknown"))
+        content_type = redact_text(
+            response.getheader("Content-Type", "unknown"), secrets=(api_key,),
+        )[:FLIGHT_DELIVERY_ERROR_PREVIEW_CHARS]
+        preview = " ".join(redact_text(
+            body.decode("utf-8", errors="replace"), secrets=(api_key,),
+        ).split())[:FLIGHT_DELIVERY_ERROR_PREVIEW_CHARS]
+        context = redact_text(
+            f"action={action}; HTTP {response.status}; "
+            f"Content-Type={content_type}; response={preview or '(empty)'}",
+            secrets=(api_key,),
+        )
+        if response.status in {401, 403} and "json" not in content_type.lower():
+            protection = (
+                "WEDOS.protection security challenge"
+                if b"wedos" in body.lower() else "non-JSON access gateway"
+            )
+            raise FlightDeliveryError(
+                "Report request blocked by " + protection
+                + "; no PDF acknowledgement received. " + context,
+                response.status,
+            )
         if len(body) > FLIGHT_DELIVERY_RESPONSE_MAX_BYTES:
-            raise FlightDeliveryError("The gallery response exceeded its limit.")
+            raise FlightDeliveryError(
+                "The gallery response exceeded its limit. " + context,
+                response.status,
+            )
         try:
             decoded = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise FlightDeliveryError(
-                "The gallery returned an invalid report response.",
+                "The gallery returned invalid JSON for a report request. " + context,
                 response.status,
             ) from exc
         if not isinstance(decoded, dict):
             raise FlightDeliveryError(
-                "The gallery returned an invalid report response.",
+                "The gallery report response must be a JSON object. " + context,
                 response.status,
             )
         if response.status < 200 or response.status >= 300:
             message = str(decoded.get("error", "The gallery rejected the report."))
-            raise FlightDeliveryError(message[:400], response.status)
+            raise FlightDeliveryError(
+                redact_text(message, secrets=(api_key,))[:FLIGHT_DELIVERY_ERROR_PREVIEW_CHARS]
+                + "; " + context, response.status,
+            )
         if decoded.get("ok") is not True:
             message = str(decoded.get("error", "The gallery rejected the report."))
-            raise FlightDeliveryError(message[:400], response.status)
+            raise FlightDeliveryError(
+                redact_text(message, secrets=(api_key,))[:FLIGHT_DELIVERY_ERROR_PREVIEW_CHARS]
+                + "; " + context, response.status,
+            )
         return decoded
     finally:
         connection.close()
@@ -397,6 +440,34 @@ def check_report_capability(upload_url: str, api_key: str) -> bool:
         isinstance(capabilities, dict)
         and capabilities.get("flight_reports_v1") is True
     )
+
+
+def saved_report_destination(
+    upload_url: str, api_key: str, expected_gallery: str,
+) -> None:
+    """Verify the current key's gallery against the explicit saved-upload choice.
+
+    Args:
+        upload_url (str): Saved canonical upload endpoint.
+        api_key (str): Current gallery-scoped key, including a replacement key.
+        expected_gallery (str): Gallery folder displayed in the confirmation.
+
+    Returns:
+        None: Inventory confirms the destination and flight_reports_v1 support.
+
+    Raises:
+        ValueError: The key belongs to a different or unknown gallery.
+        FlightDeliveryError: The endpoint cannot confirm report capability.
+        OSError: The inventory request cannot reach the server.
+    """
+    response = _perform_request(
+        upload_url, api_key, {"action": "inventory", "candidates": []},
+    )
+    if not expected_gallery or response.get("gallery_folder") != expected_gallery:
+        raise ValueError("Gallery changed; test the saved connection and confirm its destination again.")
+    capabilities = response.get("capabilities")
+    if not isinstance(capabilities, dict) or capabilities.get("flight_reports_v1") is not True:
+        raise FlightDeliveryError("The gallery does not support flight_reports_v1.")
 
 
 def deliver_report(

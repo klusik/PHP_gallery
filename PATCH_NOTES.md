@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 0.137
+
+Updated the Windows uploader to version 0.5.3 with saved-flight report management, revised landscape PDF reports, and clearer live flight readings and diagnostics. The release also added regression coverage and updated the uploader documentation and release records.
+
+### Highlights
+
+#### Flight recording and saved reports
+- Added a compact live IAS, altitude, and vertical-speed display using cached recorder readings; stale, paused, stopped, disconnected, or unavailable readings appeared as dashes.
+- Extended detailed capture through approach, touchdown, and rollout, and improved recording diagnostics with capture mode, detail counts, and maximum detail gaps.
+- Added saved-flight tools to browse and open PDFs, create or regenerate local reports for stopped flights, and upload explicitly selected PDF editions.
+- Preserved raw sessions, earlier PDFs, report identities, delivery receipts, and completed work during local regeneration, migration, cancellation, and retry.
+- Redesigned reports as landscape A4 PDFs with revised flight profiles, route and phase views, landing summaries, and clearer recorded-versus-estimated data. Chart-only interpolation did not alter recorded measurements or landing analysis.
+- Added a manual finish-flight action and clarified report recovery and delivery controls in the uploader interface.
+
+#### Release records
+- Added immutable origin and predecessor records for `v_0.137`. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Technical Details
+
+#### Windows uploader
+- Updated `winapp/VERSION` to `0.5.3` and added `pypdf>=6.0` to the uploader’s runtime and installer dependency checks.
+- Updated `winapp/uploader/flight_recorder.py` and `winapp/uploader/simconnect_flight.py` for detailed approach and landing capture, prompt empty-queue draining, and optional fuel-mass readings. Missing fuel mass remained unknown.
+- Updated `winapp/uploader/flight_data.py` to use analysis payload schema version 3, retaining bounded landing-profile samples and reporting detail truncation or rollout completion.
+- Added saved-report catalog, migration, generation, and delivery workflows in `winapp/uploader/flight_jobs.py`, `winapp/uploader/flight_report.py`, and `winapp/uploader/flight_delivery.py`. The migration preserved PDF bytes and identities; redirected paths and filename collisions were refused.
+- Updated `winapp/uploader/flight_ui.py` and `winapp/gallery_watch_upload.pyw` with saved-report browsing, explicit upload selection, retry and cancellation handling, and finish-flight controls.
+- Verified saved-report delivery against the selected gallery and its `flight_reports_v1` capability. Delivery receipts remained separate for each acknowledged edition; HTTP diagnostics were bounded and redacted, and requests retained TLS verification.
+- Added the DejaVu Sans Bold font resource and updated report translations in English, Czech, German, and Swedish.
+
+#### Tests
+- Expanded Windows regression coverage for report migration and path confinement, saved-upload validation and retry, report generation and selection, telemetry freshness, landing and rollout classification, report rendering, and optional fuel-mass conversion.
+- Updated the gallery workflow CI trigger policy test and the fixture instructions for complete replay vectors.
+
+#### Documentation and compatibility
+- Updated `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, `winapp/AGENTS.md`, `winapp/README.md`, and all four TeX manual sources.
+- No Gallery database schema or server API changes were included.
+
+### User Impact
+
+#### For visitors
+- No direct visitor behavior changed.
+
+#### For administrators
+- Windows uploader users could manage retained flight PDFs locally and upload selected report editions using a confirmed gallery connection. Local report creation did not itself upload reports or revoke credentials.
+- Users received clearer live telemetry and more detailed flight reports; legacy volume-based fuel displays were identified as estimates when measured fuel mass was unavailable.
+
+#### For maintainers
+- Regression coverage and permanent documentation were expanded for saved-report workflows, telemetry capture, and report rendering. The release changes did not establish successful installed-simulator or authenticated live-upload acceptance.
+
 ## Version 0.136.3
 
 Fixed Windows flight telemetry definitions for MSFS 2020 and 2024, improved recorder progress and failure diagnostics, and updated the standalone uploader version to 0.5.2.

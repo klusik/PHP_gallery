@@ -124,6 +124,18 @@ class FakeResponse:
         """
         return self.body[:limit]
 
+    def getheader(self, name: str, default: str = "") -> str:
+        """Expose a JSON response header to malformed-response diagnostics.
+
+        Args:
+            name (str): Case-insensitive HTTP header requested by transport.
+            default (str): Value returned for an absent header.
+
+        Returns:
+            str: JSON media type for Content-Type, otherwise the default.
+        """
+        return "application/json" if name.lower() == "content-type" else default
+
 
 class FakeConnection:
     """Capture one HTTP request while returning a controlled JSON response.
@@ -286,6 +298,42 @@ class FlightDeliveryTests(unittest.TestCase):
             "conflict": False,
             "report": report if found else None,
         }
+
+    def test_invalid_response_names_action_http_type_and_redacts_credentials(self) -> None:
+        """Retain actionable HTML/PHP response context without leaking the key.
+
+        Returns:
+            None: The error identifies inventory and HTTP failure while removing
+                the configured credential from its bounded response preview.
+        """
+        response = FakeResponse(502, {})
+        response.body = b"<html>Upstream failed; gallery-key confidential</html>"
+        connection = FakeConnection(response)
+        with mock.patch.object(DELIVERY, "_connection_target", return_value=(connection, "/api")):
+            with self.assertRaises(DELIVERY.FlightDeliveryError) as caught:
+                DELIVERY._perform_request("https://gallery.test/api", "gallery-key", {"action": "inventory"})
+        message = str(caught.exception)
+        self.assertIn("action=inventory", message)
+        self.assertIn("HTTP 502", message)
+        self.assertIn("Content-Type=application/json", message)
+        self.assertIn("Upstream failed", message)
+        self.assertNotIn("gallery-key", message)
+        self.assertTrue(connection.closed)
+
+    def test_saved_upload_requires_the_exact_confirmed_gallery(self) -> None:
+        """Refuse a stale destination label even when the key itself is valid.
+
+        Returns:
+            None: Only an explicitly supported matching gallery permits upload.
+        """
+        response = {"ok": True, "gallery_folder": "Flights/A320", "capabilities": {"flight_reports_v1": True}}
+        with mock.patch.object(DELIVERY, "_perform_request", return_value=response):
+            DELIVERY.saved_report_destination("https://gallery.test/api", "new-key", "Flights/A320")
+            with self.assertRaises(ValueError):
+                DELIVERY.saved_report_destination("https://gallery.test/api", "new-key", "Other gallery")
+            response["capabilities"]["flight_reports_v1"] = False
+            with self.assertRaises(DELIVERY.FlightDeliveryError):
+                DELIVERY.saved_report_destination("https://gallery.test/api", "new-key", "Flights/A320")
 
     def test_capability_probe_reads_inventory_flag(
         self: "FlightDeliveryTests",

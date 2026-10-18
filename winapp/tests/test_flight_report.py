@@ -44,6 +44,9 @@ from uploader.flight_report import (
     _REQUIRED_GLYPHS,
     KNOTS_PER_MPS,
     _number,
+    _manifest_path,
+    _axis_limits,
+    _fuel_profile,
     _register_font,
     _resource_directory,
     _contact_sensor_tables,
@@ -379,13 +382,11 @@ class FlightReportTests(unittest.TestCase):
                         for report_path in outputs:
                             shutil.copy2(report_path, artifact_directory)
                             shutil.copy2(
-                                report_path.with_suffix(
-                                    report_path.suffix + ".manifest.json"
-                                ),
+                                _manifest_path(report_path),
                                 artifact_directory,
                             )
                         group_manifest = next(
-                            (root / simulator.replace(" ", "_")).glob(
+                            (root / simulator.replace(" ", "_") / ".metadata").glob(
                                 "postflight-manifest-*.json"
                             )
                         )
@@ -433,15 +434,11 @@ class FlightReportTests(unittest.TestCase):
                         self.assertEqual(
                             hashlib.sha256(pdf_bytes).hexdigest(),
                             json.loads(
-                                path.with_suffix(
-                                    path.suffix + ".manifest.json"
-                                ).read_text(encoding="utf-8")
+                                _manifest_path(path).read_text(encoding="utf-8")
                             )["pdf_sha256"],
                         )
                         manifest = json.loads(
-                            path.with_suffix(
-                                path.suffix + ".manifest.json"
-                            ).read_text(encoding="utf-8")
+                            _manifest_path(path).read_text(encoding="utf-8")
                         )
                         self.assertEqual(manifest["language"], language)
                         self.assertTrue(
@@ -470,7 +467,7 @@ class FlightReportTests(unittest.TestCase):
                 for path in second
             ]
             self.assertEqual(first_hashes, second_hashes)
-            manifest_path = next(directory.glob("postflight-manifest-*.json"))
+            manifest_path = next((directory / ".metadata").glob("postflight-manifest-*.json"))
             manifest = json.loads(
                 manifest_path.read_text(encoding="utf-8")
             )
@@ -498,9 +495,7 @@ class FlightReportTests(unittest.TestCase):
             destination = Path(temporary) / "flight-en.pdf"
             first_path = render_report(analysis, "en", destination)
             first_hash = hashlib.sha256(first_path.read_bytes()).hexdigest()
-            first_manifest = first_path.with_suffix(
-                first_path.suffix + ".manifest.json"
-            )
+            first_manifest = _manifest_path(first_path)
             first_manifest.unlink()
             second_path = render_report(analysis, "en", destination)
             second_hash = hashlib.sha256(
@@ -646,22 +641,60 @@ class FlightReportTests(unittest.TestCase):
             ["+10.00 s", "+10.05 s"],
         )
 
-    def test_full_analysis_hash_is_present_on_every_page(self) -> None:
-        """Keep full report identity in the repeated footer.
+    def test_analysis_identity_stays_private_instead_of_spamming_the_footer(self) -> None:
+        """Retain traceability in metadata while the repeated footer stays concise.
 
         Returns:
-            None: Assert the shared analysis checksum is drawn on each page.
+            None: The footer omits hashes; the PDF subject retains the exact
+                source checksum recorded by the private sidecar.
         """
         canvas = Mock()
         document = SimpleNamespace(page=2)
         analysis_sha256 = "a" * 64
         _draw_page(canvas, document, "en", analysis_sha256)
-        self.assertTrue(
+        self.assertFalse(
             any(
                 analysis_sha256 in str(call.args)
                 for call in canvas.drawString.call_args_list
             )
         )
+        with tempfile.TemporaryDirectory() as temporary:
+            pdf = render_report(self._analysis("MSFS 2024"), "en", Path(temporary) / "report.pdf")
+            manifest = json.loads(_manifest_path(pdf).read_text(encoding="utf-8"))
+            self.assertIn(manifest["analysis_sha256"].encode("ascii"), pdf.read_bytes())
+
+    def test_aviation_axes_enclose_values_with_readable_steps(self) -> None:
+        """Use rounded feet/fpm limits and retain fine major/minor grid structure.
+
+        Returns:
+            None: Altitude encloses a 35,234-foot observation at 36,000 feet;
+                vertical-speed ticks use 200 fpm with 1,000 fpm major lines.
+        """
+        low, high, minor, major = _axis_limits(7.0, 35234.0, "altitude_m")
+        self.assertEqual((0.0, 36000.0, 1000, 5000), (low, high, minor, major))
+        low, high, minor, major = _axis_limits(-5123.0, 1912.0, "vertical_speed_mps")
+        self.assertEqual((-5200.0, 2000.0, 200.0, 1000.0), (low, high, minor, major))
+
+    def test_fuel_units_prefer_measured_mass_and_mark_historical_estimates(self) -> None:
+        """Display aircraft-aware units without rewriting raw fuel observations.
+
+        Returns:
+            None: Airbus/unknown use kg, Boeing uses lb, light GA keeps gallons;
+                recorded mass remains exact and historical conversion is flagged.
+        """
+        analysis = self._analysis("MSFS 2024")
+        analysis.aircraft = "Fenix A320"
+        displayed, field, scale, unit, estimated = _fuel_profile(analysis)
+        self.assertEqual(("fuel_weight_kg", 1.0, "kg", True), (field, scale, unit, estimated))
+        self.assertIsNone(analysis.samples[0].fuel_weight_kg)
+        analysis.samples = [replace(sample, fuel_weight_kg=1000.0) for sample in analysis.samples]
+        displayed, _field, _scale, unit, estimated = _fuel_profile(analysis)
+        self.assertFalse(estimated)
+        self.assertEqual(1000.0, displayed.samples[0].fuel_weight_kg)
+        analysis.aircraft = "PMDG Boeing 737"
+        self.assertEqual("lb", _fuel_profile(analysis)[3])
+        analysis.aircraft = "Cessna 172"
+        self.assertEqual("US gal", _fuel_profile(analysis)[3])
 
     def test_profile_titles_do_not_duplicate_units(self) -> None:
         """Keep unit-bearing profile titles readable in every language.

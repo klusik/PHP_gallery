@@ -838,6 +838,50 @@ class NavigationTests(unittest.TestCase):
 class FlightDeliveryCoordinationTests(unittest.TestCase):
     """Preserve accepted import and connection state during finalization."""
 
+    def test_begin_flight_opens_connection_setup_when_no_key_is_saved(self) -> None:
+        """Make the main action useful after scoped credentials were revoked.
+
+        Returns:
+            None: Missing-key admission opens API settings; a saved key reuses
+                the existing confirmed finish/revoke controller.
+        """
+        app = mock.Mock()
+        app.updates.blocked.return_value = False
+        app.config.api_key = ""
+        MAIN.WatcherApp.flight_action(app)
+        app.open_connection_dialog.assert_called_once_with()
+        app.revoke_api_key.assert_not_called()
+        app.config.api_key = "saved-key"
+        MAIN.WatcherApp.flight_action(app)
+        app.revoke_api_key.assert_called_once_with()
+
+    def test_finish_flight_is_below_gallery_and_title_can_shrink(self) -> None:
+        """Keep the finish action visible independently of gallery title length.
+
+        Returns:
+            None: Headless widget spies verify a separate finish row and a
+                constrained expanding title; no real Tk window is constructed.
+        """
+        app = mock.Mock()
+        app.flights.text.return_value = "Finish flight…"
+        widgets = mock.Mock()
+        with (
+            mock.patch.object(MAIN, "ttk", widgets),
+            mock.patch.object(MAIN, "GlassCard"),
+            mock.patch.object(MAIN, "icon_button"),
+            mock.patch.object(MAIN, "help_button"),
+        ):
+            MAIN.WatcherApp.build_watch_tab(app, mock.Mock())
+        finish = widgets.Button.call_args_list[0]
+        self.assertEqual("Finish flight…", finish.kwargs["text"])
+        self.assertEqual(app.flight_action, finish.kwargs["command"])
+        title = widgets.Label.call_args_list[0]
+        self.assertEqual(1, title.kwargs["width"])
+        self.assertIn(
+            mock.call(row=1, column=0, sticky="w", pady=(6, 0)),
+            app.finish_flight_button.grid.call_args_list,
+        )
+
     def test_watcher_run_reports_inventory_and_camera_startup_state(self) -> None:
         """Keep the original endpoint and SimConnect startup diagnostics visible.
 

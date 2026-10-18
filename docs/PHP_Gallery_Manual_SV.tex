@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.136.3}
+\newcommand{\version}{0.137}
 \newcommand{\manualdate}{18~oktober~2026}
 
 \hypersetup{
@@ -936,6 +936,83 @@ sessionsvarningar. Anslutning, första giltiga ram och första sparade mätpunkt
 loggas separat.
 Saknade historiska mätpunkter kan inte återskapas.
 
+Raden Record flight visar också en kompakt IAS/ALT/V/S-rad i knop, fot och
+fot per minut. Den läser befintlig registrerarcache utan en ny
+SimConnect-anslutning. Pausade, stoppade, saknade eller mer än tre sekunder
+gamla värden ersätts med streck. Genvägen \ui{PDF} öppnar sparade flygningar.
+
+\ui{Sparade flygningar och PDF} visar start, flygplan, checkpointens mätpunkter,
+lokala PDF-filer, status och bevarade fel. Uppdatera läser bara checkpoints;
+Öppna applogg använder befintlig logg. \ui{Avsluta flygning och skapa PDF}
+bekräftar vanligt Stop och aktiverar valda rapportspråk även när automatisk
+skapning är av. Nyckeln behålls och befintliga leveransregler gäller.
+
+För en stoppad flygning skapar \ui{Skapa lokal PDF} eller \ui{Skapa lokal PDF
+igen} en ny numrerad version i \filepath{reports/}. Tidigare PDF-filer,
+rådata och uppladdningskvittenser behålls. Ingen nyckel, uppladdning eller
+återkallelse behövs; en annan pågående flygning fortsätter. Delrapporter
+förblir ofullständiga; aktiva, inte avslutade och tomma registreringar avvisas.
+\filepath{manual-report.json} sparar lokalt förlopp och fel; lokal skapning
+slutför inte väntande serverleverans. Avbrott behåller färdiga språkversioner.
+Avslut och uppdatering hanterar denna arbetare. Windows-layout och
+livegodkännande förblir en separat manuell kontroll.
+
+\ui{Slutför flygning} ligger direkt under målgalleriet; bekräftelsen omfattar
+återkallelse av nyckeln. Efter fel behåller \ui{Behåll lokalt och återkalla
+nyckeln} och Försök igen det redan bekräftade beslutet för samma anslutning
+i denna appsession. Avbruten återkallelse, nyckelbyte eller omstart överför
+inget samtycke. Vanligt Stop behåller nyckeln. Återställningsknapparna visas
+på två rader.
+
+För senare uppladdning, spara och testa en giltig gallerinyckel, även en ny
+nyckel för samma galleri. Expandera stoppad flygning och välj PDF-filer med Ctrl/Skift,
+sedan \ui{Ladda upp sparade PDF-filer}. Bekräfta galleri och språk; serverns
+inventering verifierar exakt mål före överföring. Befintliga PDF-filer skickas
+utan ny rendering, stopp av annan flygning eller återkallelse. Separata
+\filepath{upload-receipts.json} sparar bekräftade kontrollsummor; nya försök
+stämmer av serverstatus. Gamla planer, nyckelkopplingar och rådata behålls.
+Avbrott behåller färdiga versioner. Protokollfel visar maskerad åtgärd,
+HTTP-status, innehållstyp och ett begränsat utdrag ur svaret.
+
+Utan sparad nyckel öppnar \ui{Börja flygning} API-inställningarna. Expanderade
+flygningar visar enskilda PDF-filer; dubbelklick öppnar standardvisaren.
+\ui{Öppna mapp med PDF-filer} går direkt till PDF-mappen. Namn innehåller UTC,
+flygplan, språk och version. En återupptagbar privat katalog ordnar äldre
+mappar utan ändrade filbytes eller uppladdningsidentiteter; JSON-filer finns
+i \filepath{reports/.metadata/}. Behåll mappen vid säkerhetskopiering.
+
+Nya rapporter använder liggande A4 (297 gånger 210~mm), marinblått sidhuvud,
+turkosa accenter, ljus bakgrund och vita paneler. Inbäddad DejaVu i normal/fet
+stil använder större text: rubriker 28~pt, brödtext 12~pt, noter 9,5~pt och
+axlar 9~pt. Översikten visar värdekort bredvid rutten; flygdiagram visas parvis.
+Varje landning har en sammanfattning och en detaljsida med fyra diagram.
+Äldre PDF bevaras; mätning, registrering, överföring och flygavslut ändras inte.
+
+Rapporter använder värdekort och vektorsymboler för faser/konfiguration.
+Tekniska versioner ligger i metadata; datum och simulatorversion visas smått
+i sidhuvudet. Avrundade axlar och diskreta rutnät visar ft AMSL, ft AGL vid
+inflygning, IAS-knop och fpm med 200/1\,000-delning. Långa tidsaxlar använder
+tio minuter/timme. Rutten visar koordinater, norr och första/sista registrerade
+punkt. Skalära diagram förbinder luckor upp till 5~s i kurvans färg och
+5--300~s orange streckat. Pauser, omladdning och längre avbrott förblir luckor.
+Interpolationen används aldrig i landningsmätningar; bana eller värden hittas inte på.
+
+Expanderade PDF-rader visar sidantal och lokal skapandetid med version och
+språk först. En stjärna markerar äldre filändringstid utan känd skapandemetadata.
+Flygfaser ryms normalt på en rad. Landningsdetaljer behåller originalprover
+före översiktsreduktion. Beräknad sättningshastighet och simulator-V/S är
+åtskilda; faktisk frekvens och ofullständig utrullning anges. Kompassen visar
+sann flygplanskurs, vind HDG/KT (exempelvis 020/05) och kursrelaterade komponenter,
+inte en gissad banaxel. Sjunkning under 100~ft AGL sparar varje mottaget prov
+tills tio sekunders marktaxi vid högst 15~kt. Tidigare tät registrering under
+300~m finns kvar; stigning över 500~m avslutar detaljen vid omdrag. Målet är 20~Hz.
+PDF-anrop använder samma uploaderidentifiering; HTML 401/403 från skyddslagret
+rapporteras separat. Framgång kräver bekräftade server-ID:n och kontrollsummor.
+Bränsle använder normalt kg, Boeing/PMDG lb och vanlig lätt GA gallon. Uppmätt
+simulatormassa prioriteras; gamla volymvärden använder en synlig uppskattning
+med 0,80 kg/l. Rådata ändras inte. Utrullning får inte skapa ett falskt avbrutet
+startförsök.
+
 Båda åtgärderna använder samma beständiga samordnare. Ett fristående Stop
 avslutar mappbevakningen, dess egen UTC-synkronisering och flygregistreringen,
 och slutför sedan accepterade fotografier och nödvändig rapportleverans;
@@ -1240,10 +1317,10 @@ Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanlig
 
 Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.5.2. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.5.3. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.5.2/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.5.3/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.

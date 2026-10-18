@@ -1,5 +1,78 @@
 # Compatibility lifecycle and retirement register
 
+## Manual flight PDFs and compact recorder readings (0.5.3)
+
+Finish flight is visible below Target gallery, including at compact widths.
+Without a saved key it becomes enabled Begin flight and opens API settings.
+Its confirmation includes revocation. Keep locally and Retry preserve that
+same process's confirmed, unsubmitted intent for the same saved endpoint/key;
+cancellation, changed credentials and restart never reconstruct consent.
+An ordinary Stop still keeps the key. Recovery buttons wrap into three columns.
+
+The expandable browser opens individual PDFs and uploads selected edition
+subsets across retained versions of one flight with the
+current saved key, including a replacement key after local-only completion.
+Inventory must match the confirmed gallery folder and advertise report support.
+No old completion binding/receipt is rewritten, no PDF is regenerated, and no
+live flight is stopped. Separate upload-receipts.json retains acknowledged
+identities/checksums; the existing server reconciliation owns retry safety.
+Shutdown cancels between editions and joins this independent worker. Redacted,
+bounded protocol diagnostics identify action, status, media type and response.
+Historical records identify the endpoint, not a trustworthy original gallery
+folder; the explicit current-destination confirmation owns this manual transfer.
+Do not infer the destination from an old key fingerprint.
+
+Owners: `winapp/uploader/flight_ui.py`, `flight_jobs.py`, `flight_workflow.py`
+and `flight_recorder.py`. Explicit Finish uses the existing Stop path and keeps
+the API key, including when the automatic report preference is off. Existing
+accepted-photo draining, valid-landing delivery, scoped auth and Revoke consent
+remain unchanged. Saved sessions from historical keys may produce local copies;
+local work has empty transport credentials and cannot gain Revoke consent.
+
+Every manual generation gets a unique private revision identity, flat readable
+filenames and a
+separate `manual-report.json` result. Raw data, earlier PDFs, completion plans
+and delivery receipts are preserved. Local generation neither resolves pending
+upload work nor claims remote delivery. Stopped partial flights retain the
+renderer's incomplete-flight labels; active/unclosed and empty recordings are
+rejected. Cancellation retains completed editions, and shutdown/update includes
+local rendering in the existing worker drain. Redirected source/report paths
+are refused rather than read or written outside the selected session.
+
+`reports/.metadata/catalog.json` journals original sources, readable filenames
+and stable report IDs before any rename. Explicit generation/folder opening
+flattens old automatic/manual layouts atomically; browsing remains passive.
+Sidecars stay in .metadata and raw/completion state outside the PDF directory.
+Collisions stop without replacing either PDF. Missing identity catalogs fail
+closed instead of inventing upload IDs. Retain old layout support until usage
+and migration evidence justify retirement; historical-session usage is unknown.
+Regressions cover interrupted journal recovery, exact bytes and retained IDs.
+
+Template 2 replaces raw prose tables with phase, contact and configuration
+infographics, enclosing aviation axes and subtle grids. Technical identities
+remain in private manifests/PDF metadata. Analysis 2 prevents landing rollout
+from arming rejected-takeoff evidence. Gaps and unavailable rates stay explicit.
+Optional measured fuel is stored as fuel_weight_kg, null for old recordings;
+existing gallons stay intact. Unit heuristics default to kg, use lb for
+Boeing/PMDG and gallons for common light GA. Historical mass conversion assumes
+0.80 kg/L and is visibly marked estimated. This permanent display policy supports
+volume-only sessions without rewriting their raw data or qualifying aircraft
+accuracy. Live optional mass and Windows/PDF delivery remain manual acceptance.
+
+The background-matched IAS/ALT/V/S line consumes fresh values from the existing
+recorder handle. Readings expire after three seconds and clear on pause/stop or
+unavailable acquisition; UI ticks open no native connection and read no files.
+Only the explicit report browser reads checkpoint metadata. No server schema,
+API, dependencies or simulator write capability is introduced.
+
+Usage of these controls is unknown. They were requested during an active flight;
+the local app was deliberately not launched, stopped or attached for inspection.
+Portable regressions cover local/remote isolation, preservation, cancellation,
+passive history and instrument freshness/conversion. Actual compact Windows
+layout, installed upgrade, simulator and end-to-end report acceptance remain
+manual. Retain existing Stop/Revoke and old-session recovery paths until separate
+live and deployed-usage evidence supports a deliberate retirement.
+
 ## Windows flight telemetry definitions and diagnostics (0.5.2)
 
 Owners: `winapp/uploader/simconnect_flight.py`, `flight_recorder.py` and the
@@ -228,6 +301,38 @@ Owners: `winapp/uploader/flight_jobs.py`, `flight_workflow.py`,
 `flight_ui.py`, `flight_recorder.py`, `simconnect_flight.py`,
 `flight_data.py`, `flight_report.py`, `flight_delivery.py`, and the
 gallery-scoped upload automation controller/service.
+
+Template 4 is a presentation-only A4 landscape revision: regular/bold DejaVu,
+navy/teal furniture, larger type, paired overview profiles and landing summary /
+detail pages. Render manifests invalidate older layout reuse through the
+existing template identity; prior PDF bytes, filenames, receipt bindings and
+analysis semantics are preserved. The bold font uses the existing DejaVu
+license and resource-folder packaging. All four editions share the layout.
+Maintainer feedback confirms hosting PDF upload and repeat flight closure on
+2026-10-18; BASIC and visual previews do not qualify future native cadence.
+
+The PDF browser adds passive pypdf page inspection and local-time render dates;
+legacy missing creation metadata uses a marked file mtime permanently, because
+old invariant PDF timestamps do not recover creation time. Existing identities,
+PDF bytes and receipts remain unchanged. Plot interpolation is display-only,
+bounded to five seconds in series color and 300 seconds amber/dashed; hard
+state changes and longer gaps stay separate. Neither landing fits nor telemetry
+are filled. Original landing-window frames are retained before overview thinning
+with disclosed per-landing/session bounds. Existing in-memory analysis objects
+without a raw window permanently retain their overview display fallback;
+reanalysis of saved raw data populates the new window. Dense final approach through sustained
+taxi preserves every acquired frame, remains at a 20 Hz target, and returns to
+normal by observed speed rather than an invented runway boundary. Native cadence
+remains a separate live acceptance check; replacement-key upload was
+subsequently reported successful by the maintainer.
+
+Flight HTTP uses the established uploader User-Agent as permanent hosting
+compatibility. The reported WEDOS host returned HTML 401 without it and Gallery
+JSON with it in a read-only invalid-key comparison. The client does not solve
+challenges, weaken TLS/authentication or count a send as a receipt. Per-file
+acknowledgements remain required before completion. BASIC only is requested for
+this iteration; no installer, FULL or protected integration is implied.
+
 
 Recording and analysis support the shared MSFS 2020/2024 provider path; missing
 aircraft/build signals remain explicit unavailable data. Recording defaults on
