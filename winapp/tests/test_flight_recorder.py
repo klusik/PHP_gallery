@@ -143,6 +143,36 @@ def write_session(
 class FlightAnalysisReplayTests(unittest.TestCase):
     """Verify full-resolution event extraction independently from chart sampling."""
 
+    def test_diagnostics_distinguish_saved_frames_from_paused_recorder(self) -> None:
+        """Expose actual durable progress without opening a native connection.
+
+        Returns:
+            None: Diagnostics count flushed samples, preserve a failure reason,
+                and distinguish paused state from an active worker.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            recorder = FlightRecorder(
+                Path(temporary), "gallery", "", lambda _level, _message: None
+            )
+            recorder.directory.mkdir(parents=True)
+            recorder.simulator = "Microsoft Flight Simulator 2024"
+            sample = FlightSample(
+                session_elapsed_seconds=0.0,
+                recorded_utc="2026-10-18T09:00:00+00:00",
+            )
+            self.assertTrue(recorder._write_sample(sample))
+            recorder.warnings.append("Core telemetry rejected (7).")
+            recorder.pause()
+            snapshot = recorder.diagnostics_snapshot()
+            self.assertEqual(1, snapshot["sample_count"])
+            self.assertTrue(snapshot["paused"])
+            self.assertFalse(snapshot["running"])
+            self.assertEqual(recorder.simulator, snapshot["simulator"])
+            self.assertEqual(recorder.session_id, snapshot["session_id"])
+            self.assertEqual(recorder.warnings[-1], snapshot["last_warning"])
+            recorder.resume()
+            self.assertFalse(recorder.diagnostics_snapshot()["paused"])
+
     def test_recorder_longhaul_storage_is_sparse_and_keeps_dense_landing(self) -> None:
         """Replay 20 Hz capture through cruise and preserve landing frame detail.
 

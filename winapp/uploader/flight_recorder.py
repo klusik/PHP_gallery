@@ -277,6 +277,26 @@ class FlightRecorder(threading.Thread):
             self.pause_event.clear()
             self._pending_discontinuity = "recorder resumed after pause"
 
+    def diagnostics_snapshot(self) -> dict[str, str | int | bool | None]:
+        """Read current recorder progress without querying the simulator.
+
+        Returns:
+            dict[str, str | int | bool | None]: Session ID, worker running and
+                paused flags, saved sample_count, simulator/build/aircraft
+                identity, and last_warning or None. Values are a best-effort
+                snapshot of the independent worker's current progress.
+        """
+        return {
+            "session_id": self.session_id,
+            "running": self.is_alive(),
+            "paused": self.pause_event.is_set(),
+            "sample_count": self._sample_count,
+            "simulator": self.simulator,
+            "simulator_build": self.simulator_build,
+            "aircraft": self.aircraft,
+            "last_warning": self.warnings[-1] if self.warnings else None,
+        }
+
     def _checkpoint(self, ended: bool = False) -> None:
         """Atomically replace metadata after progress or termination.
 
@@ -495,6 +515,8 @@ class FlightRecorder(threading.Thread):
         self._last_utc = datetime.fromisoformat(sample.recorded_utc)
         if self._sample_count % CHECKPOINT_SAMPLE_INTERVAL == 0:
             self._checkpoint()
+        if self._sample_count == 1:
+            self.emit("info", "Flight recording: first telemetry sample saved.")
         return True
 
     def run(self) -> None:
@@ -511,7 +533,9 @@ class FlightRecorder(threading.Thread):
         persistence = _FlightPersistencePolicy()
         failure_count = 0
         retry_delay = FLIGHT_RECONNECT_INITIAL_SECONDS
-        self.emit("info", "Flight recording started.")
+        self.emit(
+            "info", "Flight recorder armed; waiting for valid aircraft telemetry."
+        )
         try:
             while not self.stop_event.is_set():
                 if self.pause_event.is_set():
@@ -523,15 +547,17 @@ class FlightRecorder(threading.Thread):
                     if observation is None:
                         if client.last_error or not client.handle.value:
                             failure_count += 1
-                            if failure_count == 1:
-                                self.warnings.append(
-                                    "Simulator unavailable; reconnecting with backoff."
-                                )
+                            message = client.last_error or (
+                                "Simulator unavailable; reconnecting with backoff."
+                            )
+                            if not self.warnings or self.warnings[-1] != message:
+                                self.warnings.append(message)
                                 self.warnings = self.warnings[-MAX_SESSION_WARNINGS:]
                                 self._checkpoint()
+                            if failure_count == 1:
                                 self.emit(
                                     "warning",
-                                    client.last_error or "SimConnect connection unavailable.",
+                                    message,
                                 )
                             self.stop_event.wait(retry_delay)
                             retry_delay = min(

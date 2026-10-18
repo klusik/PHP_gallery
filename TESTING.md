@@ -2,6 +2,18 @@
 
 ## Flight recording and report delivery
 
+The SimConnect flight fixture independently rejects the RPN-only
+`E:ABSOLUTE TIME` name and invalid `G FORCE` units with asynchronous SDK
+exception 7. Both simulator generations must record with `ABSOLUTE TIME` and
+`GForce`; an optional rejection must leave core position available. Core errors
+must identify the variable, units, send ID and SDK parameter index after cleanup.
+Recorder diagnostics must count flushed samples and distinguish paused capture.
+Native failure fixtures retain hexadecimal HRESULTs and Windows names. Unknown
+SDK codes must remain unknown with their original operation; a dependent request
+failure cannot replace the first causal definition error.
+These regressions cover the observed zero-sample recorder failure; successful
+photo-camera acquisition alone does not establish usable flight telemetry.
+
 The WinApp adapter regressions also cover watcher-owned automatic session
 admission, an initially dormant recorder, live recording pause/resume without
 stopping photo uploads, rejected switch changes during finalization, and invalid

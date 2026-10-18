@@ -34,11 +34,12 @@ from uploader.simconnect_location import (
 # This seam lets native-provider fixtures run without changing host os.name.
 WINDOWS_NATIVE_TRANSPORT = os.name == "nt"
 # SDK enum values, not adjustable policy.
-# Core clock is documented E:ABSOLUTE TIME in seconds.
+# SimConnect uses ABSOLUTE TIME; the E: prefix belongs to RPN expressions.
 SIMCONNECT_PERIOD_SECOND = 4
 SIMCONNECT_PERIOD_SIM_FRAME = 3
 SIMCONNECT_DATATYPE_FLOAT64 = 4
 SIMCONNECT_DATATYPE_STRING256 = 9
+SIMCONNECT_EXCEPTION_NAME_UNRECOGNIZED = 7
 # Private definition/request identities for the isolated SDK TITLE string.
 FLIGHT_TITLE_DEFINITION_ID = 400
 FLIGHT_TITLE_REQUEST_ID = 401
@@ -104,7 +105,7 @@ CORE_SIMVARS = (
     (b"PLANE LONGITUDE", b"degrees"),
     (b"PLANE ALTITUDE", b"feet"),
     (b"PLANE ALT ABOVE GROUND", b"feet"),
-    (b"E:ABSOLUTE TIME", b"seconds"),
+    (b"ABSOLUTE TIME", b"seconds"),
     (b"SIM ON GROUND", b"bool"),
     (b"AIRSPEED INDICATED", b"knots"),
     (b"AIRSPEED TRUE", b"knots"),
@@ -135,7 +136,7 @@ OPTIONAL_SIMVARS = (
     ("brake_left", b"BRAKE LEFT POSITION", b"percent"),
     ("brake_right", b"BRAKE RIGHT POSITION", b"percent"),
     ("autopilot", b"AUTOPILOT MASTER", b"bool"),
-    ("load_factor", b"G FORCE", b"g"),
+    ("load_factor", b"G FORCE", b"GForce"),
     ("engine_1", b"GENERAL ENG RPM:1", b"rpm"),
     ("engine_2", b"GENERAL ENG RPM:2", b"rpm"),
     ("engine_3", b"GENERAL ENG RPM:3", b"rpm"),
@@ -148,6 +149,67 @@ EVENT_FLIGHT_LOADED = 103
 EVENT_AIRCRAFT_LOADED = 104
 REQUEST_FLIGHT_STATE = 105
 REQUEST_AIRCRAFT_STATE = 106
+
+# SDK wire codes used by this read-only provider, not retry policies. Keep
+# unknown codes explicit instead of inventing an explanation for newer SDKs.
+SIMCONNECT_EXCEPTION_DETAILS = {
+    1: ("ERROR", "The simulator reported an unspecified operation failure."),
+    2: ("SIZE_MISMATCH", "The supplied data size does not match the SDK layout."),
+    3: ("UNRECOGNIZED_ID", "A request, definition, event or object ID is unknown."),
+    4: ("UNOPENED", "The simulator connection is not open."),
+    5: ("VERSION_MISMATCH", "The client DLL and simulator API versions differ."),
+    SIMCONNECT_EXCEPTION_NAME_UNRECOGNIZED: (
+        "NAME_UNRECOGNIZED",
+        "A requested name is unknown; check the SDK variable/event and units.",
+    ),
+    18: ("INVALID_DATA_TYPE", "The requested SDK data type is invalid."),
+    19: ("INVALID_DATA_SIZE", "The data size is invalid for this operation."),
+    20: ("DATA_ERROR", "The simulator rejected the supplied data."),
+    26: ("ALREADY_SUBSCRIBED", "This connection already subscribes to the event."),
+    27: ("INVALID_ENUM", "An SDK enumeration value is invalid."),
+    28: ("DEFINITION_ERROR", "The simulator rejected the data definition."),
+    29: ("DUPLICATE_ID", "An ID was already used by another definition or event."),
+    30: ("DATUM_ID", "The simulator does not recognize the datum ID."),
+    31: ("OUT_OF_BOUNDS", "An operation parameter is outside the SDK bounds."),
+    45: ("INTERNAL", "The simulator reported an internal SDK failure."),
+    46: ("CAMERA_API", "The simulator could not acquire the camera."),
+}
+SIMCONNECT_ARGUMENT_NAMES = {
+    "AddToDataDefinition": (
+        "definition_id", "variable", "units", "datatype", "epsilon", "datum_id",
+    ),
+    "RequestDataOnSimObject": (
+        "request_id", "definition_id", "object_id", "period", "flags",
+        "origin", "interval", "limit",
+    ),
+    "SubscribeToSystemEvent": ("event_id", "event"),
+    "RequestSystemState": ("request_id", "state"),
+}
+
+
+def _hresult_description(result: int) -> str:
+    """Describe a native failure without guessing an unavailable server cause.
+
+    Args:
+        result (int): Signed 32-bit HRESULT returned by a SimConnect export.
+
+    Returns:
+        str: Hex and signed values, a known Windows error name, and its meaning;
+            unrecognized HRESULTs remain explicitly unknown.
+    """
+    # HRESULT is a 32-bit wire value; the mask normalizes signed ctypes results.
+    code = int(result) & 0xFFFFFFFF
+    name, reason = {
+        0x80004005: (
+            "E_FAIL",
+            "Unspecified native failure; verify the simulator is running and "
+            "accepting SimConnect connections. The SDK supplied no further cause.",
+        ),
+        0x80070057: ("E_INVALIDARG", "The native API rejected an argument."),
+        0x80070005: ("E_ACCESSDENIED", "The native API denied access."),
+        0x80004001: ("E_NOTIMPL", "This native operation is not implemented."),
+    }.get(code, ("UNKNOWN_HRESULT", "No decoded meaning is available."))
+    return f"HRESULT 0x{code:08X} ({int(result)}, {name}): {reason}"
 
 
 class _FlightCoreData(ctypes.Structure):
@@ -264,6 +326,7 @@ class SimConnectFlightClient:
         self.last_sim_progress_host: float | None = None
         self.clock_stall_reported = False
         self.send_ids: dict[int, str] = {}
+        self.send_details: dict[int, str] = {}
         self.last_error = ""
         self.connection_lost = False
         self._lock = threading.RLock()
@@ -302,19 +365,32 @@ class SimConnectFlightClient:
         Raises:
             OSError: Native export returns a failed HRESULT.
         """
+        labels = SIMCONNECT_ARGUMENT_NAMES.get(name, ())
+        parameters = (
+            ", ".join(
+                f"{label}={value!r}"
+                for label, value in zip(labels, arguments, strict=True)
+            )
+            if len(labels) == len(arguments)
+            else repr(arguments)
+        )
+        operation = f"SimConnect_{name}({parameters})"
         result = getattr(self.dll, "SimConnect_" + name)(
             self.handle, *arguments
         )
         if simconnect_hresult_failed(result):
-            raise OSError(f"{name} failed: HRESULT {int(result)}")
+            raise OSError(f"{operation} failed: {_hresult_description(result)}")
         sent = ctypes.c_uint32()
         result = self.dll.SimConnect_GetLastSentPacketID(
             self.handle, ctypes.byref(sent)
         )
         if not simconnect_hresult_failed(result) and sent.value:
             self.send_ids[int(sent.value)] = phase
+            self.send_details[int(sent.value)] = operation
             while len(self.send_ids) > FLIGHT_SEND_HISTORY_LIMIT:
-                del self.send_ids[next(iter(self.send_ids))]
+                oldest = next(iter(self.send_ids))
+                del self.send_ids[oldest]
+                self.send_details.pop(oldest, None)
 
     def _native_dispatch(
         self,
@@ -372,7 +448,8 @@ class SimConnectFlightClient:
                 if simconnect_hresult_failed(result):
                     self.connection_lost = True
                     raise OSError(
-                        f"SimConnect dispatch failed: HRESULT {int(result)}"
+                        "SimConnect_CallDispatch failed: "
+                        + _hresult_description(result)
                     )
                 if self.transport.open_received and stop_on_open:
                     return
@@ -522,6 +599,7 @@ class SimConnectFlightClient:
             self.last_sim_progress_host = None
             self.clock_stall_reported = False
             self.send_ids.clear()
+            self.send_details.clear()
             self.core_sequence = 0
             self.pending_discontinuity = pending_discontinuity
             if not WINDOWS_NATIVE_TRANSPORT:
@@ -551,7 +629,13 @@ class SimConnectFlightClient:
                 None, 0, None, 0,
             )
             if simconnect_hresult_failed(result) or not self.handle.value:
-                raise OSError(f"SimConnect_Open failed: HRESULT {int(result)}")
+                raise OSError(
+                    "SimConnect_Open failed: " + (
+                        _hresult_description(result)
+                        if simconnect_hresult_failed(result)
+                        else "the SDK returned success without a connection handle."
+                    )
+                )
             self._pump(
                 time.monotonic() + FLIGHT_RESPONSE_TIMEOUT_SECONDS,
                 stop_on_open=True,
@@ -605,7 +689,11 @@ class SimConnectFlightClient:
             self._add_core_definition()
             for index, (key, variable, units) in enumerate(OPTIONAL_SIMVARS):
                 self._add_optional(index, key, variable, units)
-            self._emit("info", f"Read-only telemetry connected to {self.simulator}.")
+            self._emit(
+                "info",
+                f"SimConnect connected to {self.simulator}; "
+                "waiting for valid aircraft telemetry.",
+            )
 
     def _header(
         self,
@@ -643,6 +731,8 @@ class SimConnectFlightClient:
 
         Returns:
             None: Optional fields degrade alone; core failure is surfaced.
+                Diagnostics retain the SDK code, send ID, parameter index and
+                exact operation, including rejected SimVar names and units.
         """
         if size < ctypes.sizeof(_SimConnectRecvException):
             self.last_error = "Truncated SimConnect exception packet."
@@ -651,14 +741,35 @@ class SimConnectFlightClient:
             data, ctypes.POINTER(_SimConnectRecvException)
         ).contents
         phase = self.send_ids.get(packet.dwSendID, "")
+        exception_name, reason = SIMCONNECT_EXCEPTION_DETAILS.get(
+            packet.dwException,
+            ("UNKNOWN_SDK_EXCEPTION", "No decoded SDK meaning is available."),
+        )
+        detail = (
+            f"{packet.dwException} {exception_name}; {reason} "
+            f"send_id={packet.dwSendID}; index={packet.dwIndex}; "
+            f"phase={phase or 'unknown'}; simulator={self.simulator}; "
+            f"build={self.simulator_build or 'unknown'}; "
+            f"operation={self.send_details.get(packet.dwSendID, 'unknown')}"
+        )
         if phase.endswith(":core"):
-            self.last_error = f"Core telemetry rejected ({packet.dwException})."
+            # Retain the rejected definition before a dependent request also
+            # fails; otherwise the later error hides the actual SimVar/units.
+            self.last_error = self.last_error or (
+                f"Core telemetry rejected ({detail}). "
+                "No flight sample accepted from this connection; reconnecting."
+            )
         elif phase.startswith(("definition:", "request:")):
             key = phase.split(":", 1)[1]
             self.unavailable.add(key)
             self.values.pop(key, None)
             self.value_timestamps.pop(key, None)
-            self._emit("warning", f"Optional telemetry {key} unavailable.")
+            self._emit(
+                "warning", f"Optional telemetry {key} unavailable ({detail}). "
+                "This signal remains unknown; core flight recording is independent."
+            )
+        else:
+            self._emit("warning", f"SimConnect operation rejected ({detail}).")
 
     def _data(
         self,
@@ -951,6 +1062,7 @@ class SimConnectFlightClient:
             try:
                 self.open()
             except (OSError, AttributeError, ValueError) as exc:
+                self.last_error = str(exc)
                 self._emit("warning", str(exc))
                 self.close()
                 return None
@@ -962,14 +1074,28 @@ class SimConnectFlightClient:
                 stop_on_core=True,
             )
         except (OSError, AttributeError, ValueError) as exc:
+            self.last_error = str(exc)
             self.pending_discontinuity = "SimConnect reconnect"
             self._emit("warning", str(exc))
             self.close()
             return None
         elapsed = max(0.0, time.monotonic() - self.started_monotonic)
+        first_sample = self.last_sim_elapsed is None
         sample = self._sample_from_core(elapsed)
         if sample is None:
+            self.last_error = (
+                "No valid aircraft telemetry frame received within "
+                f"{FLIGHT_RESPONSE_TIMEOUT_SECONDS:g} s; no sample saved. "
+                f"simulator={self.simulator}; build={self.simulator_build}; "
+                f"flight_loaded={self.flight_loaded}; running={self.running}; "
+                f"pause_flags={self.pause_flags}. "
+                "The simulator may be loading, paused or not supplying frames."
+            )
             return None
+        if first_sample:
+            self._emit(
+                "info", f"Valid aircraft telemetry received from {self.simulator}."
+            )
         return sample, {
             "simulator": self.simulator,
             "simulator_build": self.simulator_build,
@@ -1001,6 +1127,7 @@ class SimConnectFlightClient:
             self.last_sim_progress_host = None
             self.clock_stall_reported = False
             self.send_ids.clear()
+            self.send_details.clear()
 
     def stop(self) -> None:
         """Release the worker-owned native handle after capture stops.

@@ -1,5 +1,35 @@
 # Compatibility lifecycle and retirement register
 
+## Windows flight telemetry definitions and diagnostics (0.5.2)
+
+Owners: `winapp/uploader/simconnect_flight.py`, `flight_recorder.py` and the
+existing launcher diagnostics. The recorder uses the SimConnect name
+`ABSOLUTE TIME` and `GForce` load-factor units on both MSFS generations.
+The former `E:ABSOLUTE TIME` RPN spelling and `g` unit are invalid wire inputs.
+The observed MSFS 2024 build 12.2.282174.999 repeatedly rejected core telemetry
+with SDK exception 7; two supplied sessions contained zero persisted samples
+despite successful independent photo-camera acquisition. This is confirmed
+deployed regression evidence, not an aggregate usage estimate.
+
+Failures retain exact SDK operations, variable/units, send ID and parameter
+index in activity. Known SDK/HRESULT codes carry a name and explanation;
+unknown codes remain explicit and original arguments use named fields. Messages
+state core/optional impact, while timeouts retain loaded-flight and pause state.
+Changed consecutive failure reasons persist in session warnings; connection,
+first valid telemetry and first saved sample are logged separately. A later
+dependent request error cannot replace the first causal failure.
+Copied diagnostics separately expose recorder state, saved
+sample count and app version without opening another native connection.
+Optional signal failures continue to affect only that signal. No raw schema,
+API, existing session files or photograph location behavior changes. Missing
+historical samples cannot be recovered from camera success messages.
+
+Portable SDK-rejection fixtures cover both generations. A local read-only
+probe could not open a simulator connection, so installed MSFS 2020/2024
+acceptance and upgrade-during-flight continuity remain unverified. Keep both
+generation paths and durable recovery; these permanent SDK names require no
+legacy fallback. Retire support only with separately recorded usage evidence.
+
 ## Windows uploader dark interface and recording switch (0.5.1)
 
 Owners: `winapp/uploader/ui_theme.py`, `flight_ui.py` and the existing

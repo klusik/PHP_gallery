@@ -8051,7 +8051,7 @@ class WatcherApp:
             self.activity_drawer.insert("", "end", iid=f"event-{index}-{int(event.timestamp * 1000)}", values=(stamp, event.level, filename, event.operation, event.message))
 
     def copy_diagnostics(self) -> None:
-        """Copy diagnostics with credentials/paths redacted, including UTC state.
+        """Copy redacted diagnostics including UTC and saved flight progress.
 
         Returns:
             None: Copies support text to the clipboard and records the action.
@@ -8067,9 +8067,15 @@ class WatcherApp:
             for event in self.activity_events[-30:]
         )
         simconnect = getattr(self.worker, "simconnect_diagnostics", {"connection": "not queried", "last_result": "not requested"})
+        recorder = self.flights.recorder
+        flight_progress = (
+            recorder.diagnostics_snapshot() if recorder is not None
+            else {"running": False, "sample_count": 0}
+        )
         raw = "\n".join(
             [
                 f"App: {APP_DISPLAY_NAME}",
+                f"App version: {APP_VERSION}",
                 f"Python: {sys.version.split()[0]}",
                 f"OS: {os.name}",
                 f"Gallery URL: {self.gallery_url_var.get().strip()}",
@@ -8085,6 +8091,8 @@ class WatcherApp:
                 f"Log path: {LOG_PATH}",
                 "SimConnect (last acquisition; connections close after each request):",
                 json.dumps(simconnect, indent=2, ensure_ascii=False),
+                "Flight recorder (independent aircraft telemetry):",
+                json.dumps(flight_progress, indent=2, ensure_ascii=False),
                 "Recent activity:",
                 recent,
             ]

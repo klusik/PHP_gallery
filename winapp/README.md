@@ -33,7 +33,7 @@ restart from `%APPDATA%\PHPGalleryUploader\config.json`. Flight switches and
 languages use the existing `flights/preferences.json` in the same app profile.
 Saving feature preferences never resets unrelated settings.
 
-## Flight recording and reports (source target 0.5.1)
+## Flight recording and reports (source target 0.5.2)
 
 The uploader supports a shared, read-only flight-recording/reporting workflow for
 MSFS 2020 and MSFS 2024. Recording is enabled by default and has an independent
@@ -49,6 +49,23 @@ coordinates remain
 owned by the existing location feature. Unavailable signals are labelled and
 degrade the affected metric/chart without disabling basic recording or reports.
 Live simulator/aircraft/build qualification remains a separate acceptance step.
+
+The recorder requests the SDK clock as `ABSOLUTE TIME` in `seconds`;
+the `E:` prefix is only RPN expression syntax. Load factor uses the SDK unit
+`GForce`. A rejected core definition prevents usable flight samples even when
+the separate photo-camera connection succeeds. **Copy redacted diagnostics**
+includes the app version and independent recorder state: saved sample count,
+running/paused state, simulator identity and last session warning. SDK failures
+identify a decoded SDK name and meaning, send ID, parameter index and original
+operation with named arguments, including the rejected variable and units.
+Native failures retain hexadecimal HRESULTs and Windows error names. Unknown
+codes stay explicitly unknown. The message states whether core capture failed
+or only one optional signal is missing; timeouts include current simulator,
+loaded-flight and pause state. Changed failure reasons are also retained in
+`session.json`, without repeating an identical consecutive warning. Connection,
+first valid frame and first flushed sample have distinct activity messages;
+no failed interval is recreated. The code meanings follow the
+[SDK exception reference](https://docs.flightsimulator.com/html/Programming_Tools/SimConnect/API_Reference/Structures_And_Enumerations/SIMCONNECT_EXCEPTION.htm).
 
 Read-only acquisition targets 20 Hz, but the observed rate can be lower. Cruise
 samples persist at 1 Hz; below 300 m AGL, approach capture uses high-resolution
@@ -160,13 +177,13 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.5.1)
+## Windows installer (next version: 0.5.2)
 
 The companion app has its own version in `winapp/VERSION`, independent of the PHP
-Gallery CMS release. The current source targets **0.5.1**; this source version
+Gallery CMS release. The current source targets **0.5.2**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.5.1/`. Existing version outputs and other version folders remain
+`winapp/dist/0.5.2/`. Existing version outputs and other version folders remain
 preserved.
 
 The installer includes Python, Tkinter, Pillow, pystray, ReportLab,
@@ -221,8 +238,8 @@ The build script produces the installer and its matching update metadata togethe
 in a folder named after the independent WinApp version:
 
 ```text
-winapp/dist/0.5.1/PHPGalleryUploader-0.5.1-Setup.exe
-winapp/dist/0.5.1/winapp-update.json
+winapp/dist/0.5.2/PHPGalleryUploader-0.5.2-Setup.exe
+winapp/dist/0.5.2/winapp-update.json
 ```
 
 Attach both files from that folder to the same GitHub release as the CMS release.
@@ -234,8 +251,8 @@ metadata when GitHub's asset digest is unavailable. Its schema is:
 {
   "assets": [
     {
-      "name": "PHPGalleryUploader-0.5.1-Setup.exe",
-      "version": "0.5.1",
+      "name": "PHPGalleryUploader-0.5.2-Setup.exe",
+      "version": "0.5.2",
       "size": 12345678,
       "sha256": "<64-character hexadecimal SHA-256 digest>"
     }

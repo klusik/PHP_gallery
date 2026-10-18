@@ -925,6 +925,17 @@ valt språk från samma analys. Rapporter sparas lokalt för nytt försök. Sign
 som saknas förblir otillgängliga; liveverifiering av simulator, flygplan och
 build görs separat för varje generation.
 
+Registreraren begär \texttt{ABSOLUTE TIME} i sekunder och belastningsfaktor
+med enheten \texttt{GForce}. Prefixet \texttt{E:} hör till RPN-uttryck.
+Lyckad kamerainläsning bevisar inte flygregistrering. Kopierad diagnostik visar
+appversion, separat registrerarstatus, antal sparade mätpunkter och senaste
+varning. Avvisade SDK-anrop anger variabel, enhet, sändnings-ID och
+parameterindex. Kända SDK/HRESULT-koder får namn, förklaring och påverkan;
+okända koder förblir uttryckligen okända. Ändrade felorsaker sparas i
+sessionsvarningar. Anslutning, första giltiga ram och första sparade mätpunkt
+loggas separat.
+Saknade historiska mätpunkter kan inte återskapas.
+
 Båda åtgärderna använder samma beständiga samordnare. Ett fristående Stop
 avslutar mappbevakningen, dess egen UTC-synkronisering och flygregistreringen,
 och slutför sedan accepterade fotografier och nödvändig rapportleverans;
@@ -1229,10 +1240,10 @@ Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanlig
 
 Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.5.1. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.5.2. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.5.1/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.5.2/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.

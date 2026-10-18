@@ -929,6 +929,16 @@ selected language from one analysis. Reports remain local for retry.
 Unsupported signals stay unavailable rather than invented; live simulator,
 aircraft, and~build acceptance remains separate for each generation.
 
+The~recorder requests \texttt{ABSOLUTE TIME} in seconds and load factor in
+\texttt{GForce}. The~\texttt{E:} prefix belongs to RPN expressions.
+Photo-camera success does not establish flight recording. Copied diagnostics
+show the~app version, independent recorder state, saved sample count, and last
+warning. Rejected SDK operations identify the~variable, units, send ID, and
+parameter index. Known SDK/HRESULT codes include a~name, explanation, and impact;
+unknown codes stay explicit. Changed failure reasons stay in session warnings.
+Connection, first valid frame, and first saved sample have separate log messages.
+Missing historical samples cannot be recreated.
+
 Both actions use one durable coordinator. Standalone Stop stops the~watcher,
 its~owned UTC synchronizer, and~flight recorder, then drains accepted
 photographs and~completes required report delivery; unrelated AI, manual-import,
@@ -1234,9 +1244,9 @@ Vertical cards place the~photograph above the~description; horizontal cards plac
 
 Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
 
-The~independent uploader source targets 0.5.1. A~separately requested installer
+The~independent uploader source targets 0.5.2. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.5.1/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.5.2/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.
