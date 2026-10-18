@@ -1,5 +1,45 @@
 # Patch notes
 
+## Version 0.136.2
+
+Redesigned the Windows uploader interface and updated flight recording controls. Added a GitHub Actions workflow to create release branches, and updated related testing, compatibility, and release documentation.
+
+### Highlights
+
+#### Windows uploader redesign
+- Replaced the light layout with compact dark panels, icon navigation, contextual controls, segmented language choices, and switches that remained keyboard-operable.
+- Moved folder selection, report options, and language choices into their respective settings.
+- Automatically armed flight recording when the watcher started. Recording could be paused and resumed while photo uploads continued; starting with recording disabled did not open SimConnect.
+- Preserved saved paths, Gallery URL, and local preferences across restarts.
+
+#### Release branch workflow
+- Added a **Begin Release** workflow that created `release/<version>` from the selected commit when run from `develop` with a `v_`-prefixed version. The workflow created the branch but did not qualify or publish the release.
+
+### Technical Details
+
+#### Windows uploader
+- Updated `winapp/gallery_watch_upload.pyw`, `winapp/uploader/flight_ui.py`, and `winapp/uploader/ui_theme.py` for the redesigned interface and flight recording controls.
+- Updated `winapp/VERSION` to `0.5.1` and added flight-report language translations.
+- Preserved report policy, accepted work, Stop/Revoke ownership, tray shutdown, and updater drain.
+
+#### Workflow and documentation
+- Added `.github/workflows/begin-release.yml` and release origin and predecessor records for `v_0.136.2`.
+- Updated release, compatibility, testing, and Windows uploader documentation, including all four manual sources.
+
+#### Tests
+- Added regression coverage for automatic flight session admission, recording pause and resumption, rejected preference changes, saved configuration restoration, and scrollbar visibility.
+
+### User Impact
+
+#### For visitors
+- No direct visitor behavior changed.
+
+#### For administrators
+- Windows uploader users could access flight recording and report settings through contextual controls. Photo uploads continued when flight recording was paused.
+
+#### For maintainers
+- Maintainers could create a release branch with the new workflow; it did not qualify or publish a release. Regression coverage was expanded for uploader settings and flight recording behavior.
+
 ## Version 0.136.1
 
 Preserved compatibility with installed companion-aware updaters when packaging WinApp font and license resources. Updated production inventory generation, regression coverage, and permanent documentation; no database schema or WinApp binary/version changes were made.
