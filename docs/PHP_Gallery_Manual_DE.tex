@@ -3022,6 +3022,12 @@ Andere Fehler stoppen den~Lauf; FULL wird nicht wiederholt.
 
 \subsection{Release-Zusammenstellung aus qualifiziertem develop}
 
+Starten Sie~in GitHub Actions \ui{Begin Release} von~\codeword{develop}
+und~geben Sie die~Version einschließlich \codeword{v_} ein, zum~Beispiel
+\codeword{v_0.136.2}. Der~Workflow erstellt \codeword{release/v_0.136.2}
+auf~dem exakten develop-SHA dieses Laufs; er~qualifiziert oder~veröffentlicht
+das~Release nicht.
+
 Vor~der~PR-Freigabe bleiben fixierte main-Historie und~vorbereiteter Baum erhalten.
 Nach Freigabe und~Tag wird unverändertes develop per Fast-forward direkt auf
 den~tatsächlich markierten main-Commit gesetzt. Beide Zweige zeigen danach auf

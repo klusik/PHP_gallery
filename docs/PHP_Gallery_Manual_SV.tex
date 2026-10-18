@@ -2999,7 +2999,10 @@ bygget hanterar även tidiga godkännanden; lyckad Git-push av~ursprunget kräve
 ingen omedelbar REST-avläsning.
 
 En commit som~tagits in~i skyddad develop är~kvalificerad.
-Skapa den~separat godkända \codeword{release/v_X.Y[.Z]} från denna källa.
+Kör \ui{Begin Release} från~\codeword{develop} i~GitHub Actions och~ange
+versionen inklusive \codeword{v_}, till~exempel \codeword{v_0.136.2}.
+Arbetsflödet skapar \codeword{release/v_0.136.2} på~den exakta develop-SHA
+som valts för~körningen; det kvalificerar eller publicerar inte utgåvan.
 Utgåvan kör inte om~BASIC/FULL och~hämtar inga äldre kvalificeringsarkiv.
 Den~låser A, uppdaterar metadata och~patch notes, anpassar alla fyra
 manualutgåvorna, bygger deras PDF med~låst TinyTeX och~reproducerbar tid

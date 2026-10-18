@@ -2974,6 +2974,11 @@ ID checků a~stav větví. Jiné chyby běh zastaví; FULL se neopakuje.
 
 \subsection{Sestavení vydání z~kvalifikovaného develop}
 
+V~GitHub Actions spusťte \ui{Begin Release} z~větve \codeword{develop}
+a~zadejte číslo verze včetně \codeword{v_}, například \codeword{v_0.136.2}.
+Workflow vytvoří \codeword{release/v_0.136.2} přesně na SHA developu
+vybraném pro~toto spuštění; vydání tím nekvalifikuje ani nepublikuje.
+
 Před schválením PR sestavení zachová historii zafixovaného main i~připravený
 strom. Po~schválení a~vytvoření tagu posune nezměněný develop přímo na~skutečný
 označený commit main pomocí fast-forward. Obě větve pak ukazují na~stejný commit;
