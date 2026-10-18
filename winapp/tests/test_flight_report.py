@@ -27,7 +27,7 @@ from pathlib import Path
 from dataclasses import replace
 from typing import Optional
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -96,6 +96,16 @@ DENSE_LANDING_STARTS_SECONDS = (60.0, 140.0)
 
 class FlightReportTests(unittest.TestCase):
     """Verify the renderer produces complete, stable multilingual reports."""
+
+    def setUp(self) -> None:
+        """Keep renderer regressions independent of public map availability.
+
+        Returns:
+            None: Uses the real offline renderer without external HTTP requests.
+        """
+        transport = patch("uploader.flight_maps.urlopen", side_effect=OSError("offline fixture"))
+        transport.start()
+        self.addCleanup(transport.stop)
 
     def _analysis(
         self,
@@ -838,6 +848,112 @@ class FlightReportTests(unittest.TestCase):
         for character in _REQUIRED_GLYPHS:
             if character != " ":
                 self.assertNotEqual(glyph_map.get(ord(character), 0), 0)
+
+
+    def test_dispatch_profiles_align_simulator_clock_and_convert_fuel_units(self) -> None:
+        """Compare real and planned profiles without treating host time as flight time.
+
+        Returns:
+            None: A two-times simulator rate maps twenty planned seconds to ten
+                host seconds; missing takeoff suppresses alignment and pounds
+                are converted to the displayed measured-mass unit.
+        """
+        from uploader.flight_report import _dispatch_series, POUNDS_PER_KG, METRES_TO_FEET
+        from uploader.flight_simbrief import DispatchPlan, DispatchPoint
+
+        analysis = self._analysis("MSFS 2024")
+        analysis.samples = [
+            replace(analysis.samples[0], session_elapsed_seconds=float(host),
+                simulator_elapsed_seconds=float(sim), discontinuity_before=None)
+            for host, sim in ((0, 80), (10, 100), (20, 120), (30, 140))
+        ]
+        analysis.events = [FlightPhaseEvent("takeoff", 10.0, "moderate", ["fixture takeoff"])]
+        analysis.dispatch = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120",
+            "1000", "lbs", "2610", "2026-10-18", points=[
+                DispatchPoint("A", 50, 14, 0.0, 10000.0, 1000.0),
+                DispatchPoint("B", 50, 13, 20.0, 20000.0, 800.0),
+            ])
+        fuel = _dispatch_series(analysis, "fuel_weight_kg", 1.0, "kg")
+        self.assertEqual([10.0, 20.0], [point[0] for point in fuel])
+        self.assertAlmostEqual(800 / POUNDS_PER_KG, fuel[1][1])
+        altitude = _dispatch_series(analysis, "altitude_m", METRES_TO_FEET, "ft AMSL")
+        self.assertAlmostEqual(20000, altitude[1][1])
+        analysis.samples[2].discontinuity_before = "paused"
+        broken = _dispatch_series(analysis, "fuel_weight_kg", 1.0, "kg")
+        self.assertTrue(any(point[2] for point in broken))
+        analysis.dispatch.units = "unknown"
+        self.assertEqual([], _dispatch_series(analysis, "fuel_weight_kg", 1.0, "kg"))
+        analysis.events = []
+        self.assertEqual([], _dispatch_series(analysis, "fuel_weight_kg", 1.0, "kg"))
+
+    def test_pdf_map_embeds_native_print_pixels_and_vector_routes(self) -> None:
+        """Keep first-page backgrounds printable rather than stretching a preview.
+
+        Returns:
+            None: Embedded raster placement meets 300 dpi in both directions
+                while the actual track remains an independent vector polyline.
+        """
+        from reportlab.graphics.shapes import Image as MapShape, PolyLine
+
+        chart = _route_chart(self._analysis("MSFS 2024"), "en")
+        images = [item for item in chart.contents if isinstance(item, MapShape)]
+        self.assertEqual(1, len(images))
+        image = images[0]
+        self.assertGreaterEqual(image.path.width * 72 / image.width, 300)
+        self.assertGreaterEqual(image.path.height * 72 / image.height, 300)
+        self.assertTrue(any(isinstance(item, PolyLine) for item in chart.contents))
+
+    def test_airborne_capture_compares_ofp_at_nearby_recorded_positions(self) -> None:
+        """Compare planned profiles even when recording starts after takeoff.
+
+        Returns:
+            None: Nearby fixes map monotonically to captured host time, an
+                explicit capture gap splits the plan, and distant routes or
+                incompatible fuel units produce no misleading comparison.
+                A diversion landing never anchors the planned destination.
+        """
+        from uploader.flight_report import (
+            _dispatch_position_series, METRES_TO_FEET, POUNDS_PER_KG,
+        )
+        from uploader.flight_simbrief import DispatchPlan, DispatchPoint
+
+        analysis = self._analysis("MSFS 2024")
+        analysis.events = []
+        # Quarter-degree legs stay below the existing 50-NM jump boundary.
+        analysis.samples = [
+            replace(analysis.samples[0], session_elapsed_seconds=float(index * 10),
+                simulator_elapsed_seconds=None, latitude_deg=50.0,
+                longitude_deg=12.0 + index / 4, discontinuity_before=None)
+            for index in range(5)
+        ]
+        analysis.dispatch = DispatchPlan("TEST", "TEST", "DCT", "A320", "120",
+            "1000", "lbs", "2610", "2026-10-18", points=[
+                DispatchPoint(str(index), 50.0, 12.0 + index / 4,
+                    altitude_ft=30000 + index * 1000, fuel_onboard=1000 - index * 50)
+                for index in range(5)
+            ])
+        altitude = _dispatch_position_series(analysis, "altitude_m", METRES_TO_FEET, "ft AMSL")
+        self.assertEqual([0.0, 10.0, 20.0, 30.0, 40.0], [point[0] for point in altitude])
+        self.assertAlmostEqual(34000.0, altitude[-1][1])
+        fuel = _dispatch_position_series(analysis, "fuel_weight_kg", 1.0, "kg")
+        self.assertAlmostEqual(800 / POUNDS_PER_KG, fuel[-1][1])
+        captured = list(analysis.samples)
+        analysis.samples = captured[:3] + [
+            replace(sample, latitude_deg=55.0, longitude_deg=18.0)
+            for sample in captured[3:]
+        ]
+        analysis.events = [FlightPhaseEvent("touchdown", 40.0, "moderate", ["diversion"])]
+        diverted = _dispatch_position_series(analysis, "altitude_m", METRES_TO_FEET, "ft AMSL")
+        self.assertEqual([0.0, 10.0, 20.0], [t for t, _v, _gap in diverted if t is not None])
+        analysis.samples, analysis.events = captured, []
+        analysis.samples[2].discontinuity_before = "paused"
+        broken = _dispatch_position_series(analysis, "altitude_m", METRES_TO_FEET, "ft AMSL")
+        self.assertTrue(any(point[2] for point in broken))
+        analysis.dispatch.units = "unknown"
+        self.assertEqual([], _dispatch_position_series(analysis, "fuel_weight_kg", 1.0, "kg"))
+        analysis.dispatch.points = [replace(point, longitude=point.longitude + 20)
+            for point in analysis.dispatch.points]
+        self.assertEqual([], _dispatch_position_series(analysis, "altitude_m", METRES_TO_FEET, "ft AMSL"))
 
 
 if __name__ == "__main__":

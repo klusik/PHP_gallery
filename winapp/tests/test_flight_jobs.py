@@ -14,6 +14,7 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from uploader.flight_jobs import (
@@ -27,6 +28,7 @@ from uploader.flight_jobs import (
     report_revisions,
     organize_reports,
     allocate_report_revision,
+    report_file_details,
 )
 
 
@@ -382,6 +384,57 @@ class FlightJobsTests(unittest.TestCase):
                 first.release()
             second = WorkspaceLease(root)
             second.release()
+
+
+    def test_missing_pdf_reader_keeps_existing_report_metadata_usable(self) -> None:
+        """Retain saved PDF access when source Python lacks optional inspection.
+
+        Returns:
+            None: Missing pypdf yields unknown pages, preserving bytes and time.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            report = directory / "flight-en.pdf"
+            report.write_bytes(b"retained original PDF")
+            metadata = directory / ".metadata"
+            metadata.mkdir()
+            (metadata / (report.name + ".manifest.json")).write_text(
+                '{"created_utc":"2026-10-18T09:46:05+00:00"}', encoding="utf-8",
+            )
+            with patch.dict("sys.modules", {"pypdf": None, "reportlab": None}):
+                details = report_file_details(report)
+            self.assertIsNone(details.pages)
+            self.assertEqual("2026-10-18T09:46:05+00:00", details.created_utc)
+            self.assertFalse(details.estimated_time)
+            self.assertEqual(b"retained original PDF", report.read_bytes())
+
+
+    def test_new_dispatch_names_preserve_older_report_paths_and_bytes(self) -> None:
+        """Add current OFP identity only to newly allocated PDF generations.
+
+        Returns:
+            None: Flight number/ICAO naming preserves leading zeroes, while
+                updated plans never rename or overwrite previous editions.
+        """
+        from uploader.flight_simbrief import DispatchPlan
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "session.json").write_text(json.dumps({
+                "started_utc": "2026-10-18T09:46:05Z", "aircraft": "A320",
+            }), encoding="utf-8")
+            first = allocate_report_revision(directory, "first", ("en",))
+            original = first.files["en"]
+            original.write_bytes(b"retained original PDF")
+            plan = DispatchPlan("LKPR", "EDDF", "DCT", "A320", "120", "5000",
+                "kgs", "2610", "2026-10-18", flight_number="CY0734")
+            plan.save(directory)
+            second = allocate_report_revision(directory, "second", ("en",))
+            self.assertIn("CY0734 - LKPR-EDDF", second.files["en"].name)
+            self.assertNotEqual(original, second.files["en"])
+            organize_reports(directory)
+            self.assertEqual(b"retained original PDF", original.read_bytes())
+            self.assertEqual(original, allocate_report_revision(directory, "first", ("en",)).files["en"])
 
 
 if __name__ == "__main__":

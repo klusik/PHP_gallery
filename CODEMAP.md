@@ -495,6 +495,7 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Stop/finalize/revoke coordinator and shared progress | `winapp/uploader/flight_workflow.py`, `winapp/uploader/flight_ui.py` |
 | Telemetry normalization and landing analysis | `winapp/uploader/flight_data.py`, `winapp/uploader/flight_recorder.py`, `winapp/uploader/simconnect_flight.py` |
 | Multilingual chart PDF rendering | `winapp/uploader/flight_report.py`, `winapp/uploader/flight_report_translations.py`, bundled ReportLab/DejaVu assets |
+| Optional dispatch snapshots, AIRAC waypoint cache and OSM report maps | `winapp/uploader/flight_simbrief.py`, `winapp/uploader/flight_navdata.py`, `winapp/uploader/flight_maps.py`, `winapp/tests/test_flight_simbrief.py` |
 | Gallery-scoped PDF API and storage policy | `app/controllers/upload_automation.php`, `app/services/upload_flight_reports.php`, shared `app/services/gallery_pdf_documents.php` |
 | Desktop report delivery client | `winapp/uploader/flight_delivery.py` |
 | Flight analysis and delivery regressions | `tests/upload_flight_reports_service_test.php`, `winapp/tests/test_flight_delivery.py` |

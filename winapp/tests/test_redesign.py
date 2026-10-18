@@ -843,7 +843,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
 
         Returns:
             None: Missing-key admission opens API settings; a saved key reuses
-                the existing confirmed finish/revoke controller.
+                the one-click finish/PDF/revoke controller.
         """
         app = mock.Mock()
         app.updates.blocked.return_value = False
@@ -853,21 +853,25 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.revoke_api_key.assert_not_called()
         app.config.api_key = "saved-key"
         MAIN.WatcherApp.flight_action(app)
-        app.revoke_api_key.assert_called_once_with()
+        app.flights.finish_report.assert_called_once_with()
 
     def test_finish_flight_is_below_gallery_and_title_can_shrink(self) -> None:
         """Keep the finish action visible independently of gallery title length.
 
         Returns:
-            None: Headless widget spies verify a separate finish row and a
-                constrained expanding title; no real Tk window is constructed.
+            None: Independent widget spies verify the action container below
+                the title, Finish beside SimBrief within it, and the constrained
+                expanding title; no real Tk window is constructed.
         """
         app = mock.Mock()
         app.flights.text.return_value = "Finish flight…"
         widgets = mock.Mock()
+        # Distinct widgets preserve the real parent/child grid hierarchy.
+        widgets.Frame.side_effect = lambda *_args, **_kwargs: mock.Mock()
+        widgets.Button.side_effect = lambda *_args, **_kwargs: mock.Mock()
         with (
             mock.patch.object(MAIN, "ttk", widgets),
-            mock.patch.object(MAIN, "GlassCard"),
+            mock.patch.object(MAIN, "GlassCard", side_effect=lambda *_args, **_kwargs: mock.Mock()),
             mock.patch.object(MAIN, "icon_button"),
             mock.patch.object(MAIN, "help_button"),
         ):
@@ -877,10 +881,14 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         self.assertEqual(app.flight_action, finish.kwargs["command"])
         title = widgets.Label.call_args_list[0]
         self.assertEqual(1, title.kwargs["width"])
-        self.assertIn(
-            mock.call(row=1, column=0, sticky="w", pady=(6, 0)),
-            app.finish_flight_button.grid.call_args_list,
-        )
+        actions = finish.args[0]
+        self.assertIsNot(actions, title.args[0])
+        title.args[0].grid.assert_called_once_with(row=0, column=0, sticky="ew")
+        actions.grid.assert_called_once_with(row=1, column=0, sticky="w", pady=(6, 0))
+        app.finish_flight_button.grid.assert_called_once_with(row=0, column=0, sticky="w")
+        simbrief = widgets.Button.call_args_list[1]
+        self.assertIs(actions, simbrief.args[0])
+        self.assertEqual(app.flights.load_simbrief, simbrief.kwargs["command"])
 
     def test_watcher_run_reports_inventory_and_camera_startup_state(self) -> None:
         """Keep the original endpoint and SimConnect startup diagnostics visible.

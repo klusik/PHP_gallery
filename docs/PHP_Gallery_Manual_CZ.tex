@@ -940,8 +940,8 @@ zobrazí pomlčky. Sousední zkratka \ui{PDF} otevře uložené lety.
 \ui{Uložené lety a~PDF} ukazují začátek, letadlo, počet vzorků z~checkpointu,
 počet místních PDF, stav a~uchované chyby. Obnovit čte pouze checkpointy;
 Otevřít log aplikace používá existující log. \ui{Dokončit let a~vytvořit PDF}
-potvrdí běžné Zastavení a~zapne vybrané jazyky čekajících zpráv i~při vypnuté
-automatické tvorbě. Klíč zachová a~použije stávající pravidla doručení.
+bez potvrzování vytvoří čtyři jazykové verze, dokončí přijatou práci a~povinné
+doručení, poté revokuje uložený klíč. Funguje i~při vypnuté automatické tvorbě.
 
 Pro zastavený let vytvoří \ui{Vytvořit místní PDF} nebo \ui{Znovu vytvořit
 místní PDF} novou číslovanou verzi v~\filepath{reports/}. Starší PDF, surové
@@ -953,8 +953,8 @@ neuzavírá čekající doručení na~server. Zrušení zachová hotové jazykov
 Ukončení aplikace a~aktualizace tohoto pracovníka bezpečně dokončí nebo zruší.
 Rozložení ve~Windows a~živé ověření zůstávají samostatnou ruční kontrolou.
 
-Tlačítko \ui{Dokončit let} je přímo pod \ui{Cílovou galerií}; potvrzení zahrnuje
-zrušení klíče. Po~chybě zachová \ui{Ponechat místně a~zrušit klíč} i~Opakovat
+Tlačítko \ui{Dokončit let} je přímo pod \ui{Cílovou galerií}; jediný klik
+zahájí dokončení a~zrušení klíče. Po~chybě zachová \ui{Ponechat místně a~zrušit klíč} i~Opakovat
 již potvrzený záměr pro stejné připojení v~této instanci aplikace. Zrušení
 revokace, změna klíče nebo restart souhlas nepřenáší. Běžné Zastavení klíč
 zachová. Tlačítka obnovy jsou ve~dvou řádcích.
@@ -1313,9 +1313,67 @@ Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migr
 
 Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
-Zdroj samostatného uploaderu nyní cílí na verzi 0.5.3. Samostatně vyžádané
+Volitelné načtení ze SimBriefu je vedle zahájení/dokončení letu; ozubené
+kolečko mění ID pilota nebo uživatelské jméno v jediném poli. Identita se uloží
+teprve po úspěšném načtení OFP. Záznam letu ji nevyžaduje. Předem načtený plán
+převezme pouze následující let, plán načtený během záznamu patří tomuto letu.
+U~vybraného uloženého letu lze přímo načíst nejnovější OFP nebo vybrat archivovaný
+export SimBrief JSON/XML. Samotný PDF dokument neposkytuje strukturovaná data.
+Následně vytvořte novou verzi místních PDF; starší PDF i potvrzení přenosu zůstávají.
+Reporty obsahují mapu zaznamenané trasy OpenStreetMap i bez OFP. OFP doplní
+samostatnou plánovanou trasu, plánovaný počet cestujících a palivo na stojánce;
+tyto údaje nenahrazují telemetrii. Souřadnice navlogu se uchovávají v omezené
+místní SQLite cache podle AIRAC; nejednoznačné názvy se neodhadují. Zobrazené
+mapové dlaždice se ukládají alespoň na sedm dní, s uvedením zdroje a omezením
+velikosti cache. Bez podkladu zůstane trasa na světlém pozadí. Mercator omezuje
+polární šířky; původní souřadnice zůstávají v~surovém záznamu. OSM dostává
+souřadnice dlaždic a~identifikaci aplikace, nikoli klíč Galerie nebo identitu
+SimBriefu.
+
+Dialog identity SimBriefu používá tmavý styl aplikace, kontroluje vstup přímo
+v~okně a~podporuje Enter/Escape. Fajfka a~dvojice letišť označují načtený plán
+příštího nebo aktuálního letu; neúspěšné obnovení zachová přijatý plán. Nastavení,
+historie, průběh a~potvrzení se otevírají poblíž okna, ze kterého byly vyvolány.
+Kliknutí na záhlaví sloupce střídá vzestupné/sestupné řazení. Začátek letu uvádí
+i~sekundy; časy se řadí podle UTC, počty číselně a~názvy bez rozlišení velikosti
+písmen. Vytvoření/strany řadí skupiny podle nejnovějšího PDF/součtu známých stran.
+Rozbalení a~vícenásobný výběr zůstávají při řazení i~obnovení zachovány.
+Chybějící pypdf ponechá počet stran neznámý, uložená PDF však lze otevřít.
+Chybějící ReportLab zobrazí pokyny pro opravu závislostí. Requirements instalujte
+do stejného Pythonu, kterým spouštíte zdroj aplikace. Průběh aktualizace se sám
+zavře až po ověření nainstalované verze a~úspěšném spuštění aplikace; chyby
+a~požadavek restartu Windows zůstávají viditelné do zavření uživatelem.
+
+Mapové podklady se skládají z~nativních dlaždic alespoň na 300 dpi při
+výsledné velikosti v~PDF. Zaznamenaná trasa a~fialová přerušovaná trasa OFP
+zůstávají vektorové; přehled má světlý podklad, poslední mapa plný kontrast.
+Nová PDF mohou v~názvu obsahovat číslo letu a~ICAO odletu/příletu. Dosavadní
+verze, názvy a~potvrzení přenosu zůstávají. Dvě plánovací stránky využívají počet
+cestujících, náklad/zatížení, registraci, dráhy/náhradní letiště, cestovní výšku,
+cost index, vzdálenost/čas, plánované časy UTC, složky paliva a~hmotnosti.
+Chybějící údaje zůstávají neznámé. Časovaná výška a~palivo navlogu se mohou
+zobrazit spolu se záznamem; rozpoznaný vzlet a~zachycené hodiny simulátoru je
+sladí i~při změně rychlosti simulace. Známé kg/lb se výslovně převádějí, mezery
+záznamu srovnání přeruší. Bez časové kotvy se označené srovnání řídí zachycenou
+polohou: alespoň dva postupné body OFP musí odpovídat úsekům záznamu do 10 NM.
+Mezery a~skoky polohy zůstávají přerušené, čas vzletu se neodvozuje. Chybějící
+data vysvětlí poznámka v~grafu. Plán není měření: neodvozuje cestující,
+zpoždění ani nezaznamenané palivo. Starší snímky OFP lze číst; nové údaje
+získají výslovným novým načtením/importem. Síťové požadavky pokrývají pouze
+zobrazený výřez s~limitem 45 sekund a~po první chybě poskytovatele se zastaví.
+
+Hlavní ovládání SimBriefu ukazuje načtený plán; detail uloženého letu ukazuje
+jeho vlastní OFP. Dokončení použije načtený plán pro aktuální nebo jediný
+čekající let. Ruční tvorba jej použije pro vybraný uložený let a~bez potvrzení
+vytvoří čtyři nové jazykové verze. Bez načteného OFP zůstávají dřívější údaje;
+ani jedna akce plán nestahuje a~neptá se na identitu. Částečný záznam zůstává
+označený jako neúplný. Úspěch aktualizuje stav bez okna s~OK a~průběh zavře
+po trvalém dokončení a~vyčištění klíče. Chyby zůstávají viditelné, starší PDF
+zůstávají zachována.
+
+Zdroj samostatného uploaderu nyní cílí na verzi 0.6.0. Samostatně vyžádané
 sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
-\filepath{winapp-update.json} do \filepath{winapp/dist/0.5.3/}. Instalátor
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.6.0/}. Instalátor
 a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
 ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
 verzí včetně 0.4.0 zůstávají zachovány.

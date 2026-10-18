@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import IO
 
 from uploader.models import JsonValue
+from uploader.flight_simbrief import load_dispatch
 from uploader.state_store import atomic_write_json
 
 # Preserve the four supported report editions in a stable task order.
@@ -38,6 +39,10 @@ REPORT_REVISION_MAX_CHARS = 80
 # Consumers: readable_pdf_name. Rationale: 64 characters retain aircraft identity
 # while reserving space for date, edition and version in the profile directory.
 REPORT_AIRCRAFT_NAME_CHARS = 64
+# Keep dispatch identity useful without crowding Windows PDF basenames.
+# Type: int; Units: ASCII characters; Scope: one new PDF flight-number token.
+# Consumers: readable_pdf_name. Rationale: 16 retains airline/number/suffix text.
+REPORT_FLIGHT_NUMBER_CHARS = 16
 
 
 def connection_binding(url: str, key: str) -> str:
@@ -292,14 +297,12 @@ def report_file_details(pdf: Path) -> ReportFileDetails:
     Returns:
         ReportFileDetails: Actual page count when readable, render timestamp
             when recorded, otherwise file modification time marked as estimated.
+            Missing pypdf leaves pages unknown while keeping the file usable.
 
     Raises:
         OSError: The file cannot be inspected.
         ValueError: The selected file or private metadata redirects elsewhere.
     """
-    from pypdf import PdfReader
-    from pypdf.errors import PyPdfError
-
     if pdf.is_symlink() or pdf.parent.is_symlink():
         raise ValueError("Saved PDF cannot redirect.")
     stat = pdf.stat()
@@ -319,6 +322,14 @@ def report_file_details(pdf: Path) -> ReportFileDetails:
             except ValueError:
                 pass
     pages = None
+    try:
+        from pypdf import PdfReader
+        from pypdf.errors import PyPdfError
+    except ImportError:
+        # Source-mode repair must retain access to existing PDFs. This permanent
+        # fallback belongs to the catalog, not the renderer: unknown page counts
+        # are sufficient for opening/uploading unchanged verified report files.
+        return ReportFileDetails(pages, created, estimated)
     try:
         with pdf.open("rb") as stream:
             pages = len(PdfReader(stream, strict=False).pages)
@@ -365,14 +376,20 @@ def _report_catalog(directory: Path) -> tuple[Path, dict[str, JsonValue]]:
     return path, rows
 
 
-def readable_pdf_name(recorded_utc: str, aircraft: str, language: str, number: int) -> str:
-    """Name a PDF by recorded date, aircraft, edition and retained version.
+def readable_pdf_name(
+    recorded_utc: str, aircraft: str, language: str, number: int,
+    *, flight_number: str = "", origin: str = "", destination: str = "",
+) -> str:
+    """Name a PDF by date, optional OFP identity, aircraft, edition and version.
 
     Args:
         recorded_utc (str): Recorded flight start in ISO UTC or an unknown label.
         aircraft (str): Recorded aircraft identity or a neutral unknown label.
         language (str): Supported report language code.
         number (int): One-based retained revision number within this flight.
+        flight_number (str): Optional provider airline/flight number for a new PDF.
+        origin (str): Optional four-character departure ICAO from its OFP.
+        destination (str): Optional four-character arrival ICAO from its OFP.
 
     Returns:
         str: Windows-safe human-readable PDF basename without opaque identities.
@@ -382,24 +399,41 @@ def readable_pdf_name(recorded_utc: str, aircraft: str, language: str, number: i
     stamp = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", stamp)
     aircraft = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", aircraft)
     name = aircraft[:REPORT_AIRCRAFT_NAME_CHARS].rstrip(" .")
-    return f"{stamp} UTC - {name} - {language.upper()} - v{number:02d}.pdf"
+    identity = re.sub(r"[^A-Za-z0-9]", "", flight_number).upper()[:REPORT_FLIGHT_NUMBER_CHARS]
+    airports = [code.upper() for code in (origin, destination)
+                if re.fullmatch(r"[A-Za-z0-9]{4}", code)]
+    tokens = [f"{stamp} UTC"]
+    if identity:
+        tokens.append(identity)
+    if airports:
+        tokens.append("-".join(airports))
+    tokens.extend((name, language.upper(), f"v{number:02d}.pdf"))
+    return " - ".join(tokens)
 
 
-def _report_filename(directory: Path, language: str, number: int) -> str:
+def _report_filename(
+    directory: Path, language: str, number: int, *, include_dispatch: bool = False,
+) -> str:
     """Adapt stored session metadata to the common readable PDF naming policy.
 
     Args:
         directory (Path): Owned session containing recorded UTC and aircraft.
         language (str): Supported report edition.
         number (int): One-based retained version number.
+        include_dispatch (bool): Add current OFP identity only for newly reserved
+            PDFs; legacy migration must not relabel old evidence with a new plan.
 
     Returns:
         str: Safe PDF basename shared by catalog migration and new generation.
     """
     meta = read_document(directory / "session.json")
+    dispatch = load_dispatch(directory) if include_dispatch else None
     return readable_pdf_name(
         str(meta.get("started_utc") or "Flight"),
         str(meta.get("aircraft") or "Aircraft"), language, number,
+        flight_number=dispatch.flight_number if dispatch else "",
+        origin=dispatch.origin if dispatch else "",
+        destination=dispatch.destination if dispatch else "",
     )
 
 
@@ -490,7 +524,9 @@ def allocate_report_revision(
     if type(number) is not int or number < 1:
         raise ValueError("Invalid retained PDF version number.")
     for code in languages:
-        row["files"].setdefault(code, _report_filename(directory, code, number))
+        row["files"].setdefault(code, _report_filename(
+            directory, code, number, include_dispatch=True,
+        ))
     atomic_write_json(path, {"revisions": rows})
     return ReportRevision(report_id, {code: directory / "reports" / row["files"][code] for code in languages})
 

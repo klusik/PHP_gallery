@@ -1,5 +1,49 @@
 # Testing Guide
 
+WinApp 0.6.0 dispatch regressions cover pilot identity classification, invalid
+provider responses, optional session snapshots, archived JSON/XML imports,
+AIRAC-scoped ambiguous-fix retention and offline dateline map rendering.
+The renderer suite blocks public tile transport and exercises the real offline
+fallback. Hosted central WinApp coverage owns execution. Manual acceptance must
+also load a real SimBrief OFP, change the saved identity, verify session isolation,
+attach an archived OFP to a stopped flight and create new PDFs in all four
+languages while preserving old revisions. Check online/offline maps, attribution,
+native compact-window layout and the live simulator separately.
+
+Follow-up regressions cover missing PDF inspection dependencies without losing
+saved documents, UTC-aware heading sorting, numeric counts, case-insensitive
+names, session-specific SimBrief loaded status and owner-relative dialog
+placement. Update-helper terminal tests distinguish verified/restarted success
+from reboot-required and failed outcomes, and require the durable completion
+marker before automatic dismissal. Source-environment diagnosis confirmed all
+20 retained PDFs were readable after installing requirements into Python 3.14.4;
+this is local recovery evidence, not hosted functional qualification.
+
+Headless widget fixtures retain distinct constructor instances and model numeric
+owner/child geometry. Watcher layout asserts the action row beneath the title
+and Finish/SimBrief inside it; the offline update-notice fixture verifies owner
+centering, its cached action and the absence of a modal grab together.
+
+Print-map regressions require native pixel dimensions meeting 300 dpi at their
+PDF placement, retained vector tracks and explicit density metadata. Dispatch
+fixtures cover timed altitude/fuel, source kg/lb conversion, simulator-rate-aware
+takeoff alignment, declared gaps, unavailable anchors and older snapshots with
+defaulted fields. Airborne-start fixtures also require ordered nearby positional
+matches, explicit gap breaks and rejection of distant routes/unknown mass units.
+GUI regressions require loaded OFP before worker admission without a confirmation,
+four local editions and one-click Finish revoke intent. Success hides the exact
+operation's progress only after completed cleanup; saving-key/errors/cancellation
+stay visible. Partial-flight workflow coverage preserves incomplete evidence
+through PDF generation/receipts before revocation, while a failed edition blocks
+revocation and retains earlier receipts. Direct key management still confirms.
+Filename fixtures require flight-number leading zeroes and
+ICAO tokens only for new reservations, preserving old paths and PDF bytes.
+Focused layout diagnosis uses isolated, explicitly synthetic telemetry in all
+four editions; it never modifies a real flight or qualifies live performance.
+Review the first-page faded map, altitude/fuel overlays, both planning pages and
+the final full-contrast map. The old coordinates-only OFP must be explicitly
+reloaded/imported to exercise newly retained dispatch and navlog fields.
+
 ## Flight recording and report delivery
 
 Landscape formatting uses a frozen recorded flight in an ignored workspace

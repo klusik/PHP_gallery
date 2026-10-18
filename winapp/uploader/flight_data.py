@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from uploader.models import JsonValue
+from uploader.flight_simbrief import DispatchPlan, load_dispatch
 
 # Identify the JSON analysis schema used by saved flight reports.
 # Type: str. Units: schema version. Scope: one analysis payload.
@@ -288,6 +289,7 @@ class FlightAnalysis:
     warnings: list[str]
     events: list[FlightPhaseEvent] = field(default_factory=list)
     simulator_build: str | None = None
+    dispatch: DispatchPlan | None = None
 
     def to_payload(self) -> dict[str, Any]:
         """Return the complete JSON-compatible analysis payload.
@@ -301,6 +303,14 @@ class FlightAnalysis:
                 telemetry before overview reduction; profile_truncated marks
                 bounded detail and rollout_complete confirms a measured taxi
                 end. Descent rates and rollout measurements may be null.
+                dispatch contains optional planned origin/destination, route,
+                aircraft, passengers, fuel/units, AIRAC, fetched_utc, flight
+                number/callsign/registration, names/runways/alternate, planned
+                duration/distance/cruise/cost index, cargo/payload/weights,
+                fuel components and scheduled UTC times. Points retain ident,
+                latitude/longitude and optional takeoff-relative elapsed seconds,
+                altitude feet and fuel onboard in the declared OFP mass unit.
+                These planned values never replace telemetry.
         """
         return {
             "analysis_version": ANALYSIS_VERSION,
@@ -324,6 +334,7 @@ class FlightAnalysis:
             ],
             "warnings": list(self.warnings),
             "events": [asdict(event) for event in self.events],
+            "dispatch": asdict(self.dispatch) if self.dispatch else None,
         }
 
 
@@ -1375,4 +1386,5 @@ def analyze_session(directory: Path) -> FlightAnalysis:
         landings=tracker.landings,
         warnings=warnings,
         events=phases.events,
+        dispatch=load_dispatch(directory),
     )

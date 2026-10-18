@@ -254,11 +254,13 @@ class UpdateController:
         """
         import tkinter as tk
         from tkinter import ttk
+        from uploader.ui_theme import place_dialog
         if self.window is not None and self.window.winfo_exists():
             self.window.deiconify()
             self.window.lift()
             return
         self.window = tk.Toplevel(self.root)
+        self.window.withdraw()
         self.window.title("PHP Gallery Uploader updates")
         self.window.protocol("WM_DELETE_WINDOW", self.later)
         self.status = tk.StringVar(value="Checking for updates...")
@@ -273,6 +275,8 @@ class UpdateController:
         self.cancel_button.pack(side="left", padx=5)
         ttk.Button(buttons, text="Later", command=self.later).pack(side="left", padx=5)
         self._restore_notice_state()
+        place_dialog(self.window, self.root)
+        self.window.deiconify()
 
     def _restore_notice_state(self) -> None:
         """Render persisted offer, installer, or installation-gate state in a new notice.

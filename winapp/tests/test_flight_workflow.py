@@ -223,23 +223,27 @@ class FlightWorkflowTests(unittest.TestCase):
             report.render_report.assert_not_called()
             delivery.deliver_report.assert_not_called()
 
-    def test_missing_landing_requires_explicit_local_only_choice(self) -> None:
-        """Keep partial flight evidence until the user chooses local completion.
+    def test_partial_finish_generates_reports_before_revoke_without_landing_gate(self) -> None:
+        """Finish a partial recording without inventing missing flight events.
 
         Returns:
-            None: Assert error first, then local PDF without remote delivery.
+            None: Incomplete analysis reaches the renderer unchanged, all
+                required receipts are stored, then revoke is submitted without
+                requiring an extra local-only decision or landing evidence.
         """
         with tempfile.TemporaryDirectory() as temporary:
             plan = self._plan(Path(temporary) / "flight-partial")
             delivery, report = self._report_modules()
+            analysis = self._analysis(samples=True, landings=False)
+            revoke = Mock(side_effect=lambda: self.assertTrue(plan.completed))
             worker = workflow.FinalizationWorker(
                 [plan], "https://gallery.test/api", "test-key",
-                lambda cancel, deadline: None, lambda: None, False,
+                lambda cancel, deadline: None, revoke, True,
             )
             with (
                 patch.object(
                     workflow, "analyze_session",
-                    return_value=self._analysis(samples=True, landings=False),
+                    return_value=analysis,
                 ),
                 patch.dict("sys.modules", {
                     "uploader.flight_delivery": delivery,
@@ -247,27 +251,21 @@ class FlightWorkflowTests(unittest.TestCase):
                 }),
             ):
                 worker.run()
-                self.assertFalse(plan.completed)
-                self.assertIn("No verified landing", plan.error)
-                plan.local_only = True
-                plan.reports_enabled = False
-                plan.error = ""
-                plan.save()
-                retry_worker = workflow.FinalizationWorker(
-                    [plan], "https://gallery.test/api", "test-key",
-                    lambda cancel, deadline: None, lambda: None, False,
-                )
-                retry_worker.run()
             self.assertTrue(plan.completed)
-            report.render_report.assert_not_called()
-            delivery.check_report_capability.assert_not_called()
-            delivery.deliver_report.assert_not_called()
+            self.assertFalse(analysis.completed)
+            self.assertEqual([], analysis.landings)
+            self.assertEqual(len(plan.languages), report.render_report.call_count)
+            self.assertEqual(len(plan.languages), delivery.deliver_report.call_count)
+            self.assertTrue(all(call.args[0] is analysis for call in report.render_report.call_args_list))
+            revoke.assert_called_once_with()
+            self.assertEqual("saving_key", worker.snapshot().phase)
 
     def test_second_language_failure_keeps_first_durable_receipt(self) -> None:
         """Retain a confirmed first-language receipt when the next upload fails.
 
         Returns:
-            None: Assert receipt persistence and incomplete retry state.
+            None: Assert receipt persistence, incomplete retry state and no
+                revocation while any required PDF remains unacknowledged.
         """
         with tempfile.TemporaryDirectory() as temporary:
             plan = self._plan(
@@ -279,9 +277,10 @@ class FlightWorkflowTests(unittest.TestCase):
                 None,
                 RuntimeError("Swedish/Czech delivery failure"),
             ]
+            revoke = Mock()
             worker = workflow.FinalizationWorker(
                 [plan], "https://gallery.test/api", "test-key",
-                lambda cancel, deadline: None, lambda: None, False,
+                lambda cancel, deadline: None, revoke, True,
             )
             with (
                 patch.object(workflow, "analyze_session", return_value=self._analysis()),
@@ -299,6 +298,7 @@ class FlightWorkflowTests(unittest.TestCase):
             self.assertFalse(restored.completed)
             self.assertEqual(delivery.deliver_report.call_count, 2)
             self.assertEqual(worker.snapshot().phase, "error")
+            revoke.assert_not_called()
 
     def test_revoke_waits_for_every_plan_and_cleanup_ack(self) -> None:
         """Submit key revocation only after plans and receipts are complete.

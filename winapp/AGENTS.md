@@ -28,6 +28,9 @@ line breaks as source lines; retain literal escapes only inside Python strings.
 
 When a fixture bypasses a worker constructor, initialize its complete current
 lifecycle state and preserve the behavioral assertions for existing consumers.
+Give widget-constructor spies a distinct instance per call and model the invoking
+toplevel's numeric geometry when exercising shared dialog placement. Assert the
+parent container's row separately from its child controls' rows after nesting.
 For ReportLab documents, set forwarded canvas options on their document owner;
 verify actual PDF catalog metadata and stable output hashes after manifest loss.
 Keep binary assertion messages concise while retaining the exact conditions.
