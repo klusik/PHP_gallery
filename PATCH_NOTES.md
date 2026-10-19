@@ -1,5 +1,98 @@
 # Patch notes
 
+## Version 0.137.4
+
+Improved PHP and Markdown source readability and repaired release preparation
+for wrapped documentation version markers. This maintenance release focused on
+developer tooling, source contracts, and release reliability without adding
+visitor features or changing the database schema.
+
+### Highlights
+
+#### Source readability
+
+- Reformatted fourteen PHP files with Mago 1.57.0 using an 80-column target,
+  four-space indentation, and PHP 8.1 compatibility. Kept the complete formatter
+  output, including trailing commas, parentheses, and multiline expressions.
+- Completed the historical declaration documentation exposed by the formatting
+  changes, describing concrete parameter and return shapes. Made three existing
+  resource-valued native type slots explicitly `mixed` without narrowing their
+  previously accepted values.
+- Wrapped prose across the tracked Markdown documentation while preserving
+  rendered structure, code, tables, links, explicit hard breaks, and list
+  indentation.
+
+#### Release preparation
+
+- Fixed registered version-marker recognition in `README.md`, `TESTING.md`, and
+  `DATABASE.md` after source wrapping. Both preparation and consistency checks
+  accepted soft line breaks and retained the existing layout and historical
+  version text.
+- Updated the patch-note template to request source lines near 80 columns,
+  natural word boundaries, and correctly indented list continuations. Kept
+  complete links, URLs, inline code, and other indivisible constructs intact.
+
+### Technical Details
+
+#### PHP and developer tooling
+
+- Recorded the isolated Mago configuration in
+  `docs/experiments/mago-1.57.0-pilot.toml`.
+- Added `scripts/wrap_markdown.py` to wrap prose at existing word spaces using
+  the existing Markdown structure owner, with a read-only check mode.
+- Updated internal readability and testing references alongside the source
+  changes. Preserved existing PHP and Markdown comments and documentation.
+
+#### Release marker handling
+
+- Shared the Markdown word-separator pattern between marker preparation and
+  consistency checks in `scripts/release_lib.php`.
+- Accepted spaces and LF/CRLF continuation lines within one paragraph while
+  rejecting marker words separated by blank paragraphs.
+- Updated the release reference and all four maintained manual source editions
+  to describe the supported wrapped markers.
+- Excluded WinApp agent-instruction formatting from installer change detection
+  while retaining the existing README and test exclusions. Runtime and build
+  input changes still required a fresh installer.
+
+#### Tests
+
+- Adapted source-level PHP contracts to tolerate formatter whitespace and
+  optional trailing commas while retaining argument order, literal contents,
+  operators, parentheses, negative security assertions, and call counts.
+- Added positive and negative token-matching coverage in
+  `tests/php_source_contract_test.php` and shared support in
+  `tests/support/php_source.php`.
+- Updated the breadcrumb documentation fixture to read wrapped paragraph
+  continuations without crossing into later paragraphs.
+- Expanded the release-tooling fixture to cover spaces, LF, CRLF, exact layout
+  preservation, historical versions, idempotence, and paragraph rejection.
+- Passed the complete required source qualification on the repaired develop
+  candidate, including PHP 8.1/8.5, database, Chromium, packaging, and portable
+  Node/WinApp coverage.
+
+#### Compatibility
+
+- Preserved the PHP 8.1 compatibility target and existing application behavior.
+- Added no database migration, schema change, or new runtime dependency.
+- Retained the existing Windows companion code and its independent version;
+  Windows-related source changes were documentation formatting only.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Added no new public or administrator workflow. This release concentrated on
+  source maintenance and release preparation.
+- Preserved existing gallery, authentication, download, and thumbnail behavior
+  while improving the readability of their maintained source files.
+
+#### For maintainers
+
+- Made source diffs easier to review in narrow editors and split views.
+- Restored release preparation after Markdown word wrapping and documented the
+  same wrapping conventions for future patch-note authors.
+
 ## Version 0.137.3
 
 Improved Windows flight-report maps and removed a redundant overview note.
