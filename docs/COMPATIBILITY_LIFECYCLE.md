@@ -267,6 +267,17 @@ Live production acceptance and installation-wide incidence remain unknown.
 
 ## Attachment masters and accounting snapshots
 
+Database inspection keeps legacy case-insensitive PCRE word-boundary matching
+for identifiers outside the ASCII word index. This permanent fallback belongs
+to `database_maintenance.php`, because deployed schema names may include
+punctuation or non-ASCII characters; actual installation-wide usage is unknown.
+Boundary and scoped SQL-evidence regressions protect equivalence. Source inspection
+still distinguishes production SQL, test SQL and lexical mentions without treating
+this supporting evidence as authorization to remove schema objects. No source-cache
+freshness fallback is introduced. A local paired run preserved the full reference
+map while reducing inspection from 4.71 to 1.19 seconds; other-host timings remain
+unknown and are available through the new stage/operation diagnostic breakdown.
+
 With durable thumbnail metadata, new storage jobs finish ordinary-photo accounting
 in their initial source DB pass; only DNG display masters retain bounded disk work.
 The previous full-image derivative cursor remains for schemas without thumbnail

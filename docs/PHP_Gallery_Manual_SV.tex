@@ -2462,6 +2462,13 @@ sammanfattningen innehåller total- och~fastider, antal anrop och~mediefiler,
 observerade filanrop och~lästa byte, antal inspektionskällor samt begränsade
 ANALYZE-tider per tabell. Filanrop mäter inte fysisk disk-I/O. Privata sökvägar
 och~workflow-behörigheter loggas inte; ett~loggfel stoppar inte uppdateringen.
+Slutinspektionen mäter schema och~migreringar, källsökning och~läsning,
+SQL-literalextraktion, ordindex och~referensmatchning, städkandidater, äldre objekt,
+rapportbygge, miniatyrfördelning och~sparande separat. Lästa byte och~antal
+tabell-/kolumnjämförelser visar arbetsmängden; nästlade tider överlappar.
+Ett~färskt ordindex per fil och~SQL-literal bevarar produktions-/testgränsen
+och~kravet på~samförekomst i~samma SQL-literal. Ovanliga identifierare behåller
+regex-semantiken. Ingen beständig analyscache används.
 Fel i~obligatoriska fotofrågor och~för~tidigt tomma derivatbatcher gör att
 filfasen misslyckas och~bevarar den~senaste lyckade ögonblicksbilden.
 Senare faser fortsätter med ett~delvis resultat; frågefel betyder inte slutförd skanning.

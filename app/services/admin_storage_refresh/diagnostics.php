@@ -132,7 +132,9 @@ function admin_storage_refresh_log_run(array $state, string $event, string $phas
             . ' Phase times exclude workflow cache/lock/log overhead and request gaps.'
             . ' Nested operation times overlap and must not be summed.'
             . ' db.* counts named model/service operations, not all SQL statements.'
-            . ' Inspection internals and path-builder internals are not fully instrumented.'];
+            . ' Inspection stages and source reads are timed separately.'
+            . ' Individual inspection SQL statements and path-builder internals'
+            . ' are not fully instrumented.'];
     try {
         $partial = $state['workflow_status'] === 'partial';
         admin_log_event($partial ? 'warning' : 'info', 'storage.refresh_all.' . $event,

@@ -2457,6 +2457,14 @@ souhrn obsahuje celkový čas i~časy fází, počty požadavků a~médií, sled
 souborová volání a~načtené bajty, počty zdrojů inspekce a~omezený seznam časů
 ANALYZE po tabulkách. Volání aplikace nejsou měřením fyzického I/O disku.
 Soukromé cesty ani oprávnění workflow se nelogují; chyba logu nezastaví aktualizaci.
+Závěrečná inspekce měří zvlášť schéma a~migrace, hledání a~čtení zdrojů,
+extrakci SQL řetězců, indexování a~porovnávání identifikátorů, počty kandidátů
+úklidu, staré objekty, sestavení zprávy, rozložení náhledů a~uložení výsledku.
+Počty načtených bajtů a~porovnání tabulek/sloupců ukazují rozsah práce;
+vnořené časy se překrývají. Odkazy se hledají čerstvým slovním indexem každého
+souboru a~SQL řetězce při zachování rozdílu produkce/testů a~společného výskytu
+ve stejném SQL řetězci. Nestandardní identifikátory používají původní regulární
+výraz. Trvalá cache této analýzy se nezavádí.
 Chyba povinného dotazu na fotografie nebo předčasně prázdná dávka derivátů
 označí souborovou fázi za neúspěšnou a~zachová poslední úspěšný snímek.
 Další fáze pokračují s~celkovým částečným výsledkem; chyba dotazu neznamená dokončení.

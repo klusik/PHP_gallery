@@ -2483,6 +2483,13 @@ the~summary includes wall/phase times, request counts, media totals, observed fi
 calls and~read bytes, inspection source counts and~bounded per-table ANALYZE times.
 File-call counts are~application observations, not~physical disk I/O. Private paths
 and~workflow capabilities are~excluded; a~logging failure does~not~fail the~update.
+The final inspection records separate times for~schema and~migration reads,
+source discovery and~reads, SQL-literal extraction, identifier indexing and~matching,
+cleanup counts, legacy findings, report assembly, thumbnail distribution and~saving.
+Read byte counts and~table/column comparison counts expose the~workload;
+nested times overlap. Source references use a~fresh whole-word index per file
+and~SQL literal, preserving production/test separation and~same-literal evidence.
+Unusual identifiers retain regex matching. No~persistent analysis cache is~used.
 Required photo-query errors and~prematurely empty derivative batches fail
 the~file stage and~preserve the~last successful snapshot. Later stages continue
 with an~overall partial result; a~query failure never means completed scanning.

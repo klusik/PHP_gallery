@@ -60,6 +60,15 @@ previously recorded 98-module generated plan and unchanged ratchet allowances
 remain the review reference. Hosted preparation owns actual closure verification.
 Phase/operation timings overlap, and native file-call counts are not OS I/O proof.
 
+The existing database-maintenance Service owns inspection timing and source-word
+indexing. Its per-source accumulator retains broad lexical references separately
+from production/test SQL evidence and requires table/column co-occurrence inside
+one complete SQL-like literal. Vocabulary is prepared once per inspection;
+non-ASCII/punctuation identifiers keep the legacy regex semantics. All schema,
+source and rule-count inputs stay fresh on every explicit run. No persistent
+source-analysis cache, extra runtime file or logical module is added; inspection
+reuses the already loaded passive Core observer under unchanged closure limits.
+
 The public gallery controller prepares canonical presentation links only when
 authorized photos and lightbox capability are available. Views render translucent
 PDF/music summary cards that wrap with the gallery's available width. The shared

@@ -48,6 +48,9 @@ use function Gallery\Services\database_maintenance_protected_tables;
 use function Gallery\Services\database_maintenance_record_live_progress;
 use function Gallery\Services\database_maintenance_selected_tables;
 use function Gallery\Services\database_maintenance_sql_literals;
+use function Gallery\Services\database_maintenance_accumulate_source;
+use function Gallery\Services\database_maintenance_identifier_words;
+use function Gallery\Services\database_maintenance_has_identifier;
 use function Gallery\Services\database_maintenance_table_operation_plan;
 
 require_once __DIR__ . '/../app/migration_definitions.php';
@@ -234,7 +237,78 @@ $compactConstraintRows = array_values(array_filter($constraintRows, static fn (a
 $compactInventory = database_maintenance_normalize_inventory('gallery_test', $tableRows, $compactColumnRows, $compactIndexRows, $compactConstraintRows);
 assert_database_maintenance(database_maintenance_legacy_schema_findings($compactInventory, ['references' => []]) === [], 'Already compact schema must be idempotently clean.');
 
+// Whole-word and unusual-identifier vectors retain the legacy lexical contract,
+// including numeric keys, underscores, punctuation and non-ASCII surroundings.
+foreach (['id ID id2 _id id_2 0', 'audit_fixture_table_suffix audit_fixture_table',
+    'odd-name na.me éclair éid INTERNAL_ID', '', 'id/active.id'] as $sourceVector) {
+    $words = database_maintenance_identifier_words($sourceVector);
+    foreach (['id', 'ID', 'id2', '_id', 'id_2', '0', 'active',
+        'audit_fixture_table', 'odd-name', 'na.me', 'éclair', ''] as $identifier) {
+        $legacyMatch = preg_match('/\b' . preg_quote($identifier, '/') . '\b/i',
+            $sourceVector) === 1;
+        assert_database_maintenance(database_maintenance_has_identifier(
+            $identifier, $words, $sourceVector
+        ) === $legacyMatch, 'Indexed identifier matching changed a legacy boundary.');
+    }
+}
+
+$referenceVocabulary = [
+    'audit_fixture_table' => ['id', 'active', 'historical_column'],
+    'other_fixture_table' => ['id', 'active'],
+];
+$referenceSource = <<<'PHP'
+<?php
+// audit_fixture_table historical_column: lexical evidence only.
+$first = 'SELECT id FROM audit_fixture_table';
+$second = 'SELECT active FROM other_fixture_table';
+$prose = 'audit_fixture_table active';
+PHP;
+$scopedReferences = [];
+\Gallery\Core\storage_observer_start();
+database_maintenance_accumulate_source($scopedReferences, $referenceVocabulary,
+    $referenceSource, 'app/reference-fixture.php');
+database_maintenance_accumulate_source($scopedReferences, $referenceVocabulary,
+    "<?php \$sql = 'SELECT active FROM audit_fixture_table';", 'tests/reference-fixture.php');
+database_maintenance_accumulate_source($scopedReferences, $referenceVocabulary,
+    'SELECT id FROM audit_fixture_table', 'scripts/reference-fixture.sql');
+$referenceMetrics = \Gallery\Core\storage_observer_finish();
+assert_database_maintenance(isset($scopedReferences['audit_fixture_table']
+    ['columns']['historical_column']), 'Historical columns must retain broad lexical evidence.');
+assert_database_maintenance(!isset($scopedReferences['audit_fixture_table']
+    ['column_sql_references']['historical_column']), 'Comments must not become SQL evidence.');
+assert_database_maintenance(!isset($scopedReferences['audit_fixture_table']
+    ['column_sql_references']['active']['production_files']),
+    'Separate SQL literals and plain prose must not manufacture production column usage.');
+assert_database_maintenance(($scopedReferences['audit_fixture_table']
+    ['column_sql_references']['active']['test_files'] ?? []) === ['tests/reference-fixture.php'],
+    'Test SQL usage must remain separate from production evidence.');
+assert_database_maintenance(($scopedReferences['audit_fixture_table']
+    ['column_sql_references']['id']['production_files'] ?? [])
+    === ['app/reference-fixture.php', 'scripts/reference-fixture.sql'],
+    'Complete SQL files and same-literal production references must remain visible.');
+assert_database_maintenance(($referenceMetrics['inspection.code.references.calls'] ?? 0) === 3
+    && ($referenceMetrics['counts.inspection.sql_literals'] ?? 0) === 4
+    && ($referenceMetrics['observer.metric_updates_dropped'] ?? -1) === 0,
+    'Inspection diagnostics must count all three source vectors and their four SQL literals.');
+assert_database_maintenance(array_filter(array_keys($referenceMetrics),
+    static fn(string $key): bool => str_starts_with($key, 'fs.')) === [],
+    'In-memory reference analysis must not add diagnostic filesystem operations.');
+$numericReferences = [];
+// PHP converts numeric schema-map keys to integers; matching must still accept
+// their textual SQL identities rather than throwing a strict-typing error.
+database_maintenance_accumulate_source($numericReferences, [7 => [8]],
+    'SELECT `8` FROM `7`', 'scripts/numeric-identifiers.sql');
+assert_database_maintenance(($numericReferences[7]['column_sql_references'][8]
+    ['production_files'] ?? []) === ['scripts/numeric-identifiers.sql'],
+    'Numeric schema-map keys must retain their textual identifier semantics.');
+
+\Gallery\Core\storage_observer_start();
 $migrationAudit = database_maintenance_migration_audit();
+$migrationMetrics = \Gallery\Core\storage_observer_finish();
+assert_database_maintenance(($migrationMetrics['fs.read.inspection_migration.calls'] ?? 0)
+    === $migrationAudit['migration_count']
+    && ($migrationMetrics['fs.read.inspection_migration.bytes'] ?? 0) > 0,
+    'Migration diagnostics must count and time the actual existing reads.');
 assert_database_maintenance((int) $migrationAudit['migration_count'] > 0, 'Migration history audit must discover migration files.');
 assert_database_maintenance(in_array('202606130001_compact_thumbnail_variant_metadata', (array) ($migrationAudit['tables']['image_thumbnail_variants']['versions'] ?? []), true), 'Migration audit must identify the historical thumbnail compaction.');
 assert_database_maintenance(in_array('202607250001_database_maintenance_schema_repair', (array) $migrationAudit['versions'], true), 'Migration audit must include the new repair migration.');

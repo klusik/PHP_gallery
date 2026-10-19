@@ -270,8 +270,14 @@ elapsed/max seconds and bytes returned by JSON/OFP-magic reads. Missing files ca
 produce expected false results. `fs.derivative.*` distinguishes photograph
 derivative probes; attachment counters distinguish index reads, original checks,
 path checks and category imports. Counts describe application API calls, not
-physical disk reads: PHP/OS caches may satisfy them. Path-builder and inspection
-internals are not fully instrumented; inspection source counts remain separate.
+physical disk reads: PHP/OS caches may satisfy them. Inspection stages have separate
+timers for schema inventory, migration parsing, source discovery/reads, PHP SQL
+literal extraction, identifier indexing/matching, cleanup rule/count generation,
+legacy findings, report enrichment, thumbnail distribution and report saving.
+Source/migration reads also report bytes and calls. Table/column comparison counts
+and SQL-literal counts explain corpus size without revealing names or contents.
+Nested timers overlap; they must not be added to their enclosing stage time.
+Individual inspection SQL statements and path-builder internals are not fully timed.
 No filename, private path, SQL text, media content, workflow capability or raw
 exception message is recorded. Metrics are bounded at 256 numeric keys per step,
 with discarded updates counted. Logging never performs extra media reads or
@@ -299,3 +305,11 @@ the new selector finish through their original full-image cursor. Required thumb
 aggregate failures now fail the stage rather than authorizing skipped work with
 false zero totals. Diagnostics report `counts.photos_completed_from_database` and
 `counts.derivative_rows_pending`; source/inspection/database-table work still runs.
+
+Source-reference inspection indexes case-insensitive whole words once per file
+and per complete SQL-like literal. It prepares current/historical column vocabulary
+once, then looks up memberships instead of repeatedly scanning every source text
+for every table/column. Production/test separation and same-literal SQL evidence
+remain unchanged. Non-ASCII/punctuation identifiers retain the legacy regex path.
+Every explicit inspection still reads current sources and fresh database data;
+this optimization introduces no persistent analysis cache or invalidation window.

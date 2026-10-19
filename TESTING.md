@@ -1,5 +1,15 @@
 # Testing Guide
 
+`database_maintenance_test.php` checks indexed identifier membership against the
+legacy case-insensitive PCRE word-boundary contract, including underscores,
+numeric words, punctuation and non-ASCII names. It feeds the actual per-source
+accumulator production PHP, test PHP and complete SQL text; lexical comments,
+separate SQL literals and test-only references must never become production SQL
+column evidence. Observer assertions cover real migration read counts/bytes,
+SQL-literal/reference call counts, bounded metrics and analysis without extra I/O.
+Local before/after inspection reports also retained an identical complete reference
+map across 1,129 installed sources; hosted FULL remains the regression authority.
+
 Attachment accounting coverage lives in `admin_storage_statistics_test.php`
 and `gallery_attachment_storage_database_test.php`. The former runs a second
 refresh with every attachment directory temporarily offline and verifies that
