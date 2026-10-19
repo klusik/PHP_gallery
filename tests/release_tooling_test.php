@@ -165,6 +165,47 @@ try {
     $checks = collect_consistency_checks($fixture, '0.96.2');
     $failed = array_filter($checks, static fn(array $check): bool => $check['status'] === 'FAIL');
     release_test_assert($failed === [], 'Completed release fixture must satisfy every consistency invariant.');
+
+    // Exercise every marker word boundary with ordinary spaces and both native
+    // soft-wrap encodings; registered version bytes are the only allowed delta.
+    $markdownMarkers = [
+        'README.md' => '**Current Version:** 0.96.1',
+        'TESTING.md' => 'This guide applies to PHP Gallery Version 0.96.1.',
+        'DATABASE.md' => 'as of application version 0.96.1.',
+    ];
+    foreach ([' ', "\n", "\r\n"] as $gap) {
+        foreach ($markdownMarkers as $relative => $marker) {
+            release_test_write($fixture, $relative,
+                str_replace(' ', $gap, $marker)
+                    . "\n\nHistorical Version 0.95 stays here.\n");
+        }
+        prepare_version_markers($fixture, '0.96.2', '6 September 2026');
+        foreach ($markdownMarkers as $relative => $marker) {
+            $expected = str_replace(' ', $gap,
+                str_replace('0.96.1', '0.96.2', $marker))
+                . "\n\nHistorical Version 0.95 stays here.\n";
+            release_test_assert(file_get_contents($fixture . '/' . $relative)
+                === $expected, 'Version preparation altered Markdown layout: ' . $relative);
+        }
+        $checks = collect_consistency_checks($fixture, '0.96.2');
+        release_test_assert(array_filter($checks,
+            static fn(array $check): bool => $check['status'] === 'FAIL') === [],
+            'Consistency checks must accept the same wrapped registered markers.');
+        release_test_assert(prepare_version_markers($fixture, '0.96.2',
+            '6 September 2026') === [], 'Wrapped marker updates must be idempotent.');
+    }
+    foreach ($markdownMarkers as $relative => $marker) {
+        $valid = file_get_contents($fixture . '/' . $relative);
+        release_test_write($fixture, $relative, str_replace(' ', "\n\n", $marker));
+        $rejected = false;
+        try {
+            prepare_version_markers($fixture, '0.96.2', '6 September 2026');
+        } catch (RuntimeException $exception) {
+            $rejected = str_contains($exception->getMessage(), 'marker');
+        }
+        release_test_assert($rejected, 'Marker words must not cross paragraphs: ' . $relative);
+        release_test_write($fixture, $relative, $valid);
+    }
 } finally {
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($fixture, FilesystemIterator::SKIP_DOTS),

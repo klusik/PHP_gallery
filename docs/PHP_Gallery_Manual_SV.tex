@@ -3205,6 +3205,9 @@ versionen inklusive \codeword{v_}, till~exempel \codeword{v_0.136.2}.
 Arbetsflödet skapar \codeword{release/v_0.136.2} på~den exakta develop-SHA
 som valts för~körningen; det kvalificerar eller publicerar inte utgåvan.
 Utgåvan kör inte om~BASIC/FULL och~hämtar inga äldre kvalificeringsarkiv.
+Registrerade versionsmarkörer i~Markdown tillåter radbrytning inom samma
+stycke. Förberedelse och~konsistenskontroll bevarar radbrytningen och~historiska
+versionsuppgifter och~uppdaterar endast det registrerade värdet.
 Den~låser A, uppdaterar metadata och~patch notes, anpassar alla fyra
 manualutgåvorna, bygger deras PDF med~låst TinyTeX och~reproducerbar tid
 och~skapar till~sist inventering och~fullständigt manifest.

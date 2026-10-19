@@ -57,6 +57,11 @@ Missing responses or invalid prose block assembly; they never truncate evidence.
 A completed maintainer-written version section skips generation. Credentials and
 prompts are excluded from diagnostic attachment uploads.
 
+Registered Markdown version markers accept word wrapping within a paragraph,
+including LF and CRLF line endings. Preparation changes only the registered
+version value and retains the surrounding layout and historical version prose;
+consistency checks recognize the same wrapped markers.
+
 ## Review, tag and publish
 
 Approve the bot PR once. Automation performs the protected standard merge,

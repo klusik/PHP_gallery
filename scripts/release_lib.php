@@ -43,6 +43,18 @@ use DateTimeZone;
 use RuntimeException;
 
 /**
+ * Accept a word separator within one Markdown paragraph, preserving its bytes.
+ *
+ * Type: string. Units: PCRE source syntax.
+ * Scope: word boundaries in registered Markdown version markers.
+ * Consumers: prepare_version_markers() and collect_consistency_checks().
+ * Rationale: accept horizontal whitespace or one LF/CRLF continuation with
+ * indentation; exclude blank paragraph boundaries and preserve matched bytes.
+ * @var string Shared word-separator pattern, used without changing its captures.
+ */
+const MARKDOWN_MARKER_WORD_GAP = '(?:[ \t]+|\r?\n[ \t]*)';
+
+/**
  * Return the repository root.
  */
 function project_root(): string
@@ -165,17 +177,38 @@ function replace_registered_marker(string $path, string $pattern, string $replac
 }
 
 /**
- * Update the deterministic current-version markers owned by release tooling.
+ * Update registered current-version markers while retaining Markdown wrapping.
+ *
+ * @param string $root Repository or isolated fixture root.
+ * @param string $version Validated target X.Y or X.Y.Z version.
+ * @param string $manualDate Release edition date for the English TeX source.
  *
  * @return list<string> Repository-relative paths that changed.
  */
 function prepare_version_markers(string $root, string $version, string $manualDate): array
 {
+    $gap = MARKDOWN_MARKER_WORD_GAP;
     $definitions = [
         ['app/bootstrap.php', "/(const\\s+CMS_VERSION\\s*=\\s*['\"])[^'\"]+(['\"]\\s*;)/", '${1}' . $version . '${2}', 'runtime version'],
-        ['README.md', '/(\*\*Current Version:\*\*\s*)[^\r\n]+/', '${1}' . $version, 'README current version'],
-        ['TESTING.md', '/(This guide applies to PHP Gallery Version\s+)[0-9]+(?:\.[0-9]+){1,2}(\.)/', '${1}' . $version . '${2}', 'testing-guide version'],
-        ['DATABASE.md', '/(as of application version\s+)[0-9]+(?:\.[0-9]+){1,2}(\.)/', '${1}' . $version . '${2}', 'database-document version'],
+        [
+            'README.md',
+            '/(\*\*Current' . $gap . 'Version:\*\*(?:' . $gap . ')?)[^\r\n]+/',
+            '${1}' . $version,
+            'README current version',
+        ],
+        [
+            'TESTING.md',
+            '/(This' . $gap . 'guide' . $gap . 'applies' . $gap . 'to' . $gap
+                . 'PHP' . $gap . 'Gallery' . $gap . 'Version' . $gap . ')[0-9]+(?:\.[0-9]+){1,2}(\.)/',
+            '${1}' . $version . '${2}',
+            'testing-guide version',
+        ],
+        [
+            'DATABASE.md',
+            '/(as' . $gap . 'of' . $gap . 'application' . $gap . 'version' . $gap . ')[0-9]+(?:\.[0-9]+){1,2}(\.)/',
+            '${1}' . $version . '${2}',
+            'database-document version',
+        ],
         ['ARCHITECTURE.md', "/(const\\s+CMS_VERSION\\s*=\\s*['\"])[^'\"]+(['\"]\\s*;)/", '${1}' . $version . '${2}', 'architecture version example'],
         ['docs/PHP_Gallery_Manual.tex', '/(\\\\newcommand\{\\\\version\}\{)[^}]+(\})/', '${1}' . $version . '${2}', 'manual version'],
         ['docs/PHP_Gallery_Manual.tex', '/(\\\\newcommand\{\\\\manualdate\}\{)[^}]+(\})/', '${1}' . $manualDate . '${2}', 'manual edition date'],
@@ -351,15 +384,32 @@ function extract_pdf_text(string $pdfPath): ?string
 /**
  * Evaluate deterministic release invariants without changing files.
  *
- * @return list<array{label:string,status:string,detail:string}>
+ * @param string $root Repository or isolated fixture root.
+ * @param string $version Expected X.Y or X.Y.Z release version.
+ * @return list<array{label:string,status:string,detail:string}> Named PASS/FAIL
+ *     outcomes with the observed value or actionable failure detail.
  */
 function collect_consistency_checks(string $root, string $version): array
 {
+    $gap = MARKDOWN_MARKER_WORD_GAP;
     $markers = [
         ['Runtime CMS_VERSION', 'app/bootstrap.php', "/const\\s+CMS_VERSION\\s*=\\s*['\"]([^'\"]+)['\"]\\s*;/"],
-        ['README current version', 'README.md', '/\*\*Current Version:\*\*\s*([^\r\n]+)/'],
-        ['Testing guide version', 'TESTING.md', '/This guide applies to PHP Gallery Version\s+([0-9]+(?:\.[0-9]+){1,2})\./'],
-        ['Database document version', 'DATABASE.md', '/as of application version\s+([0-9]+(?:\.[0-9]+){1,2})\./'],
+        [
+            'README current version',
+            'README.md',
+            '/\*\*Current' . $gap . 'Version:\*\*(?:' . $gap . ')?([^\r\n]+)/',
+        ],
+        [
+            'Testing guide version',
+            'TESTING.md',
+            '/This' . $gap . 'guide' . $gap . 'applies' . $gap . 'to' . $gap
+                . 'PHP' . $gap . 'Gallery' . $gap . 'Version' . $gap . '([0-9]+(?:\.[0-9]+){1,2})\./',
+        ],
+        [
+            'Database document version',
+            'DATABASE.md',
+            '/as' . $gap . 'of' . $gap . 'application' . $gap . 'version' . $gap . '([0-9]+(?:\.[0-9]+){1,2})\./',
+        ],
         ['Architecture version example', 'ARCHITECTURE.md', "/const\\s+CMS_VERSION\\s*=\\s*['\"]([^'\"]+)['\"]\\s*;/"],
         ['Manual source version', 'docs/PHP_Gallery_Manual.tex', '/\\\\newcommand\{\\\\version\}\{([^}]+)\}/'],
     ];

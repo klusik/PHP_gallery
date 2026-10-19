@@ -1,6 +1,6 @@
 {
     "version": "0.137.3",
-    "generated_at": "2026-10-19T10:25:17+00:00",
+    "generated_at": "2026-10-19T11:09:21+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -938,7 +938,7 @@
         "scripts/recovery/io.php": "sha256:bb7ceff5ee86e664a056f65391be72da8c45779f2867f6b3a323e057b223b20e",
         "scripts/recovery/validation.php": "sha256:9fad6ded50ce57705bf6d24601ef54e8bff83ca4f56718b96d8fada7b4e6310c",
         "scripts/release_files.php": "sha256:6f434ee667efb41391bdb95b35174b68588dcd2ebc0e4aff6709d12bc5c3a248",
-        "scripts/release_lib.php": "sha256:d7b402ded33297cbcc1f34ac87fbb76831666082bda7a16d4736b3a7fd6a877e",
+        "scripts/release_lib.php": "sha256:3ffb2950e29eeefb89f246afe6d25d70ac4b342778ca0919f20934a426b23b58",
         "scripts/release_qualification.php": "sha256:41ab9613b770d34a64ffcde4e7b7f8380f50d45a2023899c39333a3eccb0ccf2",
         "scripts/release_qualification/audit.php": "sha256:f93c7a9080a5bff2321d32e5d7768f4d300a48b64491c6939fe76ebc433d3137",
         "scripts/release_qualification/cli.php": "sha256:2da8a6f9d2cf2ef96f72bfc02730d14dfa49a2b0e3b2ed2648bc68927fb22e6d",
