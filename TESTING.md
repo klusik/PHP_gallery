@@ -1523,6 +1523,32 @@ the runtime intentionally falls back to automatic DLL discovery. The regression
 fixture therefore stubs DLL resolution when testing the nonfatal missing-DLL
 branch.
 
+`winapp/tests/test_windows_startup.py` covers default-on migration, persistent
+opt-out, quoted per-user Run registration/removal, source-mode isolation,
+immediate switch persistence, duplicate admission before app-state access,
+minimized startup, deferred recovery, tray failure and native handle cleanup.
+API fakes keep the host platform/profile untouched. Windows-only subprocess
+fixtures exercise real mutex/event activation, clean exit and abandoned-owner
+recovery while a secondary still retains handles. Other hosts report these
+native cases as named skips. Central WinApp discovery owns execution.
+
+Installed-Windows acceptance remains separate: clean install with the final
+Launch checkbox cleared, logoff/logon into the tray without a window flash,
+double-click activation with active work, immediate opt-out and another logon,
+upgrade retaining opt-out, uninstall cleanup, original-user UAC behavior and
+tray initialization failure. Run these with a disposable app profile; preparing
+source without publication/build does not establish that acceptance.
+
+The registered `develop_integration_test.mjs` also exercises WinApp version
+admission against complete immutable main/candidate trees and authenticated Git
+version blobs. Equal/lower versions with runtime additions, edits, deletion,
+rename or mode changes are rejected before preparation/FULL. Tests/docs-only
+changes pass without a bump; several integrations of the same upcoming version
+pass while main retains its older version. Numeric ordering, malformed versions,
+missing/symlinked versions, truncated/hash-mismatched blobs/trees and a main-ref
+race remain explicit negative cases. The check is repeated when sealing and
+publishing and does not change release's trust in protected develop.
+
 The central audit uses a reporting adapter around the same standard Python
 `unittest` discovery (`winapp/tests`, `test_*.py`); it owns the process and the
 existing 90-second deadline. The adapter records actual named test callbacks,

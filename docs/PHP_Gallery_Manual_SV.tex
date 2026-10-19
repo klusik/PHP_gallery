@@ -844,6 +844,24 @@ förblir ogenomskinliga och kontrastrika. Ingen opacitet för hela fönstret anv
 körningsberoenden läggs till. Utan Pillow finns läsbara, platta ttk-ytor kvar;
 inbyggda kontroller samt källäget, inklusive \texttt{--once}, stöds fortfarande.
 
+\subsection{Windows-start och en körande instans}
+
+Den installerade uppladdaren startar som standard efter Windows-inloggning,
+direkt minimerad till systemfältet. I \ui{Settings > App \& integrations}
+sparas \ui{Start with Windows (minimized to tray)} direkt. Avstängning tar bort
+användarens autostartpost och uppdateringar behåller valet. Installationen
+tillämpar inställningen även om den sista rutan för programstart avmarkeras.
+Python- och källkörningar ändrar inte Windows-autostart. Bevakning och import
+kräver fortfarande ett uttryckligt Start-val.
+
+En ny programstart öppnar det befintliga fönstret och bevarar pågående arbete.
+En Windows-process äger den gemensamma app-profilen, även mellan programkopior;
+en instans i en annan Windows-session öppnas där. Frågor om återställning av
+import väntar vid inloggningsstart tills fönstret öppnas. Om systemfältet inte
+blir tillgängligt inom fem sekunder visas fönstret. Registreringen tillhör den
+användare som kör appen; installation som uttryckligen startas upphöjd kan använda
+det kontot.
+
 \subsection{Uppdateringsmeddelande och indikatorer}
 
 Appen söker efter nya uploader-versioner vid start och därefter högst en gång
@@ -1382,13 +1400,21 @@ förblir ofullständiga. Framgång uppdaterar status utan OK-ruta och stänger
 förloppet efter varaktigt slutförande och rensning av nyckeln. Fel förblir
 synliga; tidigare PDF-filer bevaras.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.6.0. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.7.0. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.6.0/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.7.0/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.
+
+Develop-integrationen jämför alla installationsindata med aktuell
+\texttt{main}. Ändrad WinApp-körkod, resurser, beroenden eller byggindata kräver
+en högre version än main; tester, README och instruktioner undantas.
+Flera integrationer får behålla samma kommande version så länge main har den
+äldre versionen. Efter publicering och uppdatering av main kräver nästa
+körningsändring en ny höjning. Kontrollen sker före FULL och igen före skyddad
+skrivning; utgivningen fortsätter att lita på kvalificerad develop.
 
 \subsection{Administrationens arbetsyta}
 

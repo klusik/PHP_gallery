@@ -865,6 +865,24 @@ lesbare,
 flache ttk-Flächen sowie native Steuerelemente und der Quellmodus einschließlich
 \texttt{--once} unterstützt.
 
+\subsection{Windows-Start und eine laufende Instanz}
+
+Der installierte Uploader startet standardmäßig nach der Windows-Anmeldung
+direkt minimiert im Infobereich. Unter \ui{Settings > App \& integrations}
+wird \ui{Start with Windows (minimized to tray)} sofort gespeichert. Ausschalten
+entfernt den benutzereigenen Autostarteintrag; Updates behalten diese Wahl.
+Setup wendet die Einstellung auch bei abgewähltem abschließendem Programmstart
+an. Python-/Quellcode-Ausführungen ändern den Windows-Autostart nicht.
+Beobachtung und Import benötigen weiterhin ihren ausdrücklichen Start.
+
+Ein erneuter Programmstart öffnet das vorhandene Fenster und erhält laufende
+Arbeit. Nur ein Windows-Prozess verwendet das gemeinsame App-Profil, auch bei
+mehreren Programmkopien; eine Instanz in einer anderen Windows-Sitzung wird dort
+geöffnet. Wiederherstellungsfragen für Importe warten beim Anmeldestart auf das
+Öffnen des Fensters. Ist der Infobereich nach fünf Sekunden nicht verfügbar,
+erscheint das Fenster. Die Registrierung gehört dem ausführenden Benutzer;
+ausdrücklich erhöht gestartetes Setup kann das entsprechende Konto verwenden.
+
 \subsection{Updatehinweis und~Anzeigen}
 
 Die~App prüft beim Start und~danach höchstens einmal pro Stunde auf neue
@@ -1420,13 +1438,22 @@ Erfolg aktualisiert den Status ohne OK-Meldung und schließt den Fortschritt
 nach dauerhaftem Abschluss und Schlüsselbereinigung. Fehler bleiben sichtbar;
 frühere PDFs bleiben erhalten.
 
-Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.6.0. Ein
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.7.0. Ein
 separat angeforderter Installer-Build legt den Installer und die passenden
 generierten Metadaten \filepath{winapp-update.json} unter
-\filepath{winapp/dist/0.6.0/} ab. Installer und Metadaten gehören zur selben
+\filepath{winapp/dist/0.7.0/} ab. Installer und Metadaten gehören zur selben
 gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
 installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
 einschließlich 0.4.0 bleiben erhalten.
+
+Die Develop-Integration vergleicht alle Installer-Eingaben mit dem aktuellen
+\texttt{main}. Änderungen an WinApp-Laufzeitcode, Ressourcen, Abhängigkeiten
+oder Build-Eingaben erfordern eine höhere Version als auf main; Tests, README
+und Anweisungen bleiben ausgenommen. Mehrere Integrationen dürfen dieselbe
+kommende Version behalten, solange main noch die ältere Version enthält.
+Nach Veröffentlichung und Fortschritt von main erfordert die nächste
+Laufzeitänderung eine weitere Erhöhung. Die Prüfung erfolgt vor FULL und erneut
+vor dem geschützten Schreiben; Releases vertrauen weiterhin qualifiziertem develop.
 
 \subsection{Administrativer Arbeitsbereich}
 

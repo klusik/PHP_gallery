@@ -843,6 +843,23 @@ průhlednost celého okna a~nepřidávají se běhové závislosti. Bez Pillow z
 čitelné ploché styly ttk a~nativní ovládací prvky i~zdrojový režim včetně
 \texttt{--once} zůstávají podporované.
 
+\subsection{Start s~Windows a~jedna běžící instance}
+
+Nainstalovaný uploader se ve výchozím stavu spustí po přihlášení do Windows
+rovnou minimalizovaný v~oznamovací oblasti. Přepínač
+\ui{Start with Windows (minimized to tray)} v~\ui{Settings > App \& integrations}
+se uloží okamžitě. Vypnutí odstraní autostart aktuálního uživatele; aktualizace
+volbu zachovají. Instalátor nastavení použije i~při zrušeném závěrečném spuštění
+aplikace. Zdrojové spuštění přes Python autostart Windows nemění. Sledování
+a~import nadále vyžadují běžné výslovné spuštění.
+
+Další spuštění otevře původní okno a~zachová běžící práci. Jeden proces Windows
+vlastní společný profil aplikace i~při spuštění více kopií programu; instanci
+v~jiné relaci Windows je nutné otevřít v~této relaci. Dotaz na obnovu importu
+při přihlášení počká na otevření okna. Pokud se tray do pěti sekund nezpřístupní,
+zobrazí se okno. Registrace patří uživateli spouštějícímu aplikaci; instalátor
+výslovně spuštěný se zvýšenými právy může použít příslušný účet.
+
 \subsection{Oznámení aktualizace a~indikátory}
 
 Aplikace kontroluje nová vydání uploaderu při spuštění a~poté nejvýše jednou
@@ -1378,12 +1395,20 @@ označený jako neúplný. Úspěch aktualizuje stav bez okna s~OK a~průběh za
 po trvalém dokončení a~vyčištění klíče. Chyby zůstávají viditelné, starší PDF
 zůstávají zachována.
 
-Zdroj samostatného uploaderu nyní cílí na verzi 0.6.0. Samostatně vyžádané
+Zdroj samostatného uploaderu nyní cílí na verzi 0.7.0. Samostatně vyžádané
 sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
-\filepath{winapp-update.json} do \filepath{winapp/dist/0.6.0/}. Instalátor
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.7.0/}. Instalátor
 a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
 ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
 verzí včetně 0.4.0 zůstávají zachovány.
+
+Integrace do develop porovnává úplné vstupy instalátoru s~aktuálním
+\texttt{main}. Změna běhového kódu WinApp, prostředků, závislostí nebo sestavení
+vyžaduje vyšší verzi než na main; testy, README a~pokyny jsou vynechány.
+Více integrací může zachovat stejnou připravovanou verzi, dokud main obsahuje
+starší verzi. Po vydání a~posunu main vyžaduje další běhová změna nové zvýšení.
+Kontrola probíhá před FULL a~znovu před chráněným zápisem; vydání nadále důvěřuje
+ověřenému develop.
 
 \subsection{Pracovní prostředí administrace}
 

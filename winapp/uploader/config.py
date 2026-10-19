@@ -33,6 +33,7 @@ DEFAULTS: Dict[str, Any] = {
     "archive_max_compression_ratio": 250.0,
     "staging_cleanup_age_hours": 24.0,
     "close_to_tray": True,
+    "start_with_windows": True,
     "activity_history_limit": 500,
 }
 
@@ -94,6 +95,11 @@ def migrate_config_payload(data: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
         result.get("staging_cleanup_age_hours"), DEFAULTS["staging_cleanup_age_hours"], 1.0, 24.0 * 30.0
     )
     result["close_to_tray"] = bool(result.get("close_to_tray", DEFAULTS["close_to_tray"]))
+    # Missing legacy preferences enable startup; an explicit opt-out survives
+    # migration and every installer/application upgrade.
+    result["start_with_windows"] = (
+        result.get("start_with_windows", DEFAULTS["start_with_windows"]) is True
+    )
     result["activity_history_limit"] = _clamp_int(
         result.get("activity_history_limit"), DEFAULTS["activity_history_limit"], 50, 5000
     )

@@ -45,7 +45,39 @@ connection and performs no disk or network work on a display tick. Stopped,
 paused, disconnected or more-than-three-second-old values become dashes.
 The adjacent **PDF** shortcut opens saved flights and reports.
 
-## Flight recording and reports (source target 0.6.1)
+## Windows startup and a single running instance (0.7.0)
+
+**Settings > App & integrations > Start with Windows (minimized to tray)** is
+enabled by default. The switch saves immediately, preserving unrelated saved
+settings and unsaved connection fields. Turning it off removes this user's
+startup entry; upgrades preserve that choice. The installed executable registers
+itself in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` as
+`PHPGalleryUploader`, using a quoted executable path and `--startup`. This runs
+after the user signs in to Windows. The installer applies the saved choice as
+its original user even when **Launch application** is cleared. Self-update
+leaves registration to the original-user app restart. If Setup was explicitly
+started elevated or under another account, registration belongs to that account;
+the next ordinary app launch also reconciles the signed-in user's preference.
+
+Logon starts with the window withdrawn before painting and exposes the tray
+icon. A missing, failed or stalled tray restores the window within five seconds
+so the app remains accessible. Import-recovery prompts wait until the user opens
+the window. Watching/importing still requires its existing explicit Start action.
+Source/Python runs never add an OS startup entry; their startup switch is disabled.
+
+All Windows desktop launches sharing the app profile use one native mutex,
+including copies from different executable/source locations and Windows
+sessions. A second manual launch signals the existing process to restore/focus
+its window, then exits before opening logs, configuration or state. Another
+logon launch keeps the existing process hidden. Restoring never restarts workers.
+An existing process in another Windows session must be opened in that session.
+Native coordination failure refuses a second writer. Normal exit or a crash
+releases ownership without a stale lock file. `--once` refuses overlapping work
+with exit code 1; version/runtime probes and the independent updater helper keep
+their existing early dispatch. Uninstall removes the Run value for its user;
+other users' profiles remain independently managed.
+
+## Flight recording and reports
 
 The uploader supports a shared, read-only flight-recording/reporting workflow
 for
@@ -461,15 +493,24 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.6.0)
+## Windows installer (next version: 0.7.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **0.6.0**; this source version
+Gallery CMS release. The current source targets **0.7.0**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.6.0/`. Existing version outputs and other version folders remain
+`winapp/dist/0.7.0/`. Existing version outputs and other version folders remain
 preserved.
+
+Develop integration compares the complete tracked installer inputs with current
+`main`. If runtime, assets, dependencies, build/installer inputs or `VERSION`
+changed, the candidate version must be strictly greater than main's. Tests,
+`README.md` and `AGENTS.md` do not trigger this requirement. Several integrations
+may retain one upcoming version while main still has its previous version.
+After publication advances main, the next runtime change needs another bump.
+This admission runs before FULL and is rechecked before protected publication;
+release itself keeps trusting qualified develop.
 
 The installer includes Python, Tkinter, Pillow, pystray, ReportLab,
 the bundled DejaVu font and its license, the tray icons, and an embedded

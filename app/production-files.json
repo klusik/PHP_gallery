@@ -1100,7 +1100,8 @@
         "winapp/uploader/state_store.py",
         "winapp/uploader/ui_theme.py",
         "winapp/uploader/update_helper.py",
-        "winapp/uploader/update_ui.py"
+        "winapp/uploader/update_ui.py",
+        "winapp/uploader/windows_startup.py"
     ],
     "companion_resource_files": [
         "winapp/uploader/resources/DejaVuSans.ttf",

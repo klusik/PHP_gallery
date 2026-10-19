@@ -850,6 +850,24 @@ opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
 surfaces remain, and~native controls and~source-mode operation, including
 \texttt{--once}, stay supported.
 
+\subsection{Windows startup and~one running instance}
+
+The~installed uploader starts after Windows sign-in by~default, minimized
+directly into the~system tray. In~\ui{Settings > App \& integrations},
+\ui{Start with Windows (minimized to tray)} saves immediately; switching it~off
+removes this user's startup entry, and~updates retain that choice. Setup applies
+the~preference even if~the~final application-launch checkbox is~cleared.
+Source/Python runs leave Windows startup unchanged. Watching and~imports still
+need their usual explicit Start action.
+
+Opening the~app again restores the~existing window and~keeps current work.
+One Windows process owns the~shared app profile, including executable copies;
+another Windows session must open its existing process in~that session.
+A~logon launch keeps import-recovery prompts deferred until the~window opens.
+If~the~tray cannot become available within five seconds, the~window appears
+so~the~app remains accessible. Startup registration belongs to~the~user running
+the~application; an~installer explicitly started elevated may~use that account.
+
 \subsection{Update notice and~indicators}
 
 The~app checks for~uploader releases at~startup and~at~most once an~hour;
@@ -1391,12 +1409,20 @@ Partial recordings retain incomplete facts. Success updates status without
 an~OK message box and~closes progress after durable completion/key cleanup.
 Errors stay visible; earlier PDFs remain intact.
 
-The~independent uploader source targets 0.6.0. A~separately requested installer
+The~independent uploader source targets 0.7.0. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.6.0/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.7.0/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.
+
+Develop integration compares the~complete installer inputs with current
+\texttt{main}. Changed WinApp runtime, assets, dependencies or~build inputs
+require a~version strictly greater than main's; tests, README and~instructions
+are~excluded. Several integrations may~keep the~same upcoming version while
+main retains its older version. After publication advances main, another runtime
+change needs another bump. Admission runs before FULL and~again before protected
+publication; release continues to~trust qualified develop.
 
 \subsection{Admin workspace}
 

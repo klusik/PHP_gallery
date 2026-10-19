@@ -49,7 +49,7 @@ import threading
 import time
 import uuid
 import webbrowser
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import (
     Any,
@@ -106,6 +106,13 @@ from logging.handlers import RotatingFileHandler
 
 from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS as REDESIGN_CONFIG_DEFAULTS, migrate_config_payload
 from uploader.diagnostics import redact_text
+from uploader.windows_startup import (
+    ACTIVATION_POLL_MS,
+    STARTUP_TRAY_TIMEOUT_SECONDS,
+    WindowsInstance,
+    startup_supported,
+    synchronize_startup,
+)
 from uploader.discovery import (
     ArchiveLimits,
     cleanup_stale_staging,
@@ -441,6 +448,7 @@ class WatcherConfig:
             ratio.
         staging_cleanup_age_hours (float): Age before unowned staging expires.
         close_to_tray (bool): Keep background work when closing to the tray.
+        start_with_windows (bool): Start the installed app in the tray at logon.
         activity_history_limit (int): Maximum retained durable activity
             records.
         watched_folder (str): Local folder to observe for newly added images.
@@ -518,6 +526,7 @@ class WatcherConfig:
     archive_max_compression_ratio: float = float(REDESIGN_CONFIG_DEFAULTS["archive_max_compression_ratio"])
     staging_cleanup_age_hours: float = float(REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"])
     close_to_tray: bool = bool(REDESIGN_CONFIG_DEFAULTS["close_to_tray"])
+    start_with_windows: bool = bool(REDESIGN_CONFIG_DEFAULTS["start_with_windows"])
     activity_history_limit: int = int(REDESIGN_CONFIG_DEFAULTS["activity_history_limit"])
     ai_worker_enabled: bool = False
     ai_worker_poll_seconds: float = DEFAULT_AI_WORKER_POLL_SECONDS
@@ -581,6 +590,7 @@ class WatcherConfig:
             archive_max_compression_ratio=float(data.get("archive_max_compression_ratio", REDESIGN_CONFIG_DEFAULTS["archive_max_compression_ratio"]) or REDESIGN_CONFIG_DEFAULTS["archive_max_compression_ratio"]),
             staging_cleanup_age_hours=float(data.get("staging_cleanup_age_hours", REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"]) or REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"]),
             close_to_tray=bool(data.get("close_to_tray", REDESIGN_CONFIG_DEFAULTS["close_to_tray"])),
+            start_with_windows=data["start_with_windows"] is True,
             activity_history_limit=int(data.get("activity_history_limit", REDESIGN_CONFIG_DEFAULTS["activity_history_limit"]) or REDESIGN_CONFIG_DEFAULTS["activity_history_limit"]),
             ai_worker_enabled=bool(data.get("ai_worker_enabled", False)),
             ai_worker_poll_seconds=float(data.get("ai_worker_poll_seconds", DEFAULT_AI_WORKER_POLL_SECONDS) or DEFAULT_AI_WORKER_POLL_SECONDS),
@@ -631,6 +641,7 @@ class WatcherConfig:
             "archive_max_compression_ratio": self.archive_max_compression_ratio,
             "staging_cleanup_age_hours": self.staging_cleanup_age_hours,
             "close_to_tray": self.close_to_tray,
+            "start_with_windows": self.start_with_windows,
             "activity_history_limit": self.activity_history_limit,
             "ai_worker_enabled": self.ai_worker_enabled,
             "ai_worker_poll_seconds": self.ai_worker_poll_seconds,
@@ -4875,10 +4886,18 @@ class WatcherApp:
     mode.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, config_store: Optional[ConfigStore] = None,
+        start_minimized: bool = False,
+    ) -> None:
         """
         Initialize the Tkinter application and load saved configuration.
 
+        Args:
+            config_store (Optional[ConfigStore]): Selected configuration owner;
+                None uses the standard per-user profile.
+            start_minimized (bool): Withdraw before painting and start in the
+                tray; restore the window if a usable tray cannot be created.
         Raises:
             RuntimeError: Raised when Tkinter is not available.
 
@@ -4889,10 +4908,17 @@ class WatcherApp:
             raise RuntimeError("Tkinter is not available in this Python installation.")
 
         self.root = tk.Tk()
+        if start_minimized:
+            self.root.withdraw()
         self.root.title(f"{APP_DISPLAY_NAME} {APP_VERSION}")
 
-        self.config_store = ConfigStore()
+        self.config_store = config_store or ConfigStore()
         self.config = self.config_store.load()
+        startup_error = ""
+        try:
+            synchronize_startup(self.config.start_with_windows)
+        except OSError as exc:
+            startup_error = str(exc)
         self.job_store = JobStateStore(STATE_PATH, self.config.activity_history_limit)
         self.events: "queue.Queue[Any]" = queue.Queue()
         self.utc_sync = UtcSyncManager(self.emit_utc_activity)
@@ -4918,7 +4944,10 @@ class WatcherApp:
         self.update_banner_label: Optional["ttk.Label"] = None
         self.update_banner_action: Optional["ttk.Button"] = None
         self.check_updates_button: Optional["ttk.Button"] = None
-        self.window_hidden_to_tray = False
+        self.window_hidden_to_tray = start_minimized
+        self.startup_waiting_for_tray = start_minimized
+        self.recovery_offer_pending = start_minimized
+        self.instance: Optional[WindowsInstance] = None
         self.exiting = False
         self.activity_events: List[ActivityEvent] = self.job_store.list_events()
         self.media_capabilities = detect_suffix_capabilities(SUPPORTED_SUFFIXES, Image)
@@ -4957,6 +4986,9 @@ class WatcherApp:
         self.archive_max_ratio_var = tk.StringVar(value=f"{self.config.archive_max_compression_ratio:g}")
         self.staging_cleanup_hours_var = tk.StringVar(value=f"{self.config.staging_cleanup_age_hours:g}")
         self.close_to_tray_var = tk.BooleanVar(value=self.config.close_to_tray)
+        self.start_with_windows_var = tk.BooleanVar(
+            value=self.config.start_with_windows,
+        )
         self.settings_advanced_visible_var = tk.BooleanVar(value=False)
         self.ai_worker_enabled_var = tk.BooleanVar(value=self.config.ai_worker_enabled)
         self.ai_worker_poll_var = tk.StringVar(value=f"{self.config.ai_worker_poll_seconds:g}")
@@ -5016,13 +5048,72 @@ class WatcherApp:
         self.build_ui()
         self.configure_window_icon()
         self.start_tray_icon()
+        self.startup_tray_deadline = (
+            time.monotonic() + STARTUP_TRAY_TIMEOUT_SECONDS
+        )
         self.root.protocol("WM_DELETE_WINDOW", self.request_window_close)
         self.root.bind("<Unmap>", self.handle_window_unmap, add="+")
         self.root.after(200, self.drain_events)
-        self.root.after(350, self.offer_recoverable_jobs)
+        if start_minimized:
+            self.root.after(ACTIVATION_POLL_MS, self.complete_startup)
+        else:
+            self.root.after(350, self.offer_recoverable_jobs)
+        if startup_error:
+            self.write_log(
+                "Windows startup registration failed: " + startup_error,
+                "warning",
+            )
         if removed_staging:
             self.write_log(f"Cleaned {len(removed_staging)} stale staging directorie(s).", "system")
 
+
+    def complete_startup(self) -> None:
+        """Keep a logon launch hidden only when the native tray becomes usable.
+
+        Returns:
+            None: Retains the tray-only launch, or restores a visible window
+                after missing/failed/late tray initialization. Deferred import
+                recovery remains an explicit action after the window is opened.
+        """
+        if self.exiting or not self.startup_waiting_for_tray:
+            return
+        if (
+            self.tray_icon is not None and self.tray_icon.visible
+            and self.tray_thread is not None and self.tray_thread.is_alive()
+        ):
+            self.startup_waiting_for_tray = False
+            self.write_log("Windows startup: application is running in the tray.", "system")
+            return
+        if (
+            self.tray_icon is None
+            or self.tray_thread is None
+            or not self.tray_thread.is_alive()
+            or time.monotonic() >= self.startup_tray_deadline
+        ):
+            self.write_log(
+                "Windows startup: tray unavailable; showing the application.",
+                "warning",
+            )
+            self.restore_from_tray()
+            return
+        self.root.after(ACTIVATION_POLL_MS, self.complete_startup)
+
+    def poll_instance_activation(self) -> None:
+        """Deliver another process's restore request through the Tk main loop.
+
+        Returns:
+            None: Restores the existing window without restarting any worker;
+                polling stops during confirmed application shutdown.
+        """
+        if self.exiting or self.instance is None:
+            return
+        try:
+            if self.instance.activation_requested():
+                self.restore_from_tray()
+        except OSError as exc:
+            self.write_log("Instance activation failed: " + str(exc), "warning")
+            return
+        self.root.after(ACTIVATION_POLL_MS, self.poll_instance_activation)
 
     def build_ui(self) -> None:
         """
@@ -5679,12 +5770,15 @@ class WatcherApp:
         self.write_log("Window hidden to tray. Use the tray icon to restore it.", "system")
 
     def restore_from_tray(self) -> None:
-        """
-        Show the Tkinter window from the tray icon.
+        """Show the existing window after a tray action or explicit relaunch.
+
+        Returns:
+            None: Restores/focuses the window and admits deferred recovery once.
         """
         if self.exiting:
             return
         self.window_hidden_to_tray = False
+        self.startup_waiting_for_tray = False
         self.root.deiconify()
         try:
             self.root.state("normal")
@@ -5692,6 +5786,9 @@ class WatcherApp:
             logging.debug("Could not force normal window state.", exc_info=True)
         self.root.lift()
         self.root.focus_force()
+        if getattr(self, "recovery_offer_pending", False):
+            self.recovery_offer_pending = False
+            self.root.after_idle(self.offer_recoverable_jobs)
 
     def stop_tray_icon(self) -> None:
         """
@@ -6357,12 +6454,28 @@ class WatcherApp:
         ttk.Checkbutton(runtime, text="Keep working in the system tray when the window closes", variable=self.close_to_tray_var).grid(
             row=3, column=1, columnspan=2, sticky="w", pady=(5, 0)
         )
+        startup_switch = ttk.Checkbutton(
+            runtime,
+            text="Start with Windows (minimized to tray)",
+            variable=self.start_with_windows_var,
+            command=self.save_startup_preference,
+        )
+        startup_switch.grid(
+            row=4, column=1, columnspan=2, sticky="w", pady=(5, 0),
+        )
+        if not startup_supported():
+            startup_switch.state(["disabled"])
+        ttk.Label(
+            runtime,
+            text="Installed Windows app only. This switch saves immediately.",
+            style="Muted.TLabel",
+        ).grid(row=5, column=1, columnspan=2, sticky="w", pady=(3, 0))
         ttk.Button(
             runtime,
             text="✓  Save settings",
             command=self.save_config,
             style="Primary.TButton",
-        ).grid(row=4, column=1, sticky="w", pady=(10, 0))
+        ).grid(row=6, column=1, sticky="w", pady=(10, 0))
 
         advanced_toggle = ttk.Checkbutton(
             runtime,
@@ -6371,7 +6484,7 @@ class WatcherApp:
             command=self.toggle_settings_advanced,
         )
         advanced_toggle.grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(8, 0),
+            row=7, column=0, columnspan=3, sticky="w", pady=(8, 0),
         )
         advanced = GlassCard(parent, padding=(14, 10))
         self.settings_advanced_frame = advanced
@@ -6650,6 +6763,7 @@ class WatcherApp:
             archive_max_compression_ratio=archive_max_ratio,
             staging_cleanup_age_hours=staging_cleanup_hours,
             close_to_tray=bool(self.close_to_tray_var.get()),
+            start_with_windows=bool(self.start_with_windows_var.get()),
             activity_history_limit=self.config.activity_history_limit,
             ai_worker_enabled=bool(self.ai_worker_enabled_var.get()),
             ai_worker_poll_seconds=ai_worker_poll,
@@ -6974,6 +7088,51 @@ class WatcherApp:
             return False
         return True
 
+    def save_startup_preference(self) -> None:
+        """Save the startup switch without admitting unrelated unsaved fields.
+
+        Returns:
+            None: Preserves all other saved settings; a blocked/failed save
+                restores the prior switch and a registry failure is displayed.
+        """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            self.start_with_windows_var.set(self.config.start_with_windows)
+            return
+        if self.api_key_revoke_running:
+            self.start_with_windows_var.set(self.config.start_with_windows)
+            return
+        config = replace(
+            self.config, start_with_windows=self.start_with_windows_var.get(),
+        )
+        try:
+            self.config_store.save(config)
+        except OSError as exc:
+            self.start_with_windows_var.set(self.config.start_with_windows)
+            messagebox.showerror("Configuration error", str(exc), parent=self.root)
+            return
+        self.config = config
+        self.apply_startup_registration()
+
+    def apply_startup_registration(self) -> None:
+        """Apply the saved preference and expose registry errors for retry.
+
+        Returns:
+            None: Keeps saved preferences after a registry failure and reports
+                the failure; saving again retries the same desired state.
+        """
+        try:
+            synchronize_startup(self.config.start_with_windows)
+        except OSError as exc:
+            self.write_log(
+                "Windows startup registration failed: " + str(exc), "warning",
+            )
+            messagebox.showwarning(
+                "Windows startup",
+                "Settings were saved, but Windows startup could not be "
+                "updated. Save settings again to retry.\n\n" + str(exc),
+                parent=self.root,
+            )
+
     def save_config(self) -> bool:
         """
         Persist current settings to the local config file.
@@ -6993,6 +7152,7 @@ class WatcherApp:
             self.config_store.save(config)
             self.config = config
             self.write_log("Configuration saved.", "success")
+            self.apply_startup_registration()
             self.refresh_connection_controls()
             return True
         except Exception as exc:  # noqa: BLE001
@@ -8583,10 +8743,20 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
             name.
 
     Returns:
-        argparse.Namespace: Parsed argparse namespace.
+        argparse.Namespace: once/startup/configure_startup boolean mode flags
+            and config string path; modes are mutually exclusive.
     """
     parser = argparse.ArgumentParser(description="Watch a folder and upload new images to PHP Gallery.")
-    parser.add_argument("--once", action="store_true", help="Run one scan using saved configuration and exit.")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--once", action="store_true", help="Run one scan using saved configuration and exit.")
+    modes.add_argument(
+        "--startup", action="store_true",
+        help="Start the installed app in the tray after Windows logon.",
+    )
+    modes.add_argument(
+        "--configure-startup", action="store_true",
+        help="Apply the saved per-user Windows startup preference without a UI.",
+    )
     parser.add_argument("--config", default=str(CONFIG_PATH), help="Path to a config JSON file.")
     return parser.parse_args(argv)
 
@@ -8600,19 +8770,44 @@ def main(argv: Optional[List[str]] = None) -> int:
             omitted, sys.argv is.
 
     Returns:
-        int: Process exit code.
+        int: Zero after a normal exit, activation or startup reconciliation;
+            one if native coordination fails or --once overlaps a running app.
     """
-    setup_logging()
     args = parse_args(list(argv) if argv is not None else sys.argv[1:])
-    store = ConfigStore(Path(args.config))
-    config = store.load()
-
-    if args.once:
-        return run_once(config)
-
-    app = WatcherApp()
-    app.run()
-    return 0
+    instance = WindowsInstance(CONFIG_DIR)
+    try:
+        if not instance.acquire():
+            if args.once:
+                return 1
+            if not args.startup and not args.configure_startup:
+                instance.request_activation()
+            return 0
+        # A second launcher never opens/rotates logs or reads/writes app state.
+        setup_logging()
+        store = ConfigStore(Path(args.config))
+        if args.once:
+            return run_once(store.load())
+        if args.configure_startup:
+            synchronize_startup(store.load().start_with_windows)
+            return 0
+        if args.startup and not store.load().start_with_windows:
+            synchronize_startup(False)
+            return 0
+        app = WatcherApp(config_store=store, start_minimized=args.startup)
+        app.instance = instance
+        app.root.after(ACTIVATION_POLL_MS, app.poll_instance_activation)
+        app.run()
+        return 0
+    except OSError as exc:
+        # Windowed builds may have no stderr. Native coordination failure must
+        # never admit a second writer, and needs a visible manual-launch error.
+        if not args.configure_startup and messagebox is not None:
+            messagebox.showerror("Application startup", str(exc))
+        elif sys.stderr is not None:
+            print("Application startup failed: " + str(exc), file=sys.stderr)
+        return 1
+    finally:
+        instance.close()
 
 
 if __name__ == "__main__":

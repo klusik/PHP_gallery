@@ -1,3 +1,12 @@
+; Project: PHP Gallery
+; Repository: https://github.com/klusik/PHP_gallery
+; File: winapp/installer.iss
+; Module Type: Windows installer
+; Purpose: Install the standalone uploader and its desktop lifecycle hooks.
+; Responsibilities: Replace verified binaries and register original-user startup.
+; Author: Rudolf Klusal
+; License: MIT License (see LICENSE file in repository)
+;
 ; PHP Gallery Uploader has its own version, independent of the PHP Gallery CMS.
 ; build_installer.py supplies all paths and the version to this script.
 #ifndef AppVersion
@@ -51,7 +60,16 @@ Name: "{group}\PHP Gallery Uploader"; Filename: "{app}\PHPGalleryUploader.exe"
 Name: "{autodesktop}\PHP Gallery Uploader"; Filename: "{app}\PHPGalleryUploader.exe"; Tasks: desktopicon
 
 [Run]
+; Apply defaults/retained opt-out even when the final Launch checkbox is cleared.
+; A self-update already has an original-user helper that owns the final restart;
+; its elevated installer must not configure the administrator's user profile.
+Filename: "{app}\PHPGalleryUploader.exe"; Parameters: "--configure-startup"; Flags: runhidden runasoriginaluser waituntilterminated; Check: not IsSelfUpdate
 Filename: "{app}\PHPGalleryUploader.exe"; Description: "{cm:LaunchProgram,PHP Gallery Uploader}"; Flags: nowait postinstall skipifsilent
+
+[Registry]
+; No ValueType/ValueData: setup logs uninstall cleanup without setting a value.
+; The original-user app owns HKCU contents, including an existing opt-out.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "PHPGalleryUploader"; Flags: uninsdeletevalue
 
 [Code]
 function CreateFileW(FileName: String; DesiredAccess, ShareMode: LongWord;
