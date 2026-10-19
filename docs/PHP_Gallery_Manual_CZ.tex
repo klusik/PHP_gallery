@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.137.2}
+\newcommand{\version}{0.137.3}
 \newcommand{\manualdate}{19.~října~2026}
 
 \hypersetup{
@@ -1329,6 +1329,13 @@ velikosti cache. Bez podkladu zůstane trasa na světlém pozadí. Mercator omez
 polární šířky; původní souřadnice zůstávají v~surovém záznamu. OSM dostává
 souřadnice dlaždic a~identifikaci aplikace, nikoli klíč Galerie nebo identitu
 SimBriefu.
+
+Obě mapy přizpůsobují měřítko celé zaznamenané i plánované trase s malým
+okrajem. Přehled neobsahuje nadbytečnou poznámku za časovou osou, která
+mohla vytvořit samostatnou téměř prázdnou stránku.
+Izolované bloky vzdálených poloh mezi skokem a návratem se z obou map
+vynechají s viditelnou poznámkou; surové vzorky zůstávají zachované.
+Vzdálené počáteční a koncové úseky i přesuny bez návratu zůstávají viditelné.
 
 Dialog identity SimBriefu používá tmavý styl aplikace, kontroluje vstup přímo
 v~okně a~podporuje Enter/Escape. Fajfka a~dvojice letišť označují načtený plán

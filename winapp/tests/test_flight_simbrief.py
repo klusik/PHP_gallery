@@ -21,7 +21,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from uploader.flight_maps import MAP_SIZE, MAP_DPI, print_size, project, render_map
+from uploader.flight_maps import MAP_SIZE, MAP_DPI, map_viewport, print_size, project, render_map
 from uploader.flight_navdata import remember_plan
 from uploader.flight_simbrief import (
     DispatchPlan, DispatchPoint, fetch_dispatch, identity_query,
@@ -113,6 +113,32 @@ class FlightDispatchTests(unittest.TestCase):
         with Image.open(io.BytesIO(raw)) as image:
             self.assertEqual(size, image.size)
             self.assertAlmostEqual(MAP_DPI, image.info["dpi"][0], delta=0.1)
+
+    def test_route_fit_fills_both_print_viewports(self) -> None:
+        """Fit short, long and dateline routes independently of print density.
+
+        Returns:
+            None: Full routes stay centered within margins and occupy eighty
+                percent of at least one axis in preview and print canvases.
+        """
+        # Geographic vectors cover Japan, intercontinental and dateline flights.
+        for points in (
+            [(34.8, 135.4), (35.55, 139.78)],
+            [(50.1, 14.2), (35.55, 139.78)],
+            [(50.0, 179.0), None, (50.0, -179.0)],
+        ):
+            for size in (MAP_SIZE, print_size(720, 300)):
+                viewport = map_viewport(points, size)
+                self.assertIsNotNone(viewport)
+                xs = [(p[0] * viewport.world - viewport.left) / size[0]
+                      for p in viewport.points if p is not None]
+                ys = [(p[1] * viewport.world - viewport.top) / size[1]
+                      for p in viewport.points if p is not None]
+                self.assertAlmostEqual(0.8, max(max(xs) - min(xs), max(ys) - min(ys)))
+                self.assertAlmostEqual(1.0, min(xs) + max(xs))
+                self.assertAlmostEqual(1.0, min(ys) + max(ys))
+                self.assertGreaterEqual(min(xs + ys), 0.1 - 1e-9)
+                self.assertLessEqual(max(xs + ys), 0.9 + 1e-9)
 
     def test_snapshots_are_optional_and_session_scoped(self) -> None:
         """Attach one plan without manufacturing data for another recording.

@@ -59,8 +59,8 @@ TILE_CACHE_BYTES = 64 * 1024 * 1024
 TILE_MAX_BYTES = 1024 * 1024
 # Bound overview detail without attempting airport imagery.
 # Type: int; Units: zoom levels; Scope: report map.
-# Consumers: render_map. Rationale: zoom 10 is sufficient for a flight overview.
-MAX_MAP_ZOOM = 10
+# Consumers: map_viewport. Rationale: zoom 18 also fits short airport-area tracks.
+MAX_MAP_ZOOM = 18
 # Web Mercator cannot represent the geographic poles.
 # Type: float; Units: degrees; Scope: map projection.
 # Consumers: project. Rationale: 85.05112878 is the standard tile latitude edge.
@@ -73,7 +73,7 @@ class MapViewport:
 
     size: tuple[int, int]
     zoom: int
-    world: int
+    world: float
     left: float
     top: float
     points: list[tuple[float, float] | None]
@@ -142,12 +142,15 @@ def map_viewport(
         return None
     min_x, max_x = min(p[0] for p in valid), max(p[0] for p in valid)
     min_y, max_y = min(p[1] for p in valid), max(p[1] for p in valid)
-    zoom = MAX_MAP_ZOOM
-    # A tile has 256 pixels by specification; reserve a margin around the route.
-    while zoom > 0 and ((max_x - min_x) * 256 * 2**zoom > width * MAP_FIT_FRACTION
-                       or (max_y - min_y) * 256 * 2**zoom > height * MAP_FIT_FRACTION):
-        zoom -= 1
-    world = 256 * 2**zoom
+    # Fit geographic extent independently of integer tile levels and print DPI.
+    # A zero-length track retains the maximum supported local detail.
+    world = min(
+        width * MAP_FIT_FRACTION / (max_x - min_x) if max_x > min_x else math.inf,
+        height * MAP_FIT_FRACTION / (max_y - min_y) if max_y > min_y else math.inf,
+        256 * 2**MAX_MAP_ZOOM,
+    )
+    # Select native tiles at or above output density, then scale their placement.
+    zoom = max(0, min(MAX_MAP_ZOOM, math.ceil(math.log2(world / 256))))
     left = (min_x + max_x) / 2 * world - width / 2
     top = (min_y + max_y) / 2 * world - height / 2
     return MapViewport(size, zoom, world, left, top, projected)
@@ -178,6 +181,7 @@ def render_map(
     width, height = size
     zoom, world = viewport.zoom, viewport.world
     left, top, projected = viewport.left, viewport.top, viewport.points
+    tile_span = world / 2**zoom
     valid = [p for p in projected if p is not None]
     image = Image.new("RGB", size, "#e6edf2")
     draw = ImageDraw.Draw(image)
@@ -195,8 +199,8 @@ def render_map(
             path.unlink()
     except OSError:
         pass
-    for tx in range(math.floor(left / 256), math.floor((left + width - 1) / 256) + 1):
-        for ty in range(math.floor(top / 256), math.floor((top + height - 1) / 256) + 1):
+    for tx in range(math.floor(left / tile_span), math.floor((left + width - 1) / tile_span) + 1):
+        for ty in range(math.floor(top / tile_span), math.floor((top + height - 1) / tile_span) + 1):
             if not 0 <= ty < 2**zoom:
                 continue
             wrapped = tx % 2**zoom
@@ -209,7 +213,7 @@ def render_map(
                 remaining = deadline - time.monotonic()
                 if path is not None and not fresh and remaining > 0:
                     request = Request(f"https://tile.openstreetmap.org/{zoom}/{wrapped}/{ty}.png",
-                        headers={"User-Agent": "PHPGalleryUploader/0.6.0 (+https://github.com/klusik/PHP_gallery)"})
+                        headers={"User-Agent": "PHPGalleryUploader/0.6.1 (+https://github.com/klusik/PHP_gallery)"})
                     with urlopen(request, timeout=min(TILE_TIMEOUT_SECONDS, remaining)) as response:
                         downloaded = response.read(TILE_MAX_BYTES + 1)
                     if len(downloaded) > TILE_MAX_BYTES:
@@ -234,7 +238,12 @@ def render_map(
                 if raw is None:
                     raise ValueError("No map tile")
                 with Image.open(io.BytesIO(raw)) as tile:
-                    image.paste(tile.convert("RGB"), (round(tx * 256 - left), round(ty * 256 - top)))
+                    # Round shared edges so adjacent scaled tiles leave no seams.
+                    x0, y0 = round(tx * tile_span - left), round(ty * tile_span - top)
+                    x1 = round((tx + 1) * tile_span - left)
+                    y1 = round((ty + 1) * tile_span - top)
+                    image.paste(tile.convert("RGB").resize(
+                        (x1 - x0, y1 - y0), Image.Resampling.LANCZOS), (x0, y0))
             except (OSError, ValueError):
                 missing = True
     if fade:

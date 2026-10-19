@@ -1,5 +1,34 @@
 # Patch notes
 
+## Version 0.137.3
+
+Improved Windows flight-report maps and removed a redundant overview note. Updated the uploader to 0.6.1 and flight-report template 9. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Highlights
+
+#### Flight-report maps and overview
+- Updated recorded and planned route maps to fit their routes independently, with equal margins regardless of print resolution. Short routes could therefore show more local detail.
+- Omitted detached jump-and-return position blocks from map geometry and added a localized notice. Raw samples and analysis remained unchanged; distant start/end segments and relocations without a local return remained visible.
+- Removed the redundant capture-scope note after the phase timeline, avoiding an overview page containing only that note.
+
+### Technical Details
+
+#### Windows uploader
+- Advanced `winapp/VERSION` to 0.6.1 and the flight-report template identity from 7 to 9. Earlier PDFs remained identified as earlier editions.
+- Updated `winapp/uploader/flight_maps.py`, `winapp/uploader/flight_report.py`, and `winapp/uploader/flight_report_translations.py` for route fitting, detached-block notices, and overview rendering.
+
+#### Tests and documentation
+- Added coverage for map fitting with short, long, and dateline routes at preview and print sizes; detached-block omission and retained relocations; and removal of the overview note.
+- Updated the compatibility lifecycle guidance, Windows uploader README, and English, Czech, German, and Swedish manual sources.
+
+### User Impact
+
+#### For visitors and administrators
+- No direct gallery visitor or administrator behavior change was evidenced.
+
+#### For Windows uploader users
+- Flight reports displayed route maps fitted to their content, with localized notice when detached jump-and-return blocks were omitted from map geometry. The overview no longer had a redundant capture-scope note, and generated reports used template 9.
+
 ## Version 0.137.2
 
 Improved gallery storage accounting and telemetry maintenance with durable attachment totals, bounded refresh diagnostics, compacted telemetry history, and visitor-triggered maintenance wake-ups. The release added database migrations, regression coverage, and updates to the English, Czech, German, and Swedish manuals. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)

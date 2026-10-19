@@ -40,7 +40,7 @@ connection and performs no disk or network work on a display tick. Stopped,
 paused, disconnected or more-than-three-second-old values become dashes.
 The adjacent **PDF** shortcut opens saved flights and reports.
 
-## Flight recording and reports (source target 0.6.0)
+## Flight recording and reports (source target 0.6.1)
 
 The uploader supports a shared, read-only flight-recording/reporting workflow for
 MSFS 2020 and MSFS 2024. Recording is enabled by default and has an independent
@@ -232,8 +232,18 @@ DejaVu supports every edition. Titles use 28 pt, normal text 12 pt, secondary
 notes 9.5 pt and plot axes 9 pt. Overview cards sit beside the captured route;
 full-flight profiles appear two per page. Each landing has a summary with its
 wind card/configuration, followed by a separate page of four larger profiles.
-The template identity advances to 7 so older PDFs are retained as earlier
+The template identity advances to 9 so older PDFs are retained as earlier
 editions; recording, analysis, report upload and completion remain unchanged.
+
+Both route maps fit the complete recorded and optional planned geometry with
+an equal margin, independently of print resolution. Short routes receive local
+map detail. A detached position block bounded by jumps of at least 50 NM and
+a return within 50 NM of the pre-jump position is omitted from map geometry
+only when every block point is at least 50 NM from both neighboring positions.
+Both maps disclose the omission; raw samples and analysis remain unchanged.
+Unbounded relocations and distant starting/ending segments remain visible.
+The overview omits the redundant capture/grid explanation after the
+phase strip, avoiding a separate page containing only that note.
 
 The bundled bold face is the DejaVu font distributed by the official
 [Matplotlib project](https://github.com/matplotlib/matplotlib/blob/main/lib/matplotlib/mpl-data/fonts/ttf/DejaVuSans-Bold.ttf),

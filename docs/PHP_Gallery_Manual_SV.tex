@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.137.2}
+\newcommand{\version}{0.137.3}
 \newcommand{\manualdate}{19~oktober~2026}
 
 \hypersetup{
@@ -1334,6 +1334,13 @@ med källangivelse och begränsad cache. Utan nät visas rutten på ljus bakgrun
 Mercator begränsar polära latituder; ursprungliga koordinater finns i rådata.
 OSM får plattkoordinater och appidentifiering, inte Gallery-nycklar eller
 SimBrief-identitet.
+
+Båda kartorna anpassar skalan till hela den inspelade och planerade rutten
+med en liten marginal. Den överflödiga noten efter faslinjen utelämnas så
+att den inte skapar en nästan tom sida.
+Isolerade positionsblock mellan hopp och lokal återkomst utelämnas
+på båda kartorna med en synlig not; rådata bevaras. Avlägsna start- och
+slutsegment samt förflyttningar utan återkomst visas fortfarande.
 
 SimBrief-dialogen använder appens mörka tema, validerar direkt i fönstret
 och stöder Enter/Escape. En bock och ett flygplatspar visar den accepterade planen

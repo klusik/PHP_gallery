@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.137.2}
+\newcommand{\version}{0.137.3}
 \newcommand{\manualdate}{19.~Oktober~2026}
 
 \hypersetup{
@@ -1367,6 +1367,13 @@ werden mindestens sieben Tage mit Quellenangabe und begrenztem Cache gespeichert
 Ohne Netz bleibt die Route auf hellem Hintergrund. Mercator begrenzt polare
 Breiten; Originalkoordinaten bleiben in den Rohdaten. OSM erhält Kachelkoordinaten
 und App-Kennung, weder Gallery-Schlüssel noch SimBrief-Identität.
+
+Beide Karten passen den Maßstab an die gesamte aufgezeichnete und geplante
+Route mit kleinem Rand an. Die überflüssige Anmerkung nach der Phasenleiste
+entfällt, damit dafür keine fast leere Seite entsteht.
+Isolierte Positionsblöcke zwischen Sprung und lokaler Rückkehr werden
+in beiden Karten mit Hinweis ausgelassen; Rohdaten bleiben erhalten.
+Entfernte Anfangs- und Endabschnitte sowie Ortswechsel ohne Rückkehr bleiben sichtbar.
 
 Der SimBrief-Identitätsdialog verwendet das dunkle App-Design, prüft Eingaben
 im Fenster und unterstützt Enter/Escape. Häkchen und Flughafenpaar kennzeichnen
