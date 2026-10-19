@@ -2492,7 +2492,12 @@ veraltet. Nach der~Datenbankmigration ist ein erster Aktualisierungslauf nötig.
 Upload, Ersetzen und~Löschen pflegen die~Summen aus bestätigten Metadaten;
 weitere Läufe öffnen keine Anhangsdateien oder~Indizes. Externe Dateiänderungen
 erfordern vor dem Aktualisieren eine ausdrückliche Invalidierung der~Einträge;
-siehe \codeword{docs/GALLERY\_PDF.md}. Fotoderivate werden weiterhin geprüft.
+siehe \codeword{docs/GALLERY\_PDF.md}.
+Mit dauerhaften Vorschaumetadaten werden gewöhnliche Fotos bereits im~ersten
+Datenbankdurchlauf erfasst, ohne weitere Fotobatch-Anfragen. Begrenzte Dateiprüfungen
+bleiben nur für DNG-Anzeigevorlagen erforderlich. Ohne Vorschaumetadaten bleibt
+der~vollständige begrenzte Dateipfad erhalten; eine fehlerhafte erforderliche
+Aggregatabfrage bewahrt den~letzten erfolgreichen Stand statt null zu~melden.
 Für die~Leistungsanalyse exportieren Sie den~neuesten Admin-Logeintrag
 \codeword{storage.refresh\_all.completed}. Seine Lauf-ID verbindet Fortschritte;
 die~Zusammenfassung enthält Gesamt- und~Phasenzeiten, Anfrage- und~Medienzahlen,

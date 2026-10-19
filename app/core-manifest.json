@@ -1,6 +1,6 @@
 {
     "version": "0.137.1",
-    "generated_at": "2026-10-19T07:17:00+00:00",
+    "generated_at": "2026-10-19T07:29:45+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -168,7 +168,7 @@
         "app/models/admin_logs.php": "sha256:5a5458dc6d2d4cd68f89d8c9c7711d1200bbe164c106626b4970b9be4363d800",
         "app/models/admin_operation_keys.php": "sha256:cf106fcfbfbca5b1b35f079eb02d70f8008c2771f0a28a8d2fe2a9d20caf9c19",
         "app/models/admin_setup_wizard.php": "sha256:b53edd9f8d41a60d0fad4027301923e55482134ddaa533ab6d30ff9f7782c1a9",
-        "app/models/admin_storage_statistics.php": "sha256:7e1f8605806ca0705c9b3f84c1d52e76ee171fe847bc1da851f3cfb4515e6fc2",
+        "app/models/admin_storage_statistics.php": "sha256:674e1ec29056213d03ab8dc03c2dbce6f6ed6455e0edf8b8146a532c082c3c01",
         "app/models/ai_image_analysis.php": "sha256:369862dcb77d8203ba811c61f55bf96ab879096d9433805b7ab197250f5ed76c",
         "app/models/app_settings.php": "sha256:82afc80f49088da96b782751d4bf6980fa51dbc8e93690eda88c818805661a7f",
         "app/models/auth.php": "sha256:0642e474efa04ec5a89287c213542b6dece57f614b814fa7beb4fc46e8f849ce",
@@ -283,8 +283,8 @@
         "app/services/admin_setup_wizard/preferences.php": "sha256:47b5ac80f7e3c7d0f90266ed38ab74ace74f5399f740e3ba75d78df1ffe0bcf6",
         "app/services/admin_storage_refresh.php": "sha256:96c4704bead49432e2625e99d99afa722701d9a2f1d61bd552a9bbef19607bc1",
         "app/services/admin_storage_refresh/diagnostics.php": "sha256:f11bbaf0b5376065446130ea60340503c250d4072a3dd0159179ed6125640926",
-        "app/services/admin_storage_statistics.php": "sha256:7fbed23e8709bf5c1e8627e8341148367a5e266f7ca0f8c12c1026e366b69758",
-        "app/services/admin_storage_statistics/jobs.php": "sha256:fa6fc956a5f9479db1e64bf84f31fd4fb00de0b223edd007058374ae312426ba",
+        "app/services/admin_storage_statistics.php": "sha256:5737c84a1c61e7bf5139deb0d9f0ea3fb8a99308efb8790b96e6b79038f6106b",
+        "app/services/admin_storage_statistics/jobs.php": "sha256:74b7d45eb061c281feca6d649a7cdc1c2df23afdf971fd74e5734000110c9bd9",
         "app/services/admin_test_run_analysis.php": "sha256:342fd44ec3268ce654fae6573fbbe90e6351110ec07ece6cfc2755c38d6cabcc",
         "app/services/admin_test_run_analysis/browser.php": "sha256:28e0b610a5343f84cb07edfb95485546e6d8ced9c07a6e72297390e8d4bb475c",
         "app/services/admin_test_run_analysis/cache_analysis.php": "sha256:5d21558c5b2dc58514cd05594e92c46a52a8667b100d4b5cc7cb03ff398fd22d",

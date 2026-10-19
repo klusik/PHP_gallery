@@ -267,6 +267,17 @@ Live production acceptance and installation-wide incidence remain unknown.
 
 ## Attachment masters and accounting snapshots
 
+With durable thumbnail metadata, new storage jobs finish ordinary-photo accounting
+in their initial source DB pass; only DNG display masters retain bounded disk work.
+The previous full-image derivative cursor remains for schemas without thumbnail
+metadata and already-running jobs without `display_masters_only`. This permanent
+support belongs to storage statistics; removing it requires complete installed
+schema/old-job retirement proof, currently unknown. Required thumbnail aggregate
+failures propagate instead of silently authorizing empty fast-path totals.
+The observed 1,744-photo run needed 89 file-phase requests despite only 0.40 seconds
+of phase work. A 40,000-row regression checks one-request ordinary-photo completion;
+production-scale timing and other-host acceptance remain separate from that fixture.
+
 Storage statistics no longer degrade required photo-query failures to empty
 collections. A local 2026-10-19 run reported 1,744 source photos but zero derivative
 batch rows and false completion. The owner now binds PDO cursor/LIMIT parameters

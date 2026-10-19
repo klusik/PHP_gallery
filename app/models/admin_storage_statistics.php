@@ -103,13 +103,24 @@ function admin_storage_statistics_model_image_rows(bool $hasDerivativeVersion): 
  * @param int $lastImageId Exclusive image ID cursor, normalized to zero or higher.
  * @param int $limit Positive service-owned maximum rows in this batch.
  * @param bool $hasDerivativeVersion Whether the installed derivative column exists.
+ * @param bool $displayMastersOnly Select only DNG sources requiring display-master
+ *     observation; false preserves the full-image filesystem fallback.
  * @return list<StorageStatisticsImageRow> Rows strictly after the cursor;
  *     an empty array means actual exhaustion, while database failures propagate.
  */
-function admin_storage_statistics_model_image_rows_after_id(int $lastImageId, int $limit, bool $hasDerivativeVersion): array
-{
+function admin_storage_statistics_model_image_rows_after_id(
+    int $lastImageId,
+    int $limit,
+    bool $hasDerivativeVersion,
+    bool $displayMastersOnly = false
+): array {
     $derivative = $hasDerivativeVersion ? 'COALESCE(i.thumbnail_derivative_version, 1)' : '1';
-    $stmt = db()->prepare("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, $derivative AS thumbnail_derivative_version, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id > ? ORDER BY i.id LIMIT ?");
+    // Stored relative paths are canonical; match the case-insensitive DNG suffix
+    // used by image_uses_dng_display_derivatives(), without reading originals.
+    $displayPredicate = $displayMastersOnly
+        ? " AND LOWER(RIGHT(COALESCE(i.relative_path, i.filename, ''), 4)) = '.dng'"
+        : '';
+    $stmt = db()->prepare("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, $derivative AS thumbnail_derivative_version, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id > ?$displayPredicate ORDER BY i.id LIMIT ?");
     // PDO execute(array) binds values as strings; emulated LIMIT needs integers.
     $stmt->bindValue(1, max(0, $lastImageId), \PDO::PARAM_INT);
     $stmt->bindValue(2, max(1, $limit), \PDO::PARAM_INT);

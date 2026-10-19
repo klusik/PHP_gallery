@@ -2471,7 +2471,12 @@ photo-only snapshots, apply the~accounting migration and run Update all once.
 Attachment uploads, replacements and deletions maintain category totals from
 committed metadata; repeat updates do~not reopen attachment files or~indexes.
 External filesystem changes require explicit accounting invalidation before
-Update all; see \codeword{docs/GALLERY\_PDF.md}. Photo derivative checks remain.
+Update all; see \codeword{docs/GALLERY\_PDF.md}.
+With durable thumbnail metadata, ordinary photos are~accounted for~during
+the~initial database pass without additional photo-batch requests. Only DNG
+display masters retain bounded file checks. Installations without thumbnail
+metadata retain the~full bounded filesystem fallback; a~failed required thumbnail
+aggregate preserves the~last successful snapshot rather than reporting zero.
 For performance diagnostics, export the~latest Admin log event
 \codeword{storage.refresh\_all.completed}. Its~run ID links progress checkpoints;
 the~summary includes wall/phase times, request counts, media totals, observed file

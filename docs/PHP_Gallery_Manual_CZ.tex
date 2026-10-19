@@ -2445,7 +2445,12 @@ Po migraci databázové evidence spusťte Aktualizovat vše jednou. Nahrání,
 nahrazení a~smazání příloh udržuje součty z~potvrzených metadat; další běhy
 už neotevírají soubory příloh ani jejich indexy. Změny souborů mimo aplikaci
 vyžadují před obnovením zneplatnit příslušnou evidenci podle
-\codeword{docs/GALLERY\_PDF.md}. Kontroly odvozených fotografií zůstávají.
+\codeword{docs/GALLERY\_PDF.md}.
+Při dostupných metadatech náhledů se běžné fotografie započtou už při úvodním
+čtení databáze bez dalších požadavků pro dávky fotografií. Omezené souborové
+kontroly zůstávají jen pro DNG zobrazovací předlohy. Bez metadat náhledů se
+zachovává úplný dávkový postup přes soubory; chyba povinného souhrnného dotazu
+zachová poslední úspěšný snímek místo vykázání nuly.
 Pro rozbor výkonu exportujte nejnovější událost Admin logu
 \codeword{storage.refresh\_all.completed}. ID běhu propojí průběžné záznamy;
 souhrn obsahuje celkový čas i~časy fází, počty požadavků a~médií, sledovaná

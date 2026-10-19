@@ -52,6 +52,23 @@ namespace Gallery\Core {
 
 namespace Gallery\Models {
     /**
+     * Return known thumbnail totals or inject a required aggregate failure.
+     * @param list<int> $sizes Configured fixture sizes.
+     * @param bool $matchDerivativeVersion Whether to match derivative identity.
+     * @return list<array{format:string,variant_count:int,total_bytes:int}>
+     *     One deterministic durable thumbnail group.
+     */
+    function admin_storage_statistics_model_thumbnail_summary_rows(
+        array $sizes,
+        bool $matchDerivativeVersion
+    ): array {
+        if (($GLOBALS['storage_fail_read'] ?? '') === 'thumbnails') {
+            throw new \RuntimeException('Fixture thumbnail aggregate failed.');
+        }
+        return [['format' => 'webp', 'variant_count' => 1, 'total_bytes' => 17]];
+    }
+
+    /**
      * Store fixture category totals with production import collision semantics.
      * @param int $galleryId Registered fixture owner.
      * @param string $kind PDF, music or OFP category.
@@ -196,14 +213,17 @@ namespace Gallery\Models {
      * @param int $lastImageId Last observed image ID.
      * @param int $limit Service-owned image batch cap.
      * @param bool $hasDerivativeVersion Whether derivative metadata exists.
+     * @param bool $displayMastersOnly Select only DNG fixture rows, default false.
      * @return list<array{image_id:int,gallery_id:int,filename:string,
      *     file_size:int}> Photo observations after the cursor.
      */
     function admin_storage_statistics_model_image_rows_after_id(
         int $lastImageId,
         int $limit,
-        bool $hasDerivativeVersion
+        bool $hasDerivativeVersion,
+        bool $displayMastersOnly = false
     ): array {
+        $GLOBALS['storage_batch_modes'][] = $displayMastersOnly;
         if (($GLOBALS['storage_fail_read'] ?? '') === 'batch') {
             throw new \RuntimeException('Fixture batch query failed.');
         }
@@ -211,11 +231,75 @@ namespace Gallery\Models {
         return array_slice(array_values(array_filter(
             admin_storage_statistics_model_image_rows($hasDerivativeVersion),
             static fn(array $row): bool => $row['image_id'] > $lastImageId
+                && (!$displayMastersOnly || strtolower(pathinfo(
+                    $row['relative_path'] ?? $row['filename'], PATHINFO_EXTENSION
+                )) === 'dng')
         )), 0, $limit);
     }
 }
 
 namespace Gallery\Services {
+    /**
+     * Mirror the production DNG extension predicate without source-file reads.
+     * @param array{relative_path:string} $image Prepared fixture image identity.
+     * @return bool Whether a display-master measurement is required.
+     */
+    function image_uses_dng_display_derivatives(array $image): bool
+    {
+        return strtolower(pathinfo($image['relative_path'], PATHINFO_EXTENSION)) === 'dng';
+    }
+
+    /**
+     * Resolve a fixture-owned display master without creating it.
+     * @param array{relative_path:string} $image Prepared fixture image identity.
+     * @param array{id:int,folder_path:string,title:string} $gallery Fixture owner.
+     * @param bool $ensure Whether generation is allowed; statistics passes false.
+     * @return string Existing fixture path for observational byte measurement.
+     */
+    function dng_display_master_abs_path(array $image, array $gallery, bool $ensure): string
+    {
+        return galleries_root() . '/display-master.webp';
+    }
+
+    /**
+     * Select durable thumbnail metadata explicitly for each fixture scenario.
+     * @return bool False by default to retain real-file fallback coverage.
+     */
+    function thumbnail_metadata_schema_ready(): bool
+    {
+        return !empty($GLOBALS['storage_thumbnail_metadata']);
+    }
+
+    /**
+     * Expose the fixture's installed metadata table without database discovery.
+     * @param string $table Code-owned table identity.
+     * @return bool Whether the metadata scenario supplies this table.
+     */
+    function db_table_exists(string $table): bool
+    {
+        return !empty($GLOBALS['storage_thumbnail_metadata']);
+    }
+
+    /**
+     * Expose derivative/size columns for the explicit metadata fixture.
+     * @param string $table Code-owned table identity.
+     * @param string $column Code-owned column identity.
+     * @return bool Whether this scenario supplies durable thumbnail columns.
+     */
+    function db_column_exists(string $table, string $column): bool
+    {
+        return !empty($GLOBALS['storage_thumbnail_metadata']);
+    }
+
+    /**
+     * Supply one configured thumbnail size for the aggregate fixture.
+     * @return list<int> The single 300-pixel fixture variant identity.
+     */
+    function thumbnail_sizes(): array
+    {
+        return [300];
+    }
+
     /**
      * Select an explicit master state for isolated SimBrief file persistence.
      * @param string $key Canonical capability identity.
@@ -279,6 +363,14 @@ namespace {
      * Rationale: Mode 0700 isolates the owned temporary originals from other users.
      */
     const ADMIN_STORAGE_FIXTURE_DIRECTORY_MODE = 0700;
+
+    /**
+     * Reproduce the requested large-gallery scale in the database-only regression.
+     * Type: int. Units: photo rows. Scope: this fixture's scale vector.
+     * Consumers: the ordinary-photo completion scenario below.
+     * Rationale: 40000 matches the reported deployment size, not a runtime cap.
+     */
+    const ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT = 40000;
 
     use function Gallery\Services\admin_storage_statistics_add_group_value;
     use function Gallery\Services\admin_storage_statistics_compact_source_summary;
@@ -618,6 +710,74 @@ namespace {
         assert_admin_storage_same($retainedSnapshot,
             \Gallery\Services\app_setting(\Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''),
             'failed source/batch work must preserve the last successful snapshot');
+
+        $savedImages = $GLOBALS['storage_fixture_images'];
+        $GLOBALS['storage_thumbnail_metadata'] = true;
+        // The scale vector shares one gallery/type; no physical originals exist.
+        $GLOBALS['storage_fixture_images'] = array_map(
+            static fn(int $id): array => ['image_id' => $id, 'gallery_id' => 1,
+                'relative_path' => 'photo.jpg', 'filename' => 'photo.jpg',
+                'file_size' => 123],
+            range(1, ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT)
+        );
+        $GLOBALS['storage_batch_modes'] = [];
+        \Gallery\Core\storage_observer_start();
+        $largeJob = \Gallery\Services\admin_storage_statistics_start_job();
+        $largeMetrics = \Gallery\Core\storage_observer_finish();
+        assert_admin_storage_same('complete', $largeJob['status'],
+            '40000 ordinary photos finish in the initial database request');
+        assert_admin_storage_same(ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT,
+            $largeJob['snapshot']['image_count'], 'large-job photo totals stay exact');
+        assert_admin_storage_same(17, $largeJob['snapshot']['generated_thumbnail_bytes'],
+            'the fast path preserves durable thumbnail byte totals');
+        assert_admin_storage_same(0, count($GLOBALS['storage_batch_modes']),
+            'database-only completion issues no derivative image batch queries');
+        assert_admin_storage_same(ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT,
+            $largeMetrics['counts.photos_completed_from_database'],
+            'diagnostics distinguish database-completed photographs');
+        assert_admin_storage_same(0, count(array_filter(array_keys($largeMetrics),
+            static fn(string $key): bool => str_starts_with($key, 'fs.'))),
+            'ordinary-photo completion performs no instrumented filesystem calls');
+
+        // One DNG among ordinary photos must retain bounded real-file work.
+        $GLOBALS['storage_fixture_images'][0]['relative_path'] = 'raw.DNG';
+        $GLOBALS['storage_fixture_images'][0]['filename'] = 'raw.DNG';
+        file_put_contents($fixtureRoot . '/display-master.webp', 'known display bytes');
+        $mixedJob = \Gallery\Services\admin_storage_statistics_start_job();
+        assert_admin_storage_same('running', $mixedJob['status'],
+            'DNG work is not skipped by the database fast path');
+        assert_admin_storage_same(ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT - 1,
+            $mixedJob['processed'], 'only the DNG photo remains pending');
+        $mixedJob = \Gallery\Services\admin_storage_statistics_process_job();
+        assert_admin_storage_same('complete', $mixedJob['status'],
+            'one DNG completes without paging all ordinary photographs');
+        assert_admin_storage_same(true, $GLOBALS['storage_batch_modes'][0],
+            'the derivative query selects only DNG rows');
+        assert_admin_storage_same(1, $mixedJob['snapshot']['display_master_count'],
+            'the real DNG display master remains counted');
+        assert_admin_storage_same(strlen('known display bytes'),
+            $mixedJob['snapshot']['display_master_bytes'],
+            'DNG byte accounting stays physical and exact');
+
+        $retainedFastSnapshot = \Gallery\Services\app_setting(
+            \Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''
+        );
+        $GLOBALS['storage_fail_read'] = 'thumbnails';
+        $refused = false;
+        try {
+            \Gallery\Services\admin_storage_statistics_start_job();
+        } catch (RuntimeException) {
+            $refused = true;
+        } finally {
+            $GLOBALS['storage_fail_read'] = '';
+        }
+        assert_admin_storage_same(true, $refused,
+            'failed thumbnail SQL must not authorize a false database-only success');
+        assert_admin_storage_same($retainedFastSnapshot,
+            \Gallery\Services\app_setting(\Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''),
+            'aggregate failure retains the last successful snapshot');
+        $GLOBALS['storage_thumbnail_metadata'] = false;
+        $GLOBALS['storage_fixture_images'] = $savedImages;
 
         $GLOBALS['storage_fixture_images'] = [];
         $emptyPhotoJob = \Gallery\Services\admin_storage_statistics_start_job();

@@ -286,4 +286,16 @@ failed-stage handler instead of becoming an empty result. A batch that ends befo
 the frozen expected photo count is reached is also a failure, recorded by
 `counts.unexpected_empty_image_batches`. These failures preserve the last successful
 snapshot and allow the later database/inspection stages to continue with an overall
-partial result. A completed file stage must actually process its expected photos.
+partial result. A completed file stage must actually account for its expected photos.
+
+When durable thumbnail metadata is available, the initial source-row read also
+identifies the DNG sources needing display-master measurement. Ordinary photos
+are accounted for immediately; they do not incur derivative keyset queries or
+additional browser requests. A gallery with no DNG and already imported attachment
+totals finishes its file phase in the initial request. Mixed collections page only
+DNG rows, using the existing image batch limit. Without thumbnail metadata the
+full bounded filesystem fallback remains supported. Existing in-flight jobs lacking
+the new selector finish through their original full-image cursor. Required thumbnail
+aggregate failures now fail the stage rather than authorizing skipped work with
+false zero totals. Diagnostics report `counts.photos_completed_from_database` and
+`counts.derivative_rows_pending`; source/inspection/database-table work still runs.

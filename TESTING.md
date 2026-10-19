@@ -29,6 +29,13 @@ native and emulated PDO prepares, checking a bounded first row and true exhausti
 The storage-job fixture injects source-query failure, batch-query failure and a
 premature empty batch; each must refuse completion and retain the last successful
 snapshot. Native integer bindings preserve LIMIT semantics on supported engines.
+The same job fixture verifies 40,000 ordinary photos finish in the initial request
+with zero derivative batch queries or instrumented filesystem calls when thumbnail
+metadata exists. A mixed collection retains one bounded DNG-only batch and checks
+real display-master bytes; missing thumbnail metadata retains the full-image path.
+An injected thumbnail aggregate failure must preserve the last successful snapshot.
+The real-engine fixture checks DNG-only integer-bound keysets in both PDO modes,
+mixed-case extensions and relative-path precedence over a misleading filename.
 
 `telemetry_visitor_http_test.php` runs a real single-worker disposable PHP server
 and the production registration/socket/controller flow. It proves public-triggered

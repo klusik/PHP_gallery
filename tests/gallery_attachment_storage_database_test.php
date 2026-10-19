@@ -62,6 +62,15 @@ namespace {
         $directory = validateFixture((string) getenv('GALLERY_WORKFLOW_FIXTURE'), $token);
         $pdo = fixtureDatabase($directory, $token);
         $GLOBALS['attachment_storage_fixture_db'] = $pdo;
+        $pdo->beginTransaction();
+        // Two source identities prove case-insensitive relative-path selection
+        // and reject a misleading filename; all edits roll back with the ledger.
+        $photoIds = $pdo->query('SELECT id FROM images ORDER BY id LIMIT 2')
+            ->fetchAll(\PDO::FETCH_COLUMN);
+        check(count($photoIds) === 2, 'Keyset fixture needs two indexed photos.');
+        $setPath = $pdo->prepare('UPDATE images SET relative_path = ?, filename = ? WHERE id = ?');
+        $setPath->execute(['fixture.DnG', 'ordinary.jpg', $photoIds[0]]);
+        $setPath->execute(['ordinary.jpg', 'misleading.dng', $photoIds[1]]);
         $originalEmulation = (bool) $pdo->getAttribute(\PDO::ATTR_EMULATE_PREPARES);
         try {
             // Exercise both supported driver modes with the actual LIMIT owner.
@@ -77,6 +86,18 @@ namespace {
                 );
                 check($afterLast === [],
                     'A successful exhausted keyset must still return an empty batch.');
+                $displayRows = \Gallery\Models\admin_storage_statistics_model_image_rows_after_id(
+                    0, 1, true, true
+                );
+                check(count($displayRows) === 1
+                    && (int) $displayRows[0]['image_id'] === (int) $photoIds[0],
+                    'DNG-only keysets must honor case-insensitive paths and integer LIMIT.');
+                $afterDng = \Gallery\Models\admin_storage_statistics_model_image_rows_after_id(
+                    (int) $photoIds[0], 1, true, true
+                );
+                check($afterDng === []
+                    || (int) $afterDng[0]['image_id'] !== (int) $photoIds[1],
+                    'A DNG filename must not override the ordinary relative path.');
             }
         } finally {
             $pdo->setAttribute(\PDO::ATTR_EMULATE_PREPARES, $originalEmulation);
@@ -84,7 +105,6 @@ namespace {
         $galleryId = (int) $pdo->query('SELECT id FROM galleries ORDER BY id LIMIT 1')
             ->fetchColumn();
         check($galleryId > 0, 'Accounting fixture needs a migrated gallery.');
-        $pdo->beginTransaction();
         foreach (['pdf', 'music', 'ofp'] as $kind) {
             gallery_attachment_storage_model_forget($galleryId, $kind);
         }

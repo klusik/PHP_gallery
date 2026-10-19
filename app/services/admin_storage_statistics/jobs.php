@@ -24,6 +24,8 @@ namespace Gallery\Services;
  * Source-photo statistics are calculated once from database rows. Generated
  * images and galleries missing durable accounting then use separate bounded
  * phases; imported galleries contribute SQL totals without filesystem work.
+ * With thumbnail metadata, ordinary photos finish in this initial database pass;
+ * only DNG sources still need bounded display-master filesystem observations.
  *
  * @return StorageJobState Running progress, or the completed empty snapshot.
  */
@@ -39,6 +41,22 @@ function admin_storage_statistics_start_job(): array
     \Gallery\Core\storage_observer_add('counts.source_image_rows', count($rows));
     \Gallery\Core\storage_observer_add('counts.pending_attachment_galleries', $galleryCount);
 
+    $thumbnailMetadataUsed = admin_storage_statistics_thumbnail_metadata_available();
+    $pendingImageCount = count($rows);
+    if ($thumbnailMetadataUsed) {
+        $pendingImageCount = 0;
+        foreach ($rows as $row) {
+            // Same extension rule as the display-master owner; no path lookup.
+            $path = (string) ($row['relative_path'] ?? $row['filename'] ?? '');
+            if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'dng') {
+                $pendingImageCount++;
+            }
+        }
+    }
+    $databaseImageCount = count($rows) - $pendingImageCount;
+    \Gallery\Core\storage_observer_add('counts.derivative_rows_pending', $pendingImageCount);
+    \Gallery\Core\storage_observer_add('counts.photos_completed_from_database', $databaseImageCount);
+
     $job = [
         'job_id' => admin_storage_statistics_job_id(),
         'status' => 'running',
@@ -46,22 +64,23 @@ function admin_storage_statistics_start_job(): array
         'started_at' => time(),
         'updated_at' => time(),
         'total' => count($rows) + $galleryCount,
-        'processed' => 0,
+        'processed' => $databaseImageCount,
         'last_image_id' => 0,
         'image_total' => count($rows),
-        'image_processed' => 0,
+        'image_processed' => $databaseImageCount,
         'last_gallery_id' => 0,
         'gallery_total' => $galleryCount,
         'gallery_processed' => 0,
         'source' => admin_storage_statistics_compact_source_summary($source),
         'generated' => admin_storage_statistics_initial_generated_summary(),
         'attachments' => admin_storage_statistics_empty_attachments(),
-        'thumbnail_metadata_used' => admin_storage_statistics_thumbnail_metadata_available(),
+        'thumbnail_metadata_used' => $thumbnailMetadataUsed,
+        'display_masters_only' => $thumbnailMetadataUsed,
     ];
     \Gallery\Core\storage_observer_add($job['thumbnail_metadata_used']
         ? 'counts.thumbnail_database_mode' : 'counts.thumbnail_filesystem_mode');
 
-    if ((int) $job['total'] <= 0) {
+    if ($job['processed'] >= $job['total']) {
         return admin_storage_statistics_finish_job($job);
     }
 
@@ -105,7 +124,9 @@ function admin_storage_statistics_process_job(
     $lastImageId = max(0, (int) ($job['last_image_id'] ?? 0));
     $rows = $job['image_processed'] < $job['image_total']
         ? \Gallery\Core\storage_observer_call('db.image_batch',
-            static fn(): array => admin_storage_statistics_image_rows_after_id($lastImageId, $batchSize))
+            static fn(): array => admin_storage_statistics_image_rows_after_id(
+                $lastImageId, $batchSize, !empty($job['display_masters_only'])
+            ))
         : [];
     \Gallery\Core\storage_observer_add('counts.derivative_image_rows', count($rows));
     if ($rows === [] && $job['image_processed'] < $job['image_total']) {

@@ -2450,7 +2450,12 @@ Efter databasmigreringen behövs en första körning av Uppdatera allt.
 Uppladdning, ersättning och~borttagning uppdaterar summorna från sparade metadata;
 senare körningar öppnar inga bilagefiler eller~index. Externa filändringar kräver
 att berörda bokföringsposter ogiltigförklaras före uppdateringen; se
-\codeword{docs/GALLERY\_PDF.md}. Kontroller av fotoderivat finns kvar.
+\codeword{docs/GALLERY\_PDF.md}.
+Med beständiga miniatyrmetadata räknas vanliga foton redan under den~första
+databasgenomgången utan ytterligare fotobatch-anrop. Begränsade filkontroller
+behövs bara för DNG-visningsmaster. Utan miniatyrmetadata finns den~fullständiga
+begränsade filhanteringen kvar; ett~fel i~den~obligatoriska aggregatfrågan bevarar
+den~senaste lyckade ögonblicksbilden i~stället för att rapportera noll.
 För prestandaanalys exporterar du den~senaste Admin-logghändelsen
 \codeword{storage.refresh\_all.completed}. Körnings-ID:t kopplar ihop framsteg;
 sammanfattningen innehåller total- och~fastider, antal anrop och~mediefiler,

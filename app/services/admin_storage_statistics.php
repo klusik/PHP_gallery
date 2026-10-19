@@ -50,7 +50,8 @@
  *     image_total:int,image_processed:int,last_gallery_id:int,
  *     gallery_total:int,gallery_processed:int,source:StorageSourceSummary,
  *     generated:StorageGeneratedSummary,attachments:StorageAttachmentSummary,
- *     thumbnail_metadata_used:bool,snapshot?:StorageSnapshot}
+ *     thumbnail_metadata_used:bool,display_masters_only?:bool,
+ *     snapshot?:StorageSnapshot}
  * @phpstan-type StorageJobState array{ok:bool,job_id?:string,status:string,
  *     total?:int,processed?:int,percent?:float,message:string,
  *     snapshot?:StorageSnapshot|null}
@@ -298,17 +299,22 @@ function admin_storage_statistics_image_rows(): array
  *
  * @param int $lastImageId Last image id identifier.
  * @param int $limit Maximum number of items.
+ * @param bool $displayMastersOnly Restrict to DNG rows needing disk measurement;
+ *     false retains the complete fallback and legacy-job behavior.
  * @return list<StorageStatisticsImageRow> Bounded rows, empty only on actual exhaustion.
  * @throws Throwable When the database cannot supply the required derivative batch.
  */
-function admin_storage_statistics_image_rows_after_id(int $lastImageId, int $limit): array
-{
+function admin_storage_statistics_image_rows_after_id(
+    int $lastImageId,
+    int $limit,
+    bool $displayMastersOnly = false
+): array {
     $lastImageId = max(0, $lastImageId);
     $limit = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, $limit));
     $hasDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
         && db_column_exists('images', 'thumbnail_derivative_version');
     return admin_storage_statistics_model_image_rows_after_id(
-        $lastImageId, $limit, $hasDerivativeVersion
+        $lastImageId, $limit, $hasDerivativeVersion, $displayMastersOnly
     );
 }
 
@@ -494,7 +500,9 @@ function admin_storage_statistics_thumbnail_metadata_available(): bool
 /**
  * Aggregate generated thumbnail bytes from durable thumbnail metadata.
  *
- * @return array<string mixed>.
+ * @return StorageGeneratedSummary Durable configured thumbnail totals, or empty
+ *     totals when the optional schema/configured sizes are unavailable.
+ * @throws Throwable When the available schema's required aggregate fails.
  */
 function admin_storage_statistics_thumbnail_metadata_summary(): array
 {
@@ -510,11 +518,11 @@ function admin_storage_statistics_thumbnail_metadata_summary(): array
     $matchDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
         && db_column_exists('image_thumbnail_variants', 'derivative_version')
         && db_column_exists('images', 'thumbnail_derivative_version');
-    try {
-        $rows = admin_storage_statistics_model_thumbnail_summary_rows($sizes, $matchDerivativeVersion);
-    } catch (Throwable) {
-        return $summary;
-    }
+    // Once this schema is available its aggregate is required accounting.
+    // A failed query cannot safely authorize skipping thumbnail measurements.
+    $rows = admin_storage_statistics_model_thumbnail_summary_rows(
+        $sizes, $matchDerivativeVersion
+    );
 
     foreach ($rows as $row) {
         $format = (string) ($row['format'] ?? '');
