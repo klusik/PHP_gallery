@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.137.6}
+\newcommand{\version}{0.137.7}
 \newcommand{\manualdate}{19.~října~2026}
 
 \hypersetup{
@@ -1395,9 +1395,13 @@ označený jako neúplný. Úspěch aktualizuje stav bez okna s~OK a~průběh za
 po trvalém dokončení a~vyčištění klíče. Chyby zůstávají viditelné, starší PDF
 zůstávají zachována.
 
-Zdroj samostatného uploaderu nyní cílí na verzi 0.7.0. Samostatně vyžádané
+Okno aktualizace se při změně stavové zprávy na pozadí přizpůsobí zalomenému
+textu a~celé řadě tlačítek. Pozadí textu i~řady tlačítek splývá s~oknem;
+hlavní akce \ui{Update} zůstává zvýrazněná.
+
+Zdroj samostatného uploaderu nyní cílí na verzi 0.7.1. Samostatně vyžádané
 sestavení instalátoru uloží instalátor a odpovídající generovaná metadata
-\filepath{winapp-update.json} do \filepath{winapp/dist/0.7.0/}. Instalátor
+\filepath{winapp-update.json} do \filepath{winapp/dist/0.7.1/}. Instalátor
 a metadata patří do stejného hostovaného vydání. Kontrola sestavení nenahrazuje
 ověření nainstalovaného programu ve Windows ani simulátoru. Existující složky
 verzí včetně 0.4.0 zůstávají zachovány.

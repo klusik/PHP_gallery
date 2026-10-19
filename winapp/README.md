@@ -493,15 +493,19 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.7.0)
+## Windows installer (next version: 0.7.1)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **0.7.0**; this source version
+Gallery CMS release. The current source targets **0.7.1**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.7.0/`. Existing version outputs and other version folders remain
+`winapp/dist/0.7.1/`. Existing version outputs and other version folders remain
 preserved.
+
+The update notice fits its wrapped status text and full button row as background
+checks change the message. Text and action-row backgrounds match the window;
+the primary **Update** action remains distinct.
 
 Develop integration compares the complete tracked installer inputs with current
 `main`. If runtime, assets, dependencies, build/installer inputs or `VERSION`

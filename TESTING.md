@@ -687,7 +687,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.137.6. Release verification uses the
+This guide applies to PHP Gallery Version 0.137.7. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1621,7 +1621,7 @@ highest-version missing hashes, metadata/URL limits, same-release manifests,
 streaming hash/size refusal, cancellation and unrelated partial-file
 preservation.
 UI fixtures cover the persistent version banner/header mark, Later/reopen
-behavior,
+behavior, notice placement followed by content-driven sizing,
 tray badge/menu/tooltip routing, clearing after a successful no-offer check, and
 retaining a validated cached offer after failed rechecks and restart. Helper
 fixtures exercise hourly scheduling, safe drain, ticket ownership, exact target

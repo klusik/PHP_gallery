@@ -250,7 +250,8 @@ class UpdateController:
         """Show a reusable, nonmodal notice without a grab or confirmation dialog.
 
         Returns:
-            None: Raises the current notice or creates one reflecting coordinator state.
+            None: Raises the current notice or creates one sized to its current
+                text and controls, including later background status changes.
         """
         import tkinter as tk
         from tkinter import ttk
@@ -264,18 +265,33 @@ class UpdateController:
         self.window.title("PHP Gallery Uploader updates")
         self.window.protocol("WM_DELETE_WINDOW", self.later)
         self.status = tk.StringVar(value="Checking for updates...")
-        ttk.Label(self.window, textvariable=self.status, wraplength=470).pack(padx=18, pady=14)
+        ttk.Label(
+            self.window,
+            textvariable=self.status,
+            style="App.TLabel",
+            justify="left",
+            wraplength=470,
+        ).pack(fill="x", padx=18, pady=14)
         self.progress = ttk.Progressbar(self.window, length=450, maximum=100)
         self.progress.pack(padx=18, pady=8)
-        buttons = ttk.Frame(self.window)
+        buttons = ttk.Frame(self.window, style="App.TFrame")
         buttons.pack(pady=12)
-        self.action = ttk.Button(buttons, text="Update", command=self.download, state="disabled")
+        self.action = ttk.Button(
+            buttons,
+            text="Update",
+            command=self.download,
+            state="disabled",
+            style="Primary.TButton",
+        )
         self.action.pack(side="left", padx=5)
         self.cancel_button = ttk.Button(buttons, text="Cancel download", command=self.cancel.set, state="disabled")
         self.cancel_button.pack(side="left", padx=5)
         ttk.Button(buttons, text="Later", command=self.later).pack(side="left", padx=5)
         self._restore_notice_state()
         place_dialog(self.window, self.root)
+        # Center once, then let Tk fit the wrapped status and complete button
+        # row when the asynchronous check replaces the short checking message.
+        self.window.geometry("")
         self.window.deiconify()
 
     def _restore_notice_state(self) -> None:

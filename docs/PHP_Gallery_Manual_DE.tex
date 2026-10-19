@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.137.6}
+\newcommand{\version}{0.137.7}
 \newcommand{\manualdate}{19.~Oktober~2026}
 
 \hypersetup{
@@ -1438,10 +1438,15 @@ Erfolg aktualisiert den Status ohne OK-Meldung und schließt den Fortschritt
 nach dauerhaftem Abschluss und Schlüsselbereinigung. Fehler bleiben sichtbar;
 frühere PDFs bleiben erhalten.
 
-Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.7.0. Ein
+Das Aktualisierungsfenster passt sich bei Statusänderungen im Hintergrund an
+den umgebrochenen Text und die vollständige Schaltflächenzeile an. Text und
+Schaltflächenzeile haben denselben Hintergrund wie das Fenster; die Hauptaktion
+\ui{Update} bleibt hervorgehoben.
+
+Der Quellstand des unabhängigen Uploaders zielt jetzt auf Version 0.7.1. Ein
 separat angeforderter Installer-Build legt den Installer und die passenden
 generierten Metadaten \filepath{winapp-update.json} unter
-\filepath{winapp/dist/0.7.0/} ab. Installer und Metadaten gehören zur selben
+\filepath{winapp/dist/0.7.1/} ab. Installer und Metadaten gehören zur selben
 gehosteten Veröffentlichung. Diese Build-Prüfung ersetzt keine Abnahme der
 installierten Windows-Anwendung oder des Simulators. Vorhandene Versionsordner
 einschließlich 0.4.0 bleiben erhalten.
