@@ -34,9 +34,23 @@ its summary explicitly says `ELIGIBLE`.
   the next release; its source retains them before the reviewed FF joins main.
 - [ ] Start from current FULL-qualified develop A. Create and push
   `release/v_X.Y[.Z]` for the intended next version.
+- [ ] Alternatively, run **Begin Release** from a branch containing the intended
+  workflow revision (normally develop), with version `v_X.Y[.Z]`. It reads
+  current develop independently of the selected workflow ref, freezes A,
+  creates the release branch and explicitly dispatches its assembly. Inspect the
+  frozen-source summary. Retry an unchanged ref after a lost acknowledgement;
+  resume assembly directly if that release ref has already advanced.
 - [ ] Wait for automatic preparation, notes, all four manuals/PDFs, manifest and
   complete attachments. Release trusts protected develop and does
   not repeat source audits or historical evidence validation.
+- [ ] On **NOTES_PENDING**, download `release-notes-handoff`, give `prompt.txt`
+  to any chosen AI, review its single-line JSON, then paste it into
+  **Release qualification -> Run workflow -> external_notes** on the same
+  release branch. The bundle README gives the exact CLI continuation when the
+  main-branch UI does not yet expose the button. Large changes bypass Copilot;
+  missing allowance/provider failure exports the same complete evidence.
+  A pending handoff has no qualification or PR. Changed evidence needs a new
+  bundle; continuation preserves PR review and manual publication.
 
 ## Review and approve the release PR
 

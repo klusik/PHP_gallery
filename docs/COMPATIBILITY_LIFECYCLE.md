@@ -1,5 +1,36 @@
 # Compatibility lifecycle and retirement register
 
+## Explicit release-start dispatch
+
+Owners: `begin-release.mjs`, `start-new-release.mjs`, `begin-release.yml` and
+`release-qualification.yml` under `.github`. The selected Begin Release
+workflow revision and current protected develop source remain independent.
+Explicit workflow dispatch permanently supports GitHub's suppression of
+GITHUB_TOKEN-created push events. Bot initialization requires server-bound
+initiating run/attempt/version and original maintainer permission. Ordinary
+push initialization and external-note origin reuse remain supported. Lost
+dispatch responses permit reuse of an unmoved ref; active work and advanced
+release refs are preserved. Registered real-Git fixtures cover creation,
+retry/duplicate suppression, source separation and adverse handoff metadata.
+Live first-release dispatch/permissions remain unmeasured until a separately
+authorized release. No existing tag, origin, review or published asset is retired.
+
+## Release-note provider availability and external editorial work
+
+Owners: `.github/scripts/patch_notes_handoff.php`, `patch_notes_ai.php` and
+`release-qualification.yml`. External evidence/response support is permanent:
+maintainers may use another AI or work without Copilot entitlement. Automatic
+requests are capped to one evidence slice plus synthesis by byte/file/context
+limits before provider work. A quota or provider failure preserves all source
+evidence in a 30-day handoff and reports NOTES_PENDING, without inventing
+qualification or publishing an incomplete release. Source hashes and existing
+editorial validation protect continuation; filesystem/build failures remain
+mandatory. Hosted regression owners cover routing boundaries, complete evidence,
+source/response drift and dispatch-origin reuse. Actual provider consumption,
+quota exhaustion, first-install GitHub input UI and live continuation acceptance
+remain unknown until a maintainer release exercises them. No historical release,
+tag, approved tree, asset or source-qualification protocol is retired.
+
 ## Telemetry storage and historical aggregates
 
 Successful public HTML visits now supply private telemetry-only worker requests

@@ -157,7 +157,7 @@ function patch_notes_ai_previous_section(string $root, string $baseTag): string
 }
 
 /**
- * Build the Copilot prompt from complete immutable Git comparison evidence.
+ * Build provider-independent context from complete immutable Git comparison evidence.
  *
  * @param string $version Target release version.
  * @param string $baseTag Previous stable release tag.
@@ -201,17 +201,19 @@ function patch_notes_ai_build_prompt(string $version, string $baseTag, string $r
     }
 
     $range = $baseCommit . '..' . $headCommit;
+    // Retain complete metadata as well as the diff. Routing bounds provider work
+    // separately; large histories must still be exportable to external AI.
     $commits = patch_notes_ai_git([
         'git', 'log', '--reverse',
         '--format=COMMIT %H%nSUBJECT %s%nBODY %b%nEND_COMMIT',
         $range,
-    ], 90000);
+    ], null);
     $nameStatus = patch_notes_ai_git([
         'git', 'diff', '--name-status', '--find-renames', $baseCommit, $headCommit,
-    ], 50000);
+    ], null);
     $stat = patch_notes_ai_git([
         'git', 'diff', '--stat', '--find-renames', $baseCommit, $headCommit,
-    ], 30000);
+    ], null);
     $diff = patch_notes_ai_git([
         'git', 'diff', '--no-ext-diff', '--find-renames', '--unified=3', $baseCommit, $headCommit, '--',
         '.',
@@ -436,9 +438,24 @@ try {
         exit(0);
     }
 
+    if ($command === 'validate') {
+        [$version, $responsePath] = array_pad($args, 2, null);
+        if (!is_string($version) || !is_string($responsePath) || $responsePath === '') {
+            throw new RuntimeException('Usage: patch_notes_ai.php validate VERSION RESPONSE_PATH');
+        }
+        $response = file_get_contents($responsePath);
+        if (!is_string($response)) {
+            throw new RuntimeException('Copilot release-note response is unavailable.');
+        }
+        patch_notes_ai_validate_response($version, $response);
+        fwrite(STDOUT, "Validated editorial release-note response.\n");
+        exit(0);
+    }
+
     fwrite(STDERR, "Usage:\n");
     fwrite(STDERR, "  php .github/scripts/patch_notes_ai.php prompt VERSION BASE_TAG OWNER/REPO OUTPUT_PATH\n");
     fwrite(STDERR, "  php .github/scripts/patch_notes_ai.php apply VERSION RESPONSE_PATH\n");
+    fwrite(STDERR, "  php .github/scripts/patch_notes_ai.php validate VERSION RESPONSE_PATH\n");
     exit(2);
 } catch (Throwable $exception) {
     fwrite(STDERR, 'BLOCKED AI release-note automation: ' . $exception->getMessage() . "\n");

@@ -8,6 +8,7 @@
 #   - Apply deterministic release preparation and commit it back only to the same release branch
 #   - Generate missing release-note prose through tightly scoped GitHub Copilot CLI
 #   - Preserve completed maintainer-authored release notes without invoking AI
+#   - Export large changes or provider failures for externally authored notes
 #   - Trust the selected protected develop source without replaying source qualification
 #   - Build all maintained manuals, notes, manifest and authenticated release attachments
 #   - Expose one aggregate release qualification gate
@@ -19,6 +20,29 @@ on:
   push:
     branches:
       - 'release/v_*'
+  workflow_dispatch:
+    inputs:
+      begin_source_sha:
+        description: Frozen develop source supplied only by Begin Release initialization.
+        type: string
+        default: ''
+      begin_run:
+        description: Authenticated initiating Begin Release run ID.
+        type: string
+        default: ''
+      begin_attempt:
+        description: Exact initiating Begin Release attempt.
+        type: string
+        default: ''
+      external_notes:
+        description: Paste the single-line response JSON from the release-notes-handoff prompt.
+        type: string
+        default: ''
+      notes_mode:
+        description: Use external to export evidence without trying Copilot.
+        type: choice
+        default: auto
+        options: [auto, external]
 
 permissions:
   contents: read
@@ -71,6 +95,7 @@ jobs:
       preparation_changed: ${{ steps.commit.outputs.changed }}
       winapp_changed: ${{ steps.final.outputs.winapp_changed }}
       installer_required: ${{ steps.final.outputs.installer_required }}
+      notes_pending: ${{ steps.notes.outputs.pending }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -98,6 +123,9 @@ jobs:
         name: Initialize or reuse immutable origin after release push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEGIN_SOURCE_SHA: ${{ inputs.begin_source_sha }}
+          BEGIN_RELEASE_RUN_ID: ${{ inputs.begin_run }}
+          BEGIN_RELEASE_RUN_ATTEMPT: ${{ inputs.begin_attempt }}
         run: node .github/scripts/start-new-release.mjs
       - id: origin
         name: Verify immutable release develop origin and prior main tag
@@ -161,16 +189,6 @@ jobs:
           else
             echo "complete=false" >> "${GITHUB_OUTPUT}"
           fi
-      - name: Set up Node.js for AI release notes
-        if: ${{ steps.notes-before.outputs.complete != 'true' }}
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version: '22'
-          package-manager-cache: false
-      - name: Install GitHub Copilot CLI
-        if: ${{ steps.notes-before.outputs.complete != 'true' }}
-        shell: bash
-        run: npm install -g @github/copilot
       - name: Build complete release-note evidence prompt
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
         # Bound the whole local evidence step independently of Copilot and TeX.
@@ -185,8 +203,38 @@ jobs:
           php .github/scripts/patch_notes_ai.php prompt \
             "${RELEASE_VERSION}" "${BASE_TAG}" "${GITHUB_REPOSITORY}" \
             "${RUNNER_TEMP}/release-notes-prompt.txt"
-      - name: Prepare bounded Copilot evidence slices
+      - id: notes-route
+        name: Select bounded Copilot work or external AI handoff
         if: ${{ steps.notes-before.outputs.complete != 'true' }}
+        timeout-minutes: 2
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          COPILOT_AVAILABLE: ${{ secrets.COPILOT_GITHUB_TOKEN != '' }}
+          NOTES_MODE: ${{ inputs.notes_mode || 'auto' }}
+          EXTERNAL_NOTES: ${{ inputs.external_notes }}
+        run: >-
+          php .github/scripts/patch_notes_handoff.php
+          "${RELEASE_VERSION}" "${GITHUB_REPOSITORY}"
+          "${RUNNER_TEMP}/release-notes-prompt.txt"
+          "${RUNNER_TEMP}/release-notes-handoff"
+      - id: apply-external
+        name: Apply verified externally supplied release notes
+        if: ${{ steps.notes-route.outputs.mode == 'supplied' }}
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: >-
+          php .github/scripts/patch_notes_ai.php apply "${RELEASE_VERSION}"
+          "${RUNNER_TEMP}/release-notes-handoff/accepted-notes.md"
+      - id: copilot-install
+        name: Install GitHub Copilot CLI
+        if: ${{ steps.notes-route.outputs.mode == 'copilot' }}
+        # Optional provider setup may fail; evidence export and assembly integrity may not.
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        run: npm install -g @github/copilot
+      - name: Prepare bounded Copilot evidence slices
+        if: ${{ steps.notes-route.outputs.mode == 'copilot' && steps.copilot-install.outcome == 'success' }}
         timeout-minutes: 2
         shell: bash
         run: |
@@ -194,9 +242,12 @@ jobs:
           php .github/scripts/patch_notes_ai_chunks.php prepare \
             "${RUNNER_TEMP}/release-notes-prompt.txt" \
             "${RUNNER_TEMP}/release-notes-evidence"
-      - name: Generate release notes with Copilot from every diff slice
-        if: ${{ steps.notes-before.outputs.complete != 'true' }}
-        timeout-minutes: 90
+      - id: copilot
+        name: Generate release notes with Copilot from every diff slice
+        if: ${{ steps.notes-route.outputs.mode == 'copilot' && steps.copilot-install.outcome == 'success' }}
+        continue-on-error: true
+        # One admitted evidence slice plus synthesis, including bounded model fallback.
+        timeout-minutes: 20
         shell: bash
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -270,8 +321,18 @@ jobs:
           echo "Generating final editorial release notes from fully processed evidence."
           run_copilot "${evidence_dir}/final.prompt" \
             "${RUNNER_TEMP}/release-notes-response.md" 'final release-note synthesis'
-      - name: Validate and apply generated release notes
-        if: ${{ steps.notes-before.outputs.complete != 'true' }}
+      - id: validate-copilot
+        name: Validate generated release-note prose
+        if: ${{ steps.copilot.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: >-
+          php .github/scripts/patch_notes_ai.php validate
+          "${RELEASE_VERSION}" "${RUNNER_TEMP}/release-notes-response.md"
+      - id: apply-copilot
+        name: Apply validated generated release notes
+        if: ${{ steps.validate-copilot.outcome == 'success' }}
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
@@ -280,7 +341,7 @@ jobs:
           php .github/scripts/patch_notes_ai.php apply \
             "${RELEASE_VERSION}" "${RUNNER_TEMP}/release-notes-response.md"
       - name: Upload rejected AI release-note response
-        if: ${{ failure() && steps.notes-before.outputs.complete == 'false' }}
+        if: ${{ !cancelled() && (steps.copilot.outcome == 'failure' || steps.validate-copilot.outcome == 'failure') }}
         uses: actions/upload-artifact@v7.0.1
         with:
           name: release-notes-rejected-response
@@ -292,8 +353,33 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          EXISTING_NOTES: ${{ steps.notes-before.outputs.complete }}
+          EXTERNAL_RESULT: ${{ steps.apply-external.outcome }}
+          COPILOT_RESULT: ${{ steps.apply-copilot.outcome }}
+          NOTES_REASON: ${{ steps.notes-route.outputs.reason }}
+          DIFF_BYTES: ${{ steps.notes-route.outputs.diff_bytes }}
+          SOURCE_FILES: ${{ steps.notes-route.outputs.source_files }}
+          PROMPT_BYTES: ${{ steps.notes-route.outputs.prompt_bytes }}
+          INSTALL_RESULT: ${{ steps.copilot-install.outcome }}
+          PROVIDER_RESULT: ${{ steps.copilot.outcome }}
+          VALIDATION_RESULT: ${{ steps.validate-copilot.outcome }}
         run: |
           set -euo pipefail
+          if [[ "${EXISTING_NOTES}" != 'true' && "${EXTERNAL_RESULT}" != 'success' && "${COPILOT_RESULT}" != 'success' ]]; then
+            echo 'complete=false' >> "${GITHUB_OUTPUT}"
+            echo 'pending=true' >> "${GITHUB_OUTPUT}"
+            {
+              echo '### NOTES_PENDING: external release notes required'
+              echo ''
+              echo 'Download the **release-notes-handoff** artifact and give **prompt.txt** to your chosen AI.'
+              echo "- Routing: ${NOTES_REASON}; diff bytes: ${DIFF_BYTES}; source files: ${SOURCE_FILES}; prompt bytes: ${PROMPT_BYTES}."
+              echo "- Copilot setup: ${INSTALL_RESULT}; generation: ${PROVIDER_RESULT}; prose validation: ${VALIDATION_RESULT}."
+              echo "In **Release qualification → Run workflow**, select **${GITHUB_REF_NAME}**, paste its single-line JSON into **external_notes** and run."
+              echo 'See README.md in the bundle for CLI continuation when the dispatch button is not registered on main yet.'
+              echo 'Copilot size routing or provider failure has paused assembly. No release qualification or PR has been produced.'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
           php -r '
             require "scripts/release_lib.php";
             $section = \PhpGallery\Release\patch_notes_section(getcwd(), $argv[1]);
@@ -302,6 +388,17 @@ jobs:
               && preg_match("/\\bTODO\\b/i", $section) !== 1 ? 0 : 1);
           ' "${RELEASE_VERSION}"
           echo "complete=true" >> "${GITHUB_OUTPUT}"
+          echo "pending=false" >> "${GITHUB_OUTPUT}"
+      - name: Export complete evidence for external release-note generation
+        if: ${{ steps.notes.outputs.pending == 'true' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-notes-handoff
+          path: ${{ runner.temp }}/release-notes-handoff/
+          if-no-files-found: error
+          # Type: integer; Units: days; Scope: external editorial handoff artifacts.
+          # Consumers: upload-artifact retention; Rationale: 30 days allow review without a waiting runner.
+          retention-days: 30
       - id: tinytex-cache
         name: Restore cached TinyTeX
         if: ${{ steps.notes.outputs.complete == 'true' }}
@@ -364,6 +461,7 @@ jobs:
           fi
       - id: commit
         name: Commit deterministic preparation to the release branch
+        if: ${{ steps.notes.outputs.complete == 'true' }}
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
@@ -438,12 +536,13 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
           NOTES_COMPLETE: ${{ steps.notes.outputs.complete }}
           PREPARED_SHA: ${{ steps.commit.outputs.candidate_sha }}
+          ORIGIN_SHA: ${{ steps.initialize.outputs.candidate_sha }}
           SOURCE_BASE: ${{ steps.origin.outputs.source_base }}
           SELECTED_DEVELOP_SHA: ${{ steps.origin.outputs.selected_develop_sha }}
         run: |
           set -euo pipefail
           echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "candidate_sha=${PREPARED_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "candidate_sha=${PREPARED_SHA:-${ORIGIN_SHA}}" >> "${GITHUB_OUTPUT}"
 
           if [[ "${NOTES_COMPLETE}" != "true" ]]; then
             echo "ready=false" >> "${GITHUB_OUTPUT}"
@@ -453,12 +552,12 @@ jobs:
               echo "### Release preparation"
               echo ""
               echo "- Version: \`${RELEASE_VERSION}\`"
-              echo "- Candidate SHA: \`${PREPARED_SHA}\`"
-              echo "- Deterministic preparation: committed"
+              echo "- Source SHA: \`${ORIGIN_SHA}\`"
+              echo "- Deterministic preparation: not committed while notes are pending"
               echo "- Editorial patch notes: **pending**"
               echo "- Release assembly: not completed"
               echo ""
-              echo "Complete the \`PATCH_NOTES.md\` section for Version ${RELEASE_VERSION} and push it to this release branch."
+              echo 'Continue using the release-notes-handoff artifact instructions above.'
             } >> "${GITHUB_STEP_SUMMARY}"
             exit 0
           fi
@@ -488,7 +587,7 @@ jobs:
 
   release-gate:
     name: Release qualification gate
-    if: ${{ always() && needs.coverage-owner.outputs.bootstrap == 'false' }}
+    if: ${{ always() && needs.coverage-owner.outputs.bootstrap == 'false' && !(needs.prepare.result == 'success' && needs.prepare.outputs.notes_pending == 'true') }}
     needs:
       - coverage-owner
       - prepare

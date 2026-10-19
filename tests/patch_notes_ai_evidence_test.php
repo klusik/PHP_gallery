@@ -149,18 +149,24 @@ try {
     $check(str_contains($result['stdout'], 'Prepared complete AI release-note context:'),
         'The workflow log must report complete evidence size without exposing raw diff content.');
 
-    // Metadata is never silently shortened to make an immutable comparison succeed.
+    // Metadata stays complete for external handoff even beyond the old provider bound.
     $messagePath = $fixture . '/commit-message.txt';
-    $write($messagePath, "Large immutable commit metadata\n\n" . str_repeat('metadata ', 12000));
+    $metadataBody = str_repeat('metadata ', 12000);
+    $write($messagePath, "Large immutable commit metadata\n\n" . $metadataBody);
     $gitRun(['commit', '--quiet', '--allow-empty', '--no-gpg-sign', '-F', $messagePath]);
     unlink($promptPath);
     $result = run_process([
         PHP_BINARY, $fixture . '/.github/scripts/patch_notes_ai.php', 'prompt',
         '0.123', 'v_0.122.1', 'klusik/PHP_gallery', $promptPath,
     ], $fixture, 10);
-    $check(!$result['timed_out'] && $result['exit_code'] !== 0 && !is_file($promptPath)
-        && str_contains($result['stderr'], 'Release evidence exceeds the configured AI context bound.'),
-        'Oversized immutable metadata must fail promptly without creating a partial prompt.');
+    $check(!$result['timed_out'] && $result['exit_code'] === 0 && is_file($promptPath),
+        'Large immutable metadata collection failed: ' . $result['stderr']);
+    // The collector labels subject/body separately; raw commit-message layout
+    // is not its output format. Require the entire body after its actual label.
+    $metadataPrompt = (string) file_get_contents($promptPath);
+    $check(str_contains($metadataPrompt, "SUBJECT Large immutable commit metadata\n")
+        && str_contains($metadataPrompt, 'BODY ' . rtrim($metadataBody) . "\n"),
+        'Large immutable metadata must remain exportable without truncation or provider invocation.');
 } finally {
     if (is_dir($fixture)) {
         $iterator = new RecursiveIteratorIterator(

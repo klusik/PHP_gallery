@@ -155,7 +155,8 @@ export function qualificationAssets(record,name,owner,files,adapters={}) {
     if (String(run.id)!==record.run_id || String(run.run_attempt)!==record.run_attempt
         || latest.run_attempt!==run.run_attempt || run.status!=='completed' || run.conclusion!=='success'
         || run.repository?.full_name!==record.repository || run.head_branch!==record.branch
-        || run.path!=='.github/workflows/release-qualification.yml' || run.event!=='push') throw new Error('BLOCKED foreign or superseded asset run/attempt.');
+        || run.path!=='.github/workflows/release-qualification.yml'
+        || !['push','workflow_dispatch'].includes(run.event)) throw new Error('BLOCKED foreign or superseded asset run/attempt.');
     const jobs=call(root+'/attempts/'+record.run_attempt+'/jobs?per_page=100');
     if (jobs.total_count!==jobs.jobs?.length || jobs.total_count>=100) throw new Error('BLOCKED incomplete asset job inventory.');
     const owners=jobs.jobs.filter(job=>(job.name===owner || job.name.endsWith(' / '+owner)) && job.status==='completed' && job.conclusion==='success'
@@ -240,7 +241,13 @@ export function loadDraftAssets(record,adapters={}) {
             if (previous.draft!==false || previous.prerelease!==false || previous.tag_name!==record.previous_stable_tag
                 || peelReleaseTag(call,record.repository,record.previous_stable_tag).commit_sha!==record.previous_stable_sha
                 || git('git',['show',record.previous_release_candidate_sha+':winapp/VERSION'])!==version
-                || git('git',['diff','--name-only',record.previous_release_candidate_sha,record.candidate_sha,'--','winapp',':!winapp/tests',':!winapp/README.md']).trim()) throw new Error('BLOCKED predecessor companion source/version changed.');
+                || git('git',[
+                    'diff','--name-only',record.previous_release_candidate_sha,
+                    record.candidate_sha,'--','winapp',':!winapp/tests',
+                    ':!winapp/README.md',':!winapp/AGENTS.md'
+                ]).trim()) {
+                throw new Error('BLOCKED predecessor companion source/version changed.');
+            }
             pair=new Map();
             for (const name of [installerName,'winapp-update.json']) {
                 const matches=previous.assets?.filter(asset=>asset.name===name);

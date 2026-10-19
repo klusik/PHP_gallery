@@ -383,7 +383,9 @@ namespace {
     // The selector reads immutable main identity; release execution still owns no main mutation.
     $releaseExecutionWorkflow = strstr($releaseWorkflow, "\n  prepare:") ?: '';
     check(str_contains($releaseWorkflow, "      - 'release/v_*'")
-        && !str_contains($releaseWorkflow, 'workflow_dispatch:')
+        && str_contains($releaseWorkflow, 'workflow_dispatch:')
+        && str_contains($releaseWorkflow, 'external_notes:')
+        && str_contains($releaseWorkflow, 'notes_mode:')
         && str_contains($releaseWorkflow, 'Initialize or reuse immutable origin after release push')
         && str_contains($releaseWorkflow, 'name: Prepare release candidate')
         && str_contains($releaseWorkflow, 'contents: write')
@@ -511,10 +513,22 @@ namespace {
 
     $patchNotesAi = (string) file_get_contents(dirname(__DIR__) . '/.github/scripts/patch_notes_ai.php');
     check(str_contains($releaseWorkflow, 'name: Upload rejected AI release-note response')
-        && str_contains($releaseWorkflow, "failure() && steps.notes-before.outputs.complete == 'false'")
+        && str_contains($releaseWorkflow, "steps.validate-copilot.outcome == 'failure'")
         && str_contains($releaseWorkflow, 'name: release-notes-rejected-response')
         && str_contains($releaseWorkflow, 'path: ${{ runner.temp }}/release-notes-response.md'),
-        'Rejected AI prose must remain available as a failure-only artifact without uploading prompts or authentication diagnostics.');
+        'Rejected AI prose must remain available after an optional provider failure without uploading authentication diagnostics.');
+    check(str_contains($releaseWorkflow, 'name: release-notes-handoff')
+        && str_contains($releaseWorkflow, 'path: ${{ runner.temp }}/release-notes-handoff/')
+        && str_contains($releaseWorkflow, "steps.notes.outputs.pending == 'true'")
+        && str_contains($releaseWorkflow, "needs.prepare.result == 'success' && needs.prepare.outputs.notes_pending == 'true'")
+        && strpos($releaseWorkflow, 'id: notes-route') < strpos($releaseWorkflow, 'id: copilot-install')
+        && str_contains($releaseWorkflow, 'EXTERNAL_NOTES: ${{ inputs.external_notes }}'),
+        'External handoff must precede provider work, pass pasted data only through environment and skip release qualification while pending.');
+    preg_match('/      - id: apply-copilot\n(.*?)(?=      - name: Upload)/s', $releaseWorkflow, $applyCopilotStep);
+    check(($applyCopilotStep[1] ?? '') !== ''
+        && !str_contains($applyCopilotStep[1], 'continue-on-error:')
+        && str_contains($applyCopilotStep[1], "steps.validate-copilot.outcome == 'success'"),
+        'Validated note application remains mandatory: filesystem failures cannot become optional provider failures.');
     check(preg_match('/name: Build complete release-note evidence prompt\n(?:(?!      - name:).)*timeout-minutes: 2/s', $releaseWorkflow) === 1,
         'Local release evidence collection must have its own two-minute workflow deadline.');
     check(str_contains($patchNotesAi, 'EVIDENCE - TEXT DIFF:')

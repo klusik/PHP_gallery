@@ -126,7 +126,7 @@ jobs:
           const record=JSON.parse(readFileSync(e.RUNNER_TEMP+'/qualification-bootstrap/release-candidate.json','utf8'));
           const listing=JSON.parse(readFileSync(e.RUNNER_TEMP+'/checks.json','utf8'));
           const identity='release:'+e.QUALIFICATION_RUN+':'+run.run_attempt+':'+e.CANDIDATE_SHA;
-          if (run.path!=='.github/workflows/release-qualification.yml' || run.event!=='push'
+          if (run.path!=='.github/workflows/release-qualification.yml' || !['push','workflow_dispatch'].includes(run.event)
             || run.head_branch!==e.RELEASE_BRANCH || run.repository?.full_name!==e.GITHUB_REPOSITORY
             || run.status!=='completed' || run.conclusion!=='success' || String(run.id)!==e.QUALIFICATION_RUN
             || record.repository!==e.GITHUB_REPOSITORY || record.branch!==e.RELEASE_BRANCH

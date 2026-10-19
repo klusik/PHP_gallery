@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.137.4}
+\newcommand{\version}{0.137.5}
 \newcommand{\manualdate}{19~oktober~2026}
 
 \hypersetup{
@@ -3200,16 +3200,25 @@ bygget hanterar även tidiga godkännanden; lyckad Git-push av~ursprunget kräve
 ingen omedelbar REST-avläsning.
 
 En commit som~tagits in~i skyddad develop är~kvalificerad.
-Kör \ui{Begin Release} från~\codeword{develop} i~GitHub Actions och~ange
-versionen inklusive \codeword{v_}, till~exempel \codeword{v_0.136.2}.
-Arbetsflödet skapar \codeword{release/v_0.136.2} på~den exakta develop-SHA
-som valts för~körningen; det kvalificerar eller publicerar inte utgåvan.
+Kör \ui{Begin Release} från~grenen med~önskad workflow-version i~GitHub
+Actions, normalt \codeword{develop}, och~ange versionen inklusive
+\codeword{v_}, till~exempel \codeword{v_0.136.2}. Arbetsflödet läser separat
+aktuell skyddad develop, låser dess SHA, skapar \codeword{release/v_0.136.2}
+och~startar uttryckligen sammansättningen på~releasegrenen. Nya arbetsflöden
+och~skript används innan de~når main. BASIC/FULL upprepas inte.
+Initieringen verifierar ursprunglig förvaltare, startkörning, försök och~version;
+enbart botidentiteten räcker inte. Återförsök återanvänder en~oförändrad ref
+och~undviker dubbla aktiva byggen. Om~releasegrenen redan har~avancerat,
+fortsätt dess sammansättning direkt. PR-godkännande och~publicering förblir
+separata förvaltaråtgärder.
 Utgåvan kör inte om~BASIC/FULL och~hämtar inga äldre kvalificeringsarkiv.
 Registrerade versionsmarkörer i~Markdown tillåter radbrytning inom samma
 stycke. Förberedelse och~konsistenskontroll bevarar radbrytningen och~historiska
 versionsuppgifter och~uppdaterar endast det registrerade värdet.
 Enbart ändringar i~WinApp-README, agentinstruktioner och~tester bygger inte
 om~installeraren; ändrade körnings- och~byggindata kräver fortfarande nybygge.
+Samma undantag används när utkastets bilagor återanvänder verifierade publicerade
+installationsfiler. Återställning efter taggning bevarar Q, M och~taggen.
 Den~låser A, uppdaterar metadata och~patch notes, anpassar alla fyra
 manualutgåvorna, bygger deras PDF med~låst TinyTeX och~reproducerbar tid
 och~skapar till~sist inventering och~fullständigt manifest.
@@ -3217,7 +3226,22 @@ och~skapar till~sist inventering och~fullständigt manifest.
 version och~verifierade befintliga filer.
 
 Färdig redaktionell text bevaras; annars används begränsad Copilot-generering
-med~fullständiga Git-underlag. Ogiltig text tillämpas aldrig.
+med~fullständiga Git-underlag. Före leverantörsinstallationen tillåter automatiken
+högst 100000 diffbyte, 20 källfiler och~180000 promptbyte. Större ändringar,
+saknade autentiseringsuppgifter, uttryckligt externt läge eller~Copilot-,
+kvot- och~utdatafel ger~\codeword{NOTES_PENDING}. Hämta
+\codeword{release-notes-handoff} från~Actions-körningen och~ge
+\filepath{prompt.txt} till~vald AI. Artefakten sparas 30 dagar och~innehåller
+hela mallen, commitunderlag, källdiff och~hashmanifest. Granska AI:ns enradiga
+JSON-svar, välj samma releasegren under~\ui{Release qualification > Run workflow},
+klistra in~svaret i~\codeword{external_notes} och~starta fortsättningen.
+Paketets README innehåller CLI-kommandot när~knappen ännu inte finns registrerad
+på~main. JSON bevarar Markdown-radbrytningar. Repository, version, gren,
+käll-SHA och~prompthash måste stämma med~nybyggda underlag; ändrade underlag
+kräver ett~nytt paket. Färdiga anteckningar förblir styrande. Vänteläget håller
+ingen runner igång och~skapar varken förberedd commit, kvalificeringskontroll,
+manualbygge eller~release-PR. Fortsättningen lägger inte till BASIC/FULL.
+Ogiltig text tillämpas aldrig.
 Byggfel, saknade bilagor och~inaktuella genererade hashvärden stoppar
 sammansättningen, ingen ny källkvalificering. Livscykelschema 4 sparar
 develop-källan och~sammansättningsresultatet.

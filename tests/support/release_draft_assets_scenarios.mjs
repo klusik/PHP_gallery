@@ -120,7 +120,8 @@ const run={id:99,run_attempt:2,status:'completed',conclusion:'success',repositor
     path:'.github/workflows/release-qualification.yml',event:'push'};
 const jobs=['Prepare manual release assets','Prepare Windows companion installer'].map(name=>({name,status:'completed',conclusion:'success',run_id:99,run_attempt:2,
     started_at:'2026-10-12T10:00:00Z',completed_at:'2026-10-12T10:02:00Z'}));
-let published=false,uploadCount=0,mode='',corruptDownload=false,changedSource=false;
+let published=false,uploadCount=0,mode='',corruptDownload=false;
+let changedPaths=[];
 const uploaded=new Map(),previous=new Map();
 let sequence=100;
 const add=(name,bytes,target=uploaded)=>{const id=sequence++;target.set(id,{row:{id,name,state:'uploaded',size:bytes.length,digest:'sha256:'+assetHash(bytes)},bytes});};
@@ -145,7 +146,13 @@ const download=path=>{
 const git=(program,args)=>{
     assert.equal(program,'git');
     if (args[0]==='hash-object' || args[0]==='rev-parse') return q;
-    if (args[0]==='diff') return changedSource?'winapp/app.py':'';
+    if (args[0]==='diff') {
+        const excluded=args.filter(value=>value.startsWith(':!'))
+            .map(value=>value.slice(2));
+        return changedPaths.filter(path=>!excluded.some(
+            prefix=>path===prefix || path.startsWith(prefix+'/')
+        )).join('\n');
+    }
     const path=args[1].split(':').slice(1).join(':');
     if (path==='winapp/VERSION') return version;
     if (path==='PATCH_NOTES.md') return files.get('release-notes.md').toString().trim();
@@ -160,12 +167,28 @@ const upload=(repo,id,name,bytes)=>{
 const adapters={api:call,download,git,upload};
 const loaded=loadDraftAssets(record,adapters);
 assert.equal(loaded.size,14);
+run.event='workflow_dispatch';
+assert.equal(loadDraftAssets(record,adapters).size,14,
+    'Resumed editorial assembly retains the same exact-attempt authenticated assets.');
+run.event='pull_request';
+assert.throws(()=>loadDraftAssets(record,adapters),/foreign or superseded/,
+    'A foreign event cannot substitute release-assembly evidence.');
+run.event='push';
 for (const [name,bytes] of files) assert.ok(loaded.get(name).equals(bytes));
 verifyInstallerPair(pair,version);
 assert.throws(()=>verifyInstallerPair(pair,'2.0.0'),/version/);
 assert.throws(()=>verifyInstallerPair(new Map([...pair].map(([name,bytes])=>[name,name===exe?Buffer.from('corrupt'):bytes])),version),/digest/);
 assert.equal(loadDraftAssets({...record,installer_required:false},adapters).size,14);
-changedSource=true;assert.throws(()=>loadDraftAssets({...record,installer_required:false},adapters),/source\/version/);changedSource=false;
+changedPaths=['winapp/AGENTS.md','winapp/README.md','winapp/tests/fixture.py'];
+assert.equal(loadDraftAssets({...record,installer_required:false},adapters).size,14,
+    'Documentation and fixtures reuse the authenticated predecessor installer.');
+for (const path of ['winapp/app.py','winapp/build.ps1','winapp/AGENTS.md.py']) {
+    changedPaths.push(path);
+    assert.throws(()=>loadDraftAssets({...record,installer_required:false},adapters),
+        /source\/version/,'Runtime/build changes cannot reuse the predecessor.');
+    changedPaths.pop();
+}
+changedPaths=[];
 const original=artifacts[0].created_at;artifacts[0].created_at='2026-10-11T10:01:00Z';
 assert.throws(()=>loadDraftAssets(record,adapters),/attempt window/);artifacts[0].created_at=original;
 run.run_attempt=3;assert.throws(()=>loadDraftAssets(record,adapters),/run\/attempt/);run.run_attempt=2;

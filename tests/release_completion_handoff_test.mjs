@@ -131,6 +131,8 @@ try {
 const workflow=readFileSync(new URL('../.github/workflows/release-promotion.yml',import.meta.url),'utf8');
 assert.match(workflow,/workflow_dispatch:/);
 assert.match(workflow,/REQUESTED_RUN/);
+assert.ok(workflow.includes("!['push','workflow_dispatch'].includes(run.event)"),
+    'Automatic completion authenticates resumed assembly as well as pushed assembly.');
 assert.match(workflow,/probe-child/);
 assert.match(workflow,/ref: \$\{\{ env.CANDIDATE_SHA \}\}/);
 assert.doesNotMatch(workflow,/environment:|gh release (create|edit)|refs\/heads\/main['"]?\s*$/m);

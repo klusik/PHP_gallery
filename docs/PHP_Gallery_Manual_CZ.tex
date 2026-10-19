@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.137.4}
+\newcommand{\version}{0.137.5}
 \newcommand{\manualdate}{19.~října~2026}
 
 \hypersetup{
@@ -3175,10 +3175,17 @@ ID checků a~stav větví. Jiné chyby běh zastaví; FULL se neopakuje.
 
 \subsection{Sestavení vydání z~kvalifikovaného develop}
 
-V~GitHub Actions spusťte \ui{Begin Release} z~větve \codeword{develop}
-a~zadejte číslo verze včetně \codeword{v_}, například \codeword{v_0.136.2}.
-Workflow vytvoří \codeword{release/v_0.136.2} přesně na SHA developu
-vybraném pro~toto spuštění; vydání tím nekvalifikuje ani nepublikuje.
+V~GitHub Actions spusťte \ui{Begin Release} z~větve obsahující požadovanou
+verzi workflow, obvykle \codeword{develop}, a~zadejte číslo verze včetně
+\codeword{v_}, například \codeword{v_0.136.2}. Workflow samostatně načte
+aktuální chráněný develop, zafixuje jeho SHA, vytvoří
+\codeword{release/v_0.136.2} a~výslovně na~této větvi spustí sestavení.
+Nové workflow a~skripty se~použijí ještě před přijetím do~main.
+BASIC/FULL se~neopakuje. Inicializace ověří původního správce, zahajovací
+běh, pokus a~verzi; samotná identita bota nestačí. Opakování může použít
+neposunutou větev a~nespouští druhé aktivní sestavení. Pokud release větev
+již pokročila, pokračujte přímo v~jejím sestavení. Schválení PR
+a~publikování zůstávají samostatnými úkony správce.
 
 Před schválením PR sestavení zachová historii zafixovaného main i~připravený
 strom. Po~schválení a~vytvoření tagu posune nezměněný develop přímo na~skutečný
@@ -3203,6 +3210,8 @@ odstavce. Příprava a~kontroly konzistence zachovávají rozložení i~historic
 údaje a~aktualizují pouze registrovanou hodnotu.
 Samotné změny WinApp README, pokynů pro~agenty a~testů nevyvolávají nové
 sestavení instalátoru; změny běhových a~sestavovacích vstupů je~stále vyžadují.
+Stejné výjimky používá čtení příloh draftu při~převzetí ověřeného publikovaného
+instalátoru. Obnova po~tagování zachovává Q, M i~tag.
 Z~tohoto zdroje založte samostatně schválenou \codeword{release/v_X.Y[.Z]}.
 Release neopakuje BASIC/FULL ani nestahuje starší kvalifikační archivy.
 Zafixuje zdroj A, upraví metadata a~patch notes, sjednotí všechny čtyři
@@ -3212,7 +3221,22 @@ Změněné vstupy WinApp vyžadují instalátor; jinak se~zachová jeho
 samostatná verze a~ověřené existující soubory.
 
 Hotový redakční text zůstává zachován; jinak se~použije ohraničené
-generování Copilotem z~úplných Git podkladů. Neplatný výstup se~neaplikuje.
+generování Copilotem z~úplných Git podkladů. Automatická cesta připustí nejvýše
+100000 bajtů diffu, 20 zdrojových souborů a~180000 bajtů promptu ještě před
+přípravou poskytovatele. Větší změny, chybějící přihlašovací údaje, výslovná
+externí cesta či chyba Copilotu, kvóty nebo výstupu vytvoří
+\codeword{NOTES_PENDING}. Z~běhu Actions stáhněte
+\codeword{release-notes-handoff} a~předejte \filepath{prompt.txt} zvolené AI.
+Artefakt uchovávaný 30 dní obsahuje úplnou šablonu, podklady commitů, zdrojový
+diff a~manifest hashů. Zkontrolujte jednořádkovou JSON odpověď, ve~\ui{Release
+qualification > Run workflow} vyberte stejnou release větev, vložte odpověď
+do~\codeword{external_notes} a~spusťte pokračování. README balíčku uvádí
+příkaz CLI, pokud tlačítko ještě není registrováno na~main. JSON zachová nové
+řádky Markdownu. Repozitář, verze, větev, SHA zdroje a~hash promptu musí
+odpovídat znovu sestaveným podkladům; změněné podklady vyžadují nový balíček.
+Hotové poznámky zůstávají rozhodující. Čekání nedrží runner ani nevytváří
+připravený commit, kvalifikační check, příručky či release PR. Pokračování
+nepřidává BASIC/FULL. Neplatný výstup se~neaplikuje.
 Chyba sestavení, chybějící příloha či zastaralý generovaný hash zastaví
 sestavení, nikoli novou kvalifikaci zdrojů. Schéma životního cyklu 4 ukládá
 kvalifikovaný zdroj develop a~výsledek sestavení.

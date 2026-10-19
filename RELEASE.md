@@ -27,18 +27,32 @@ protections. This installs infrastructure, not a production version.
 
 ## Prepare the release
 
-In GitHub Actions, select **Begin Release**, run it from `develop` and enter the
-version including `v_` (for example `v_0.136.2`). It creates
-`release/v_0.136.2` at the exact `develop` commit selected for that run. The
-workflow only creates the branch; it does not qualify or publish the release.
+In GitHub Actions, select **Begin Release** and enter the version including
+`v_` (for example `v_0.136.2`). Select a branch containing the intended workflow
+revision; `develop` includes newly integrated release changes before main does.
+The workflow reads current protected `develop` independently of that selector,
+freezes its exact SHA and creates `release/v_0.136.2` there. It explicitly
+dispatches **Release qualification** on the release ref, using that source's
+workflow/scripts. Token-created branch events are not a continuation mechanism.
+No preliminary release with old CI or extra BASIC/FULL is needed.
+
+The dispatch binds frozen source, initiating run and attempt. Initialization
+authenticates the original maintainer through server-owned Begin Release
+metadata, including its version-specific run title; a bot actor alone grants no
+authority. Ordinary external-note continuation still requires an existing origin.
+Retries reuse an unchanged source ref and avoid dispatching a duplicate active
+assembly. A moved release ref is preserved: continue its existing assembly run
+instead of restarting Begin Release. Failed creation/dispatch is reconciled by
+readback on the next invocation, never by overwriting an existing release.
 The automated release workflow:
 
 1. Freezes A and the actual main/release heads and resolves the existing stable
    tag through protected main merge history. Existing tags/origins stay
    immutable.
 2. Updates version/date metadata and aligns all four maintained manual editions.
-3. Preserves completed editorial patch notes or generates their missing prose
-   from complete Git evidence using the existing bounded Copilot workflow.
+3. Preserves completed editorial patch notes. Small changes use bounded Copilot
+   generation; large changes or unavailable Copilot export an external AI
+   handoff and wait for source-bound editorial notes before proceeding.
 4. Compiles all four PDFs with the locked TinyTeX/package inputs and
    reproducible
    release timestamp. Compiler/build errors remain assembly failures.
@@ -51,11 +65,50 @@ The automated release workflow:
    attachments,
    then opens the exact bot-authored PR to main.
 
-Patch-note generation keeps the complete source diff, uses bounded UTF-8 slices
-and SHA-256 manifests where needed, and validates editorial headings/prose.
-Missing responses or invalid prose block assembly; they never truncate evidence.
-A completed maintainer-written version section skips generation. Credentials and
-prompts are excluded from diagnostic attachment uploads.
+Patch-note routing measures the complete source diff before installing or calling
+Copilot. Automatic mode admits at most 100000 diff bytes, 20 changed source files
+and 180000 complete prompt bytes: one evidence request plus final synthesis.
+Larger changes, missing credentials or explicit `notes_mode: external` spend no
+Copilot requests. Installation, provider, quota, timeout and rejected-prose
+failures switch to external handoff. No billing API or extra billing permission
+is required; a configured token does not prove remaining allowance.
+
+**NOTES_PENDING** is a successful handoff, not successful release qualification.
+The workflow retains `release-notes-handoff` for 30 days and stops without a
+waiting runner, prepared commit, manuals build, release PR or qualification
+record/check. Its immutable origin remains on the release branch. Evidence,
+artifact-upload, filesystem and actual assembly errors still fail normally.
+Completed maintainer-written version sections skip all generation.
+
+To continue:
+
+1. Download that Actions artifact and give `prompt.txt` to your chosen AI. It
+   includes the full template, complete commit metadata, changed paths and the
+   entire source diff. `changes.diff`, `canonical-prompt.txt`, the actual template,
+   `manifest.json` and `README.md` are also included. Generated release files,
+   PDFs and installer outputs remain excluded from the source diff.
+2. Review and copy the AI's single-line JSON response, including its identity
+   fields. JSON escapes preserve Markdown newlines through GitHub's input box.
+3. In **Release qualification -> Run workflow**, select the same
+   `release/v_X.Y[.Z]` branch and paste that JSON into `external_notes`.
+   Leave `notes_mode` as `auto`, then run. A maintainer dispatch reuses the
+   existing origin; it cannot initialize a release from another branch.
+
+The continuation rebuilds the canonical prompt and checks repository, version,
+release branch, source SHA and prompt SHA-256 before applying the same strict
+editorial validation. A changed source/template needs a fresh bundle. Notes are
+never executed, and invalid supplied JSON fails without changing the release.
+The existing PR approval, version completion and manual publication follow once
+assembly finishes; continuation adds no BASIC/FULL.
+
+GitHub may not show **Run workflow** until the dispatch trigger reaches main.
+The already registered workflow can also be dispatched at the release ref:
+save the AI response as `response.json`, then run
+`gh workflow run release-qualification.yml --ref release/v_X.Y.Z --field external_notes=@response.json`.
+The bundle repeats this command with its exact branch. No preliminary protected
+branch edit or new release is needed. Provider credentials and stderr remain
+outside both handoff and rejected-response artifacts. Rejected provider prose
+alone remains available for seven days.
 
 Registered Markdown version markers accept word wrapping within a paragraph,
 including LF and CRLF line endings. Preparation changes only the registered
@@ -66,6 +119,10 @@ Windows installer change detection excludes `winapp/README.md`,
 `winapp/AGENTS.md`, and tests. Changes to these documentation and fixture paths
 alone reuse the verified existing installer; runtime and build inputs still
 require a fresh installer.
+
+The draft attachment reader applies these same exclusions before reusing the
+previous published installer. Post-tag attachment recovery keeps the original
+candidate, merge, tag, and verified asset bytes unchanged.
 
 ## Review, tag and publish
 

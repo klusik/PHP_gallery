@@ -2422,6 +2422,7 @@
         "tests/outbound_http_transport_test.php",
         "tests/patch_notes_ai_chunks_test.php",
         "tests/patch_notes_ai_evidence_test.php",
+        "tests/patch_notes_handoff_test.php",
         "tests/patch_notes_links_render_test.php",
         "tests/php_source_contract_test.php",
         "tests/picture_manager_copy_test.php",
