@@ -2432,7 +2432,8 @@ Průzkum databáze inventarizuje objekty schématu, odkazy, kategorie vlastnictv
 
 Pohled Soubory uvádí také počty a~velikosti originálů PDF a~hudby
 spolu s~celkovým součtem médií. Aktualizovat vše po dávkách fotografií
-projde nejvýše dvě fyzické galerie za krok, včetně galerií bez fotografií.
+načte součty PDF, hudby a~OFP z~databáze. První běh doplní chybějící evidenci
+nejvýše ze dvou fyzických galerií za krok, včetně galerií bez fotografií.
 Počítají se i~skryté, soukromé, vypnuté a~nestáhnutelné soubory. Fyzické
 kopie zabírají místo samostatně; playlist Smart galerie žádnou kopii
 nepřidává. Stránky převedené z~PDF už patří mezi fotografie. Indexy, zámky,
@@ -2440,8 +2441,20 @@ stav převodů, neindexované soubory, Koš a~ostatní cache sem nepatří.
 Nečitelné indexy a~nebezpečné či~chybějící soubory vyvolají upozornění
 na neúplné měření bez oprav. Běžné stránky čtou uložené výsledky; změny
 příloh je označí za zastaralé, pokud se podaří zapsat pomocnou revizi.
-Po aktualizaci starých statistik pouze fotografií spusťte Aktualizovat vše.
-Ruční obnovení vyžadují také změny souborů mimo aplikaci.
+Po migraci databázové evidence spusťte Aktualizovat vše jednou. Nahrání,
+nahrazení a~smazání příloh udržuje součty z~potvrzených metadat; další běhy
+už neotevírají soubory příloh ani jejich indexy. Změny souborů mimo aplikaci
+vyžadují před obnovením zneplatnit příslušnou evidenci podle
+\codeword{docs/GALLERY\_PDF.md}. Kontroly odvozených fotografií zůstávají.
+Pro rozbor výkonu exportujte nejnovější událost Admin logu
+\codeword{storage.refresh\_all.completed}. ID běhu propojí průběžné záznamy;
+souhrn obsahuje celkový čas i~časy fází, počty požadavků a~médií, sledovaná
+souborová volání a~načtené bajty, počty zdrojů inspekce a~omezený seznam časů
+ANALYZE po tabulkách. Volání aplikace nejsou měřením fyzického I/O disku.
+Soukromé cesty ani oprávnění workflow se nelogují; chyba logu nezastaví aktualizaci.
+Chyba povinného dotazu na fotografie nebo předčasně prázdná dávka derivátů
+označí souborovou fázi za neúspěšnou a~zachová poslední úspěšný snímek.
+Další fáze pokračují s~celkovým částečným výsledkem; chyba dotazu neznamená dokončení.
 
 \index{s00225@statistiky úložiště}
 \index{u00243@úplná zpráva}

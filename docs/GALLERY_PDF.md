@@ -204,8 +204,13 @@ alongside indexed photographs, thumbnails and DNG display masters. It shows
 separate original counts/bytes and an additive overall media total. The existing
 picture-only total and photograph charts keep their prior meanings.
 
-After bounded photo-derivative work, an independent gallery keyset observes at
-most two physical galleries per request. Galleries without images are included.
+After bounded photo-derivative work, SQL aggregates PDF/music/OFP counts and bytes
+from `gallery_attachment_storage`. Uploads, replacement and deletion update only
+their category from committed metadata. Repeat updates do not open attachment
+directories, JSON indexes or original payloads. Smart unions never add copies.
+
+The first update after migration imports absent categories from at most two
+physical galleries per request. Galleries without images are included.
 The attachment owner reads the existing bounded indexes and stats only their
 expected opaque-ID originals plus a valid established SimBrief OFP path; it does
 not decode or hash complete payloads. Actual confined sizes count even when a
@@ -224,7 +229,61 @@ Size accounting is not content-integrity or codec validation.
 Ordinary Admin page loads only read cached results. Supported web attachment
 mutations update an advisory revision to mark old snapshots and active jobs
 stale. A failed optional revision write preserves the successful upload response;
-manual Update all still remeasures files. Out-of-band changes require that manual
-refresh. Photo-only snapshots/jobs from older installations are not reused for
-the new coverage; the first new snapshot requires Update all. No media rewrite
-or schema migration is involved.
+failed category writes remove the derived row when possible, allowing the next
+Update all to import it again. If the database outage also prevents invalidation,
+the safe error log identifies the owner/category needing reconciliation.
+Out-of-band filesystem changes require explicit invalidation before Update all.
+An operator may remove derived rows for the affected gallery with
+`DELETE FROM gallery_attachment_storage WHERE gallery_id = <verified-id>`;
+this deletes no original, index, preference or authorization data. The next
+Update all imports only the missing categories. Invalidate the cached storage
+snapshot through the existing refresh workflow. Migration
+`202610190001_gallery_attachment_storage.php` creates the accounting table;
+older job v2 state is retained but not resumed as a v3 import. No media rewrite
+is involved. Missing/unavailable schema fails the report visibly.
+
+### Update all run diagnostics
+
+Export the newest **`storage.refresh_all.completed`** Admin log entry when
+investigating refresh performance. Its non-authorizing `run_id` links `started`,
+`resumed`, `progress` and `stage_completed` checkpoints. Completion is emitted
+after terminal state is saved, including partial failures; replaying a terminal
+request does not emit it again. A long phase logs progress every ten completed
+steps. A started run with no completion may have stopped before reaching its end.
+
+The context includes UTC start/checkpoint times, PHP/CMS/OS versions, configured
+PHP limits, batch sizes, per-stage outcomes, phase request counts, accumulated
+server work, the longest step and three slowest request positions, PHP request
+peak memory, final media counts/bytes and import warnings. Up to 128 per-table
+ANALYZE timings identify slow/failing tables; an explicit omitted count bounds
+larger installations. Final inspection counts identify schema tables and migration
+and code sources read from the existing inspection result, without rescanning.
+
+`wall_seconds` includes browser/network pauses, cache/lock/log overhead and idle
+time between requests. `phase_work_seconds` sums monotonic phase callback timings;
+`other_wall_seconds` is the remaining wall time, not a network-only measurement.
+Nested operation timings overlap: do not sum them into a total. `db.*` metrics
+count named model/service operations rather than every SQL statement.
+
+Instrumented file calls report attempts, returned false results, thrown exceptions,
+elapsed/max seconds and bytes returned by JSON/OFP-magic reads. Missing files can
+produce expected false results. `fs.derivative.*` distinguishes photograph
+derivative probes; attachment counters distinguish index reads, original checks,
+path checks and category imports. Counts describe application API calls, not
+physical disk reads: PHP/OS caches may satisfy them. Path-builder and inspection
+internals are not fully instrumented; inspection source counts remain separate.
+No filename, private path, SQL text, media content, workflow capability or raw
+exception message is recorded. Metrics are bounded at 256 numeric keys per step,
+with discarded updates counted. Logging never performs extra media reads or
+queries for measurement, and failure to publish a diagnostic does not fail work.
+Workflows resumed from pre-diagnostics state have `complete_observation=false`;
+their timings cover only the observed continuation. Ordinary media requests keep
+the numeric observer disabled.
+
+Photo keyset reads bind both the cursor and LIMIT as PDO integers, including
+emulated prepares. Required source/batch database errors propagate to the existing
+failed-stage handler instead of becoming an empty result. A batch that ends before
+the frozen expected photo count is reached is also a failure, recorded by
+`counts.unexpected_empty_image_batches`. These failures preserve the last successful
+snapshot and allow the later database/inspection stages to continue with an overall
+partial result. A completed file stage must actually process its expected photos.

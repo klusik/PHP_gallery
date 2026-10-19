@@ -2457,8 +2457,9 @@ Database inspection inventories schema objects, references, ownership categories
 \subsection{Storage statistics and~Complete report}
 
 The~Files view also shows counts and~bytes for~PDF and~music originals,
-plus an~overall media total. Update all follows photo batches with at~most
-two physical galleries per~step, including galleries without photos. Hidden,
+plus an~overall media total. Update all reads PDF/music/OFP totals from
+the~database after photo batches. The~first update imports missing accounting
+from at~most two physical galleries per~step, including empty galleries. Hidden,
 private and~disabled files and~tracks with downloads denied still consume
 storage. Separate physical copies count separately; Smart playlists add no~copy.
 Generated PDF pages already count as~photographs. Indexes, locks, conversion
@@ -2466,8 +2467,20 @@ state, unindexed files, Trash and~other caches are~outside these media totals.
 Unreadable indexes or~unsafe/missing files produce partial-accounting warnings
 without repair. Passive pages read cached results; attachment mutations mark
 them stale when the~advisory revision write succeeds. After upgrading from
-photo-only snapshots, run Update all to~obtain the~new measurement. External
-filesystem changes also require this explicit refresh.
+photo-only snapshots, apply the~accounting migration and run Update all once.
+Attachment uploads, replacements and deletions maintain category totals from
+committed metadata; repeat updates do~not reopen attachment files or~indexes.
+External filesystem changes require explicit accounting invalidation before
+Update all; see \codeword{docs/GALLERY\_PDF.md}. Photo derivative checks remain.
+For performance diagnostics, export the~latest Admin log event
+\codeword{storage.refresh\_all.completed}. Its~run ID links progress checkpoints;
+the~summary includes wall/phase times, request counts, media totals, observed file
+calls and~read bytes, inspection source counts and~bounded per-table ANALYZE times.
+File-call counts are~application observations, not~physical disk I/O. Private paths
+and~workflow capabilities are~excluded; a~logging failure does~not~fail the~update.
+Required photo-query errors and~prematurely empty derivative batches fail
+the~file stage and~preserve the~last successful snapshot. Later stages continue
+with an~overall partial result; a~query failure never means completed scanning.
 
 \index{storage statistics}
 \index{Complete report}

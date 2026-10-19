@@ -52,6 +52,92 @@ namespace Gallery\Core {
 
 namespace Gallery\Models {
     /**
+     * Store fixture category totals with production import collision semantics.
+     * @param int $galleryId Registered fixture owner.
+     * @param string $kind PDF, music or OFP category.
+     * @param int $count Known original count.
+     * @param int $bytes Known original bytes.
+     * @param int $errors Accounting warning count, initially zero.
+     * @param bool $onlyMissing Preserve newer rows during import, initially false.
+     * @return void Persist the in-memory ledger row.
+     */
+    function gallery_attachment_storage_model_store(
+        int $galleryId, string $kind, int $count, int $bytes,
+        int $errors = 0, bool $onlyMissing = false
+    ): void {
+        if ($onlyMissing && isset($GLOBALS['storage_ledger'][$galleryId][$kind])) return;
+        $GLOBALS['storage_ledger'][$galleryId][$kind] = [
+            'count' => $count, 'bytes' => $bytes, 'errors' => $errors,
+        ];
+    }
+
+    /**
+     * Drop one optional category for a later import.
+     * @param int $galleryId Fixture owner.
+     * @param string $kind Category whose persistence failed.
+     * @return void Remove only derived accounting.
+     */
+    function gallery_attachment_storage_model_forget(int $galleryId, string $kind): void
+    {
+        unset($GLOBALS['storage_ledger'][$galleryId][$kind]);
+    }
+
+    /**
+     * Find owners missing one of the three structural categories.
+     * @param int $limit Maximum fixture owners returned.
+     * @return list<array{id:int,folder_path:string,missing_kinds:list<string>}>
+     *     Pending registered owners and their absent category identities.
+     */
+    function gallery_attachment_storage_model_pending(int $limit): array
+    {
+        $GLOBALS['storage_gallery_limits'][] = $limit;
+        $owners = array_slice(array_values(array_filter(
+            $GLOBALS['storage_fixture_galleries'] ?? [],
+            static fn(array $row): bool => count(
+                $GLOBALS['storage_ledger'][$row['id']] ?? []
+            ) < 3
+        )), 0, $limit);
+        return array_map(static fn(array $row): array => $row + [
+            'missing_kinds' => array_values(array_diff(['pdf', 'music', 'ofp'],
+                array_keys($GLOBALS['storage_ledger'][$row['id']] ?? []))),
+        ], $owners);
+    }
+
+    /**
+     * Count pending fixture owners without recording a filesystem observation.
+     * @return int Number of owners with incomplete durable accounting.
+     */
+    function gallery_attachment_storage_model_pending_count(): int
+    {
+        return count(array_filter(
+            $GLOBALS['storage_fixture_galleries'] ?? [],
+            static fn(array $row): bool => count(
+                $GLOBALS['storage_ledger'][$row['id']] ?? []
+            ) < 3
+        ));
+    }
+
+    /**
+     * Aggregate registered owners without consulting the fixture filesystem.
+     * @return array{pdf_count:int,pdf_bytes:int,music_count:int,music_bytes:int,
+     *     errors:int} Durable original totals.
+     */
+    function gallery_attachment_storage_model_summary(): array
+    {
+        $summary = ['pdf_count' => 0, 'pdf_bytes' => 0,
+            'music_count' => 0, 'music_bytes' => 0, 'errors' => 0];
+        foreach ($GLOBALS['storage_fixture_galleries'] ?? [] as $gallery) {
+            foreach ($GLOBALS['storage_ledger'][$gallery['id']] ?? [] as $kind => $row) {
+                $prefix = $kind === 'ofp' ? 'pdf' : $kind;
+                $summary[$prefix . '_count'] += $row['count'];
+                $summary[$prefix . '_bytes'] += $row['bytes'];
+                $summary['errors'] += $row['errors'];
+            }
+        }
+        return $summary;
+    }
+
+    /**
      * Observe fixture data for the actual storage-job fingerprint.
      * @return array{0:array{image_count:int,original_bytes:int},
      *     1:array{gallery_count:int}} Deterministic source/owner aggregates.
@@ -99,6 +185,9 @@ namespace Gallery\Models {
     function admin_storage_statistics_model_image_rows(
         bool $hasDerivativeVersion
     ): array {
+        if (($GLOBALS['storage_fail_read'] ?? '') === 'source') {
+            throw new \RuntimeException('Fixture source query failed.');
+        }
         return $GLOBALS['storage_fixture_images'] ?? [];
     }
 
@@ -115,6 +204,10 @@ namespace Gallery\Models {
         int $limit,
         bool $hasDerivativeVersion
     ): array {
+        if (($GLOBALS['storage_fail_read'] ?? '') === 'batch') {
+            throw new \RuntimeException('Fixture batch query failed.');
+        }
+        if (!empty($GLOBALS['storage_force_empty_batch'])) return [];
         return array_slice(array_values(array_filter(
             admin_storage_statistics_model_image_rows($hasDerivativeVersion),
             static fn(array $row): bool => $row['image_id'] > $lastImageId
@@ -377,6 +470,7 @@ namespace {
                 'ofp_pdf_file' => 'simbrief-ofp.pdf'], JSON_THROW_ON_ERROR));
         file_put_contents($musicDirectory . '/unindexed.bin', 'Excluded orphan');
 
+        \Gallery\Core\storage_observer_start();
         $state = \Gallery\Services\admin_storage_statistics_start_job();
         assert_admin_storage_same(4, $state['total'],
             'job counts one photo plus three independent physical owners');
@@ -411,6 +505,43 @@ namespace {
             'overall total adds each physical media category once');
         assert_admin_storage_same(0, $snapshot['attachment_scan_errors'],
             'complete confined indexes have no accounting warnings');
+        $importMetrics = \Gallery\Core\storage_observer_finish();
+        assert_admin_storage_same(1, $importMetrics['fs.read.music_index.calls'],
+            'first import records its actual music-index read');
+        assert_admin_storage_same(5, $importMetrics['fs.read.ofp_magic.bytes'],
+            'OFP validation records only the PDF magic bytes actually read');
+        assert_admin_storage_same(3, $importMetrics['counts.imported_gallery_rows'],
+            'import diagnostics retain registered gallery observations');
+        // Remove every source directory temporarily: a second update must use
+        // durable totals and must not load attachment files or their indexes.
+        $offlineRoot = $fixtureRoot . '-offline';
+        rename($fixtureRoot, $offlineRoot);
+        try {
+            \Gallery\Core\storage_observer_start();
+            \Gallery\Services\admin_storage_statistics_start_job();
+            $databaseOnly = \Gallery\Services\admin_storage_statistics_process_job();
+            $repeatMetrics = \Gallery\Core\storage_observer_finish();
+            assert_admin_storage_same(0, count(array_filter(
+                array_keys($repeatMetrics),
+                static fn(string $key): bool => str_starts_with($key, 'fs.')
+            )), 'repeat DB updates report no instrumented attachment filesystem calls');
+            assert_admin_storage_same('complete', $databaseOnly['status'],
+                'repeat updates complete while attachment directories are offline');
+            assert_admin_storage_same($snapshot['pdf_bytes'],
+                $databaseOnly['snapshot']['pdf_bytes'],
+                'repeat updates retain database PDF totals without disk access');
+            assert_admin_storage_same($snapshot['music_bytes'],
+                $databaseOnly['snapshot']['music_bytes'],
+                'repeat updates retain database music totals without disk access');
+        } finally {
+            rename($offlineRoot, $fixtureRoot);
+        }
+        \Gallery\Models\gallery_attachment_storage_model_store(
+            $owner['id'], 'pdf', 99, 99, 0, true
+        );
+        assert_admin_storage_same($snapshot['pdf_bytes'],
+            \Gallery\Models\gallery_attachment_storage_model_summary()['pdf_bytes'],
+            'legacy import cannot overwrite totals published by a mutation');
         $observations = count($GLOBALS['storage_gallery_limits']);
         \Gallery\Services\admin_storage_statistics();
         \Gallery\Services\admin_storage_statistics_cached_snapshot();
@@ -440,6 +571,9 @@ namespace {
         assert_admin_storage_same($pdfBytes,
             file_get_contents($fixtureRoot . '/documents/simbrief-ofp.pdf'),
             'independent JSON refresh never rewrites an old disabled PDF');
+        assert_admin_storage_same($snapshot['pdf_bytes'],
+            \Gallery\Models\gallery_attachment_storage_model_summary()['pdf_bytes'],
+            'PDF OFF retains the stored OFP bytes in database accounting');
         $deniedPdf = \Gallery\Services\simbrief_description_save_pdf_for_gallery(
             'https://example.invalid/never-fetch-this.pdf',
             $fixtureRoot . '/must-not-exist.pdf'
@@ -451,13 +585,49 @@ namespace {
             'disabled direct imports cannot create an original');
         $GLOBALS['storage_media_features'] = [];
 
+        $retainedSnapshot = \Gallery\Services\app_setting(
+            \Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''
+        );
+        foreach (['source', 'batch'] as $failedOwner) {
+            $GLOBALS['storage_fail_read'] = $failedOwner === 'source' ? 'source' : '';
+            $refused = false;
+            try {
+                \Gallery\Services\admin_storage_statistics_start_job();
+                $GLOBALS['storage_fail_read'] = $failedOwner;
+                \Gallery\Services\admin_storage_statistics_process_job();
+            } catch (RuntimeException) {
+                $refused = true;
+            } finally {
+                $GLOBALS['storage_fail_read'] = '';
+            }
+            assert_admin_storage_same(true, $refused,
+                'database failure must not masquerade as source/batch exhaustion');
+        }
+        \Gallery\Services\admin_storage_statistics_start_job();
+        $GLOBALS['storage_force_empty_batch'] = true;
+        $refused = false;
+        try {
+            \Gallery\Services\admin_storage_statistics_process_job();
+        } catch (RuntimeException) {
+            $refused = true;
+        } finally {
+            $GLOBALS['storage_force_empty_batch'] = false;
+        }
+        assert_admin_storage_same(true, $refused,
+            'premature empty derivative batches must fail instead of claiming completion');
+        assert_admin_storage_same($retainedSnapshot,
+            \Gallery\Services\app_setting(\Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''),
+            'failed source/batch work must preserve the last successful snapshot');
+
         $GLOBALS['storage_fixture_images'] = [];
         $emptyPhotoJob = \Gallery\Services\admin_storage_statistics_start_job();
-        assert_admin_storage_same('running', $emptyPhotoJob['status'],
-            'a photo-free installation still starts its gallery accounting phase');
-        assert_admin_storage_same(3, $emptyPhotoJob['total'],
-            'the photo-free job includes every registered physical gallery');
+        assert_admin_storage_same('complete', $emptyPhotoJob['status'],
+            'a photo-free installation with imported totals completes immediately');
+        assert_admin_storage_same(0, $emptyPhotoJob['total'],
+            'already imported galleries need no filesystem work');
 
+        $GLOBALS['storage_fixture_images'] = [['image_id' => 1,
+            'gallery_id' => 1, 'filename' => 'test.jpg', 'file_size' => 123]];
         \Gallery\Services\admin_storage_statistics_start_job();
         \Gallery\Services\gallery_attachment_storage_changed();
         $state = \Gallery\Services\admin_storage_statistics_process_job();

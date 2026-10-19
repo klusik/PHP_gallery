@@ -36,6 +36,12 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/../runtime/storage_observer.php';
+
+use function Gallery\Core\storage_observer_call;
+
+require_once __DIR__ . '/gallery_pdf_settings.php';
+
 /**
  * Detect gallery-owned document metadata before loading its presentation module.
  *
@@ -85,7 +91,7 @@ function simbrief_ofp_visitor_access_allowed(array $gallery, bool $isAdmin): boo
  * The manifest is a local attachment index. Never accept a file or URL supplied
  * by a caller. The safe legacy path is supported for OFPs imported before #103.
  *
- * @param array<string,mixed> $gallery Physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Physical gallery identity/path.
  * @return ?string Validated absolute PDF path or null when unavailable.
  */
 function simbrief_ofp_local_pdf_path(array $gallery): ?string
@@ -99,16 +105,21 @@ function simbrief_ofp_local_pdf_path(array $gallery): ?string
         || !function_exists('Gallery\\Core\\path_inside')) {
         return null;
     }
-    $root = realpath(gallery_abs_path($relative));
-    $galleriesRoot = realpath(galleries_root());
+    $root = storage_observer_call('fs.realpath',
+        static fn(): string|false => realpath(gallery_abs_path($relative)));
+    $galleriesRoot = storage_observer_call('fs.realpath', static fn(): string|false => realpath(galleries_root()));
     if ($root === false || $galleriesRoot === false || !\Gallery\Core\path_inside($galleriesRoot, $root)) {
         return null;
     }
     $manifestPath = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
-    if (!is_file($manifestPath) || is_link($manifestPath) || (int) filesize($manifestPath) > 32768) {
+    if (!storage_observer_call('fs.is_file', static fn(): bool => is_file($manifestPath))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link($manifestPath))
+        || (int) storage_observer_call('fs.filesize',
+            static fn(): int|false => filesize($manifestPath)) > 32768) {
         return null;
     }
-    $json = @file_get_contents($manifestPath);
+    $json = storage_observer_call('fs.read.ofp_manifest',
+        static fn(): string|false => @file_get_contents($manifestPath));
     $manifest = is_string($json) ? json_decode($json, true) : null;
     if (!is_array($manifest)
         || ($manifest['format'] ?? '') !== 'php_gallery_simbrief_ofp_manifest_v1'
@@ -116,23 +127,26 @@ function simbrief_ofp_local_pdf_path(array $gallery): ?string
         return null;
     }
     $candidate = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
-    if (!is_file($candidate) || is_link($candidate)) {
+    if (!storage_observer_call('fs.is_file', static fn(): bool => is_file($candidate))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link($candidate))) {
         return null;
     }
-    $path = realpath($candidate);
-    $size = $path !== false ? @filesize($path) : false;
+    $path = storage_observer_call('fs.realpath', static fn(): string|false => realpath($candidate));
+    $size = $path !== false
+        ? storage_observer_call('fs.filesize', static fn(): int|false => @filesize($path)) : false;
     if ($path === false || !\Gallery\Core\path_inside($root, $path)
         || $size === false || $size < 8 || $size > 26214400) {
         return null;
     }
-    $handle = @fopen($path, 'rb');
+    // PHP cannot express resource|false natively; preserve the original stream.
+    $handle = storage_observer_call('fs.fopen.ofp', static fn(): mixed => @fopen($path, 'rb'));
     if ($handle === false) {
         return null;
     }
     try {
-        $magic = fread($handle, 5);
+        $magic = storage_observer_call('fs.read.ofp_magic', static fn(): string|false => fread($handle, 5));
     } finally {
-        fclose($handle);
+        storage_observer_call('fs.fclose.ofp', static fn(): bool => fclose($handle));
     }
     return $magic === '%PDF-' ? $path : null;
 }
@@ -375,7 +389,7 @@ function simbrief_ofp_dispatch_prefill(array $gallery, ?array $flightMap = null)
  * This service deliberately accepts a local path to enable isolated fixture
  * testing. It never touches source JSON, gallery metadata, route or images.
  *
- * @param array<string,mixed> $gallery Gallery selected by authenticated ID.
+ * @param array{id:int,folder_path:string} $gallery Gallery selected by authenticated ID.
  * @param string $source Local validated upload temporary file.
  * @param string $provenance One of the explicit attachment origins.
  * @param bool $replace Explicit replacement request and confirmation.
@@ -517,6 +531,9 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
             throw new \RuntimeException('The PDF manifest could not be installed; the previous attachment was retained.');
         }
         $stageManifest = '';
+        gallery_attachment_storage_record(
+            (int) $gallery['id'], 'ofp', [['size' => $written]]
+        );
         return ['sha256' => (string) hash_file('sha256', $pdf), 'bytes' => $written, 'provenance' => $provenance];
     } finally {
         foreach ([$stagePdf, $stageManifest, $backup] as $temporary) {
@@ -531,7 +548,7 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
 
 /**
  * Delete the attached SimBrief OFP PDF while preserving its flight-plan data and generated images.
- * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical owner.
  * @param bool $confirmed Whether the caller explicitly confirmed deletion.
  * @return bool True when the PDF attachment was removed; false when it was already absent.
  * @throws \RuntimeException When confirmation is missing or safe atomic metadata update fails.
@@ -603,6 +620,7 @@ function simbrief_ofp_delete_manual_pdf(array $gallery, bool $confirmed = false)
         @unlink($backupPdf);
         $backupPdf = '';
         $restorePdf = '';
+        gallery_attachment_storage_record((int) $gallery['id'], 'ofp', []);
         return true;
     } finally {
         if ($backupPdf !== '' && $restorePdf !== '' && is_file($backupPdf)) {

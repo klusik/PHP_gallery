@@ -267,6 +267,28 @@ Live production acceptance and installation-wide incidence remain unknown.
 
 ## Attachment masters and accounting snapshots
 
+Storage statistics no longer degrade required photo-query failures to empty
+collections. A local 2026-10-19 run reported 1,744 source photos but zero derivative
+batch rows and false completion. The owner now binds PDO cursor/LIMIT parameters
+as integers, propagates required-query errors and rejects premature exhaustion.
+The previous catch-and-empty behavior is retired because it cannot distinguish
+database failure from completed work. Existing optional thumbnail-schema policy
+is unchanged. Real database regression covers native/emulated prepares; job
+regression covers failures and retained snapshots. Other-host incidence is unknown.
+
+Database attachment accounting retains legacy sidecar ownership. A bounded
+first-use import reads missing PDF/music/OFP categories, including empty ones;
+subsequent updates use SQL totals. This permanent upgrade bridge belongs to
+Admin storage jobs and may retire only after every supported installation has
+durable accounting coverage; installation coverage is currently unknown.
+Explicit reconciliation invalidates derived rows before reimporting out-of-band
+changes. Optional accounting failures retain committed originals, log safe
+owner/category diagnostics and drop stale categories where possible. A complete
+database outage may also prevent invalidation and requires operator recovery.
+The regression owner `tests/admin_storage_statistics_test.php` covers repeated
+updates with source directories offline and insert-if-absent mutation protection.
+Hosted execution is required to establish regression evidence.
+
 Owners: canonical capability registry, shared upload/editor controllers,
 attachment readers and Admin storage statistics. Independent PDF/music masters
 default ON when no preference exists, including upgrades; fresh seeding preserves
@@ -278,7 +300,7 @@ enabled. The tab is omitted only when all three capabilities are OFF; an old
 selected-tab URL then normalizes to Identity rather than an empty panel.
 
 Photo-only cached snapshots/jobs are derived state and cannot establish complete
-attachment coverage. The new v3 snapshot/v2 job keys do not rewrite original data
+attachment coverage. The v3 snapshot/v3 job keys do not rewrite original data
 or old derived bytes; the first new measurement requires explicit Update all.
 The existing optional snapshot argument remains supported for pure/legacy
 photo-only consumers and contributes zero attachment bytes when omitted.
@@ -287,9 +309,11 @@ The attachment accounting owner omits corrupt indexes and unsafe/unreadable
 originals with visible partial-coverage warnings, preserving independent readable
 categories and all original bytes. This is permanent read-only reporting behavior,
 not permission to repair indexes. A post-commit advisory revision write may fail
-without failing the successful attachment response; the next manual scan still
-measures files. This permanent fallback avoids duplicate retries after optional
-reporting failures. Out-of-band file changes require manual refresh.
+without failing the successful attachment response. Missing derived categories
+are reimported by the next update; complete database-outage recovery requires
+explicit invalidation as described above. This permanent fallback avoids duplicate
+retries after optional reporting failures. Out-of-band file changes require
+accounting invalidation followed by manual refresh.
 
 Regression owners: canonical feature core/inventory, real MySQL/MariaDB HTTP
 workflow and the existing storage-statistics fixture. Real-host library sizes,

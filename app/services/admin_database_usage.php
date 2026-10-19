@@ -38,6 +38,10 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/../runtime/storage_observer.php';
+
+use function Gallery\Core\storage_observer_call;
+
 use function Gallery\Models\admin_database_usage_model_analyze_table;
 use function Gallery\Models\admin_database_usage_model_current_database_name;
 use function Gallery\Models\admin_database_usage_model_table_rows;
@@ -209,16 +213,20 @@ function admin_database_usage_recompute_statistics(): array
  *
  * @param int $offset Zero-based position of the next table to analyze.
  * @param int $batchSize Maximum number of tables to analyze in this request.
- * @return array<string, mixed> Batch progress and bounded failure counts.
+ * @return array{ok:bool,processed:int,total:int,failed_table_count:int,complete:bool,
+ *     table_timings:list<array{table:string,seconds:float,ok:bool}>} Batch progress,
+ *     failures and bounded per-table timings without SQL or exception text.
  */
 function admin_database_usage_recompute_statistics_batch(int $offset, int $batchSize = ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE): array
 {
-    $databaseName = admin_database_usage_current_database_name();
+    $databaseName = storage_observer_call('db.current_database_name',
+        static fn(): string => admin_database_usage_current_database_name());
     if ($databaseName === '') {
         throw new \RuntimeException('Current database name could not be detected.');
     }
 
-    $rows = admin_database_usage_table_rows($databaseName);
+    $rows = storage_observer_call('db.table_metadata',
+        static fn(): array => admin_database_usage_table_rows($databaseName));
     $tableNames = admin_database_usage_recomputable_table_names($rows);
     // ANALYZE can change size estimates, so use a stable name order for the browser cursor.
     sort($tableNames, SORT_NATURAL | SORT_FLAG_CASE);
@@ -235,13 +243,21 @@ function admin_database_usage_recompute_statistics_batch(int $offset, int $batch
     $batchSize = max(1, min(ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE, $batchSize));
     $batch = array_slice($tableNames, $offset, $batchSize);
     $failed = 0;
+    $tableTimings = [];
 
     foreach ($batch as $tableName) {
+        $started = hrtime(true);
+        $ok = true;
         try {
-            admin_database_usage_model_analyze_table($tableName);
+            storage_observer_call('db.analyze_table',
+                static fn(): array => admin_database_usage_model_analyze_table($tableName));
         } catch (Throwable) {
             $failed++;
+            $ok = false;
         }
+        // Convert monotonic nanoseconds to seconds; one record per bounded table.
+        $tableTimings[] = ['table' => $tableName,
+            'seconds' => max(0.0, (hrtime(true) - $started) / 1e9), 'ok' => $ok];
     }
 
     $processed = $offset + count($batch);
@@ -251,6 +267,7 @@ function admin_database_usage_recompute_statistics_batch(int $offset, int $batch
         'total' => $total,
         'failed_table_count' => $failed,
         'complete' => $processed >= $total,
+        'table_timings' => $tableTimings,
     ];
 }
 

@@ -94,6 +94,7 @@ try {
             // populated-upgrade regression. A report-level PASS
             // can otherwise conceal a required per-file SKIP.
             $requiredTests = array_merge($requiredTests, [
+                'gallery_attachment_storage_database_test.php',
                 'telemetry_storage_compaction_database_test.php',
                 'installer_first_install_test.php',
                 'gallery_workflow_integration_test.php',

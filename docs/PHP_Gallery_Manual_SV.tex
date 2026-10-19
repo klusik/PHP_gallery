@@ -2437,7 +2437,8 @@ Databasundersökning inventerar schemaobjekt, referenser, ansvarskategorier, lag
 \subsection{Lagringsstatistik och fullständig rapport}
 
 Filvyn visar också antal och~byte för PDF- och~musikoriginal samt en
-samlad mediesumma. Efter fotobatcher mäter Uppdatera allt högst två fysiska
+samlad mediesumma. Efter fotobatcher läser Uppdatera allt PDF-, musik- och~OFP-summor
+från databasen. Första körningen importerar saknade poster från högst två fysiska
 gallerier per steg, även gallerier utan foton. Dolda, privata, avstängda
 filer och~spår utan nedladdning räknas också. Fysiska kopior räknas separat;
 smarta spellistor skapar ingen kopia. Konverterade PDF-sidor räknas redan
@@ -2445,8 +2446,20 @@ som foton. Index, lås, konverteringstillstånd, oindexerade filer, Papperskorg
 och~andra cacher ingår inte. Oläsbara index eller osäkra/saknade filer ger
 synlig ofullständig mätning utan reparation. Vanliga sidor läser cache;
 bilageändringar markerar den som gammal när revisionsskrivningen lyckas.
-Efter uppgradering av äldre fotostatistik och~vid externa filändringar
-behövs Uppdatera allt för en ny mätning.
+Efter databasmigreringen behövs en första körning av Uppdatera allt.
+Uppladdning, ersättning och~borttagning uppdaterar summorna från sparade metadata;
+senare körningar öppnar inga bilagefiler eller~index. Externa filändringar kräver
+att berörda bokföringsposter ogiltigförklaras före uppdateringen; se
+\codeword{docs/GALLERY\_PDF.md}. Kontroller av fotoderivat finns kvar.
+För prestandaanalys exporterar du den~senaste Admin-logghändelsen
+\codeword{storage.refresh\_all.completed}. Körnings-ID:t kopplar ihop framsteg;
+sammanfattningen innehåller total- och~fastider, antal anrop och~mediefiler,
+observerade filanrop och~lästa byte, antal inspektionskällor samt begränsade
+ANALYZE-tider per tabell. Filanrop mäter inte fysisk disk-I/O. Privata sökvägar
+och~workflow-behörigheter loggas inte; ett~loggfel stoppar inte uppdateringen.
+Fel i~obligatoriska fotofrågor och~för~tidigt tomma derivatbatcher gör att
+filfasen misslyckas och~bevarar den~senaste lyckade ögonblicksbilden.
+Senare faser fortsätter med ett~delvis resultat; frågefel betyder inte slutförd skanning.
 
 \index{l00147@lagringsstatistik}
 \index{f00087@fullständig rapport}

@@ -1,5 +1,35 @@
 # Testing Guide
 
+Attachment accounting coverage lives in `admin_storage_statistics_test.php`
+and `gallery_attachment_storage_database_test.php`. The former runs a second
+refresh with every attachment directory temporarily offline and verifies that
+durable PDF/music totals remain available. It retains the original missing-file,
+symlink and corrupt-index import checks. The database fixture uses the actual
+SQL model inside a rolled-back disposable transaction to verify insert-if-absent
+import, additive PDF/OFP totals, last-track deletion and targeted invalidation.
+The central database workflow requires it on each supported engine; source BASIC
+alone does not execute these runtime/database regressions.
+The database fixture belongs to FULL rather than the bounded quick feedback
+subset. The CI selector fixture retains exact required lists for both browser
+modes. Runtime route probes guard against loading refresh diagnostics merely to
+render a cached Admin dashboard. The existing storage Model owns ledger SQL too,
+so durable attachment accounting introduces no separate model include.
+
+`admin_storage_refresh_test.php` additionally captures lifecycle diagnostics to
+verify stable non-authorizing run correlation, resume counts, per-phase request
+counts, exception-path timing, terminal replay deduplication, safe field selection
+and optional log failure. It exercises passive behavior, callback result/exception
+preservation, read-byte counters and the observer's bounded metric cardinality.
+The real-file storage fixture checks index/OFP read counts during first import
+and zero instrumented attachment filesystem calls during a repeat database read.
+No diagnostic check adds production file reads or a parallel audit registry.
+
+The attachment database fixture also calls the real photo-keyset Model with both
+native and emulated PDO prepares, checking a bounded first row and true exhaustion.
+The storage-job fixture injects source-query failure, batch-query failure and a
+premature empty batch; each must refuse completion and retain the last successful
+snapshot. Native integer bindings preserve LIMIT semantics on supported engines.
+
 `telemetry_visitor_http_test.php` runs a real single-worker disposable PHP server
 and the production registration/socket/controller flow. It proves public-triggered
 worker arrival, private token transport, five-minute fanout suppression, later-visit

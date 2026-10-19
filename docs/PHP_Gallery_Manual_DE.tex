@@ -2478,8 +2478,9 @@ Die Datenbankprüfung erfasst Schemaobjekte, Referenzen, Zuordnungskategorien, A
 \subsection{Speicherstatistik und Gesamtbericht}
 
 Die Dateiansicht zeigt auch Anzahl und~Bytes der~PDF- und~Musikoriginale
-sowie eine Gesamtmediensumme. Nach Fotobatches prüft Alles aktualisieren
-höchstens zwei physische Galerien je Schritt, auch Galerien ohne Fotos.
+sowie eine Gesamtmediensumme. Nach Fotobatches liest Alles aktualisieren
+PDF-, Musik- und~OFP-Summen aus der~Datenbank. Der~erste Lauf importiert fehlende
+Einträge aus höchstens zwei physischen Galerien je Schritt, auch ohne Fotos.
 Verborgene, private, deaktivierte und~nicht herunterladbare Dateien zählen
 weiter. Physische Kopien zählen einzeln; Smart-Listen erzeugen keine Kopie.
 Konvertierte PDF-Seiten zählen bereits als Fotos. Indizes, Sperren,
@@ -2487,8 +2488,22 @@ Konvertierungszustand, nicht indexierte Dateien, Papierkorb und~andere Caches
 sind ausgeschlossen. Unlesbare Indizes oder unsichere/fehlende Dateien
 führen zu~sichtbarer Teilmessung ohne Reparatur. Normale Seiten lesen den~Cache;
 Anhangsänderungen markieren ihn bei erfolgreicher Revisionsspeicherung als
-veraltet. Nach dem Upgrade alter Fotostatistiken sowie externen Dateiänderungen
-ist Alles aktualisieren für~eine neue Messung erforderlich.
+veraltet. Nach der~Datenbankmigration ist ein erster Aktualisierungslauf nötig.
+Upload, Ersetzen und~Löschen pflegen die~Summen aus bestätigten Metadaten;
+weitere Läufe öffnen keine Anhangsdateien oder~Indizes. Externe Dateiänderungen
+erfordern vor dem Aktualisieren eine ausdrückliche Invalidierung der~Einträge;
+siehe \codeword{docs/GALLERY\_PDF.md}. Fotoderivate werden weiterhin geprüft.
+Für die~Leistungsanalyse exportieren Sie den~neuesten Admin-Logeintrag
+\codeword{storage.refresh\_all.completed}. Seine Lauf-ID verbindet Fortschritte;
+die~Zusammenfassung enthält Gesamt- und~Phasenzeiten, Anfrage- und~Medienzahlen,
+beobachtete Dateiaufrufe und~gelesene Bytes, Quellenzahlen der~Inspektion sowie
+begrenzte ANALYZE-Zeiten je Tabelle. Dateiaufrufe messen keine physischen
+Datenträgerzugriffe. Private Pfade und~Workflow-Berechtigungen fehlen im~Log;
+ein~Protokollfehler lässt die~Aktualisierung weiterlaufen.
+Fehler erforderlicher Fotoabfragen und~vorzeitig leere Derivatbatches lassen
+die~Dateiphase fehlschlagen und~bewahren den~letzten erfolgreichen Stand.
+Spätere Phasen laufen mit einem teilweisen Gesamtergebnis weiter;
+ein~Abfragefehler bedeutet keinen abgeschlossenen Scan.
 
 \index{s00229@Speicherstatistik}
 \index{g00139@Gesamtbericht}

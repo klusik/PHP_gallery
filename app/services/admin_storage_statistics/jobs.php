@@ -18,24 +18,26 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-use function Gallery\Models\admin_storage_statistics_model_gallery_count;
-use function Gallery\Models\admin_storage_statistics_model_gallery_rows_after_id;
-
 /**
  * Start a manual, browser-driven storage statistics job.
  *
  * Source-photo statistics are calculated once from database rows. Generated
- * images and registered galleries then use separate bounded keyset phases;
- * galleries with no photos still contribute attachment bytes.
+ * images and galleries missing durable accounting then use separate bounded
+ * phases; imported galleries contribute SQL totals without filesystem work.
  *
  * @return StorageJobState Running progress, or the completed empty snapshot.
  */
 function admin_storage_statistics_start_job(): array
 {
-    $fingerprint = admin_storage_statistics_fingerprint();
-    $rows = admin_storage_statistics_image_rows();
-    $source = admin_storage_statistics_source_summary($rows);
-    $galleryCount = admin_storage_statistics_model_gallery_count();
+    $fingerprint = \Gallery\Core\storage_observer_call('db.source_fingerprint',
+        static fn(): string => admin_storage_statistics_fingerprint());
+    $rows = \Gallery\Core\storage_observer_call('db.source_image_rows',
+        static fn(): array => admin_storage_statistics_image_rows());
+    $source = \Gallery\Core\storage_observer_call('cpu.source_summary',
+        static fn(): array => admin_storage_statistics_source_summary($rows));
+    $galleryCount = \Gallery\Models\gallery_attachment_storage_model_pending_count();
+    \Gallery\Core\storage_observer_add('counts.source_image_rows', count($rows));
+    \Gallery\Core\storage_observer_add('counts.pending_attachment_galleries', $galleryCount);
 
     $job = [
         'job_id' => admin_storage_statistics_job_id(),
@@ -56,6 +58,8 @@ function admin_storage_statistics_start_job(): array
         'attachments' => admin_storage_statistics_empty_attachments(),
         'thumbnail_metadata_used' => admin_storage_statistics_thumbnail_metadata_available(),
     ];
+    \Gallery\Core\storage_observer_add($job['thumbnail_metadata_used']
+        ? 'counts.thumbnail_database_mode' : 'counts.thumbnail_filesystem_mode');
 
     if ((int) $job['total'] <= 0) {
         return admin_storage_statistics_finish_job($job);
@@ -84,7 +88,8 @@ function admin_storage_statistics_process_job(
         ];
     }
 
-    $currentFingerprint = admin_storage_statistics_fingerprint();
+    $currentFingerprint = \Gallery\Core\storage_observer_call('db.source_fingerprint',
+        static fn(): string => admin_storage_statistics_fingerprint());
     if ($currentFingerprint !== ''
         && (string) ($job['fingerprint'] ?? '') !== ''
         && !hash_equals((string) $job['fingerprint'], $currentFingerprint)) {
@@ -99,8 +104,16 @@ function admin_storage_statistics_process_job(
     $batchSize = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, $batchSize));
     $lastImageId = max(0, (int) ($job['last_image_id'] ?? 0));
     $rows = $job['image_processed'] < $job['image_total']
-        ? admin_storage_statistics_image_rows_after_id($lastImageId, $batchSize)
+        ? \Gallery\Core\storage_observer_call('db.image_batch',
+            static fn(): array => admin_storage_statistics_image_rows_after_id($lastImageId, $batchSize))
         : [];
+    \Gallery\Core\storage_observer_add('counts.derivative_image_rows', count($rows));
+    if ($rows === [] && $job['image_processed'] < $job['image_total']) {
+        \Gallery\Core\storage_observer_add('counts.unexpected_empty_image_batches');
+        throw new \RuntimeException(
+            'Storage image batch ended before the expected images were processed.'
+        );
+    }
     $generated = admin_storage_statistics_normalize_generated_summary(
         is_array($job['generated'] ?? null) ? $job['generated'] : []
     );
@@ -125,10 +138,11 @@ function admin_storage_statistics_process_job(
         );
         $job['attachments'] = $attachments;
         $job['last_gallery_id'] = $batch['last_id'];
-        $job['gallery_processed'] = $batch['processed'] === 0
-            ? $job['gallery_total']
-            : min($job['gallery_total'],
-                $job['gallery_processed'] + $batch['processed']);
+        $job['gallery_processed'] = min($job['gallery_total'],
+            $job['gallery_processed'] + $batch['processed']);
+        if (\Gallery\Models\gallery_attachment_storage_model_pending_count() === 0) {
+            $job['gallery_processed'] = $job['gallery_total'];
+        }
     }
     $processed = $job['image_processed'] + $job['gallery_processed'];
     $job['generated'] = $generated;
@@ -184,31 +198,48 @@ function admin_storage_statistics_empty_attachments(): array
 /**
  * Accumulate one bounded gallery batch after loading its attachment owner.
  * @param StorageAttachmentSummary $summary Mutable known byte/count totals.
- * @param int $lastGalleryId Exclusive physical-gallery cursor, initially zero.
+ * @param int $lastGalleryId Last observed owner for public progress, initially zero;
+ *     pending database categories, rather than this cursor, select import work.
  * @param int $limit Requested count, clamped to the gallery observation ceiling.
- * @return array{last_id:int,processed:int} Durable next cursor and observed rows.
+ * @return array{last_id:int,processed:int} Last imported ID and observed owners;
+ *     no pending owners returns zero without loading attachment readers.
  */
 function admin_storage_statistics_attachment_batch(
     array &$summary,
     int $lastGalleryId,
     int $limit
 ): array {
+    $rows = \Gallery\Models\gallery_attachment_storage_model_pending(
+        max(1, min(ADMIN_STORAGE_STATISTICS_GALLERY_BATCH_SIZE, $limit))
+    );
+    if ($rows === []) {
+        $summary = \Gallery\Models\gallery_attachment_storage_model_summary();
+        return ['last_id' => $lastGalleryId, 'processed' => 0];
+    }
     // Direct CLI consumers explicitly include the attachment entry points.
     // HTTP work loads that same reviewed owner only for an explicit scan.
     if (!function_exists(__NAMESPACE__ . '\\gallery_attachment_storage_summary')) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
     }
-    $rows = admin_storage_statistics_model_gallery_rows_after_id(
-        $lastGalleryId,
-        max(1, min(ADMIN_STORAGE_STATISTICS_GALLERY_BATCH_SIZE, $limit))
-    );
     foreach ($rows as $row) {
         $gallery = ['id' => (int) $row['id'],
             'folder_path' => $row['folder_path']];
-        $measured = gallery_attachment_storage_summary($gallery);
-        foreach ($measured as $key => $value) $summary[$key] += $value;
+        foreach ($row['missing_kinds'] as $kind) {
+            \Gallery\Core\storage_observer_add('counts.import_' . $kind . '_category_attempts');
+            $measured = \Gallery\Core\storage_observer_call('work.import_category.' . $kind,
+                static fn(): array => gallery_attachment_storage_summary($gallery, $kind));
+            $prefix = $kind === 'ofp' ? 'pdf' : $kind;
+            // Import never overwrites totals published by a concurrent writer.
+            \Gallery\Models\gallery_attachment_storage_model_store(
+                $gallery['id'], $kind, $measured[$prefix . '_count'],
+                $measured[$prefix . '_bytes'], $measured['errors'], true
+            );
+            \Gallery\Core\storage_observer_add('counts.import_' . $kind . '_categories_processed');
+        }
         $lastGalleryId = $gallery['id'];
+        \Gallery\Core\storage_observer_add('counts.imported_gallery_rows');
     }
+    $summary = \Gallery\Models\gallery_attachment_storage_model_summary();
     return ['last_id' => $lastGalleryId, 'processed' => count($rows)];
 }
 
@@ -282,6 +313,7 @@ function admin_storage_statistics_snapshot_from_summaries(
  */
 function admin_storage_statistics_finish_job(array $job): array
 {
+    $job['attachments'] = \Gallery\Models\gallery_attachment_storage_model_summary();
     $job['status'] = 'complete';
     $job['processed'] = (int) ($job['total'] ?? $job['processed'] ?? 0);
     $job['updated_at'] = time();

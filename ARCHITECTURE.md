@@ -28,6 +28,38 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
 ## Gallery music ownership
 
+Attachment accounting uses the SQL-only model
+`app/models/admin_storage_statistics.php`. The existing PDF settings service
+publishes counts/bytes from committed original metadata. PDF/music editor writers
+invoke it under their existing file-operation lock; SimBrief download publication
+records the original after writing its manifest. The Admin storage
+job imports missing categories once through the deferred attachment reader, then
+aggregates database rows on repeat updates. Import never overwrites a concurrent
+mutation row. The existing storage-statistics SQL owner also owns the derived
+ledger; no extra model file or public filesystem scan is introduced.
+Hosted preparation establishes actual closure counts
+against the unchanged runtime budgets. Original sidecars remain authoritative
+for delivery/integrity. Reporting failure never rolls back committed media.
+Pre-edit generated-plan text contains 98 module-shaped entries and 4,505 PHP
+file references (436 unique); these raw counts are observational, not compiled
+route metrics. The reviewed ratchet baseline records 96 modules with an allowance
+of two transitive modules, so that allowance is already consumed. No new logical
+root is introduced. File allowance remains four files or five percent; direct
+duplicate entries may not grow beyond the reviewed composition baseline.
+
+Explicit Update all diagnostics use the passive numeric Core observer
+`app/runtime/storage_observer.php` and the private part
+`app/services/admin_storage_refresh/diagnostics.php`. The workflow activates a
+fresh observation window only around its existing phase callback, persists merged
+counters between requests and emits a sanitized terminal summary after saving
+the terminal state. Media/index readers and the accounting Model can observe
+their existing operations without importing the workflow service. Typed callback
+sites are registered individually in the runtime dependency contract. Expected
+delta for this logging batch: two source files and no new logical root; the
+previously recorded 98-module generated plan and unchanged ratchet allowances
+remain the review reference. Hosted preparation owns actual closure verification.
+Phase/operation timings overlap, and native file-call counts are not OS I/O proof.
+
 The public gallery controller prepares canonical presentation links only when
 authorized photos and lightbox capability are available. Views render translucent
 PDF/music summary cards that wrap with the gallery's available width. The shared

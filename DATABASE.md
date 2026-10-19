@@ -27,21 +27,39 @@ The lazy `presentation_gallery_settings` health resolver shares the same schema
 authority and lightbox capability gate. Link-only fullscreen/exclusive choices
 do not require additional persistence.
 
-PDF/music capability and accounting changes add no tables, columns or migrations.
+Attachment accounting adds migration
+`202610190001_gallery_attachment_storage.php`. The derived
+`gallery_attachment_storage` table has one `(gallery_id, kind)` primary key per
+PDF, music or OFP category, including empty categories. It stores count, bytes
+and import warnings. The gallery foreign key cascades deletion; restoring or
+importing a gallery leaves its missing categories for the next bounded import.
+Original ownership and integrity metadata remain in the existing sidecar indexes.
+Committed attachment writers publish category totals from their validated
+metadata. `Update all` imports missing categories once, then reads SQL sums.
+Import uses insert-if-absent semantics so a concurrent writer's totals win.
+An unavailable accounting table fails the report instead of silently returning
+zero or repeatedly scanning all galleries; run the normal upgrade migrations.
+
+PDF/music capability switches add no separate preference table.
 The canonical keys `feature_flag.gallery_pdf_documents.enabled` and
 `feature_flag.gallery_music.enabled` use existing `app_settings` storage.
 Both missing-key upgrade fallbacks and fresh-install defaults are ON. An explicit
 OFF value is preserved, and no playlist/document metadata or original is deleted.
 
 Manual storage snapshots use `admin_storage_statistics_cache_v3`; resumable
-photo/gallery cursors use `admin_storage_statistics_job_v2`. Older derived keys
+photo/gallery cursors use `admin_storage_statistics_job_v3`. Older derived keys
 are retained but are not reused as complete attachment measurements; run Update
 all after upgrading. `gallery_attachment_storage_revision` is an opaque advisory
 nonce changed after supported web attachment mutations. It marks cached totals
 and active jobs stale without scanning files. Failure to update that optional
 marker does not turn a committed attachment operation into a failed upload;
-the next explicit scan still measures actual files. Out-of-band filesystem edits
-also require Update all. Original storage remains under its existing owners.
+failed category writes remove the derived row when possible so Update all can
+reimport it. Failures are logged with the gallery ID and category. If a database
+outage also prevents invalidation, explicit reconciliation is required.
+Out-of-band filesystem edits require invalidating the affected accounting rows
+before Update all; repeat refreshes deliberately trust the database. See
+[attachment reconciliation](docs/GALLERY_PDF.md#admin-storage-accounting).
+Original storage remains under its existing owners.
 
 Music playlists introduce no tables or columns. Each physical gallery's denied
 `.gallery-music/index.json` stores its ordered immutable-original metadata,

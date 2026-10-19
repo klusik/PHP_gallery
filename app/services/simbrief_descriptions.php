@@ -556,7 +556,8 @@ function simbrief_description_extract_details(array $payload): array
  * When the OFP payload exposes a PDF document URL, the original PDF is saved
  * beside it for direct long-term reference.
  *
- * @param array{folder_path:string} $gallery Physical OFP destination.
+ * @param array{folder_path:string,id?:int} $gallery Physical OFP destination;
+ *     registered owners also persist durable PDF accounting.
  * @param array<string,SimbriefJsonValue> $payload Complete JSON dispatch data.
  * @param array{label?:string,kind?:string} $identifier Resolved pilot identity.
  * @param array{origin_code?:string,destination_code?:string,flight_label?:string,
@@ -689,6 +690,16 @@ function simbrief_description_save_ofp_for_gallery(
         ];
     }
 
+    if ((int) ($gallery['id'] ?? 0) > 0) {
+        require_once __DIR__ . '/gallery_pdf_settings.php';
+        // A disabled PDF feature retains the existing original and its bytes.
+        $pdfSize = $manifest['ofp_pdf_file'] === 'simbrief-ofp.pdf'
+            && !is_link($pdfPath) ? @filesize($pdfPath) : false;
+        gallery_attachment_storage_record(
+            (int) $gallery['id'], 'ofp',
+            $pdfSize === false ? [] : [['size' => $pdfSize]]
+        );
+    }
     return [
         'saved' => true,
         'path' => $ofpPath,
