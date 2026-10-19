@@ -240,7 +240,13 @@ export function loadDraftAssets(record,adapters={}) {
             if (previous.draft!==false || previous.prerelease!==false || previous.tag_name!==record.previous_stable_tag
                 || peelReleaseTag(call,record.repository,record.previous_stable_tag).commit_sha!==record.previous_stable_sha
                 || git('git',['show',record.previous_release_candidate_sha+':winapp/VERSION'])!==version
-                || git('git',['diff','--name-only',record.previous_release_candidate_sha,record.candidate_sha,'--','winapp',':!winapp/tests',':!winapp/README.md']).trim()) throw new Error('BLOCKED predecessor companion source/version changed.');
+                || git('git',[
+                    'diff','--name-only',record.previous_release_candidate_sha,
+                    record.candidate_sha,'--','winapp',':!winapp/tests',
+                    ':!winapp/README.md',':!winapp/AGENTS.md'
+                ]).trim()) {
+                throw new Error('BLOCKED predecessor companion source/version changed.');
+            }
             pair=new Map();
             for (const name of [installerName,'winapp-update.json']) {
                 const matches=previous.assets?.filter(asset=>asset.name===name);

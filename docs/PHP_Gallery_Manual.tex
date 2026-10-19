@@ -3224,6 +3224,8 @@ paragraph. Preparation and~consistency checks preserve the~existing wrapping
 and~historical version prose while updating the~registered value.
 WinApp README, agent instructions and~tests alone do~not~trigger an~installer
 rebuild; runtime and~build-input changes still do.
+The~draft attachment reader uses the~same exclusions when reusing verified
+published installer bytes. Recovery after tagging preserves Q, M and~the~tag.
 
 In~GitHub Actions, run \ui{Begin Release} from~\codeword{develop} and~enter
 the~version including \codeword{v_}, for example \codeword{v_0.136.2}.

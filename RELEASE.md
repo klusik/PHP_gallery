@@ -67,6 +67,10 @@ Windows installer change detection excludes `winapp/README.md`,
 alone reuse the verified existing installer; runtime and build inputs still
 require a fresh installer.
 
+The draft attachment reader applies these same exclusions before reusing the
+previous published installer. Post-tag attachment recovery keeps the original
+candidate, merge, tag, and verified asset bytes unchanged.
+
 ## Review, tag and publish
 
 Approve the bot PR once. Automation performs the protected standard merge,
