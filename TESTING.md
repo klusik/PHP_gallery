@@ -1030,7 +1030,15 @@ provider/setup/invalid-prose failures retain a complete external handoff.
 the maintained template, JSON transport, stale/foreign identity, changed prompt
 hashes, malformed/oversized responses and mandatory editorial headings.
 `start_new_release_test.mjs` covers maintainer dispatch reuse and refuses dispatch
-initialization or stale event identity. Workflow policy fixtures retain the
+initialization without an authenticated Begin Release handoff or with stale
+event identity. Its real disposable Git remote also covers a Begin Release
+workflow selected on main while current develop supplies a different source,
+create-only branch publication, lost-dispatch retry, active-run suppression,
+advanced-ref refusal and actual origin initialization by a bot authenticated
+against the initiating maintainer run/attempt/version. Foreign repository,
+workflow, version, failed and superseded handoffs remain negative cases.
+These fixtures use isolated server adapters; live token dispatch needs a
+separately authorized release. Workflow policy fixtures retain the
 pending-state qualification guard and mandatory filesystem application.
 Feature CI verifies
 deterministic chunk orchestration but cannot validate Copilot entitlement,

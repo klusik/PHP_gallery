@@ -34,6 +34,12 @@ its summary explicitly says `ELIGIBLE`.
   the next release; its source retains them before the reviewed FF joins main.
 - [ ] Start from current FULL-qualified develop A. Create and push
   `release/v_X.Y[.Z]` for the intended next version.
+- [ ] Alternatively, run **Begin Release** from a branch containing the intended
+  workflow revision (normally develop), with version `v_X.Y[.Z]`. It reads
+  current develop independently of the selected workflow ref, freezes A,
+  creates the release branch and explicitly dispatches its assembly. Inspect the
+  frozen-source summary. Retry an unchanged ref after a lost acknowledgement;
+  resume assembly directly if that release ref has already advanced.
 - [ ] Wait for automatic preparation, notes, all four manuals/PDFs, manifest and
   complete attachments. Release trusts protected develop and does
   not repeat source audits or historical evidence validation.

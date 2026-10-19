@@ -903,6 +903,15 @@ const completion=read('.github/workflows/release-promotion.yml');
 assert.match(qualification,/Initialize or reuse immutable origin after release push/);
 assert.doesNotMatch(qualification,/initialization_run:/);
 assert.match(qualification,/workflow_dispatch:[\s\S]*external_notes:/);
+const beginWorkflow=read('.github/workflows/begin-release.yml');
+assert.match(beginWorkflow,/run-name: Begin release \$\{\{ inputs.version \}\}/);
+assert.match(beginWorkflow,/actions: write/);
+assert.ok(beginWorkflow.includes('node .github/scripts/begin-release.mjs'));
+assert.doesNotMatch(beginWorkflow,/SOURCE_SHA:.*github.sha|if:.*github.ref.*refs\/heads\/develop/,
+    'The workflow selector must not silently become the released source or skip main-selected runs.');
+for (const input of ['begin_source_sha','begin_run','begin_attempt']) {
+    assert.ok(qualification.includes('inputs.'+input), 'Release initialization must receive '+input);
+}
 assert.ok(qualification.includes("needs.prepare.outputs.notes_pending == 'true'"),
     'Pending external editorial handoff cannot publish successful qualification.');
 assert.match(qualification,/name: Select release source[\s\S]*Freeze the observed main Git base/);

@@ -1,5 +1,20 @@
 # Compatibility lifecycle and retirement register
 
+## Explicit release-start dispatch
+
+Owners: `begin-release.mjs`, `start-new-release.mjs`, `begin-release.yml` and
+`release-qualification.yml` under `.github`. The selected Begin Release
+workflow revision and current protected develop source remain independent.
+Explicit workflow dispatch permanently supports GitHub's suppression of
+GITHUB_TOKEN-created push events. Bot initialization requires server-bound
+initiating run/attempt/version and original maintainer permission. Ordinary
+push initialization and external-note origin reuse remain supported. Lost
+dispatch responses permit reuse of an unmoved ref; active work and advanced
+release refs are preserved. Registered real-Git fixtures cover creation,
+retry/duplicate suppression, source separation and adverse handoff metadata.
+Live first-release dispatch/permissions remain unmeasured until a separately
+authorized release. No existing tag, origin, review or published asset is retired.
+
 ## Release-note provider availability and external editorial work
 
 Owners: `.github/scripts/patch_notes_handoff.php`, `patch_notes_ai.php` and

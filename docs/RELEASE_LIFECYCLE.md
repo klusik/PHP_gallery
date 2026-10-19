@@ -36,10 +36,20 @@ stable tag and release-side Git identities without replaying historical CI.
 A ref race, conflicting immutable identity or different merge tree still blocks
 the corresponding Git operation.
 
-The maintainer runs **Begin Release** from `develop` in GitHub Actions and
-enters
-the version including `v_`, such as `v_0.136.2`. The workflow creates
-`release/v_0.136.2` at that run's exact `develop` SHA. Feature implementation
+The maintainer selects the desired **Begin Release** workflow revision in
+GitHub Actions and enters the version including `v_`, such as `v_0.136.2`.
+Use develop for changes already integrated there but not yet released on main.
+The selected workflow reads current protected develop separately, freezes A,
+creates `release/v_0.136.2` and explicitly dispatches assembly on that release
+ref. `GITHUB_TOKEN` branch creation does not supply a downstream push run.
+The handoff supplies A and its Begin Release run/attempt; initialization binds
+the actual release event/ref/SHA and authenticates the version-specific original
+maintainer run through GitHub, accepting only the current in-progress or
+successful attempt. The bot cannot initialize a release without that proof.
+Existing tag/origin/source checks remain mandatory; no source audit is repeated.
+Unchanged release refs permit retry after lost dispatch acknowledgement, and a
+matching active assembly avoids duplicate dispatch. Advanced release refs are
+never overwritten; resume their existing assembly directly. Feature implementation
 does not authorize release/tag/publication or protected branch writes. Main
 review, develop's non-force/check protections and no-bypass rules remain
 mandatory. The target develop policy admits reviewed main merges;
@@ -99,7 +109,9 @@ truncated to meet provider limits. Provider stderr and credentials are excluded.
 
 A maintainer resumes **Release qualification** on the exact release branch with
 the AI's single-line JSON in `external_notes`. Existing origins are reused;
-dispatch never initializes a release. Repository/version/branch/source and the
+ordinary note-continuation dispatch never initializes a release. The separate
+authenticated Begin Release handoff may initialize its frozen source.
+Repository/version/branch/source and the
 SHA-256 of freshly rebuilt canonical evidence must match the response before
 strict Markdown validation and application. Source or template drift requires
 new evidence. An invalid pasted response is an input error, not another provider

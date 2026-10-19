@@ -2,13 +2,15 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/begin-release.yml
 # Module Type: Release Branch Creation Workflow
-# Purpose: Create a release branch at the selected current develop commit.
+# Purpose: Freeze current develop and explicitly start its release assembly.
 # Responsibilities:
 #   - Accept the release version from a maintainer workflow dispatch
-#   - Create release/v_<version> at the selected develop commit
+#   - Create release/v_<version> at current develop independently of the workflow ref
+#   - Dispatch assembly on that release branch without relying on token-created push events
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 name: Begin Release
+run-name: Begin release ${{ inputs.version }}
 
 on:
   workflow_dispatch:
@@ -20,28 +22,25 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   create-release-branch:
     name: Create release branch from develop
-    if: ${{ github.ref == 'refs/heads/develop' }}
     runs-on: ubuntu-24.04
+    # Type: integer; Units: minutes; Scope: release-start job.
+    # Consumers: Actions timeout; Rationale: 5 minutes bound short API handoff work.
+    timeout-minutes: 5
     steps:
-      - name: Create release branch at selected develop commit
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Freeze develop, create release branch and dispatch assembly
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version }}
-          SOURCE_SHA: ${{ github.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "${VERSION}" =~ ^v_(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$ ]]; then
-            echo 'Expected version format v_X.Y or v_X.Y.Z.' >&2
-            exit 1
-          fi
-          gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
-            --method POST \
-            --field ref="refs/heads/release/${VERSION}" \
-            --field sha="${SOURCE_SHA}"
-          echo "Created release/${VERSION} at ${SOURCE_SHA}." \
-            >> "${GITHUB_STEP_SUMMARY}"
+        run: node .github/scripts/begin-release.mjs

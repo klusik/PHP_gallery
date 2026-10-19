@@ -3200,10 +3200,17 @@ bygget hanterar även tidiga godkännanden; lyckad Git-push av~ursprunget kräve
 ingen omedelbar REST-avläsning.
 
 En commit som~tagits in~i skyddad develop är~kvalificerad.
-Kör \ui{Begin Release} från~\codeword{develop} i~GitHub Actions och~ange
-versionen inklusive \codeword{v_}, till~exempel \codeword{v_0.136.2}.
-Arbetsflödet skapar \codeword{release/v_0.136.2} på~den exakta develop-SHA
-som valts för~körningen; det kvalificerar eller publicerar inte utgåvan.
+Kör \ui{Begin Release} från~grenen med~önskad workflow-version i~GitHub
+Actions, normalt \codeword{develop}, och~ange versionen inklusive
+\codeword{v_}, till~exempel \codeword{v_0.136.2}. Arbetsflödet läser separat
+aktuell skyddad develop, låser dess SHA, skapar \codeword{release/v_0.136.2}
+och~startar uttryckligen sammansättningen på~releasegrenen. Nya arbetsflöden
+och~skript används innan de~når main. BASIC/FULL upprepas inte.
+Initieringen verifierar ursprunglig förvaltare, startkörning, försök och~version;
+enbart botidentiteten räcker inte. Återförsök återanvänder en~oförändrad ref
+och~undviker dubbla aktiva byggen. Om~releasegrenen redan har~avancerat,
+fortsätt dess sammansättning direkt. PR-godkännande och~publicering förblir
+separata förvaltaråtgärder.
 Utgåvan kör inte om~BASIC/FULL och~hämtar inga äldre kvalificeringsarkiv.
 Registrerade versionsmarkörer i~Markdown tillåter radbrytning inom samma
 stycke. Förberedelse och~konsistenskontroll bevarar radbrytningen och~historiska

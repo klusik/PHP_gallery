@@ -3175,10 +3175,17 @@ ID checků a~stav větví. Jiné chyby běh zastaví; FULL se neopakuje.
 
 \subsection{Sestavení vydání z~kvalifikovaného develop}
 
-V~GitHub Actions spusťte \ui{Begin Release} z~větve \codeword{develop}
-a~zadejte číslo verze včetně \codeword{v_}, například \codeword{v_0.136.2}.
-Workflow vytvoří \codeword{release/v_0.136.2} přesně na SHA developu
-vybraném pro~toto spuštění; vydání tím nekvalifikuje ani nepublikuje.
+V~GitHub Actions spusťte \ui{Begin Release} z~větve obsahující požadovanou
+verzi workflow, obvykle \codeword{develop}, a~zadejte číslo verze včetně
+\codeword{v_}, například \codeword{v_0.136.2}. Workflow samostatně načte
+aktuální chráněný develop, zafixuje jeho SHA, vytvoří
+\codeword{release/v_0.136.2} a~výslovně na~této větvi spustí sestavení.
+Nové workflow a~skripty se~použijí ještě před přijetím do~main.
+BASIC/FULL se~neopakuje. Inicializace ověří původního správce, zahajovací
+běh, pokus a~verzi; samotná identita bota nestačí. Opakování může použít
+neposunutou větev a~nespouští druhé aktivní sestavení. Pokud release větev
+již pokročila, pokračujte přímo v~jejím sestavení. Schválení PR
+a~publikování zůstávají samostatnými úkony správce.
 
 Před schválením PR sestavení zachová historii zafixovaného main i~připravený
 strom. Po~schválení a~vytvoření tagu posune nezměněný develop přímo na~skutečný

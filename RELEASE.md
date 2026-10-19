@@ -27,10 +27,23 @@ protections. This installs infrastructure, not a production version.
 
 ## Prepare the release
 
-In GitHub Actions, select **Begin Release**, run it from `develop` and enter the
-version including `v_` (for example `v_0.136.2`). It creates
-`release/v_0.136.2` at the exact `develop` commit selected for that run. The
-workflow only creates the branch; it does not qualify or publish the release.
+In GitHub Actions, select **Begin Release** and enter the version including
+`v_` (for example `v_0.136.2`). Select a branch containing the intended workflow
+revision; `develop` includes newly integrated release changes before main does.
+The workflow reads current protected `develop` independently of that selector,
+freezes its exact SHA and creates `release/v_0.136.2` there. It explicitly
+dispatches **Release qualification** on the release ref, using that source's
+workflow/scripts. Token-created branch events are not a continuation mechanism.
+No preliminary release with old CI or extra BASIC/FULL is needed.
+
+The dispatch binds frozen source, initiating run and attempt. Initialization
+authenticates the original maintainer through server-owned Begin Release
+metadata, including its version-specific run title; a bot actor alone grants no
+authority. Ordinary external-note continuation still requires an existing origin.
+Retries reuse an unchanged source ref and avoid dispatching a duplicate active
+assembly. A moved release ref is preserved: continue its existing assembly run
+instead of restarting Begin Release. Failed creation/dispatch is reconciled by
+readback on the next invocation, never by overwriting an existing release.
 The automated release workflow:
 
 1. Freezes A and the actual main/release heads and resolves the existing stable

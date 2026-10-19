@@ -22,6 +22,18 @@ on:
       - 'release/v_*'
   workflow_dispatch:
     inputs:
+      begin_source_sha:
+        description: Frozen develop source supplied only by Begin Release initialization.
+        type: string
+        default: ''
+      begin_run:
+        description: Authenticated initiating Begin Release run ID.
+        type: string
+        default: ''
+      begin_attempt:
+        description: Exact initiating Begin Release attempt.
+        type: string
+        default: ''
       external_notes:
         description: Paste the single-line response JSON from the release-notes-handoff prompt.
         type: string
@@ -111,6 +123,9 @@ jobs:
         name: Initialize or reuse immutable origin after release push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEGIN_SOURCE_SHA: ${{ inputs.begin_source_sha }}
+          BEGIN_RELEASE_RUN_ID: ${{ inputs.begin_run }}
+          BEGIN_RELEASE_RUN_ATTEMPT: ${{ inputs.begin_attempt }}
         run: node .github/scripts/start-new-release.mjs
       - id: origin
         name: Verify immutable release develop origin and prior main tag

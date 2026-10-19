@@ -3236,11 +3236,18 @@ Andere Fehler stoppen den~Lauf; FULL wird nicht wiederholt.
 
 \subsection{Release-Zusammenstellung aus qualifiziertem develop}
 
-Starten Sie~in GitHub Actions \ui{Begin Release} von~\codeword{develop}
-und~geben Sie die~Version einschließlich \codeword{v_} ein, zum~Beispiel
-\codeword{v_0.136.2}. Der~Workflow erstellt \codeword{release/v_0.136.2}
-auf~dem exakten develop-SHA dieses Laufs; er~qualifiziert oder~veröffentlicht
-das~Release nicht.
+Starten Sie~in GitHub Actions \ui{Begin Release} vom~Branch mit~der gewünschten
+Workflow-Version, normalerweise \codeword{develop}, und~geben Sie~die Version
+einschließlich \codeword{v_} ein, zum~Beispiel \codeword{v_0.136.2}.
+Der~Workflow liest unabhängig davon aktuelles geschütztes develop, fixiert
+dessen SHA, erstellt \codeword{release/v_0.136.2} und~startet ausdrücklich
+die~Zusammenstellung auf~diesem Branch. Neue Workflows und~Skripte werden
+bereits vor~ihrer Aufnahme in~main verwendet. BASIC/FULL wird nicht wiederholt.
+Die~Initialisierung prüft ursprünglichen Maintainer, Startlauf, Versuch und~Version;
+die~Bot-Identität allein genügt nicht. Wiederholungen verwenden unveränderte
+Refs erneut und~vermeiden doppelte aktive Builds. Bei~fortgeschrittenem
+Release-Ref setzen Sie~dessen Zusammenstellung direkt fort. PR-Freigabe
+und~Veröffentlichung bleiben getrennte Maintainer-Aktionen.
 
 Vor~der~PR-Freigabe bleiben fixierte main-Historie und~vorbereiteter Baum erhalten.
 Nach Freigabe und~Tag wird unverändertes develop per Fast-forward direkt auf
