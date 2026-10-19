@@ -42,8 +42,17 @@ Owners: `flight_simbrief.py`, `flight_navdata.py`, `flight_maps.py`,
 `flight_ui.py`, `flight_data.py` and `flight_report.py` in `winapp/uploader`.
 Legacy sessions without simbrief.json remain valid. Dispatch values are planned
 evidence and never overwrite simulator measurements. The OFP snapshot participates
-in the analysis checksum; template 7 prevents reuse of earlier report layouts.
+in the analysis checksum; template 9 prevents reuse of earlier report layouts.
 Explicit local regeneration retains all previous PDF revisions and receipts.
+Version 0.6.1 fits both map extents independently of print DPI and omits the
+redundant capture-scope paragraph. Existing PDFs remain unchanged; actual
+printed-map acceptance remains unknown until reviewed. The observed RJTT–RJFR
+recording contains 57 repeated remote positions near 0 N, 90 E between local
+Japan positions after simulator resume. The report map owner excludes only
+blocks bounded by >=50 NM jumps, whose neighbors are <50 NM apart and whose
+points are >=50 NM from both neighbors. Both maps disclose omitted positions.
+Raw telemetry, analysis and unbounded relocations are preserved permanently;
+this presentation rule does not establish invalid simulator telemetry globally.
 
 SimBrief identity is stored only after a successful explicit fetch; archived
 JSON/XML imports need no account. The next session consumes a staged plan once.

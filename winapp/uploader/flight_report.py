@@ -74,7 +74,7 @@ from .flight_jobs import readable_pdf_name, read_document
 
 # Template identity is included in every manifest and output filename so a
 # future layout revision does not silently reuse a prior rendering.
-REPORT_TEMPLATE_VERSION = "7"
+REPORT_TEMPLATE_VERSION = "9"
 
 # Purpose: Share true A4 landscape geometry across document and page chrome.
 # Type: tuple[float, float]; Units: PDF points; Scope: rendered report pages.
@@ -111,9 +111,10 @@ _COLOR_PLANNED = colors.HexColor("#8056AD")
 # offsets while refusing distant fixes and unrelated routes; no endpoint extension.
 DISPATCH_POSITION_MATCH_NM = 10.0
 # Keep report geometry consistent with the analysis owner's jump exclusion.
-# Type: float; Units: nautical miles; Scope: consecutive captured positions.
+# Type: float; Units: nautical miles; Scope: report position continuity.
 # Consumers: _recorded_positions and _dispatch_position_series. Rationale: the
-# existing analysis rejects 50-NM single-sample jumps rather than drawing a leg.
+# analysis rejects 50-NM jumps; the map also uses this boundary to identify
+# detached blocks bracketed by a return within the same local neighborhood.
 REPORT_POSITION_JUMP_NM = 50.0
 # Type: float; Units: knots per metre per second; Scope: displayed speeds;
 # Consumers: _format_speed; Rationale: convert SI capture values to aviation
@@ -1250,21 +1251,46 @@ def _recorded_positions(analysis: FlightAnalysis) -> list[tuple[float, float] | 
         analysis (FlightAnalysis): Immutable recorded aircraft samples.
     Returns:
         list[tuple[float, float] | None]: Latitude/longitude pairs with None
-            separators for missing positions, discontinuities or 50 NM jumps.
+            separators for missing positions, discontinuities or 50 NM jumps;
+            detached jump-and-return blocks are omitted from map geometry only.
     """
-    points: list[tuple[float, float] | None] = []
+    segments: list[list[FlightSample]] = []
+    current: list[FlightSample] = []
     previous = None
     for sample in analysis.samples:
-        if sample.discontinuity_before or sample.latitude_deg is None or sample.longitude_deg is None:
-            points.append(None)
+        missing = sample.latitude_deg is None or sample.longitude_deg is None
+        distance = _distance_nm(previous, sample) if previous is not None and not missing else None
+        if (missing or sample.discontinuity_before
+                or (distance is not None and distance >= REPORT_POSITION_JUMP_NM)):
+            if current:
+                segments.append(current)
+                current = []
             previous = None
-        if sample.latitude_deg is not None and sample.longitude_deg is not None:
-            distance = _distance_nm(previous, sample) if previous is not None else None
-            # Match the existing analysis distance owner's 50 NM jump exclusion.
-            if distance is not None and distance >= REPORT_POSITION_JUMP_NM:
-                points.append(None)
-            points.append((sample.latitude_deg, sample.longitude_deg))
+        if not missing:
+            current.append(sample)
             previous = sample
+    if current:
+        segments.append(current)
+    points: list[tuple[float, float] | None] = []
+    for index, segment in enumerate(segments):
+        # Exclude only a detached excursion bounded by a return near its entry.
+        # An actual relocation or a remote beginning/end stays visible. Original
+        # samples and analysis are untouched; no line bridges the omitted block.
+        if 0 < index < len(segments) - 1:
+            before, after = segments[index - 1][-1], segments[index + 1][0]
+            return_distance = _distance_nm(before, after)
+            if (return_distance is not None and return_distance < REPORT_POSITION_JUMP_NM
+                    and all(
+                        (_distance_nm(before, sample) or 0.0) >= REPORT_POSITION_JUMP_NM
+                        and (_distance_nm(after, sample) or 0.0) >= REPORT_POSITION_JUMP_NM
+                        for sample in segment
+                    )):
+                points.append(None)
+                continue
+        if points:
+            points.append(None)
+        points.extend((sample.latitude_deg, sample.longitude_deg) for sample in segment
+                      if sample.latitude_deg is not None and sample.longitude_deg is not None)
     return points
 
 
@@ -1295,6 +1321,10 @@ def _route_chart(
     drawing.add(String(15, chart_height - 23, title,
         fontName=_FONT_BOLD, fontSize=11, fillColor=_COLOR_INK))
     recorded = _recorded_positions(analysis)
+    omitted_positions = sum(
+        sample.latitude_deg is not None and sample.longitude_deg is not None
+        for sample in analysis.samples
+    ) - sum(point is not None for point in recorded)
     dispatch = [(p.latitude, p.longitude) for p in analysis.dispatch.points] if analysis.dispatch else []
     points = recorded + [None] + dispatch
     left, bottom = 12, 38
@@ -1314,6 +1344,9 @@ def _route_chart(
         if raster.info.get("tile_status") == "unavailable":
             drawing.add(String(left, 28, tr(language, "map_tiles_unavailable"),
                 fontName=_FONT_NAME, fontSize=7, fillColor=_COLOR_MUTED))
+    if omitted_positions:
+        drawing.add(String(left, 5, tr(language, "map_positions_omitted"),
+            fontName=_FONT_NAME, fontSize=7, fillColor=_COLOR_MUTED))
     drawing.add(String(left, 16,
         "© OpenStreetMap contributors · openstreetmap.org/copyright",
         fontName=_FONT_NAME, fontSize=7, fillColor=_COLOR_MUTED))
@@ -2761,7 +2794,7 @@ def _build_story(
     analysis: FlightAnalysis, language: str, analysis_sha256: str,
     map_cache: Path | None = None,
 ) -> List[Flowable]:
-    """Arrange unchanged report content into landscape overview and paired profiles.
+    """Arrange a compact landscape overview and paired flight profiles.
 
     Args:
         analysis (FlightAnalysis): Immutable shared flight-analysis model.
@@ -2799,7 +2832,6 @@ def _build_story(
         ], [metric_width, CHART_WIDTH - metric_width]),
         _paragraph(tr(language, "phase_timeline"), styles["heading"]),
         _phase_infographic(analysis, language),
-        _paragraph(tr(language, "capture_scope"), styles["small"]),
         PageBreak(), _paragraph(tr(language, "charts"), styles["title"]),
     ])
     for attribute, label, scale, unit, color in (

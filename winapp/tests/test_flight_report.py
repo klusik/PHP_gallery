@@ -886,6 +886,67 @@ class FlightReportTests(unittest.TestCase):
         analysis.events = []
         self.assertEqual([], _dispatch_series(analysis, "fuel_weight_kg", 1.0, "kg"))
 
+    def test_route_excludes_detached_resume_block_but_keeps_relocations(self) -> None:
+        """Exclude a reproduced remote resume block without trimming real routes.
+
+        Returns:
+            None: Both map layouts disclose the omitted block, preserve raw
+                samples, keep a route break and retain unbounded relocations.
+        """
+        from reportlab.graphics.shapes import String
+        from uploader.flight_report import _recorded_positions
+
+        analysis = self._analysis("MSFS 2024")
+        original = analysis.samples[0]
+        local = replace(original, latitude_deg=35.54, longitude_deg=139.77,
+                        discontinuity_before=None)
+        remote = replace(original, latitude_deg=0.0, longitude_deg=90.0,
+                         discontinuity_before="simulator resumed")
+        returned = replace(local, latitude_deg=35.55, longitude_deg=139.79,
+                           discontinuity_before="simulator resumed")
+        # Three equal remote samples reproduce the observed multi-sample block.
+        analysis.samples = [local, remote, replace(remote, discontinuity_before=None),
+                            replace(remote, discontinuity_before=None), returned]
+        saved = list(analysis.samples)
+        points = _recorded_positions(analysis)
+        self.assertEqual([(35.54, 139.77), None, None, (35.55, 139.79)], points)
+        self.assertEqual(saved, analysis.samples)
+        for planned in (False, True):
+            for language in supported_languages():
+                chart = _route_chart(analysis, language, planned=planned)
+                self.assertTrue(any(isinstance(item, String)
+                    and item.text == tr(language, "map_positions_omitted")
+                    for item in chart.contents))
+        # A genuine distant end or start has no bounded local return.
+        for samples in ([local, remote], [remote, returned]):
+            analysis.samples = samples
+            self.assertEqual(2, sum(point is not None
+                                   for point in _recorded_positions(analysis)))
+        # Ordinary intermediate positions remain part of the complete route.
+        analysis.samples = [local, replace(local, longitude_deg=139.78), returned]
+        self.assertEqual(3, sum(point is not None
+                               for point in _recorded_positions(analysis)))
+
+    def test_overview_has_no_orphan_capture_note(self) -> None:
+        """Keep the redundant scope note out of every report edition.
+
+        Returns:
+            None: Overview flows directly from its phase strip to chart pages
+                without a paragraph capable of creating a note-only page.
+        """
+        from reportlab.platypus import Paragraph, PageBreak
+        from uploader.flight_report import _build_story
+        from uploader.flight_report_translations import tr
+
+        for language in ("en", "cs", "de", "sv"):
+            story = _build_story(self._analysis("MSFS 2024"), language, "fixture")
+            first_break = next(index for index, item in enumerate(story)
+                               if isinstance(item, PageBreak))
+            self.assertFalse(isinstance(story[first_break - 1], Paragraph))
+            self.assertFalse(any(isinstance(item, Paragraph)
+                and item.getPlainText() == tr(language, "capture_scope")
+                for item in story))
+
     def test_pdf_map_embeds_native_print_pixels_and_vector_routes(self) -> None:
         """Keep first-page backgrounds printable rather than stretching a preview.
 
