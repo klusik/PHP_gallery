@@ -19,13 +19,15 @@ versions and keep the established Markdown structure.
 ```markdown
 ## Version X.Y
 
-Short release summary paragraph explaining the purpose of the release, main features, and important changes.
+Short release summary paragraph explaining the purpose of the release, main
+features, and important changes.
 
   ### Highlights
 
   #### Added feature or changed area name
 
-  - Describe user-visible changes.
+  - Describe user-visible changes with enough context to explain the completed
+    behavior and its practical effect.
   - Keep every item as a clear completed action.
   - Group related behavior together.
 
@@ -78,6 +80,17 @@ Short release summary paragraph explaining the purpose of the release, main feat
 - Use main sections with `###`.
 - Use feature groups with `####`.
 - Use bullet lists for individual changes.
+- Wrap newly authored prose at existing word spaces, targeting 80 columns.
+  At 81-100 columns, choose a natural word boundary; actively split prose above
+  100 columns. Use source line breaks within the same paragraph, not new blank
+  lines or Markdown hard breaks.
+- Indent wrapped list continuations under the item's text, as in the example
+  above. Preserve paragraph boundaries, headings, tables and explicit hard
+  breaks.
+- Keep complete Markdown links, URLs, inline code and other indivisible
+  constructs intact, allowing them to exceed the preferred width when needed.
+- Apply wrapping to the new release entry only; preserve older entries unless
+  their revision is explicitly requested.
 - Use past tense: "Added", "Updated", "Fixed", "Improved".
 - Avoid vague entries such as "changed some files".
 
