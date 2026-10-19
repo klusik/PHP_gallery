@@ -35,6 +35,11 @@ for (const version of ['1.3','1.2.1']) {
         const origin=f.git('git',['show',initialized.origin_sha+':.github/release-origins/v_'+version+'.json']);
         assert.equal(JSON.parse(origin).initial_main_sha,f.previousMain);
         assert.equal(startNewRelease(request,f.repository,f).origin_sha,initialized.origin_sha);
+        const dispatch={...f.context,GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_SHA:initialized.origin_sha};
+        assert.equal(startNewRelease({...request,selected:initialized.origin_sha},f.repository,{...f,context:dispatch}).candidate_sha,
+            initialized.origin_sha,'A maintainer dispatch resumes the immutable origin without creating another.');
+        assert.throws(()=>startNewRelease(request,f.repository,{...f,context:dispatch}),/BLOCKED/,
+            'A dispatch cannot impersonate a different source event.');
         const record=f.prepare(initialized);
         const count=f.state.writes.length;
         assert.equal(startNewRelease(request,f.repository,f).candidate_sha,record.candidate_sha);
@@ -44,6 +49,14 @@ for (const version of ['1.3','1.2.1']) {
         f.context.GITHUB_ACTOR='intruder';f.state.permission='read';
         assert.throws(()=>startNewRelease(request,f.repository,f),/maintainer/);
         assert.equal(f.state.writes.length,count);
+    } finally {f.cleanup();}
+}
+{
+    const f=lifecycleFixture();
+    try {
+        const context={...f.context,GITHUB_EVENT_NAME:'workflow_dispatch'};
+        assert.throws(()=>startNewRelease({version:'1.2.1',selected:f.selected},f.repository,{...f,context}),/existing immutable release origin/);
+        assert.equal(f.state.writes.length,0,'Dispatch never initializes an unrelated release or writes protected refs.');
     } finally {f.cleanup();}
 }
 for (const scenario of ['existing-tag','stale-event','main-drift','unretained-source']) {

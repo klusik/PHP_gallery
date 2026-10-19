@@ -22,11 +22,11 @@ import {isAncestor,matchingBranchSha} from './release-reconciliation.mjs';
  * @typedef {import('./release-promotion.mjs').JsonValue} InitializationJson
  */
 
-/** Initialize or reuse the origin of the exact pushed release branch.
+/** Initialize a pushed release or reuse its origin for maintainer note continuation.
  * @param {{version:string,selected:string}} request Branch-derived version and exact event commit.
  * @param {string} repository Exact owner/repository identity.
  * @param {import('./release-origin.mjs').PredecessorAdapters & {api?:function(string,string=,(InitializationJson|null)=):InitializationJson,context?:Record<string,string|undefined>}} adapters Optional isolated API, literal command, event and fully bound predecessor/archive readers.
- * @returns {{state:string,branch:string,origin_sha:string,candidate_sha:string,selected_develop_sha:string,previous_stable_sha:string}} Immutable origin and current preparation checkout.
+ * @returns {{state:string,branch:string,origin_sha:string,candidate_sha:string,selected_develop_sha:string,previous_stable_sha:string}} Immutable origin and current preparation checkout; dispatch can only reuse an existing origin.
  */
 export function startNewRelease(request,repository,adapters={}) {
     const call=adapters.api ?? api;
@@ -35,7 +35,7 @@ export function startNewRelease(request,repository,adapters={}) {
     const path=originPath(request.version);
     const branch='release/v_'+request.version;
     if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(request.selected)
-        || context.GITHUB_EVENT_NAME!=='push' || context.GITHUB_REF!=='refs/heads/'+branch
+        || !['push','workflow_dispatch'].includes(context.GITHUB_EVENT_NAME) || context.GITHUB_REF!=='refs/heads/'+branch
         || context.GITHUB_SHA!==request.selected) throw new Error('BLOCKED exact release push identity required.');
     const permission=call('repos/'+repository+'/collaborators/'+encodeURIComponent(context.GITHUB_ACTOR ?? '')+'/permission');
     if (!['admin','maintain'].includes(permission?.permission)) throw new Error('BLOCKED release push requires a maintainer.');
@@ -58,6 +58,9 @@ export function startNewRelease(request,repository,adapters={}) {
         }
         return {state:'REUSED_IMMUTABLE_ORIGIN',branch,origin_sha:checked.origin_commit_sha,candidate_sha:head,
             selected_develop_sha:stored.selected_develop_sha,previous_stable_sha:stored.previous_stable_sha};
+    }
+    if (context.GITHUB_EVENT_NAME!=='push') {
+        throw new Error('BLOCKED note continuation requires an existing immutable release origin.');
     }
     if (head!==request.selected) throw new Error('BLOCKED release branch advanced before initialization.');
     const main=call('repos/'+repository+'/git/ref/heads/main').object?.sha;

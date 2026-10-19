@@ -1011,19 +1011,28 @@ to `--suite=php-regression --no-report` and always means the complete PHP suite.
 
 `patch_notes_ai_evidence_test.php` runs in the full/release PHP suite with an
 exclusive process barrier. It exercises output larger than pipe buffers, exact
-metadata bounds, generic diagnostic refusal, forced deadline cleanup and
+optional metadata bounds, generic diagnostic refusal, forced deadline cleanup and
 byte-for-byte complete UTF-8 text. Its owned Git repository executes the actual
 release prompt CLI against a multi-megabyte diff, checks content from later
-changed files and generated-artifact exclusion, and verifies that oversized
-immutable metadata fails without creating a partial prompt. The CI workflow
+changed files and generated-artifact exclusion, and verifies that large
+immutable metadata remains complete for external handoff. The CI workflow
 contract also retains the evidence step's independent two-minute timeout. These
 fixtures collect local evidence only; they do not call Copilot, prepare release
 metadata or compile PDFs. The companion `tests/patch_notes_ai_chunks_test.php`
 exercises complete source-byte reconstruction and SHA-256 provenance,
 multibyte/oversized-line boundaries, missing and tampered responses, bounded
 final synthesis and an additional digest-reduction level. The release workflow
-executes the actual Copilot CLI once per mandatory diff slice (and for any
-required reduction levels) before final Markdown validation. Feature CI verifies
+now routes large changes before provider setup: at most 100000 source diff bytes,
+20 source files and 180000 complete prompt bytes admit one evidence request plus
+synthesis. Larger changes, missing credentials, explicit external mode and
+provider/setup/invalid-prose failures retain a complete external handoff.
+`patch_notes_handoff_test.php` covers exact routing boundaries, UTF-8 evidence,
+the maintained template, JSON transport, stale/foreign identity, changed prompt
+hashes, malformed/oversized responses and mandatory editorial headings.
+`start_new_release_test.mjs` covers maintainer dispatch reuse and refuses dispatch
+initialization or stale event identity. Workflow policy fixtures retain the
+pending-state qualification guard and mandatory filesystem application.
+Feature CI verifies
 deterministic chunk orchestration but cannot validate Copilot entitlement,
 provider quotas or editorial quality without a release run using
 `COPILOT_GITHUB_TOKEN`.
@@ -1033,9 +1042,16 @@ and validator share all three mandatory main headings, including for
 tooling-only releases with no direct public behavior change. Missing headings,
 inline mentions, renamed headings and incorrect heading levels must be rejected
 with the exact section name. Bounded evidence reduction must preserve this
-contract in its final prompt. The CI workflow contract keeps failure-only
+contract in its final prompt. The CI workflow contract keeps rejected-provider
 retention of raw model prose in `release-notes-rejected-response` for seven
-days; prompts and authentication diagnostics are excluded. Real Copilot output
+days; authentication diagnostics are excluded. The separate 30-day
+`release-notes-handoff` artifact intentionally includes the complete prompt,
+template and source diff only when notes are pending. NOTES_PENDING creates no
+qualification record/check or release PR. Supplied JSON is environment data and
+must match the freshly rebuilt source/prompt before ordinary assembly resumes.
+Push and workflow-dispatch assembly retain the same authenticated completion
+and draft-asset bindings. Live Copilot allowance, first-install UI/CLI dispatch
+and the full paused/resumed release need maintainer acceptance. Real Copilot output
 remains subject to strict validation before any notes are applied.
 
 ### Hosted coverage ownership

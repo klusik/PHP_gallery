@@ -3219,7 +3219,22 @@ och~skapar till~sist inventering och~fullständigt manifest.
 version och~verifierade befintliga filer.
 
 Färdig redaktionell text bevaras; annars används begränsad Copilot-generering
-med~fullständiga Git-underlag. Ogiltig text tillämpas aldrig.
+med~fullständiga Git-underlag. Före leverantörsinstallationen tillåter automatiken
+högst 100000 diffbyte, 20 källfiler och~180000 promptbyte. Större ändringar,
+saknade autentiseringsuppgifter, uttryckligt externt läge eller~Copilot-,
+kvot- och~utdatafel ger~\codeword{NOTES_PENDING}. Hämta
+\codeword{release-notes-handoff} från~Actions-körningen och~ge
+\filepath{prompt.txt} till~vald AI. Artefakten sparas 30 dagar och~innehåller
+hela mallen, commitunderlag, källdiff och~hashmanifest. Granska AI:ns enradiga
+JSON-svar, välj samma releasegren under~\ui{Release qualification > Run workflow},
+klistra in~svaret i~\codeword{external_notes} och~starta fortsättningen.
+Paketets README innehåller CLI-kommandot när~knappen ännu inte finns registrerad
+på~main. JSON bevarar Markdown-radbrytningar. Repository, version, gren,
+käll-SHA och~prompthash måste stämma med~nybyggda underlag; ändrade underlag
+kräver ett~nytt paket. Färdiga anteckningar förblir styrande. Vänteläget håller
+ingen runner igång och~skapar varken förberedd commit, kvalificeringskontroll,
+manualbygge eller~release-PR. Fortsättningen lägger inte till BASIC/FULL.
+Ogiltig text tillämpas aldrig.
 Byggfel, saknade bilagor och~inaktuella genererade hashvärden stoppar
 sammansättningen, ingen ny källkvalificering. Livscykelschema 4 sparar
 develop-källan och~sammansättningsresultatet.

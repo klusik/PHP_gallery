@@ -167,6 +167,13 @@ const upload=(repo,id,name,bytes)=>{
 const adapters={api:call,download,git,upload};
 const loaded=loadDraftAssets(record,adapters);
 assert.equal(loaded.size,14);
+run.event='workflow_dispatch';
+assert.equal(loadDraftAssets(record,adapters).size,14,
+    'Resumed editorial assembly retains the same exact-attempt authenticated assets.');
+run.event='pull_request';
+assert.throws(()=>loadDraftAssets(record,adapters),/foreign or superseded/,
+    'A foreign event cannot substitute release-assembly evidence.');
+run.event='push';
 for (const [name,bytes] of files) assert.ok(loaded.get(name).equals(bytes));
 verifyInstallerPair(pair,version);
 assert.throws(()=>verifyInstallerPair(pair,'2.0.0'),/version/);

@@ -880,6 +880,12 @@ const qualification=read('.github/workflows/release-qualification.yml');
             workflow_name:'Release qualification',run_id:Number(request.runId),run_attempt:run.run_attempt}));
     const noHistoricalReads={api:()=>{throw new Error('Release must not reopen historical qualification.');}};
     assert.deepEqual(verifyQualification(request,run,assemblyJobs,assembled,record.repository,candidate,noHistoricalReads),[]);
+    assert.deepEqual(verifyQualification(request,{...run,event:'workflow_dispatch'},assemblyJobs,assembled,
+        record.repository,candidate,noHistoricalReads),[],
+        'Resumed editorial assembly retains the exact source and native assembly owners.');
+    assert.throws(()=>verifyQualification(request,{...run,event:'pull_request'},assemblyJobs,assembled,
+        record.repository,candidate,noHistoricalReads),/BLOCKED/,
+        'Foreign event types cannot supply release assembly evidence.');
     assert.throws(()=>verifyQualification(request,run,assemblyJobs.map(job=>job.name==='Prepare manual release assets'
         ?{...job,conclusion:'failure'}:job),assembled,record.repository,candidate,noHistoricalReads),/BLOCKED/,
         'qualified develop does not excuse an incomplete release build');
@@ -895,7 +901,10 @@ assert.throws(()=>verifyQualification(request,run,schema2Jobs.map(job=>job.name=
     ? {...job,conclusion:'skipped'} : job),recoveryRecord,record.repository,candidate),/BLOCKED/);
 const completion=read('.github/workflows/release-promotion.yml');
 assert.match(qualification,/Initialize or reuse immutable origin after release push/);
-assert.doesNotMatch(qualification,/workflow_dispatch:|initialization_run:/);
+assert.doesNotMatch(qualification,/initialization_run:/);
+assert.match(qualification,/workflow_dispatch:[\s\S]*external_notes:/);
+assert.ok(qualification.includes("needs.prepare.outputs.notes_pending == 'true'"),
+    'Pending external editorial handoff cannot publish successful qualification.');
 assert.match(qualification,/name: Select release source[\s\S]*Freeze the observed main Git base/);
 assert.doesNotMatch(qualification,/name: Run first-install full release lifecycle|uses: \.\/\.github\/workflows\/release-bootstrap\.yml|audit_profile:|php scripts\/audit\.php/);
 assert.match(qualification,/name: Prepare release candidate\s+needs: coverage-owner\s+if: \$\{\{ needs\.coverage-owner\.outputs\.bootstrap == 'false' \}\}/);

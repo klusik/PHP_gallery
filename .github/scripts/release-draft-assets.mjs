@@ -155,7 +155,8 @@ export function qualificationAssets(record,name,owner,files,adapters={}) {
     if (String(run.id)!==record.run_id || String(run.run_attempt)!==record.run_attempt
         || latest.run_attempt!==run.run_attempt || run.status!=='completed' || run.conclusion!=='success'
         || run.repository?.full_name!==record.repository || run.head_branch!==record.branch
-        || run.path!=='.github/workflows/release-qualification.yml' || run.event!=='push') throw new Error('BLOCKED foreign or superseded asset run/attempt.');
+        || run.path!=='.github/workflows/release-qualification.yml'
+        || !['push','workflow_dispatch'].includes(run.event)) throw new Error('BLOCKED foreign or superseded asset run/attempt.');
     const jobs=call(root+'/attempts/'+record.run_attempt+'/jobs?per_page=100');
     if (jobs.total_count!==jobs.jobs?.length || jobs.total_count>=100) throw new Error('BLOCKED incomplete asset job inventory.');
     const owners=jobs.jobs.filter(job=>(job.name===owner || job.name.endsWith(' / '+owner)) && job.status==='completed' && job.conclusion==='success'

@@ -1,5 +1,21 @@
 # Compatibility lifecycle and retirement register
 
+## Release-note provider availability and external editorial work
+
+Owners: `.github/scripts/patch_notes_handoff.php`, `patch_notes_ai.php` and
+`release-qualification.yml`. External evidence/response support is permanent:
+maintainers may use another AI or work without Copilot entitlement. Automatic
+requests are capped to one evidence slice plus synthesis by byte/file/context
+limits before provider work. A quota or provider failure preserves all source
+evidence in a 30-day handoff and reports NOTES_PENDING, without inventing
+qualification or publishing an incomplete release. Source hashes and existing
+editorial validation protect continuation; filesystem/build failures remain
+mandatory. Hosted regression owners cover routing boundaries, complete evidence,
+source/response drift and dispatch-origin reuse. Actual provider consumption,
+quota exhaustion, first-install GitHub input UI and live continuation acceptance
+remain unknown until a maintainer release exercises them. No historical release,
+tag, approved tree, asset or source-qualification protocol is retired.
+
 ## Telemetry storage and historical aggregates
 
 Successful public HTML visits now supply private telemetry-only worker requests

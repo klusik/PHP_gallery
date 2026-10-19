@@ -81,10 +81,36 @@ release timestamp. Production inventory precedes final complete-file manifest
 generation. Conditional installer generation preserves the separate WinApp
 version.
 
-Patch-note evidence uses the complete Git text diff, bounded UTF-8 chunks,
-SHA-256 manifests and bounded provider requests. Invalid/missing AI output is
-retained safely and never applied. Existing complete maintainer prose is reused.
-Generation does not invent product behavior or rewrite technical manual content.
+Patch-note evidence keeps complete commit metadata and the full Git source diff.
+Before any provider setup/request, automatic routing admits at most 100000 diff
+bytes, 20 source files and 180000 prompt bytes; larger changes export external
+evidence. Missing credentials, explicit external mode, provider installation or
+request failure (including exhausted allowance), timeout and invalid provider
+prose also produce **NOTES_PENDING**. The token's presence is not a quota check.
+No billing credentials or new qualification are introduced.
+
+This state retains the immutable origin and a 30-day Actions handoff artifact,
+then ends successfully without qualification, manual builds, prepared commits,
+PR creation or a waiting runner. Mandatory evidence/export and filesystem errors
+still fail. The handoff contains a complete self-contained AI prompt, canonical
+prompt, source diff, template, hash manifest and continuation instructions.
+Generated release artifacts remain excluded from text evidence; nothing is
+truncated to meet provider limits. Provider stderr and credentials are excluded.
+
+A maintainer resumes **Release qualification** on the exact release branch with
+the AI's single-line JSON in `external_notes`. Existing origins are reused;
+dispatch never initializes a release. Repository/version/branch/source and the
+SHA-256 of freshly rebuilt canonical evidence must match the response before
+strict Markdown validation and application. Source or template drift requires
+new evidence. An invalid pasted response is an input error, not another provider
+fallback. Completed maintainer prose is reused. Generation does not invent
+product behavior or rewrite technical manual content. See [RELEASE.md](../RELEASE.md)
+for the UI and registered-workflow CLI continuation during first installation.
+
+Pending handoffs deliberately skip the release gate and its retained success
+record/check. Successful resumed assembly retains the existing exact-Q gate;
+completion and draft readers authenticate both push and workflow-dispatch runs
+with their unchanged workflow/repository/branch/attempt/owner/digest bindings.
 
 Assembly commits only intended release files back to the same leased branch.
 Before review it links frozen P as a parent while retaining the complete

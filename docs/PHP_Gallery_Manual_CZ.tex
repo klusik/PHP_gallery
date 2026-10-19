@@ -3214,7 +3214,22 @@ Změněné vstupy WinApp vyžadují instalátor; jinak se~zachová jeho
 samostatná verze a~ověřené existující soubory.
 
 Hotový redakční text zůstává zachován; jinak se~použije ohraničené
-generování Copilotem z~úplných Git podkladů. Neplatný výstup se~neaplikuje.
+generování Copilotem z~úplných Git podkladů. Automatická cesta připustí nejvýše
+100000 bajtů diffu, 20 zdrojových souborů a~180000 bajtů promptu ještě před
+přípravou poskytovatele. Větší změny, chybějící přihlašovací údaje, výslovná
+externí cesta či chyba Copilotu, kvóty nebo výstupu vytvoří
+\codeword{NOTES_PENDING}. Z~běhu Actions stáhněte
+\codeword{release-notes-handoff} a~předejte \filepath{prompt.txt} zvolené AI.
+Artefakt uchovávaný 30 dní obsahuje úplnou šablonu, podklady commitů, zdrojový
+diff a~manifest hashů. Zkontrolujte jednořádkovou JSON odpověď, ve~\ui{Release
+qualification > Run workflow} vyberte stejnou release větev, vložte odpověď
+do~\codeword{external_notes} a~spusťte pokračování. README balíčku uvádí
+příkaz CLI, pokud tlačítko ještě není registrováno na~main. JSON zachová nové
+řádky Markdownu. Repozitář, verze, větev, SHA zdroje a~hash promptu musí
+odpovídat znovu sestaveným podkladům; změněné podklady vyžadují nový balíček.
+Hotové poznámky zůstávají rozhodující. Čekání nedrží runner ani nevytváří
+připravený commit, kvalifikační check, příručky či release PR. Pokračování
+nepřidává BASIC/FULL. Neplatný výstup se~neaplikuje.
 Chyba sestavení, chybějící příloha či zastaralý generovaný hash zastaví
 sestavení, nikoli novou kvalifikaci zdrojů. Schéma životního cyklu 4 ukládá
 kvalifikovaný zdroj develop a~výsledek sestavení.

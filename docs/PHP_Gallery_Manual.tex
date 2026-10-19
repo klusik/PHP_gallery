@@ -3258,8 +3258,23 @@ Changed WinApp inputs require the~installer; unchanged inputs retain its
 independent version and~verified existing assets.
 
 Editorial notes preserve completed maintainer prose or~use the~existing
-bounded Copilot generation from complete Git evidence. Invalid output is~never
-applied. Build failures, missing attachments and~stale generated hashes stop
+bounded Copilot generation from complete Git evidence. Automatic work admits
+at~most 100000 diff bytes, 20 source files and~180000 prompt bytes before
+provider setup. Larger changes, missing credentials, explicit external mode
+or~Copilot/quota/invalid-output failures create \codeword{NOTES_PENDING}.
+Download \codeword{release-notes-handoff} from~the~Actions run and~give
+\filepath{prompt.txt} to~your chosen AI. The~30-day artifact includes the~full
+template, commit evidence, source diff and~hash manifest. Review its~single-line
+JSON response, then select the~same release branch in~\ui{Release qualification
+> Run workflow}, paste it~into \codeword{external_notes} and~run.
+The~bundle README provides CLI continuation when the~button is~not~yet
+registered on~main. JSON escapes retain Markdown newlines. Repository, version,
+branch, source SHA and~prompt hash must match freshly rebuilt evidence;
+changed evidence needs a~new bundle. Existing notes remain authoritative.
+Pending handoff uses no~waiting runner and~creates no~prepared commit,
+qualification check, manuals build or~release PR. Continuation adds no~BASIC/FULL.
+Invalid output is~never applied. Build failures, missing attachments
+and~stale generated hashes stop
 assembly; they do~not introduce another source qualification stage.
 Lifecycle schema 4 records the~qualified develop source and~assembly outcome.
 

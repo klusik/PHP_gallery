@@ -3278,8 +3278,24 @@ und~vollständiges Manifest. Geänderte WinApp-Eingaben benötigen den~Installer
 sonst bleiben unabhängige Version und~geprüfte vorhandene Dateien erhalten.
 
 Fertiger redaktioneller Text bleibt erhalten; andernfalls arbeitet die
-begrenzte Copilot-Erzeugung mit~vollständigen Git-Belegen. Ungültiger Text
-wird nicht angewendet. Buildfehler, fehlende Anhänge und~veraltete generierte
+begrenzte Copilot-Erzeugung mit~vollständigen Git-Belegen. Vor~der Einrichtung
+des~Anbieters erlaubt die~Automatik höchstens 100000 Diff-Bytes, 20 Quelldateien
+und~180000 Prompt-Bytes. Größere Änderungen, fehlende Zugangsdaten, ausdrücklich
+externer Modus oder~Copilot-, Kontingent- und~Ausgabefehler erzeugen
+\codeword{NOTES_PENDING}. Laden Sie~\codeword{release-notes-handoff} aus~dem
+Actions-Lauf und~geben Sie~\filepath{prompt.txt} der~gewählten KI.
+Das~30 Tage gespeicherte Artefakt enthält die~vollständige Vorlage,
+Commit-Belege, Quell-Diff und~Hashmanifest. Prüfen Sie~die einzeilige
+JSON-Antwort, wählen Sie~denselben Release-Branch unter~\ui{Release
+qualification > Run workflow}, fügen Sie~sie in~\codeword{external_notes}
+ein und~starten Sie~die Fortsetzung. Die~README enthält den~CLI-Befehl, falls
+die~Schaltfläche auf~main noch nicht registriert ist. JSON erhält
+Markdown-Zeilenumbrüche. Repository, Version, Branch, Quell-SHA und~Prompthash
+müssen den~neu erstellten Belegen entsprechen; geänderte Belege benötigen
+ein~neues Paket. Fertige Notizen bleiben maßgeblich. Warten belegt keinen
+Runner und~erstellt weder vorbereiteten Commit, Qualifikationscheck,
+Handbücher noch Release-PR. Die~Fortsetzung ergänzt kein BASIC/FULL.
+Ungültiger Text wird nicht angewendet. Buildfehler, fehlende Anhänge und~veraltete generierte
 Hashes stoppen die~Zusammenstellung, keine neue Quellqualifikation.
 Lebenszyklusschema 4 speichert develop-Quelle und~Zusammenstellungsergebnis.
 
