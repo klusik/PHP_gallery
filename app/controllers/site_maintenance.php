@@ -65,7 +65,7 @@ use function Gallery\Services\cache_cleanup_diagnostic_event;
 use function Gallery\Services\cache_cleanup_diagnostic_buffer;
 
 /**
- * Process token-protected site maintenance, an external cache slice or a leased autonomous timer request.
+ * Process token-protected site, telemetry or leased cache maintenance requests.
  * @return void Writes the safe cron JSON result or a forbidden response.
  */
 function cms_site_maintenance_cron(): void
@@ -84,6 +84,24 @@ function cms_site_maintenance_cron(): void
     ignore_user_abort(true);
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_write_close();
+    }
+
+    $telemetryOnly = (string) ($_POST['telemetry_only'] ?? $_GET['telemetry_only'] ?? '') === '1';
+    if ($telemetryOnly) {
+        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST'
+            || (string) ($_POST['telemetry_only'] ?? '') !== '1'
+            || isset($_POST['cache_only']) || isset($_POST['cache_ticket'])
+            || isset($_GET['cache_only']) || isset($_GET['cache_ticket'])) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'reason' => 'telemetry_transport_refused']);
+            return;
+        }
+        $result = \Gallery\Services\site_maintenance_telemetry_worker_run();
+        if (empty($result['ok'])) {
+            http_response_code(500);
+        }
+        echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return;
     }
 
     $force = (string) ($_GET['force'] ?? $_POST['force'] ?? '') === '1';

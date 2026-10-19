@@ -477,7 +477,8 @@ function cms_admin_telemetry_export(): void
 }
 
 /**
- * Save telemetry settings from the admin form.
+ * Save validated telemetry settings from the authenticated admin form.
+ * @return void Persists bounded preferences and redirects to telemetry.
  */
 function cms_admin_telemetry_settings(): void
 {
@@ -503,13 +504,26 @@ function cms_admin_telemetry_settings(): void
         'telemetry_respect_dnt',
         'telemetry_admin_excluded',
     ];
+    $values = [];
+    try {
+        $definitions = \Gallery\Services\telemetry_admin_editable_setting_definitions();
+        foreach (['telemetry_max_photo_view_seconds', 'telemetry_raw_retention_days',
+            'telemetry_hourly_retention_days', 'telemetry_daily_retention_days',
+            'telemetry_database_retention_days'] as $key) {
+            $values[$key] = \Gallery\Services\telemetry_admin_setting_normalize(
+                $key,
+                $_POST[$key] ?? $definitions[$key]['default']
+            );
+        }
+    } catch (\InvalidArgumentException) {
+        http_response_code(400);
+        return;
+    }
     foreach ($checkboxKeys as $key) {
         telemetry_set_setting($key, isset($_POST[$key]) ? '1' : '0');
     }
-    foreach (['telemetry_max_photo_view_seconds', 'telemetry_raw_retention_days', 'telemetry_hourly_retention_days', 'telemetry_daily_retention_days'] as $key) {
-        // $value stores the bounded numeric setting value.
-        $value = max(1, (int) ($_POST[$key] ?? 0));
-        telemetry_set_setting($key, (string) $value);
+    foreach ($values as $key => $value) {
+        telemetry_set_setting($key, $value);
     }
     admin_log_event('info', 'telemetry.settings_updated', 'Telemetry settings were updated.', [], [
         'category' => 'telemetry',

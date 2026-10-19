@@ -220,15 +220,27 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
 
     try {
         $enabled = function_exists(__NAMESPACE__ . '\\site_maintenance_enabled') ? site_maintenance_enabled() : null;
-        $schedule = function_exists(__NAMESPACE__ . '\\site_maintenance_schedule_due_state') ? site_maintenance_schedule_due_state($now) : [];
+        $schedule = function_exists(__NAMESPACE__ . '\\site_maintenance_schedule_due_state')
+            ? site_maintenance_schedule_due_state($now)
+            : [];
         $state = function_exists(__NAMESPACE__ . '\\site_maintenance_state') ? site_maintenance_state() : [];
         $lastResult = function_exists(__NAMESPACE__ . '\\site_maintenance_last_result') ? site_maintenance_last_result() : [];
-        $budget = function_exists(__NAMESPACE__ . '\\site_maintenance_time_budget_seconds') ? site_maintenance_time_budget_seconds() : null;
+        $budget = function_exists(__NAMESPACE__ . '\\site_maintenance_time_budget_seconds')
+            ? site_maintenance_time_budget_seconds()
+            : null;
         $batchSize = function_exists(__NAMESPACE__ . '\\site_maintenance_batch_size') ? site_maintenance_batch_size() : null;
-        $triggerEnabled = function_exists(__NAMESPACE__ . '\\site_maintenance_request_trigger_enabled') ? site_maintenance_request_trigger_enabled() : false;
-        $detachSupported = function_exists(__NAMESPACE__ . '\\site_maintenance_request_trigger_can_detach_response') ? site_maintenance_request_trigger_can_detach_response() : false;
-        $lastCompletedAt = function_exists(__NAMESPACE__ . '\\app_setting') ? (string) app_setting('site_maintenance_last_completed_at', '') : '';
-        $lastCompletedDate = function_exists(__NAMESPACE__ . '\\app_setting') ? trim((string) app_setting('site_maintenance_last_completed_date', '')) : '';
+        $triggerEnabled = function_exists(__NAMESPACE__ . '\\site_maintenance_request_trigger_enabled')
+            ? site_maintenance_request_trigger_enabled()
+            : false;
+        $detachSupported = function_exists(__NAMESPACE__ . '\\site_maintenance_request_trigger_can_detach_response')
+            ? site_maintenance_request_trigger_can_detach_response()
+            : false;
+        $lastCompletedAt = function_exists(__NAMESPACE__ . '\\app_setting')
+            ? (string) app_setting('site_maintenance_last_completed_at', '')
+            : '';
+        $lastCompletedDate = function_exists(__NAMESPACE__ . '\\app_setting')
+            ? trim((string) app_setting('site_maintenance_last_completed_date', ''))
+            : '';
         $maintenanceDue = admin_test_run_site_maintenance_due_analysis($schedule, $state, $enabled, $lastCompletedDate, $lastCompletedAt, $now);
         $lastCompletedEpoch = (int) ($maintenanceDue['last_completed_epoch'] ?? 0);
         $scheduleDate = (string) ($maintenanceDue['schedule_cycle_date'] ?? '');
@@ -237,14 +249,28 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
         $isRunning = !empty($maintenanceDue['is_running']);
         $currentlyDue = !empty($maintenanceDue['currently_due']);
         $nextExpected = (string) ($maintenanceDue['next_expected_or_due_time'] ?? '');
-        $lock = function_exists(__NAMESPACE__ . '\\site_maintenance_lock_path') ? admin_test_run_lock_snapshot(site_maintenance_lock_path()) : [];
+        $lock = function_exists(__NAMESPACE__ . '\\site_maintenance_lock_path')
+            ? admin_test_run_lock_snapshot(site_maintenance_lock_path())
+            : [];
         $lockAssessment = admin_test_run_lock_assessment($lock, is_int($budget) ? max(120, $budget * 5) : 600);
         $overdue = !empty($maintenanceDue['overdue']);
         $tasks['site_maintenance'] = [
             'subsystem' => 'site_maintenance',
             'enabled' => $enabled,
-            'configured_schedule_or_cadence' => function_exists(__NAMESPACE__ . '\\site_maintenance_utc_time')
-                ? 'daily at ' . site_maintenance_utc_time() . ' UTC within ' . (function_exists(__NAMESPACE__ . '\\site_maintenance_window_minutes') ? site_maintenance_window_minutes() : 0) . ' minute window'
+            'configured_schedule_or_cadence' => function_exists(
+                __NAMESPACE__ . '\\site_maintenance_utc_time'
+            )
+                ? 'daily at ' . site_maintenance_utc_time()
+                    . ' UTC within '
+                    . (
+                        function_exists(
+                            __NAMESPACE__
+                                . '\\site_maintenance_window_minutes'
+                        )
+                            ? site_maintenance_window_minutes()
+                            : 0
+                    )
+                    . ' minute window'
                 : 'unknown',
             'external_cron_or_cli_available' => is_file(dirname(__DIR__, 3) . '/scripts/site_maintenance.php'),
             'external_cron_configured' => 'not_observable_from_php',
@@ -293,8 +319,12 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
         $status = function_exists(__NAMESPACE__ . '\\application_autoupdate_status') ? application_autoupdate_status() : [];
         $activeJob = admin_test_run_update_job_pointer_read_only('active-job.json');
         $lastJob = admin_test_run_update_job_pointer_read_only('last-job.json');
-        $activePublic = is_array($activeJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state') ? application_update_job_public_state($activeJob) : $activeJob;
-        $lastPublic = is_array($lastJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state') ? application_update_job_public_state($lastJob) : $lastJob;
+        $activePublic = is_array($activeJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state')
+            ? application_update_job_public_state($activeJob)
+            : $activeJob;
+        $lastPublic = is_array($lastJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state')
+            ? application_update_job_public_state($lastJob)
+            : $lastJob;
         $lastChecked = max(0, (int) ($status['last_checked_at'] ?? 0), (int) app_setting('application_update_check_cached_at', '0'));
         $intervalSeconds = (int) ($status['interval_seconds'] ?? 300);
         $due = !empty($status['effective']) && ($lastChecked <= 0 || $now - $lastChecked >= $intervalSeconds);
@@ -375,8 +405,12 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
             'previous_execution_duration_seconds' => isset($status['last_result']['elapsed_ms']) ? ((float) $status['last_result']['elapsed_ms'] / 1000.0) : null,
             'configured_execution_budget_seconds' => 'one historical day per invocation; optional caller deadline',
             'configured_work_or_item_budget' => ['row_batch' => 200, 'delete_batch' => 2000],
-            'can_execute_after_response' => function_exists(__NAMESPACE__ . '\\admin_log_archive_request_trigger_can_detach_response') ? admin_log_archive_request_trigger_can_detach_response() : false,
-            'php_worker_remains_occupied_after_response' => function_exists(__NAMESPACE__ . '\\admin_log_archive_request_trigger_can_detach_response') ? admin_log_archive_request_trigger_can_detach_response() : false,
+            'can_execute_after_response' => function_exists(__NAMESPACE__ . '\\admin_log_archive_request_trigger_can_detach_response')
+                ? admin_log_archive_request_trigger_can_detach_response()
+                : false,
+            'php_worker_remains_occupied_after_response' => function_exists(__NAMESPACE__ . '\\admin_log_archive_request_trigger_can_detach_response')
+                ? admin_log_archive_request_trigger_can_detach_response()
+                : false,
             'current_test_run_attempted_or_scheduled_it' => $eventsBySubsystem['admin_log_archive'] ?? [],
             'public_anonymous_traffic_can_trigger' => false,
             'authenticated_admin_traffic_can_trigger' => true,
@@ -388,7 +422,9 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
 
     try {
         $enabled = function_exists(__NAMESPACE__ . '\\thumbnail_warmup_enabled') ? thumbnail_warmup_enabled() : null;
-        $lock = function_exists(__NAMESPACE__ . '\\thumbnail_warmup_lock_path') ? admin_test_run_lock_snapshot(thumbnail_warmup_lock_path()) : [];
+        $lock = function_exists(__NAMESPACE__ . '\\thumbnail_warmup_lock_path')
+            ? admin_test_run_lock_snapshot(thumbnail_warmup_lock_path())
+            : [];
         $lockAssessment = admin_test_run_lock_assessment($lock, 300);
         $tasks['thumbnail_warmup'] = [
             'subsystem' => 'thumbnail_warmup',
@@ -440,7 +476,9 @@ function admin_test_run_cron_and_maintenance_snapshot(array $requests = []): arr
         'active_lock' => null,
         'stale_lock_assessment' => null,
         'currently_active_job' => null,
-        'resumable_job_state' => function_exists(__NAMESPACE__ . '\\database_maintenance_cleanup_state') ? database_maintenance_cleanup_state() : [],
+        'resumable_job_state' => function_exists(__NAMESPACE__ . '\\database_maintenance_cleanup_state')
+            ? database_maintenance_cleanup_state()
+            : [],
         'previous_execution_duration_seconds' => null,
         'configured_execution_budget_seconds' => null,
         'configured_work_or_item_budget' => 'explicit bounded cleanup step selected by Admin',

@@ -1114,32 +1114,148 @@ function telemetry_model_report_job_runs(int $days, int $limit): array
 }
 
 /**
- * Roll hourly metrics into daily telemetry aggregates.
+ * Build the normalized daily aggregation for one fixed telemetry source.
+ *
+ * Known metrics discard dimensions already neutralized by hourly ingestion.
+ * Future metrics retain every dimension until their reporting contract is known.
+ * @param bool $hourly True for hourly archival; false for daily compaction.
+ * @return string SQL SELECT with start/end timestamp bindings in that order.
+ */
+function telemetry_model_daily_select(bool $hourly): string
+{
+    $source = $hourly ? 'telemetry_hourly_metrics' : 'telemetry_daily_metrics';
+    $time = $hourly ? 'bucket_start' : 'bucket_date';
+    // The ten-character web_vital. prefix is a structural metric namespace.
+    $known = "(metric_name IN ('public.sessions', 'public.page_views',"
+        . " 'photo.views', 'photo.view_seconds', 'client.errors',"
+        . " 'client.page_load_ms', 'client.image_decode_ms',"
+        . " 'client.image_display_ms')"
+        . " OR LEFT(metric_name, 10) = 'web_vital.'"
+        . " OR metric_name LIKE 'media.%' OR metric_name LIKE 'cache.%')";
+    $groups = ['DATE(' . $time . ')', 'metric_name', 'route_name',
+        'page_kind', 'gallery_id', 'image_id'];
+    foreach (['browser_family', 'os_family'] as $dimension) {
+        $groups[] = "CASE WHEN " . $known . " THEN 'unknown' ELSE "
+            . $dimension . ' END';
+    }
+    $groups[] = 'device_type';
+    foreach (['viewport_class', 'country_code', 'referrer_category'] as $dimension) {
+        $neutral = $dimension === 'country_code' ? "''" : "'unknown'";
+        $groups[] = 'CASE WHEN ' . $known . ' THEN ' . $neutral
+            . ' ELSE ' . $dimension . ' END';
+    }
+    $groups[] = 'media_variant';
+    $groups[] = 'cache_result';
+    $groupSql = implode(', ', $groups);
+    return 'SELECT ' . $groupSql
+        . ', SUM(sample_count), SUM(event_count), SUM(value_sum),'
+        . ' MIN(value_min), MAX(value_max), MAX(updated_at) FROM ' . $source
+        . ' WHERE ' . $time . ' >= ? AND ' . $time . ' < ?'
+        . ' GROUP BY ' . $groupSql;
+}
+
+/**
+ * Return the explicit daily payload columns, excluding physical row identity.
+ * @return string Fixed SQL column list shared by archival and compaction.
+ */
+function telemetry_model_daily_columns(): string
+{
+    return 'bucket_date, metric_name, route_name, page_kind, gallery_id, image_id,'
+        . ' browser_family, os_family, device_type, viewport_class, country_code,'
+        . ' referrer_category, media_variant, cache_result, sample_count,'
+        . ' event_count, value_sum, value_min, value_max, updated_at';
+}
+
+/**
+ * Replace a complete hourly date window with normalized daily aggregates.
+ *
+ * Delete and replacement are atomic, so retries cannot leave duplicate legacy
+ * dimensions or partially refreshed totals. Maintenance holds the telemetry lock.
+ * @param string $fromDate Inclusive local SQL date with complete hourly source.
+ * @param string $toDate Inclusive local SQL date with complete hourly source.
+ * @param string $now Compatibility timestamp; source timestamps remain authoritative.
+ * @return int Number of daily aggregate rows inserted.
  */
 function telemetry_model_rollup_daily(string $fromDate, string $toDate, string $now): int
 {
-    $stmt = db()->prepare('INSERT INTO telemetry_daily_metrics (
-        bucket_date, metric_name, route_name, page_kind, gallery_id, image_id, browser_family, os_family,
-        device_type, viewport_class, country_code, referrer_category, media_variant, cache_result,
-        sample_count, event_count, value_sum, value_min, value_max, updated_at
-    )
-    SELECT
-        DATE(bucket_start), metric_name, route_name, page_kind, gallery_id, image_id, browser_family, os_family,
-        device_type, viewport_class, country_code, referrer_category, media_variant, cache_result,
-        SUM(sample_count), SUM(event_count), SUM(value_sum), MIN(value_min), MAX(value_max), ?
-    FROM telemetry_hourly_metrics
-    WHERE bucket_start >= ? AND bucket_start < DATE_ADD(?, INTERVAL 1 DAY)
-    GROUP BY DATE(bucket_start), metric_name, route_name, page_kind, gallery_id, image_id, browser_family, os_family,
-        device_type, viewport_class, country_code, referrer_category, media_variant, cache_result
-    ON DUPLICATE KEY UPDATE
-        sample_count = VALUES(sample_count),
-        event_count = VALUES(event_count),
-        value_sum = VALUES(value_sum),
-        value_min = VALUES(value_min),
-        value_max = VALUES(value_max),
-        updated_at = VALUES(updated_at)');
-    $stmt->execute([$now, $fromDate . ' 00:00:00', $toDate]);
-    return $stmt->rowCount();
+    unset($now);
+    $end = date('Y-m-d', strtotime($toDate . ' +1 day'));
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare('DELETE FROM telemetry_daily_metrics'
+            . ' WHERE bucket_date >= ? AND bucket_date < ?');
+        $stmt->execute([$fromDate, $end]);
+        $stmt = $pdo->prepare('INSERT INTO telemetry_daily_metrics ('
+            . telemetry_model_daily_columns() . ') '
+            . telemetry_model_daily_select(true));
+        $stmt->execute([$fromDate . ' 00:00:00', $end . ' 00:00:00']);
+        $rows = $stmt->rowCount();
+        $pdo->commit();
+        return $rows;
+    } catch (\Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
+}
+
+/**
+ * Find the next historical daily partition to compact under the maintenance lock.
+ * @param ?string $after Last successfully compacted date, exclusive.
+ * @param string $before Exclusive stable-day boundary.
+ * @return ?string Next populated date, or null when the archive is caught up.
+ */
+function telemetry_model_next_daily_compaction_day(?string $after, string $before): ?string
+{
+    $parsed = $after === null ? false
+        : \DateTimeImmutable::createFromFormat('!Y-m-d', $after);
+    if ($after !== null && ($parsed === false || $parsed->format('Y-m-d') !== $after)) {
+        throw new \RuntimeException('Invalid telemetry compaction checkpoint.');
+    }
+    $stmt = db()->prepare('SELECT MIN(bucket_date) FROM telemetry_daily_metrics'
+        . ' WHERE bucket_date < ?' . ($after !== null ? ' AND bucket_date > ?' : ''));
+    $stmt->execute($after === null ? [$before] : [$before, $after]);
+    $value = $stmt->fetchColumn();
+    return is_string($value) && $value !== '' ? $value : null;
+}
+
+/**
+ * Compact one historical daily partition without needing expired hourly data.
+ *
+ * A connection-private temporary table preserves the full partition before its
+ * atomic replacement. A crash rolls back the replacement; replay is idempotent.
+ * @param string $day Local SQL date selected by the maintenance owner.
+ * @return void Preserves counts, sums, extrema and all report-owned dimensions.
+ */
+function telemetry_model_compact_daily(string $day): void
+{
+    $pdo = db();
+    $columns = telemetry_model_daily_columns();
+    $end = date('Y-m-d', strtotime($day . ' +1 day'));
+    // Temporary DDL does not implicitly commit a MySQL/MariaDB transaction.
+    $pdo->exec('DROP TEMPORARY TABLE IF EXISTS telemetry_daily_compact_work');
+    $pdo->exec('CREATE TEMPORARY TABLE telemetry_daily_compact_work'
+        . ' LIKE telemetry_daily_metrics');
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare('INSERT INTO telemetry_daily_compact_work ('
+            . $columns . ') ' . telemetry_model_daily_select(false));
+        $stmt->execute([$day, $end]);
+        $stmt = $pdo->prepare('DELETE FROM telemetry_daily_metrics WHERE bucket_date = ?');
+        $stmt->execute([$day]);
+        $pdo->exec('INSERT INTO telemetry_daily_metrics (' . $columns . ') SELECT '
+            . $columns . ' FROM telemetry_daily_compact_work');
+        $pdo->commit();
+    } catch (\Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    } finally {
+        $pdo->exec('DROP TEMPORARY TABLE IF EXISTS telemetry_daily_compact_work');
+    }
 }
 
 /**

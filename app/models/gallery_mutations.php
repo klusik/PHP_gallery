@@ -213,18 +213,49 @@ function gallery_mutation_model_delete_subtree_in_transaction(array $galleryIds,
 
     $imageIds = gallery_mutation_model_image_ids_for_galleries($galleryIds);
     if ($imageIds !== []) {
-        foreach (['galleries.cover_image_id', 'telemetry_sessions.first_image_id', 'telemetry_sessions.last_image_id', 'telemetry_events.image_id', 'telemetry_job_runs.image_id'] as $dependency) {
+        foreach ([
+            'galleries.cover_image_id',
+            'telemetry_sessions.first_image_id',
+            'telemetry_sessions.last_image_id',
+            'telemetry_events.image_id',
+            'telemetry_job_runs.image_id',
+        ] as $dependency) {
             gallery_mutation_model_apply_null_dependency($dependency, $imageIds, $availableDependencies);
         }
-        foreach (['image_thumbnail_variants.image_id', 'image_ai_analysis_jobs.image_id', 'image_ai_metadata.image_id', 'picture_game_votes.image_a_id', 'picture_game_votes.image_b_id', 'picture_game_votes.winner_image_id', 'image_tags.image_id', 'image_votes.image_id'] as $dependency) {
+        foreach ([
+            'image_thumbnail_variants.image_id',
+            'image_ai_analysis_jobs.image_id',
+            'image_ai_metadata.image_id',
+            'picture_game_votes.image_a_id',
+            'picture_game_votes.image_b_id',
+            'picture_game_votes.winner_image_id',
+            'image_tags.image_id',
+            'image_votes.image_id',
+        ] as $dependency) {
             gallery_mutation_model_apply_delete_dependency($dependency, $imageIds, $availableDependencies);
         }
     }
 
-    foreach (['telemetry_sessions.first_gallery_id', 'telemetry_sessions.last_gallery_id', 'telemetry_events.gallery_id', 'telemetry_job_runs.gallery_id', 'galleries.parent_id'] as $dependency) {
+    foreach ([
+        'telemetry_sessions.first_gallery_id',
+        'telemetry_sessions.last_gallery_id',
+        'telemetry_events.gallery_id',
+        'telemetry_job_runs.gallery_id',
+        'galleries.parent_id',
+    ] as $dependency) {
         gallery_mutation_model_apply_null_dependency($dependency, $galleryIds, $availableDependencies);
     }
-    foreach (['gallery_flight_maps.gallery_id', 'gallery_upload_tokens.gallery_id', 'mobile_webdav_upload_tokens.gallery_id', 'image_thumbnail_variants.gallery_id', 'image_ai_analysis_jobs.gallery_id', 'picture_game_votes.gallery_id', 'gallery_tags.gallery_id', 'zip_archives.gallery_id', 'images.gallery_id'] as $dependency) {
+    foreach ([
+        'gallery_flight_maps.gallery_id',
+        'gallery_upload_tokens.gallery_id',
+        'mobile_webdav_upload_tokens.gallery_id',
+        'image_thumbnail_variants.gallery_id',
+        'image_ai_analysis_jobs.gallery_id',
+        'picture_game_votes.gallery_id',
+        'gallery_tags.gallery_id',
+        'zip_archives.gallery_id',
+        'images.gallery_id',
+    ] as $dependency) {
         gallery_mutation_model_apply_delete_dependency($dependency, $galleryIds, $availableDependencies);
     }
 
@@ -290,10 +321,30 @@ function gallery_mutation_model_delete_images(int $galleryId, array $imageIds, a
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        foreach (['galleries.cover_image_id', 'telemetry_sessions.first_image_id', 'telemetry_sessions.last_image_id', 'telemetry_events.image_id', 'telemetry_job_runs.image_id'] as $dependency) {
+        foreach ([
+            'galleries.cover_image_id',
+            'telemetry_sessions.first_image_id',
+            'telemetry_sessions.last_image_id',
+            'telemetry_events.image_id',
+            'telemetry_job_runs.image_id',
+        ] as $dependency) {
             gallery_mutation_model_apply_null_dependency($dependency, $imageIds, $availableDependencies);
         }
-        foreach (['image_thumbnail_variants.image_id', 'image_ai_analysis_jobs.image_id', 'image_ai_metadata.image_id', 'picture_game_votes.image_a_id', 'picture_game_votes.image_b_id', 'picture_game_votes.winner_image_id', 'image_tags.image_id', 'image_votes.image_id', 'image_translations.image_id', 'viewer_favourites.image_id', 'viewer_collection_items.image_id', 'duplicate_photo_ledger_pairs.image_id_low', 'duplicate_photo_ledger_pairs.image_id_high'] as $dependency) {
+        foreach ([
+            'image_thumbnail_variants.image_id',
+            'image_ai_analysis_jobs.image_id',
+            'image_ai_metadata.image_id',
+            'picture_game_votes.image_a_id',
+            'picture_game_votes.image_b_id',
+            'picture_game_votes.winner_image_id',
+            'image_tags.image_id',
+            'image_votes.image_id',
+            'image_translations.image_id',
+            'viewer_favourites.image_id',
+            'viewer_collection_items.image_id',
+            'duplicate_photo_ledger_pairs.image_id_low',
+            'duplicate_photo_ledger_pairs.image_id_high',
+        ] as $dependency) {
             gallery_mutation_model_apply_delete_dependency($dependency, $imageIds, $availableDependencies);
         }
 

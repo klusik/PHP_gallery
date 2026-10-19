@@ -58,7 +58,7 @@ namespace {
     }, E_ALL);
     try {
         $source = (string) file_get_contents(__DIR__ . '/../app/services/admin_settings_registry.php');
-        preg_match_all("/admin_settings_entry\('([^']+)'/", $source, $matches);
+        preg_match_all("/admin_settings_entry\\(\\s*'([^']+)'/", $source, $matches);
         if (count($matches[1]) < 30) {
             throw new \RuntimeException('Registry owner coverage unexpectedly lost its declared entries.');
         }

@@ -1,5 +1,41 @@
 # Compatibility lifecycle and retirement register
 
+## Telemetry storage and historical aggregates
+
+Successful public HTML visits now supply private telemetry-only worker requests
+through the existing maintenance endpoint and configured installation origin.
+The site-maintenance service owns admission, attempt throttling and shared socket
+transport; the controller owns token/method validation. Retention still belongs
+to the original telemetry worker. Single-worker HTTP regressions establish real
+handoff and security/opt-out behavior; production TLS loopback and worker-pool
+impact are unknown until deployed. External cron remains supported permanently
+for low-traffic or restricted-loopback installations. No traffic cannot create a
+PHP wake-up. Response-finishing support improves detachment; without it only the
+bounded transport remains in visitor shutdown, never the retention SQL itself.
+
+
+The telemetry rollup service now rotates a persisted allowlisted first-target
+cursor and visits independent targets in one-batch rounds. Missing or obsolete
+cursor values permanently restart the scheduling order without altering retention
+eligibility; unavailable settings refuse the pass. Defaults increase to ten seconds,
+5000 rows times eight batches per table and a five-minute completed interval.
+Existing local runtime-limit overrides remain authoritative. Production deletion
+throughput and cron cadence are unmeasured; the Maintenance Center four-second
+slice and archival safety checks remain supported.
+
+
+Owners: telemetry settings/rollup services, telemetry model and
+`202610190001_telemetry_compact_indexes.php`. Missing independent SQL retention
+permanently supports pre-seed installations with the documented seven-day default;
+unknown reads never authorize purge. Existing administrator hourly/daily choices
+are preserved. Unknown metric families retain their dimensions permanently until
+an explicit reporting contract permits normalization. No measurement totals,
+photo identity or bot segmentation are retired. Historical daily compaction does
+not reconstruct from partially purged hourly data. Production savings and DDL
+lock duration are unknown until deployed. Hosted regressions cover populated
+migration replay, logical uniqueness, archival/compaction idempotence, historical
+source independence and rollback on a real constraint failure.
+
 ## Optional WinApp dispatch and maps (0.6.0)
 
 Owners: `flight_simbrief.py`, `flight_navdata.py`, `flight_maps.py`,
@@ -231,6 +267,50 @@ Live production acceptance and installation-wide incidence remain unknown.
 
 ## Attachment masters and accounting snapshots
 
+Database inspection keeps legacy case-insensitive PCRE word-boundary matching
+for identifiers outside the ASCII word index. This permanent fallback belongs
+to `database_maintenance.php`, because deployed schema names may include
+punctuation or non-ASCII characters; actual installation-wide usage is unknown.
+Boundary and scoped SQL-evidence regressions protect equivalence. Source inspection
+still distinguishes production SQL, test SQL and lexical mentions without treating
+this supporting evidence as authorization to remove schema objects. No source-cache
+freshness fallback is introduced. A local paired run preserved the full reference
+map while reducing inspection from 4.71 to 1.19 seconds; other-host timings remain
+unknown and are available through the new stage/operation diagnostic breakdown.
+
+With durable thumbnail metadata, new storage jobs finish ordinary-photo accounting
+in their initial source DB pass; only DNG display masters retain bounded disk work.
+The previous full-image derivative cursor remains for schemas without thumbnail
+metadata and already-running jobs without `display_masters_only`. This permanent
+support belongs to storage statistics; removing it requires complete installed
+schema/old-job retirement proof, currently unknown. Required thumbnail aggregate
+failures propagate instead of silently authorizing empty fast-path totals.
+The observed 1,744-photo run needed 89 file-phase requests despite only 0.40 seconds
+of phase work. A 40,000-row regression checks one-request ordinary-photo completion;
+production-scale timing and other-host acceptance remain separate from that fixture.
+
+Storage statistics no longer degrade required photo-query failures to empty
+collections. A local 2026-10-19 run reported 1,744 source photos but zero derivative
+batch rows and false completion. The owner now binds PDO cursor/LIMIT parameters
+as integers, propagates required-query errors and rejects premature exhaustion.
+The previous catch-and-empty behavior is retired because it cannot distinguish
+database failure from completed work. Existing optional thumbnail-schema policy
+is unchanged. Real database regression covers native/emulated prepares; job
+regression covers failures and retained snapshots. Other-host incidence is unknown.
+
+Database attachment accounting retains legacy sidecar ownership. A bounded
+first-use import reads missing PDF/music/OFP categories, including empty ones;
+subsequent updates use SQL totals. This permanent upgrade bridge belongs to
+Admin storage jobs and may retire only after every supported installation has
+durable accounting coverage; installation coverage is currently unknown.
+Explicit reconciliation invalidates derived rows before reimporting out-of-band
+changes. Optional accounting failures retain committed originals, log safe
+owner/category diagnostics and drop stale categories where possible. A complete
+database outage may also prevent invalidation and requires operator recovery.
+The regression owner `tests/admin_storage_statistics_test.php` covers repeated
+updates with source directories offline and insert-if-absent mutation protection.
+Hosted execution is required to establish regression evidence.
+
 Owners: canonical capability registry, shared upload/editor controllers,
 attachment readers and Admin storage statistics. Independent PDF/music masters
 default ON when no preference exists, including upgrades; fresh seeding preserves
@@ -242,7 +322,7 @@ enabled. The tab is omitted only when all three capabilities are OFF; an old
 selected-tab URL then normalizes to Identity rather than an empty panel.
 
 Photo-only cached snapshots/jobs are derived state and cannot establish complete
-attachment coverage. The new v3 snapshot/v2 job keys do not rewrite original data
+attachment coverage. The v3 snapshot/v3 job keys do not rewrite original data
 or old derived bytes; the first new measurement requires explicit Update all.
 The existing optional snapshot argument remains supported for pure/legacy
 photo-only consumers and contributes zero attachment bytes when omitted.
@@ -251,9 +331,11 @@ The attachment accounting owner omits corrupt indexes and unsafe/unreadable
 originals with visible partial-coverage warnings, preserving independent readable
 categories and all original bytes. This is permanent read-only reporting behavior,
 not permission to repair indexes. A post-commit advisory revision write may fail
-without failing the successful attachment response; the next manual scan still
-measures files. This permanent fallback avoids duplicate retries after optional
-reporting failures. Out-of-band file changes require manual refresh.
+without failing the successful attachment response. Missing derived categories
+are reimported by the next update; complete database-outage recovery requires
+explicit invalidation as described above. This permanent fallback avoids duplicate
+retries after optional reporting failures. Out-of-band file changes require
+accounting invalidation followed by manual refresh.
 
 Regression owners: canonical feature core/inventory, real MySQL/MariaDB HTTP
 workflow and the existing storage-statistics fixture. Real-host library sizes,

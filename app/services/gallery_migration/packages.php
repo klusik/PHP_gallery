@@ -196,7 +196,12 @@ function gallery_migration_package_plan(array $manifest, ?int $targetBytes = nul
 
         $groupCount = count($group);
         if ($groupCount > GALLERY_MIGRATION_PACKAGE_MAX_ASSETS) {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_invalid', 'Migration ZIP package request is invalid.'));
+            throw new RuntimeException(
+                gallery_migration_t(
+                    'gallery_migration.error.package_invalid',
+                    'Migration ZIP package request is invalid.'
+                )
+            );
         }
         if ($current && (
             $currentBytes + $groupBytes > $targetBytes
@@ -250,7 +255,12 @@ function gallery_migration_job_package(array $job, string $packageId): ?array
 function gallery_migration_build_package_file(int $rootGalleryId, array $assets, bool $includeSubgalleries): string
 {
     if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.zip_unavailable', 'PHP ZipArchive is required for gallery migration ZIP packages.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.zip_unavailable',
+                'PHP ZipArchive is required for gallery migration ZIP packages.'
+            )
+        );
     }
     if (!$assets || count($assets) > GALLERY_MIGRATION_PACKAGE_MAX_ASSETS) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_invalid', 'Migration ZIP package request is invalid.'));
@@ -262,36 +272,71 @@ function gallery_migration_build_package_file(int $rootGalleryId, array $assets,
     $zip = new ZipArchive();
     if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
         gallery_migration_release_temporary_file($zipPath);
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_create_failed', 'Could not create migration ZIP package.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.package_create_failed',
+                'Could not create migration ZIP package.'
+            )
+        );
     }
 
     try {
         $seen = [];
         foreach ($assets as $asset) {
             if (!is_array($asset)) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_invalid', 'Migration ZIP package request is invalid.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_invalid',
+                        'Migration ZIP package request is invalid.'
+                    )
+                );
             }
             $key = gallery_migration_asset_key($asset);
             if ($key === '' || isset($seen[$key])) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_invalid', 'Migration ZIP package request is invalid.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_invalid',
+                        'Migration ZIP package request is invalid.'
+                    )
+                );
             }
             $seen[$key] = true;
             $descriptor = gallery_migration_source_asset_descriptor($rootGalleryId, $asset, $includeSubgalleries);
             $expectedSize = max(0, (int) ($asset['file_size'] ?? 0));
             $actualSize = filesize($descriptor['path']);
             if ($expectedSize > 0 && ($actualSize === false || $actualSize !== $expectedSize)) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_checksum_failed', 'Migration asset checksum does not match the manifest.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.asset_checksum_failed',
+                        'Migration asset checksum does not match the manifest.'
+                    )
+                );
             }
             $expectedChecksum = strtolower((string) ($asset['checksum_sha256'] ?? ''));
             if ($expectedChecksum !== '' && strtolower((string) (hash_file('sha256', $descriptor['path']) ?: '')) !== $expectedChecksum) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.asset_checksum_failed', 'Migration asset checksum does not match the manifest.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.asset_checksum_failed',
+                        'Migration asset checksum does not match the manifest.'
+                    )
+                );
             }
             $entryName = gallery_migration_package_entry_name($asset);
             if (!$zip->addFile($descriptor['path'], $entryName)) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_create_failed', 'Could not create migration ZIP package.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_create_failed',
+                        'Could not create migration ZIP package.'
+                    )
+                );
             }
             if (!method_exists($zip, 'setCompressionName') || !$zip->setCompressionName($entryName, ZipArchive::CM_STORE)) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_create_failed', 'Could not create migration ZIP package.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_create_failed',
+                        'Could not create migration ZIP package.'
+                    )
+                );
             }
         }
     } catch (Throwable $exception) {
@@ -302,7 +347,12 @@ function gallery_migration_build_package_file(int $rootGalleryId, array $assets,
 
     if (!$zip->close()) {
         gallery_migration_release_temporary_file($zipPath);
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_create_failed', 'Could not create migration ZIP package.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.package_create_failed',
+                'Could not create migration ZIP package.'
+            )
+        );
     }
 
     return $zipPath;
@@ -323,7 +373,12 @@ function gallery_migration_package_assets_from_json(string $json): array
     $assets = [];
     foreach ($decoded as $asset) {
         if (!is_array($asset)) {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_invalid', 'Migration ZIP package request is invalid.'));
+            throw new RuntimeException(
+                gallery_migration_t(
+                    'gallery_migration.error.package_invalid',
+                    'Migration ZIP package request is invalid.'
+                )
+            );
         }
         $assets[] = $asset;
     }
@@ -368,7 +423,12 @@ function gallery_migration_install_package_file(string $jobId, int $targetGaller
 function gallery_migration_install_package_file_owned(string $jobId, int $targetGalleryId, string $packageId, string $zipPath): array
 {
     if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.zip_unavailable', 'PHP ZipArchive is required for gallery migration ZIP packages.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.zip_unavailable',
+                'PHP ZipArchive is required for gallery migration ZIP packages.'
+            )
+        );
     }
     if (!is_file($zipPath)) {
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_missing', 'Migration ZIP package is not available.'));
@@ -376,11 +436,21 @@ function gallery_migration_install_package_file_owned(string $jobId, int $target
 
     $job = gallery_migration_load_job($jobId);
     if ((int) ($job['target_gallery_id'] ?? 0) !== $targetGalleryId) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.job_target_mismatch', 'Migration job does not belong to this target gallery.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.job_target_mismatch',
+                'Migration job does not belong to this target gallery.'
+            )
+        );
     }
     $package = gallery_migration_job_package($job, $packageId);
     if ($package === null) {
-        throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_not_in_job', 'Migration ZIP package is not part of this job.'));
+        throw new RuntimeException(
+            gallery_migration_t(
+                'gallery_migration.error.package_not_in_job',
+                'Migration ZIP package is not part of this job.'
+            )
+        );
     }
     $assets = array_values(array_filter((array) ($package['assets'] ?? []), 'is_array'));
 
@@ -394,32 +464,62 @@ function gallery_migration_install_package_file_owned(string $jobId, int $target
         foreach ($assets as $asset) {
             $entryName = gallery_migration_package_entry_name($asset);
             if (isset($expectedEntries[$entryName])) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_contents', 'Migration ZIP package contents do not match the prepared job.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_contents',
+                        'Migration ZIP package contents do not match the prepared job.'
+                    )
+                );
             }
             $expectedEntries[$entryName] = $asset;
         }
         if ($zip->numFiles !== count($expectedEntries)) {
-            throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_contents', 'Migration ZIP package contents do not match the prepared job.'));
+            throw new RuntimeException(
+                gallery_migration_t(
+                    'gallery_migration.error.package_contents',
+                    'Migration ZIP package contents do not match the prepared job.'
+                )
+            );
         }
 
         $seenEntries = [];
         for ($index = 0; $index < $zip->numFiles; $index++) {
             $name = (string) $zip->getNameIndex($index);
             if (!isset($expectedEntries[$name]) || isset($seenEntries[$name])) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_contents', 'Migration ZIP package contents do not match the prepared job.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_contents',
+                        'Migration ZIP package contents do not match the prepared job.'
+                    )
+                );
             }
             $seenEntries[$name] = true;
             $stat = $zip->statIndex($index);
             if (!is_array($stat)) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_contents', 'Migration ZIP package contents do not match the prepared job.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_contents',
+                        'Migration ZIP package contents do not match the prepared job.'
+                    )
+                );
             }
             $expectedSize = max(0, (int) ($expectedEntries[$name]['file_size'] ?? 0));
             $archiveSize = max(0, (int) ($stat['size'] ?? 0));
             if ($expectedSize > 0 && $archiveSize !== $expectedSize) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_contents', 'Migration ZIP package contents do not match the prepared job.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_contents',
+                        'Migration ZIP package contents do not match the prepared job.'
+                    )
+                );
             }
             if (isset($stat['comp_method']) && (int) $stat['comp_method'] !== ZipArchive::CM_STORE) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_contents', 'Migration ZIP package contents do not match the prepared job.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_contents',
+                        'Migration ZIP package contents do not match the prepared job.'
+                    )
+                );
             }
         }
 
@@ -435,18 +535,33 @@ function gallery_migration_install_package_file_owned(string $jobId, int $target
             $entryName = gallery_migration_package_entry_name($asset);
             $stream = $zip->getStream($entryName);
             if (!is_resource($stream)) {
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.package_contents', 'Migration ZIP package contents do not match the prepared job.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.package_contents',
+                        'Migration ZIP package contents do not match the prepared job.'
+                    )
+                );
             }
             $tmp = tempnam(sys_get_temp_dir(), 'php_gallery_migration_asset_');
             if ($tmp === false) {
                 fclose($stream);
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.temp_failed',
+                        'Could not create a temporary migration file.'
+                    )
+                );
             }
             $out = fopen($tmp, 'wb');
             if ($out === false) {
                 fclose($stream);
                 @unlink($tmp);
-                throw new RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
+                throw new RuntimeException(
+                    gallery_migration_t(
+                        'gallery_migration.error.temp_failed',
+                        'Could not create a temporary migration file.'
+                    )
+                );
             }
             stream_copy_to_stream($stream, $out);
             fclose($stream);

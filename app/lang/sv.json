@@ -7624,5 +7624,10 @@
     "presentation.exclusive_help": "Dölj kontroller. Avsluta med Esc.",
     "presentation.autoplay_short": "Autostart",
     "presentation.interval_short": "Bilder",
-    "presentation.transition_short": "Övergång"
+    "presentation.transition_short": "Övergång",
+    "admin.telemetry.database_retention": "Lagring av databasdiagnostik, dagar",
+    "admin.telemetry.database_retention_hint": "SQL-frågeavtryck används för kortvarig diagnostik. Den separata lagringstiden förkortar inte användningshistoriken.",
+    "admin.settings.item.telemetry_database_retention_days": "Lagring av databastelemetri",
+    "admin.settings.item.telemetry_database_retention_days.hint": "Antal dagar att lagra SQL-frågeavtryck oberoende av användningsstatistik.",
+    "admin.settings.item.telemetry_database_retention_days.example": "Exempel: Behåll SQL-diagnostik i 7 dagar och timvis användning i 90 dagar."
 }

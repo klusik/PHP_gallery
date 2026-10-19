@@ -421,7 +421,11 @@ function python_command_is_usable(array $commandPrefix, ?callable $runner = null
  * @param ?callable $probe Optional command probe used by regression tests.
  * @return ?array Resolved runnable command prefix, or null when no Python 3 command works.
  */
-function resolve_python_command_from_candidates(array $candidates, ?callable $finder = null, ?callable $probe = null): ?array
+function resolve_python_command_from_candidates(
+    array $candidates,
+    ?callable $finder = null,
+    ?callable $probe = null
+): ?array
 {
     $executableFinder = $finder ?? static fn(string $name): ?string => find_executable($name);
     $commandProbe = $probe ?? static fn(array $commandPrefix): bool => python_command_is_usable($commandPrefix);
@@ -491,7 +495,14 @@ function resolve_browser_executable(): ?string
         return null;
     }
 
-    foreach (['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge', 'msedge'] as $name) {
+    foreach ([
+        'google-chrome',
+        'google-chrome-stable',
+        'chromium',
+        'chromium-browser',
+        'microsoft-edge',
+        'msedge',
+    ] as $name) {
         $resolved = find_executable($name);
         if ($resolved !== null) {
             return $resolved;
@@ -683,7 +694,21 @@ function select_lint_targets(string $rootPath, array $extensions, bool $changedO
         }
     }
     return [
-        'files' => discover_files($rootPath, $extensions, ['.git', '.idea', '.vscode', 'cache', 'data', 'galleries', 'deploy', 'node_modules', 'vendor', '__pycache__', '.pytest_cache', '.venv', 'venv']),
+        'files' => discover_files($rootPath, $extensions, [
+            '.git',
+            '.idea',
+            '.vscode',
+            'cache',
+            'data',
+            'galleries',
+            'deploy',
+            'node_modules',
+            'vendor',
+            '__pycache__',
+            '.pytest_cache',
+            '.venv',
+            'venv',
+        ]),
         'fallback' => $changedOnly,
         'blocked' => false,
         'reason' => $reason,
@@ -1152,7 +1177,10 @@ function render_markdown_report(array $report): string
 
     array_push($lines, '## Environment', '', '| Component | Status | Value |', '| --- | --- | --- |');
     foreach ($report['environment'] as $item) {
-        $lines[] = '| ' . markdown_cell((string) $item['component']) . ' | ' . markdown_cell((string) $item['status']) . ' | ' . markdown_cell((string) $item['value']) . ' |';
+        $lines[] = '| '
+            . markdown_cell((string) $item['component']) . ' | '
+            . markdown_cell((string) $item['status']) . ' | '
+            . markdown_cell((string) $item['value']) . ' |';
     }
 
     $lines[] = '';
@@ -1161,7 +1189,11 @@ function render_markdown_report(array $report): string
     $lines[] = '| Suite | Status | Result | Duration |';
     $lines[] = '| --- | --- | --- | ---: |';
     foreach ($report['tasks'] as $task) {
-        $lines[] = '| ' . markdown_cell((string) $task['label']) . ' | **' . markdown_cell((string) $task['status']) . '** | ' . markdown_cell((string) $task['summary']) . ' | ' . format_duration((float) $task['duration_seconds']) . ' |';
+        $lines[] = '| '
+            . markdown_cell((string) $task['label']) . ' | **'
+            . markdown_cell((string) $task['status']) . '** | '
+            . markdown_cell((string) $task['summary']) . ' | '
+            . format_duration((float) $task['duration_seconds']) . ' |';
     }
 
     $problemTasks = array_values(array_filter(

@@ -83,7 +83,15 @@ function flight_maps_model_delete(int $galleryId): void
  * @param ?string $resolvedAt Optional timestamp for the captured navigation cycle.
  * @return void Stores one resolved map record.
  */
-function flight_maps_model_upsert(int $galleryId, string $sourceType, string $routeText, array $points, array $unresolved, string $now, ?string $resolvedAt = null): void
+function flight_maps_model_upsert(
+    int $galleryId,
+    string $sourceType,
+    string $routeText,
+    array $points,
+    array $unresolved,
+    string $now,
+    ?string $resolvedAt = null
+): void
 {
     $stmt = db()->prepare("INSERT INTO gallery_flight_maps (
         gallery_id,
@@ -109,7 +117,10 @@ function flight_maps_model_upsert(int $galleryId, string $sourceType, string $ro
         $sourceType,
         $routeText,
         json_encode($points, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        json_encode(array_values($unresolved), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        json_encode(
+            array_values($unresolved),
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        ),
         count($points),
         $resolvedAt !== null && trim($resolvedAt) !== '' ? $resolvedAt : $now,
         $now,
@@ -126,7 +137,12 @@ function flight_maps_model_upsert(int $galleryId, string $sourceType, string $ro
  * @param string $now Resolution timestamp.
  * @return bool True when the snapshot was updated; false after an edit or deletion.
  */
-function flight_maps_model_complete_route(array $row, array $points, array $unresolved, string $now): bool
+function flight_maps_model_complete_route(
+    array $row,
+    array $points,
+    array $unresolved,
+    string $now
+): bool
 {
     $stmt = db()->prepare('UPDATE gallery_flight_maps
         SET resolved_points_json = ?, unresolved_points_json = ?, point_count = ?, resolved_at = ?, updated_at = ?
@@ -136,10 +152,19 @@ function flight_maps_model_complete_route(array $row, array $points, array $unre
             AND BINARY unresolved_points_json = BINARY ? AND updated_at = ?');
     $stmt->execute([
         json_encode($points, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        json_encode(array_values($unresolved), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        count($points), $now, $now,
-        (int) $row['gallery_id'], (string) $row['map_source_type'], (string) $row['route_text'],
-        (string) $row['resolved_points_json'], (string) $row['unresolved_points_json'], (string) $row['updated_at'],
+        json_encode(
+            array_values($unresolved),
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        ),
+        count($points),
+        $now,
+        $now,
+        (int) $row['gallery_id'],
+        (string) $row['map_source_type'],
+        (string) $row['route_text'],
+        (string) $row['resolved_points_json'],
+        (string) $row['unresolved_points_json'],
+        (string) $row['updated_at'],
     ]);
     return $stmt->rowCount() > 0;
 }
@@ -199,10 +224,19 @@ function flight_maps_model_replace_navdata(array $rows, string $source, string $
         // Bound prepared-statement parameters while reducing 100,000 individual
         // round trips to roughly 500 batches. The transaction remains atomic.
         foreach (array_chunk($rows, FLIGHT_MAPS_NAVDATA_BATCH_ROWS) as $batch) {
-            $stmt = $pdo->prepare(sprintf($insertSql, implode(', ', array_fill(0, count($batch), '(?, ?, ?, ?, ?, ?, ?, ?, ?)'))));
+            $placeholders = array_fill(
+                0,
+                count($batch),
+                '(?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            );
+            $stmt = $pdo->prepare(sprintf(
+                $insertSql,
+                implode(', ', $placeholders)
+            ));
             $parameters = [];
             foreach ($batch as $row) {
-                array_push($parameters,
+                array_push(
+                    $parameters,
                     $row['ident'],
                     $row['kind'],
                     $row['region'],

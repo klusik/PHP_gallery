@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.137.1. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.137.2. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
 
@@ -27,21 +27,39 @@ The lazy `presentation_gallery_settings` health resolver shares the same schema
 authority and lightbox capability gate. Link-only fullscreen/exclusive choices
 do not require additional persistence.
 
-PDF/music capability and accounting changes add no tables, columns or migrations.
+Attachment accounting adds migration
+`202610190001_gallery_attachment_storage.php`. The derived
+`gallery_attachment_storage` table has one `(gallery_id, kind)` primary key per
+PDF, music or OFP category, including empty categories. It stores count, bytes
+and import warnings. The gallery foreign key cascades deletion; restoring or
+importing a gallery leaves its missing categories for the next bounded import.
+Original ownership and integrity metadata remain in the existing sidecar indexes.
+Committed attachment writers publish category totals from their validated
+metadata. `Update all` imports missing categories once, then reads SQL sums.
+Import uses insert-if-absent semantics so a concurrent writer's totals win.
+An unavailable accounting table fails the report instead of silently returning
+zero or repeatedly scanning all galleries; run the normal upgrade migrations.
+
+PDF/music capability switches add no separate preference table.
 The canonical keys `feature_flag.gallery_pdf_documents.enabled` and
 `feature_flag.gallery_music.enabled` use existing `app_settings` storage.
 Both missing-key upgrade fallbacks and fresh-install defaults are ON. An explicit
 OFF value is preserved, and no playlist/document metadata or original is deleted.
 
 Manual storage snapshots use `admin_storage_statistics_cache_v3`; resumable
-photo/gallery cursors use `admin_storage_statistics_job_v2`. Older derived keys
+photo/gallery cursors use `admin_storage_statistics_job_v3`. Older derived keys
 are retained but are not reused as complete attachment measurements; run Update
 all after upgrading. `gallery_attachment_storage_revision` is an opaque advisory
 nonce changed after supported web attachment mutations. It marks cached totals
 and active jobs stale without scanning files. Failure to update that optional
 marker does not turn a committed attachment operation into a failed upload;
-the next explicit scan still measures actual files. Out-of-band filesystem edits
-also require Update all. Original storage remains under its existing owners.
+failed category writes remove the derived row when possible so Update all can
+reimport it. Failures are logged with the gallery ID and category. If a database
+outage also prevents invalidation, explicit reconciliation is required.
+Out-of-band filesystem edits require invalidating the affected accounting rows
+before Update all; repeat refreshes deliberately trust the database. See
+[attachment reconciliation](docs/GALLERY_PDF.md#admin-storage-accounting).
+Original storage remains under its existing owners.
 
 Music playlists introduce no tables or columns. Each physical gallery's denied
 `.gallery-music/index.json` stores its ordered immutable-original metadata,
@@ -1099,6 +1117,52 @@ telemetry fields.
 ### `telemetry_job_runs`
 
 Tracks telemetry maintenance and rollup jobs.
+
+### Telemetry storage lifecycle
+
+Scheduled admission now uses a five-minute interval both while catching up and
+when complete. A normal slice admits ten seconds of work, with up to eight
+5000-row DELETEs per table (40000 rows). Independent targets alternate one batch
+at a time and persist the next first target across slices; expiry of the shared
+deadline can reduce actual progress. Hourly deletion still requires its archival
+checkpoint. Maintenance Center retains its four-second UI budget. Successful public HTML visits start a private token-authenticated telemetry-only
+worker through the existing maintenance endpoint. The visitor-side attempt marker
+and worker-side database throttle/lock keep execution bounded without requiring
+external cron. Preview/media/error responses cannot start it. The worker yields
+to known or unknown central maintenance ownership and respects telemetry OFF.
+No visits means no wake-up; optional cron can supply independent opportunities.
+
+
+SQL query fingerprints have independent retention (`telemetry_database_retention_days`):
+seven days by default, configurable from one to 90 days. Upgrades seed this new
+setting without overwriting an explicit value. Missing pre-migration settings use
+the same default; unavailable or invalid settings stop destructive maintenance.
+Hourly (90-day default), daily (730-day default), raw-event and session retention
+remain independent. Database diagnostic reports cover only their retained window.
+
+Telemetry hourly, daily and SQL aggregates use an unsigned BIGINT physical primary
+key and retain their original composite identity as a UNIQUE key. Secondary
+indexes therefore reference the short physical identity. The migration rebuilds
+these three tables and preserves measurements; allow temporary disk space and a
+DDL maintenance window on large installations. Interrupted multi-table upgrades
+replay through the existing duplicate-DDL migration handler.
+
+Daily archival neutralizes browser, OS, viewport, country and referrer dimensions
+for known metric families; current reports obtain browser mixes from sessions.
+It preserves photo/gallery identities, routes, media/cache breakdowns, traffic
+segments, counts, sums and extrema. Unknown metric families retain all dimensions.
+A durable `telemetry_daily_compact_after` cursor compacts historical daily data
+one date per transaction, including dates whose hourly source has expired.
+Existing maintenance day/time budgets bound admission; one SQL statement may
+outlast the PHP admission deadline. A failed date never advances its cursor.
+Archival replaces complete daily windows transactionally, preventing stale legacy
+keys from duplicating totals on refresh. Compaction uses connection-private
+InnoDB temporary storage and does not change the hourly archival checkpoint.
+
+Logical deletion makes InnoDB pages reusable; it does not promise an immediate
+reduction in the hosting provider's allocated-size estimate. Physical database
+optimization remains an explicit administrator operation. Production savings and
+lock duration must be measured after deployment; no fixed saving is guaranteed.
 
 ### Telemetry storage diagnostics
 

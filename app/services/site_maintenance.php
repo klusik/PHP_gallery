@@ -117,7 +117,12 @@ function site_maintenance_normalize_utc_time(string $value): string
  */
 function site_maintenance_window_minutes(): int
 {
-    return site_maintenance_normalize_window_minutes((int) app_setting('site_maintenance_window_minutes', (string) SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES));
+    return site_maintenance_normalize_window_minutes(
+        (int) app_setting(
+            'site_maintenance_window_minutes',
+            (string) SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES
+        )
+    );
 }
 
 /**
@@ -289,8 +294,16 @@ function site_maintenance_request_trigger_interval_seconds(): int
  * @param int $timeBudgetSeconds Time budget seconds value.
  * @param bool $requestTriggerEnabled Request trigger enabled value.
  * @param int $windowMinutes Window minutes value.
+ * @return void Saves the normalized maintenance preferences.
  */
-function set_site_maintenance_settings(bool $enabled, string $utcTime, int $batchSize, int $timeBudgetSeconds, bool $requestTriggerEnabled = true, int $windowMinutes = SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES): void
+function set_site_maintenance_settings(
+    bool $enabled,
+    string $utcTime,
+    int $batchSize,
+    int $timeBudgetSeconds,
+    bool $requestTriggerEnabled = true,
+    int $windowMinutes = SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES
+): void
 {
     set_app_setting('site_maintenance_enabled', $enabled ? '1' : '0');
     set_app_setting('site_maintenance_utc_time', site_maintenance_normalize_utc_time($utcTime));
@@ -648,7 +661,9 @@ function site_maintenance_new_state(string $cycleDate, string $source): array
         'totals' => site_maintenance_empty_totals(),
         'cleanup' => [],
         'cleanup_diagnostics' => [],
-        'thumbnail_metadata_start_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
+        'thumbnail_metadata_start_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot')
+            ? thumbnail_metadata_storage_snapshot()
+            : [],
     ];
 }
 
@@ -877,8 +892,27 @@ function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
 function site_maintenance_fire_cache_chain(string $ticket): bool
 {
     require_once __DIR__ . '/cache_lifecycle_storage.php';
-    if (!cache_lifecycle_chain_runtime_available() || preg_match('/^[a-f0-9]{64}$/', $ticket) !== 1
-        || !function_exists('stream_socket_client')) return false;
+    if (!cache_lifecycle_chain_runtime_available()
+        || preg_match('/^[a-f0-9]{64}$/', $ticket) !== 1) {
+        return false;
+    }
+    return site_maintenance_fire_background_worker(false, $ticket);
+}
+
+/**
+ * Dispatch cache continuation or telemetry to the configured private worker.
+ *
+ * The visitor sends only a bounded handoff; it never waits for maintenance SQL.
+ * @param bool $telemetryOnly True for telemetry admission; false for a cache ticket.
+ * @param string $ticket Private cache continuation ticket; empty for telemetry.
+ * @return bool True after the complete authenticated POST is written; not proof of worker arrival.
+ */
+function site_maintenance_fire_background_worker(bool $telemetryOnly, string $ticket = ''): bool
+{
+    if (!function_exists('stream_socket_client')
+        || ($telemetryOnly ? $ticket !== '' : preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1)) {
+        return false;
+    }
     // Use the persisted installation origin, never an incoming Host header or
     // a caller-selected URL, so a public visit cannot redirect the secret.
     $base = rtrim((string) (cms_config()['base_url'] ?? ''), '/');
@@ -889,12 +923,26 @@ function site_maintenance_fire_cache_chain(string $ticket): bool
     $host = (string) $parts['host'];
     $port = (int) ($parts['port'] ?? ($parts['scheme'] === 'https' ? 443 : 80));
     if ($port < 1 || $port > 65535) return false;
-    $body = http_build_query(['cache_only'=>1,'cache_ticket'=>$ticket], '', '&', PHP_QUERY_RFC3986);
+    $payload = $telemetryOnly ? ['telemetry_only' => 1]
+        : ['cache_only' => 1, 'cache_ticket' => $ticket];
+    $body = http_build_query($payload, '', '&', PHP_QUERY_RFC3986);
     $target = rtrim((string) ($parts['path'] ?? ''), '/') . '/index.php?page=site_maintenance_cron';
-    $hostHeader = $host . (($parts['scheme'] === 'https' && $port === 443) || ($parts['scheme'] === 'http' && $port === 80) ? '' : ':' . $port);
-    $context = stream_context_create(['ssl'=>['verify_peer'=>true,'verify_peer_name'=>true,'allow_self_signed'=>false,'peer_name'=>$host]]);
+    $hostHeader = $host . (
+        ($parts['scheme'] === 'https' && $port === 443)
+            || ($parts['scheme'] === 'http' && $port === 80)
+            ? ''
+            : ':' . $port
+    );
+    $context = stream_context_create([
+        'ssl' => [
+            'verify_peer'=>true,
+            'verify_peer_name'=>true,
+            'allow_self_signed'=>false,
+            'peer_name'=>$host
+        ],
+    ]);
     // Bound each connection and the complete write admission.
-    // Type: int. Units: seconds. Scope: one asynchronous cache handoff.
+    // Type: int. Units: seconds. Scope: one asynchronous maintenance handoff.
     // Consumers: stream connection, write timeout and write deadline. Rationale: a one-second limit prevents a stalled loopback from turning the public kickoff into a long network wait.
     $transportSeconds = 1;
     $socket = @stream_socket_client(($parts['scheme'] === 'https' ? 'tls://' : 'tcp://') . $host . ':' . $port,
@@ -902,10 +950,11 @@ function site_maintenance_fire_cache_chain(string $ticket): bool
     if (!is_resource($socket)) return false;
     try {
         stream_set_timeout($socket, $transportSeconds);
+        $agent = $telemetryOnly ? 'PHP-Gallery-Telemetry-Worker' : 'PHP-Gallery-Cache-Worker';
         $request = 'POST ' . $target . " HTTP/1.1\r\nHost: " . $hostHeader
             . "\r\nX-Site-Maintenance-Token: " . site_maintenance_token()
             . "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: " . strlen($body)
-            . "\r\nUser-Agent: PHP-Gallery-Cache-Worker\r\nConnection: close\r\n\r\n" . $body;
+            . "\r\nUser-Agent: " . $agent . "\r\nConnection: close\r\n\r\n" . $body;
         $offset = 0;
         $deadline = microtime(true) + $transportSeconds;
         while ($offset < strlen($request) && microtime(true) < $deadline) {
@@ -1019,14 +1068,15 @@ function site_maintenance_queue_next_chained_slice(): bool
 }
 
 /**
- * Register independent public cache opportunities and the existing Admin-only thumbnail maintenance fallback.
+ * Register public telemetry/cache opportunities and the Admin thumbnail fallback.
  *
  * @param string $page Canonical route identifier.
  * @param callable(string):mixed|null $loadDependencies Optional reviewed kernel module loader for admitted shutdown work.
- * @return void Registers bounded public cache work independently of Admin thumbnail enable/window gates; existing Admin fallback retains its eligibility.
+ * @return void Registers private telemetry handoffs and bounded cache opportunities independently of Admin thumbnail windows; the Admin fallback retains its eligibility.
  */
 function site_maintenance_register_request_trigger(string $page, ?callable $loadDependencies = null): void
 {
+    site_maintenance_register_telemetry_trigger($page);
     site_maintenance_register_cache_trigger($page, $loadDependencies);
     if (PHP_SAPI === 'cli') {
         return;
@@ -1074,6 +1124,87 @@ function site_maintenance_register_request_trigger(string $page, ?callable $load
             admin_test_run_record_maintenance_event('site_maintenance', 'execution_end', ['source' => 'request_trigger_inline']);
         }
     });
+}
+
+/**
+ * Register a traffic-driven telemetry handoff independently of thumbnail windows.
+ *
+ * Only successful public HTML GETs may schedule one private server request.
+ * Collection preferences and the worker's authoritative throttle remain owners.
+ * @param string $page Canonical route; home, gallery and smart_gallery are admitted.
+ * @return void Registers a shutdown handoff; never performs retention SQL in the visitor.
+ */
+function site_maintenance_register_telemetry_trigger(string $page): void
+{
+    if (PHP_SAPI === 'cli' || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
+        || strtoupper((string) (request_data('server')['REQUEST_METHOD'] ?? 'GET')) !== 'GET'
+        || array_key_exists('preview', request_data('query'))
+        || !feature_capability_effective_enabled('telemetry')
+        || !telemetry_setting_enabled('telemetry_enabled', '0')) {
+        return;
+    }
+    register_shutdown_function(static function (): void {
+        if (response_status_code() < 200 || response_status_code() >= 300
+            || error_get_last() !== null
+                && in_array(error_get_last()['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+            return;
+        }
+        $lock = false;
+        try {
+            $root = defined('CACHE_LIFECYCLE_TEST_ROOT')
+                ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT') : dirname(__DIR__, 2);
+            application_update_assert_safe_target($root, 'cache/site-maintenance/telemetry-trigger.lock', true);
+            application_update_assert_safe_target($root, 'cache/site-maintenance/telemetry-trigger.touch', true);
+            $directory = site_maintenance_cache_dir();
+            $lock = @fopen($directory . '/telemetry-trigger.lock', 'c');
+            if (!is_resource($lock) || !flock($lock, LOCK_EX | LOCK_NB)) {
+                return;
+            }
+            $touch = $directory . '/telemetry-trigger.touch';
+            clearstatcache(true, $touch);
+            $interval = max(1, (int) \Gallery\Core\cms_runtime_limit('telemetry.maintenance_retry_seconds'));
+            if (is_file($touch) && time() - (int) filemtime($touch) < $interval) {
+                return;
+            }
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            ignore_user_abort(true);
+            site_maintenance_finish_response_before_background_work();
+            // Throttle failed handoffs too: unavailable loopback must not add
+            // a network attempt to every visitor. A later visit retries admission.
+            if (@touch($touch)) {
+                site_maintenance_fire_background_worker(true);
+            }
+        } catch (Throwable) {
+            // Unavailable coordination or loopback must preserve the public HTML.
+        } finally {
+            if (is_resource($lock)) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
+        }
+    });
+}
+
+/**
+ * Admit the private telemetry worker under central ownership and telemetry policy.
+ * @return array{ok:bool,skipped?:bool,reason?:string,has_more?:bool,error?:string,rolled_up?:int,deleted?:array<string,int>,checkpoint?:?string} Bounded progress or a safe unavailable/disabled/busy result.
+ */
+function site_maintenance_telemetry_worker_run(): array
+{
+    try {
+        if (!feature_capability_effective_enabled('telemetry')
+            || !telemetry_setting_enabled('telemetry_enabled', '0')) {
+            return ['ok' => true, 'skipped' => true, 'reason' => 'disabled'];
+        }
+        if (maintenance_center_model_mutation_owner(true) !== null) {
+            return ['ok' => true, 'skipped' => true, 'reason' => 'central_maintenance_active'];
+        }
+        return telemetry_run_scheduled_maintenance();
+    } catch (Throwable) {
+        return ['ok' => false, 'has_more' => true, 'error' => 'maintenance_unavailable'];
+    }
 }
 
 /**
@@ -1738,21 +1869,46 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
 
     if (image_uses_dng_display_derivatives($image)) {
         if ($fullRepairSource) {
-            return ['allowed' => true, 'reason' => 'scheduled_dng_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+            return [
+                'allowed' => true,
+                'reason' => 'scheduled_dng_repair_allowed',
+                'source_bytes' => $sourceBytes,
+                'pixels' => $sourcePixels
+            ];
         }
-        return ['allowed' => false, 'reason' => 'dng_repair_requires_scheduled_or_cli_maintenance', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        return [
+            'allowed' => false,
+            'reason' => 'dng_repair_requires_scheduled_or_cli_maintenance',
+            'source_bytes' => $sourceBytes,
+            'pixels' => $sourcePixels
+        ];
     }
 
     if ($fullRepairSource) {
-        return ['allowed' => true, 'reason' => 'scheduled_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        return [
+            'allowed' => true,
+            'reason' => 'scheduled_repair_allowed',
+            'source_bytes' => $sourceBytes,
+            'pixels' => $sourcePixels
+        ];
     }
 
     if ($sourceBytes > SITE_MAINTENANCE_WEB_REPAIR_MAX_BYTES) {
-        return ['allowed' => false, 'reason' => 'source_file_too_large_for_web_repair', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        return [
+            'allowed' => false,
+            'reason' => 'source_file_too_large_for_web_repair',
+            'source_bytes' => $sourceBytes,
+            'pixels' => $sourcePixels
+        ];
     }
 
     if ($sourcePixels > SITE_MAINTENANCE_WEB_REPAIR_MAX_PIXELS) {
-        return ['allowed' => false, 'reason' => 'source_dimensions_too_large_for_web_repair', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        return [
+            'allowed' => false,
+            'reason' => 'source_dimensions_too_large_for_web_repair',
+            'source_bytes' => $sourceBytes,
+            'pixels' => $sourcePixels
+        ];
     }
 
     return ['allowed' => true, 'reason' => 'web_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];

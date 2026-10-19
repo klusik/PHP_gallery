@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine Versionsänderung benötigt.
-\newcommand{\version}{0.137.1}
-\newcommand{\manualdate}{18.~Oktober~2026}
+\newcommand{\version}{0.137.2}
+\newcommand{\manualdate}{19.~Oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2478,8 +2478,9 @@ Die Datenbankprüfung erfasst Schemaobjekte, Referenzen, Zuordnungskategorien, A
 \subsection{Speicherstatistik und Gesamtbericht}
 
 Die Dateiansicht zeigt auch Anzahl und~Bytes der~PDF- und~Musikoriginale
-sowie eine Gesamtmediensumme. Nach Fotobatches prüft Alles aktualisieren
-höchstens zwei physische Galerien je Schritt, auch Galerien ohne Fotos.
+sowie eine Gesamtmediensumme. Nach Fotobatches liest Alles aktualisieren
+PDF-, Musik- und~OFP-Summen aus der~Datenbank. Der~erste Lauf importiert fehlende
+Einträge aus höchstens zwei physischen Galerien je Schritt, auch ohne Fotos.
 Verborgene, private, deaktivierte und~nicht herunterladbare Dateien zählen
 weiter. Physische Kopien zählen einzeln; Smart-Listen erzeugen keine Kopie.
 Konvertierte PDF-Seiten zählen bereits als Fotos. Indizes, Sperren,
@@ -2487,8 +2488,35 @@ Konvertierungszustand, nicht indexierte Dateien, Papierkorb und~andere Caches
 sind ausgeschlossen. Unlesbare Indizes oder unsichere/fehlende Dateien
 führen zu~sichtbarer Teilmessung ohne Reparatur. Normale Seiten lesen den~Cache;
 Anhangsänderungen markieren ihn bei erfolgreicher Revisionsspeicherung als
-veraltet. Nach dem Upgrade alter Fotostatistiken sowie externen Dateiänderungen
-ist Alles aktualisieren für~eine neue Messung erforderlich.
+veraltet. Nach der~Datenbankmigration ist ein erster Aktualisierungslauf nötig.
+Upload, Ersetzen und~Löschen pflegen die~Summen aus bestätigten Metadaten;
+weitere Läufe öffnen keine Anhangsdateien oder~Indizes. Externe Dateiänderungen
+erfordern vor dem Aktualisieren eine ausdrückliche Invalidierung der~Einträge;
+siehe \codeword{docs/GALLERY\_PDF.md}.
+Mit dauerhaften Vorschaumetadaten werden gewöhnliche Fotos bereits im~ersten
+Datenbankdurchlauf erfasst, ohne weitere Fotobatch-Anfragen. Begrenzte Dateiprüfungen
+bleiben nur für DNG-Anzeigevorlagen erforderlich. Ohne Vorschaumetadaten bleibt
+der~vollständige begrenzte Dateipfad erhalten; eine fehlerhafte erforderliche
+Aggregatabfrage bewahrt den~letzten erfolgreichen Stand statt null zu~melden.
+Für die~Leistungsanalyse exportieren Sie den~neuesten Admin-Logeintrag
+\codeword{storage.refresh\_all.completed}. Seine Lauf-ID verbindet Fortschritte;
+die~Zusammenfassung enthält Gesamt- und~Phasenzeiten, Anfrage- und~Medienzahlen,
+beobachtete Dateiaufrufe und~gelesene Bytes, Quellenzahlen der~Inspektion sowie
+begrenzte ANALYZE-Zeiten je Tabelle. Dateiaufrufe messen keine physischen
+Datenträgerzugriffe. Private Pfade und~Workflow-Berechtigungen fehlen im~Log;
+ein~Protokollfehler lässt die~Aktualisierung weiterlaufen.
+Die abschließende Inspektion misst Schema und~Migrationen, Quellensuche und~Lesen,
+SQL-Literalextraktion, Wortindex und~Referenzvergleich, Bereinigungskandidaten,
+Altobjekte, Berichtserstellung, Vorschauverteilung und~Speichern getrennt.
+Gelesene Bytes und~Tabellen-/Spaltenvergleiche zeigen den~Umfang; verschachtelte
+Zeiten überlappen. Ein~frischer Wortindex pro Datei und~SQL-Literal erhält
+die~Trennung zwischen Produktion und~Tests sowie Belege im~selben SQL-Literal.
+Ungewöhnliche Bezeichner behalten die~Regex-Semantik; es~gibt keinen dauerhaften
+Analysecache.
+Fehler erforderlicher Fotoabfragen und~vorzeitig leere Derivatbatches lassen
+die~Dateiphase fehlschlagen und~bewahren den~letzten erfolgreichen Stand.
+Spätere Phasen laufen mit einem teilweisen Gesamtergebnis weiter;
+ein~Abfragefehler bedeutet keinen abgeschlossenen Scan.
 
 \index{s00229@Speicherstatistik}
 \index{g00139@Gesamtbericht}
@@ -2509,6 +2537,29 @@ Der fertige Bericht wird als Download zum Browser zurückgegeben und nicht als B
 Der optionale Bereich \ui{Telemetrie} erfasst datenschutzkontrollierte Betriebsmessungen und zeigt sie als Administrationsberichte. Steuerungen umfassen Telemetriehauptschalter, öffentliche Nutzungsmessung, Leistung, Cache- und Datenbankereignisse, Berücksichtigung von Do Not Track, Ausschluss von Administratoren, maximale gezählte Fotobetrachtungsdauer und Aufbewahrung roher, stündlicher und täglicher Daten. Berichte enthalten bei aktivierten Kategorien beispielsweise anonyme Sitzungen, Seitenaufrufe, Fotoöffnungen und begrenzte Betrachtungszeit, Clientfehler, gemessene Medienbytes, Browserverteilung und Cache-/Datenbankaktivität.
 
 Das Telemetriesystem ist so ausgelegt, dass es keine unverarbeiteten IP-Adressen, Browser-User-Agent-Zeichenfolgen, Referrer-URLs, Namen, E-Mail-Adressen, Kontokennungen, Anfrageinhalte oder genauen Besucherorte speichert. Exporte enthalten aggregierte anonyme Telemetrie und Sitzungshashes statt ursprünglicher Besucherkennungen. Wartung aggregiert und bereinigt Telemetrie gemäß konfigurierter Aufbewahrungsrichtlinie; die Administrationsansicht kann einen eigenständigen HTML-Bericht zur Offline-Prüfung exportieren. Prüfen Sie Datenschutzsteuerungen vor Aktivierung der Erfassung auf einer öffentlichen Website.
+
+Die SQL-Diagnostik hat eine eigene Aufbewahrung: standardmäßig sieben Tage,
+einstellbar von einem bis 90 Tagen. Die stündliche und tägliche Nutzungshistorie
+bleibt unabhängig. Die Wartung verdichtet ältere Tagessummen tageweise und erhält
+Anzahlen, Zeiten, Fotoidentität und Bot-Segmente. Browser, Betriebssystem,
+Viewport, Land und Verweisquelle werden bei bekannten Tagesmetriken neutralisiert;
+die Browserverteilung stammt weiterhin aus Sitzungen. Unbekannte Metriken behalten
+ihre Dimensionen. Die Migration erhält Messwerte und baut Aggregatindizes mit
+kurzen physischen Schlüsseln neu auf; temporären Speicherplatz und ein DDL-Fenster
+einplanen. Gelöschte Seiten werden wiederverwendbar; die zugewiesene Größe kann
+eine manuelle physische Optimierung erfordern. Die Ersparnis hängt von den Daten ab.
+
+Geplante Telemetrie kann alle fünf Minuten laufen, mit zehn Sekunden pro
+normalem Durchlauf und höchstens acht Chargen von 5000 abgelaufenen Zeilen je
+Tabelle (40000 Zeilen). Tabellen wechseln nach jeder Charge; die erste Tabelle
+rotiert zwischen Durchläufen. Das gemeinsame Zeitbudget kann den Fortschritt
+begrenzen. Das Wartungszentrum behält vier Sekunden pro UI-Schritt. Erfolgreiche öffentliche Besuche der Startseite, einer Galerie oder intelligenten
+Galerie starten nach dem Rendern einen privaten Telemetrieauftrag. Bei Verkehr
+wird etwa alle fünf Minuten Arbeit zugelassen, unabhängig vom Vorschaubildfenster.
+Besucher warten nicht auf Aufbewahrungs-SQL und erhalten kein Wartungstoken.
+Externer Cron ist optional; ohne Anfragen wartet die Arbeit auf einen späteren
+Besuch. Vorschauen, Medien und Fehlerantworten lösen keine Arbeit aus.
+Deaktivierung, zentrale Wartungsansprüche und Aufbewahrungsfristen bleiben gültig.
 
 \subsection{Laufzeitdiagnose, Integrität und Galeriebenchmark}
 \index{l00160@Laufzeitdiagnose}

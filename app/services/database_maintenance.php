@@ -18,6 +18,38 @@
  *   - Execute bounded, resumable, idempotent database-only cleanup batches
  *   - Keep ANALYZE TABLE and OPTIMIZE TABLE separate and explicitly confirmed
  *   - Protect content, accounts, logs, telemetry, and unknown tables by default
+ *   - Observe explicit inspection stages and index source identifiers once
+ *
+ * @phpstan-type MaintenanceReportValue bool|int|float|string|null|array<int|string,MaintenanceReportValue>
+ * @phpstan-type MaintenanceCodeReference array{files?:list<string>,
+ *     production_files?:list<string>,test_files?:list<string>,
+ *     sql_files?:list<string>,production_sql_files?:list<string>,
+ *     test_sql_files?:list<string>,columns?:array<int|string,list<string>>,
+ *     column_table_context_files?:array<int|string,list<string>>,
+ *     column_sql_references?:array<int|string,array{files?:list<string>,
+ *     production_files?:list<string>,test_files?:list<string>}>}
+ * @phpstan-type MaintenanceCodeAudit array{scan_roots:list<string>,
+ *     scan_extensions:list<string>,file_count:int,reference_model:string,
+ *     references:array<int|string,MaintenanceCodeReference>}
+ * @phpstan-type MaintenanceMigrationTable array{versions?:list<string>,
+ *     added_columns?:array<string,list<string>>,
+ *     dropped_columns?:array<string,list<string>>,
+ *     renamed_columns?:array<string,array<string,list<string>>>,
+ *     added_indexes?:array<string,list<string>>,
+ *     dropped_indexes?:array<string,list<string>>,
+ *     added_foreign_keys?:array<string,list<string>>,
+ *     dropped_foreign_keys?:array<string,list<string>>,
+ *     repair_callbacks?:array<string,list<string>>}
+ * @phpstan-type MaintenanceMigrationAudit array{migration_count:int,
+ *     versions:list<string>,tables:array<string,MaintenanceMigrationTable>}
+ * @phpstan-type MaintenanceInspectionReport array{ok:bool,generated_at_utc:string,
+ *     duration_seconds:float,inventory:array<string,MaintenanceReportValue>,
+ *     migration_audit:MaintenanceMigrationAudit,code_audit:MaintenanceCodeAudit,
+ *     cleanup_candidates:list<array<string,MaintenanceReportValue>>,
+ *     legacy_schema_findings:list<array<string,MaintenanceReportValue>>,
+ *     table_specific_audit:array{image_thumbnail_variants:array<string,MaintenanceReportValue>},
+ *     protected_tables:list<string>,physical_space_reclaimed:bool,
+ *     physical_optimization_note:string}
  *
  * Author:
  *   Rudolf Klusal
@@ -44,6 +76,8 @@ namespace Gallery\Services;
 use PDO;
 use RuntimeException;
 use Throwable;
+use function Gallery\Core\storage_observer_call;
+use function Gallery\Core\storage_observer_add;
 use function Gallery\Core\pending_migration_files;
 use function Gallery\Core\discover_migration_files;
 use function Gallery\Core\run_migrations;
@@ -57,6 +91,8 @@ use function Gallery\Models\database_maintenance_model_run_table_operation;
 use function Gallery\Models\database_maintenance_model_schema_inventory_rows;
 use function Gallery\Models\database_maintenance_model_thumbnail_distribution_rows;
 use function Gallery\Models\database_maintenance_model_write_cleanup_audit;
+
+require_once __DIR__ . '/../runtime/storage_observer.php';
 
 const DATABASE_MAINTENANCE_REPORT_FILE = 'admin-database-maintenance-report.json';
 const DATABASE_MAINTENANCE_STATE_SETTING = 'database_maintenance_cleanup_state';
@@ -114,42 +150,224 @@ function database_maintenance_table_policies(): array
     return [
         'galleries' => $protected('gallery/content data', 'Filesystem gallery folder and gallery metadata', 'Valid gallery content is always protected.'),
         'images' => $protected('gallery/content data', 'Gallery and source image', 'Valid image content is always protected.'),
-        'duplicate_photo_ledger_pairs' => $protected('administrator workflow state', 'Per-administrator reviewed duplicate image relationships', 'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.'),
-        'duplicate_photo_ledger_galleries' => $protected('administrator workflow state', 'Per-administrator exact-gallery duplicate suppression rules', 'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.'),
-        'tags' => $protected('gallery/content data', 'Administrator-defined taxonomy', 'Unused tags may be intentional and are not removed automatically.'),
-        'gallery_tags' => $derived('gallery/content data', 'Gallery and tag link', 'Remove only links whose gallery or tag parent is missing.', 'No retention rule.', 'Composite primary key defines one gallery/tag link.', 'automatic'),
-        'image_tags' => $derived('gallery/content data', 'Image and tag link', 'Remove only links whose image or tag parent is missing.', 'No retention rule.', 'Composite primary key defines one image/tag link.', 'automatic'),
-        'image_votes' => $derived('gallery/content data', 'Image vote', 'Remove only votes whose image parent is missing.', 'No retention rule.', 'Existing user/visitor unique keys define identity.', 'automatic'),
-        'picture_game_votes' => $derived('gallery/content data', 'Gallery picture-game vote', 'Remove only votes whose gallery or referenced image is missing.', 'No retention rule.', 'Gallery, voter, and image-pair unique key defines identity.', 'automatic'),
-        'zip_archives' => $derived('caches and temporary state', 'Generated ZIP metadata', 'Remove only gallery-scoped rows whose gallery parent is missing. Never delete ZIP files from this workflow.', 'No age-based deletion.', 'Content signature participates in lookup identity.', 'automatic'),
-        'gallery_upload_tokens' => $derived('authentication and accounts', 'Gallery upload credential', 'Remove only tokens whose gallery parent is missing.', 'Revoked tokens are preserved unless a separate credential policy removes them.', 'Token hash is unique.', 'automatic'),
-        'gallery_flight_maps' => $derived('external integration data', 'Gallery flight-map metadata', 'Remove only rows whose gallery parent is missing.', 'No retention rule.', 'One row per gallery primary key.', 'automatic'),
-        'image_ai_metadata' => $derived('gallery/content data', 'Image AI-derived metadata', 'Remove only rows whose image parent is missing.', 'No age-based deletion.', 'Image, model name, and model version define identity.', 'automatic'),
-        'image_ai_analysis_jobs' => $derived('caches and temporary state', 'Gallery image analysis queue', 'Remove only jobs whose gallery or image parent is missing.', 'Completed jobs are not deleted by age in this workflow.', 'Job key is unique.', 'automatic'),
-        'image_thumbnail_variants' => $derived('caches and temporary state', 'Generated thumbnail metadata only, never image bytes', 'Remove only rows whose image parent is missing.', 'Unsupported sizes and formats are reported, not deleted automatically.', 'Image, size, and format define identity; deterministic duplicate survivor is the lowest id.', 'automatic'),
-        'flight_map_nav_points' => $protected('external integration data', 'Imported navigation dataset', 'Data lifecycle is owned by the navigation-data refresh workflow.'),
-        'navigation_data_accounts' => $derived('external integration data', 'User navigation provider credential', 'Remove only rows whose user parent is missing.', 'Token expiry does not imply account deletion.', 'User and provider define identity.', 'automatic'),
-        'navigation_data_cache' => $derived('caches and temporary state', 'Navigation lookup cache', 'No parent relationship.', 'Rows are eligible only when expires_at is explicitly in the past.', 'cache_key is unique; deterministic duplicate survivor is the lowest id.', 'automatic'),
+        'duplicate_photo_ledger_pairs' => $protected(
+            'administrator workflow state',
+            'Per-administrator reviewed duplicate image relationships',
+            'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.',
+        ),
+        'duplicate_photo_ledger_galleries' => $protected(
+            'administrator workflow state',
+            'Per-administrator exact-gallery duplicate suppression rules',
+            'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.',
+        ),
+        'tags' => $protected(
+            'gallery/content data',
+            'Administrator-defined taxonomy',
+            'Unused tags may be intentional and are not removed automatically.',
+        ),
+        'gallery_tags' => $derived(
+            'gallery/content data',
+            'Gallery and tag link',
+            'Remove only links whose gallery or tag parent is missing.',
+            'No retention rule.',
+            'Composite primary key defines one gallery/tag link.',
+            'automatic',
+        ),
+        'image_tags' => $derived(
+            'gallery/content data',
+            'Image and tag link',
+            'Remove only links whose image or tag parent is missing.',
+            'No retention rule.',
+            'Composite primary key defines one image/tag link.',
+            'automatic',
+        ),
+        'image_votes' => $derived(
+            'gallery/content data',
+            'Image vote',
+            'Remove only votes whose image parent is missing.',
+            'No retention rule.',
+            'Existing user/visitor unique keys define identity.',
+            'automatic',
+        ),
+        'picture_game_votes' => $derived(
+            'gallery/content data',
+            'Gallery picture-game vote',
+            'Remove only votes whose gallery or referenced image is missing.',
+            'No retention rule.',
+            'Gallery, voter, and image-pair unique key defines identity.',
+            'automatic',
+        ),
+        'zip_archives' => $derived(
+            'caches and temporary state',
+            'Generated ZIP metadata',
+            'Remove only gallery-scoped rows whose gallery parent is missing. Never delete ZIP files from this workflow.',
+            'No age-based deletion.',
+            'Content signature participates in lookup identity.',
+            'automatic',
+        ),
+        'gallery_upload_tokens' => $derived(
+            'authentication and accounts',
+            'Gallery upload credential',
+            'Remove only tokens whose gallery parent is missing.',
+            'Revoked tokens are preserved unless a separate credential policy removes them.',
+            'Token hash is unique.',
+            'automatic',
+        ),
+        'gallery_flight_maps' => $derived(
+            'external integration data',
+            'Gallery flight-map metadata',
+            'Remove only rows whose gallery parent is missing.',
+            'No retention rule.',
+            'One row per gallery primary key.',
+            'automatic',
+        ),
+        'image_ai_metadata' => $derived(
+            'gallery/content data',
+            'Image AI-derived metadata',
+            'Remove only rows whose image parent is missing.',
+            'No age-based deletion.',
+            'Image, model name, and model version define identity.',
+            'automatic',
+        ),
+        'image_ai_analysis_jobs' => $derived(
+            'caches and temporary state',
+            'Gallery image analysis queue',
+            'Remove only jobs whose gallery or image parent is missing.',
+            'Completed jobs are not deleted by age in this workflow.',
+            'Job key is unique.',
+            'automatic',
+        ),
+        'image_thumbnail_variants' => $derived(
+            'caches and temporary state',
+            'Generated thumbnail metadata only, never image bytes',
+            'Remove only rows whose image parent is missing.',
+            'Unsupported sizes and formats are reported, not deleted automatically.',
+            'Image, size, and format define identity; deterministic duplicate survivor is the lowest id.',
+            'automatic',
+        ),
+        'flight_map_nav_points' => $protected(
+            'external integration data',
+            'Imported navigation dataset',
+            'Data lifecycle is owned by the navigation-data refresh workflow.',
+        ),
+        'navigation_data_accounts' => $derived(
+            'external integration data',
+            'User navigation provider credential',
+            'Remove only rows whose user parent is missing.',
+            'Token expiry does not imply account deletion.',
+            'User and provider define identity.',
+            'automatic',
+        ),
+        'navigation_data_cache' => $derived(
+            'caches and temporary state',
+            'Navigation lookup cache',
+            'No parent relationship.',
+            'Rows are eligible only when expires_at is explicitly in the past.',
+            'cache_key is unique; deterministic duplicate survivor is the lowest id.',
+            'automatic',
+        ),
         'users' => $protected('authentication and accounts', 'Administrator account', 'Accounts are never removed by database maintenance.'),
-        'admin_remember_tokens' => $derived('authentication and accounts', 'Administrator persistent login token', 'Remove only rows whose user parent is missing.', 'Expired or explicitly revoked credentials are eligible.', 'Selector is unique.', 'automatic'),
-        'password_reset_tokens' => $derived('authentication and accounts', 'One-time password reset credential', 'Remove only rows whose user parent is missing.', 'Expired or already-used credentials are eligible.', 'Selector is unique.', 'automatic'),
-        'auth_rate_limits' => $derived('authentication and accounts', 'Authentication throttle state', 'No parent relationship.', 'Use the application policy: inactive rows older than 24 hours and expired locks older than 24 hours.', 'Bucket and subject hash define identity.', 'automatic'),
-        'mobile_webdav_upload_tokens' => $derived('authentication and accounts', 'User and gallery WebDAV credential', 'Remove only rows whose user or gallery parent is missing.', 'Disabled credentials are preserved.', 'Path token is unique.', 'automatic'),
-        'user_google_accounts' => $derived('authentication and accounts', 'User Google account link', 'Remove only rows whose user parent is missing.', 'No retention rule.', 'User id and Google subject are unique identities.', 'automatic'),
-        'user_openai_text_settings' => $derived('settings', 'User OpenAI text profile', 'Remove only rows whose user parent is missing.', 'No retention rule.', 'One row per user.', 'automatic'),
-        'app_settings' => $protected('settings', 'Application configuration', 'Unknown and compatibility settings are retained. Dedicated migrations may remove proven obsolete keys.'),
-        'admin_logs' => $protected('audit logs', 'Administrator audit and diagnostics history', 'Generic database cleanup never deletes Admin logs. Admin Logs archival maintenance removes historical rows only after a verified daily filesystem ZIP has been created.'),
-        'database_maintenance_audit_log' => $protected('audit logs', 'Transactional database cleanup audit trail', 'Immutable row-identifier audit records are never deleted by generic database cleanup.'),
-        'maintenance_jobs' => $protected('maintenance/system state', 'Maintenance Center persisted job history', 'Retention is owned only by the Maintenance Center history policy; active checkpoints are never generic-cleanup candidates.'),
+        'admin_remember_tokens' => $derived(
+            'authentication and accounts',
+            'Administrator persistent login token',
+            'Remove only rows whose user parent is missing.',
+            'Expired or explicitly revoked credentials are eligible.',
+            'Selector is unique.',
+            'automatic',
+        ),
+        'password_reset_tokens' => $derived(
+            'authentication and accounts',
+            'One-time password reset credential',
+            'Remove only rows whose user parent is missing.',
+            'Expired or already-used credentials are eligible.',
+            'Selector is unique.',
+            'automatic',
+        ),
+        'auth_rate_limits' => $derived(
+            'authentication and accounts',
+            'Authentication throttle state',
+            'No parent relationship.',
+            'Use the application policy: inactive rows older than 24 hours and expired locks older than 24 hours.',
+            'Bucket and subject hash define identity.',
+            'automatic',
+        ),
+        'mobile_webdav_upload_tokens' => $derived(
+            'authentication and accounts',
+            'User and gallery WebDAV credential',
+            'Remove only rows whose user or gallery parent is missing.',
+            'Disabled credentials are preserved.',
+            'Path token is unique.',
+            'automatic',
+        ),
+        'user_google_accounts' => $derived(
+            'authentication and accounts',
+            'User Google account link',
+            'Remove only rows whose user parent is missing.',
+            'No retention rule.',
+            'User id and Google subject are unique identities.',
+            'automatic',
+        ),
+        'user_openai_text_settings' => $derived(
+            'settings',
+            'User OpenAI text profile',
+            'Remove only rows whose user parent is missing.',
+            'No retention rule.',
+            'One row per user.',
+            'automatic',
+        ),
+        'app_settings' => $protected(
+            'settings',
+            'Application configuration',
+            'Unknown and compatibility settings are retained. Dedicated migrations may remove proven obsolete keys.',
+        ),
+        'admin_logs' => $protected(
+            'audit logs',
+            'Administrator audit and diagnostics history',
+            'Generic database cleanup never deletes Admin logs. Admin Logs archival maintenance removes historical rows only after a verified daily filesystem ZIP has been created.',
+        ),
+        'database_maintenance_audit_log' => $protected(
+            'audit logs',
+            'Transactional database cleanup audit trail',
+            'Immutable row-identifier audit records are never deleted by generic database cleanup.',
+        ),
+        'maintenance_jobs' => $protected(
+            'maintenance/system state',
+            'Maintenance Center persisted job history',
+            'Retention is owned only by the Maintenance Center history policy; active checkpoints are never generic-cleanup candidates.',
+        ),
         'telemetry_settings' => $protected('telemetry/analytics', 'Telemetry configuration', 'Never deleted by generic database cleanup.'),
-        'telemetry_sessions' => $protected('telemetry/analytics', 'Anonymous telemetry session data', 'Retention is owned by the separate telemetry maintenance workflow.'),
-        'telemetry_events' => $protected('telemetry/analytics', 'Raw telemetry events', 'Retention is owned by the separate telemetry maintenance workflow.'),
-        'telemetry_hourly_metrics' => $protected('telemetry/analytics', 'Hourly telemetry aggregates', 'Retention is owned by the separate telemetry maintenance workflow.'),
-        'telemetry_daily_metrics' => $protected('telemetry/analytics', 'Daily telemetry aggregates', 'Retention is owned by the separate telemetry maintenance workflow.'),
-        'telemetry_db_query_metrics' => $protected('telemetry/analytics', 'Database query aggregates', 'Retention is owned by the separate telemetry maintenance workflow.'),
+        'telemetry_sessions' => $protected(
+            'telemetry/analytics',
+            'Anonymous telemetry session data',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
+        'telemetry_events' => $protected(
+            'telemetry/analytics',
+            'Raw telemetry events',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
+        'telemetry_hourly_metrics' => $protected(
+            'telemetry/analytics',
+            'Hourly telemetry aggregates',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
+        'telemetry_daily_metrics' => $protected(
+            'telemetry/analytics',
+            'Daily telemetry aggregates',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
+        'telemetry_db_query_metrics' => $protected(
+            'telemetry/analytics',
+            'Database query aggregates',
+            'Retention is owned by the separate telemetry maintenance workflow.',
+        ),
         'telemetry_job_runs' => $protected('telemetry/analytics', 'Telemetry maintenance job history', 'Never deleted by generic database cleanup.'),
         'schema_migrations' => $protected('migration/system tables', 'Current migration audit trail', 'Migration audit rows are immutable.'),
-        'migrations' => $protected('migration/system tables', 'Legacy migration audit trail when present', 'Legacy audit rows are preserved for old installations.'),
+        'migrations' => $protected(
+            'migration/system tables',
+            'Legacy migration audit trail when present',
+            'Legacy audit rows are preserved for old installations.',
+        ),
     ];
 }
 
@@ -373,7 +591,7 @@ function database_maintenance_inventory_has(array $inventory, string $tableName,
 /**
  * Parse migration source files without executing them.
  *
- * @return array<string, mixed> Migration audit data.
+ * @return MaintenanceMigrationAudit Parsed per-table history without executing DDL.
  */
 function database_maintenance_migration_audit(): array
 {
@@ -399,7 +617,8 @@ function database_maintenance_migration_audit(): array
 
     foreach ($files as $file) {
         $version = basename($file, '.php');
-        $source = (string) file_get_contents($file);
+        $source = (string) storage_observer_call('fs.read.inspection_migration',
+            static fn(): string|false => file_get_contents($file));
         $versions[] = $version;
 
         preg_match_all('/\b(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|ALTER\s+TABLE\s+|REFERENCES\s+)`?([A-Za-z_][A-Za-z0-9_]*)`?/i', $source, $tableMatches);
@@ -597,84 +816,61 @@ function database_maintenance_sql_literals(string $source): array
  * External scripts and admin exports may exist outside this repository, so the
  * result remains supporting evidence rather than sole authority.
  *
- * @param array<string, mixed> $inventory Inventory.
- * @param array<string, mixed> $migrationAudit Parsed migration audit.
- * @return array<string, mixed> Reference counts and files.
+ * @param array{tables:array<string,array{columns?:array<string,mixed>}>} $inventory
+ *     Current schema identities. Column values are opaque and unused here;
+ *     only their keys enter the vocabulary, and other inventory fields are ignored.
+ * @param MaintenanceMigrationAudit|array{} $migrationAudit Historical vocabulary;
+ *     the default empty history uses only current column identities.
+ * @return MaintenanceCodeAudit Scoped lexical and same-literal SQL evidence.
  */
 function database_maintenance_code_audit(array $inventory, array $migrationAudit = []): array
 {
     $root = database_maintenance_project_root();
     $scanRoots = ['app', 'public', 'scripts', 'tests'];
     $scanExtensions = ['php', 'inc', 'phtml', 'sql'];
-    $files = [];
-    foreach ($scanRoots as $relativeRoot) {
-        $directory = $root . '/' . $relativeRoot;
-        if (!is_dir($directory)) {
-            continue;
-        }
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS));
-        foreach ($iterator as $file) {
-            if ($file->isFile() && in_array(strtolower($file->getExtension()), $scanExtensions, true) && $file->getPathname() !== __FILE__) {
-                $files[] = $file->getPathname();
+    $files = storage_observer_call('inspection.code.discovery', static function () use (
+        $root, $scanRoots, $scanExtensions
+    ): array {
+        $files = [];
+        foreach ($scanRoots as $relativeRoot) {
+            $directory = $root . '/' . $relativeRoot;
+            if (!is_dir($directory)) {
+                continue;
+            }
+            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS));
+            foreach ($iterator as $file) {
+                if ($file->isFile() && in_array(strtolower($file->getExtension()), $scanExtensions, true) && $file->getPathname() !== __FILE__) {
+                    $files[] = $file->getPathname();
+                }
             }
         }
-    }
-    foreach (['install.php', 'reset.php'] as $topLevelFile) {
-        $path = $root . '/' . $topLevelFile;
-        if (is_file($path)) {
-            $files[] = $path;
+        foreach (['install.php', 'reset.php'] as $topLevelFile) {
+            $path = $root . '/' . $topLevelFile;
+            if (is_file($path)) {
+                $files[] = $path;
+            }
         }
-    }
-    $files = array_values(array_unique($files));
+        return array_values(array_unique($files));
+    });
+    storage_observer_add('counts.inspection.code_files', count($files));
 
+    // Table/column vocabulary is constant across the source corpus.
+    $tableColumns = [];
+    foreach ((array) ($inventory['tables'] ?? []) as $tableName => $table) {
+        $migrationTable = (array) ($migrationAudit['tables'][strtolower((string) $tableName)] ?? []);
+        $tableColumns[$tableName] = array_values(array_unique(array_merge(
+            array_keys((array) ($table['columns'] ?? [])),
+            array_keys((array) ($migrationTable['added_columns'] ?? [])),
+            array_keys((array) ($migrationTable['dropped_columns'] ?? [])),
+            array_keys((array) ($migrationTable['renamed_columns'] ?? []))
+        )));
+    }
     $references = [];
     foreach ($files as $file) {
-        $source = (string) file_get_contents($file);
+        $source = (string) storage_observer_call('fs.read.inspection_source',
+            static fn(): string|false => file_get_contents($file));
         $relative = str_replace('\\', '/', substr($file, strlen($root) + 1));
-        $scope = str_starts_with($relative, 'tests/') ? 'test' : 'production';
-        $sqlLiterals = strtolower(pathinfo($file, PATHINFO_EXTENSION)) === 'sql'
-            ? [$source]
-            : database_maintenance_sql_literals($source);
-
-        foreach ((array) ($inventory['tables'] ?? []) as $tableName => $table) {
-            $tablePattern = '/\b' . preg_quote((string) $tableName, '/') . '\b/i';
-            $tableMentioned = preg_match($tablePattern, $source) === 1;
-            if ($tableMentioned) {
-                $references[$tableName]['files'][] = $relative;
-                $references[$tableName][$scope . '_files'][] = $relative;
-            }
-
-            $tableSqlLiterals = array_values(array_filter($sqlLiterals, static fn (string $literal): bool => preg_match($tablePattern, $literal) === 1));
-            if ($tableSqlLiterals !== []) {
-                $references[$tableName]['sql_files'][] = $relative;
-                $references[$tableName][$scope . '_sql_files'][] = $relative;
-            }
-
-            $migrationTable = (array) ($migrationAudit['tables'][strtolower((string) $tableName)] ?? []);
-            $columnNames = array_values(array_unique(array_merge(
-                array_keys((array) ($table['columns'] ?? [])),
-                array_keys((array) ($migrationTable['added_columns'] ?? [])),
-                array_keys((array) ($migrationTable['dropped_columns'] ?? [])),
-                array_keys((array) ($migrationTable['renamed_columns'] ?? []))
-            )));
-            foreach ($columnNames as $columnName) {
-                $columnPattern = '/\b' . preg_quote((string) $columnName, '/') . '\b/i';
-                if (preg_match($columnPattern, $source) === 1) {
-                    $references[$tableName]['columns'][$columnName][] = $relative;
-                    if ($tableMentioned) {
-                        $references[$tableName]['column_table_context_files'][$columnName][] = $relative;
-                    }
-                }
-                foreach ($tableSqlLiterals as $literal) {
-                    if (preg_match($columnPattern, $literal) !== 1) {
-                        continue;
-                    }
-                    $references[$tableName]['column_sql_references'][$columnName]['files'][] = $relative;
-                    $references[$tableName]['column_sql_references'][$columnName][$scope . '_files'][] = $relative;
-                    break;
-                }
-            }
-        }
+        database_maintenance_accumulate_source($references, $tableColumns, $source, $relative);
     }
 
     foreach ($references as &$reference) {
@@ -702,6 +898,115 @@ function database_maintenance_code_audit(array $inventory, array $migrationAudit
         'reference_model' => 'Lexical references are reported broadly. SQL references require the table and column in the same SQL-like literal and are separated into production and test scopes.',
         'references' => $references,
     ];
+}
+
+/**
+ * Accumulate scoped lexical and same-literal SQL evidence from one source file.
+ * @param array<int|string,MaintenanceCodeReference> $references Mutable report evidence.
+ * @param array<int|string,list<int|string>> $tableColumns Current/historical column names
+ *     keyed by schema table identity, prepared once for the complete corpus.
+ * @param string $source Complete source text; no code is executed.
+ * @param string $relative Project-relative file identity determining test scope
+ *     and whether the input is a complete SQL file or PHP-like source.
+ * @return void Append matching file identities while preserving SQL co-occurrence.
+ */
+function database_maintenance_accumulate_source(
+    array &$references,
+    array $tableColumns,
+    string $source,
+    string $relative
+): void {
+    $scope = str_starts_with($relative, 'tests/') ? 'test' : 'production';
+    $sqlLiterals = strtolower(pathinfo($relative, PATHINFO_EXTENSION)) === 'sql'
+        ? [$source]
+        : storage_observer_call('inspection.code.sql_literals',
+            static fn(): array => database_maintenance_sql_literals($source));
+    storage_observer_add('counts.inspection.sql_literals', count($sqlLiterals));
+    $sourceWords = storage_observer_call('inspection.code.index_words',
+        static fn(): array => database_maintenance_identifier_words($source));
+    $sqlWords = storage_observer_call('inspection.code.index_sql_words',
+        static fn(): array => array_map(
+            static fn(string $literal): array => database_maintenance_identifier_words($literal),
+            $sqlLiterals
+        ));
+
+    storage_observer_call('inspection.code.references', static function () use (
+        &$references, $tableColumns, $source, $sqlLiterals,
+        $relative, $scope, $sourceWords, $sqlWords
+    ): void {
+        foreach ($tableColumns as $tableName => $columnNames) {
+            $tableMentioned = database_maintenance_has_identifier(
+                (string) $tableName, $sourceWords, $source
+            );
+            if ($tableMentioned) {
+                $references[$tableName]['files'][] = $relative;
+                $references[$tableName][$scope . '_files'][] = $relative;
+            }
+
+            $tableSqlPositions = [];
+            foreach ($sqlLiterals as $position => $literal) {
+                if (database_maintenance_has_identifier((string) $tableName,
+                    $sqlWords[$position], $literal)) {
+                    $tableSqlPositions[] = $position;
+                }
+            }
+            if ($tableSqlPositions !== []) {
+                $references[$tableName]['sql_files'][] = $relative;
+                $references[$tableName][$scope . '_sql_files'][] = $relative;
+            }
+
+            foreach ($columnNames as $columnName) {
+                if (database_maintenance_has_identifier((string) $columnName, $sourceWords, $source)) {
+                    $references[$tableName]['columns'][$columnName][] = $relative;
+                    if ($tableMentioned) {
+                        $references[$tableName]['column_table_context_files'][$columnName][] = $relative;
+                    }
+                }
+                foreach ($tableSqlPositions as $position) {
+                    if (!database_maintenance_has_identifier((string) $columnName,
+                        $sqlWords[$position], $sqlLiterals[$position])) {
+                        continue;
+                    }
+                    $references[$tableName]['column_sql_references'][$columnName]['files'][] = $relative;
+                    $references[$tableName]['column_sql_references'][$columnName][$scope . '_files'][] = $relative;
+                    break;
+                }
+            }
+            storage_observer_add('counts.inspection.column_checks', count($columnNames));
+        }
+        storage_observer_add('counts.inspection.table_checks', count($tableColumns));
+    });
+}
+
+/**
+ * Index case-insensitive ASCII words with the existing non-Unicode PCRE boundaries.
+ * @param string $source One source file or one complete SQL-like literal.
+ * @return array<int|string,true> Lowercase whole words mapped to membership markers.
+ */
+function database_maintenance_identifier_words(string $source): array
+{
+    preg_match_all('/\b[A-Za-z0-9_]+\b/', $source, $matches);
+    return array_fill_keys(array_map('strtolower', $matches[0]), true);
+}
+
+/**
+ * Match an identifier without rescanning text for ordinary SQL names.
+ * @param string $identifier Table or column identity from the actual schema/history.
+ * @param array<int|string,true> $words Whole-word membership for the supplied text.
+ * @param string $source Original text retained for unusual identifier spellings.
+ * @return bool The same case-insensitive word-boundary match as the legacy scan.
+ */
+function database_maintenance_has_identifier(
+    string $identifier,
+    array $words,
+    string $source
+): bool {
+    if (preg_match('/^[A-Za-z0-9_]+$/D', $identifier) === 1) {
+        return isset($words[strtolower($identifier)]);
+    }
+    // Permanent compatibility for non-ASCII/punctuation identifiers: their
+    // legacy regex semantics cannot be represented by the ASCII word index.
+    return preg_match('/\b' . preg_quote($identifier, '/') . '\b/i', $source) === 1;
 }
 
 /**
@@ -1014,53 +1319,64 @@ function database_maintenance_thumbnail_distribution(array $inventory): array
 /**
  * Build and persist a complete explicit Admin audit report.
  *
- * @return array<string, mixed> Report.
+ * @return MaintenanceInspectionReport Fresh schema/source findings and rule counts;
+ *     nested inventory/candidate values are the JSON-safe reports of their owners.
  */
 function database_maintenance_inspect(): array
 {
     $startedAt = microtime(true);
-    $inventory = database_maintenance_schema_inventory();
-    $migrationAudit = database_maintenance_migration_audit();
-    $codeAudit = database_maintenance_code_audit($inventory, $migrationAudit);
-    $rules = database_maintenance_cleanup_rules($inventory);
-    $candidates = database_maintenance_inspect_cleanup_candidates($rules);
-    $legacyFindings = database_maintenance_legacy_schema_findings($inventory, $codeAudit);
+    $inventory = storage_observer_call('inspection.schema',
+        static fn(): array => database_maintenance_schema_inventory());
+    $migrationAudit = storage_observer_call('inspection.migrations',
+        static fn(): array => database_maintenance_migration_audit());
+    $codeAudit = storage_observer_call('inspection.code',
+        static fn(): array => database_maintenance_code_audit($inventory, $migrationAudit));
+    $rules = storage_observer_call('inspection.cleanup_rules',
+        static fn(): array => database_maintenance_cleanup_rules($inventory));
+    $candidates = storage_observer_call('inspection.cleanup_counts',
+        static fn(): array => database_maintenance_inspect_cleanup_candidates($rules));
+    $legacyFindings = storage_observer_call('inspection.legacy_findings',
+        static fn(): array => database_maintenance_legacy_schema_findings($inventory, $codeAudit));
 
-    foreach ($inventory['tables'] as $tableName => &$table) {
-        $tableMigrationAudit = (array) ($migrationAudit['tables'][strtolower((string) $tableName)] ?? []);
-        $table['migration_audit'] = $tableMigrationAudit;
-        $table['code_reference_files'] = $codeAudit['references'][$tableName]['files'] ?? [];
-        $table['code_sql_reference_files'] = $codeAudit['references'][$tableName]['sql_files'] ?? [];
-        $table['production_sql_reference_files'] = $codeAudit['references'][$tableName]['production_sql_files'] ?? [];
-        $table['test_sql_reference_files'] = $codeAudit['references'][$tableName]['test_sql_files'] ?? [];
-        $currentColumnNames = array_keys((array) ($table['columns'] ?? []));
-        $historicalColumnNames = array_values(array_unique(array_merge(
-            array_keys((array) ($tableMigrationAudit['added_columns'] ?? [])),
-            array_keys((array) ($tableMigrationAudit['dropped_columns'] ?? []))
-        )));
-        $table['historical_columns_absent_from_current_schema'] = [];
-        foreach (array_values(array_diff($historicalColumnNames, $currentColumnNames)) as $historicalColumnName) {
-            $table['historical_columns_absent_from_current_schema'][$historicalColumnName] = [
-                'added_versions' => (array) ($tableMigrationAudit['added_columns'][$historicalColumnName] ?? []),
-                'dropped_versions' => (array) ($tableMigrationAudit['dropped_columns'][$historicalColumnName] ?? []),
-                'current_code_reference_files' => (array) ($codeAudit['references'][$tableName]['columns'][$historicalColumnName] ?? []),
-                'production_sql_reference_files' => (array) ($codeAudit['references'][$tableName]['column_sql_references'][$historicalColumnName]['production_files'] ?? []),
-                'test_sql_reference_files' => (array) ($codeAudit['references'][$tableName]['column_sql_references'][$historicalColumnName]['test_files'] ?? []),
-            ];
+    storage_observer_call('inspection.enrich_report', static function () use (
+        &$inventory, $migrationAudit, $codeAudit
+    ): void {
+        foreach ($inventory['tables'] as $tableName => &$table) {
+            $tableMigrationAudit = (array) ($migrationAudit['tables'][strtolower((string) $tableName)] ?? []);
+            $table['migration_audit'] = $tableMigrationAudit;
+            $table['code_reference_files'] = $codeAudit['references'][$tableName]['files'] ?? [];
+            $table['code_sql_reference_files'] = $codeAudit['references'][$tableName]['sql_files'] ?? [];
+            $table['production_sql_reference_files'] = $codeAudit['references'][$tableName]['production_sql_files'] ?? [];
+            $table['test_sql_reference_files'] = $codeAudit['references'][$tableName]['test_sql_files'] ?? [];
+            $currentColumnNames = array_keys((array) ($table['columns'] ?? []));
+            $historicalColumnNames = array_values(array_unique(array_merge(
+                array_keys((array) ($tableMigrationAudit['added_columns'] ?? [])),
+                array_keys((array) ($tableMigrationAudit['dropped_columns'] ?? []))
+            )));
+            $table['historical_columns_absent_from_current_schema'] = [];
+            foreach (array_values(array_diff($historicalColumnNames, $currentColumnNames)) as $historicalColumnName) {
+                $table['historical_columns_absent_from_current_schema'][$historicalColumnName] = [
+                    'added_versions' => (array) ($tableMigrationAudit['added_columns'][$historicalColumnName] ?? []),
+                    'dropped_versions' => (array) ($tableMigrationAudit['dropped_columns'][$historicalColumnName] ?? []),
+                    'current_code_reference_files' => (array) ($codeAudit['references'][$tableName]['columns'][$historicalColumnName] ?? []),
+                    'production_sql_reference_files' => (array) ($codeAudit['references'][$tableName]['column_sql_references'][$historicalColumnName]['production_files'] ?? []),
+                    'test_sql_reference_files' => (array) ($codeAudit['references'][$tableName]['column_sql_references'][$historicalColumnName]['test_files'] ?? []),
+                ];
+            }
+            foreach ((array) ($table['columns'] ?? []) as $columnName => &$column) {
+                $column['migration_audit'] = [
+                    'added_versions' => (array) ($tableMigrationAudit['added_columns'][$columnName] ?? []),
+                    'dropped_versions' => (array) ($tableMigrationAudit['dropped_columns'][$columnName] ?? []),
+                    'rename_history' => (array) ($tableMigrationAudit['renamed_columns'][$columnName] ?? []),
+                ];
+                $column['code_reference_files'] = (array) ($codeAudit['references'][$tableName]['columns'][$columnName] ?? []);
+                $column['production_sql_reference_files'] = (array) ($codeAudit['references'][$tableName]['column_sql_references'][$columnName]['production_files'] ?? []);
+                $column['test_sql_reference_files'] = (array) ($codeAudit['references'][$tableName]['column_sql_references'][$columnName]['test_files'] ?? []);
+            }
+            unset($column);
         }
-        foreach ((array) ($table['columns'] ?? []) as $columnName => &$column) {
-            $column['migration_audit'] = [
-                'added_versions' => (array) ($tableMigrationAudit['added_columns'][$columnName] ?? []),
-                'dropped_versions' => (array) ($tableMigrationAudit['dropped_columns'][$columnName] ?? []),
-                'rename_history' => (array) ($tableMigrationAudit['renamed_columns'][$columnName] ?? []),
-            ];
-            $column['code_reference_files'] = (array) ($codeAudit['references'][$tableName]['columns'][$columnName] ?? []);
-            $column['production_sql_reference_files'] = (array) ($codeAudit['references'][$tableName]['column_sql_references'][$columnName]['production_files'] ?? []);
-            $column['test_sql_reference_files'] = (array) ($codeAudit['references'][$tableName]['column_sql_references'][$columnName]['test_files'] ?? []);
-        }
-        unset($column);
-    }
-    unset($table);
+        unset($table);
+    });
 
     $report = [
         'ok' => true,
@@ -1072,14 +1388,16 @@ function database_maintenance_inspect(): array
         'cleanup_candidates' => $candidates,
         'legacy_schema_findings' => $legacyFindings,
         'table_specific_audit' => [
-            'image_thumbnail_variants' => database_maintenance_thumbnail_distribution($inventory),
+            'image_thumbnail_variants' => storage_observer_call('inspection.thumbnail_distribution',
+                static fn(): array => database_maintenance_thumbnail_distribution($inventory)),
         ],
         'protected_tables' => database_maintenance_protected_tables($inventory),
         'physical_space_reclaimed' => false,
         'physical_optimization_note' => 'Inspection and logical cleanup do not reclaim table files. OPTIMIZE TABLE remains a separate manually selected action.',
     ];
 
-    database_maintenance_save_report($report);
+    storage_observer_call('inspection.save_report',
+        static function () use ($report): void { database_maintenance_save_report($report); });
     if (function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event('info', 'database_maintenance.inspected', 'Admin inspected the complete application database.', [
             'table_count' => (int) ($inventory['table_count'] ?? 0),
@@ -1368,13 +1686,24 @@ function database_maintenance_log_cleanup_batch(array $rule, int $deletedCount, 
 
 /**
  * Record cleanup summary without logging secrets or row payloads.
+ *
+ * @param array{failed?:bool,dry_run?:bool,deleted_rows?:int,candidate_rows?:int,...} $state
+ *     Resumable cleanup snapshot; the flags select audit severity and event type,
+ *     while the remaining bounded state is emitted unchanged.
+ * @return void Emits the Admin event when the logger is installed; otherwise no-op.
  */
 function database_maintenance_log_cleanup(array $state): void
 {
     if (!function_exists('Gallery\\Services\\admin_log_event')) {
         return;
     }
-    admin_log_event(!empty($state['failed']) ? 'error' : 'info', 'database_maintenance.cleanup_' . (!empty($state['dry_run']) ? 'dry_run' : 'completed'), !empty($state['dry_run']) ? 'Admin ran a database cleanup dry-run.' : 'Admin ran bounded safe database cleanup.', $state, ['category' => 'database', 'severity' => !empty($state['failed']) ? 'error' : 'notice']);
+    admin_log_event(
+        !empty($state['failed']) ? 'error' : 'info',
+        'database_maintenance.cleanup_' . (!empty($state['dry_run']) ? 'dry_run' : 'completed'),
+        !empty($state['dry_run']) ? 'Admin ran a database cleanup dry-run.' : 'Admin ran bounded safe database cleanup.',
+        $state,
+        ['category' => 'database', 'severity' => !empty($state['failed']) ? 'error' : 'notice'],
+    );
 }
 
 /**
@@ -1602,7 +1931,13 @@ function database_maintenance_run_table_operation(string $operation, array $sele
         'finished_at_utc' => gmdate('c'),
     ];
     if (function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event($failed === 0 ? 'info' : 'warning', 'database_maintenance.' . strtolower($operation), 'Admin ran ' . $operation . ' TABLE for selected tables.', $result, ['category' => 'database', 'severity' => $failed === 0 ? 'notice' : 'warning']);
+        admin_log_event(
+            $failed === 0 ? 'info' : 'warning',
+            'database_maintenance.' . strtolower($operation),
+            'Admin ran ' . $operation . ' TABLE for selected tables.',
+            $result,
+            ['category' => 'database', 'severity' => $failed === 0 ? 'notice' : 'warning'],
+        );
     }
     return $result;
 }

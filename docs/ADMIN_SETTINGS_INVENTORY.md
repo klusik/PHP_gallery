@@ -169,6 +169,7 @@ The Setup Wizard may edit only the bounded scalar subset `admin_upload_client_fo
 | `telemetry_max_photo_view_seconds` | `telemetry_settings.php`; Telemetry | effective reader clamps 10..3600 | 900 | existing telemetry schema | Specialized | Telemetry | privacy |
 | `telemetry_raw_retention_days` | `telemetry_settings.php`; Telemetry | effective reader clamps 1..90 | 7 | retention maintenance side effect occurs in telemetry maintenance | Specialized | Telemetry | privacy |
 | `telemetry_hourly_retention_days` | `telemetry_settings.php`; Telemetry | UI 7..730, service-owned effective normalization | 90 | retention maintenance | Specialized | Telemetry | privacy |
+| `telemetry_database_retention_days` | `telemetry_settings.php`; Telemetry | 1..90 days; strict maintenance reads | 7 | independent SQL diagnostic retention | Editable | Telemetry | privacy |
 | `telemetry_daily_retention_days` | `telemetry_settings.php`; Telemetry | UI 30..3650, service-owned effective normalization | 730 | retention maintenance | Specialized | Telemetry | privacy |
 | `seo_request_guard_enabled` | `seo_request_guard.php`; Dashboard Maintenance | boolean | `1` | affects public request rejection | Summary | Dashboard Maintenance | security |
 | `seo_request_guard_logging_enabled` | `seo_request_guard.php`; Dashboard Maintenance | boolean | `1` | controls sampled Admin log writes | Summary | Dashboard Maintenance | security |

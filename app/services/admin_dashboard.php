@@ -106,7 +106,17 @@ function admin_dashboard_overview_totals(bool $accessReady): array
  * @param bool $editRevisionReady Whether the shared gallery-edit schema health verified revision storage.
  * @return list<array<string,mixed>> Gallery rows with direct counts and verified optional columns.
  */
-function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady, bool $coverAssetReady, bool $editRevisionReady = false): array
+function admin_dashboard_gallery_rows(
+    bool $accessReady,
+    bool $gpsMapReady,
+    bool $backgroundSourceReady,
+    bool $filenameDisplayReady,
+    bool $votingReady,
+    bool $pictureGameReady,
+    bool $publicPathReady,
+    bool $coverAssetReady,
+    bool $editRevisionReady = false
+): array
 {
     return admin_dashboard_model_gallery_rows([
         'access' => $accessReady,
@@ -277,7 +287,13 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
             $galleries[$index]['view_quick_access_ready'] = $accessReady && $editRevisionReady && $galleries[$index]['view_edit_revision'] !== null;
         }
         $availableFeatures = [];
-        foreach (['maps' => $gpsMapReady, 'filenames' => $filenameDisplayReady, 'voting' => $votingReady, 'game' => $pictureGameReady, 'background' => $backgroundSourceReady] as $feature => $ready) {
+        foreach ([
+            'maps' => $gpsMapReady,
+            'filenames' => $filenameDisplayReady,
+            'voting' => $votingReady,
+            'game' => $pictureGameReady,
+            'background' => $backgroundSourceReady,
+        ] as $feature => $ready) {
             if ($ready) {
                 $availableFeatures[] = $feature;
             }
@@ -292,7 +308,14 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
     // $siteMaintenanceStatus stores the persisted cron-safe maintenance state for the media maintenance card.
-    $siteMaintenanceStatus = $includeMaintenance ? admin_render_profile_setting_read('site_maintenance_status', static fn (): array => function_exists('Gallery\\Services\\site_maintenance_status') ? site_maintenance_status() : []) : [];
+    $siteMaintenanceStatus = $includeMaintenance
+        ? admin_render_profile_setting_read(
+            'site_maintenance_status',
+            static fn (): array => function_exists('Gallery\\Services\\site_maintenance_status')
+                ? site_maintenance_status()
+                : []
+        )
+        : [];
     // Trash mode affects the always-visible gallery bulk action, so expose its small settings even before deferred Maintenance loads.
     $galleryTrashEnabled = function_exists('Gallery\Services\gallery_trash_enabled') && gallery_trash_enabled();
     $galleryTrashAutoPurgeEnabled = function_exists('Gallery\Services\gallery_trash_auto_purge_enabled') && gallery_trash_auto_purge_enabled();
@@ -302,7 +325,17 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     // $galleryTrashSummary stores bounded counters for the Maintenance > Trash badge and panel.
     $galleryTrashSummary = $includeMaintenance && function_exists('Gallery\\Services\\gallery_trash_summary')
         ? admin_render_profile_db('gallery_trash_summary', static fn (): array => gallery_trash_summary())
-        : ['available' => false, 'count' => 0, 'trashed_count' => 0, 'broken_count' => 0, 'transitional_count' => 0, 'problem_count' => 0, 'purgeable_count' => 0, 'active_count' => 0, 'bytes' => 0];
+        : [
+            'available' => false,
+            'count' => 0,
+            'trashed_count' => 0,
+            'broken_count' => 0,
+            'transitional_count' => 0,
+            'problem_count' => 0,
+            'purgeable_count' => 0,
+            'active_count' => 0,
+            'bytes' => 0,
+        ];
     // $galleryTrashEntries stores active/recoverable/problem rows. Historical restored/purged rows stay out of the dashboard payload.
     $galleryTrashEntries = $includeMaintenance && !empty($galleryTrashSummary['available']) && function_exists('Gallery\\Services\\gallery_trash_admin_entries')
         ? admin_render_profile_db('gallery_trash_entries', /**
@@ -314,11 +347,23 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
     // $lastThumbnailCheck stores an explicit full dry-run result when an admin requested one.
-    $lastThumbnailCheck = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check') ? admin_render_profile_setting_read('thumbnail_maintenance_last_check', static fn (): array => thumbnail_maintenance_last_check()) : [];
+    $lastThumbnailCheck = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check')
+        ? admin_render_profile_setting_read(
+            'thumbnail_maintenance_last_check',
+            static fn (): array => thumbnail_maintenance_last_check()
+        )
+        : [];
     // $legacyJpgThumbnailInventory is a cheap metadata aggregate. It never mutates thumbnail files.
     $legacyJpgThumbnailInventory = $includeMaintenance && function_exists('Gallery\Services\thumbnail_legacy_jpg_inventory')
         ? admin_render_profile_db('legacy_jpg_thumbnail_inventory', static fn (): array => thumbnail_legacy_jpg_inventory())
-        : ['available' => false, 'registered_variant_count' => 0, 'affected_image_count' => 0, 'registered_bytes' => 0, 'cleanup_available' => false, 'cleanup_recommended' => false];
+        : [
+            'available' => false,
+            'registered_variant_count' => 0,
+            'affected_image_count' => 0,
+            'registered_bytes' => 0,
+            'cleanup_available' => false,
+            'cleanup_recommended' => false,
+        ];
     if ($lastThumbnailCheck) {
         $thumbnailSummary = [
             'images_scanned' => (int) ($lastThumbnailCheck['images_scanned'] ?? 0),
@@ -341,7 +386,13 @@ function admin_dashboard_view_model(bool $includeMaintenance = false, string $su
     // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.
     $originalStorageLabel = admin_dashboard_format_bytes($originalStorageBytes);
     // $databaseUsage stores a cheap information_schema estimate for DB capacity display.
-    $databaseUsage = $includeMaintenance && function_exists('Gallery\\Services\\admin_database_usage_summary') ? admin_render_profile_db('dashboard_database_usage', static fn (): array => admin_database_usage_summary()) : [];
+    $databaseUsage = $includeMaintenance
+        && function_exists('Gallery\\Services\\admin_database_usage_summary')
+        ? admin_render_profile_db(
+            'dashboard_database_usage',
+            static fn (): array => admin_database_usage_summary()
+        )
+        : [];
     // $galleryDatabaseUsageBytes stores table-level DB storage for gallery/content metadata.
     $galleryDatabaseUsageBytes = !empty($databaseUsage['available']) ? max(0, (int) ($databaseUsage['gallery_bytes'] ?? 0)) : 0;
     // $databaseUsageBytes stores table-level DB storage for the whole app database.
@@ -918,7 +969,13 @@ function admin_dashboard_parent_sync_needed(): bool
     if ($fingerprint === '') {
         return true;
     }
-    return !hash_equals((string) admin_render_profile_setting_read('parent_sync_fingerprint_setting', static fn (): string => app_setting('admin_dashboard_parent_sync_fingerprint', '')), $fingerprint);
+    return !hash_equals(
+        (string) admin_render_profile_setting_read(
+            'parent_sync_fingerprint_setting',
+            static fn (): string => app_setting('admin_dashboard_parent_sync_fingerprint', '')
+        ),
+        $fingerprint
+    );
 }
 
 /**
@@ -929,7 +986,12 @@ function admin_dashboard_store_parent_sync_fingerprint(): void
     // $fingerprint stores the post-repair gallery hierarchy fingerprint.
     $fingerprint = admin_dashboard_parent_sync_fingerprint();
     if ($fingerprint !== '') {
-        admin_render_profile_setting_write('parent_sync_fingerprint_setting_write', static function () use ($fingerprint): void { set_app_setting('admin_dashboard_parent_sync_fingerprint', $fingerprint); });
+        admin_render_profile_setting_write(
+            'parent_sync_fingerprint_setting_write',
+            static function () use ($fingerprint): void {
+                set_app_setting('admin_dashboard_parent_sync_fingerprint', $fingerprint);
+            }
+        );
     }
 }
 

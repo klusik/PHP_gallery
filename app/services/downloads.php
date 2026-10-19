@@ -274,7 +274,13 @@ function gallery_download_gallery_rows(array $gallery): array
     $candidates = downloads_model_gallery_subtree($folderPath, $limit);
     download_manifest_profile_count('gallery_rows', count($candidates));
     if (count($candidates) > $manifestGalleryLimit) {
-        throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'), 'manifest_too_large');
+        throw new GalleryDownloadManifestException(
+            t(
+                'download.progress.manifest_too_large',
+                'This gallery contains too many files for one browser download.'
+            ),
+            'manifest_too_large'
+        );
     }
 
     $rows = [];
@@ -308,7 +314,13 @@ function gallery_download_manifest_authorized_items(array $galleries): array
     $candidateImages = downloads_model_images_for_galleries($galleryIds, true, $limit);
     download_manifest_profile_count('image_rows', count($candidateImages));
     if (count($candidateImages) > $manifestFileLimit) {
-        throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'), 'manifest_too_large');
+        throw new GalleryDownloadManifestException(
+            t(
+                'download.progress.manifest_too_large',
+                'This gallery contains too many files for one browser download.'
+            ),
+            'manifest_too_large'
+        );
     }
 
     $imagesByGallery = [];
@@ -323,7 +335,13 @@ function gallery_download_manifest_authorized_items(array $galleries): array
                 continue;
             }
             if (count($items) >= $manifestFileLimit) {
-                throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'), 'manifest_too_large');
+                throw new GalleryDownloadManifestException(
+                    t(
+                        'download.progress.manifest_too_large',
+                        'This gallery contains too many files for one browser download.'
+                    ),
+                    'manifest_too_large'
+                );
             }
             $items[] = ['gallery' => $sourceGallery, 'image' => $image];
         }
@@ -391,16 +409,31 @@ function gallery_download_manifest_build_cached_payload(array $items): array
         download_manifest_profile_count('filesystem_realpath_checks', 2);
         download_manifest_profile_count('filesystem_checks', 2);
         if (!is_file($absolute) || !path_inside($galleryRoot, $absolute)) {
-            throw new GalleryDownloadManifestException(t('download.progress.source_missing', 'A source file required for this download is unavailable.'), 'source_missing');
+            throw new GalleryDownloadManifestException(
+                t(
+                    'download.progress.source_missing',
+                    'A source file required for this download is unavailable.'
+                ),
+                'source_missing'
+            );
         }
         download_manifest_profile_count('filesystem_size_reads');
         download_manifest_profile_count('filesystem_checks');
         $size = filesize($absolute);
         if ($size === false || $size < 0) {
-            throw new GalleryDownloadManifestException(t('download.progress.source_size_failed', 'A source file size could not be determined.'), 'source_size_failed');
+            throw new GalleryDownloadManifestException(
+                t('download.progress.source_size_failed', 'A source file size could not be determined.'),
+                'source_size_failed'
+            );
         }
         if ($size > PHP_INT_MAX - $totalBytes) {
-            throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'), 'manifest_too_large');
+            throw new GalleryDownloadManifestException(
+                t(
+                    'download.progress.manifest_too_large',
+                    'This gallery contains too many files for one browser download.'
+                ),
+                'manifest_too_large'
+            );
         }
 
         $relativePath = normalize_relative_path((string) $image['relative_path']);
@@ -435,7 +468,14 @@ function gallery_download_manifest_build_cached_payload(array $items): array
  * @param ?string $sourceCapability Optional query-transport compatibility capability.
  * @return array<int,array{name:string,size:int,url:string}> Browser-safe response files.
  */
-function gallery_download_manifest_response_files(array $payload, string $sourceRoute, string $resourceIdKey, int $resourceId, string $manifestRevision, ?string $sourceCapability): array
+function gallery_download_manifest_response_files(
+    array $payload,
+    string $sourceRoute,
+    string $resourceIdKey,
+    int $resourceId,
+    string $manifestRevision,
+    ?string $sourceCapability
+): array
 {
     $files = [];
     foreach ($payload['files'] as $file) {
@@ -472,7 +512,10 @@ function gallery_download_manifest_response_files(array $payload, string $source
 function gallery_download_manifest(array $gallery, ?string $sourceCapability = null): array
 {
     if (!visitor_can_access_gallery($gallery)) {
-        throw new GalleryDownloadManifestException(t('download.progress.not_available', 'This gallery is not available for download.'), 'not_available');
+        throw new GalleryDownloadManifestException(
+            t('download.progress.not_available', 'This gallery is not available for download.'),
+            'not_available'
+        );
     }
 
     $galleryId = (int) ($gallery['id'] ?? 0);
@@ -573,7 +616,13 @@ function smart_gallery_download_manifest_authorized_items(array $smartGallery): 
     $total = smart_gallery_count_images($smartGallery, true);
     $manifestFileLimit = max(1, (int) cms_runtime_limit('download.manifest_max_files'));
     if ($total > $manifestFileLimit) {
-        throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'), 'manifest_too_large');
+        throw new GalleryDownloadManifestException(
+            t(
+                'download.progress.manifest_too_large',
+                'This gallery contains too many files for one browser download.'
+            ),
+            'manifest_too_large'
+        );
     }
 
     $items = [];
@@ -587,11 +636,20 @@ function smart_gallery_download_manifest_authorized_items(array $smartGallery): 
         download_manifest_profile_count('gallery_rows', count($sourceGalleries));
         foreach ($batch as $image) {
             if (count($items) >= $manifestFileLimit) {
-                throw new GalleryDownloadManifestException(t('download.progress.manifest_too_large', 'This gallery contains too many files for one browser download.'), 'manifest_too_large');
+                throw new GalleryDownloadManifestException(
+                    t(
+                        'download.progress.manifest_too_large',
+                        'This gallery contains too many files for one browser download.'
+                    ),
+                    'manifest_too_large'
+                );
             }
             $sourceGallery = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
             if (!$sourceGallery || !public_image_visible_to_current_visitor($image, $sourceGallery)) {
-                throw new GalleryDownloadManifestException(t('download.progress.not_available', 'This gallery is not available for download.'), 'not_available');
+                throw new GalleryDownloadManifestException(
+                    t('download.progress.not_available', 'This gallery is not available for download.'),
+                    'not_available'
+                );
             }
             $items[] = ['gallery' => $sourceGallery, 'image' => $image];
         }
@@ -600,7 +658,13 @@ function smart_gallery_download_manifest_authorized_items(array $smartGallery): 
     // A changing rule/result set between COUNT and paginated reads must not
     // silently produce a partial archive. The browser can retry a fresh manifest.
     if (count($items) !== $total) {
-        throw new GalleryDownloadManifestException(t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'), 'source_changed');
+        throw new GalleryDownloadManifestException(
+            t(
+                'download.progress.source_changed',
+                'A source file changed after the download was prepared. Retry the download.'
+            ),
+            'source_changed'
+        );
     }
     return $items;
 }
@@ -657,7 +721,10 @@ function smart_gallery_download_manifest(array $smartGallery, ?string $sourceCap
         || (int) ($smartGallery['enabled'] ?? 0) !== 1
         || (string) ($smartGallery['visibility'] ?? '') !== 'public'
         || empty(smart_gallery_effective_presentation($smartGallery)['download_enabled'])) {
-        throw new GalleryDownloadManifestException(t('download.progress.not_available', 'This gallery is not available for download.'), 'not_available');
+        throw new GalleryDownloadManifestException(
+            t('download.progress.not_available', 'This gallery is not available for download.'),
+            'not_available'
+        );
     }
 
     $smartGalleryId = (int) $smartGallery['id'];
@@ -850,7 +917,12 @@ function legacy_download_busy_retry_after_seconds(): int
  * @param array<string,bool|int|float|string|null> $archiveOptions Content-affecting archive options.
  * @return string SHA-256 build key.
  */
-function legacy_download_build_key(string $resourceType, int $resourceId, string $resourceRevision, array $archiveOptions = []): string
+function legacy_download_build_key(
+    string $resourceType,
+    int $resourceId,
+    string $resourceRevision,
+    array $archiveOptions = []
+): string
 {
     $resourceType = trim($resourceType);
     $resourceRevision = strtolower(trim($resourceRevision));

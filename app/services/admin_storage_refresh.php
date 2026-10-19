@@ -15,6 +15,39 @@
  *   - Refresh database metadata through bounded ANALYZE batches
  *   - Run the existing read-only database maintenance inspection
  *   - Persist authoritative workflow progress outside the browser
+ *   - Correlate per-run timings, media counts and bounded I/O observations
+ *
+ * @phpstan-type StorageRefreshPhase array{steps:int,seconds:float,
+ *     max_step_seconds:float,metrics:array<string,int|float>,
+ *     slowest_steps:list<array{step:int,seconds:float,processed_before:int}>}
+ * @phpstan-type StorageRefreshDiagnostics array{run_id:string,started_at:float,
+ *     complete_observation:bool,resume_count:int,phase_work_seconds:float,
+ *     peak_memory_bytes:int,phases:array<string,StorageRefreshPhase>,
+ *     files:array<string,int>,inspection:array<string,int>,
+ *     table_timings:list<array{table:string,seconds:float,ok:bool}>,
+ *     table_timings_omitted:int}
+ * @phpstan-type StorageRefreshState array{workflow_id:string,owner_id:int,
+ *     phase:string,workflow_status:string,database_processed:int,database_total:int,
+ *     database_failed:int,updated_at:int,diagnostics?:StorageRefreshDiagnostics,
+ *     stages:list<array{phase:string,status:string,processed:int,total:int,failed:int}>}
+ * @phpstan-type StorageRefreshFileTotals array{image_count?:int,
+ *     known_source_size_count?:int,unknown_source_size_count?:int,original_bytes?:int,
+ *     generated_thumbnail_count?:int,generated_thumbnail_bytes?:int,
+ *     display_master_count?:int,display_master_bytes?:int,pdf_count?:int,pdf_bytes?:int,
+ *     music_count?:int,music_bytes?:int,attachment_scan_errors?:int,
+ *     thumbnail_scan_errors?:int,total_media_bytes?:int}
+ * @phpstan-type StorageRefreshLogContext array{diagnostic_version?:int,run_id?:string,
+ *     workflow_status?:string,phase?:string,wall_seconds?:float,other_wall_seconds?:float,
+ *     stages?:list<array{phase:string,status:string,processed:int,total:int,failed:int}>,
+ *     diagnostics?:StorageRefreshDiagnostics,coverage?:string,exception_class?:string,
+ *     table_count?:int,failed_table_count?:int,started_at_utc?:string,
+ *     checkpoint_at_utc?:string,runtime?:array{php_version:string,os_family:string,
+ *     cms_version:string,memory_limit:string,max_execution_seconds:int},
+ *     batch_sizes?:array{photos:int,database_tables:int}}
+ * @phpstan-type StorageRefreshPayload array{ok:bool,workflow_id:string,
+ *     workflow_status:string,phase:string,processed:int,total:int,
+ *     phase_percent:float,overall_percent:float,message:string,
+ *     stages:list<array{phase:string,status:string,processed:int,total:int,failed:int}>}
  *
  * Author:
  *   Rudolf Klusal
@@ -38,6 +71,31 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use Throwable;
+
+require_once __DIR__ . '/../runtime/storage_observer.php';
+
+/**
+ * Bound per-table timing details retained across database batches.
+ * Type: int. Units: table timing records. Scope: one Update all run.
+ * Consumers: admin_storage_refresh_step_database().
+ * Rationale: 128 retains ordinary installations while bounding state/log size;
+ *     additional tables retain aggregate counts and an explicit omitted count.
+ */
+const ADMIN_STORAGE_REFRESH_TABLE_TIMINGS_LIMIT = 128;
+/**
+ * Publish bounded progress while a multi-request phase is still running.
+ * Type: int. Units: completed phase steps per checkpoint. Scope: one active run.
+ * Consumers: admin_storage_refresh_all_step().
+ * Rationale: ten steps expose long scans without one Admin event per request.
+ */
+const ADMIN_STORAGE_REFRESH_LOG_STEP_INTERVAL = 10;
+/**
+ * Keep the worst request positions for later bottleneck investigation.
+ * Type: int. Units: slow-step samples per phase. Scope: run diagnostics.
+ * Consumers: admin_storage_refresh_measure().
+ * Rationale: three samples identify outliers while bounding workflow/log growth.
+ */
+const ADMIN_STORAGE_REFRESH_SLOW_STEPS_LIMIT = 3;
 
 /** Define the authoritative order of Update all workflow phases.
  * @var list<string>
@@ -92,7 +150,7 @@ const ADMIN_STORAGE_REFRESH_JOB_TTL = 3600;
  * Start one server-owned Update all workflow for the given administrator.
  *
  * @param int $actorId Authenticated administrator ID owning this workflow.
- * @return array<string, mixed> Initial workflow identity and authoritative progress.
+ * @return StorageRefreshPayload Initial/resumed progress or a safe ownership/busy error.
  */
 function admin_storage_refresh_all_start(int $actorId): array
 {
@@ -110,9 +168,12 @@ function admin_storage_refresh_all_start(int $actorId): array
                 && in_array($activePhase, ['files', 'database', 'inspection', 'complete'], true)
                 && is_array($active['stages'] ?? null);
             if ($compatible) {
-                return $activeOwnerId === $actorId
-                    ? admin_storage_refresh_payload($active)
-                    : admin_storage_refresh_error_payload();
+                if ($activeOwnerId !== $actorId) return admin_storage_refresh_error_payload();
+                $active['diagnostics'] ??= admin_storage_refresh_diagnostics_new(false);
+                $active['diagnostics']['resume_count']++;
+                admin_storage_refresh_write_state($active);
+                admin_storage_refresh_log_run($active, 'resumed');
+                return admin_storage_refresh_payload($active);
             }
         }
         $workflowId = bin2hex(random_bytes(16));
@@ -126,10 +187,14 @@ function admin_storage_refresh_all_start(int $actorId): array
             'database_failed' => 0,
             'stages' => [admin_storage_refresh_stage('files', 'running', 0, 0, 0)],
             'updated_at' => time(),
+            'diagnostics' => admin_storage_refresh_diagnostics_new(),
         ];
 
+        admin_storage_refresh_log_run($state, 'started');
         try {
-            $file = admin_storage_statistics_start_job();
+            $file = admin_storage_refresh_measure($state, 'files',
+                static fn(): array => admin_storage_statistics_start_job());
+            admin_storage_refresh_record_files($state, $file);
             $fileStatus = (string) ($file['status'] ?? 'error');
             $processed = max(0, (int) ($file['processed'] ?? 0));
             $total = max(0, (int) ($file['total'] ?? 0));
@@ -139,12 +204,15 @@ function admin_storage_refresh_all_start(int $actorId): array
                 $state['phase'] = 'database';
             }
         } catch (Throwable $exception) {
-            admin_storage_refresh_log_failure('files', $exception);
+            admin_storage_refresh_log_failure('files', $exception, $state['diagnostics']['run_id'] ?? '');
             $state['stages'][0] = admin_storage_refresh_stage('files', 'failed', 0, 0, 1);
             $state['phase'] = 'database';
         }
 
         admin_storage_refresh_write_state($state);
+        if ($state['phase'] !== 'files') {
+            admin_storage_refresh_log_run($state, 'stage_completed', 'files');
+        }
         return admin_storage_refresh_payload($state);
     });
 }
@@ -154,7 +222,7 @@ function admin_storage_refresh_all_start(int $actorId): array
  *
  * @param string $workflowId Opaque server-issued workflow identity.
  * @param int $actorId Authenticated administrator ID making the request.
- * @return array<string, mixed> Updated authoritative workflow progress.
+ * @return StorageRefreshPayload Updated/terminal progress or a safe refusal.
  */
 function admin_storage_refresh_all_step(string $workflowId, int $actorId): array
 {
@@ -186,6 +254,15 @@ function admin_storage_refresh_all_step(string $workflowId, int $actorId): array
         $state['workflow_id'] = bin2hex(random_bytes(16));
         $state['updated_at'] = time();
         admin_storage_refresh_write_state($state);
+        if ($state['phase'] !== $phase) {
+            admin_storage_refresh_log_run($state, 'stage_completed', $phase);
+        } elseif (($state['diagnostics']['phases'][$phase]['steps'] ?? 0)
+            % ADMIN_STORAGE_REFRESH_LOG_STEP_INTERVAL === 0) {
+            admin_storage_refresh_log_run($state, 'progress', $phase);
+        }
+        if ($state['phase'] === 'complete') {
+            admin_storage_refresh_log_run($state, 'completed');
+        }
         return admin_storage_refresh_payload($state);
     });
 }
@@ -193,19 +270,21 @@ function admin_storage_refresh_all_step(string $workflowId, int $actorId): array
 /**
  * Process one bounded file-statistics batch and advance from its persisted result.
  *
- * @param array<string, mixed> $state Canonical workflow state loaded under lock.
- * @return array<string, mixed> Updated canonical state.
+ * @param StorageRefreshState $state Canonical workflow state loaded under lock.
+ * @return StorageRefreshState Updated state including bounded diagnostic counters.
  */
 function admin_storage_refresh_step_files(array $state): array
 {
     try {
-        $file = admin_storage_statistics_process_job(ADMIN_STORAGE_REFRESH_FILE_BATCH_SIZE);
+        $file = admin_storage_refresh_measure($state, 'files',
+            static fn(): array => admin_storage_statistics_process_job(ADMIN_STORAGE_REFRESH_FILE_BATCH_SIZE));
+        admin_storage_refresh_record_files($state, $file);
         $status = (string) ($file['status'] ?? 'error');
         $processed = max(0, (int) ($file['processed'] ?? 0));
         $total = max(0, (int) ($file['total'] ?? 0));
         $stageStatus = $status === 'running' ? 'running' : ($status === 'complete' ? 'complete' : 'failed');
     } catch (Throwable $exception) {
-        admin_storage_refresh_log_failure('files', $exception);
+        admin_storage_refresh_log_failure('files', $exception, $state['diagnostics']['run_id'] ?? '');
         $processed = 0;
         $total = 0;
         $stageStatus = 'failed';
@@ -224,22 +303,31 @@ function admin_storage_refresh_step_files(array $state): array
 /**
  * Process one bounded database metadata batch using the persisted cursor.
  *
- * @param array<string, mixed> $state Canonical workflow state loaded under lock.
- * @return array<string, mixed> Updated canonical state.
+ * @param StorageRefreshState $state Canonical workflow state loaded under lock.
+ * @return StorageRefreshState Updated state including bounded per-table timing records.
  */
 function admin_storage_refresh_step_database(array $state): array
 {
     $processedBefore = max(0, (int) ($state['database_processed'] ?? 0));
     $failedBefore = max(0, (int) ($state['database_failed'] ?? 0));
     try {
-        $batch = admin_database_usage_recompute_statistics_batch($processedBefore, ADMIN_STORAGE_REFRESH_DATABASE_BATCH_SIZE);
+        $batch = admin_storage_refresh_measure($state, 'database',
+            static fn(): array => admin_database_usage_recompute_statistics_batch(
+                $processedBefore, ADMIN_STORAGE_REFRESH_DATABASE_BATCH_SIZE));
+        foreach ($batch['table_timings'] ?? [] as $timing) {
+            if (count($state['diagnostics']['table_timings']) < ADMIN_STORAGE_REFRESH_TABLE_TIMINGS_LIMIT) {
+                $state['diagnostics']['table_timings'][] = $timing;
+            } else {
+                $state['diagnostics']['table_timings_omitted']++;
+            }
+        }
         $processed = max($processedBefore, (int) ($batch['processed'] ?? $processedBefore));
         $total = max(0, (int) ($batch['total'] ?? 0));
         $failed = $failedBefore + max(0, (int) ($batch['failed_table_count'] ?? 0));
         $complete = !empty($batch['complete']);
         $status = $complete ? ($failed > 0 ? 'partial' : 'complete') : 'running';
     } catch (Throwable $exception) {
-        admin_storage_refresh_log_failure('database', $exception);
+        admin_storage_refresh_log_failure('database', $exception, $state['diagnostics']['run_id'] ?? '');
         $processed = $processedBefore;
         $total = max($processedBefore, (int) ($state['database_total'] ?? 0));
         $failed = $failedBefore + 1;
@@ -262,16 +350,29 @@ function admin_storage_refresh_step_database(array $state): array
 /**
  * Run the bounded read-only inspection and mark the workflow terminal.
  *
- * @param array<string, mixed> $state Canonical workflow state loaded under lock.
- * @return array<string, mixed> Terminal canonical state.
+ * @param StorageRefreshState $state Canonical workflow state loaded under lock.
+ * @return StorageRefreshState Terminal state including inspection counts and timings.
  */
 function admin_storage_refresh_step_inspection(array $state): array
 {
     try {
-        $report = database_maintenance_inspect();
+        $report = admin_storage_refresh_measure($state, 'inspection',
+            static fn(): array => database_maintenance_inspect());
+        // Existing report counts describe source reads without rereading files.
+        $state['diagnostics']['inspection'] = [
+            'tables' => max(0, (int) ($report['inventory']['table_count'] ?? 0)),
+            'migration_sources_read' => max(0, (int) ($report['migration_audit']['migration_count'] ?? 0)),
+            'code_sources_read' => max(0, (int) ($report['code_audit']['file_count'] ?? 0)),
+            'cleanup_rules_checked' => count($report['cleanup_candidates'] ?? []),
+            'cleanup_candidates' => array_sum(array_map(
+                static fn(array $candidate): int => max(0, (int) ($candidate['candidate_count'] ?? 0)),
+                $report['cleanup_candidates'] ?? []
+            )),
+            'legacy_findings' => count($report['legacy_schema_findings'] ?? []),
+        ];
         $status = !empty($report['ok']) ? 'complete' : 'failed';
     } catch (Throwable $exception) {
-        admin_storage_refresh_log_failure('inspection', $exception);
+        admin_storage_refresh_log_failure('inspection', $exception, $state['diagnostics']['run_id'] ?? '');
         $status = 'failed';
     }
     $state['stages'][2] = admin_storage_refresh_stage('inspection', $status, 1, 1, $status === 'failed' ? 1 : 0);
@@ -398,6 +499,8 @@ function admin_storage_refresh_stage(string $phase, string $status, int $process
  */
 function admin_storage_refresh_with_lock(callable $operation): array
 {
+    // Diagnostics belong to explicit workflow execution, not cached Admin views.
+    require_once __DIR__ . '/admin_storage_refresh/diagnostics.php';
     $directory = admin_storage_refresh_job_directory();
     if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
         return admin_storage_refresh_error_payload();
@@ -474,15 +577,17 @@ function admin_storage_refresh_write_state(array $state): void
  *
  * @param string $phase Failed phase name.
  * @param Throwable $exception Underlying service failure.
+ * @param string $runId Non-authorizing correlation identity; empty when unknown.
  * @return void Writes one bounded diagnostic event when logging is available.
  */
-function admin_storage_refresh_log_failure(string $phase, Throwable $exception): void
+function admin_storage_refresh_log_failure(string $phase, Throwable $exception, string $runId = ''): void
 {
     if (function_exists(__NAMESPACE__ . '\\admin_log_event')) {
         try {
             admin_log_event('error', 'storage.refresh_all_stage_failed', 'An Admin storage refresh stage failed.', [
                 'phase' => $phase,
                 'exception_class' => $exception::class,
+                'run_id' => $runId,
             ], ['category' => 'database', 'severity' => 'error']);
         } catch (Throwable) {
             // Diagnostics must not change the persisted workflow result.

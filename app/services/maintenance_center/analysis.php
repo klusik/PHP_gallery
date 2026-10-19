@@ -212,8 +212,25 @@ function maintenance_center_start_analysis_unlocked(int $actorId): array
         }
         if (in_array($status, ['analyzing', 'ready'], true)) {
             $state = maintenance_center_json_decode((string) ($existing['state_json'] ?? '{}'));
-            maintenance_center_activity($state, 'warning', maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_superseded', 'Analysis was superseded by a newer analysis request.'));
-            maintenance_center_model_finish_job((int) $existing['id'], $actorId, 'cancelled', 'superseded', maintenance_center_json_encode($state), (float) ($existing['progress_percent'] ?? 0), now_sql(), 'superseded', 'Replaced by a newer analysis.');
+            maintenance_center_activity(
+                $state,
+                'warning',
+                maintenance_center_runtime_text(
+                    'admin.maintenance_center.runtime.analysis_superseded',
+                    'Analysis was superseded by a newer analysis request.'
+                )
+            );
+            maintenance_center_model_finish_job(
+                (int) $existing['id'],
+                $actorId,
+                'cancelled',
+                'superseded',
+                maintenance_center_json_encode($state),
+                (float) ($existing['progress_percent'] ?? 0),
+                now_sql(),
+                'superseded',
+                'Replaced by a newer analysis.'
+            );
         }
     }
 
@@ -228,7 +245,14 @@ function maintenance_center_start_analysis_unlocked(int $actorId): array
         'errors' => [],
         'metrics' => [],
     ];
-    maintenance_center_activity($state, 'info', maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_started', 'Read-only maintenance analysis started.'));
+    maintenance_center_activity(
+        $state,
+        'info',
+        maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.analysis_started',
+            'Read-only maintenance analysis started.'
+        )
+    );
     $jobId = maintenance_center_model_create_job([
         'actor_id' => $actorId,
         'status' => 'analyzing',
@@ -244,7 +268,13 @@ function maintenance_center_start_analysis_unlocked(int $actorId): array
         'created_at' => $now,
         'updated_at' => $now,
     ]);
-    maintenance_center_log_lifecycle('info', 'maintenance_center.analysis_started', 'Maintenance Center read-only analysis started.', $jobId, ['task_count' => count($order)]);
+    maintenance_center_log_lifecycle(
+        'info',
+        'maintenance_center.analysis_started',
+        'Maintenance Center read-only analysis started.',
+        $jobId,
+        ['task_count' => count($order)]
+    );
     return maintenance_center_job_status($jobId, $actorId);
 }
 
@@ -273,9 +303,31 @@ function maintenance_center_analysis_step_unlocked(int $jobId, int $actorId, ?ca
     }
     $state = maintenance_center_json_decode((string) ($row['state_json'] ?? '{}'));
     if (!empty($row['cancel_requested'])) {
-        maintenance_center_activity($state, 'warning', maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_cancelled', 'Analysis cancelled before the next bounded step.'));
-        maintenance_center_model_finish_job($jobId, $actorId, 'cancelled', 'cancelled', maintenance_center_json_encode($state), (float) ($row['progress_percent'] ?? 0), now_sql(), 'cancelled', 'Cancelled by administrator.');
-        maintenance_center_log_lifecycle('info', 'maintenance_center.cancelled', 'Maintenance Center analysis was cancelled.', $jobId);
+        maintenance_center_activity(
+            $state,
+            'warning',
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.analysis_cancelled',
+                'Analysis cancelled before the next bounded step.'
+            )
+        );
+        maintenance_center_model_finish_job(
+            $jobId,
+            $actorId,
+            'cancelled',
+            'cancelled',
+            maintenance_center_json_encode($state),
+            (float) ($row['progress_percent'] ?? 0),
+            now_sql(),
+            'cancelled',
+            'Cancelled by administrator.'
+        );
+        maintenance_center_log_lifecycle(
+            'info',
+            'maintenance_center.cancelled',
+            'Maintenance Center analysis was cancelled.',
+            $jobId
+        );
         return maintenance_center_job_status($jobId, $actorId);
     }
 
@@ -308,19 +360,69 @@ function maintenance_center_analysis_step_unlocked(int $jobId, int $actorId, ?ca
     } catch (Throwable $exception) {
         $diagnostic = maintenance_center_exception_diagnostic($exception);
         $result = ['available' => false, 'reason' => 'analysis_failed', 'has_work' => false, 'work_units' => 0, 'warning' => maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_subsystem_failed', 'Analysis failed for this subsystem.')];
-        maintenance_center_warning($state, 'analysis.' . str_replace('.', '_', $key), maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_task_failed', 'Analysis failed for {task}; the task will not be runnable.', ['task' => $key]));
+        maintenance_center_warning(
+            $state,
+            'analysis.' . str_replace('.', '_', $key),
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.analysis_task_failed',
+                'Analysis failed for {task}; the task will not be runnable.',
+                ['task' => $key]
+            )
+        );
         if (!empty($task['required'])) {
-            maintenance_center_error($state, 'analysis_required_failed', maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_required_failed', 'Required analysis failed for {task}.', ['task' => $key]));
-            maintenance_center_model_finish_job($jobId, $actorId, 'failed', 'analysis_failed', maintenance_center_json_encode($state), (float) ($row['progress_percent'] ?? 0), now_sql(), 'analysis_failed', maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_required_failed_generic', 'Required read-only analysis failed.'));
-            maintenance_center_log_lifecycle('error', 'maintenance_center.failed', 'Maintenance Center analysis failed.', $jobId, ['task' => $key] + $diagnostic);
+            maintenance_center_error(
+                $state,
+                'analysis_required_failed',
+                maintenance_center_runtime_text(
+                    'admin.maintenance_center.runtime.analysis_required_failed',
+                    'Required analysis failed for {task}.',
+                    ['task' => $key]
+                )
+            );
+            maintenance_center_model_finish_job(
+                $jobId,
+                $actorId,
+                'failed',
+                'analysis_failed',
+                maintenance_center_json_encode($state),
+                (float) ($row['progress_percent'] ?? 0),
+                now_sql(),
+                'analysis_failed',
+                maintenance_center_runtime_text(
+                    'admin.maintenance_center.runtime.analysis_required_failed_generic',
+                    'Required read-only analysis failed.'
+                )
+            );
+            maintenance_center_log_lifecycle(
+                'error',
+                'maintenance_center.failed',
+                'Maintenance Center analysis failed.',
+                $jobId,
+                ['task' => $key] + $diagnostic
+            );
             return maintenance_center_job_status($jobId, $actorId);
         }
-        maintenance_center_log_lifecycle('warning', 'maintenance_center.analysis_task_failed', 'Optional Maintenance Center analysis task failed and was disabled.', $jobId, ['task' => $key] + $diagnostic);
+        maintenance_center_log_lifecycle(
+            'warning',
+            'maintenance_center.analysis_task_failed',
+            'Optional Maintenance Center analysis task failed and was disabled.',
+            $jobId,
+            ['task' => $key] + $diagnostic
+        );
     }
 
     $state['analysis_results'][$key] = $result;
     $state['analysis_index'] = $index + 1;
-    maintenance_center_activity($state, 'info', maintenance_center_runtime_text('admin.maintenance_center.runtime.analyzed_task', 'Analyzed: {task}.', ['task' => $key]), ['available' => !empty($result['available']), 'work_units' => (int) ($result['work_units'] ?? 0)]);
+    maintenance_center_activity(
+        $state,
+        'info',
+        maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.analyzed_task',
+            'Analyzed: {task}.',
+            ['task' => $key]
+        ),
+        ['available' => !empty($result['available']), 'work_units' => (int) ($result['work_units'] ?? 0)]
+    );
     $done = $index + 1;
     $total = max(1, count($order));
     $percent = maintenance_center_monotonic_percent((float) ($row['progress_percent'] ?? 0), $done, $total);
@@ -399,7 +501,14 @@ function maintenance_center_finalize_analysis(array $row, array $state, array $r
     maintenance_center_assert_transition('analyzing', 'ready');
     $state['analysis_complete_at'] = now_sql();
     $state['plan_hash'] = $planHash;
-    maintenance_center_activity($state, 'info', maintenance_center_runtime_text('admin.maintenance_center.runtime.analysis_completed', 'Read-only analysis completed. Review the plan before execution.'));
+    maintenance_center_activity(
+        $state,
+        'info',
+        maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.analysis_completed',
+            'Read-only analysis completed. Review the plan before execution.'
+        )
+    );
     maintenance_center_model_update_job($jobId, $actorId, [
         'status' => 'ready',
         'phase' => 'review',

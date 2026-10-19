@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.137.1}
-\newcommand{\manualdate}{18.~října~2026}
+\newcommand{\version}{0.137.2}
+\newcommand{\manualdate}{19.~října~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2432,7 +2432,8 @@ Průzkum databáze inventarizuje objekty schématu, odkazy, kategorie vlastnictv
 
 Pohled Soubory uvádí také počty a~velikosti originálů PDF a~hudby
 spolu s~celkovým součtem médií. Aktualizovat vše po dávkách fotografií
-projde nejvýše dvě fyzické galerie za krok, včetně galerií bez fotografií.
+načte součty PDF, hudby a~OFP z~databáze. První běh doplní chybějící evidenci
+nejvýše ze dvou fyzických galerií za krok, včetně galerií bez fotografií.
 Počítají se i~skryté, soukromé, vypnuté a~nestáhnutelné soubory. Fyzické
 kopie zabírají místo samostatně; playlist Smart galerie žádnou kopii
 nepřidává. Stránky převedené z~PDF už patří mezi fotografie. Indexy, zámky,
@@ -2440,8 +2441,33 @@ stav převodů, neindexované soubory, Koš a~ostatní cache sem nepatří.
 Nečitelné indexy a~nebezpečné či~chybějící soubory vyvolají upozornění
 na neúplné měření bez oprav. Běžné stránky čtou uložené výsledky; změny
 příloh je označí za zastaralé, pokud se podaří zapsat pomocnou revizi.
-Po aktualizaci starých statistik pouze fotografií spusťte Aktualizovat vše.
-Ruční obnovení vyžadují také změny souborů mimo aplikaci.
+Po migraci databázové evidence spusťte Aktualizovat vše jednou. Nahrání,
+nahrazení a~smazání příloh udržuje součty z~potvrzených metadat; další běhy
+už neotevírají soubory příloh ani jejich indexy. Změny souborů mimo aplikaci
+vyžadují před obnovením zneplatnit příslušnou evidenci podle
+\codeword{docs/GALLERY\_PDF.md}.
+Při dostupných metadatech náhledů se běžné fotografie započtou už při úvodním
+čtení databáze bez dalších požadavků pro dávky fotografií. Omezené souborové
+kontroly zůstávají jen pro DNG zobrazovací předlohy. Bez metadat náhledů se
+zachovává úplný dávkový postup přes soubory; chyba povinného souhrnného dotazu
+zachová poslední úspěšný snímek místo vykázání nuly.
+Pro rozbor výkonu exportujte nejnovější událost Admin logu
+\codeword{storage.refresh\_all.completed}. ID běhu propojí průběžné záznamy;
+souhrn obsahuje celkový čas i~časy fází, počty požadavků a~médií, sledovaná
+souborová volání a~načtené bajty, počty zdrojů inspekce a~omezený seznam časů
+ANALYZE po tabulkách. Volání aplikace nejsou měřením fyzického I/O disku.
+Soukromé cesty ani oprávnění workflow se nelogují; chyba logu nezastaví aktualizaci.
+Závěrečná inspekce měří zvlášť schéma a~migrace, hledání a~čtení zdrojů,
+extrakci SQL řetězců, indexování a~porovnávání identifikátorů, počty kandidátů
+úklidu, staré objekty, sestavení zprávy, rozložení náhledů a~uložení výsledku.
+Počty načtených bajtů a~porovnání tabulek/sloupců ukazují rozsah práce;
+vnořené časy se překrývají. Odkazy se hledají čerstvým slovním indexem každého
+souboru a~SQL řetězce při zachování rozdílu produkce/testů a~společného výskytu
+ve stejném SQL řetězci. Nestandardní identifikátory používají původní regulární
+výraz. Trvalá cache této analýzy se nezavádí.
+Chyba povinného dotazu na fotografie nebo předčasně prázdná dávka derivátů
+označí souborovou fázi za neúspěšnou a~zachová poslední úspěšný snímek.
+Další fáze pokračují s~celkovým částečným výsledkem; chyba dotazu neznamená dokončení.
 
 \index{s00225@statistiky úložiště}
 \index{u00243@úplná zpráva}
@@ -2462,6 +2488,29 @@ Dokončená zpráva se vrací prohlížeči ke stažení a~neukládá se jako so
 Volitelná oblast \ui{Telemetrie} zaznamenává provozní měření s~řízeným soukromím a~představuje je jako zprávy administrace. Dostupné prvky zahrnují hlavní přepínač telemetrie, měření veřejného využití, výkon, události mezipaměti a~databáze, respektování Do Not Track, vyloučení správců, maximální započítávanou dobu prohlížení fotografie a~uchování surových, hodinových a~denních dat. Zprávy zahrnují například anonymní relace, zobrazení stránek, otevření fotografií a~omezený čas prohlížení, chyby klientů, naměřené bajty médií, zastoupení prohlížečů a~aktivitu mezipaměti a~databáze, pokud jsou tyto kategorie povoleny.
 
 Subsystém telemetrie je navržen tak, aby neukládal nezpracované adresy IP, řetězce user-agent prohlížečů, URL odkazujících stránek, jména, e-mailové adresy, identifikátory účtů, těla požadavků ani přesné polohy návštěvníků. Exporty obsahují souhrnnou anonymní telemetrii a~hashe relací místo nezpracovaných identifikátorů návštěvníků. Údržba shrnuje a~maže telemetrii podle nastavených pravidel uchování a~obrazovka administrace může exportovat samostatnou zprávu HTML pro offline kontrolu. Před povolením sběru na veřejném webu zkontrolujte ovládání soukromí.
+
+Databázová diagnostika má samostatné uchování: výchozích sedm dnů, nastavitelné
+od jednoho do 90 dnů. Nezkracuje hodinovou ani denní historii návštěvnosti.
+Údržba slučuje starší denní souhrny po jednom dni a~zachovává počty, časy,
+identitu fotografií a~rozlišení botů. U~známých denních metrik sjednocuje údaje
+o~prohlížeči, systému, viewportu, zemi a~zdroji návštěvy; zastoupení prohlížečů
+nadále vychází z~relací. Neznámé metriky si ponechávají všechny dimenze.
+Databázová migrace zachovává měření a~přestaví indexy agregací kolem krátkých
+fyzických klíčů; počítejte s~dočasným místem na disku a~oknem pro změnu schématu.
+Smazané stránky se uvolní pro další použití; pokles přidělené velikosti databáze
+může vyžadovat ruční fyzickou optimalizaci. Úspora závisí na uložených datech.
+
+Plánovaná telemetrie může běžet každých pět minut s~běžným rozpočtem deseti
+sekund a~nejvýše osmi dávkami po 5000 expirovaných řádcích na tabulku (40000 řádků).
+Tabulky se střídají po dávkách a~první tabulka mezi průchody rotuje. Sdílený časový
+limit může skutečný postup omezit. Centrum údržby zachovává čtyřsekundový úsek.
+Úspěšná veřejná návštěva úvodu, galerie nebo chytré galerie po vykreslení předá
+práci soukromému telemetrickému požadavku. Sdílené omezení umožní práci přibližně
+každých pět minut při návštěvnosti, nezávisle na okně údržby náhledů. Návštěvník
+nečeká na retenční SQL a~nedostává servisní token. Externí cron je volitelný;
+bez příchozích požadavků práce počká na další návštěvu. Náhledy editoru, média
+a~neúspěšné odpovědi práci nespouštějí. Vypnutí telemetrie, vlastnictví Centra
+údržby a~doby uchování zůstávají respektovány.
 
 \subsection{Diagnostika běhového prostředí, integrita a~měření galerie}
 \index{d00029@diagnostika běhového prostředí}

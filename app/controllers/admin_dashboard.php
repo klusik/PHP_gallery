@@ -301,6 +301,8 @@ function cms_admin_dashboard_maintenance_client_log(): void
 
 /**
  * Render the dedicated Admin storage statistics view.
+ *
+ * @return void Emits the selected Admin storage statistics tab as HTML.
  */
 function cms_admin_storage_statistics(): void
 {
@@ -309,19 +311,37 @@ function cms_admin_storage_statistics(): void
     if (!in_array($activeTab, ['files', 'database', 'maintenance'], true)) {
         $activeTab = 'files';
     }
-    $statistics = $activeTab === 'files' && function_exists('Gallery\\Services\\admin_storage_statistics_cached_snapshot') ? admin_storage_statistics_cached_snapshot(true) : null;
-    $databaseUsage = $activeTab === 'database' && function_exists('Gallery\\Services\\admin_database_usage_summary') ? admin_database_usage_summary() : null;
+    $statistics = $activeTab === 'files'
+        && function_exists('Gallery\\Services\\admin_storage_statistics_cached_snapshot')
+        ? admin_storage_statistics_cached_snapshot(true)
+        : null;
+    $databaseUsage = $activeTab === 'database'
+        && function_exists('Gallery\\Services\\admin_database_usage_summary')
+        ? admin_database_usage_summary()
+        : null;
     $databaseMaintenance = [];
     if ($activeTab === 'maintenance') {
         $databaseMaintenance = [
-            'report' => function_exists('Gallery\\Services\\database_maintenance_load_report') ? database_maintenance_load_report() : null,
-            'cleanup_state' => function_exists('Gallery\\Services\\database_maintenance_cleanup_state') ? database_maintenance_cleanup_state() : [],
-            'repair_readiness' => function_exists('Gallery\\Services\\database_maintenance_schema_repair_readiness') ? database_maintenance_schema_repair_readiness() : [],
+            'report' => function_exists('Gallery\\Services\\database_maintenance_load_report')
+                ? database_maintenance_load_report()
+                : null,
+            'cleanup_state' => function_exists('Gallery\\Services\\database_maintenance_cleanup_state')
+                ? database_maintenance_cleanup_state()
+                : [],
+            'repair_readiness' => function_exists('Gallery\\Services\\database_maintenance_schema_repair_readiness')
+                ? database_maintenance_schema_repair_readiness()
+                : [],
             'mutations_enabled' => feature_capability_effective_enabled('advanced_database_maintenance'),
         ];
     }
     $notice = (string) flash_message('admin_notice');
-    view_render_admin_storage_statistics_page($statistics, $databaseUsage, $activeTab, $notice, $databaseMaintenance);
+    view_render_admin_storage_statistics_page(
+        $statistics,
+        $databaseUsage,
+        $activeTab,
+        $notice,
+        $databaseMaintenance
+    );
 }
 
 /**

@@ -13,6 +13,10 @@ declare(strict_types=1);
 
 namespace Gallery\Models;
 
+require_once __DIR__ . '/../runtime/storage_observer.php';
+
+use function Gallery\Core\storage_observer_call;
+
 /**
  * Bound playlist JSON allocation before parsing or publishing.
  * Type: int. Units: bytes. Scope: one gallery music index.
@@ -42,14 +46,18 @@ const GALLERY_MUSIC_FILE_MODE = 0600;
 function gallery_music_model_read(string $directory): array
 {
     $path = $directory . '/index.json';
-    if (is_link($directory) || is_link($path)) {
+    if (storage_observer_call('fs.is_link', static fn(): bool => is_link($directory))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link($path))) {
         throw new \RuntimeException('Unsafe music index.');
     }
-    if (!file_exists($path)) {
+    if (!storage_observer_call('fs.file_exists', static fn(): bool => file_exists($path))) {
         // The all-zero revision is the wire identity of a never-created playlist.
         return ['revision' => str_repeat('0', 32), 'enabled' => false, 'tracks' => []];
     }
-    $bytes = @file_get_contents($path, false, null, 0, GALLERY_MUSIC_INDEX_BYTES + 1);
+    $bytes = storage_observer_call('fs.read.music_index',
+        static fn(): string|false => @file_get_contents(
+            $path, false, null, 0, GALLERY_MUSIC_INDEX_BYTES + 1
+        ));
     if (!is_string($bytes) || strlen($bytes) > GALLERY_MUSIC_INDEX_BYTES) {
         throw new \RuntimeException('Unreadable music index.');
     }

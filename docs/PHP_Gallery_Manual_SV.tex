@@ -63,8 +63,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.137.1}
-\newcommand{\manualdate}{18~oktober~2026}
+\newcommand{\version}{0.137.2}
+\newcommand{\manualdate}{19~oktober~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2437,7 +2437,8 @@ Databasundersökning inventerar schemaobjekt, referenser, ansvarskategorier, lag
 \subsection{Lagringsstatistik och fullständig rapport}
 
 Filvyn visar också antal och~byte för PDF- och~musikoriginal samt en
-samlad mediesumma. Efter fotobatcher mäter Uppdatera allt högst två fysiska
+samlad mediesumma. Efter fotobatcher läser Uppdatera allt PDF-, musik- och~OFP-summor
+från databasen. Första körningen importerar saknade poster från högst två fysiska
 gallerier per steg, även gallerier utan foton. Dolda, privata, avstängda
 filer och~spår utan nedladdning räknas också. Fysiska kopior räknas separat;
 smarta spellistor skapar ingen kopia. Konverterade PDF-sidor räknas redan
@@ -2445,8 +2446,32 @@ som foton. Index, lås, konverteringstillstånd, oindexerade filer, Papperskorg
 och~andra cacher ingår inte. Oläsbara index eller osäkra/saknade filer ger
 synlig ofullständig mätning utan reparation. Vanliga sidor läser cache;
 bilageändringar markerar den som gammal när revisionsskrivningen lyckas.
-Efter uppgradering av äldre fotostatistik och~vid externa filändringar
-behövs Uppdatera allt för en ny mätning.
+Efter databasmigreringen behövs en första körning av Uppdatera allt.
+Uppladdning, ersättning och~borttagning uppdaterar summorna från sparade metadata;
+senare körningar öppnar inga bilagefiler eller~index. Externa filändringar kräver
+att berörda bokföringsposter ogiltigförklaras före uppdateringen; se
+\codeword{docs/GALLERY\_PDF.md}.
+Med beständiga miniatyrmetadata räknas vanliga foton redan under den~första
+databasgenomgången utan ytterligare fotobatch-anrop. Begränsade filkontroller
+behövs bara för DNG-visningsmaster. Utan miniatyrmetadata finns den~fullständiga
+begränsade filhanteringen kvar; ett~fel i~den~obligatoriska aggregatfrågan bevarar
+den~senaste lyckade ögonblicksbilden i~stället för att rapportera noll.
+För prestandaanalys exporterar du den~senaste Admin-logghändelsen
+\codeword{storage.refresh\_all.completed}. Körnings-ID:t kopplar ihop framsteg;
+sammanfattningen innehåller total- och~fastider, antal anrop och~mediefiler,
+observerade filanrop och~lästa byte, antal inspektionskällor samt begränsade
+ANALYZE-tider per tabell. Filanrop mäter inte fysisk disk-I/O. Privata sökvägar
+och~workflow-behörigheter loggas inte; ett~loggfel stoppar inte uppdateringen.
+Slutinspektionen mäter schema och~migreringar, källsökning och~läsning,
+SQL-literalextraktion, ordindex och~referensmatchning, städkandidater, äldre objekt,
+rapportbygge, miniatyrfördelning och~sparande separat. Lästa byte och~antal
+tabell-/kolumnjämförelser visar arbetsmängden; nästlade tider överlappar.
+Ett~färskt ordindex per fil och~SQL-literal bevarar produktions-/testgränsen
+och~kravet på~samförekomst i~samma SQL-literal. Ovanliga identifierare behåller
+regex-semantiken. Ingen beständig analyscache används.
+Fel i~obligatoriska fotofrågor och~för~tidigt tomma derivatbatcher gör att
+filfasen misslyckas och~bevarar den~senaste lyckade ögonblicksbilden.
+Senare faser fortsätter med ett~delvis resultat; frågefel betyder inte slutförd skanning.
 
 \index{l00147@lagringsstatistik}
 \index{f00087@fullständig rapport}
@@ -2467,6 +2492,29 @@ Den färdiga rapporten returneras till webbläsaren som en hämtning och sparas 
 Det valfria området \ui{Telemetri} registrerar integritetskontrollerade driftmätningar och presenterar dem som administrationsrapporter. Tillgängliga kontroller omfattar huvudväxeln för telemetri, offentliga användningsmätningar, prestanda, cache- och databashändelser, respekt för Do Not Track, uteslutning av administratörer, maximal räknad bildvisningstid och lagringstid för rådata, timdata och dygnsdata. Rapporter innehåller mått såsom anonyma sessioner, sidvisningar, öppnade fotografier och begränsad visningstid, klientfel, uppmätta mediebyte, webbläsarfördelning och cache- och databasaktivitet där kategorierna är~aktiverade.
 
 Telemetridelsystemet är utformat för att inte lagra råa IP-adresser, råa user-agent-strängar från webbläsare, råa hänvisnings-URL:er, namn, e-postadresser, kontoidentifierare, begärandekroppar eller exakta besökarplatser. Exporter innehåller sammanställd anonym telemetri och sessionshashar i stället för råa besökaridentifierare. Underhåll sammanställer och rensar telemetri enligt konfigurerad lagringspolicy, och administrationsskärmen kan exportera en fristående HTML-rapport för offline-granskning. Granska integritetskontrollerna innan du aktiverar insamling på en offentlig webbplats.
+
+SQL-diagnostik har en egen lagringstid: sju dagar som standard, inställbart
+från en till 90 dagar. Timvis och daglig användningshistorik förblir oberoende.
+Underhåll slår samman äldre dagssummor en dag i taget och bevarar antal, tider,
+fotografiidentitet och botsegment. Webbläsare, operativsystem, visningsyta, land
+och hänvisningskälla neutraliseras för kända dagsmått; webbläsarfördelning hämtas
+fortfarande från sessioner. Okända mått behåller sina dimensioner. Migreringen
+bevarar mätvärden och bygger om aggregatindex med korta fysiska nycklar; planera
+för tillfälligt diskutrymme och ett DDL-underhållsfönster. Raderade sidor kan
+återanvändas; allokerad databasstorlek kan kräva manuell fysisk optimering.
+Besparingen beror på lagrade data.
+
+Schemalagd telemetri får köras var femte minut, med tio sekunder per normal
+omgång och högst åtta batcher om 5000 utgångna rader per tabell (40000 rader).
+Tabeller växlar efter varje batch och den första tabellen roterar mellan omgångar.
+Den gemensamma tidsbudgeten kan begränsa framstegen. Underhållscentret behåller
+fyra sekunder per UI-steg. Lyckade offentliga besök på startsidan, gallerier och smarta gallerier skickar
+efter rendering en privat telemetriuppgift. Vid trafik tillåts arbete ungefär
+var femte minut, oberoende av miniatyrunderhållets tidsfönster. Besökaren väntar
+inte på SQL-rensning och får ingen underhållstoken. Extern cron är valfri;
+utan inkommande anrop väntar arbetet till nästa besök. Förhandsvisningar, medier
+och felsvar startar inget arbete. Avstängd telemetri, centralt underhållsanspråk
+och lagringstider respekteras fortfarande.
 
 \subsection{Körningsdiagnostik, integritet och galleriprestandatest}
 \index{k00145@Körningsdiagnostik}

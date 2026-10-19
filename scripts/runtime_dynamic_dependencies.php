@@ -88,6 +88,8 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     // The cache capacity probe is a native disk_free_space closure or an explicit
     // service/fixture provider parameter. No hidden Gallery declaration needs a
     // generated root; request input never selects this callback.
+    // Storage observation callbacks are supplied lexically by reviewed call sites.
+    // They run once and add no hidden Gallery roots or user-selected targets.
     $signatures = <<<'SITES'
 Gallery\Controllers\admin_gallery_discovery_capture_html|variable_callable|$renderer()
 Gallery\Controllers\admin_maintenance_center_json_action|variable_callable|$callback()
@@ -99,6 +101,7 @@ Gallery\Core\db|dynamic_class|new $pdoClass
 Gallery\Core\db|variable_callable|$pdoClass()
 Gallery\Core\load_migration_definition|dynamic_callback_argument|is_callable($after)
 Gallery\Core\run_migrations|variable_callable|$after()
+Gallery\Core\storage_observer_call|variable_callable|$callback()
 Gallery\Models\admin_gallery_report_model_image_rows_after_id|variable_callable|$optional()
 Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$compensate()
 Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$operation()
@@ -121,6 +124,7 @@ Gallery\Services\admin_render_profile_span|variable_callable|$callback()
 Gallery\Services\admin_setup_wizard_apply|dynamic_callback_argument|is_callable($restoreUrl)
 Gallery\Services\admin_setup_wizard_apply|variable_callable|$restoreUrl()
 Gallery\Services\admin_storage_refresh_with_lock|variable_callable|$operation()
+Gallery\Services\admin_storage_refresh_measure|variable_callable|$callback()
 Gallery\Services\admin_test_run_clear_safe_caches|dynamic_function_exists|function_exists(dynamic)
 Gallery\Services\admin_test_run_clear_safe_caches|variable_callable|$callback()
 Gallery\Services\admin_test_run_create|variable_callable|$callback()

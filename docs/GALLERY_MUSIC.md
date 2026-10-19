@@ -10,13 +10,17 @@ independently OFF by default. PDF availability uses its own separate capability.
 
 Storage statistics count each stored physical copy, including hidden and
 download-locked tracks, even when this master is OFF. Smart deduplication changes
-playback membership, never physical byte accounting. Run **Update all** to measure
-the originals; see [accounting scope](GALLERY_PDF.md#admin-storage-accounting).
+playback membership, never physical byte accounting. **Update all** reads durable
+database totals after a one-time import of missing categories. Playlist mutations
+update the music totals from committed metadata without rereading audio files;
+see [accounting scope](GALLERY_PDF.md#admin-storage-accounting).
 
 Music belongs to one physical gallery. `app/services/gallery_music.php` owns
 validation, confinement, upload quotas and serialized playlist changes;
 `app/models/gallery_music.php` owns the versioned JSON index. No database
-migration is required. This foundation is tracked in issue #247.
+migration is required for that original index. Derived storage accounting uses
+`202610190001_gallery_attachment_storage.php`. This foundation is tracked in
+issue #247.
 
 Administrators can use the ordinary Upload photos chooser/drop queue for a
 mixed selection of photographs, PDFs and music. Audio goes to protected original

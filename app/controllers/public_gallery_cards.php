@@ -205,7 +205,13 @@ function public_thumbnail_loading_attributes(int $index): string
 function public_gallery_card_rendering_contexts(array $galleries, bool $publicOnly, bool $includeCounts): array
 {
     // $galleryIds stores visible gallery ids used for batched card context lookups.
-    $galleryIds = array_values(array_unique(array_filter(array_map(static fn (array $gallery): int => (int) ($gallery['id'] ?? 0), $galleries), static fn (int $galleryId): bool => $galleryId > 0)));
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map(
+            static fn (array $gallery): int => (int) ($gallery['id'] ?? 0),
+            $galleries
+        ),
+        static fn (int $galleryId): bool => $galleryId > 0
+    )));
     if (!$galleryIds) {
         return [];
     }
@@ -281,7 +287,15 @@ function public_gallery_card_rendering_contexts(array $galleries, bool $publicOn
  * @param bool $pictureManagerEnabled Whether this physical gallery card participates in Picture manager selection.
  * @return void Emits the prepared gallery card.
  */
-function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false, int $cardIndex = 0, array $cardContext = [], bool $pictureManagerEnabled = false): void
+function render_gallery_card(
+    array $gallery,
+    bool $publicOnly,
+    bool $showPublicReorderHandle = false,
+    bool $showSubgalleryBadge = false,
+    int $cardIndex = 0,
+    array $cardContext = [],
+    bool $pictureManagerEnabled = false
+): void
 {
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
@@ -290,9 +304,23 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         ? gallery_description_layout_normalize($cardContext['description_layout'], gallery_effective_description_layout($gallery))
         : gallery_effective_description_layout($gallery);
     // $coverAsset stores an optional branding/cover asset resolved before rendering.
-    $coverAsset = $isProtectedPublicCard ? '' : (array_key_exists('cover_asset', $cardContext) ? (string) $cardContext['cover_asset'] : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly)));
+    $coverAsset = $isProtectedPublicCard
+        ? ''
+        : (array_key_exists('cover_asset', $cardContext)
+            ? (string) $cardContext['cover_asset']
+            : public_render_profile_span(
+                'gallery_cover_asset_lookup',
+                static fn (): string => gallery_cover_asset_url($gallery, $publicOnly)
+            ));
     // $cover stores the selected real image when no explicit asset is available.
-    $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : (array_key_exists('cover', $cardContext) ? $cardContext['cover'] : public_render_profile_span('gallery_cover_image_lookup', static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly)));
+    $cover = $isProtectedPublicCard || $coverAsset !== ''
+        ? null
+        : (array_key_exists('cover', $cardContext)
+            ? $cardContext['cover']
+            : public_render_profile_span(
+                'gallery_cover_image_lookup',
+                static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly)
+            ));
     // Admin-only totals also appear on a protected gallery card; anonymous protected cards keep the old rule.
     $isCountAdmin = current_user() !== null && !current_user_is_known_under_18() && !admin_anonymous_preview_active();
     $showCountBadge = (!$isProtectedPublicCard || $isCountAdmin) && $showSubgalleryBadge && gallery_effective_count_badge_enabled($gallery);
@@ -306,7 +334,12 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
             ? (int) $cardContext['total_image_count']
             : gallery_branch_image_count((int) $gallery['id'], false);
     }
-    $countBadgePresentation = gallery_count_badge_presentation($gallery, $isCountAdmin, $branchImageCount, $totalImageCount === null ? null : (int) $totalImageCount);
+    $countBadgePresentation = gallery_count_badge_presentation(
+        $gallery,
+        $isCountAdmin,
+        $branchImageCount,
+        $totalImageCount === null ? null : (int) $totalImageCount
+    );
     // $galleryCardTags stores the tags shown in the card body. Own gallery tags win, then contained tags keep the old fallback useful.
     $galleryCardTags = $isProtectedPublicCard ? [] : public_render_profile_span('gallery_card_tag_lookup', static function () use ($gallery, $publicOnly): array {
         // $ownTags stores tags attached directly to the gallery record.
@@ -328,14 +361,36 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     $collagePictureHtml = [];
     if (!$isProtectedPublicCard && $coverAsset === '' && is_array($cover)) {
         $coverThumbnailBundle = public_render_profile_span('subgallery_cover_thumbnail_bundle', static fn (): array => thumbnail_bundle($cover));
-        $coverPictureHtml = public_render_profile_with_thumbnail_purpose('subgallery cover stable picture', static fn (): string => thumbnail_picture_html($cover, 300, [300, 600, 800, 960], '(max-width: 299px) 300px, 800px', '', $coverLoadingAttributes, $coverThumbnailBundle));
+        $coverPictureHtml = public_render_profile_with_thumbnail_purpose(
+            'subgallery cover stable picture',
+            static fn (): string => thumbnail_picture_html(
+                $cover,
+                300,
+                [300, 600, 800, 960],
+                '(max-width: 299px) 300px, 800px',
+                '',
+                $coverLoadingAttributes,
+                $coverThumbnailBundle
+            )
+        );
     } elseif (!$isProtectedPublicCard && $coverAsset === '') {
         // $collage stores this steps working value.
         $collage = array_key_exists('collage', $cardContext) ? (array) $cardContext['collage'] : public_render_profile_span('gallery_cover_collage_lookup', static fn (): array => gallery_cover_collage_images((int) $gallery['id'], $publicOnly));
         foreach ($collage as $image) {
             // Collage images must not use progressive replacement. A metagallery card contains several child covers, and independent delayed srcset upgrades make the card repaint in visible waves. Render a stable srcset immediately and let the browser choose the best candidate once.
             $collageThumbnailBundle = public_render_profile_span('subgallery_collage_thumbnail_bundle', static fn (): array => thumbnail_bundle($image));
-            $collagePictureHtml[] = public_render_profile_with_thumbnail_purpose('subgallery collage stable picture', static fn (): string => thumbnail_picture_html($image, 300, [300, 600, 800], '(max-width: 520px) 300px, 420px', '', $coverLoadingAttributes, $collageThumbnailBundle));
+            $collagePictureHtml[] = public_render_profile_with_thumbnail_purpose(
+                'subgallery collage stable picture',
+                static fn (): string => thumbnail_picture_html(
+                    $image,
+                    300,
+                    [300, 600, 800],
+                    '(max-width: 520px) 300px, 420px',
+                    '',
+                    $coverLoadingAttributes,
+                    $collageThumbnailBundle
+                )
+            );
         }
     }
 
@@ -414,7 +469,16 @@ function render_smart_gallery_card(array $smartGallery, int $cardIndex = 0, arra
         $bundle = thumbnail_bundle($cover);
         $candidateSizes = $sourceGallery !== [] ? smart_gallery_thumbnail_sizes($presentation, $cover, $sourceGallery, [300, 600, 800, 960]) : [300, 600, 800];
         $fallbackSize = (int) ($candidateSizes[0] ?? 300);
-        $coverPictureHtml = public_thumbnail_render_picture_html($cover, $fallbackSize, $candidateSizes, '(max-width: 520px) 300px, 420px', '', $cardIndex, $bundle, (string) $presentation['thumbnail_rendering_mode']);
+        $coverPictureHtml = public_thumbnail_render_picture_html(
+            $cover,
+            $fallbackSize,
+            $candidateSizes,
+            '(max-width: 520px) 300px, 420px',
+            '',
+            $cardIndex,
+            $bundle,
+            (string) $presentation['thumbnail_rendering_mode']
+        );
     }
 
     \Gallery\Views\view_render_public_smart_gallery_card([
@@ -527,7 +591,13 @@ function render_public_gallery_admin_visibility_menu(array $gallery): void
         return;
     }
     $name = trim((string) ($gallery['title'] ?? 'gallery'));
-    render_public_admin_visibility_menu('gallery', (int) ($gallery['id'] ?? 0), $name, gallery_effective_visibility($gallery), url_for('admin_public_update_gallery'));
+    render_public_admin_visibility_menu(
+        'gallery',
+        (int) ($gallery['id'] ?? 0),
+        $name,
+        gallery_effective_visibility($gallery),
+        url_for('admin_public_update_gallery')
+    );
 }
 
 /**

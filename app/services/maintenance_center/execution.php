@@ -154,7 +154,15 @@ function maintenance_center_start_execution_unlocked(int $jobId, int $actorId, a
             'started_at' => now_sql(),
         ];
         $state['before'] = maintenance_center_before_snapshot($plan);
-        maintenance_center_activity($state, 'info', maintenance_center_runtime_text('admin.maintenance_center.runtime.execution_started', 'Approved maintenance execution is starting.'), ['selected_tasks' => count($selected)]);
+        maintenance_center_activity(
+            $state,
+            'info',
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.execution_started',
+                'Approved maintenance execution is starting.'
+            ),
+            ['selected_tasks' => count($selected)]
+        );
         maintenance_center_model_update_job($jobId, $actorId, [
             'state_json' => maintenance_center_json_encode($state),
             'progress_done' => 0,
@@ -167,14 +175,30 @@ function maintenance_center_start_execution_unlocked(int $jobId, int $actorId, a
         if (empty($execution['selected_tasks'])) {
             throw new RuntimeException('Paused Maintenance Center job has no persisted execution plan.');
         }
-        maintenance_center_activity($state, 'info', maintenance_center_runtime_text('admin.maintenance_center.runtime.execution_resumed', 'Maintenance execution resumed.'));
-        maintenance_center_model_update_job($jobId, $actorId, ['state_json' => maintenance_center_json_encode($state), 'updated_at' => now_sql()]);
+        maintenance_center_activity(
+            $state,
+            'info',
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.execution_resumed',
+                'Maintenance execution resumed.'
+            )
+        );
+        maintenance_center_model_update_job(
+            $jobId,
+            $actorId,
+            ['state_json' => maintenance_center_json_encode($state), 'updated_at' => now_sql()]
+        );
     }
 
     if (!maintenance_center_model_claim_mutation_lock($jobId, $actorId, now_sql())) {
         throw new RuntimeException('Another central maintenance job owns the installation mutation lock.');
     }
-    maintenance_center_log_lifecycle('info', 'maintenance_center.started', 'Maintenance Center execution started or resumed.', $jobId);
+    maintenance_center_log_lifecycle(
+        'info',
+        'maintenance_center.started',
+        'Maintenance Center execution started or resumed.',
+        $jobId
+    );
     return maintenance_center_job_status($jobId, $actorId);
 }
 
@@ -203,7 +227,14 @@ function maintenance_center_pause(int $jobId, int $actorId): array
     }
     maintenance_center_assert_transition('running', 'paused');
     $state = maintenance_center_json_decode((string) ($row['state_json'] ?? '{}'));
-    maintenance_center_activity($state, 'warning', maintenance_center_runtime_text('admin.maintenance_center.runtime.paused', 'Maintenance paused between bounded operations.'));
+    maintenance_center_activity(
+        $state,
+        'warning',
+        maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.paused',
+            'Maintenance paused between bounded operations.'
+        )
+    );
     maintenance_center_model_update_job($jobId, $actorId, [
         'status' => 'paused', 'phase' => 'paused', 'state_json' => maintenance_center_json_encode($state), 'updated_at' => now_sql(),
     ]);
@@ -224,8 +255,25 @@ function maintenance_center_cancel(int $jobId, int $actorId): array
     maintenance_center_model_request_cancel($jobId, $actorId, now_sql());
     if (in_array($status, ['ready', 'paused', 'analyzing'], true)) {
         $state = maintenance_center_json_decode((string) ($row['state_json'] ?? '{}'));
-        maintenance_center_activity($state, 'warning', maintenance_center_runtime_text('admin.maintenance_center.runtime.cancelled_before_next', 'Maintenance cancelled before the next operation. Completed work was not rolled back.'));
-        maintenance_center_model_finish_job($jobId, $actorId, 'cancelled', 'cancelled', maintenance_center_json_encode($state), (float) ($row['progress_percent'] ?? 0), now_sql(), 'cancelled', 'Cancelled by administrator.');
+        maintenance_center_activity(
+            $state,
+            'warning',
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.cancelled_before_next',
+                'Maintenance cancelled before the next operation. Completed work was not rolled back.'
+            )
+        );
+        maintenance_center_model_finish_job(
+            $jobId,
+            $actorId,
+            'cancelled',
+            'cancelled',
+            maintenance_center_json_encode($state),
+            (float) ($row['progress_percent'] ?? 0),
+            now_sql(),
+            'cancelled',
+            'Cancelled by administrator.'
+        );
         maintenance_center_log_lifecycle('info', 'maintenance_center.cancelled', 'Maintenance Center job was cancelled.', $jobId);
     }
     return maintenance_center_job_status($jobId, $actorId);
@@ -263,9 +311,31 @@ function maintenance_center_execution_step_unlocked(int $jobId, int $actorId, ?c
     }
     $state = maintenance_center_json_decode((string) ($row['state_json'] ?? '{}'));
     if (!empty($row['cancel_requested'])) {
-        maintenance_center_activity($state, 'warning', maintenance_center_runtime_text('admin.maintenance_center.runtime.cancelled_between', 'Cancellation took effect between bounded operations. Completed work remains committed.'));
-        maintenance_center_model_finish_job($jobId, $actorId, 'cancelled', 'cancelled', maintenance_center_json_encode($state), (float) ($row['progress_percent'] ?? 0), now_sql(), 'cancelled', 'Cancelled between operations.');
-        maintenance_center_log_lifecycle('info', 'maintenance_center.cancelled', 'Maintenance Center job was cancelled between operations.', $jobId);
+        maintenance_center_activity(
+            $state,
+            'warning',
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.cancelled_between',
+                'Cancellation took effect between bounded operations. Completed work remains committed.'
+            )
+        );
+        maintenance_center_model_finish_job(
+            $jobId,
+            $actorId,
+            'cancelled',
+            'cancelled',
+            maintenance_center_json_encode($state),
+            (float) ($row['progress_percent'] ?? 0),
+            now_sql(),
+            'cancelled',
+            'Cancelled between operations.'
+        );
+        maintenance_center_log_lifecycle(
+            'info',
+            'maintenance_center.cancelled',
+            'Maintenance Center job was cancelled between operations.',
+            $jobId
+        );
         return maintenance_center_job_status($jobId, $actorId);
     }
 
@@ -282,11 +352,31 @@ function maintenance_center_execution_step_unlocked(int $jobId, int $actorId, ?c
     if ($inflight !== null) {
         $table = (string) ($inflight['table'] ?? '');
         $operation = (string) ($inflight['operation'] ?? '');
-        maintenance_center_warning($state, 'atomic_outcome_unknown.' . $operation . '.' . $table, maintenance_center_runtime_text('admin.maintenance_center.runtime.atomic_outcome_unknown', 'The previous {operation} operation on {table} has an unknown client-visible outcome and will not be repeated automatically.', ['operation' => $operation, 'table' => $table]));
-        maintenance_center_activity($state, 'warning', maintenance_center_runtime_text('admin.maintenance_center.runtime.atomic_replay_skipped', 'Skipped automatic replay of an atomic database operation after an interrupted response.'), ['operation' => $operation, 'table' => $table]);
+        maintenance_center_warning(
+            $state,
+            'atomic_outcome_unknown.' . $operation . '.' . $table,
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.atomic_outcome_unknown',
+                'The previous {operation} operation on {table} has an unknown client-visible outcome and will not be repeated automatically.',
+                ['operation' => $operation, 'table' => $table]
+            )
+        );
+        maintenance_center_activity(
+            $state,
+            'warning',
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.atomic_replay_skipped',
+                'Skipped automatic replay of an atomic database operation after an interrupted response.'
+            ),
+            ['operation' => $operation, 'table' => $table]
+        );
         $execution['atomic_inflight'] = null;
         $state['execution'] = $execution;
-        maintenance_center_model_update_job($jobId, $actorId, ['state_json' => maintenance_center_json_encode($state), 'updated_at' => now_sql()]);
+        maintenance_center_model_update_job(
+            $jobId,
+            $actorId,
+            ['state_json' => maintenance_center_json_encode($state), 'updated_at' => now_sql()]
+        );
         $row = maintenance_center_model_job($jobId) ?? $row;
         $state = maintenance_center_json_decode((string) ($row['state_json'] ?? '{}'));
         $execution = (array) ($state['execution'] ?? []);
@@ -308,7 +398,15 @@ function maintenance_center_execution_step_unlocked(int $jobId, int $actorId, ?c
         if (!empty($task['required'])) {
             return maintenance_center_fail_job($row, 'required_feature_disabled', 'A required maintenance capability became unavailable.');
         }
-        maintenance_center_warning($state, 'feature_disabled.' . str_replace('.', '_', $key), maintenance_center_runtime_text('admin.maintenance_center.runtime.feature_disabled', 'Task {task} was skipped because its capability is now disabled.', ['task' => $key]));
+        maintenance_center_warning(
+            $state,
+            'feature_disabled.' . str_replace('.', '_', $key),
+            maintenance_center_runtime_text(
+                'admin.maintenance_center.runtime.feature_disabled',
+                'Task {task} was skipped because its capability is now disabled.',
+                ['task' => $key]
+            )
+        );
         $execution['task_states'][$key] = ['done' => true, 'skipped' => true, 'reason' => 'feature_disabled'];
         return maintenance_center_advance_completed_task($row, $state, $execution, $planTask, $key, maintenance_center_runtime_text('admin.maintenance_center.runtime.task_skipped_disabled', 'Skipped disabled task: {task}.', ['task' => $key]));
     }
@@ -335,8 +433,22 @@ function maintenance_center_execution_step_unlocked(int $jobId, int $actorId, ?c
     } catch (Throwable $exception) {
         $diagnostic = maintenance_center_exception_diagnostic($exception);
         if (empty($task['mutates']) && empty($task['required'])) {
-            maintenance_center_warning($state, 'task_failed.' . str_replace('.', '_', $key), maintenance_center_runtime_text('admin.maintenance_center.runtime.optional_task_failed', 'Optional read-only task {task} failed and was skipped.', ['task' => $key]));
-            maintenance_center_log_lifecycle('warning', 'maintenance_center.task_skipped_failed', 'Optional Maintenance Center task failed and was skipped.', $jobId, ['task' => $key] + $diagnostic);
+            maintenance_center_warning(
+                $state,
+                'task_failed.' . str_replace('.', '_', $key),
+                maintenance_center_runtime_text(
+                    'admin.maintenance_center.runtime.optional_task_failed',
+                    'Optional read-only task {task} failed and was skipped.',
+                    ['task' => $key]
+                )
+            );
+            maintenance_center_log_lifecycle(
+                'warning',
+                'maintenance_center.task_skipped_failed',
+                'Optional Maintenance Center task failed and was skipped.',
+                $jobId,
+                ['task' => $key] + $diagnostic
+            );
             $execution['task_states'][$key] = $taskState + ['done' => true, 'skipped' => true, 'reason' => 'task_failed', 'diagnostic' => $diagnostic];
             return maintenance_center_advance_completed_task($row, $state, $execution, $planTask, $key, maintenance_center_runtime_text('admin.maintenance_center.runtime.task_skipped_failed', 'Skipped failed optional task: {task}.', ['task' => $key]));
         }
@@ -413,7 +525,13 @@ function maintenance_center_advance_completed_task(array $row, array $state, arr
         'progress_percent' => $percent,
         'updated_at' => now_sql(),
     ]);
-    maintenance_center_log_lifecycle('info', 'maintenance_center.task_completed', 'Maintenance Center task completed.', $jobId, ['task' => $key]);
+    maintenance_center_log_lifecycle(
+        'info',
+        'maintenance_center.task_completed',
+        'Maintenance Center task completed.',
+        $jobId,
+        ['task' => $key]
+    );
 
     $selected = array_values((array) ($execution['selected_tasks'] ?? []));
     if ((int) $execution['task_index'] >= count($selected)) {
@@ -526,7 +644,17 @@ function maintenance_center_fail_job(array $row, string $category, string $messa
     if ($task !== '' && isset($state['execution']['metrics']) && is_array($state['execution']['metrics'])) {
         $state['execution']['metrics'] = maintenance_center_merge_metrics($state['execution']['metrics'], ['task_failures' => [$task]]);
     }
-    maintenance_center_model_finish_job($jobId, $actorId, 'failed', 'failed', maintenance_center_json_encode($state), (float) ($row['progress_percent'] ?? 0), now_sql(), $category, $displayMessage);
+    maintenance_center_model_finish_job(
+        $jobId,
+        $actorId,
+        'failed',
+        'failed',
+        maintenance_center_json_encode($state),
+        (float) ($row['progress_percent'] ?? 0),
+        now_sql(),
+        $category,
+        $displayMessage
+    );
     $logContext = ['category' => $category, 'task' => $task];
     foreach ($diagnostic as $key => $value) {
         if ((is_scalar($value) || $value === null) && count($logContext) < 10) {
@@ -548,8 +676,23 @@ function maintenance_center_complete_job(array $row, array $state): array
         return maintenance_center_fail_job($row, 'verification_missing', 'Required completion verification did not finish.');
     }
     $state['completed_at'] = now_sql();
-    maintenance_center_activity($state, 'info', maintenance_center_runtime_text('admin.maintenance_center.runtime.completed', 'Maintenance completed and central mutation claim released.'));
-    maintenance_center_model_finish_job($jobId, $actorId, 'completed', 'completed', maintenance_center_json_encode($state), 100.0, now_sql());
+    maintenance_center_activity(
+        $state,
+        'info',
+        maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.completed',
+            'Maintenance completed and central mutation claim released.'
+        )
+    );
+    maintenance_center_model_finish_job(
+        $jobId,
+        $actorId,
+        'completed',
+        'completed',
+        maintenance_center_json_encode($state),
+        100.0,
+        now_sql()
+    );
     maintenance_center_log_lifecycle('info', 'maintenance_center.completed', 'Maintenance Center job completed.', $jobId, [
         'warnings' => count((array) ($state['warnings'] ?? [])),
         'errors' => count((array) ($state['errors'] ?? [])),
@@ -568,7 +711,11 @@ function maintenance_center_execute_preflight(array $context): array
     if (maintenance_center_model_schema_revision() === 'unknown') {
         throw new RuntimeException('Schema revision cannot be verified.');
     }
-    return ['done' => true, 'task_state' => ['done' => true], 'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.preflight_passed', 'Preflight safety checks passed.')];
+    return [
+        'done' => true,
+        'task_state' => ['done' => true],
+        'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.preflight_passed', 'Preflight safety checks passed.')
+    ];
 }
 
 /** Reconcile stale Trash transitions in bounded slices. */
@@ -599,7 +746,12 @@ function maintenance_center_execute_telemetry(array $context): array
         throw new RuntimeException('Telemetry maintenance slice failed.');
     }
     if (!empty($result['skipped']) && (string) ($result['reason'] ?? '') === 'busy') {
-        return ['done' => false, 'fraction' => 0.0, 'task_state' => (array) $context['task_state'], 'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.telemetry_busy', 'Telemetry maintenance is busy; the job will retry on the next browser step.')];
+        return [
+            'done' => false,
+            'fraction' => 0.0,
+            'task_state' => (array) $context['task_state'],
+            'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.telemetry_busy', 'Telemetry maintenance is busy; the job will retry on the next browser step.')
+        ];
     }
     $deleted = array_sum(array_map('intval', (array) ($result['deleted'] ?? [])));
     $rolled = max(0, (int) ($result['rolled_up'] ?? 0));
@@ -660,7 +812,12 @@ function maintenance_center_execute_security(array $context): array
 {
     $result = viewer_security_maintenance_cleanup();
     if ((string) ($result['storage'] ?? '') === 'unavailable') {
-        return ['done' => true, 'task_state' => ['skipped' => true, 'reason' => 'storage_unavailable'], 'warning' => maintenance_center_runtime_text('admin.maintenance_center.runtime.security_unavailable', 'Viewer security storage is unavailable; its cleanup was skipped fail-closed.'), 'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.security_skipped', 'Security cleanup skipped because storage could not be verified.')];
+        return [
+            'done' => true,
+            'task_state' => ['skipped' => true, 'reason' => 'storage_unavailable'],
+            'warning' => maintenance_center_runtime_text('admin.maintenance_center.runtime.security_unavailable', 'Viewer security storage is unavailable; its cleanup was skipped fail-closed.'),
+            'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.security_skipped', 'Security cleanup skipped because storage could not be verified.')
+        ];
     }
     $removed = maintenance_center_numeric_total($result);
     $taskState = (array) $context['task_state'];
@@ -921,7 +1078,11 @@ function maintenance_center_execute_database_logical(array $context): array
         $execution = (array) $context['execution'];
         $execution['task_states']['database.logical'] = $taskState;
         $state['execution'] = $execution;
-        maintenance_center_model_update_job((int) $context['job']['id'], (int) $context['job']['actor_id'], ['state_json' => maintenance_center_json_encode($state), 'updated_at' => now_sql()]);
+        maintenance_center_model_update_job(
+            (int) $context['job']['id'],
+            (int) $context['job']['actor_id'],
+            ['state_json' => maintenance_center_json_encode($state), 'updated_at' => now_sql()]
+        );
     }
     $cleanup = database_maintenance_cleanup_step(false, MAINTENANCE_CENTER_DB_CLEANUP_BATCH, $restart);
     if (!empty($cleanup['failed'])) {
@@ -1023,7 +1184,11 @@ function maintenance_center_execute_atomic_table_operation(array $context, strin
     $tables = array_values((array) ($taskState['tables'] ?? []));
     $cursor = max(0, (int) ($taskState['cursor'] ?? 0));
     if (!isset($tables[$cursor])) {
-        return ['done' => true, 'task_state' => $taskState, 'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.database_phase_completed', '{operation} TABLE phase completed for {count} selected table(s).', ['operation' => $operation, 'count' => count($tables)])];
+        return [
+            'done' => true,
+            'task_state' => $taskState,
+            'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.database_phase_completed', '{operation} TABLE phase completed for {count} selected table(s).', ['operation' => $operation, 'count' => count($tables)])
+        ];
     }
     $table = (string) $tables[$cursor];
 
@@ -1125,5 +1290,9 @@ function maintenance_center_execute_verify(array $context): array
     $taskState = ['done' => true, 'report' => $report];
     // The outer executor persists the verified report inside this task state in
     // the same checkpoint as task completion, avoiding an intermediate state write.
-    return ['done' => true, 'task_state' => $taskState, 'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.verify_completed', 'Postcondition verification completed; before/after report is ready.')];
+    return [
+        'done' => true,
+        'task_state' => $taskState,
+        'activity' => maintenance_center_runtime_text('admin.maintenance_center.runtime.verify_completed', 'Postcondition verification completed; before/after report is ready.')
+    ];
 }

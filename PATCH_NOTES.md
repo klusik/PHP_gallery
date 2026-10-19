@@ -1,5 +1,55 @@
 # Patch notes
 
+## Version 0.137.2
+
+Improved gallery storage accounting and telemetry maintenance with durable attachment totals, bounded refresh diagnostics, compacted telemetry history, and visitor-triggered maintenance wake-ups. The release added database migrations, regression coverage, and updates to the English, Czech, German, and Swedish manuals. [#101](https://github.com/klusik/PHP_gallery/issues/101) [#133](https://github.com/klusik/PHP_gallery/issues/133)
+
+### Highlights
+
+#### Storage accounting and refresh
+- Added durable per-gallery PDF, music, and OFP attachment counts and byte totals. The first **Update all** imported missing categories; later refreshes used database aggregates instead of rereading attachment indexes and files.
+- Improved photo accounting to use thumbnail metadata for ordinary photos when available, limiting filesystem measurements to bounded DNG display-master work. Required read failures and unexpectedly empty batches now failed the refresh rather than appearing as zero, preserving the last successful snapshot.
+- Added correlated refresh diagnostics for phase timings, bounded operation and table metrics, media totals, and inspection counts.
+
+#### Telemetry maintenance
+- Added a private, authenticated telemetry-maintenance wake-up after successful public home, gallery, and smart-gallery HTML visits. Throttling, telemetry opt-out, central-maintenance ownership, and request eligibility checks continued to govern dispatch; optional cron remained supported.
+- Separated SQL diagnostic retention from usage-history retention, with a seven-day default and a configurable 1–90-day range. Invalid or unavailable retention settings stopped destructive maintenance.
+- Improved bounded telemetry cleanup with rotating targets, and compacted daily metrics transactionally with a durable cursor that advanced only after success.
+
+### Technical Details
+
+#### Backend
+- Added `app/runtime/storage_observer.php` for request-local numeric operation counts and timings. Storage refresh and maintenance diagnostics recorded bounded metrics without exposing private paths, workflow capabilities, or exception text.
+- Updated `app/services/admin_storage_statistics.php`, `app/services/admin_storage_statistics/jobs.php`, and related storage services to use durable attachment totals, account for ordinary photos from database metadata when available, and propagate required query or batch failures.
+- Updated `app/services/telemetry.php`, `app/services/telemetry_rollup.php`, and `app/services/telemetry_settings.php` for independent SQL diagnostic retention, transactional daily compaction, and bounded rotating cleanup.
+- Added telemetry-only worker request handling and visitor-triggered dispatch through the public page controllers. The worker required an eligible authenticated POST request and returned an error for invalid transport or failed maintenance.
+
+#### Database
+- Added migration `database/migrations/202610190001_gallery_attachment_storage.php` for durable PDF, music, and OFP attachment accounting. Committed attachment mutations updated totals; optional accounting failures triggered invalidation and logging without undoing the media change.
+- Added migration `database/migrations/202610190001_telemetry_compact_indexes.php` to rebuild telemetry aggregate tables with compact physical keys while preserving logical identity and measurements. Daily compaction preserved documented counts and measurements; selected dimensions were normalized for known metric families, while unknown metrics retained their dimensions.
+- Changed storage snapshots and resumable jobs to cache and job version 3. Older derived keys were not reused as complete attachment measurements, so **Update all** was needed after upgrading. External filesystem changes required invalidating affected accounting before reconciliation.
+
+#### Administration
+- Added a separate database telemetry retention setting to Admin Settings and localized its labels and guidance in English, Czech, German, and Swedish.
+- Expanded Admin telemetry reporting with session summaries, daily trends, gallery and route rankings, page-kind and device distributions, performance metrics, client errors, and a database summary.
+- Added persisted, correlated diagnostics to storage **Update all**, including phase timings and bounded slow-step and table-timing samples.
+
+#### Tests and documentation
+- Added database regression coverage for attachment accounting and telemetry compaction, including populated migration, replay, rollback, and recovery cases. Expanded tests for refresh failures, visitor dispatch eligibility, retention validation, bounded cleanup, and diagnostic limits.
+- Updated `ARCHITECTURE.md`, `DATABASE.md`, `TESTING.md`, the compatibility and accounting guidance, telemetry repair notes, and all four TeX manual sources.
+
+### User Impact
+
+#### For visitors
+- No direct page-content or presentation change was evidenced. Eligible successful public HTML visits could wake telemetry maintenance after rendering; maintenance remained subject to throttling, opt-out, and ownership checks.
+
+#### For administrators
+- Storage **Update all** could use durable attachment totals on repeated runs and provided bounded diagnostics for refresh work. After upgrading, administrators needed to run **Update all** to populate attachment accounting.
+- Administrators could configure SQL diagnostic retention separately from usage-history retention. Invalid or unavailable retention settings prevented destructive cleanup.
+
+#### For maintainers
+- Added regression coverage and operational guidance for attachment reconciliation, telemetry compaction and retention, visitor-triggered maintenance, and bounded diagnostics. Logical deletion made database pages reusable but did not guarantee immediate reduction in allocated database size; large telemetry migrations could require temporary disk space and a DDL maintenance window.
+
 ## Version 0.137.1
 
 Updated the Windows uploader to version 0.6.0 with optional SimBrief flight plans, expanded flight reports, improved saved-flight management, and clearer finalization and update flows. The release also added regression coverage, updated the manuals and lifecycle records, and made no Gallery server schema changes.

@@ -126,7 +126,9 @@ function admin_edit_gallery_render_overview(
     // Only the heading receives an overlay; the editor still owns source fields.
     $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
     // $activeVisibility stores the normalized gallery visibility label for summary cards.
-    $activeVisibility = normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
+    $activeVisibility = normalize_gallery_visibility(
+        (string) ($gallery['visibility'] ?? 'unpublished')
+    );
     // $adminTabs stores the edit-gallery sections shown by the shared admin tab controller.
     $adminTabs = [
         ['id' => 'admin-edit-identity', 'label' => t('admin.gallery_editor.tab_identity')],
@@ -134,7 +136,12 @@ function admin_edit_gallery_render_overview(
         ['id' => 'admin-edit-access', 'label' => t('admin.gallery_editor.tab_access')],
         ['id' => 'admin-edit-display', 'label' => t('admin.gallery_editor.tab_display')],
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
-        ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount, 'disabled' => $deferredImages],
+        [
+            'id' => 'admin-edit-images',
+            'label' => t('admin.gallery_editor.tab_images'),
+            'badge' => $imageCount,
+            'disabled' => $deferredImages,
+        ],
     ];
     if (feature_capability_effective_enabled('gallery_pdf_documents')
         || feature_capability_effective_enabled('gallery_music')
@@ -145,10 +152,16 @@ function admin_edit_gallery_render_overview(
         ];
     }
     if (feature_capability_effective_enabled('metadata_organizer')) {
-        $adminTabs[] = ['id' => 'admin-edit-organizer', 'label' => t('admin.metadata_organizer.tab_label', 'Organizer')];
+        $adminTabs[] = [
+            'id' => 'admin-edit-organizer',
+            'label' => t('admin.metadata_organizer.tab_label', 'Organizer'),
+        ];
     }
     if ($capabilities['media_renamer_feature_enabled']) {
-        $adminTabs[] = ['id' => 'admin-edit-renamer', 'label' => t('admin.media_renamer.tab_label', 'File renamer')];
+        $adminTabs[] = [
+            'id' => 'admin-edit-renamer',
+            'label' => t('admin.media_renamer.tab_label', 'File renamer'),
+        ];
     }
 
     view_render_admin_gallery_overview([
@@ -165,7 +178,10 @@ function admin_edit_gallery_render_overview(
                         'data-admin-side-panel-workflow' => 'upload',
                         'data-admin-side-panel-kicker' => t('gallery.upload_workflow'),
                         'data-admin-side-panel-title' => t('gallery.upload_photos'),
-                        'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+                        'data-gallery-side-panel-url' => url_for(
+                            'admin_upload',
+                            ['gallery_id' => $gallery['id'], 'panel' => 1]
+                        ),
                     ],
                 ],
                 [
@@ -177,11 +193,23 @@ function admin_edit_gallery_render_overview(
                         'data-admin-side-panel-workflow' => 'create',
                         'data-admin-side-panel-kicker' => t('gallery.workflow'),
                         'data-admin-side-panel-title' => t('gallery.create_here'),
-                        'data-gallery-side-panel-url' => url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1]),
+                        'data-gallery-side-panel-url' => url_for(
+                            'admin_new_gallery',
+                            ['parent_id' => $gallery['id'], 'panel' => 1]
+                        ),
                     ],
                 ],
-                ['label' => t('admin.gallery_editor.view_gallery'), 'url' => gallery_public_url($gallery), 'class' => 'button secondary', 'target' => '_blank'],
-                ['label' => t('admin.gallery_editor.back_to_galleries'), 'url' => url_for('admin'), 'class' => 'button secondary'],
+                [
+                    'label' => t('admin.gallery_editor.view_gallery'),
+                    'url' => gallery_public_url($gallery),
+                    'class' => 'button secondary',
+                    'target' => '_blank',
+                ],
+                [
+                    'label' => t('admin.gallery_editor.back_to_galleries'),
+                    'url' => url_for('admin'),
+                    'class' => 'button secondary',
+                ],
             ],
         ],
         'metrics' => [

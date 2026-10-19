@@ -129,7 +129,8 @@ foreach ($inventory as $module => $names) {
             'Writer must begin before reads, delegate once and release in finally: ' . $name);
         $owned = $functions[$name . '_owned'];
         gallery_writer_check(
-            str_replace($name . '_owned', $name, $owned['declaration']) === $function['declaration'],
+            gallery_writer_compact(str_replace($name . '_owned', $name, $owned['declaration']))
+                === gallery_writer_compact($function['declaration']),
             'Owned implementation changed the public signature: ' . $name
         );
         gallery_writer_check(str_contains($function['doc'], '@return') && str_contains($owned['doc'], '@return'),

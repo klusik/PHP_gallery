@@ -218,14 +218,26 @@ function admin_gallery_report_finalize_gps_clusters(array $clusters): array
             'lat_max' => round((float) ($cluster['lat_max'] ?? $lat), 5),
             'lng_min' => round((float) ($cluster['lng_min'] ?? $lng), 5),
             'lng_max' => round((float) ($cluster['lng_max'] ?? $lng), 5),
-            'gallery_count' => count(is_array($cluster['gallery_ids'] ?? null) ? $cluster['gallery_ids'] : []),
-            'gallery_labels' => array_keys(is_array($cluster['gallery_labels'] ?? null) ? $cluster['gallery_labels'] : []),
+            'gallery_count' => count(
+                is_array($cluster['gallery_ids'] ?? null)
+                    ? $cluster['gallery_ids']
+                    : []
+            ),
+            'gallery_labels' => array_keys(
+                is_array($cluster['gallery_labels'] ?? null)
+                    ? $cluster['gallery_labels']
+                    : []
+            ),
             'first_date' => $cluster['first_date'] ?? '',
             'last_date' => $cluster['last_date'] ?? '',
             'sample_images' => is_array($cluster['sample_images'] ?? null) ? $cluster['sample_images'] : [],
         ];
     }
-    usort($rows, static fn (array $a, array $b): int => ((int) ($b['count'] ?? 0)) <=> ((int) ($a['count'] ?? 0)));
+    usort(
+        $rows,
+        static fn (array $a, array $b): int =>
+            ((int) ($b['count'] ?? 0)) <=> ((int) ($a['count'] ?? 0))
+    );
     return array_slice($rows, 0, 120);
 }
 
@@ -242,7 +254,12 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
     $best = null;
     $nearest = null;
     foreach ($places as $place) {
-        $distance = admin_gallery_report_haversine_km($lat, $lng, (float) $place['lat'], (float) $place['lng']);
+        $distance = admin_gallery_report_haversine_km(
+            $lat,
+            $lng,
+            (float) $place['lat'],
+            (float) $place['lng']
+        );
         $candidate = [
             'name' => (string) $place['name'],
             'label' => admin_gallery_report_place_display_label($place),
@@ -277,7 +294,11 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
 
     if ($nearest !== null) {
         return [
-            'label' => t('admin.gallery_report.export.closest_known_area', 'Closest known area: {area}', ['area' => (string) $nearest['label']]),
+            'label' => t(
+                'admin.gallery_report.export.closest_known_area',
+                'Closest known area: {area}',
+                ['area' => (string) $nearest['label']]
+            ),
             'nearest_reference' => (string) $nearest['name'],
             'place_kind' => (string) $nearest['kind'],
             'place_match' => t('admin.gallery_report.export.nearest_fallback', 'nearest fallback'),
@@ -286,7 +307,14 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
     }
 
     return [
-        'label' => t('admin.gallery_report.export.area_around_coordinates', 'Area around {lat}, {lng}', ['lat' => number_format($lat, 3, '.', ''), 'lng' => number_format($lng, 3, '.', '')]),
+        'label' => t(
+            'admin.gallery_report.export.area_around_coordinates',
+            'Area around {lat}, {lng}',
+            [
+                'lat' => number_format($lat, 3, '.', ''),
+                'lng' => number_format($lng, 3, '.', ''),
+            ]
+        ),
         'nearest_reference' => '',
         'place_kind' => 'coordinate fallback',
         'place_match' => t('admin.gallery_report.export.coordinate_fallback', 'coordinate fallback'),

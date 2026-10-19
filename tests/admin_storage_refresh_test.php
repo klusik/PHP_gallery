@@ -46,6 +46,7 @@ $GLOBALS['storage_refresh_fixture'] = [
 function admin_storage_statistics_start_job(): array
 {
     $GLOBALS['storage_refresh_fixture']['file_start_calls']++;
+    \Gallery\Core\storage_observer_add('counts.source_image_rows', 1);
     return ['status' => 'running', 'processed' => 0, 'total' => 1];
 }
 
@@ -53,13 +54,37 @@ function admin_storage_statistics_start_job(): array
  * Complete one fixture file-statistics batch.
  *
  * @param int $batchSize Requested batch bound.
- * @return array<string, int|string> Completed file-job summary.
+ * @return array{status:string,processed:int,total:int,snapshot:array{
+ *     image_count:int,pdf_count:int,pdf_bytes:int,largest_original_name:string}}
+ *     Completed summary with a private label that must never enter diagnostics.
  */
 function admin_storage_statistics_process_job(int $batchSize): array
 {
     $GLOBALS['storage_refresh_fixture']['file_step_calls']++;
     $GLOBALS['storage_refresh_fixture']['file_batch_size'] = $batchSize;
-    return ['status' => 'complete', 'processed' => 1, 'total' => 1];
+    \Gallery\Core\storage_observer_call('fs.is_file', static fn(): bool => false);
+    return ['status' => 'complete', 'processed' => 1, 'total' => 1,
+        'snapshot' => ['image_count' => 1, 'pdf_count' => 2, 'pdf_bytes' => 10,
+            'largest_original_name' => '/private/original-secret.pdf']];
+}
+
+/**
+ * Capture owned lifecycle log contexts without touching installation storage.
+ * @param string $level Requested event level.
+ * @param string $eventKey Code-owned event identity.
+ * @param string $message Safe event description.
+ * @param StorageRefreshLogContext $context Numeric run/stage diagnostics or failure class.
+ * @param array{category?:string,severity?:string} $options Event display metadata.
+ * @return void Append to the fixture or inject an optional logging failure.
+ */
+function admin_log_event(
+    string $level, string $eventKey, string $message,
+    array $context = [], array $options = []
+): void {
+    if (!empty($GLOBALS['storage_refresh_log_failure'])) {
+        throw new RuntimeException('Fixture log storage unavailable.');
+    }
+    $GLOBALS['storage_refresh_logs'][] = ['event' => $eventKey, 'context' => $context];
 }
 
 /**
@@ -212,6 +237,62 @@ try {
     $terminalRetry = admin_storage_refresh_all_step($terminal['workflow_id'], 41);
     storage_refresh_assert($terminalRetry['workflow_status'] === 'partial' && $GLOBALS['storage_refresh_fixture']['inspection_calls'] === 1, 'A terminal retry must return its saved result without repeating inspection.');
     storage_refresh_assert(empty(admin_storage_refresh_all_step($finalId, 41)['ok']) && $GLOBALS['storage_refresh_fixture']['inspection_calls'] === 1, 'The superseded pre-terminal capability must remain rejected.');
+    $completedLogs = array_values(array_filter($GLOBALS['storage_refresh_logs'],
+        static fn(array $row): bool => $row['event'] === 'storage.refresh_all.completed'));
+    storage_refresh_assert(count($completedLogs) === 1,
+        'Persisted completion and terminal retries must emit one final diagnostic.');
+    $context = $completedLogs[0]['context'];
+    $diagnostics = $context['diagnostics'];
+    storage_refresh_assert($diagnostics['resume_count'] === 1
+        && $diagnostics['run_id'] !== $firstId,
+        'Owner resumes must retain one non-authorizing diagnostic identity.');
+    storage_refresh_assert($diagnostics['phases']['files']['steps'] === 2
+        && $diagnostics['phases']['database']['steps'] === 2
+        && $diagnostics['phases']['inspection']['steps'] === 1,
+        'Run diagnostics must include every phase request, including thrown inspection.');
+    storage_refresh_assert($diagnostics['phases']['files']['metrics']['fs.is_file.calls'] === 1
+        && $diagnostics['phases']['files']['metrics']['fs.is_file.false_results'] === 1
+        && $diagnostics['files']['pdf_count'] === 2,
+        'File-operation attempts, absent results and final DB totals must remain distinct.');
+    $logged = json_encode($context, JSON_THROW_ON_ERROR);
+    storage_refresh_assert(!str_contains($logged, $firstId)
+        && !str_contains($logged, '/private/original-secret.pdf')
+        && !str_contains($logged, 'private inspection secret'),
+        'Log contexts must exclude capabilities, media names/paths and exception text.');
+    storage_refresh_assert($context['wall_seconds'] >= 0
+        && $diagnostics['phase_work_seconds'] >= 0
+        && $diagnostics['peak_memory_bytes'] > 0,
+        'Timings and memory diagnostics must be available without extra I/O.');
+    \Gallery\Core\storage_observer_add('passive.reader');
+    storage_refresh_assert(\Gallery\Core\storage_observer_finish() === [],
+        'Observation must be disabled after each request, including a failed phase.');
+    $GLOBALS['storage_refresh_log_failure'] = true;
+    admin_storage_refresh_log_run(admin_storage_refresh_read_state(), 'completed');
+    $GLOBALS['storage_refresh_log_failure'] = false;
+    \Gallery\Core\storage_observer_start();
+    $originalFailure = new RuntimeException('private callback payload');
+    try {
+        \Gallery\Core\storage_observer_call('fixture.throw',
+            static function () use ($originalFailure): void { throw $originalFailure; });
+    } catch (RuntimeException $caught) {
+        storage_refresh_assert($caught === $originalFailure,
+            'Operation observation must preserve the original exception object.');
+    }
+    $readValue = \Gallery\Core\storage_observer_call('fs.read.fixture',
+        static fn(): string => 'abc');
+    $observed = \Gallery\Core\storage_observer_finish();
+    storage_refresh_assert($readValue === 'abc' && $observed['fs.read.fixture.bytes'] === 3
+        && $observed['fixture.throw.exceptions'] === 1,
+        'Read-byte and exception counters must preserve original operation behavior.');
+    \Gallery\Core\storage_observer_start();
+    // Exceed the declared cardinality by one structural boundary sample.
+    for ($index = 0; $index <= \Gallery\Core\STORAGE_OBSERVER_MAX_METRICS; $index++) {
+        \Gallery\Core\storage_observer_add('fixture.' . $index);
+    }
+    $bounded = \Gallery\Core\storage_observer_finish();
+    storage_refresh_assert(count($bounded) <= \Gallery\Core\STORAGE_OBSERVER_MAX_METRICS
+        && $bounded['observer.metric_updates_dropped'] > 0,
+        'Metric cardinality must remain bounded and report discarded updates.');
 
     $statePath = $fixtureDirectory . DIRECTORY_SEPARATOR . 'workflow.json';
     file_put_contents($statePath, json_encode([

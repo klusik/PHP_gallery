@@ -1,5 +1,76 @@
 # Testing Guide
 
+`database_maintenance_test.php` checks indexed identifier membership against the
+legacy case-insensitive PCRE word-boundary contract, including underscores,
+numeric words, punctuation and non-ASCII names. It feeds the actual per-source
+accumulator production PHP, test PHP and complete SQL text; lexical comments,
+separate SQL literals and test-only references must never become production SQL
+column evidence. Observer assertions cover real migration read counts/bytes,
+SQL-literal/reference call counts, bounded metrics and analysis without extra I/O.
+Local before/after inspection reports also retained an identical complete reference
+map across 1,129 installed sources; hosted FULL remains the regression authority.
+
+Attachment accounting coverage lives in `admin_storage_statistics_test.php`
+and `gallery_attachment_storage_database_test.php`. The former runs a second
+refresh with every attachment directory temporarily offline and verifies that
+durable PDF/music totals remain available. It retains the original missing-file,
+symlink and corrupt-index import checks. The database fixture uses the actual
+SQL model inside a rolled-back disposable transaction to verify insert-if-absent
+import, additive PDF/OFP totals, last-track deletion and targeted invalidation.
+The central database workflow requires it on each supported engine; source BASIC
+alone does not execute these runtime/database regressions.
+The database fixture belongs to FULL rather than the bounded quick feedback
+subset. The CI selector fixture retains exact required lists for both browser
+modes. Runtime route probes guard against loading refresh diagnostics merely to
+render a cached Admin dashboard. The existing storage Model owns ledger SQL too,
+so durable attachment accounting introduces no separate model include.
+
+`admin_storage_refresh_test.php` additionally captures lifecycle diagnostics to
+verify stable non-authorizing run correlation, resume counts, per-phase request
+counts, exception-path timing, terminal replay deduplication, safe field selection
+and optional log failure. It exercises passive behavior, callback result/exception
+preservation, read-byte counters and the observer's bounded metric cardinality.
+The real-file storage fixture checks index/OFP read counts during first import
+and zero instrumented attachment filesystem calls during a repeat database read.
+No diagnostic check adds production file reads or a parallel audit registry.
+
+The attachment database fixture also calls the real photo-keyset Model with both
+native and emulated PDO prepares, checking a bounded first row and true exhaustion.
+The storage-job fixture injects source-query failure, batch-query failure and a
+premature empty batch; each must refuse completion and retain the last successful
+snapshot. Native integer bindings preserve LIMIT semantics on supported engines.
+The same job fixture verifies 40,000 ordinary photos finish in the initial request
+with zero derivative batch queries or instrumented filesystem calls when thumbnail
+metadata exists. A mixed collection retains one bounded DNG-only batch and checks
+real display-master bytes; missing thumbnail metadata retains the full-image path.
+An injected thumbnail aggregate failure must preserve the last successful snapshot.
+The real-engine fixture checks DNG-only integer-bound keysets in both PDO modes,
+mixed-case extensions and relative-path precedence over a misleading filename.
+
+`telemetry_visitor_http_test.php` runs a real single-worker disposable PHP server
+and the production registration/socket/controller flow. It proves public-triggered
+worker arrival, private token transport, five-minute fanout suppression, later-visit
+continuation, excluded methods/routes/preview/errors, opt-out and strict central
+ownership without real telemetry deletion. Existing recovery/database regressions
+remain the authoritative evidence for retention and archival behavior. Real hosting
+loopback/TLS availability and production traffic cadence require deployment observation.
+
+
+Telemetry recovery coverage also asserts round-robin visitation, per-table caps,
+rotation after exhausted admission and fail-closed cursor reads. The deterministic
+fixture uses smaller batches to exercise the same production loop without sleeps.
+
+Telemetry storage regressions include independent SQL retention and strict failed
+reads (`telemetry_database_retention_test.php`), compaction cursor recovery in
+`telemetry_maintenance_recovery_test.php`, and populated migration replay, preserved
+UNIQUE identity, normalized measurements, expired hourly source and transaction
+rollback in `telemetry_storage_compaction_database_test.php`. The latter is a
+required real-engine result in hosted database FULL owners; it uses private
+temporary tables and validates the disposable fixture before connecting.
+Production migration duration, physical storage savings and live Admin layout
+remain separate deployment/manual observations.
+
+
 WinApp 0.6.0 dispatch regressions cover pilot identity classification, invalid
 provider responses, optional session snapshots, archived JSON/XML imports,
 AIRAC-scoped ambiguous-fix retention and offline dateline map rendering.
@@ -500,7 +571,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.137.1. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
+This guide applies to PHP Gallery Version 0.137.2. Release verification uses the central audit runner's `release` profile as the single authoritative automated qualification pass, plus any material environment-dependent/manual coverage reported by that profile and the retained Version 0.97 coverage: recoverable gallery-subtree deletion, restore, manual purge, bounded Empty Trash, crash reconciliation, optional retention-based automatic purge, persistent protected trash storage, and fail-closed schema readiness; recursive, resumable gallery migration with bounded ZIP packages and imported child-tree reconstruction; canonical map-marker photo-page fallbacks and in-viewer map navigation across physical-gallery pagination, fullscreen split-map persistence, the canonical Admin side-panel mutation envelope and completion coordinator, multi-context postcondition verification, stale/out-of-order suppression, browser upload pipeline safeguards, opened-gallery branch image counters and their Theme/per-gallery visibility policy, progressive thumbnail dimension detection and responsive compatibility, the Version 0.93 request-budget/TTFB behavior, request-local database caching, resumable updater safety, updater server-policy reconciliation, Admin test-run diagnostics, public media concurrency and cache invalidation, clean-home URL handling, upload auto-renaming and inventory behavior, the redesigned Windows uploader, the Windows HTTP monitor schedules/protocol snapshots/report ZIPs, deployment exclusion rules, lightbox detached-image cleanup, decoded-cache ownership, preload-generation invalidation, navigation-transaction settlement, recoverable loading failures, teardown/reopen cycles, public lightbox zoom and progressive quality promotion, Shift+Left/Right ten-photo navigation, public Smart Gallery visibility, presentation settings, cycle-safe placement/order evaluation, viewer account privacy/access, collection sharing, bounded gallery benchmark diagnostics, access intersection and pagination; multilingual gallery/photo content and fallbacks; browser-local ZIP imports; progressive gallery and Smart Gallery ZIP downloads; browser download symbol rendering; ordered migration upgrades; complete deployment packaging; updater safety; the configurable public language selector; configurable automatic-update discovery throttling; and the supported English, Czech, German, and Swedish catalogs.
 
 ## Purpose
 

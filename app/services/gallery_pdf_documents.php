@@ -21,7 +21,14 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/../runtime/storage_observer.php';
+
+use function Gallery\Core\storage_observer_call;
+use function Gallery\Core\storage_observer_add;
+
 use RuntimeException;
+
+require_once __DIR__ . '/gallery_pdf_settings.php';
 
 /**
  * Measure indexed attachment originals without decoding or hashing payloads.
@@ -33,10 +40,12 @@ use RuntimeException;
  * and sidecar metadata are intentionally outside these original-media totals.
  *
  * @param array{id:int,folder_path:string} $gallery Registered physical gallery.
+ * @param string|null $onlyKind Optional pdf, music or ofp import category;
+ *     null measures all original categories for explicit reconciliation.
  * @return array{pdf_count:int,pdf_bytes:int,music_count:int,music_bytes:int,
  *     errors:int} Known confined originals and partial-accounting warnings.
  */
-function gallery_attachment_storage_summary(array $gallery): array
+function gallery_attachment_storage_summary(array $gallery, ?string $onlyKind = null): array
 {
     $summary = ['pdf_count' => 0, 'pdf_bytes' => 0,
         'music_count' => 0, 'music_bytes' => 0, 'errors' => 0];
@@ -46,6 +55,7 @@ function gallery_attachment_storage_summary(array $gallery): array
         return $summary;
     }
     foreach (['pdf', 'music'] as $kind) {
+        if ($onlyKind !== null && $onlyKind !== $kind) continue;
         try {
             $entries = $kind === 'pdf'
                 ? gallery_pdf_documents_read_index($root)
@@ -57,6 +67,7 @@ function gallery_attachment_storage_summary(array $gallery): array
             continue;
         }
         foreach ($entries as $entry) {
+            storage_observer_add('counts.' . $kind . '_originals_checked');
             $relative = $kind === 'pdf'
                 ? '/.gallery-pdf-documents/' . $entry['id'] . '.pdf'
                 : '/.gallery-music/' . $entry['id'] . '.bin';
@@ -70,6 +81,7 @@ function gallery_attachment_storage_summary(array $gallery): array
             $summary[$kind . '_bytes'] += $bytes;
         }
     }
+    if ($onlyKind !== null && $onlyKind !== 'ofp') return $summary;
     $ofp = simbrief_ofp_local_pdf_path($gallery);
     if ($ofp !== null) {
         $bytes = gallery_attachment_storage_file_size(
@@ -81,8 +93,8 @@ function gallery_attachment_storage_summary(array $gallery): array
             $summary['pdf_count']++;
             $summary['pdf_bytes'] += $bytes;
         }
-    } elseif (file_exists($root . '/simbrief-ofp.pdf')
-        || is_link($root . '/simbrief-ofp.pdf')) {
+    } elseif (storage_observer_call('fs.file_exists', static fn(): bool => file_exists($root . '/simbrief-ofp.pdf'))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link($root . '/simbrief-ofp.pdf'))) {
         $summary['errors']++;
     }
     return $summary;
@@ -100,13 +112,15 @@ function gallery_attachment_storage_file_size(
     string $relative
 ): ?int {
     $candidate = $root . $relative;
-    $resolved = realpath($candidate);
-    if ($resolved === false || is_link($candidate)
-        || is_link(dirname($candidate)) || !is_file($resolved)
+    $resolved = storage_observer_call('fs.realpath', static fn(): string|false => realpath($candidate));
+    if ($resolved === false
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link($candidate))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link(dirname($candidate)))
+        || !storage_observer_call('fs.is_file', static fn(): bool => is_file($resolved))
         || !\Gallery\Core\path_inside($root, $resolved)) {
         return null;
     }
-    $bytes = @filesize($resolved);
+    $bytes = storage_observer_call('fs.filesize', static fn(): int|false => @filesize($resolved));
     return $bytes === false ? null : max(0, $bytes);
 }
 
@@ -123,7 +137,7 @@ const GALLERY_PDF_DOCUMENT_MAX_BYTES = 26214400;
 /**
  * Resolve a physical gallery directory without following a gallery symlink.
  *
- * @param array<string,mixed> $gallery Persisted physical gallery row with id and folder_path.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical owner.
  * @return ?string Confined absolute directory, or null if the gallery is unsafe.
  */
 function gallery_pdf_documents_gallery_directory(array $gallery): ?string
@@ -137,9 +151,9 @@ function gallery_pdf_documents_gallery_directory(array $gallery): ?string
         return null;
     }
     $candidate = gallery_abs_path($relative);
-    $resolved = realpath($candidate);
-    $base = realpath(galleries_root());
-    if ($resolved === false || $base === false || is_link($candidate)
+    $resolved = storage_observer_call('fs.realpath', static fn(): string|false => realpath($candidate));
+    $base = storage_observer_call('fs.realpath', static fn(): string|false => realpath(galleries_root()));
+    if ($resolved === false || $base === false || storage_observer_call('fs.is_link', static fn(): bool => is_link($candidate))
         || !\Gallery\Core\path_inside($base, $resolved)) {
         return null;
     }
@@ -197,23 +211,24 @@ function gallery_pdf_documents_validate_pdf_source(string $source): array
 function gallery_pdf_documents_read_index_state(string $root): array
 {
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
-    if (is_link($directory)) {
+    if (storage_observer_call('fs.is_link', static fn(): bool => is_link($directory))) {
         throw new RuntimeException('PDF document storage is unsafe.');
     }
-    if (!is_dir($directory)) {
+    if (!storage_observer_call('fs.is_dir', static fn(): bool => is_dir($directory))) {
         return ['documents' => [], 'ofp_hidden' => false];
     }
     $indexPath = $directory . DIRECTORY_SEPARATOR . 'index.json';
-    if (is_link($indexPath)) {
+    if (storage_observer_call('fs.is_link', static fn(): bool => is_link($indexPath))) {
         throw new RuntimeException('PDF document index is unsafe.');
     }
-    if (!is_file($indexPath)) {
+    if (!storage_observer_call('fs.is_file', static fn(): bool => is_file($indexPath))) {
         return ['documents' => [], 'ofp_hidden' => false];
     }
-    if ((int) @filesize($indexPath) > 262144) {
+    if ((int) storage_observer_call('fs.filesize', static fn(): int|false => @filesize($indexPath)) > 262144) {
         throw new RuntimeException('PDF document index exceeds its storage limit.');
     }
-    $decoded = json_decode((string) @file_get_contents($indexPath), true);
+    $decoded = json_decode((string) storage_observer_call('fs.read.pdf_index',
+        static fn(): string|false => @file_get_contents($indexPath)), true);
     if (!is_array($decoded) || ($decoded['format'] ?? '') !== 'php_gallery_pdf_documents_v1'
         || !is_array($decoded['documents'] ?? null)
         || (array_key_exists('ofp_hidden', $decoded) && !is_bool($decoded['ofp_hidden']))) {
@@ -275,7 +290,7 @@ function gallery_pdf_documents_list(array $gallery): array
 /**
  * Attach a new original PDF or replace one after explicit confirmation.
  *
- * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical owner.
  * @param string $source Local validated upload temporary file.
  * @param string $filename Original user-facing filename; stored as metadata only.
  * @param string $title User-facing document title.
@@ -416,6 +431,7 @@ function gallery_pdf_documents_attach(
         $backupPdf = '';
         $backupIndex = '';
         $committed = true;
+        gallery_attachment_storage_record((int) $gallery['id'], 'pdf', $documents);
         return $entry;
     } finally {
         if (!$committed && $backupPdf !== '' && $restoreTarget !== '') {
@@ -602,7 +618,7 @@ function gallery_pdf_documents_set_ofp_hidden(array $gallery, bool $hidden): boo
 /**
  * Delete one original PDF only after explicit confirmation.
  *
- * @param array<string,mixed> $gallery Persisted physical gallery row.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical owner.
  * @param string $id Opaque document id selected from the gallery's trusted index.
  * @param bool $confirmed Whether the caller received explicit deletion confirmation.
  * @return bool True when the document was deleted; false when it no longer exists.
@@ -654,6 +670,7 @@ function gallery_pdf_documents_delete(array $gallery, string $id, bool $confirme
         $stageIndex = '';
         @unlink($backupPdf);
         $backupPdf = '';
+        gallery_attachment_storage_record((int) $gallery['id'], 'pdf', $documents);
         return true;
     } finally {
         foreach ([$backupPdf, $stageIndex] as $temporary) {

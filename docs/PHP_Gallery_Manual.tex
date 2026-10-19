@@ -61,8 +61,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.137.1}
-\newcommand{\manualdate}{18 October 2026}
+\newcommand{\version}{0.137.2}
+\newcommand{\manualdate}{19 October 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2457,8 +2457,9 @@ Database inspection inventories schema objects, references, ownership categories
 \subsection{Storage statistics and~Complete report}
 
 The~Files view also shows counts and~bytes for~PDF and~music originals,
-plus an~overall media total. Update all follows photo batches with at~most
-two physical galleries per~step, including galleries without photos. Hidden,
+plus an~overall media total. Update all reads PDF/music/OFP totals from
+the~database after photo batches. The~first update imports missing accounting
+from at~most two physical galleries per~step, including empty galleries. Hidden,
 private and~disabled files and~tracks with downloads denied still consume
 storage. Separate physical copies count separately; Smart playlists add no~copy.
 Generated PDF pages already count as~photographs. Indexes, locks, conversion
@@ -2466,8 +2467,32 @@ state, unindexed files, Trash and~other caches are~outside these media totals.
 Unreadable indexes or~unsafe/missing files produce partial-accounting warnings
 without repair. Passive pages read cached results; attachment mutations mark
 them stale when the~advisory revision write succeeds. After upgrading from
-photo-only snapshots, run Update all to~obtain the~new measurement. External
-filesystem changes also require this explicit refresh.
+photo-only snapshots, apply the~accounting migration and run Update all once.
+Attachment uploads, replacements and deletions maintain category totals from
+committed metadata; repeat updates do~not reopen attachment files or~indexes.
+External filesystem changes require explicit accounting invalidation before
+Update all; see \codeword{docs/GALLERY\_PDF.md}.
+With durable thumbnail metadata, ordinary photos are~accounted for~during
+the~initial database pass without additional photo-batch requests. Only DNG
+display masters retain bounded file checks. Installations without thumbnail
+metadata retain the~full bounded filesystem fallback; a~failed required thumbnail
+aggregate preserves the~last successful snapshot rather than reporting zero.
+For performance diagnostics, export the~latest Admin log event
+\codeword{storage.refresh\_all.completed}. Its~run ID links progress checkpoints;
+the~summary includes wall/phase times, request counts, media totals, observed file
+calls and~read bytes, inspection source counts and~bounded per-table ANALYZE times.
+File-call counts are~application observations, not~physical disk I/O. Private paths
+and~workflow capabilities are~excluded; a~logging failure does~not~fail the~update.
+The final inspection records separate times for~schema and~migration reads,
+source discovery and~reads, SQL-literal extraction, identifier indexing and~matching,
+cleanup counts, legacy findings, report assembly, thumbnail distribution and~saving.
+Read byte counts and~table/column comparison counts expose the~workload;
+nested times overlap. Source references use a~fresh whole-word index per file
+and~SQL literal, preserving production/test separation and~same-literal evidence.
+Unusual identifiers retain regex matching. No~persistent analysis cache is~used.
+Required photo-query errors and~prematurely empty derivative batches fail
+the~file stage and~preserve the~last successful snapshot. Later stages continue
+with an~overall partial result; a~query failure never means completed scanning.
 
 \index{storage statistics}
 \index{Complete report}
@@ -2488,6 +2513,29 @@ The~completed report is~returned to~the~browser as~a~download and~is~not~saved a
 The~optional \ui{Telemetry} area records privacy-controlled operational measurements and~presents them as~Admin reports. Available controls cover the~master telemetry switch, public usage measurements, performance, cache and~database events, honoring Do~Not~Track, excluding administrators, the~maximum counted photo-view duration, and~retention for~raw, hourly, and~daily data. Reports include measures such as~anonymous sessions, page views, photograph opens and~capped view time, client errors, measured media bytes, browser mix, and~cache/database activity where those categories are~enabled.
 
 The~telemetry subsystem is~designed not~to~store raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or~exact visitor locations. Exports contain aggregated anonymous telemetry and~session hashes rather than~raw visitor identifiers. Maintenance rolls up~and~purges telemetry according to~the~configured retention policy, and~the~Admin screen can~export a~standalone HTML report for~offline review. Review the~privacy controls before enabling collection on~a~public site.
+
+SQL diagnostics have their own retention: seven days by~default, configurable
+from one to~90 days. This does not~shorten hourly or~daily usage history.
+Maintenance compacts historical daily summaries one day at~a~time while preserving
+counts, durations, photo identity and~bot segments. Browser, OS, viewport, country
+and~referrer details are~neutralized for~known daily metric families; browser mixes
+continue to~come from sessions. Unknown metrics retain their dimensions.
+The~database migration preserves measurements and~rebuilds aggregate indexes
+around short physical keys; plan temporary disk space and~a~DDL maintenance
+window. Deleted data pages become reusable; allocated database size may~require
+manual physical optimization. Actual savings depend on~the~stored data.
+
+Scheduled telemetry is~eligible every five minutes, with a~ten-second normal
+slice and~up~to~eight batches of~5000 expired rows per~table (40000 rows).
+Tables alternate by~batch and~the~first table rotates between slices. The~shared
+clock may~reduce actual progress. Maintenance Center keeps its four-second UI
+slice. Successful public visits to~home, gallery and~smart-gallery pages dispatch
+a~private telemetry worker after rendering. Shared throttling admits work about
+every five minutes when traffic exists, independently of~thumbnail windows.
+The~visitor never waits for~retention SQL and~receives no~maintenance token.
+External cron is~optional; without incoming requests, work waits for~a~later visit.
+Preview, media and~failed responses cannot trigger work. Telemetry OFF and~central
+maintenance ownership remain respected; retention ages are~unchanged.
 
 \subsection{Runtime diagnostics, integrity, and~gallery benchmark}
 \index{Runtime diagnostics}

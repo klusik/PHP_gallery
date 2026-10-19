@@ -15,19 +15,45 @@ independent scheduling, bounded deletion batches and a durable daily checkpoint.
 maintenance lock and its time-window/phase checks. Thumbnail failures or a busy
 thumbnail worker therefore do not prevent a separately admitted telemetry slice.
 This is not a new daemon: the existing scheduled maintenance entrypoint still
-has to be invoked regularly. Public gallery requests do not run a retention scan.
+can be invoked externally, but successful public HTML visits also dispatch a
+private telemetry-only worker. Public gallery requests do not run a retention scan.
 Master telemetry OFF remains non-destructive.
 
-Defaults in `app/configuration_defaults.php`:
+Current supported defaults in `app/configuration_defaults.php`:
+(The original repair used a three-second budget and an hourly completed interval.)
 
 | Setting | Default | Meaning |
 | --- | ---: | --- |
-| `telemetry.maintenance_time_budget_seconds` | 3 | Cooperative slice budget |
-| `telemetry.maintenance_delete_batch_size` | 2000 | Maximum rows per DELETE |
-| `telemetry.maintenance_delete_batches` | 4 | Maximum DELETE batches per target |
+| `telemetry.maintenance_time_budget_seconds` | 10 | Cooperative slice budget |
+| `telemetry.maintenance_delete_batch_size` | 5000 | Maximum rows per DELETE |
+| `telemetry.maintenance_delete_batches` | 8 | Maximum DELETE batches per target |
 | `telemetry.maintenance_rollup_days` | 7 | Maximum stable dates archived per slice |
 | `telemetry.maintenance_retry_seconds` | 300 | Retry/catch-up interval |
-| `telemetry.maintenance_interval_seconds` | 3600 | Normal completed-slice interval |
+| `telemetry.maintenance_interval_seconds` | 300 | Normal completed-slice interval |
+
+Independent retention targets are visited in rounds of one DELETE per table,
+with up to eight rounds (40000 rows per target). A durable
+`telemetry_purge_next_table` setting rotates the first target across opportunities,
+including exhausted deadlines, so a large raw-event backlog does not monopolize
+every slice. Missing or unrecognized cursor values start at the first allowlisted
+target; read/write errors stop the operation. The hourly purge remains a separate
+checkpoint-protected phase. Its per-table cap is also 40000 rows. All phases share
+the cooperative deadline; these counts are ceilings, not throughput guarantees.
+Maintenance Center retains its explicit four-second UI slice while inheriting
+the larger batch capacity and fair scheduling. CLI and the Telemetry action use
+the configured ten-second default. Successful GET visits to home, gallery and smart-gallery pages trigger the same
+server maintenance entrypoint through an authenticated telemetry-only POST.
+A nonblocking filesystem lock and five-minute attempt marker prevent visitor fanout;
+the worker repeats database throttle/lock checks. The request uses the configured
+installation origin, verified HTTPS when applicable, a private token header and
+the existing one-second bounded transport. No visitor receives the token or waits
+for retention SQL. Unsupported response finishing still permits the short socket
+handoff. Failed dispatch is retried by a later visit after the interval; failed
+workers also retain their normal recovery throttle. Preview, media, HEAD, POST,
+redirect and failed-response requests do not start telemetry. Disabled telemetry
+or active/unknown central maintenance ownership prevents worker mutations.
+External cron remains optional. With no incoming traffic there is no autonomous
+wake-up: work resumes on a later suitable visit.
 
 Deadlines are checked between statements. They are not a database-side query
 cancellation guarantee. Retention ages remain the existing administrator settings.

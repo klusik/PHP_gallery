@@ -50,7 +50,8 @@
  *     image_total:int,image_processed:int,last_gallery_id:int,
  *     gallery_total:int,gallery_processed:int,source:StorageSourceSummary,
  *     generated:StorageGeneratedSummary,attachments:StorageAttachmentSummary,
- *     thumbnail_metadata_used:bool,snapshot?:StorageSnapshot}
+ *     thumbnail_metadata_used:bool,display_masters_only?:bool,
+ *     snapshot?:StorageSnapshot}
  * @phpstan-type StorageJobState array{ok:bool,job_id?:string,status:string,
  *     total?:int,processed?:int,percent?:float,message:string,
  *     snapshot?:StorageSnapshot|null}
@@ -76,6 +77,10 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/../runtime/storage_observer.php';
+
+use function Gallery\Core\storage_observer_call;
+
 use function Gallery\Models\admin_storage_statistics_model_fingerprint_rows;
 use function Gallery\Models\admin_storage_statistics_model_image_rows;
 use function Gallery\Models\admin_storage_statistics_model_image_rows_after_id;
@@ -91,13 +96,13 @@ use Throwable;
  */
 const ADMIN_STORAGE_STATISTICS_CACHE_KEY = 'admin_storage_statistics_cache_v3';
 /**
- * Version resumable jobs to require independent photo and gallery cursors.
+ * Version resumable jobs to require durable attachment-import progress.
  * Type: string. Units: app_settings key. Scope: one manual statistics job.
  * Consumers: statistics job readers, writers and explicit invalidation.
- * Rationale: v2 cannot safely resume a v1 photo-only state as complete media
- *     accounting; old derived state is preserved for a fresh manual restart.
+ * Rationale: v3 imports missing accounting categories only; a v2 physical scan
+ *     cannot safely resume with the new database-only repeat-update semantics.
  */
-const ADMIN_STORAGE_STATISTICS_JOB_KEY = 'admin_storage_statistics_job_v2';
+const ADMIN_STORAGE_STATISTICS_JOB_KEY = 'admin_storage_statistics_job_v3';
 /**
  * Keep ordinary derivative work responsive without changing its default.
  * Type: int. Units: images per request. Scope: manual statistics photo phase.
@@ -279,17 +284,14 @@ function admin_storage_statistics_cache_clear(): void
 /**
  * Return image rows required by source and generated-media statistics.
  *
- * @return array<int array<string, mixed>>.
+ * @return list<StorageStatisticsImageRow> Indexed photo owners and source sizes.
+ * @throws Throwable When the database cannot supply the required source rows.
  */
 function admin_storage_statistics_image_rows(): array
 {
     $hasDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
         && db_column_exists('images', 'thumbnail_derivative_version');
-    try {
-        return admin_storage_statistics_model_image_rows($hasDerivativeVersion);
-    } catch (Throwable) {
-        return [];
-    }
+    return admin_storage_statistics_model_image_rows($hasDerivativeVersion);
 }
 
 /**
@@ -297,19 +299,23 @@ function admin_storage_statistics_image_rows(): array
  *
  * @param int $lastImageId Last image id identifier.
  * @param int $limit Maximum number of items.
- * @return array<int array<string, mixed>>.
+ * @param bool $displayMastersOnly Restrict to DNG rows needing disk measurement;
+ *     false retains the complete fallback and legacy-job behavior.
+ * @return list<StorageStatisticsImageRow> Bounded rows, empty only on actual exhaustion.
+ * @throws Throwable When the database cannot supply the required derivative batch.
  */
-function admin_storage_statistics_image_rows_after_id(int $lastImageId, int $limit): array
-{
+function admin_storage_statistics_image_rows_after_id(
+    int $lastImageId,
+    int $limit,
+    bool $displayMastersOnly = false
+): array {
     $lastImageId = max(0, $lastImageId);
     $limit = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, $limit));
     $hasDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
         && db_column_exists('images', 'thumbnail_derivative_version');
-    try {
-        return admin_storage_statistics_model_image_rows_after_id($lastImageId, $limit, $hasDerivativeVersion);
-    } catch (Throwable) {
-        return [];
-    }
+    return admin_storage_statistics_model_image_rows_after_id(
+        $lastImageId, $limit, $hasDerivativeVersion, $displayMastersOnly
+    );
 }
 
 /**
@@ -458,7 +464,7 @@ function admin_storage_statistics_generated_media_summary(array $rows): array
  * database-driven public renderer and avoids expensive disk probes for every
  * thumbnail during normal Admin checks.
  *
- * @return array<string mixed>.
+ * @return StorageGeneratedSummary Empty derivative totals or durable thumbnail totals.
  */
 function admin_storage_statistics_initial_generated_summary(): array
 {
@@ -467,7 +473,9 @@ function admin_storage_statistics_initial_generated_summary(): array
         return $summary;
     }
 
-    return admin_storage_statistics_merge_generated_summaries($summary, admin_storage_statistics_thumbnail_metadata_summary());
+    return admin_storage_statistics_merge_generated_summaries($summary,
+        storage_observer_call('db.thumbnail_metadata_summary',
+            static fn(): array => admin_storage_statistics_thumbnail_metadata_summary()));
 }
 
 /**
@@ -492,7 +500,9 @@ function admin_storage_statistics_thumbnail_metadata_available(): bool
 /**
  * Aggregate generated thumbnail bytes from durable thumbnail metadata.
  *
- * @return array<string mixed>.
+ * @return StorageGeneratedSummary Durable configured thumbnail totals, or empty
+ *     totals when the optional schema/configured sizes are unavailable.
+ * @throws Throwable When the available schema's required aggregate fails.
  */
 function admin_storage_statistics_thumbnail_metadata_summary(): array
 {
@@ -508,11 +518,11 @@ function admin_storage_statistics_thumbnail_metadata_summary(): array
     $matchDerivativeVersion = function_exists('Gallery\Services\db_column_exists')
         && db_column_exists('image_thumbnail_variants', 'derivative_version')
         && db_column_exists('images', 'thumbnail_derivative_version');
-    try {
-        $rows = admin_storage_statistics_model_thumbnail_summary_rows($sizes, $matchDerivativeVersion);
-    } catch (Throwable) {
-        return $summary;
-    }
+    // Once this schema is available its aggregate is required accounting.
+    // A failed query cannot safely authorize skipping thumbnail measurements.
+    $rows = admin_storage_statistics_model_thumbnail_summary_rows(
+        $sizes, $matchDerivativeVersion
+    );
 
     foreach ($rows as $row) {
         $format = (string) ($row['format'] ?? '');
@@ -804,15 +814,15 @@ function admin_storage_statistics_job_id(): string
  * Return a safe size for an existing file or zero for missing/unreadable paths.
  *
  * @param string $path Filesystem path.
- * @return int Integer result for the caller.
+ * @return int Existing nonnegative bytes, or zero for empty, missing or unreadable paths.
  */
 function admin_storage_statistics_existing_file_size(string $path): int
 {
-    if ($path === '' || !is_file($path)) {
+    if ($path === '' || !storage_observer_call('fs.derivative.is_file', static fn(): bool => is_file($path))) {
         return 0;
     }
 
-    $bytes = @filesize($path);
+    $bytes = storage_observer_call('fs.derivative.filesize', static fn(): int|false => @filesize($path));
     return $bytes === false ? 0 : max(0, (int) $bytes);
 }
 

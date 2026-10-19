@@ -292,13 +292,19 @@ function cms_gallery(): void
     // $lightboxExcludesRestrictedNsfw stores whether the async lightbox list must omit restricted rows.
     $lightboxExcludesRestrictedNsfw = gallery_lightbox_excludes_restricted_nsfw($gallery, $publicOnly);
     // $imageStateSummary stores the complete photo count plus an aggregate revision used by Admin mutation verification.
-    $imageStateSummary = public_render_profile_db('gallery_image_count_query', static fn (): array => gallery_lightbox_state_summary($gallery, $publicOnly, false));
+    $imageStateSummary = public_render_profile_db(
+        'gallery_image_count_query',
+        static fn (): array => gallery_lightbox_state_summary($gallery, $publicOnly, false)
+    );
     // $imageTotalCount stores the complete top-level photo count used by public pagination.
     $imageTotalCount = (int) ($imageStateSummary['count'] ?? 0);
     // $imageStateRevision verifies all-page image mutations without requiring the changed image to be visible on this pagination page.
     $imageStateRevision = (string) ($imageStateSummary['revision'] ?? '');
     // $lightboxTotalCount stores the async lightbox count after visitor-specific restrictions are applied.
-    $lightboxTotalCount = public_render_profile_db('gallery_lightbox_count_query', static fn (): int => gallery_lightbox_total_count($gallery, $publicOnly, true));
+    $lightboxTotalCount = public_render_profile_db(
+        'gallery_lightbox_count_query',
+        static fn (): int => gallery_lightbox_total_count($gallery, $publicOnly, true)
+    );
     // Variable $images stores the visible page photo rows. It is filled after pagination knows the requested offset.
     $images = [];
     // Variable $allImages stores only the current visible photo set. Full-gallery lightbox data is loaded asynchronously.
@@ -309,7 +315,10 @@ function cms_gallery(): void
     $votesById = [];
     // Variable $children stores this steps working value.
     public_render_profile_count('gallery_scan_calls');
-    $children = public_render_profile_span('child_gallery_lookup', static fn (): array => child_galleries((int) $gallery['id'], $publicOnly));
+    $children = public_render_profile_span(
+        'child_gallery_lookup',
+        static fn (): array => child_galleries((int) $gallery['id'], $publicOnly)
+    );
     $smartAttachmentGroups = smart_gallery_attachment_groups((int) $gallery['id'], $publicOnly);
     $topSmartChildren = (array) ($smartAttachmentGroups['top'] ?? []);
     $bottomSmartChildren = (array) ($smartAttachmentGroups['bottom'] ?? []);
@@ -347,9 +356,15 @@ function cms_gallery(): void
     // $lightboxBrowsingMode stores the effective public lightbox mode resolved from Theme plus gallery override.
     $lightboxBrowsingMode = gallery_effective_lightbox_browsing_mode($gallery);
     // Variable $pictureGameAvailable stores this steps working value.
-    $pictureGameAvailable = public_render_profile_span('picture_game_lookup', static fn (): bool => picture_game_available($gallery));
+    $pictureGameAvailable = public_render_profile_span(
+        'picture_game_lookup',
+        static fn (): bool => picture_game_available($gallery)
+    );
     // Variable $paginationSettings stores this steps working value.
-    $paginationSettings = public_render_profile_span('gallery_grid_settings', static fn (): array => gallery_effective_grid_settings($gallery));
+    $paginationSettings = public_render_profile_span(
+        'gallery_grid_settings',
+        static fn (): array => gallery_effective_grid_settings($gallery)
+    );
     // Variable $galleryPaginationPath stores the gallery-level URL path used for clean pagination links.
     $galleryPaginationPath = trim((string) ($gallery['url_path'] ?? ''), '/');
     if ($galleryPaginationPath === '') {
@@ -363,7 +378,15 @@ function cms_gallery(): void
     // Variable $galleryPaginationQuery stores this steps working value.
     $galleryPaginationQuery = ['page' => 'gallery', 'public_path' => $galleryPaginationPath];
     // Variable $childPagination stores this steps working value.
-    $childPagination = pagination_model(count($children), pagination_current_page('gallery_page'), (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', $galleryPaginationQuery, static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'subgalleries'));
+    $childPagination = pagination_model(
+        count($children),
+        pagination_current_page('gallery_page'),
+        (int) $paginationSettings['columns'],
+        (int) $paginationSettings['rows'],
+        'gallery_page',
+        $galleryPaginationQuery,
+        static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'subgalleries')
+    );
     // Variable $photoCurrentPage stores this steps working value.
     $photoCurrentPage = pagination_current_page('photo_page');
     if (!empty($paginationSettings['enabled']) && $requestedImage) {
@@ -375,15 +398,35 @@ function cms_gallery(): void
         }
     }
     // Variable $photoPagination stores this steps working value.
-    $photoPagination = pagination_model($imageTotalCount, $photoCurrentPage, (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'photo_page', $galleryPaginationQuery, static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'photos'));
+    $photoPagination = pagination_model(
+        $imageTotalCount,
+        $photoCurrentPage,
+        (int) $paginationSettings['columns'],
+        (int) $paginationSettings['rows'],
+        'photo_page',
+        $galleryPaginationQuery,
+        static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'photos')
+    );
     if (!empty($paginationSettings['enabled'])) {
         // $children stores the subgallery list after any requested date sort has already been applied.
         $children = pagination_slice_items($children, $childPagination);
         // $images stores only the visible photo page so large galleries do not render full-gallery metadata.
-        $images = public_render_profile_db('gallery_image_page_query', static fn (): array => gallery_lightbox_fetch_images($gallery, $publicOnly, (int) $photoPagination['offset'], (int) $photoPagination['limit'], false));
+        $images = public_render_profile_db(
+            'gallery_image_page_query',
+            static fn (): array => gallery_lightbox_fetch_images(
+                $gallery,
+                $publicOnly,
+                (int) $photoPagination['offset'],
+                (int) $photoPagination['limit'],
+                false
+            )
+        );
     } else {
         // $images stores all rows only when the gallery grid explicitly has pagination disabled.
-        $images = public_render_profile_db('gallery_image_full_query', static fn (): array => gallery_lightbox_fetch_images($gallery, $publicOnly, 0, null, false));
+        $images = public_render_profile_db(
+            'gallery_image_full_query',
+            static fn (): array => gallery_lightbox_fetch_images($gallery, $publicOnly, 0, null, false)
+        );
     }
     // Resolve optional content overlays only after access policy and pagination have selected safe rows.
     $contentLanguage = translation_active_language();
@@ -404,11 +447,17 @@ function cms_gallery(): void
     // $publicMediaManifest stores request-local thumbnail data for visible cards.
     $publicMediaManifest = $images ? public_gallery_media_manifest($images, $gallery) : [];
     // Variable $imageTagsById stores this steps working value.
-    $imageTagsById = public_render_profile_span('image_tag_lookup', static fn (): array => tags_for_entities('image', $imageIds));
+    $imageTagsById = public_render_profile_span(
+        'image_tag_lookup',
+        static fn (): array => tags_for_entities('image', $imageIds)
+    );
     // Variable $votesById stores this steps working value.
     $votesById = public_render_profile_span('image_vote_lookup', static fn (): array => current_votes_for_images($imageIds));
     // Variable $backgroundAssetUrl stores this steps working value.
-    $backgroundAssetUrl = public_render_profile_span('background_asset_lookup', static fn (): string => gallery_background_asset_url($gallery, $publicOnly));
+    $backgroundAssetUrl = public_render_profile_span(
+        'background_asset_lookup',
+        static fn (): string => gallery_background_asset_url($gallery, $publicOnly)
+    );
     // Variable $seo stores this steps working value.
     $seo = public_render_profile_span('seo_metadata_lookup', static fn (): array => public_gallery_metadata($gallery));
     ob_start();
@@ -550,7 +599,10 @@ function cms_gallery(): void
         $subgalleryPaginationHtml = (string) ob_get_clean();
 
         public_render_profile_count('rendered_subgalleries', count($children));
-        $subgalleryCardContexts = public_render_profile_span('subgallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($children, true, true));
+        $subgalleryCardContexts = public_render_profile_span(
+            'subgallery_card_context_preload',
+            static fn (): array => public_gallery_card_rendering_contexts($children, true, true)
+        );
         $subgalleryCardsHtml = public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicSubgalleryReorderEnabled, $subgalleryCardContexts, $pictureManagerEnabled): string {
             ob_start();
             foreach ($children as $index => $child) {
@@ -660,7 +712,10 @@ function cms_gallery(): void
             // Variable $previewUrl stores this steps working value.
             $previewUrl = (string) ($mediaManifestEntry['preview_url'] ?? '');
             if ($previewUrl === '') {
-                $previewUrl = public_render_profile_with_thumbnail_purpose('image card lightbox preview 1600 fallback', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
+                $previewUrl = public_render_profile_with_thumbnail_purpose(
+                    'image card lightbox preview 1600 fallback',
+                    static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600)
+                );
             }
             // Variable $imageTags stores this steps working value.
             $imageTags = $imageTagsById[(int) $image['id']] ?? [];
@@ -687,7 +742,19 @@ function cms_gallery(): void
             // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
             $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
             // $publicThumbnailRenderingMode selects only the photo picture strategy; loading policy stays centralized with the renderer.
-            $thumbnailHtml = public_render_profile_with_thumbnail_purpose('image card public thumbnail picture', static fn (): string => public_thumbnail_render_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, $index, $thumbnailBundle, $publicThumbnailRenderingMode));
+            $thumbnailHtml = public_render_profile_with_thumbnail_purpose(
+                'image card public thumbnail picture',
+                static fn (): string => public_thumbnail_render_picture_html(
+                    $image,
+                    300,
+                    [300, 600, 800, 960],
+                    $thumbnailSizesAttribute,
+                    $altText,
+                    $index,
+                    $thumbnailBundle,
+                    $publicThumbnailRenderingMode
+                )
+            );
             $favouriteHtml = $viewerFavouriteAvailableForImage
                 ? render_viewer_favourite_form_html((int) $image['id'], !empty($viewerFavouriteStates[(int) $image['id']]), 'viewer-favourite-card-overlay')
                 : '';

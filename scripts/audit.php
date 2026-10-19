@@ -334,8 +334,16 @@ function audit_tool_version(array $command, array $versionArgs): string
 $environment = $isMinimalProfile
     ? [
         ['component' => 'PHP', 'status' => STATUS_PASS, 'value' => PHP_VERSION . ' (' . PHP_BINARY . ')'],
-        ['component' => 'Node', 'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'],
-        ['component' => 'Git', 'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP, 'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'],
+        [
+            'component' => 'Node',
+            'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED,
+            'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'
+        ],
+        [
+            'component' => 'Git',
+            'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP,
+            'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'
+        ],
     ]
     : [
         ['component' => 'PHP', 'status' => STATUS_PASS, 'value' => PHP_VERSION . ' (' . PHP_BINARY . ')'],
@@ -346,10 +354,26 @@ $environment = $isMinimalProfile
         'component' => 'pdo_mysql', 'status' => extension_loaded('pdo_mysql') ? STATUS_PASS : STATUS_SKIP,
         'value' => extension_loaded('pdo_mysql') ? 'loaded' : 'not loaded',
         ],
-        ['component' => 'Node', 'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'],
-        ['component' => 'Python', 'status' => $python !== null ? STATUS_PASS : STATUS_BLOCKED, 'value' => $python !== null ? audit_tool_version($python, ['--version']) : 'not found'],
-        ['component' => 'Git', 'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP, 'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'],
-        ['component' => 'Chromium browser', 'status' => $browser !== null ? STATUS_PASS : (browser_required() ? STATUS_BLOCKED : STATUS_SKIP), 'value' => $browser ?? (trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled' ? 'explicitly disabled by PHP_GALLERY_BROWSER' : 'not found')],
+        [
+            'component' => 'Node',
+            'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED,
+            'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'
+        ],
+        [
+            'component' => 'Python',
+            'status' => $python !== null ? STATUS_PASS : STATUS_BLOCKED,
+            'value' => $python !== null ? audit_tool_version($python, ['--version']) : 'not found'
+        ],
+        [
+            'component' => 'Git',
+            'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP,
+            'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'
+        ],
+        [
+            'component' => 'Chromium browser',
+            'status' => $browser !== null ? STATUS_PASS : (browser_required() ? STATUS_BLOCKED : STATUS_SKIP),
+            'value' => $browser ?? (trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled' ? 'explicitly disabled by PHP_GALLERY_BROWSER' : 'not found')
+        ],
     ];
 
 $tasks = [];
@@ -419,7 +443,16 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
     $testDirectory = $root . '/tests';
     $label = match ($suiteId) { 'php-fast' => 'PHP regression (fast)', 'packaging' => 'Production packaging policy and smoke', default => 'PHP regression' };
     if (!is_dir($testDirectory)) {
-        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'tests/ source tree is unavailable.', null, ['problems' => ['The tracked tests/ directory is required for source-tree regression coverage.']]);
+        return task_result(
+            $suiteId,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'tests/ source tree is unavailable.',
+            null,
+            ['problems' => ['The tracked tests/ directory is required for source-tree regression coverage.']]
+        );
     }
 
     $packagingNames = $registry['packaging_tests'] ?? [];
@@ -660,7 +693,14 @@ function audit_run_runtime_performance(array $registry): array
     $counts = ['passed' => 0, 'failed' => 0, 'blocked' => 0, 'skipped' => 0, 'total' => count($definitions)];
     $log = ['Fresh-child include-only bootstrap probes; route probes below execute cms_run() and use the owned disposable database/session when available.'];
     if ($definitions === []) {
-        return task_result('runtime-performance', 'Runtime performance probes', STATUS_BLOCKED, 0.0, [], 'No bootstrap performance probes registered.');
+        return task_result(
+            'runtime-performance',
+            'Runtime performance probes',
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'No bootstrap performance probes registered.'
+        );
     }
     foreach ($definitions as $id => $definition) {
         $process = run_process([PHP_BINARY, $root . '/scripts/audit_runtime_probe.php', $id], $root, 30);
@@ -811,7 +851,16 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
     global $root, $runDirectory;
     $started = microtime(true);
     if ($node === null) {
-        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'Node executable was not found.', null, ['problems' => ['Set PHP_GALLERY_NODE or install Node.js to execute JavaScript regression tests.']]);
+        return task_result(
+            $suiteId,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Node executable was not found.',
+            null,
+            ['problems' => ['Set PHP_GALLERY_NODE or install Node.js to execute JavaScript regression tests.']]
+        );
     }
     if ($definitions === []) {
         return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'No registered Node tests were selected.');
@@ -946,7 +995,16 @@ function audit_run_winapp(?array $python): array
         return task_result('winapp', 'WinApp regression', STATUS_SKIP, 0.0, [], 'winapp/tests is not present in this source tree.');
     }
     if ($python === null) {
-        return task_result('winapp', 'WinApp regression', STATUS_BLOCKED, 0.0, [], 'Python executable was not found.', null, ['problems' => ['Set PHP_GALLERY_PYTHON or install Python 3 to execute WinApp regression tests.']]);
+        return task_result(
+            'winapp',
+            'WinApp regression',
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Python executable was not found.',
+            null,
+            ['problems' => ['Set PHP_GALLERY_PYTHON or install Python 3 to execute WinApp regression tests.']]
+        );
     }
 
     $reportPath = $runDirectory . '/winapp-report.json';
@@ -1017,17 +1075,44 @@ function audit_run_php_command(string $id, string $label, string $relativeScript
     global $root;
     $path = $root . '/' . $relativeScript;
     if (!is_file($path)) {
-        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $relativeScript . ' is missing.', null, ['problems' => [$relativeScript . ' is required for this audit task.']]);
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            $relativeScript . ' is missing.',
+            null,
+            ['problems' => [$relativeScript . ' is required for this audit task.']]
+        );
     }
     $process = run_process(array_merge([PHP_BINARY, $path], $arguments), $root, $timeout);
     audit_record_slow_check($label, (float) $process['duration']);
     $output = audit_process_output($process);
     $logPath = audit_write_log($id, [$label, $output]);
     if ($process['timed_out']) {
-        return task_result($id, $label, STATUS_FAIL, (float) $process['duration'], [], 'Timed out after ' . $timeout . ' seconds.', $logPath, ['problems' => [$relativeScript . ' timed out.']]);
+        return task_result(
+            $id,
+            $label,
+            STATUS_FAIL,
+            (float) $process['duration'],
+            [],
+            'Timed out after ' . $timeout . ' seconds.',
+            $logPath,
+            ['problems' => [$relativeScript . ' timed out.']]
+        );
     }
     if ((int) $process['exit_code'] !== 0) {
-        return task_result($id, $label, STATUS_FAIL, (float) $process['duration'], [], 'Exit code ' . $process['exit_code'] . '.', $logPath, ['problems' => [$relativeScript . ' reported a failure.']]);
+        return task_result(
+            $id,
+            $label,
+            STATUS_FAIL,
+            (float) $process['duration'],
+            [],
+            'Exit code ' . $process['exit_code'] . '.',
+            $logPath,
+            ['problems' => [$relativeScript . ' reported a failure.']]
+        );
     }
     if (output_is_skip($output)) {
         return task_result($id, $label, STATUS_SKIP, (float) $process['duration'], [], preg_replace('/\s+/', ' ', trim($output)), $logPath);
@@ -1328,7 +1413,16 @@ function audit_run_php_lint(bool $changedOnly, ?string $baseSha = null, bool $re
     $status = $failed === [] ? STATUS_PASS : STATUS_FAIL;
     $summary = count($files) . ' PHP files; ' . $targets['reason'] . ($failed !== [] ? ', ' . count($failed) . ' failed' : '');
     $logPath = audit_write_log($id, $log);
-    return task_result($id, $label, $status, microtime(true) - $started, ['total' => count($files), 'php' => count($files), 'failed' => count($failed)], $summary, $logPath, ['selection' => $targets['reason'], 'problems' => array_map(static fn(string $file): string => $file . ': PHP syntax check failed.', $failed)]);
+    return task_result(
+        $id,
+        $label,
+        $status,
+        microtime(true) - $started,
+        ['total' => count($files), 'php' => count($files), 'failed' => count($failed)],
+        $summary,
+        $logPath,
+        ['selection' => $targets['reason'], 'problems' => array_map(static fn(string $file): string => $file . ': PHP syntax check failed.', $failed)]
+    );
 }
 
 /**
@@ -1346,7 +1440,16 @@ function audit_run_js_lint(bool $changedOnly, ?string $node, ?string $baseSha = 
     $id = $changedOnly ? 'js-lint-changed' : 'js-lint';
     $label = $changedOnly ? 'JavaScript syntax (changed)' : 'JavaScript syntax';
     if ($node === null) {
-        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], 'Node executable was not found.', null, ['problems' => ['Node is required for JavaScript syntax validation.']]);
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Node executable was not found.',
+            null,
+            ['problems' => ['Node is required for JavaScript syntax validation.']]
+        );
     }
 
     $started = microtime(true);
@@ -1381,7 +1484,16 @@ function audit_run_js_lint(bool $changedOnly, ?string $node, ?string $baseSha = 
     $mjsCount = count($files) - $jsCount;
     $summary = $jsCount . ' JS / ' . $mjsCount . ' MJS files; ' . $targets['reason'] . ($failed !== [] ? ', ' . count($failed) . ' failed' : '');
     $logPath = audit_write_log($id, $log);
-    return task_result($id, $label, $status, microtime(true) - $started, ['total' => count($files), 'js' => $jsCount, 'mjs' => $mjsCount, 'failed' => count($failed)], $summary, $logPath, ['selection' => $targets['reason'], 'problems' => array_map(static fn(string $file): string => $file . ': JavaScript syntax check failed.', $failed)]);
+    return task_result(
+        $id,
+        $label,
+        $status,
+        microtime(true) - $started,
+        ['total' => count($files), 'js' => $jsCount, 'mjs' => $mjsCount, 'failed' => count($failed)],
+        $summary,
+        $logPath,
+        ['selection' => $targets['reason'], 'problems' => array_map(static fn(string $file): string => $file . ': JavaScript syntax check failed.', $failed)]
+    );
 }
 
 /**
@@ -1394,7 +1506,14 @@ function audit_run_git_diff_check(?string $git): array
 {
     global $root;
     if ($git === null || !is_dir($root . '/.git')) {
-        return task_result('git-diff-check', 'Git whitespace check', STATUS_SKIP, 0.0, [], 'Git checkout metadata is unavailable in this source package.');
+        return task_result(
+            'git-diff-check',
+            'Git whitespace check',
+            STATUS_SKIP,
+            0.0,
+            [],
+            'Git checkout metadata is unavailable in this source package.'
+        );
     }
     $process = run_process([$git, 'diff', '--check'], $root, 30);
     $output = audit_process_output($process);

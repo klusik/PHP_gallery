@@ -384,7 +384,15 @@ function collect_declarations(array $file): array
         }
         $fqcn = ($namespace !== '' ? $namespace . '\\' : '') . $tokens[$nameIndex]['text'];
         $classRanges[] = ['start' => $open, 'end' => $close, 'name' => $fqcn];
-        $symbols[] = ['id' => strtolower($fqcn), 'name' => $fqcn, 'kind' => token_name((int) $token['id']), 'file' => $file['path'], 'line' => $token['line'], 'start' => $index, 'end' => $close];
+        $symbols[] = [
+            'id' => strtolower($fqcn),
+            'name' => $fqcn,
+            'kind' => token_name((int) $token['id']),
+            'file' => $file['path'],
+            'line' => $token['line'],
+            'start' => $index,
+            'end' => $close,
+        ];
         $index = $nameIndex;
     }
 
@@ -422,7 +430,16 @@ function collect_declarations(array $file): array
         $name = $ownerClass !== null
             ? $ownerClass . '::' . $tokens[$nameIndex]['text']
             : (($namespace !== '' ? $namespace . '\\' : '') . $tokens[$nameIndex]['text']);
-        $symbols[] = ['id' => strtolower($name), 'name' => $name, 'kind' => $ownerClass !== null ? 'method' : 'function', 'file' => $file['path'], 'line' => $tokenLine = $token['line'], 'start' => $index, 'body_start' => $open + 1, 'end' => $close];
+        $symbols[] = [
+            'id' => strtolower($name),
+            'name' => $name,
+            'kind' => $ownerClass !== null ? 'method' : 'function',
+            'file' => $file['path'],
+            'line' => $tokenLine = $token['line'],
+            'start' => $index,
+            'body_start' => $open + 1,
+            'end' => $close,
+        ];
     }
 
     for ($index = 0; $index < $count; $index++) {
@@ -438,7 +455,15 @@ function collect_declarations(array $file): array
             continue;
         }
         $name = ($namespace !== '' ? $namespace . '\\' : '') . $tokens[$nameIndex]['text'];
-        $symbols[] = ['id' => strtolower($name), 'name' => $name, 'kind' => 'constant', 'file' => $file['path'], 'line' => $tokens[$index]['line'], 'start' => $index, 'end' => $index];
+        $symbols[] = [
+            'id' => strtolower($name),
+            'name' => $name,
+            'kind' => 'constant',
+            'file' => $file['path'],
+            'line' => $tokens[$index]['line'],
+            'start' => $index,
+            'end' => $index,
+        ];
     }
 
     return ['symbols' => $symbols, 'classRanges' => $classRanges];
@@ -662,7 +687,13 @@ function collect_symbol_dependencies(array $file, array $symbol, array $symbols)
             return;
         }
         $seen[$key] = true;
-        $edges[] = ['target' => $target['name'], 'target_id' => $target['index_key'] ?? $target['id'], 'target_file' => $target['file'], 'kind' => $kind, 'line' => $line];
+        $edges[] = [
+            'target' => $target['name'],
+            'target_id' => $target['index_key'] ?? $target['id'],
+            'target_file' => $target['file'],
+            'kind' => $kind,
+            'line' => $line,
+        ];
     };
     $addUnresolved = static function (string $expression, int $line, string $kind) use (&$unresolved, &$seen, $symbol, $file): void {
         $key = 'unresolved:' . $kind . ':' . $expression . ':' . $line;
@@ -686,11 +717,23 @@ function collect_symbol_dependencies(array $file, array $symbol, array $symbols)
         $prevText = $previous !== null ? $tokens[$previous]['text'] : '';
         $nextToken = $next !== null ? $tokens[$next] : null;
 
-        if ($token['id'] === T_VARIABLE && $nextToken !== null && $nextToken['text'] === '(' && !in_array($prevText, ['->', '?->', '::', 'function'], true)) {
+        if ($token['id'] === T_VARIABLE
+            && $nextToken !== null
+            && $nextToken['text'] === '('
+            && !in_array($prevText, ['->', '?->', '::', 'function'], true)) {
             $addUnresolved($token['text'] . '()', $token['line'], 'variable_callable');
             continue;
         }
-        if ($token['id'] === T_STRING && in_array(strtolower($token['text']), ['call_user_func', 'call_user_func_array', 'is_callable', 'register_shutdown_function', 'set_error_handler'], true) && $nextToken !== null && $nextToken['text'] === '(') {
+        if ($token['id'] === T_STRING
+            && in_array(strtolower($token['text']), [
+                'call_user_func',
+                'call_user_func_array',
+                'is_callable',
+                'register_shutdown_function',
+                'set_error_handler',
+            ], true)
+            && $nextToken !== null
+            && $nextToken['text'] === '(') {
             $argument = next_significant($tokens, $next + 1, $end + 1);
             if ($argument !== null && $tokens[$argument]['id'] === T_VARIABLE) {
                 $addUnresolved($token['text'] . '(' . $tokens[$argument]['text'] . ')', $token['line'], 'dynamic_callback_argument');
@@ -715,7 +758,10 @@ function collect_symbol_dependencies(array $file, array $symbol, array $symbols)
             }
         }
 
-        if ($token['id'] === T_STRING && $nextToken !== null && $nextToken['text'] === '(' && !in_array(strtolower($token['text']), $excludedCalls, true)) {
+        if ($token['id'] === T_STRING
+            && $nextToken !== null
+            && $nextToken['text'] === '('
+            && !in_array(strtolower($token['text']), $excludedCalls, true)) {
             if (in_array($prevText, ['->', '?->', '::', 'function', 'new'], true)) {
                 continue;
             }
@@ -797,7 +843,13 @@ function collect_symbol_dependencies(array $file, array $symbol, array $symbols)
                 }
             }
         }
-        if ($token['id'] === T_STRING && $nextToken !== null && $nextToken['text'] !== '(' && !in_array($prevText, ['->', '?->', '::', 'function', 'class', 'interface', 'trait', 'enum', 'as'], true)) {
+        if ($token['id'] === T_STRING
+            && $nextToken !== null
+            && $nextToken['text'] !== '('
+            && !in_array($prevText, [
+                '->', '?->', '::', 'function', 'class',
+                'interface', 'trait', 'enum', 'as',
+            ], true)) {
             $target = find_symbol($symbols, resolve_name($token['text'], 'classes', $context), 'classes');
             if ($target !== null) {
                 $addEdge($target, 'class_reference', $token['line']);
@@ -809,7 +861,13 @@ function collect_symbol_dependencies(array $file, array $symbol, array $symbols)
                 $addEdge($target, 'constant_reference', $token['line']);
             }
         }
-        if ($token['id'] === T_STRING && $nextToken !== null && $nextToken['text'] !== '(' && !in_array($prevText, ['->', '?->', '::', 'function', 'const', 'class', 'interface', 'trait', 'enum', 'as'], true)) {
+        if ($token['id'] === T_STRING
+            && $nextToken !== null
+            && $nextToken['text'] !== '('
+            && !in_array($prevText, [
+                '->', '?->', '::', 'function', 'const',
+                'class', 'interface', 'trait', 'enum', 'as',
+            ], true)) {
             $target = find_symbol($symbols, resolve_name($token['text'], 'constants', $context), 'constants');
             if ($target !== null) {
                 $addEdge($target, isset($context['constants'][strtolower($token['text'])]) ? 'imported_constant' : 'constant_reference', $token['line']);
@@ -826,7 +884,10 @@ function collect_symbol_dependencies(array $file, array $symbol, array $symbols)
             }
         }
 
-        if ($token['id'] === T_STRING && strtolower($token['text']) === 'function_exists' && $nextToken !== null && $nextToken['text'] === '(') {
+        if ($token['id'] === T_STRING
+            && strtolower($token['text']) === 'function_exists'
+            && $nextToken !== null
+            && $nextToken['text'] === '(') {
             $arg = next_significant($tokens, $next + 1, $end + 1);
             if ($arg !== null && $tokens[$arg]['id'] === T_CONSTANT_ENCAPSED_STRING) {
                 $value = literal_string($tokens[$arg]);
@@ -1075,7 +1136,16 @@ function main(array $arguments): int
         return isset($symbols[$handlerId]) ? 0 : 1;
     }
 
-    $counts = ['files' => count($files), 'symbols' => count($symbols), 'functions' => 0, 'methods' => 0, 'classes' => 0, 'constants' => 0, 'duplicate_symbols' => 0, 'unresolved_dynamic_sites' => 0];
+    $counts = [
+        'files' => count($files),
+        'symbols' => count($symbols),
+        'functions' => 0,
+        'methods' => 0,
+        'classes' => 0,
+        'constants' => 0,
+        'duplicate_symbols' => 0,
+        'unresolved_dynamic_sites' => 0,
+    ];
     foreach ($symbols as $symbol) {
         if ($symbol['kind'] === 'function') {
             $counts['functions']++;

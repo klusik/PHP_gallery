@@ -99,7 +99,11 @@ function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
  * @param bool $hideWithoutRenameCandidates Hide without rename candidates value.
  * @return array{rows:array<int,array<string,mixed>>,availability:array<int,array<string,int>>} Structured result data for the caller.
  */
-function media_renamer_gallery_rows_with_rename_availability(array $galleryRows, string $pattern = '', bool $hideWithoutRenameCandidates = false): array
+function media_renamer_gallery_rows_with_rename_availability(
+    array $galleryRows,
+    string $pattern = '',
+    bool $hideWithoutRenameCandidates = false
+): array
 {
     $rows = [];
     $galleryIds = [];
@@ -272,7 +276,18 @@ function media_renamer_indexed_relative_path_image_ids(int $galleryId): array
  * @param array<int,string> $warnings Warnings value.
  * @return array{filename:string,relative_path:string}|null Structured result data for the caller.
  */
-function media_renamer_unique_target_from_database(array $gallery, array $image, string $contextBase, string $pattern, int $sequence, string $extension, array $selectedImageIds, array $indexedRelativePathImageIds, array &$usedTargetPaths, array &$warnings): ?array
+function media_renamer_unique_target_from_database(
+    array $gallery,
+    array $image,
+    string $contextBase,
+    string $pattern,
+    int $sequence,
+    string $extension,
+    array $selectedImageIds,
+    array $indexedRelativePathImageIds,
+    array &$usedTargetPaths,
+    array &$warnings
+): ?array
 {
     $collisionCount = 0;
     for ($suffix = 0; $suffix <= 99; $suffix++) {
@@ -309,7 +324,11 @@ function media_renamer_unique_target_from_database(array $gallery, array $image,
  * @param bool $hideWithoutRenameCandidates Hide without rename candidates value.
  * @return array<int,array<string,mixed>> Structured result data for the caller.
  */
-function media_renamer_gallery_rows_with_submitted_availability(array $galleryRows, array $availability, bool $hideWithoutRenameCandidates = false): array
+function media_renamer_gallery_rows_with_submitted_availability(
+    array $galleryRows,
+    array $availability,
+    bool $hideWithoutRenameCandidates = false
+): array
 {
     $rows = [];
 
@@ -406,7 +425,11 @@ function media_renamer_plan_for_gallery(int $galleryId, string $pattern = ''): a
  * @param string $pattern Pattern value.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function media_renamer_plan_for_gallery_selection(int $galleryId, array $imageIds = [], string $pattern = ''): array
+function media_renamer_plan_for_gallery_selection(
+    int $galleryId,
+    array $imageIds = [],
+    string $pattern = ''
+): array
 {
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
@@ -498,43 +521,135 @@ function media_renamer_plan_item_is_hidden_noop(array $item): bool
  * @param array<string,int> $usedTargetPaths Used target paths filesystem path.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function media_renamer_plan_item(array $gallery, string $galleryRoot, string $contextBase, string $pattern, array $image, int $sequence, array $selectedImageIds, array $currentFileKeys, array &$usedTargetPaths): array
+function media_renamer_plan_item(
+    array $gallery,
+    string $galleryRoot,
+    string $contextBase,
+    string $pattern,
+    array $image,
+    int $sequence,
+    array $selectedImageIds,
+    array $currentFileKeys,
+    array &$usedTargetPaths
+): array
 {
     $oldRelativePath = normalize_relative_path((string) ($image['relative_path'] ?? ''));
     $oldFilename = (string) ($image['filename'] ?? basename($oldRelativePath));
     $warnings = [];
 
     if ($oldRelativePath === '' || str_contains($oldRelativePath, '/')) {
-        return media_renamer_item_result($gallery, $image, $oldRelativePath, $oldFilename, '', '', 'skipped', [t('admin.media_renamer.warning_nested_path', 'Only direct image files in the gallery folder are renamed.')], false);
+        return media_renamer_item_result(
+            $gallery,
+            $image,
+            $oldRelativePath,
+            $oldFilename,
+            '',
+            '',
+            'skipped',
+            [t('admin.media_renamer.warning_nested_path', 'Only direct image files in the gallery folder are renamed.')],
+            false
+        );
     }
 
     $sourcePath = image_abs_path($image, $gallery);
     if (!thumbnail_path_inside_existing_gallery($galleryRoot, $sourcePath)) {
-        return media_renamer_item_result($gallery, $image, $oldRelativePath, $oldFilename, '', '', 'skipped', [t('admin.media_renamer.warning_source_outside_gallery', 'Source file is outside the gallery folder.')], false);
+        return media_renamer_item_result(
+            $gallery,
+            $image,
+            $oldRelativePath,
+            $oldFilename,
+            '',
+            '',
+            'skipped',
+            [t('admin.media_renamer.warning_source_outside_gallery', 'Source file is outside the gallery folder.')],
+            false
+        );
     }
 
     if (!is_file($sourcePath)) {
-        return media_renamer_item_result($gallery, $image, $oldRelativePath, $oldFilename, '', '', 'missing', [t('admin.media_renamer.warning_missing_file', 'Source file is missing on disk.')], false);
+        return media_renamer_item_result(
+            $gallery,
+            $image,
+            $oldRelativePath,
+            $oldFilename,
+            '',
+            '',
+            'missing',
+            [t('admin.media_renamer.warning_missing_file', 'Source file is missing on disk.')],
+            false
+        );
     }
 
     $extension = media_renamer_safe_extension($oldFilename);
-    $target = media_renamer_unique_target($gallery, $galleryRoot, $image, $contextBase, $pattern, $sequence, $extension, $selectedImageIds, $currentFileKeys, $usedTargetPaths, $warnings);
+    $target = media_renamer_unique_target(
+        $gallery,
+        $galleryRoot,
+        $image,
+        $contextBase,
+        $pattern,
+        $sequence,
+        $extension,
+        $selectedImageIds,
+        $currentFileKeys,
+        $usedTargetPaths,
+        $warnings
+    );
     if ($target === null) {
-        return media_renamer_item_result($gallery, $image, $oldRelativePath, $oldFilename, '', '', 'collision', array_merge($warnings, [t('admin.media_renamer.warning_no_collision_free_target', 'No safe collision-free target filename could be found.')]), false);
+        return media_renamer_item_result(
+            $gallery,
+            $image,
+            $oldRelativePath,
+            $oldFilename,
+            '',
+            '',
+            'collision',
+            array_merge($warnings, [t('admin.media_renamer.warning_no_collision_free_target', 'No safe collision-free target filename could be found.')]),
+            false
+        );
     }
 
     $newFilename = $target['filename'];
     $newRelativePath = $target['relative_path'];
     $targetPath = $galleryRoot . DIRECTORY_SEPARATOR . $newFilename;
     if (!thumbnail_path_inside_existing_gallery($galleryRoot, $targetPath)) {
-        return media_renamer_item_result($gallery, $image, $oldRelativePath, $oldFilename, $newRelativePath, $newFilename, 'collision', [t('admin.media_renamer.warning_target_outside_gallery', 'Generated target path is outside the gallery folder.')], false);
+        return media_renamer_item_result(
+            $gallery,
+            $image,
+            $oldRelativePath,
+            $oldFilename,
+            $newRelativePath,
+            $newFilename,
+            'collision',
+            [t('admin.media_renamer.warning_target_outside_gallery', 'Generated target path is outside the gallery folder.')],
+            false
+        );
     }
 
     if ($oldRelativePath === $newRelativePath) {
-        return media_renamer_item_result($gallery, $image, $oldRelativePath, $oldFilename, $newRelativePath, $newFilename, 'already_matches', $warnings, false);
+        return media_renamer_item_result(
+            $gallery,
+            $image,
+            $oldRelativePath,
+            $oldFilename,
+            $newRelativePath,
+            $newFilename,
+            'already_matches',
+            $warnings,
+            false
+        );
     }
 
-    return media_renamer_item_result($gallery, $image, $oldRelativePath, $oldFilename, $newRelativePath, $newFilename, 'rename', $warnings, true);
+    return media_renamer_item_result(
+        $gallery,
+        $image,
+        $oldRelativePath,
+        $oldFilename,
+        $newRelativePath,
+        $newFilename,
+        'rename',
+        $warnings,
+        true
+    );
 }
 
 /**
@@ -551,7 +666,17 @@ function media_renamer_plan_item(array $gallery, string $galleryRoot, string $co
  * @param bool $canRename Can rename value.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function media_renamer_item_result(array $gallery, array $image, string $oldRelativePath, string $oldFilename, string $newRelativePath, string $newFilename, string $status, array $warnings, bool $canRename): array
+function media_renamer_item_result(
+    array $gallery,
+    array $image,
+    string $oldRelativePath,
+    string $oldFilename,
+    string $newRelativePath,
+    string $newFilename,
+    string $status,
+    array $warnings,
+    bool $canRename
+): array
 {
     $targetImage = $image;
     if ($newRelativePath !== '') {
@@ -591,7 +716,19 @@ function media_renamer_item_result(array $gallery, array $image, string $oldRela
  * @param array<int,string> $warnings Warnings value.
  * @return array{filename:string,relative_path:string}|null Structured result data for the caller.
  */
-function media_renamer_unique_target(array $gallery, string $galleryRoot, array $image, string $contextBase, string $pattern, int $sequence, string $extension, array $selectedImageIds, array $currentFileKeys, array &$usedTargetPaths, array &$warnings): ?array
+function media_renamer_unique_target(
+    array $gallery,
+    string $galleryRoot,
+    array $image,
+    string $contextBase,
+    string $pattern,
+    int $sequence,
+    string $extension,
+    array $selectedImageIds,
+    array $currentFileKeys,
+    array &$usedTargetPaths,
+    array &$warnings
+): ?array
 {
     $collisionCount = 0;
     for ($suffix = 0; $suffix <= 99; $suffix++) {
@@ -643,7 +780,12 @@ function media_renamer_unique_target(array $gallery, string $galleryRoot, array 
  * @param array<string,bool> $currentFileKeys Current file keys value.
  * @return bool True when the condition matches.
  */
-function media_renamer_target_derivative_conflicts(array $sourceImage, array $targetImage, array $gallery, array $currentFileKeys): bool
+function media_renamer_target_derivative_conflicts(
+    array $sourceImage,
+    array $targetImage,
+    array $gallery,
+    array $currentFileKeys
+): bool
 {
     foreach (thumbnail_sizes() as $size) {
         foreach (['jpg', 'webp'] as $format) {
@@ -832,7 +974,13 @@ function media_renamer_pattern_help_text(): string
  * @param array $image Image row or image data.
  * @return string Text result for the caller.
  */
-function media_renamer_pattern_stem(string $pattern, string $contextBase, int $sequence, array $gallery, array $image): string
+function media_renamer_pattern_stem(
+    string $pattern,
+    string $contextBase,
+    int $sequence,
+    array $gallery,
+    array $image
+): string
 {
     $pattern = media_renamer_normalize_pattern($pattern);
     $oldFilename = (string) ($image['filename'] ?? basename((string) ($image['relative_path'] ?? '')));
@@ -871,7 +1019,15 @@ function media_renamer_pattern_stem(string $pattern, string $contextBase, int $s
  * @param array $image Image row or image data.
  * @return string Text result for the caller.
  */
-function media_renamer_build_filename(string $contextBase, int $sequence, string $extension, int $suffix = 0, string $pattern = '', array $gallery = [], array $image = []): string
+function media_renamer_build_filename(
+    string $contextBase,
+    int $sequence,
+    string $extension,
+    int $suffix = 0,
+    string $pattern = '',
+    array $gallery = [],
+    array $image = []
+): string
 {
     $extensionPart = '.' . $extension;
     $suffixPart = $suffix > 0 ? '_' . ($suffix + 1) : '';
@@ -984,7 +1140,11 @@ function media_renamer_execute_gallery_image_batch(int $galleryId, array $imageI
  * @return array<string,int|list<string>|list<array<string,mixed>>> Selected-image rename counters, details, warnings and failures; empty selection yields the zero aggregate.
  * @author Rudolf Klusal
  */
-function media_renamer_execute_gallery_image_batch_owned(int $galleryId, array $imageIds, string $pattern = ''): array
+function media_renamer_execute_gallery_image_batch_owned(
+    int $galleryId,
+    array $imageIds,
+    string $pattern = ''
+): array
 {
     $requested = array_values(array_unique(array_filter(array_map('intval', $imageIds),
         /**
@@ -1105,10 +1265,22 @@ function media_renamer_empty_execution_result(int $requestedGalleries = 0): arra
  *
  * @param array<string,mixed> $target Target value.
  * @param array<string,mixed> $source Source value.
+ * @return void Adds counters and appends details, warnings and failures to $target.
  */
 function media_renamer_merge_execution_result(array &$target, array $source): void
 {
-    foreach (['renamed', 'already_matches', 'missing', 'skipped', 'collisions', 'derivatives_moved', 'derivatives_cleaned', 'derivative_failures', 'zip_archives_deleted', 'titles_updated'] as $key) {
+    foreach ([
+        'renamed',
+        'already_matches',
+        'missing',
+        'skipped',
+        'collisions',
+        'derivatives_moved',
+        'derivatives_cleaned',
+        'derivative_failures',
+        'zip_archives_deleted',
+        'titles_updated',
+    ] as $key) {
         $target[$key] = (int) ($target[$key] ?? 0) + (int) ($source[$key] ?? 0);
     }
     foreach ((array) ($source['details'] ?? []) as $detail) {
@@ -1510,7 +1682,11 @@ function media_renamer_preinvalidate_thumbnail_caches(array $items, array $galle
  * @param array<int,string> $approvedOldDerivatives Old derivative paths whose ownership was verified before the rename.
  * @return array{cleaned:int,failures:int,warnings:array<int,string>} Cleanup counts and safe filesystem warnings.
  */
-function media_renamer_cleanup_generated_derivatives(array $items, array $gallery, array $approvedOldDerivatives = []): array
+function media_renamer_cleanup_generated_derivatives(
+    array $items,
+    array $gallery,
+    array $approvedOldDerivatives = []
+): array
 {
     $result = ['cleaned' => 0, 'failures' => 0, 'warnings' => []];
     $paths = [];
@@ -1591,7 +1767,17 @@ function media_renamer_generated_derivative_paths(array $image, array $gallery):
  * @param string $label Label value.
  * @param bool $required Required value.
  */
-function media_renamer_add_manifest_entry(array &$manifest, array &$targetKeys, array $occupiedSourceKeys, string $galleryRoot, string $sourcePath, string $targetPath, string $kind, string $label, bool $required): void
+function media_renamer_add_manifest_entry(
+    array &$manifest,
+    array &$targetKeys,
+    array $occupiedSourceKeys,
+    string $galleryRoot,
+    string $sourcePath,
+    string $targetPath,
+    string $kind,
+    string $label,
+    bool $required
+): void
 {
     if (media_renamer_path_key($sourcePath) === media_renamer_path_key($targetPath)) {
         return;

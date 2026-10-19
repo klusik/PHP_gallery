@@ -39,12 +39,24 @@ return [
     'runtime_limits' => [
         // Independent telemetry maintenance. Large historical backlogs resume
         // across bounded slices instead of blocking on thumbnail processing.
-        'telemetry.maintenance_time_budget_seconds' => 3,
-        'telemetry.maintenance_delete_batch_size' => 2000,
-        'telemetry.maintenance_delete_batches' => 4,
+        // Type: integer. Units: seconds. Scope: one telemetry slice.
+        // Consumers: scheduled, CLI and Admin telemetry maintenance.
+        // Rationale: ten seconds gives retention and archival sustained throughput.
+        'telemetry.maintenance_time_budget_seconds' => 10,
+        // Type: integer. Units: rows per DELETE. Scope: each telemetry target.
+        // Consumers: round-robin retention and checkpoint-protected hourly purge.
+        // Rationale: 5000 rows amortizes SQL overhead while retaining short batches.
+        'telemetry.maintenance_delete_batch_size' => 5000,
+        // Type: integer. Units: batches per target per slice.
+        // Scope: telemetry retention. Consumers: both bounded purge paths.
+        // Rationale: eight batches admit 40000 expired rows per table before time caps.
+        'telemetry.maintenance_delete_batches' => 8,
         'telemetry.maintenance_rollup_days' => 7,
         'telemetry.maintenance_retry_seconds' => 300,
-        'telemetry.maintenance_interval_seconds' => 3600,
+        // Type: integer. Units: seconds. Scope: completed telemetry slices.
+        // Consumers: independent maintenance scheduling admission.
+        // Rationale: five minutes prevents hourly accumulation even without backlog.
+        'telemetry.maintenance_interval_seconds' => 300,
 
         // Shared server-side raster decode admission. Unlimited PHP memory still uses
         // this request ceiling; invalid overrides cannot disable positive bounds.

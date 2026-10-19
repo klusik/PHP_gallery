@@ -16,6 +16,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 require_once __DIR__ . '/../models/gallery_music.php';
+require_once __DIR__ . '/gallery_pdf_settings.php';
 
 /**
  * Bound one original audio upload without transcoding or decoding on the
@@ -365,6 +366,9 @@ function gallery_music_mutate(
         $state['revision'] = bin2hex(random_bytes(16));
         \Gallery\Models\gallery_music_model_write($directory, $state);
         $committed = true;
+        gallery_attachment_storage_record(
+            (int) $gallery['id'], 'music', $state['tracks']
+        );
         // Metadata is authoritative: an interrupted unlink leaves an inaccessible
         // orphan rather than a playlist that points to a deleted original.
         if ($action === 'delete') {
