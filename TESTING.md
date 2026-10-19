@@ -1621,7 +1621,7 @@ highest-version missing hashes, metadata/URL limits, same-release manifests,
 streaming hash/size refusal, cancellation and unrelated partial-file
 preservation.
 UI fixtures cover the persistent version banner/header mark, Later/reopen
-behavior,
+behavior, notice placement followed by content-driven sizing,
 tray badge/menu/tooltip routing, clearing after a successful no-offer check, and
 retaining a validated cached offer after failed rechecks and restart. Helper
 fixtures exercise hourly scheduling, safe drain, ticket ownership, exact target

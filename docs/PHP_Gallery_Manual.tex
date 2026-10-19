@@ -1409,9 +1409,13 @@ Partial recordings retain incomplete facts. Success updates status without
 an~OK message box and~closes progress after durable completion/key cleanup.
 Errors stay visible; earlier PDFs remain intact.
 
-The~independent uploader source targets 0.7.0. A~separately requested installer
+The~update notice resizes to~fit its wrapped status text and~complete button row
+when background checks change the~message. Text and~action-row backgrounds match
+the~window; the~primary \ui{Update} action remains distinct.
+
+The~independent uploader source targets 0.7.1. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.7.0/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.7.1/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.

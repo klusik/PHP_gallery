@@ -18,7 +18,7 @@ import threading
 from types import SimpleNamespace
 import unittest
 from typing import Callable
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from uploader.update_ui import InstallGate, UpdateController, check_due
@@ -431,7 +431,8 @@ class UpdateControllerTests(unittest.TestCase):
 
         Returns:
             None: The new notice shows the cached version/action and is placed
-                nonmodally over its invoking window on the secondary monitor.
+                nonmodally over its invoking window on the secondary monitor,
+                then releases its fixed size for later status changes.
         """
         controller = self.controller()
         controller.installer = None
@@ -481,7 +482,10 @@ class UpdateControllerTests(unittest.TestCase):
             self.assertEqual(len(operations), 1)
             self.assertIs(controller.window, window)
             window.transient.assert_called_once_with(controller.root)
-            window.geometry.assert_called_once_with('400x200+3250+1200')
+            self.assertEqual(window.geometry.call_args_list, [
+                call('400x200+3250+1200'),
+                call(''),
+            ])
             window.grab_set.assert_not_called()
             shown_text = str(status.set.call_args.args[0])
             self.assertIn(asset.version, shown_text)
