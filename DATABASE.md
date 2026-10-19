@@ -1,7 +1,7 @@
 # PHP Gallery Database Documentation
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.137.3. Version 0.97 adds the recoverable gallery-trash
+application version 0.137.4. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
