@@ -2525,9 +2525,13 @@ Geplante Telemetrie kann alle fünf Minuten laufen, mit zehn Sekunden pro
 normalem Durchlauf und höchstens acht Chargen von 5000 abgelaufenen Zeilen je
 Tabelle (40000 Zeilen). Tabellen wechseln nach jeder Charge; die erste Tabelle
 rotiert zwischen Durchläufen. Das gemeinsame Zeitbudget kann den Fortschritt
-begrenzen. Das Wartungszentrum behält vier Sekunden pro UI-Schritt. Der bestehende
-Cron muss die Wartung mindestens alle fünf Minuten aufrufen; die Änderung
-installiert keinen Timer und verkürzt keine Aufbewahrungsfrist.
+begrenzen. Das Wartungszentrum behält vier Sekunden pro UI-Schritt. Erfolgreiche öffentliche Besuche der Startseite, einer Galerie oder intelligenten
+Galerie starten nach dem Rendern einen privaten Telemetrieauftrag. Bei Verkehr
+wird etwa alle fünf Minuten Arbeit zugelassen, unabhängig vom Vorschaubildfenster.
+Besucher warten nicht auf Aufbewahrungs-SQL und erhalten kein Wartungstoken.
+Externer Cron ist optional; ohne Anfragen wartet die Arbeit auf einen späteren
+Besuch. Vorschauen, Medien und Fehlerantworten lösen keine Arbeit aus.
+Deaktivierung, zentrale Wartungsansprüche und Aufbewahrungsfristen bleiben gültig.
 
 \subsection{Laufzeitdiagnose, Integrität und Galeriebenchmark}
 \index{l00160@Laufzeitdiagnose}

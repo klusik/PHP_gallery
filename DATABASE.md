@@ -1107,8 +1107,12 @@ when complete. A normal slice admits ten seconds of work, with up to eight
 5000-row DELETEs per table (40000 rows). Independent targets alternate one batch
 at a time and persist the next first target across slices; expiry of the shared
 deadline can reduce actual progress. Hourly deletion still requires its archival
-checkpoint. Maintenance Center retains its four-second UI budget. Existing cron
-must invoke maintenance regularly; configuration defaults do not create a timer.
+checkpoint. Maintenance Center retains its four-second UI budget. Successful public HTML visits start a private token-authenticated telemetry-only
+worker through the existing maintenance endpoint. The visitor-side attempt marker
+and worker-side database throttle/lock keep execution bounded without requiring
+external cron. Preview/media/error responses cannot start it. The worker yields
+to known or unknown central maintenance ownership and respects telemetry OFF.
+No visits means no wake-up; optional cron can supply independent opportunities.
 
 
 SQL query fingerprints have independent retention (`telemetry_database_retention_days`):

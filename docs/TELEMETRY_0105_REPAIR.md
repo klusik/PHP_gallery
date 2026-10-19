@@ -15,7 +15,8 @@ independent scheduling, bounded deletion batches and a durable daily checkpoint.
 maintenance lock and its time-window/phase checks. Thumbnail failures or a busy
 thumbnail worker therefore do not prevent a separately admitted telemetry slice.
 This is not a new daemon: the existing scheduled maintenance entrypoint still
-has to be invoked regularly. Public gallery requests do not run a retention scan.
+can be invoked externally, but successful public HTML visits also dispatch a
+private telemetry-only worker. Public gallery requests do not run a retention scan.
 Master telemetry OFF remains non-destructive.
 
 Current supported defaults in `app/configuration_defaults.php`:
@@ -40,9 +41,19 @@ checkpoint-protected phase. Its per-table cap is also 40000 rows. All phases sha
 the cooperative deadline; these counts are ceilings, not throughput guarantees.
 Maintenance Center retains its explicit four-second UI slice while inheriting
 the larger batch capacity and fair scheduling. CLI and the Telemetry action use
-the configured ten-second default. No cron daemon or production schedule is
-installed by changing these defaults: invoke existing maintenance at least every
-five minutes for the configured cadence to take effect.
+the configured ten-second default. Successful GET visits to home, gallery and smart-gallery pages trigger the same
+server maintenance entrypoint through an authenticated telemetry-only POST.
+A nonblocking filesystem lock and five-minute attempt marker prevent visitor fanout;
+the worker repeats database throttle/lock checks. The request uses the configured
+installation origin, verified HTTPS when applicable, a private token header and
+the existing one-second bounded transport. No visitor receives the token or waits
+for retention SQL. Unsupported response finishing still permits the short socket
+handoff. Failed dispatch is retried by a later visit after the interval; failed
+workers also retain their normal recovery throttle. Preview, media, HEAD, POST,
+redirect and failed-response requests do not start telemetry. Disabled telemetry
+or active/unknown central maintenance ownership prevents worker mutations.
+External cron remains optional. With no incoming traffic there is no autonomous
+wake-up: work resumes on a later suitable visit.
 
 Deadlines are checked between statements. They are not a database-side query
 cancellation guarantee. Retention ages remain the existing administrator settings.

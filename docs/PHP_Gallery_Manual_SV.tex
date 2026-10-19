@@ -2483,8 +2483,13 @@ Schemalagd telemetri får köras var femte minut, med tio sekunder per normal
 omgång och högst åtta batcher om 5000 utgångna rader per tabell (40000 rader).
 Tabeller växlar efter varje batch och den första tabellen roterar mellan omgångar.
 Den gemensamma tidsbudgeten kan begränsa framstegen. Underhållscentret behåller
-fyra sekunder per UI-steg. Befintlig cron måste anropa underhållet minst var femte
-minut; ändringen installerar ingen timer och förkortar ingen lagringstid.
+fyra sekunder per UI-steg. Lyckade offentliga besök på startsidan, gallerier och smarta gallerier skickar
+efter rendering en privat telemetriuppgift. Vid trafik tillåts arbete ungefär
+var femte minut, oberoende av miniatyrunderhållets tidsfönster. Besökaren väntar
+inte på SQL-rensning och får ingen underhållstoken. Extern cron är valfri;
+utan inkommande anrop väntar arbetet till nästa besök. Förhandsvisningar, medier
+och felsvar startar inget arbete. Avstängd telemetri, centralt underhållsanspråk
+och lagringstider respekteras fortfarande.
 
 \subsection{Körningsdiagnostik, integritet och galleriprestandatest}
 \index{k00145@Körningsdiagnostik}

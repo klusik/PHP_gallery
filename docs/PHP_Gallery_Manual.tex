@@ -2504,8 +2504,13 @@ Scheduled telemetry is~eligible every five minutes, with a~ten-second normal
 slice and~up~to~eight batches of~5000 expired rows per~table (40000 rows).
 Tables alternate by~batch and~the~first table rotates between slices. The~shared
 clock may~reduce actual progress. Maintenance Center keeps its four-second UI
-slice. Existing cron must invoke maintenance at~least every five minutes;
-changing these limits does not~install a~timer or~shorten retention ages.
+slice. Successful public visits to~home, gallery and~smart-gallery pages dispatch
+a~private telemetry worker after rendering. Shared throttling admits work about
+every five minutes when traffic exists, independently of~thumbnail windows.
+The~visitor never waits for~retention SQL and~receives no~maintenance token.
+External cron is~optional; without incoming requests, work waits for~a~later visit.
+Preview, media and~failed responses cannot trigger work. Telemetry OFF and~central
+maintenance ownership remain respected; retention ages are~unchanged.
 
 \subsection{Runtime diagnostics, integrity, and~gallery benchmark}
 \index{Runtime diagnostics}

@@ -1,5 +1,14 @@
 # Testing Guide
 
+`telemetry_visitor_http_test.php` runs a real single-worker disposable PHP server
+and the production registration/socket/controller flow. It proves public-triggered
+worker arrival, private token transport, five-minute fanout suppression, later-visit
+continuation, excluded methods/routes/preview/errors, opt-out and strict central
+ownership without real telemetry deletion. Existing recovery/database regressions
+remain the authoritative evidence for retention and archival behavior. Real hosting
+loopback/TLS availability and production traffic cadence require deployment observation.
+
+
 Telemetry recovery coverage also asserts round-robin visitation, per-table caps,
 rotation after exhausted admission and fail-closed cursor reads. The deterministic
 fixture uses smaller batches to exercise the same production loop without sleeps.

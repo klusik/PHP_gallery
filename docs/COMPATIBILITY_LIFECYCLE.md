@@ -2,6 +2,18 @@
 
 ## Telemetry storage and historical aggregates
 
+Successful public HTML visits now supply private telemetry-only worker requests
+through the existing maintenance endpoint and configured installation origin.
+The site-maintenance service owns admission, attempt throttling and shared socket
+transport; the controller owns token/method validation. Retention still belongs
+to the original telemetry worker. Single-worker HTTP regressions establish real
+handoff and security/opt-out behavior; production TLS loopback and worker-pool
+impact are unknown until deployed. External cron remains supported permanently
+for low-traffic or restricted-loopback installations. No traffic cannot create a
+PHP wake-up. Response-finishing support improves detachment; without it only the
+bounded transport remains in visitor shutdown, never the retention SQL itself.
+
+
 The telemetry rollup service now rotates a persisted allowlisted first-target
 cursor and visits independent targets in one-batch rounds. Missing or obsolete
 cursor values permanently restart the scheduling order without altering retention

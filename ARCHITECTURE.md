@@ -2296,6 +2296,19 @@ Gallery-scoped API-key create/revoke forms are also embedded in the gallery edit
 
 ## Telemetry Model
 
+The existing public request-maintenance bridge registers a telemetry-only handoff
+for successful home/gallery/smart-gallery HTML GETs. The shared socket transport
+posts to the configured installation origin with its token in a private header,
+without waiting for worker output. The visitor keeps the lightweight existing
+`site-request-trigger` closure; the separate `domain-site-maintenance` route owns
+central-claim checks, schema validation, throttling, locking and retention SQL.
+No new runtime module is introduced. Expected public route/file counts are
+unchanged; hosted preparation and runtime ratchets verify that estimate.
+Cache continuation retains its ticket and runtime-availability gates while sharing
+the same transport. Preview, asset, unsuccessful and non-GET requests do not admit
+telemetry work. External cron is optional; traffic supplies execution opportunities.
+
+
 SQL diagnostic retention is independent of usage retention (default seven days).
 The telemetry model owns atomic normalized daily replacement and historical
 compaction. The existing locked maintenance service advances a separate daily
