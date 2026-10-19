@@ -494,7 +494,8 @@ function application_autoupdate_run_installing_check_locked(bool $force = false,
             'target_version' => (string) ($status['latest_version'] ?? ''),
         ], 'background');
         // Do not combine remote discovery and package processing in one request.
-        // The next safe page request, Admin poll, or cron invocation advances the job.
+        // A successful visitor response hands the persisted job to independent
+        // authenticated worker slices. Later visits remain the recovery path.
         set_app_setting('application_autoupdate_last_result', 'job:' . (string) $job['id'] . ':' . (string) $job['stage']);
         admin_log_event('info', 'update.autoupdate_started', t('admin.updates.log_autoupdate_installed', 'Automatic application update started a resumable stable release job.'), [
             'job_id' => (string) $job['id'],

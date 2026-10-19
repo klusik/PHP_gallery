@@ -131,6 +131,20 @@ function application_update_active_job(): ?array
 }
 
 /**
+ * Observe a queued or running autonomous chain without advancing its job.
+ * @param string $jobId Active job identifier whose continuation ownership is checked.
+ * @return bool True while that job's bounded chain lease remains live; an absent, stale or different-job lease permits ordinary visitor recovery.
+ */
+function application_update_background_chain_pending(string $jobId): bool
+{
+    $record = application_update_read_json(
+        application_update_jobs_root() . '/background-chain.json'
+    );
+    return ($record['job_id'] ?? '') === $jobId
+        && (int) ($record['queued_until'] ?? 0) > time();
+}
+
+/**
  * Return the last persisted updater job used by rollback controls.
  *
  * @return array<string,mixed>|null Last job state, or null when the pointer is absent or invalid.

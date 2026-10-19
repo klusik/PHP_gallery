@@ -1141,7 +1141,7 @@ return [
     'admin.side_panel.gallery_editor_load_failed' => 'Der Galerieeditor konnte nicht geladen werden.',
     'admin.updates.autoupdate_kicker' => 'Automatische Updates',
     'admin.updates.autoupdate_enable_label' => 'Automatische stabile Updates aktivieren',
-    'admin.updates.autoupdate_hint' => 'Geeignete GET/HEAD-Anfragen können im gewählten Intervall nach stabilen Updates suchen und eine fortsetzbare Installation starten. Anfragebasierte Prüfungen benötigen Besucher; für unbeaufsichtigte Prüfungen muss der Hosting-Cron separat eingerichtet werden. Der Testlauf umgeht nur das lokale Intervall und installiert keine Dateien.',
+    'admin.updates.autoupdate_hint' => 'Nach dem gewählten Intervall prüft ein gewöhnlicher Besuch auf ein stabiles Update und setzt die Installation automatisch auf dem Server fort. Anmeldung, JavaScript und Hosting-Cron sind unnötig. Prüfungen benötigen Besucher und beachten GitHub-Wartezeiten. Der Testlauf installiert keine Dateien.',
     'admin.updates.autoupdate_interval_label' => 'Nach Updates suchen alle',
     'admin.updates.autoupdate_interval_option' => '{count} Minuten',
     'admin.updates.autoupdate_next_eligible_label' => 'Nächste mögliche Prüfung',

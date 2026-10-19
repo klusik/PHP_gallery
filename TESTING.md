@@ -538,7 +538,13 @@ disposable SQLite table derived from the migration. It covers oldest-due
 selection, partial-region fairness/cursors, retained completed observations,
 connection restart, stable row count, discovery/path reuse, legitimate size
 decreases, persistent removal receipts, passive status, opt-out and
-corrupt-checkpoint backoff. The existing required autonomous HTTP fixture shares
+corrupt-checkpoint backoff. Regional catalog offsets must never move behind
+their committed prefixes or restart an unfinished inventory identity. A global
+scheduler burst may leave one region unchanged while serving another; the
+large fixture must still finish within the original bounded opportunities and
+report exact file/byte totals. Deterministic cursor vectors reject a reset and
+admit unchanged/advanced offsets or completed frames independently of runner
+timing. The existing required autonomous HTTP fixture shares
 a real disposable registry across independent worker requests, retaining actual
 token/header/controller transport and a single public kickoff. The existing
 Chromium dashboard fixture additionally checks retained registry measurements,
@@ -4265,6 +4271,38 @@ discovery request is issued.
     traces, and exception messages must not appear.
 
 ### Configurable automatic discovery cadence (#198)
+
+`autoupdate_background_chain_test.php` uses the actual updater entry point,
+durable job storage, kernel locks and cleanup worker on a random disposable
+installation. One kickoff drains 720 private prune payloads across multiple
+single-use continuations without another visitor or browser callback. It checks
+duplicate admission, wrong/replayed/expired tokens, chain/worker contention,
+lease recovery, failed-delivery throttling, hashed token storage, installer OFF
+and manual/beta isolation. The existing interval fixture also verifies that a
+live chain prevents foreground worker execution. Transport fixtures ensure that
+private maintenance requests perform no implicit updater work before token
+validation. These fixtures are discovered by the central FULL PHP registry;
+BASIC does not execute them.
+
+`autoupdate_background_http_test.php` starts a private two-worker PHP server in
+hosted Linux CI. A single successful anonymous response launches the real
+shutdown callback, configured-origin transport, maintenance controller and
+multiple updater cleanup workers; the parent only observes durable completion.
+It separately rejects a 503 kickoff and an unauthenticated maintenance request.
+The router uses an owned temporary root and a fixture-only loader/configuration
+adapter. It does not qualify production bootstrap, TLS or release activation.
+
+On deployment, select five minutes and visit an ordinary public gallery in a
+fresh anonymous browser after the discovery boundary. Repeat with an admitted
+robot user agent. Close the browser after the single visit and confirm actual
+independent HTTP arrivals and a completed stable job. Compare with an
+authenticated gallery visit without opening Updates. A SEO-guard 503 must not
+start discovery or a chain. Inspect private
+`cache/updates/background-chain.json` for actual arrival time and redacted
+dispatch/worker failure; a socket write alone does not prove arrival. Exercise
+an unreachable configured origin and verify that later visits recover bounded
+work. Production TLS, reverse-proxy queuing and a complete release activation
+remain deployment evidence, separate from isolated cleanup-fixture success.
 
 Run `php tests/autoupdate_interval_policy_test.php`,
 `php tests/autoupdate_request_latency_safety_test.php`,

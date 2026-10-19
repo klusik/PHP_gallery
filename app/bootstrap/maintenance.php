@@ -100,7 +100,49 @@ function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
             \Gallery\Services\admin_test_run_mark('maintenance.site_maintenance_trigger.end', ['page' => $page]);
         }
     }
+    cms_register_update_background_continuation($kernel);
+}
 
+/**
+ * Hand a running automatic stable update to independent workers after a visit.
+ * @param Kernel|null $kernel Optional selective loader; full-bootstrap callers already own worker dependencies.
+ * @return void Registers one successful-response handoff, excluding CLI, manual jobs, failed responses and fatal requests.
+ */
+function cms_register_update_background_continuation(?Kernel $kernel = null): void
+{
+    if (PHP_SAPI === 'cli') {
+        return;
+    }
+    $job = \Gallery\Services\application_update_active_job();
+    if ($job === null || ($job['trigger'] ?? '') !== 'background'
+        || ($job['operation'] ?? '') !== 'stable_update'
+        || ($job['status'] ?? '') !== 'running'
+        || \Gallery\Services\application_update_background_chain_pending((string) $job['id'])) {
+        return;
+    }
+    register_shutdown_function(static function () use ($kernel): void {
+        $error = error_get_last();
+        if (response_status_code() < 200 || response_status_code() >= 400
+            || $error !== null && in_array($error['type'],
+                [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+            return;
+        }
+        try {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            ignore_user_abort(true);
+            \Gallery\Services\site_maintenance_finish_response_before_background_work();
+            $kernel?->load('updater-work');
+            \Gallery\Services\application_update_background_chain_start(
+                static fn(string $ticket): bool =>
+                    \Gallery\Services\site_maintenance_fire_background_worker(false, '', $ticket)
+            );
+        } catch (\Throwable) {
+            // Preserve the visitor response and durable job. Another admitted
+            // visit can recover a lost handoff through the bounded lease.
+        }
+    });
 }
 
 /**
@@ -109,11 +151,12 @@ function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
  * @param string $method Normalized HTTP request method.
  * @param bool $jobStatusRead Whether the query requests the existing updater status response.
  * @param string $cacheAction Scalar site-maintenance action, empty for unrelated requests.
- * @return bool True only for GET updater checkpoint reads or the three explicit POST cache transports; security checks still run at dispatch.
+ * @return bool True for private maintenance workers, GET updater checkpoint reads or explicit POST cache transports; security checks still run at dispatch.
  */
 function cms_request_owns_cache_transport(string $page, string $method, bool $jobStatusRead, string $cacheAction): bool
 {
-    return ($page === 'admin_update' && $method === 'GET' && $jobStatusRead)
+    return $page === 'site_maintenance_cron'
+        || ($page === 'admin_update' && $method === 'GET' && $jobStatusRead)
         || ($page === 'admin_site_maintenance_settings' && $method === 'POST'
             && in_array($cacheAction, ['cache_cleanup', 'cache_diagnostic', 'cache_job_stop', 'cache_inventory_start', 'cache_inventory_step', 'cache_cleanup_start', 'cache_cleanup_step'], true));
 }

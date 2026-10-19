@@ -46,3 +46,5 @@ require_once __DIR__ . '/updates_remote.php';
 require_once __DIR__ . '/update_server_policy_reconciliation.php';
 require_once __DIR__ . '/updates_filesystem.php';
 require_once __DIR__ . '/updates_jobs.php';
+// Legacy full-load consumers also receive the deferred background chain owner.
+require_once __DIR__ . '/updates_background.php';

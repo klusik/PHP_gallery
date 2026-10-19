@@ -1,5 +1,29 @@
 # Compatibility lifecycle and retirement register
 
+## Visitor-started automatic stable-update continuation
+
+Owners: request maintenance, lightweight updater job lookup, deferred updater
+background service, and the existing site-maintenance controller/transport.
+The first admitted GET/HEAD after the saved discovery interval may create a
+stable job; a successful response hands its complete installation to sequential
+authenticated HTTP workers. Anonymous visitors and admitted robots share the
+same interval as signed-in users. Rejected SEO requests exit before maintenance.
+No browser JavaScript or external scheduler is required. Existing 5/15/30/60
+minute preferences, disabled discovery, pinned beta code, stage validation,
+activation semantics and GitHub backoff remain authoritative.
+
+Request-driven continuation and optional CLI remain permanent fallbacks for
+restricted loopback, single-worker development servers, lost handoffs and
+hosting termination. A queued or executing lease lasts 120 seconds; failed
+dispatch admission retries no faster than thirty seconds. A failed worker stops
+the chain and retains the existing sixty-second visitor retry policy. No idle
+PHP process waits for a future release. One visit can complete a healthy
+installation; no traffic cannot initiate discovery of a later release.
+Registered regressions cover real multi-slice cleanup and ticket/lock/recovery
+boundaries. Production provider, TLS, host process-pool and activation timing
+remain unknown until deployment. No database schema, release assets, manual
+updater workflow or recovery data are retired.
+
 ## Explicit release-start dispatch
 
 Owners: `begin-release.mjs`, `start-new-release.mjs`, `begin-release.yml` and

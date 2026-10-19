@@ -1349,7 +1349,7 @@ Lassen Sie die Ersatzauswahl leer, um das installierte CSS zu behalten. Wählen 
 \subsubsection{Kartenorientierung und Betriebszustand}
 Vertikale Karten zeigen das Foto über dem Text, horizontale daneben. Die normale Orientierungsmigration erhält das frühere Aussehen von Einstellungen, physischen und Smart Galleries, Sidecars, importierten Metadaten und Papierkorb. Sichern Sie Datenbank, Galerien und Papierkorb gemeinsam. Beheben Sie nach Unterbrechung den gemeldeten Fehler und wiederholen Sie die Migration; Dokumentmarker verhindern doppelte Umwandlung. Neuinstallationen verwenden vertikale Karten. Alle Tags bleiben ohne JavaScript vorhanden; Aufklappen und Scrollen funktionieren auch auf Karten.
 
-Öffentliche Suche ist nur ohne gespeicherte Wahl und bei verfügbarer Funktion standardmäßig an. Updates aktualisieren Versionen, Notizen und API-Zustand gemeinsam; automatische Metadatenprüfung erfolgt höchstens stündlich, deaktivierte automatische Updates lassen alte Hintergrundaufträge pausiert. OurAirports verwendet wöchentliche Aktualität und eine Stunde Fehlerabstand. Der Papierkorb zeigt Restdauer und sichere Löschbarkeit. Auch Präsentationsschema-Probleme verlangen eine Aktion im Systemstatus.
+Öffentliche Suche ist nur ohne gespeicherte Wahl und bei verfügbarer Funktion standardmäßig an. Updates aktualisieren Versionen, Notizen und API-Zustand gemeinsam; automatische Metadatenprüfung verwendet das gespeicherte Intervall (standardmäßig fünf Minuten), vorhandene Hintergrundaufträge laufen unabhängig von neuen Prüfungen weiter. OurAirports verwendet wöchentliche Aktualität und eine Stunde Fehlerabstand. Der Papierkorb zeigt Restdauer und sichere Löschbarkeit. Auch Präsentationsschema-Probleme verlangen eine Aktion im Systemstatus.
 
 Optionales Laden aus SimBrief steht neben Flugbeginn/-abschluss; das Zahnrad
 ändert Piloten-ID oder Benutzername in einem Feld. Erst ein erfolgreicher
@@ -2765,6 +2765,21 @@ Produktionspakete & Ein portables PHP-Werkzeug für Ordner und ZIPs, positives I
 \bottomrule
 \end{longtable}
 \subsection{Anwendungsaktualisierungen}
+
+Automatische Prüfungen stabiler Versionen verwenden das gespeicherte Intervall
+von 5/15/30/60~Minuten, standardmäßig fünf Minuten. Der erste zugelassene
+Galeriebesuch nach dem Intervall kann das Update starten, auch anonym oder
+durch einen erlaubten Roboter. Nach einer erfolgreichen Antwort setzen
+unabhängige authentifizierte Serveranfragen die Installation in begrenzten
+Dreisekundenschritten bis zum Abschluss fort. Anmeldung, JavaScript, ein
+offenes Updatepanel und Hosting-Cron sind unnötig. Vom SEO-Schutz abgewiesene
+Anfragen starten diese Arbeit nicht. Die konfigurierte Installationsadresse
+muss vom Server mit gültigem TLS erreichbar sein. Verlorene Übergaben laufen
+nach 120~Sekunden ab und können durch einen späteren Besuch erneuert werden.
+GitHub-Wartezeiten und Workerfehler können den Fortschritt verzögern. Fünf
+Minuten bestimmen die Fälligkeit der Prüfung, nicht die gesamte Installationszeit;
+eine künftige Veröffentlichung benötigt weiterhin einen geeigneten Besuch.
+Siehe \filepath{docs/AUTOUPDATE.md}.
 
 Die kompakte Versionsübersicht fasst installierte und verfügbare Version, Kanal, Status und Hauptaktionen zusammen; Repository- und GitHub-API-Details bleiben in einem eingeklappten Diagnosebereich. Nach Abschluss eines Auftrags aktualisiert der Browser die Übersicht direkt aus lokalen Metadaten, hält das Panel offen und die URL unverändert und blendet eine überholte Aktion für stabile Updates aus. Dabei erfolgt keine weitere GitHub-Prüfung. Schlägt das Laden fehl, wiederholt die Schaltfläche zur Statusaktualisierung nur den lokalen Lesevorgang, ohne die Installation zu wiederholen.
 

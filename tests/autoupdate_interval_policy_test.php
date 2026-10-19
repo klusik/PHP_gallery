@@ -60,6 +60,12 @@ namespace Gallery\Services {
         return $GLOBALS['autoupdate_fixture_active_job'];
     }
 
+    /** Observe an optional live continuation lease. @param string $jobId Active identifier. @return bool Whether this fixture grants continuation ownership to a server chain. */
+    function application_update_background_chain_pending(string $jobId): bool
+    {
+        return (bool) ($GLOBALS['autoupdate_fixture_chain_pending'] ?? false);
+    }
+
     /** Observe bounded job continuation. @param float $budgetSeconds Time budget. @return array<string,mixed> Fake job state. */
     function application_update_continue_background_job(float $budgetSeconds): array
     {
@@ -174,6 +180,11 @@ namespace {
         $GLOBALS['autoupdate_fixture_active_job'] = ['id' => 'existing'];
         \Gallery\Services\application_autoupdate_maybe_run(3600, 'POST', $loader);
         autoupdate_interval_assert($GLOBALS['autoupdate_fixture_continue_budgets'] === [3.0], 'Active background jobs must continue before HTTP method/checkbox guards.');
+        $GLOBALS['autoupdate_fixture_active_job']['trigger'] = 'background';
+        $GLOBALS['autoupdate_fixture_chain_pending'] = true;
+        \Gallery\Services\application_autoupdate_maybe_run(3600, 'GET', $loader);
+        autoupdate_interval_assert($GLOBALS['autoupdate_fixture_continue_budgets'] === [3.0], 'An existing server-chain lease must keep ordinary visitor requests out of the heavy worker.');
+        $GLOBALS['autoupdate_fixture_chain_pending'] = false;
         $GLOBALS['autoupdate_fixture_active_job'] = null;
         \Gallery\Services\set_app_setting('application_autoupdate_enabled', '1');
         \Gallery\Services\set_app_setting('application_update_channel', 'beta');

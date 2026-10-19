@@ -74,6 +74,33 @@ const APPLICATION_UPDATE_STATE_RENAME_DELAY_US = 50_000;
  */
 const APPLICATION_UPDATE_GC_CHECKPOINT_MAX_BYTES = 65536;
 
+/**
+ * Bound each private worker's updater execution.
+ * Type: float. Units: seconds. Scope: one authenticated continuation request.
+ * Consumers: application_update_background_chain_run().
+ * Rationale: three seconds retains the ordinary background-worker budget and
+ *   leaves room for checkpoint persistence and the next asynchronous handoff.
+ */
+const APPLICATION_UPDATE_CHAIN_SLICE_SECONDS = 3.0;
+
+/**
+ * Recover a handed-off ticket when no worker arrival was recorded.
+ * Type: int. Units: seconds. Scope: one installation-wide queued handoff.
+ * Consumers: background chain start/run ticket admission.
+ * Rationale: 120 seconds tolerates hosting queues without permanently stalling
+ *   an update after a killed request or a lost connection.
+ */
+const APPLICATION_UPDATE_CHAIN_LEASE_SECONDS = 120;
+
+/**
+ * Throttle unavailable background transport independently of release discovery.
+ * Type: int. Units: seconds. Scope: visitor recovery after a failed handoff.
+ * Consumers: application_update_background_chain_start().
+ * Rationale: thirty seconds avoids a connection attempt on every visitor while
+ *   preserving the existing request-driven worker fallback.
+ */
+const APPLICATION_UPDATE_CHAIN_RETRY_SECONDS = 30;
+
 // This module is split into focused part files under app/services/updates_jobs/.
 // Per-request time budget and runtime limit resolution.
 require_once __DIR__ . '/updates_jobs/budget.php';

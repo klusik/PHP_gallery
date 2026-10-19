@@ -1138,18 +1138,23 @@ first-install `setup-gallery.php` bootstrap predates the application and
 therefore cannot use the authenticated updater engine; it remains a separate
 one-request bootstrap path and manual ZIP upload remains the fallback on hosts
 that terminate that initial download/extract request. When enabled, request-time
-discovery is throttled to at most once per hour per installation, while GitHub
+discovery uses the saved 5/15/30/60-minute interval (five minutes by default), while GitHub
 rate-limit responses and backoff windows are still respected. Remote version
 discovery has its own approximately eight-second wall-clock budget shared fairly
 across configured GitHub branches, and a discovery request only creates the
-durable background job; package work begins on a later invocation. Normal safe
-page requests can then advance a short background slice. A caught background
+durable background job. After a successful ordinary visit, the server hands
+that job to authenticated, single-use HTTP continuations. Each worker advances
+one bounded slice and hands off the next until the installation completes;
+neither a login nor browser JavaScript nor hosting cron is required. Admitted
+robots count as visitors; requests rejected by the SEO guard never reach this
+trigger. Five minutes determines when the next visitor can discover a release,
+not a package-download or installation deadline. A caught background
 failure waits at least 60 seconds and then goes through the same stage-aware
-retry cleanup before another worker attempt. On an idle site, schedule
-`php scripts/application_update.php` from hosting cron, for example every five
-minutes; each invocation either performs bounded discovery or advances the
-existing background job, not both. The CLI runner does not advance manual/Admin
-beta jobs. Correctness never depends on `set_time_limit()` or
+retry cleanup before another worker attempt. Lost handoffs are recovered by a
+later visit after their lease expires. Restricted loopback hosts retain bounded
+request-driven continuation. The existing optional CLI runner remains supported
+for installations that already use it. See [automatic updates](docs/AUTOUPDATE.md)
+for transport requirements, diagnostics and recovery. Correctness never depends on `set_time_limit()` or
 `ignore_user_abort()`.
 
 #### Customizing Appearance

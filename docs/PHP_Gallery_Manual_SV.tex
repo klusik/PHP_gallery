@@ -1316,7 +1316,7 @@ Lämna ersättningsvalet tomt för att behålla installerad CSS. Välj uttryckli
 \subsubsection{Kortorientering och driftstatus}
 Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanliga orienteringsmigreringen bevarar tidigare utseende i inställningar, fysiska och Smarta Gallerier, sidecars, importerade metadata och Papperskorg. Säkerhetskopiera databas, gallerier och Papperskorg tillsammans. Lös rapporterat problem efter avbrott och försök igen; dokumentmarkörer hindrar dubbel omvandling. Nyinstallationer använder vertikalt standardval. Alla taggar finns utan JavaScript; expansion och rullning fungerar även på kort.
 
-Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
+Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll använder det sparade intervallet (fem minuter som standard), och befintliga bakgrundsjobb fortsätter oberoende av nya kontroller. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
 Valfri inläsning från SimBrief finns bredvid flygstart/-avslut; kugghjulet
 ändrar pilot-ID eller användarnamn i ett fält. Identiteten sparas först efter
@@ -2717,6 +2717,20 @@ Produktionspaketering & Ett portabelt PHP-verktyg för mappar och ZIP-filer, pos
 \bottomrule
 \end{longtable}
 \subsection{Programuppdateringar}
+
+Automatiska kontroller av stabila utgåvor använder det sparade intervallet
+5/15/30/60~minuter, med fem minuter som standard. Det första tillåtna
+galleribesöket efter intervallet kan starta uppdateringen, även anonymt eller
+från en tillåten robot. Efter ett lyckat svar fortsätter fristående
+autentiserade serveranrop installationen i begränsade tresekundersdelar tills
+jobbet är klart. Inloggning, JavaScript, en öppen uppdateringspanel och
+webbhotellets cron behövs inte. Begäranden som SEO-skyddet avvisar startar inte
+arbetet. Den konfigurerade installationsadressen måste vara nåbar från servern
+med giltig TLS. Förlorade överlämningar löper ut efter 120~sekunder och kan
+återupptas vid ett senare besök. GitHubs väntetider och workerfel kan fördröja
+förloppet. Fem minuter anger när kontrollen förfaller, inte hela
+installationstiden; en framtida utgåva kräver fortfarande ett lämpligt besök.
+Se \filepath{docs/AUTOUPDATE.md}.
 
 Den kompakta versionsöversikten samlar installerad och tillgänglig version, kanal, status och huvudåtgärder; detaljer om kodförrådet och GitHub API finns kvar i ett hopfällt diagnostikavsnitt. När ett jobb slutförs uppdaterar webbläsaren översikten direkt från lokala metadata, håller panelen öppen och URL:en oförändrad och döljer en inaktuell åtgärd för stabil uppdatering. Detta gör ingen ny GitHub-kontroll. Om läsningen misslyckas kan knappen för statusuppdatering försöka läsa lokalt igen utan att upprepa installationen.
 

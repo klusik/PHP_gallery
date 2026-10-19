@@ -56,6 +56,7 @@ function assert_cache_transport(bool $condition, string $message): void
 }
 use function Gallery\Core\cms_request_owns_cache_transport;
 assert_cache_transport(cms_request_owns_cache_transport('admin_update', 'GET', true, ''), 'Passive status GET may execute background updater work.');
+assert_cache_transport(cms_request_owns_cache_transport('site_maintenance_cron', 'POST', false, ''), 'Private workers may run an implicit updater before token and single-use ticket validation.');
     foreach (['cache_cleanup', 'cache_diagnostic', 'cache_job_stop', 'cache_inventory_start', 'cache_inventory_step', 'cache_cleanup_start', 'cache_cleanup_step'] as $action) {
     assert_cache_transport(cms_request_owns_cache_transport('admin_site_maintenance_settings', 'POST', false, $action), 'Explicit cache POST may run unrelated background work before its owner.');
 }
@@ -70,6 +71,7 @@ $GLOBALS['cache_transport_method'] = 'GET';
 $_GET = ['update_job_status' => '1'];
 $_POST = [];
 \Gallery\Core\cms_run_request_maintenance('admin_update');
+\Gallery\Core\cms_run_request_maintenance('site_maintenance_cron');
 $GLOBALS['cache_transport_method'] = 'POST';
 $_GET = [];
 foreach (['cache_cleanup', 'cache_diagnostic', 'cache_job_stop'] as $action) {

@@ -2557,13 +2557,26 @@ Automatic stable updates also create `trigger=background` jobs. Discovery and
 package processing are deliberately separate invocations, so a slow metadata
 probe cannot be followed by a second long package slice in the same request.
 Safe normal page requests may advance a small slice through
-`application_autoupdate_maybe_run()`. Caught background failures wait at least
+`application_autoupdate_maybe_run()`. After a successful visit the Core maintenance
+boundary registers a shutdown handoff for a running automatic stable job.
+The deferred `updates_background.php` owner holds single-use hashed tickets and a
+nonblocking installation-wide chain lock. The existing configured-origin
+maintenance transport carries each ticket under its private token; the
+controller validates both before loading the worker. Each independent request
+advances three seconds of normal checkpoint work and dispatches its successor
+without waiting for the successor's response. No idle timer or browser poll is
+needed. A live chain lease keeps other visitors out of heavy updater work.
+Private maintenance requests bypass all implicit request maintenance before
+authentication. Manual jobs, beta operations, blocked SEO requests and failed
+visitor responses cannot start this chain. Caught background failures wait at least
 60 seconds, then pass through `application_update_retry_job()` so package-stage
 failures discard untrusted partial artifacts before another worker attempt.
 `scripts/application_update.php` provides a bounded CLI cron runner for idle
 sites. Unattended background runners refuse to advance Admin/manual jobs,
 including beta installs. A true long-lived background worker is not assumed on
 shared hosting.
+See [automatic update operation](docs/AUTOUPDATE.md) for lease recovery,
+configured-origin TLS requirements and retained request/CLI fallbacks.
 
 **Automatic discovery cadence (issue #198).** Admin > Updates > Automatic
 updates

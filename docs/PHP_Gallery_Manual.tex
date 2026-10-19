@@ -1319,7 +1319,7 @@ Keep the~installed custom stylesheet by~leaving replacement empty. Explicitly ch
 \subsubsection{Card orientation and~operational status}
 Vertical cards place the~photograph above the~description; horizontal cards place it~beside the~description. The~normal orientation migration preserves existing appearance across saved settings, physical and~Smart Galleries, sidecars, imported metadata, and~Trash. Back up~the~database, galleries, and~Trash together. If~conversion is~interrupted, resolve the~reported problem and~retry; document markers prevent double conversion. Fresh installations keep the~vertical default. Tags remain complete without JavaScript; browser expansion and~scrolling also work on~gallery cards.
 
-Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
+Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks use the~saved interval (five minutes by~default), and~existing background jobs continue independently of~new discovery. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
 
 Optional SimBrief loading sits beside Begin/Finish flight, with an adjacent
 identity gear. Enter one pilot ID or username; only a successful OFP fetch saves
@@ -2739,6 +2739,18 @@ Production packaging & One portable PHP folder/ZIP builder, positive inventory, 
 \end{longtable}
 
 \subsection{Application updates}
+
+Automatic stable checks use the~saved 5/15/30/60-minute interval, defaulting
+to~five minutes. The~first admitted gallery visit after the~interval, including
+an~anonymous visitor or~allowed robot, can~start the~update. After a~successful
+response, independent authenticated server requests continue three-second
+worker slices until completion. Login, JavaScript, an~open Updates panel
+and~hosting cron are~unnecessary. Blocked SEO requests do~not~start this work.
+The~configured installation URL must be~reachable from~the~server with valid
+TLS. Lost handoffs expire after 120 seconds; later visits recover them.
+GitHub backoff and~worker failures may~delay progress. Five minutes controls
+discovery eligibility, not~total installation time; a~future release still
+needs an~eligible visit. See~\filepath{docs/AUTOUPDATE.md}.
 
 The~compact release summary keeps installed and~available versions, channel, status, and~the~main actions together; repository and~GitHub API details remain in~a~collapsed diagnostics section. When a~job completes, the~browser refreshes the~summary from~local metadata in~place, keeps the~panel open and~the~URL unchanged, and~hides an~obsolete stable-update action. This refresh does~not~perform another GitHub check. If~it~fails, use the~status-refresh button to~retry the~local read without repeating the~installation.
 

@@ -900,18 +900,35 @@ function site_maintenance_fire_cache_chain(string $ticket): bool
 }
 
 /**
- * Dispatch cache continuation or telemetry to the configured private worker.
+ * Dispatch cache, telemetry or updater continuation to the configured private worker.
  *
  * The visitor sends only a bounded handoff; it never waits for maintenance SQL.
- * @param bool $telemetryOnly True for telemetry admission; false for a cache ticket.
- * @param string $ticket Private cache continuation ticket; empty for telemetry.
+ * @param bool $telemetryOnly True for telemetry admission; false for cache/updater tickets.
+ * @param string $ticket Private cache continuation ticket; empty for other worker modes.
+ * @param string $updateTicket Private updater continuation ticket; empty for other worker modes.
  * @return bool True after the complete authenticated POST is written; not proof of worker arrival.
  */
-function site_maintenance_fire_background_worker(bool $telemetryOnly, string $ticket = ''): bool
+function site_maintenance_fire_background_worker(
+    bool $telemetryOnly,
+    string $ticket = '',
+    string $updateTicket = ''
+): bool
 {
+    $updaterOnly = $updateTicket !== '';
     if (!function_exists('stream_socket_client')
-        || ($telemetryOnly ? $ticket !== '' : preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1)) {
+        || ($updaterOnly
+            ? $telemetryOnly || $ticket !== '' || preg_match('/^[a-f0-9]{64}$/D', $updateTicket) !== 1
+            : ($telemetryOnly ? $ticket !== '' : preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1))) {
         return false;
+    }
+    // Keep the existing single-worker protection for autonomous updater hops.
+    // Permanent fallback: ordinary admitted visits still advance the job when
+    // the built-in server cannot serve an independent HTTP request safely.
+    if ($updaterOnly) {
+        require_once __DIR__ . '/cache_lifecycle_storage.php';
+        if (!cache_lifecycle_chain_runtime_available()) {
+            return false;
+        }
     }
     // Use the persisted installation origin, never an incoming Host header or
     // a caller-selected URL, so a public visit cannot redirect the secret.
@@ -923,8 +940,9 @@ function site_maintenance_fire_background_worker(bool $telemetryOnly, string $ti
     $host = (string) $parts['host'];
     $port = (int) ($parts['port'] ?? ($parts['scheme'] === 'https' ? 443 : 80));
     if ($port < 1 || $port > 65535) return false;
-    $payload = $telemetryOnly ? ['telemetry_only' => 1]
-        : ['cache_only' => 1, 'cache_ticket' => $ticket];
+    $payload = $updaterOnly ? ['update_ticket' => $updateTicket]
+        : ($telemetryOnly ? ['telemetry_only' => 1]
+            : ['cache_only' => 1, 'cache_ticket' => $ticket]);
     $body = http_build_query($payload, '', '&', PHP_QUERY_RFC3986);
     $target = rtrim((string) ($parts['path'] ?? ''), '/') . '/index.php?page=site_maintenance_cron';
     $hostHeader = $host . (
@@ -950,7 +968,8 @@ function site_maintenance_fire_background_worker(bool $telemetryOnly, string $ti
     if (!is_resource($socket)) return false;
     try {
         stream_set_timeout($socket, $transportSeconds);
-        $agent = $telemetryOnly ? 'PHP-Gallery-Telemetry-Worker' : 'PHP-Gallery-Cache-Worker';
+        $agent = $updaterOnly ? 'PHP-Gallery-Update-Worker'
+            : ($telemetryOnly ? 'PHP-Gallery-Telemetry-Worker' : 'PHP-Gallery-Cache-Worker');
         $request = 'POST ' . $target . " HTTP/1.1\r\nHost: " . $hostHeader
             . "\r\nX-Site-Maintenance-Token: " . site_maintenance_token()
             . "\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: " . strlen($body)

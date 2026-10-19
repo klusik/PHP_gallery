@@ -1311,7 +1311,7 @@ Ponechte výběr náhrady prázdný, chcete-li zachovat nainstalované CSS. Pro 
 \subsubsection{Orientace karet a provozní stav}
 Svislá karta má fotografii nad popisem, vodorovná vedle popisu. Běžná migrace orientace zachovává dosavadní vzhled uložených nastavení, fyzických i chytrých galerií, sidecar souborů, importovaných metadat a Koše. Zálohujte databázi, galerie a Koš společně. Po přerušení odstraňte hlášený problém a opakujte migraci; značky dokumentů brání dvojímu převodu. Nová instalace používá svislou výchozí kartu. Všechny štítky zůstávají dostupné bez JavaScriptu; rozbalování a posouvání funguje i na kartách.
 
-Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat je nejvýše hodinová a vypnuté automatické aktualizace ponechávají starší úlohy pozastavené. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
+Veřejné hledání je výchozím způsobem zapnuté jen bez uložené preference a při dostupné funkci. Aktualizace společně obnovují verze, poznámky a stav API; automatická kontrola metadat používá uložený interval (výchozí je~pět minut) a~stávající úlohy pokračují nezávisle na~novém vyhledávání. OurAirports používá týdenní obnovu a hodinový odstup po chybě. Koš ukazuje zbývající dobu a bezpečnou možnost trvalého odstranění. Také problémy prezentačního schématu vyžadují akci ve Zdraví systému.
 
 Volitelné načtení ze SimBriefu je vedle zahájení/dokončení letu; ozubené
 kolečko mění ID pilota nebo uživatelské jméno v jediném poli. Identita se uloží
@@ -2710,6 +2710,19 @@ Produkční balení & Jeden přenositelný nástroj PHP pro adresáře a~ZIPy, p
 \bottomrule
 \end{longtable}
 \subsection{Aktualizace aplikace}
+
+Automatická kontrola stabilních vydání používá uložený interval
+5/15/30/60~minut, výchozí je~pět minut. První povolená návštěva galerie
+po~uplynutí intervalu může zahájit aktualizaci, včetně nepřihlášeného
+návštěvníka či~povoleného robota. Po~úspěšné odpovědi pokračují samostatné
+autentizované serverové požadavky v~třísekundových částech až~do~dokončení.
+Není potřeba přihlášení, JavaScript, otevřený panel aktualizací ani hostingový
+cron. Požadavky odmítnuté SEO ochranou tuto práci nespouštějí.
+Nastavená adresa instalace musí být ze~serveru dostupná s~platným TLS.
+Ztracené předání vyprší po~120~sekundách a~další návštěva je~může obnovit.
+Čekání na~GitHub a~selhání workeru mohou postup odložit. Pět minut určuje
+splatnost kontroly, nikoli celkovou délku instalace; nové budoucí vydání
+stále potřebuje vhodnou návštěvu. Viz~\filepath{docs/AUTOUPDATE.md}.
 
 Kompaktní přehled vydání sdružuje nainstalovanou a~dostupnou verzi, kanál, stav a~hlavní akce; podrobnosti repozitáře a~GitHub API zůstávají ve sbalené diagnostické sekci. Po dokončení úlohy prohlížeč obnoví přehled z~místních metadat přímo na místě, ponechá panel otevřený a~URL beze změny a~skryje již neaktuální akci stabilní aktualizace. Obnova neprovádí další kontrolu GitHubu. Pokud selže, tlačítkem obnovení stavu zopakujte místní načtení bez opakování instalace.
 
