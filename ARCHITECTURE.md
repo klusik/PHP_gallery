@@ -2296,6 +2296,14 @@ Gallery-scoped API-key create/revoke forms are also embedded in the gallery edit
 
 ## Telemetry Model
 
+SQL diagnostic retention is independent of usage retention (default seven days).
+The telemetry model owns atomic normalized daily replacement and historical
+compaction. The existing locked maintenance service advances a separate daily
+compaction cursor only after successful commit. Composite UNIQUE keys preserve
+logical aggregate identity while short physical primary keys reduce secondary
+index replication. See DATABASE.md for upgrade and storage-reclamation limits.
+
+
 Telemetry is opt-in/configurable and anonymized. It is implemented by:
 
 ```text

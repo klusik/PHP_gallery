@@ -2510,6 +2510,17 @@ Der optionale Bereich \ui{Telemetrie} erfasst datenschutzkontrollierte Betriebsm
 
 Das Telemetriesystem ist so ausgelegt, dass es keine unverarbeiteten IP-Adressen, Browser-User-Agent-Zeichenfolgen, Referrer-URLs, Namen, E-Mail-Adressen, Kontokennungen, Anfrageinhalte oder genauen Besucherorte speichert. Exporte enthalten aggregierte anonyme Telemetrie und Sitzungshashes statt ursprünglicher Besucherkennungen. Wartung aggregiert und bereinigt Telemetrie gemäß konfigurierter Aufbewahrungsrichtlinie; die Administrationsansicht kann einen eigenständigen HTML-Bericht zur Offline-Prüfung exportieren. Prüfen Sie Datenschutzsteuerungen vor Aktivierung der Erfassung auf einer öffentlichen Website.
 
+Die SQL-Diagnostik hat eine eigene Aufbewahrung: standardmäßig sieben Tage,
+einstellbar von einem bis 90 Tagen. Die stündliche und tägliche Nutzungshistorie
+bleibt unabhängig. Die Wartung verdichtet ältere Tagessummen tageweise und erhält
+Anzahlen, Zeiten, Fotoidentität und Bot-Segmente. Browser, Betriebssystem,
+Viewport, Land und Verweisquelle werden bei bekannten Tagesmetriken neutralisiert;
+die Browserverteilung stammt weiterhin aus Sitzungen. Unbekannte Metriken behalten
+ihre Dimensionen. Die Migration erhält Messwerte und baut Aggregatindizes mit
+kurzen physischen Schlüsseln neu auf; temporären Speicherplatz und ein DDL-Fenster
+einplanen. Gelöschte Seiten werden wiederverwendbar; die zugewiesene Größe kann
+eine manuelle physische Optimierung erfordern. Die Ersparnis hängt von den Daten ab.
+
 \subsection{Laufzeitdiagnose, Integrität und Galeriebenchmark}
 \index{l00160@Laufzeitdiagnose}
 \index{i00151@Integritätsprüfung}

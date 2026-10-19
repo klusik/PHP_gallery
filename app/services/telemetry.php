@@ -904,7 +904,7 @@ function telemetry_report_table_count(string $tableName): int
  * prediction.
  *
  * @param int $reportDays Selected report window in days.
- * @return array<string,mixed> Storage, retention, and hourly metric cardinality diagnostics.
+ * @return array{available:bool,recent_days:int,report_days:int,hourly_retention_days:int,daily_retention_days:int,aggregate_source_state:string,tables:list<array{table_name:string,exact_rows:int,recent_rows:int,overdue_rows:int,oldest_row:?string,newest_row:?string,data_bytes:int,index_bytes:int,total_bytes:int,retention_days:int,approx_rows_per_day:float}>,hourly_metric_cardinality:list<array{metric_name:string,row_count:int|string,route_cardinality:int|string,page_kind_cardinality:int|string,gallery_cardinality:int|string,image_cardinality:int|string,browser_cardinality:int|string,os_cardinality:int|string,device_cardinality:int|string,viewport_cardinality:int|string,referrer_cardinality:int|string,media_variant_cardinality:int|string,cache_cardinality:int|string}>} Storage evidence or unavailable state with empty collections.
  */
 function telemetry_report_storage_diagnostics(int $reportDays = 30): array
 {
@@ -915,7 +915,7 @@ function telemetry_report_storage_diagnostics(int $reportDays = 30): array
         'telemetry_sessions' => telemetry_retention_days('telemetry_session_retention_days', 30, 1, 365),
         'telemetry_hourly_metrics' => telemetry_retention_days('telemetry_hourly_retention_days', 90, 7, 730),
         'telemetry_daily_metrics' => telemetry_retention_days('telemetry_daily_retention_days', 730, 30, 3650),
-        'telemetry_db_query_metrics' => telemetry_retention_days('telemetry_hourly_retention_days', 90, 7, 730),
+        'telemetry_db_query_metrics' => telemetry_database_retention_days(),
         'telemetry_job_runs' => 180,
     ];
     try {

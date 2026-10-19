@@ -1,5 +1,19 @@
 # Compatibility lifecycle and retirement register
 
+## Telemetry storage and historical aggregates
+
+Owners: telemetry settings/rollup services, telemetry model and
+`202610190001_telemetry_compact_indexes.php`. Missing independent SQL retention
+permanently supports pre-seed installations with the documented seven-day default;
+unknown reads never authorize purge. Existing administrator hourly/daily choices
+are preserved. Unknown metric families retain their dimensions permanently until
+an explicit reporting contract permits normalization. No measurement totals,
+photo identity or bot segmentation are retired. Historical daily compaction does
+not reconstruct from partially purged hourly data. Production savings and DDL
+lock duration are unknown until deployed. Hosted regressions cover populated
+migration replay, logical uniqueness, archival/compaction idempotence, historical
+source independence and rollback on a real constraint failure.
+
 ## Optional WinApp dispatch and maps (0.6.0)
 
 Owners: `flight_simbrief.py`, `flight_navdata.py`, `flight_maps.py`,

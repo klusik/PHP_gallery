@@ -1307,4 +1307,9 @@ return [
     'presentation.autoplay_short' => 'Autoplay',
     'presentation.interval_short' => 'Střídání',
     'presentation.transition_short' => 'Přechod',
+    'admin.telemetry.database_retention' => 'Uchování databázové diagnostiky, dny',
+    'admin.telemetry.database_retention_hint' => 'Otisky SQL dotazů slouží ke krátkodobé diagnostice. Tato samostatná retence nezkracuje historii návštěvnosti.',
+    'admin.settings.item.telemetry_database_retention_days' => 'Uchování databázové telemetrie',
+    'admin.settings.item.telemetry_database_retention_days.hint' => 'Počet dnů uchování otisků SQL dotazů nezávisle na statistikách návštěvnosti.',
+    'admin.settings.item.telemetry_database_retention_days.example' => 'Příklad: SQL diagnostiku uchovávejte 7 dnů a hodinovou návštěvnost 90 dnů.',
 ];

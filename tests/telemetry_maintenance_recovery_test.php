@@ -95,6 +95,12 @@ namespace Gallery\Services {
      */
     function telemetry_retention_days(string $key, int $fallback, int $min, int $max): int { return $fallback; }
     /**
+     * Supply independent diagnostic retention for maintenance orchestration.
+     * @param bool $strict Whether maintenance requires conclusive reads.
+     * @return int The fixture's seven-day SQL diagnostic retention.
+     */
+    function telemetry_database_retention_days(bool $strict = false): int { return 7; }
+    /**
      * Accept operational logging without a live database.
      * @param scalar|array<array-key,mixed>|object|resource|null $args Arguments accepted for interface compatibility; unused by this fixture.
      * @return void No return value; effects are recorded in the owned state.
@@ -162,6 +168,27 @@ namespace Gallery\Models {
      */
     function telemetry_maintenance_model_finish_job(int $id, string $status, string $now, int $ms, int $items, ?string $error): void {
         $GLOBALS['tm']['jobs'][$id - 1] = ['status' => $status, 'error' => $error];
+    }
+    /**
+     * Select the next historical partition using the independent cursor.
+     * @param ?string $after Exclusive previously compacted date.
+     * @param string $before Exclusive stable-day boundary.
+     * @return ?string Next date or null when no partition remains.
+     */
+    function telemetry_model_next_daily_compaction_day(?string $after, string $before): ?string {
+        foreach (array_keys($GLOBALS['tm']['daily']) as $day) {
+            if ($day < $before && ($after === null || $day > $after)) { return $day; }
+        }
+        return null;
+    }
+    /**
+     * Record compaction and inject a failure before cursor publication.
+     * @param string $day Selected stable date.
+     * @return void Records the day or throws the injected failure.
+     */
+    function telemetry_model_compact_daily(string $day): void {
+        if (!empty($GLOBALS['tm']['compact_failure'])) { throw new \RuntimeException('fixture compaction failure'); }
+        $GLOBALS['tm']['compacted'][] = $day;
     }
     /**
      * Simulate replace-style daily rollup so partial-hour replay would be observable.
@@ -263,6 +290,14 @@ namespace {
     tm_assert($GLOBALS['tm']['daily'][$next] === 3, 'Partial hourly deletion must NEVER overwrite a full daily total on resume.');
     tm_assert($GLOBALS['tm']['daily'][$yesterday] === 9, 'Yesterday must be refreshed for late accepted events.');
     tm_assert(telemetry_rollup_checkpoint() === $yesterday, 'Yesterday is refreshable, not permanently closed.');
+    $beforeCompactionFailure = $GLOBALS['tm'];
+    unset($GLOBALS['tm']['settings']['telemetry_daily_compact_after']);
+    $GLOBALS['tm']['compact_failure'] = true;
+    $compactFailure = telemetry_run_maintenance();
+    tm_assert(!$compactFailure['ok']
+        && !isset($GLOBALS['tm']['settings']['telemetry_daily_compact_after']),
+        'Failed compaction cannot publish a completed partition cursor.');
+    $GLOBALS['tm'] = $beforeCompactionFailure;
     $jobs = count($GLOBALS['tm']['jobs']);
     tm_assert(telemetry_run_scheduled_maintenance()['reason'] === 'not_due' && count($GLOBALS['tm']['jobs']) === $jobs, 'Scheduled runs must recheck the independent throttle under lock.');
     tm_assert(!$GLOBALS['tm']['locked'], 'Throttled invocation must release the lock.');

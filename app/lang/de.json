@@ -7624,5 +7624,10 @@
     "presentation.exclusive_help": "Bedienelemente ausblenden. Mit Esc beenden.",
     "presentation.autoplay_short": "Autostart",
     "presentation.interval_short": "Fotos",
-    "presentation.transition_short": "Übergang"
+    "presentation.transition_short": "Übergang",
+    "admin.telemetry.database_retention": "Aufbewahrung der Datenbankdiagnose, Tage",
+    "admin.telemetry.database_retention_hint": "SQL-Abfragefingerabdrücke dienen der kurzfristigen Diagnose. Diese separate Aufbewahrung verkürzt den Nutzungsverlauf nicht.",
+    "admin.settings.item.telemetry_database_retention_days": "Aufbewahrung der Datenbanktelemetrie",
+    "admin.settings.item.telemetry_database_retention_days.hint": "Aufbewahrungsdauer für SQL-Abfragefingerabdrücke unabhängig von Nutzungsstatistiken.",
+    "admin.settings.item.telemetry_database_retention_days.example": "Beispiel: SQL-Diagnosen 7 Tage und stündliche Nutzungsdaten 90 Tage aufbewahren."
 }

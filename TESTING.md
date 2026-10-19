@@ -1,5 +1,16 @@
 # Testing Guide
 
+Telemetry storage regressions include independent SQL retention and strict failed
+reads (`telemetry_database_retention_test.php`), compaction cursor recovery in
+`telemetry_maintenance_recovery_test.php`, and populated migration replay, preserved
+UNIQUE identity, normalized measurements, expired hourly source and transaction
+rollback in `telemetry_storage_compaction_database_test.php`. The latter is a
+required real-engine result in hosted database FULL owners; it uses private
+temporary tables and validates the disposable fixture before connecting.
+Production migration duration, physical storage savings and live Admin layout
+remain separate deployment/manual observations.
+
+
 WinApp 0.6.0 dispatch regressions cover pilot identity classification, invalid
 provider responses, optional session snapshots, archived JSON/XML imports,
 AIRAC-scoped ambiguous-fix retention and offline dateline map rendering.

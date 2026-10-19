@@ -2463,6 +2463,17 @@ Volitelná oblast \ui{Telemetrie} zaznamenává provozní měření s~řízeným
 
 Subsystém telemetrie je navržen tak, aby neukládal nezpracované adresy IP, řetězce user-agent prohlížečů, URL odkazujících stránek, jména, e-mailové adresy, identifikátory účtů, těla požadavků ani přesné polohy návštěvníků. Exporty obsahují souhrnnou anonymní telemetrii a~hashe relací místo nezpracovaných identifikátorů návštěvníků. Údržba shrnuje a~maže telemetrii podle nastavených pravidel uchování a~obrazovka administrace může exportovat samostatnou zprávu HTML pro offline kontrolu. Před povolením sběru na veřejném webu zkontrolujte ovládání soukromí.
 
+Databázová diagnostika má samostatné uchování: výchozích sedm dnů, nastavitelné
+od jednoho do 90 dnů. Nezkracuje hodinovou ani denní historii návštěvnosti.
+Údržba slučuje starší denní souhrny po jednom dni a~zachovává počty, časy,
+identitu fotografií a~rozlišení botů. U~známých denních metrik sjednocuje údaje
+o~prohlížeči, systému, viewportu, zemi a~zdroji návštěvy; zastoupení prohlížečů
+nadále vychází z~relací. Neznámé metriky si ponechávají všechny dimenze.
+Databázová migrace zachovává měření a~přestaví indexy agregací kolem krátkých
+fyzických klíčů; počítejte s~dočasným místem na disku a~oknem pro změnu schématu.
+Smazané stránky se uvolní pro další použití; pokles přidělené velikosti databáze
+může vyžadovat ruční fyzickou optimalizaci. Úspora závisí na uložených datech.
+
 \subsection{Diagnostika běhového prostředí, integrita a~měření galerie}
 \index{d00029@diagnostika běhového prostředí}
 \index{k00067@kontrola integrity}

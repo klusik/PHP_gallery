@@ -90,10 +90,11 @@ try {
             && is_file(dirname(__DIR__) . '/' . $logPath), 'Central regression evidence missing.');
         $requiredTests = ['database_engine_contract_test.php'];
         if ($profile !== 'quick') {
-            // These fourteen PHP fixtures returned PASS in all three real DB jobs
-            // of the exact-SHA hosted baseline 38143567033. A report-level PASS
+            // Retain the established real-database fixtures and the telemetry
+            // populated-upgrade regression. A report-level PASS
             // can otherwise conceal a required per-file SKIP.
             $requiredTests = array_merge($requiredTests, [
+                'telemetry_storage_compaction_database_test.php',
                 'installer_first_install_test.php',
                 'gallery_workflow_integration_test.php',
                 'public_visual_preview_workflow_test.php',

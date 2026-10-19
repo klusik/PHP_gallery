@@ -2468,6 +2468,17 @@ Det valfria området \ui{Telemetri} registrerar integritetskontrollerade driftm�
 
 Telemetridelsystemet är utformat för att inte lagra råa IP-adresser, råa user-agent-strängar från webbläsare, råa hänvisnings-URL:er, namn, e-postadresser, kontoidentifierare, begärandekroppar eller exakta besökarplatser. Exporter innehåller sammanställd anonym telemetri och sessionshashar i stället för råa besökaridentifierare. Underhåll sammanställer och rensar telemetri enligt konfigurerad lagringspolicy, och administrationsskärmen kan exportera en fristående HTML-rapport för offline-granskning. Granska integritetskontrollerna innan du aktiverar insamling på en offentlig webbplats.
 
+SQL-diagnostik har en egen lagringstid: sju dagar som standard, inställbart
+från en till 90 dagar. Timvis och daglig användningshistorik förblir oberoende.
+Underhåll slår samman äldre dagssummor en dag i taget och bevarar antal, tider,
+fotografiidentitet och botsegment. Webbläsare, operativsystem, visningsyta, land
+och hänvisningskälla neutraliseras för kända dagsmått; webbläsarfördelning hämtas
+fortfarande från sessioner. Okända mått behåller sina dimensioner. Migreringen
+bevarar mätvärden och bygger om aggregatindex med korta fysiska nycklar; planera
+för tillfälligt diskutrymme och ett DDL-underhållsfönster. Raderade sidor kan
+återanvändas; allokerad databasstorlek kan kräva manuell fysisk optimering.
+Besparingen beror på lagrade data.
+
 \subsection{Körningsdiagnostik, integritet och galleriprestandatest}
 \index{k00145@Körningsdiagnostik}
 \index{i00128@integritetskontroll}

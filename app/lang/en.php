@@ -1312,4 +1312,9 @@ return [
     'presentation.autoplay_short' => 'Autoplay',
     'presentation.interval_short' => 'Photos',
     'presentation.transition_short' => 'Transition',
+    'admin.telemetry.database_retention' => 'Database diagnostic retention, days',
+    'admin.telemetry.database_retention_hint' => 'SQL query fingerprints are short-lived diagnostics. This independent retention does not shorten usage history.',
+    'admin.settings.item.telemetry_database_retention_days' => 'Database telemetry retention',
+    'admin.settings.item.telemetry_database_retention_days.hint' => 'Days to retain SQL query fingerprints independently of usage statistics.',
+    'admin.settings.item.telemetry_database_retention_days.example' => 'Example: Keep SQL diagnostics for 7 days while retaining hourly usage for 90 days.',
 ];

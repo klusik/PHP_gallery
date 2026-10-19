@@ -1100,6 +1100,39 @@ telemetry fields.
 
 Tracks telemetry maintenance and rollup jobs.
 
+### Telemetry storage lifecycle
+
+SQL query fingerprints have independent retention (`telemetry_database_retention_days`):
+seven days by default, configurable from one to 90 days. Upgrades seed this new
+setting without overwriting an explicit value. Missing pre-migration settings use
+the same default; unavailable or invalid settings stop destructive maintenance.
+Hourly (90-day default), daily (730-day default), raw-event and session retention
+remain independent. Database diagnostic reports cover only their retained window.
+
+Telemetry hourly, daily and SQL aggregates use an unsigned BIGINT physical primary
+key and retain their original composite identity as a UNIQUE key. Secondary
+indexes therefore reference the short physical identity. The migration rebuilds
+these three tables and preserves measurements; allow temporary disk space and a
+DDL maintenance window on large installations. Interrupted multi-table upgrades
+replay through the existing duplicate-DDL migration handler.
+
+Daily archival neutralizes browser, OS, viewport, country and referrer dimensions
+for known metric families; current reports obtain browser mixes from sessions.
+It preserves photo/gallery identities, routes, media/cache breakdowns, traffic
+segments, counts, sums and extrema. Unknown metric families retain all dimensions.
+A durable `telemetry_daily_compact_after` cursor compacts historical daily data
+one date per transaction, including dates whose hourly source has expired.
+Existing maintenance day/time budgets bound admission; one SQL statement may
+outlast the PHP admission deadline. A failed date never advances its cursor.
+Archival replaces complete daily windows transactionally, preventing stale legacy
+keys from duplicating totals on refresh. Compaction uses connection-private
+InnoDB temporary storage and does not change the hourly archival checkpoint.
+
+Logical deletion makes InnoDB pages reusable; it does not promise an immediate
+reduction in the hosting provider's allocated-size estimate. Physical database
+optimization remains an explicit administrator operation. Production savings and
+lock duration must be measured after deployment; no fixed saving is guaranteed.
+
 ### Telemetry storage diagnostics
 
 The authenticated telemetry export may query `information_schema.tables` for the

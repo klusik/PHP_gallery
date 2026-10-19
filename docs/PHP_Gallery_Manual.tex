@@ -2489,6 +2489,17 @@ The~optional \ui{Telemetry} area records privacy-controlled operational measurem
 
 The~telemetry subsystem is~designed not~to~store raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or~exact visitor locations. Exports contain aggregated anonymous telemetry and~session hashes rather than~raw visitor identifiers. Maintenance rolls up~and~purges telemetry according to~the~configured retention policy, and~the~Admin screen can~export a~standalone HTML report for~offline review. Review the~privacy controls before enabling collection on~a~public site.
 
+SQL diagnostics have their own retention: seven days by~default, configurable
+from one to~90 days. This does not~shorten hourly or~daily usage history.
+Maintenance compacts historical daily summaries one day at~a~time while preserving
+counts, durations, photo identity and~bot segments. Browser, OS, viewport, country
+and~referrer details are~neutralized for~known daily metric families; browser mixes
+continue to~come from sessions. Unknown metrics retain their dimensions.
+The~database migration preserves measurements and~rebuilds aggregate indexes
+around short physical keys; plan temporary disk space and~a~DDL maintenance
+window. Deleted data pages become reusable; allocated database size may~require
+manual physical optimization. Actual savings depend on~the~stored data.
+
 \subsection{Runtime diagnostics, integrity, and~gallery benchmark}
 \index{Runtime diagnostics}
 \index{integrity checking}

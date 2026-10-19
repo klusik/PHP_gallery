@@ -36,6 +36,27 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+/**
+ * Keep SQL fingerprints as short-lived technical diagnostics.
+ * Type: integer.
+ * Units: days.
+ * Scope: default for this installation's database telemetry only.
+ * Consumers: settings, storage diagnostics and retention maintenance.
+ * Rationale: seven days supports recent diagnosis without a 90-day SQL archive.
+ */
+const TELEMETRY_DATABASE_RETENTION_DEFAULT_DAYS = 7;
+
+/**
+ * Bound configurable SQL diagnostic history independently of usage history.
+ * Type: integer.
+ * Units: days.
+ * Scope: SQL diagnostic settings validation and maintenance.
+ * Consumers: the telemetry preference form and strict retention reader.
+ * Rationale: 90 days is the supported ceiling for this short-term diagnostic store.
+ */
+const TELEMETRY_DATABASE_RETENTION_MAX_DAYS = 90;
+
+
 const TELEMETRY_SEMANTICS_VERSION = '2';
 const TELEMETRY_SEMANTICS_VERSION_KEY = 'telemetry_semantics_version';
 const TELEMETRY_SEMANTICS_EFFECTIVE_AT_KEY = 'telemetry_semantics_v2_effective_at';
@@ -153,6 +174,15 @@ function telemetry_admin_editable_setting_definitions(): array
         'telemetry_max_photo_view_seconds' => ['input_type' => 'number', 'default' => '900', 'validation' => ['min' => 10, 'max' => 3600, 'step' => 1]],
         'telemetry_raw_retention_days' => ['input_type' => 'number', 'default' => '7', 'validation' => ['min' => 1, 'max' => 90, 'step' => 1]],
         'telemetry_hourly_retention_days' => ['input_type' => 'number', 'default' => '90', 'validation' => ['min' => 7, 'max' => 730, 'step' => 1]],
+        'telemetry_database_retention_days' => [
+            'input_type' => 'number',
+            'default' => (string) TELEMETRY_DATABASE_RETENTION_DEFAULT_DAYS,
+            'validation' => [
+                'min' => 1,
+                'max' => TELEMETRY_DATABASE_RETENTION_MAX_DAYS,
+                'step' => 1,
+            ],
+        ],
         'telemetry_daily_retention_days' => ['input_type' => 'number', 'default' => '730', 'validation' => ['min' => 30, 'max' => 3650, 'step' => 1]],
     ];
 }
@@ -342,4 +372,32 @@ function telemetry_ensure_current_semantics_marker(): void
     } catch (Throwable) {
         // The event ingestion path deliberately continues without the marker.
     }
+}
+
+/**
+ * Resolve independent SQL diagnostic retention without hiding maintenance errors.
+ *
+ * Missing settings permanently support upgrades before the seed migration.
+ * Strict maintenance propagates read failures so they cannot authorize deletion.
+ * @param bool $strict Whether a database read failure must stop maintenance.
+ * @return int Retention in days, bounded to the supported one-to-90-day interval.
+ */
+function telemetry_database_retention_days(bool $strict = false): int
+{
+    if (!$strict) {
+        return telemetry_retention_days(
+            'telemetry_database_retention_days',
+            TELEMETRY_DATABASE_RETENTION_DEFAULT_DAYS,
+            1,
+            TELEMETRY_DATABASE_RETENTION_MAX_DAYS
+        );
+    }
+    $value = telemetry_model_setting('telemetry_database_retention_days');
+    if ($value === false) {
+        return TELEMETRY_DATABASE_RETENTION_DEFAULT_DAYS;
+    }
+    if (!ctype_digit((string) $value) || (int) $value < 1 || (int) $value > TELEMETRY_DATABASE_RETENTION_MAX_DAYS) {
+        throw new RuntimeException('Invalid database telemetry retention.');
+    }
+    return (int) $value;
 }

@@ -146,7 +146,7 @@ function telemetry_delete_older_than(string $tableName, string $columnName, int 
 /**
  * Run daily rollup and retention cleanup, logging only the operational summary.
  *
- * @return array<string,mixed> Structured result data for the caller.
+ * @return array{ok:bool,rolled_up:int,deleted:array<string,int>,has_more:bool,skipped?:bool,reason?:string,error?:string,checkpoint?:?string} Slice progress or explicit disabled/busy/failure outcome.
  * @param array{force?:bool,time_budget_seconds?:int} $options Operation-specific controls; unsupported keys do not change behavior.
  */
 function telemetry_run_maintenance(array $options = []): array
@@ -221,6 +221,26 @@ function telemetry_run_maintenance(array $options = []): array
         } else {
             $result['has_more'] = true;
         }
+        // Compact historical daily data independently of the hourly checkpoint.
+        // Each transaction owns one day; a failed day never advances its cursor.
+        $compactAfter = telemetry_model_setting('telemetry_daily_compact_after');
+        for ($i = 0; $i < $maxDays && microtime(true) < $deadline; $i++) {
+            $day = \Gallery\Models\telemetry_model_next_daily_compaction_day(
+                $compactAfter === false ? null : (string) $compactAfter,
+                $closedBefore
+            );
+            if ($day === null) {
+                break;
+            }
+            \Gallery\Models\telemetry_model_compact_daily($day);
+            telemetry_set_setting('telemetry_daily_compact_after', $day);
+            $compactAfter = $day;
+        }
+        $result['has_more'] = $result['has_more']
+            || \Gallery\Models\telemetry_model_next_daily_compaction_day(
+                $compactAfter === false ? null : (string) $compactAfter,
+                $closedBefore
+            ) !== null;
         $result['checkpoint'] = $checkpoint;
         $interval = $result['has_more'] ? $retrySeconds : max($retrySeconds, (int) cms_runtime_limit('telemetry.maintenance_interval_seconds'));
         telemetry_set_setting(TELEMETRY_MAINTENANCE_NEXT_KEY, (string) (time() + $interval));
@@ -287,7 +307,7 @@ function telemetry_purge_bounded(float $deadline, bool &$pending, bool $skipHour
         'telemetry_events' => ['occurred_at', telemetry_maintenance_retention_days('telemetry_raw_retention_days', 7, 1, 90)],
         'telemetry_sessions' => ['last_seen_at', telemetry_maintenance_retention_days('telemetry_session_retention_days', 30, 1, 365)],
         'telemetry_daily_metrics' => ['bucket_date', telemetry_maintenance_retention_days('telemetry_daily_retention_days', 730, 30, 3650)],
-        'telemetry_db_query_metrics' => ['bucket_start', telemetry_maintenance_retention_days('telemetry_hourly_retention_days', 90, 7, 730)],
+        'telemetry_db_query_metrics' => ['bucket_start', telemetry_database_retention_days(true)],
         'telemetry_job_runs' => ['started_at', 180],
     ];
     $checkpoint = $skipHourly ? null : telemetry_rollup_checkpoint();
@@ -367,7 +387,7 @@ function telemetry_maintenance_retention_days(string $key, int $default, int $mi
  * retention delete, or maintenance-job write. It exists for Maintenance Center
  * analysis and other diagnostics that need concrete backlog counts.
  *
- * @return array<string,mixed> Read-only telemetry backlog summary.
+ * @return array{available:bool,reason:string,eligible_rows:int,rollup_days:int,has_work:bool,retention_days?:array<string,int>,eligible_by_table?:array<string,int>,rollup_checkpoint?:?string,rollup_closed_before?:string,next_rollup_day?:?string,next_compaction_date?:?string} Read-only backlog or unavailable state.
  */
 function telemetry_maintenance_analysis(): array
 {
@@ -384,7 +404,7 @@ function telemetry_maintenance_analysis(): array
         'telemetry_events' => telemetry_maintenance_retention_days('telemetry_raw_retention_days', 7, 1, 90),
         'telemetry_sessions' => telemetry_maintenance_retention_days('telemetry_session_retention_days', 30, 1, 365),
         'telemetry_daily_metrics' => telemetry_maintenance_retention_days('telemetry_daily_retention_days', 730, 30, 3650),
-        'telemetry_db_query_metrics' => telemetry_maintenance_retention_days('telemetry_hourly_retention_days', 90, 7, 730),
+        'telemetry_db_query_metrics' => telemetry_database_retention_days(true),
         'telemetry_job_runs' => 180,
         'telemetry_hourly_metrics' => telemetry_maintenance_retention_days('telemetry_hourly_retention_days', 90, 7, 730),
     ];
@@ -407,6 +427,11 @@ function telemetry_maintenance_analysis(): array
     }
     $counts = telemetry_maintenance_model_retention_counts($cutoffs, $checkpoint);
     $eligibleRows = array_sum($counts);
+    $compactAfter = telemetry_model_setting('telemetry_daily_compact_after');
+    $nextCompaction = \Gallery\Models\telemetry_model_next_daily_compaction_day(
+        $compactAfter === false ? null : (string) $compactAfter,
+        $closedBefore
+    );
 
     return [
         'available' => true,
@@ -418,6 +443,7 @@ function telemetry_maintenance_analysis(): array
         'rollup_closed_before' => $closedBefore,
         'next_rollup_day' => $nextDay,
         'rollup_days' => $rollupDays,
-        'has_work' => $eligibleRows > 0 || $nextDay !== null,
+        'next_compaction_date' => $nextCompaction,
+        'has_work' => $eligibleRows > 0 || $nextDay !== null || $nextCompaction !== null,
     ];
 }

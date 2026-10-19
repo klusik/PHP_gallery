@@ -646,6 +646,15 @@ function admin_settings_specialized_catalog(): array
             ''
         ],
         [
+            'telemetry_database_retention_days',
+            'privacy',
+            'Database telemetry retention',
+            'Days to retain SQL query fingerprints independently of usage statistics.',
+            'admin_telemetry',
+            [],
+            ''
+        ],
+        [
             'telemetry_daily_retention_days',
             'privacy',
             'Daily telemetry retention',
