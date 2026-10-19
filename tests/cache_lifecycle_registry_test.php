@@ -43,6 +43,36 @@ namespace {
     {
         if (!$condition) throw new \RuntimeException($message);
     }
+
+    /**
+     * Reject a regional catalog cursor moving behind its committed prefix.
+     * @param array<string,int> $previous Greatest observed byte offset per cache-relative directory in the same inventory cycle.
+     * @param array<string,int> $current Byte offsets for directory frames still present in the persisted regional checkpoint.
+     * @return void Throws on rewind; unchanged cursors and completed, absent frames remain valid between fair scheduler turns.
+     */
+    function cache_registry_assert_offsets(array $previous, array $current): void
+    {
+        foreach ($current as $path => $offset) {
+            cache_registry_assert(
+                $offset >= ($previous[$path] ?? 0),
+                'Large region replayed its committed catalog prefix: ' . $path
+            );
+        }
+    }
+
+    // Adjacent byte offsets exercise equal/advanced progress and a reset from
+    // the first committed byte to zero, independently of filesystem timing.
+    cache_registry_assert_offsets(['big' => 1], ['big' => 1]);
+    cache_registry_assert_offsets(['big' => 1], ['big' => 2]);
+    cache_registry_assert_offsets(['big' => 1], []);
+    $rejectedRewind = false;
+    try {
+        cache_registry_assert_offsets(['big' => 1], ['big' => 0]);
+    } catch (\RuntimeException) {
+        $rejectedRewind = true;
+    }
+    cache_registry_assert($rejectedRewind, 'Cursor observer accepted a committed prefix reset.');
+
     $root = sys_get_temp_dir() . '/gallery-cache-registry-' . bin2hex(random_bytes(8));
     // Keep DB, journals and payloads within one disposable owner.
     // Type: string. Units: absolute directory. Scope: this regression and its reopened connection.
@@ -95,7 +125,8 @@ namespace {
         cache_registry_assert($transition['last_removed_at'] === 0,
             'A legacy completion timestamp was invented as the last actual removal time.');
         $sawPartial = false;
-        $cursor = null;
+        $cursorOffsets = [];
+        $inventoryId = null;
         $bigKey = hash('sha256', 'region:big');
         for ($step = 0; $step < 100; $step++) {
             $result = \Gallery\Services\cache_lifecycle_scheduled_run(1, 'cli_cron', 8);
@@ -104,14 +135,31 @@ namespace {
             $state = $row === null ? [] : \Gallery\Services\cache_lifecycle_registry_decode((string) $row['checkpoint_json']);
             if (($state['phase'] ?? '') === 'inventory' && count($state['stack'] ?? []) > 0) {
                 $sawPartial = true;
-                $nextCursor = json_encode($state['stack'], JSON_THROW_ON_ERROR);
-                if ($cursor !== null) cache_registry_assert($nextCursor !== $cursor, 'Large region repeatedly replayed its committed prefix.');
-                $cursor = $nextCursor;
+                // Another due region or cleanup turn may consume the whole
+                // bounded burst. Check this region's durable offsets instead
+                // of demanding a different stack after every global arrival.
+                $inventoryId ??= $state['id'];
+                cache_registry_assert($state['id'] === $inventoryId,
+                    'Large region restarted its unfinished inventory cycle.');
+                $nextOffsets = [];
+                foreach ($state['stack'] as $frame) {
+                    $nextOffsets[$frame['path']] = $frame['offset'];
+                }
+                cache_registry_assert_offsets($cursorOffsets, $nextOffsets);
+                $cursorOffsets = array_replace($cursorOffsets, $nextOffsets);
                 cache_registry_assert((int) $row['last_completed_at'] === 0, 'A partial region was labelled successfully completed.');
             }
             if (!is_dir($root . '/cache/' . $workspace) && $row !== null && (int) $row['last_completed_at'] > 0 && ($state['phase'] ?? '') === 'complete') break;
             $GLOBALS['cache_lifecycle_test_now'] += 30;
         }
+        cache_registry_assert($row !== null && (int) $row['last_completed_at'] > 0
+            && ($state['phase'] ?? '') === 'complete',
+            'Large region failed to complete within the bounded scheduler opportunities.');
+        // Exactly 1200 protected files of 100 bytes also reject prefix replay
+        // that starts and catches up between two persisted observations.
+        cache_registry_assert($state['totals']['unknown']['files'] === 1200
+            && $state['totals']['unknown']['bytes'] === 120000,
+            'Large region did not measure each protected payload exactly once.');
         cache_registry_assert($sawPartial && !is_dir($root . '/cache/' . $workspace), 'Large region starved a separate eligible workspace.');
         $status = \Gallery\Services\cache_lifecycle_status();
         cache_registry_assert($status['bytes_removed'] > 0 && $status['last_removed_at'] > 0, 'Confirmed deletion receipt was lost.');

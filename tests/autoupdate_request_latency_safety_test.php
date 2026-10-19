@@ -60,7 +60,18 @@ assert_autoupdate_request_latency_safety(
     !str_contains($serviceSource, 'function application_autoupdate_fire_background_tick(): bool')
         && !str_contains($serviceSource, 'X-Gallery-Autoupdate-Token:')
         && !str_contains($serviceSource, 'fsockopen('),
-    'Automatic updates must not create loopback HTTP requests that can consume the same shared-host PHP worker pool.'
+    'The retired unleased updater socket/token endpoint must stay absent; server continuation uses the existing authenticated maintenance transport.'
+);
+
+$backgroundSource = (string) file_get_contents(__DIR__ . '/../app/services/updates_background.php');
+$maintenanceController = (string) file_get_contents(__DIR__ . '/../app/controllers/site_maintenance.php');
+assert_autoupdate_request_latency_safety(
+    str_contains($backgroundSource, "hash('sha256', \$ticket)")
+        && str_contains($backgroundSource, 'application_update_release_lock($lock);')
+        && !str_contains($backgroundSource, 'sleep(')
+        && strpos($maintenanceController, 'if (!site_maintenance_token_is_valid($token))')
+            < strpos($maintenanceController, 'application_update_background_chain_run('),
+    'Autonomous updater work must consume hashed single-use tickets after authentication, release its chain lock before handoff and never sleep between worker slices.'
 );
 
 assert_autoupdate_request_latency_safety(

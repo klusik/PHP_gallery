@@ -18,6 +18,19 @@ import {fullMatrixOwners,requireCurrentWorkflowOwners} from './ci-owner-contract
 import {requireOwnerRuleset} from './release-owner-authorization.mjs';
 import {bindTrustedBasicReport} from './trusted-basic.mjs';
 import {loadFeatureExecution,verifyFeatureOwners,verifyFeatureBasic} from './feature-qualification.mjs';
+import {createHash} from 'node:crypto';
+
+/** Bound the complete semantic version text admitted from an immutable Git blob.
+ * Type: number. Units: bytes. Scope: one winapp/VERSION blob.
+ * Consumers: readWinappVersion.
+ * Rationale: 64 bytes accommodates three numeric components and a final newline
+ * while refusing binary or unexpectedly large version inputs before decoding.
+ */
+const WINAPP_VERSION_MAX_BYTES=64;
+
+/** Retain the immutable published baseline used to admit one WinApp candidate.
+ * @typedef {{main_sha:string,main_version:string,candidate_version:string,inputs_changed:boolean}} WinappVersionProof
+ */
 
 /**
  * Space status requests while awaiting the prepared candidate's BASIC run.
@@ -194,7 +207,7 @@ function requireFeatureDispatch(context,run,call) {
  * @typedef {{branch:string,sourceSha:string,candidateSha:string,expectedDevelopSha:string,sourceBase:string,basicRunId:number|string,basicRunAttempt:number|string,integrationCheckId?:number,matrixCheckId?:number,basicArtifactId?:number,basicArtifactDigest?:string,qualifiedRun?:string}} IntegrationRequest
  */
 /** Retained protocol shared by normal integration and no-ref-write owner recovery.
- * @typedef {{schema_version:1|2,repository:string,source_branch:string,source_sha:string,candidate_sha:string,candidate_tree:string,expected_develop_sha:string,source_base:string,workflow_sha:string,workflow_path:string,run_id:string,run_attempt:string,basic_profile:string[],native_owners:Array<{id:number,name:string,status:string,conclusion:string}>,check_run_id?:number,matrix_check_run_id?:number,matrix_status_id?:number,feature_qualification?:import('./feature-qualification.mjs').FeatureQualification,recovery_mode?:'existing-develop',observed_develop_sha?:string,ref_write?:false,authority_update?:{anchor:ReturnType<typeof loadIntegrationQualification>,inherited_basic:Record<string,unknown>}}} IntegrationEvidenceRecord
+ * @typedef {{schema_version:1|2,repository:string,source_branch:string,source_sha:string,candidate_sha:string,candidate_tree:string,expected_develop_sha:string,source_base:string,workflow_sha:string,workflow_path:string,run_id:string,run_attempt:string,basic_profile:string[],native_owners:Array<{id:number,name:string,status:string,conclusion:string}>,check_run_id?:number,matrix_check_run_id?:number,matrix_status_id?:number,winapp_version?:WinappVersionProof,feature_qualification?:import('./feature-qualification.mjs').FeatureQualification,recovery_mode?:'existing-develop',observed_develop_sha?:string,ref_write?:false,authority_update?:{anchor:ReturnType<typeof loadIntegrationQualification>,inherited_basic:Record<string,unknown>}}} IntegrationEvidenceRecord
  */
 /** Protected workflow identity taken from the current GitHub Actions environment.
  * @typedef {{repository:string,workflowPath:string,workflowRef:string,eventName:string,ref:string,runId:number|string,runAttempt:number|string,headSha:string,authorityUpdate?:boolean,featureQualification?:boolean,stage?:'execution'|'publication',qualifiedRun?:string}} WorkflowContext
@@ -251,6 +264,81 @@ function completeTree(call,repository,treeSha) {
         if (entry.type!=='tree') files.set(entry.path,entry.mode+':'+entry.type+':'+entry.sha);
     }
     return files;
+}
+
+/** Select the same tracked WinApp inputs that trigger installer rebuilding.
+ * @param {string} path Repository-relative leaf path from a complete Git tree.
+ * @returns {boolean} True for WinApp runtime/build/assets/dependencies/version;
+ *     tests and the two non-distributed instruction/readme files are excluded.
+ */
+function isWinappInstallerInput(path) {
+    return path.startsWith('winapp/') && !path.startsWith('winapp/tests/')
+        && !['winapp/README.md','winapp/AGENTS.md'].includes(path);
+}
+
+/** Read and authenticate the complete version blob without the Contents API.
+ * @param {GithubApi} call Read-only provider adapter.
+ * @param {string} repository Exact owner/repository identity.
+ * @param {Map<string,string>} tree Complete path-to-mode/type/blob identities.
+ * @returns {string} Canonical numeric X.Y.Z version; missing, malformed, truncated,
+ *     non-regular or hash-mismatched evidence throws.
+ */
+function readWinappVersion(call,repository,tree) {
+    const entry=tree.get('winapp/VERSION');
+    if (typeof entry!=='string' || !/^100644:blob:[a-f0-9]{40}$/.test(entry)) {
+        throw new Error('BLOCKED winapp/VERSION must be a regular tracked file.');
+    }
+    const sha=entry.split(':')[2],blob=call(`repos/${repository}/git/blobs/${sha}`);
+    if (blob?.sha!==sha || blob.encoding!=='base64' || typeof blob.content!=='string'
+        || !Number.isSafeInteger(blob.size) || blob.size<1 || blob.size>WINAPP_VERSION_MAX_BYTES) {
+        throw new Error('BLOCKED complete winapp/VERSION blob is unavailable.');
+    }
+    const encoded=blob.content.replace(/[\r\n]/g,''),bytes=Buffer.from(encoded,'base64');
+    // Git blob identity includes its object header; decoded length and canonical
+    // Base64 also reject partial provider responses before parsing the version.
+    const hash=createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+    if (bytes.length!==blob.size || bytes.toString('base64')!==encoded || hash!==sha) {
+        throw new Error('BLOCKED winapp/VERSION blob is incomplete or has a different identity.');
+    }
+    const version=bytes.toString('utf8').trim();
+    if (!/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version)) {
+        throw new Error('BLOCKED winapp/VERSION must contain canonical numeric X.Y.Z.');
+    }
+    return version;
+}
+
+/** Refuse changed installer inputs without a version above the published main.
+ * @param {GithubApi} call Read-only provider adapter; failures remain blocking.
+ * @param {string} repository Exact owner/repository identity.
+ * @param {string} candidateTree Immutable complete candidate tree SHA.
+ * @returns {WinappVersionProof} Exact main SHA, both versions and full installer
+ *     delta decision; equal/lower versions with changed inputs throw before FULL.
+ */
+export function requireWinappVersion(call,repository,candidateTree) {
+    const main=call(`repos/${repository}/git/ref/heads/main`)?.object?.sha;
+    if (!/^[a-f0-9]{40}$/.test(main ?? '') || !/^[a-f0-9]{40}$/.test(candidateTree ?? '')) {
+        throw new Error('BLOCKED exact main/candidate identity is unavailable for WinApp version admission.');
+    }
+    const baseline=call(`repos/${repository}/commits/${main}`);
+    if (baseline?.sha!==main || !/^[a-f0-9]{40}$/.test(baseline.commit?.tree?.sha ?? '')) {
+        throw new Error('BLOCKED main tree is unavailable for WinApp version admission.');
+    }
+    const before=completeTree(call,repository,baseline.commit.tree.sha);
+    const after=completeTree(call,repository,candidateTree);
+    const mainVersion=readWinappVersion(call,repository,before);
+    const candidateVersion=readWinappVersion(call,repository,after);
+    const paths=new Set([...before.keys(),...after.keys()]);
+    const changed=[...paths].some(path=>isWinappInstallerInput(path) && before.get(path)!==after.get(path));
+    const oldParts=mainVersion.split('.').map(BigInt),newParts=candidateVersion.split('.').map(BigInt);
+    const firstDifferent=newParts.findIndex((part,index)=>part!==oldParts[index]);
+    if (changed && (firstDifferent<0 || newParts[firstDifferent]<oldParts[firstDifferent])) {
+        throw new Error(`BLOCKED WinApp installer inputs changed from main ${main}, but winapp/VERSION `
+            +`${candidateVersion} must be greater than published ${mainVersion}. Increase the WinApp version before integration.`);
+    }
+    if (call(`repos/${repository}/git/ref/heads/main`)?.object?.sha!==main) {
+        throw new Error('BLOCKED main moved during WinApp version admission; select a fresh baseline.');
+    }
+    return {main_sha:main,main_version:mainVersion,candidate_version:candidateVersion,inputs_changed:changed};
 }
 
 /** Require the source checkout's BASIC workflow and transitive evaluator inputs to match protected develop.
@@ -533,7 +621,7 @@ function loadTrustedBasicEvidence(request,context,call) {
     return {...proof,artifact_id:request.basicArtifactId,artifact_sha256:request.basicArtifactDigest};
 }
 
-/** Resolve the selected branch head, its direct develop parent and newest successful BASIC attempt.
+/** Resolve source and BASIC, admitting WinApp against the published main baseline.
  * @param {string} branch User-selected feature branch name.
  * @param {WorkflowContext} context Current main-owned workflow identity.
  * @param {string} repository Configured owner/repository.
@@ -569,6 +657,7 @@ export function selectDevelopIntegration(branch,context,repository,call,recovery
     }
     const base=call('repos/'+repository+'/commits/'+expectedDevelopSha);
     if (base?.sha!==expectedDevelopSha || typeof base.commit?.tree?.sha!=='string') throw new Error('BLOCKED current develop P tree is unavailable.');
+    if (context.featureQualification) requireWinappVersion(call,repository,source.commit.tree.sha);
     if (context.authorityUpdate) requireAuthorityUpdateSourcePaths(
         completeTree(call,repository,source.commit.tree.sha),completeTree(call,repository,base.commit.tree.sha));
     if (!context.featureQualification) requireInheritedBasicAuthority(call,repository,source.commit.tree.sha,recovery ? source.commit.tree.sha : base.commit.tree.sha,context.authorityUpdate);
@@ -697,6 +786,9 @@ function validateFeatureIntegration(request,context,call,tree,basic,develop) {
         throw new Error('BLOCKED feature qualification requires the final prepared source and ordinary main authority.');
     }
     const repository=context.repository,runId=String(context.runId),attempt=String(context.runAttempt);
+    // Re-evaluate against current main when sealing/recovering publication. A
+    // release during FULL cannot turn the earlier admission into stale proof.
+    const winappVersion=requireWinappVersion(call,repository,tree);
     const jobs=completeRows(call,`repos/${repository}/actions/runs/${runId}/attempts/${attempt}/jobs`,'jobs');
     let execution={run_id:runId,run_attempt:attempt,workflow_sha:context.headSha};
     let owners=jobs.filter(job=>FULL_OWNERS.some(name=>job.name==='Develop integration / '+name))
@@ -730,7 +822,8 @@ function validateFeatureIntegration(request,context,call,tree,basic,develop) {
         candidate_sha:request.candidateSha,candidate_tree:tree,expected_develop_sha:request.expectedDevelopSha,
         source_base:request.sourceBase,workflow_sha:context.headSha,workflow_path:WORKFLOW_PATH,
         run_id:runId,run_attempt:attempt,basic_profile:BASIC_PROFILE,native_owners:owners,
-        feature_qualification:{schema_version:1,input_tree:tree,basic,execution}};
+        feature_qualification:{schema_version:1,input_tree:tree,basic,execution},
+        winapp_version:winappVersion};
     return {plan:{branch:'develop',oldSha:develop,newSha:request.candidateSha},record};
 }
 
@@ -880,6 +973,10 @@ export function integrateDevelop(request,context,repository,call,pause=pauseRequ
         requireIntegrationStatus(repository,request.candidateSha,matrixStatus,call);
         const fresh=readHeads(call,repository,request.branch,request.candidateSha,request.expectedDevelopSha);
         if (fresh.develop!==checked.plan.oldSha) throw new Error('BLOCKED develop changed before fast-forward write.');
+        if (checked.record.winapp_version
+            && call(`repos/${repository}/git/ref/heads/main`)?.object?.sha!==checked.record.winapp_version.main_sha) {
+            throw new Error('BLOCKED main moved after WinApp version qualification; no develop write is permitted.');
+        }
         let updated;
         try {
             updated=call('repos/'+repository+'/git/refs/heads/develop','PATCH',{sha:request.candidateSha,force:false});

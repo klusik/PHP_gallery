@@ -14,9 +14,23 @@ revision. Ordinary test, registry and evaluator changes need no preliminary main
 installation. The selected workflow actually executes its changed tests.
 
 The final source must be one commit S above observed develop P. Unprivileged
-hosted preparation generates runtime modules, inventory and manifest in
-dependency
-order. The privileged publisher accepts only those generated files, leases the
+selection also compares complete tracked WinApp installer inputs against the
+exact current `main` tree. A changed runtime, asset, dependency, build/installer
+input or version requires a canonical `winapp/VERSION` strictly greater than
+main's version. Tests, `winapp/README.md` and `winapp/AGENTS.md` are excluded,
+matching installer rebuild scope. Repeated integrations of one upcoming version
+remain allowed because the baseline is main, never the preceding develop commit.
+Missing/truncated trees or version blobs block admission before preparation/FULL.
+
+Sealing and publication repeat this check against current main, retaining
+`winapp_version` with the main SHA, both versions and input-change decision.
+A further main move before the protected ref update refuses that write. Sealed
+execution reuse cannot waive current version admission. Historical no-write
+recovery retains its original compatibility protocol. Release continues to trust
+qualified develop and does not introduce another version-bump decision.
+
+Unprivileged hosted preparation generates runtime modules, inventory and manifest
+in dependency order. The privileged publisher accepts only those generated files, leases the
 feature head, folds them into one final A when necessary and obtains fresh
 BASIC.
 A separate authority checkout scans clean A with BASIC; candidate execution has

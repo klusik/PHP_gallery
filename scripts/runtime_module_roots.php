@@ -86,6 +86,7 @@ return [
         'archive-request-trigger' => ['Gallery\\Services\\admin_log_archive_register_request_trigger'],
         'site-request-trigger' => ['Gallery\\Services\\site_maintenance_register_request_trigger'],
         'site-maintenance-work' => [
+            'Gallery\\Services\\cache_lifecycle_chain_runtime_available',
             'Gallery\\Services\\cache_lifecycle_chain_start',
             'Gallery\\Services\\cache_lifecycle_chain_run',
             'Gallery\\Services\\cache_lifecycle_visitor_run',
@@ -99,6 +100,8 @@ return [
         ],
         'archive-maintenance-work' => ['Gallery\\Services\\admin_log_archive_maintenance_run'],
         'updater-work' => [
+            'Gallery\\Services\\application_update_background_chain_start',
+            'Gallery\\Services\\application_update_background_chain_run',
             'Gallery\\Services\\application_update_job_worker_diagnostic',
             'Gallery\\Services\\application_update_continue_background_job',
             'Gallery\\Services\\application_autoupdate_dry_run',
@@ -171,6 +174,17 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // The updater-only transport branch explicitly requires the lightweight
+        // cache runtime policy before this shared single-worker admission check.
+        'Gallery\\Services\\site_maintenance_fire_background_worker' => [
+            'Gallery\\Services\\cache_lifecycle_chain_runtime_available',
+        ],
+        'Gallery\\Core\\cms_register_update_background_continuation' => [
+            'Gallery\\Services\\application_update_background_chain_start',
+        ],
+        'Gallery\\Controllers\\cms_site_maintenance_cron' => [
+            'Gallery\\Services\\application_update_background_chain_run',
+        ],
         // Explicit storage jobs load the existing attachment owner. Cached
         // Admin reads and ordinary public routes do not acquire its closure.
         'Gallery\\Services\\admin_storage_statistics_attachment_batch' => [

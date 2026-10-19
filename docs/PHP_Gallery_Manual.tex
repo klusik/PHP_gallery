@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.137.5}
+\newcommand{\version}{0.137.6}
 \newcommand{\manualdate}{19 October 2026}
 
 \hypersetup{
@@ -850,6 +850,24 @@ opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
 surfaces remain, and~native controls and~source-mode operation, including
 \texttt{--once}, stay supported.
 
+\subsection{Windows startup and~one running instance}
+
+The~installed uploader starts after Windows sign-in by~default, minimized
+directly into the~system tray. In~\ui{Settings > App \& integrations},
+\ui{Start with Windows (minimized to tray)} saves immediately; switching it~off
+removes this user's startup entry, and~updates retain that choice. Setup applies
+the~preference even if~the~final application-launch checkbox is~cleared.
+Source/Python runs leave Windows startup unchanged. Watching and~imports still
+need their usual explicit Start action.
+
+Opening the~app again restores the~existing window and~keeps current work.
+One Windows process owns the~shared app profile, including executable copies;
+another Windows session must open its existing process in~that session.
+A~logon launch keeps import-recovery prompts deferred until the~window opens.
+If~the~tray cannot become available within five seconds, the~window appears
+so~the~app remains accessible. Startup registration belongs to~the~user running
+the~application; an~installer explicitly started elevated may~use that account.
+
 \subsection{Update notice and~indicators}
 
 The~app checks for~uploader releases at~startup and~at~most once an~hour;
@@ -1319,7 +1337,7 @@ Keep the~installed custom stylesheet by~leaving replacement empty. Explicitly ch
 \subsubsection{Card orientation and~operational status}
 Vertical cards place the~photograph above the~description; horizontal cards place it~beside the~description. The~normal orientation migration preserves existing appearance across saved settings, physical and~Smart Galleries, sidecars, imported metadata, and~Trash. Back up~the~database, galleries, and~Trash together. If~conversion is~interrupted, resolve the~reported problem and~retry; document markers prevent double conversion. Fresh installations keep the~vertical default. Tags remain complete without JavaScript; browser expansion and~scrolling also work on~gallery cards.
 
-Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks are~limited to~hourly, and~disabled automatic updates leave old background jobs paused. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
+Public search defaults on~only without a~saved choice and~when its feature is~enabled. Updates refresh versions, notes, and~API status together; automatic metadata checks use the~saved interval (five minutes by~default), and~existing background jobs continue independently of~new discovery. OurAirports refresh uses weekly freshness and~hourly failure backoff. Trash shows remaining retention and~safe purge availability. Presentation-schema problems also require action in~System Health.
 
 Optional SimBrief loading sits beside Begin/Finish flight, with an adjacent
 identity gear. Enter one pilot ID or username; only a successful OFP fetch saves
@@ -1391,12 +1409,20 @@ Partial recordings retain incomplete facts. Success updates status without
 an~OK message box and~closes progress after durable completion/key cleanup.
 Errors stay visible; earlier PDFs remain intact.
 
-The~independent uploader source targets 0.6.0. A~separately requested installer
+The~independent uploader source targets 0.7.0. A~separately requested installer
 build will place the~installer and~matching generated
-\filepath{winapp-update.json} under \filepath{winapp/dist/0.6.0/}. The~installer
+\filepath{winapp-update.json} under \filepath{winapp/dist/0.7.0/}. The~installer
 and~metadata belong to~the~same hosted release. This build check does~not~replace
 acceptance testing of~the~installed Windows app or~the~simulator. Existing
 version folders, including 0.4.0, remain preserved.
+
+Develop integration compares the~complete installer inputs with current
+\texttt{main}. Changed WinApp runtime, assets, dependencies or~build inputs
+require a~version strictly greater than main's; tests, README and~instructions
+are~excluded. Several integrations may~keep the~same upcoming version while
+main retains its older version. After publication advances main, another runtime
+change needs another bump. Admission runs before FULL and~again before protected
+publication; release continues to~trust qualified develop.
 
 \subsection{Admin workspace}
 
@@ -2739,6 +2765,18 @@ Production packaging & One portable PHP folder/ZIP builder, positive inventory, 
 \end{longtable}
 
 \subsection{Application updates}
+
+Automatic stable checks use the~saved 5/15/30/60-minute interval, defaulting
+to~five minutes. The~first admitted gallery visit after the~interval, including
+an~anonymous visitor or~allowed robot, can~start the~update. After a~successful
+response, independent authenticated server requests continue three-second
+worker slices until completion. Login, JavaScript, an~open Updates panel
+and~hosting cron are~unnecessary. Blocked SEO requests do~not~start this work.
+The~configured installation URL must be~reachable from~the~server with valid
+TLS. Lost handoffs expire after 120 seconds; later visits recover them.
+GitHub backoff and~worker failures may~delay progress. Five minutes controls
+discovery eligibility, not~total installation time; a~future release still
+needs an~eligible visit. See~\filepath{docs/AUTOUPDATE.md}.
 
 The~compact release summary keeps installed and~available versions, channel, status, and~the~main actions together; repository and~GitHub API details remain in~a~collapsed diagnostics section. When a~job completes, the~browser refreshes the~summary from~local metadata in~place, keeps the~panel open and~the~URL unchanged, and~hides an~obsolete stable-update action. This refresh does~not~perform another GitHub check. If~it~fails, use the~status-refresh button to~retry the~local read without repeating the~installation.
 

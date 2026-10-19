@@ -191,6 +191,12 @@ function application_autoupdate_maybe_run(
     // Continue persisted work before checking method and preference, preserving legacy behavior.
     $activeJob = application_update_active_job();
     if ($activeJob !== null) {
+        // A live server chain already owns this job's next slice. Public visits
+        // keep rendering; an expired/lost lease restores the legacy fallback.
+        if (($activeJob['trigger'] ?? '') === 'background'
+            && application_update_background_chain_pending((string) $activeJob['id'])) {
+            return;
+        }
         if ($loadDependencies !== null) {
             $loadDependencies('updater-work');
         }

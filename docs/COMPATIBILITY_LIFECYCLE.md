@@ -1,5 +1,63 @@
 # Compatibility lifecycle and retirement register
 
+## Visitor-started automatic stable-update continuation
+
+Owners: request maintenance, lightweight updater job lookup, deferred updater
+background service, and the existing site-maintenance controller/transport.
+The first admitted GET/HEAD after the saved discovery interval may create a
+stable job; a successful response hands its complete installation to sequential
+authenticated HTTP workers. Anonymous visitors and admitted robots share the
+same interval as signed-in users. Rejected SEO requests exit before maintenance.
+No browser JavaScript or external scheduler is required. Existing 5/15/30/60
+minute preferences, disabled discovery, pinned beta code, stage validation,
+activation semantics and GitHub backoff remain authoritative.
+
+Request-driven continuation and optional CLI remain permanent fallbacks for
+restricted loopback, single-worker development servers, lost handoffs and
+hosting termination. A queued or executing lease lasts 120 seconds; failed
+dispatch admission retries no faster than thirty seconds. A failed worker stops
+the chain and retains the existing sixty-second visitor retry policy. No idle
+PHP process waits for a future release. One visit can complete a healthy
+installation; no traffic cannot initiate discovery of a later release.
+Registered regressions cover real multi-slice cleanup and ticket/lock/recovery
+boundaries. Production provider, TLS, host process-pool and activation timing
+remain unknown until deployment. No database schema, release assets, manual
+updater workflow or recovery data are retired.
+
+## Windows startup, shared profile and tray availability
+
+Owners: `winapp/uploader/windows_startup.py`, `gallery_watch_upload.pyw` and
+`installer.iss`. Missing legacy `start_with_windows` preferences default to true;
+explicit false survives migration and upgrades. Only frozen Windows apps own
+the per-user Run entry. Source/non-Windows execution permanently remains usable
+without registration. Helpers and runtime/version probes retain early dispatch;
+`--once` refuses concurrent profile writers. Windows mutex/event ownership is
+profile-scoped across sessions and releases on clean exit or process death.
+
+A logon launch withdraws its root before painting. If tray creation is missing,
+fails or stays unavailable for five seconds, the launcher restores the window.
+This permanently protects access in stripped-down source environments and shell
+initialization failures. Retirement requires an alternative visible entry point
+that cannot strand the process. Explicit relaunch restores the same window and
+preserves current workers; import recovery waits until the window is opened.
+Central regressions cover registry fakes, state-admission ordering and tray
+fallback; native Windows subprocess cases cover event delivery and crash cleanup.
+Installed logon/UAC/uninstall and cross-session usability evidence is unknown
+until manual qualification. No installer, existing profile or previous binary
+artifact is retired by this source change.
+
+Integration's `develop-integration.mjs` also owns pre-FULL installer-version
+admission. Complete trees compare distributed WinApp inputs against current
+main; tests/readme/instructions retain their existing build-impact exclusion.
+Runtime changes require a higher numeric X.Y.Z version than main, while multiple
+integrations of an already higher upcoming version remain supported. Complete
+version blobs are hash-bound; missing/ambiguous evidence blocks instead of
+assuming no impact. Selection and final publication recheck main, and retained
+execution cannot waive a newer published baseline. Registered negative fixtures
+cover same/lower versions, deletion/rename/mode changes and main movement.
+Release remains an assembly of protected develop, without a new release gate.
+Native installer/autoupdate acceptance remains separate from these policy tests.
+
 ## Explicit release-start dispatch
 
 Owners: `begin-release.mjs`, `start-new-release.mjs`, `begin-release.yml` and

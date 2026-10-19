@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.137.5}
+\newcommand{\version}{0.137.6}
 \newcommand{\manualdate}{19~oktober~2026}
 
 \hypersetup{
@@ -844,6 +844,24 @@ förblir ogenomskinliga och kontrastrika. Ingen opacitet för hela fönstret anv
 körningsberoenden läggs till. Utan Pillow finns läsbara, platta ttk-ytor kvar;
 inbyggda kontroller samt källäget, inklusive \texttt{--once}, stöds fortfarande.
 
+\subsection{Windows-start och en körande instans}
+
+Den installerade uppladdaren startar som standard efter Windows-inloggning,
+direkt minimerad till systemfältet. I \ui{Settings > App \& integrations}
+sparas \ui{Start with Windows (minimized to tray)} direkt. Avstängning tar bort
+användarens autostartpost och uppdateringar behåller valet. Installationen
+tillämpar inställningen även om den sista rutan för programstart avmarkeras.
+Python- och källkörningar ändrar inte Windows-autostart. Bevakning och import
+kräver fortfarande ett uttryckligt Start-val.
+
+En ny programstart öppnar det befintliga fönstret och bevarar pågående arbete.
+En Windows-process äger den gemensamma app-profilen, även mellan programkopior;
+en instans i en annan Windows-session öppnas där. Frågor om återställning av
+import väntar vid inloggningsstart tills fönstret öppnas. Om systemfältet inte
+blir tillgängligt inom fem sekunder visas fönstret. Registreringen tillhör den
+användare som kör appen; installation som uttryckligen startas upphöjd kan använda
+det kontot.
+
 \subsection{Uppdateringsmeddelande och indikatorer}
 
 Appen söker efter nya uploader-versioner vid start och därefter högst en gång
@@ -1316,7 +1334,7 @@ Lämna ersättningsvalet tomt för att behålla installerad CSS. Välj uttryckli
 \subsubsection{Kortorientering och driftstatus}
 Vertikala kort placerar bilden ovanför texten, horisontella bredvid. Den vanliga orienteringsmigreringen bevarar tidigare utseende i inställningar, fysiska och Smarta Gallerier, sidecars, importerade metadata och Papperskorg. Säkerhetskopiera databas, gallerier och Papperskorg tillsammans. Lös rapporterat problem efter avbrott och försök igen; dokumentmarkörer hindrar dubbel omvandling. Nyinstallationer använder vertikalt standardval. Alla taggar finns utan JavaScript; expansion och rullning fungerar även på kort.
 
-Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll görs högst varje timme, och avstängda automatiska uppdateringar lämnar äldre bakgrundsjobb pausade. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
+Offentlig sökning är på som standard bara utan sparat val och när funktionen är tillgänglig. Uppdateringar synkroniserar versioner, notiser och API-status; automatisk metadatakontroll använder det sparade intervallet (fem minuter som standard), och befintliga bakgrundsjobb fortsätter oberoende av nya kontroller. OurAirports använder veckovis aktualitet och en timmes felpaus. Papperskorgen visar återstående tid och säker raderingsmöjlighet. Även presentationsschemafel kräver åtgärd i Systemstatus.
 
 Valfri inläsning från SimBrief finns bredvid flygstart/-avslut; kugghjulet
 ändrar pilot-ID eller användarnamn i ett fält. Identiteten sparas först efter
@@ -1382,13 +1400,21 @@ förblir ofullständiga. Framgång uppdaterar status utan OK-ruta och stänger
 förloppet efter varaktigt slutförande och rensning av nyckeln. Fel förblir
 synliga; tidigare PDF-filer bevaras.
 
-Källan till den fristående uppladdaren riktar sig nu mot version 0.6.0. Ett
+Källan till den fristående uppladdaren riktar sig nu mot version 0.7.0. Ett
 separat beställt installationsbygge placerar installationsfilen och tillhörande
 genererade metadata \filepath{winapp-update.json} under
-\filepath{winapp/dist/0.6.0/}. Installationsfilen och metadata hör till samma
+\filepath{winapp/dist/0.7.0/}. Installationsfilen och metadata hör till samma
 publicerade GitHub-utgåva. Byggkontrollen ersätter inte acceptansprovning av den
 installerade Windows-appen eller simulatorn. Befintliga versionsmappar, inklusive
 0.4.0, bevaras.
+
+Develop-integrationen jämför alla installationsindata med aktuell
+\texttt{main}. Ändrad WinApp-körkod, resurser, beroenden eller byggindata kräver
+en högre version än main; tester, README och instruktioner undantas.
+Flera integrationer får behålla samma kommande version så länge main har den
+äldre versionen. Efter publicering och uppdatering av main kräver nästa
+körningsändring en ny höjning. Kontrollen sker före FULL och igen före skyddad
+skrivning; utgivningen fortsätter att lita på kvalificerad develop.
 
 \subsection{Administrationens arbetsyta}
 
@@ -2717,6 +2743,20 @@ Produktionspaketering & Ett portabelt PHP-verktyg för mappar och ZIP-filer, pos
 \bottomrule
 \end{longtable}
 \subsection{Programuppdateringar}
+
+Automatiska kontroller av stabila utgåvor använder det sparade intervallet
+5/15/30/60~minuter, med fem minuter som standard. Det första tillåtna
+galleribesöket efter intervallet kan starta uppdateringen, även anonymt eller
+från en tillåten robot. Efter ett lyckat svar fortsätter fristående
+autentiserade serveranrop installationen i begränsade tresekundersdelar tills
+jobbet är klart. Inloggning, JavaScript, en öppen uppdateringspanel och
+webbhotellets cron behövs inte. Begäranden som SEO-skyddet avvisar startar inte
+arbetet. Den konfigurerade installationsadressen måste vara nåbar från servern
+med giltig TLS. Förlorade överlämningar löper ut efter 120~sekunder och kan
+återupptas vid ett senare besök. GitHubs väntetider och workerfel kan fördröja
+förloppet. Fem minuter anger när kontrollen förfaller, inte hela
+installationstiden; en framtida utgåva kräver fortfarande ett lämpligt besök.
+Se \filepath{docs/AUTOUPDATE.md}.
 
 Den kompakta versionsöversikten samlar installerad och tillgänglig version, kanal, status och huvudåtgärder; detaljer om kodförrådet och GitHub API finns kvar i ett hopfällt diagnostikavsnitt. När ett jobb slutförs uppdaterar webbläsaren översikten direkt från lokala metadata, håller panelen öppen och URL:en oförändrad och döljer en inaktuell åtgärd för stabil uppdatering. Detta gör ingen ny GitHub-kontroll. Om läsningen misslyckas kan knappen för statusuppdatering försöka läsa lokalt igen utan att upprepa installationen.
 

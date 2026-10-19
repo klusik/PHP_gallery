@@ -1197,7 +1197,7 @@ return [
     'admin.theme.overrides.visual_editor_anonymous_fallback_notice' => 'Tato galerie není v anonymním zobrazení dostupná. Náhled se přesunul na dostupnou stránku.',
     'admin.updates.autoupdate_kicker' => 'Automatické aktualizace',
     'admin.updates.autoupdate_enable_label' => 'Povolit automatické stabilní aktualizace',
-    'admin.updates.autoupdate_hint' => 'Při vhodném požadavku GET/HEAD může galerie ve zvoleném intervalu zkontrolovat stabilní verzi a zahájit obnovitelnou instalaci. Kontroly přes web vyžadují příchozí provoz; pro kontrolu bez návštěvníků je nutné samostatně nastavit cron hostingu. Suchá kontrola obchází lokální interval, ale neinstaluje soubory.',
+    'admin.updates.autoupdate_hint' => 'Po zvoleném intervalu běžná návštěva zkontroluje stabilní aktualizaci a automaticky pokračuje v instalaci na serveru. Přihlášení, JavaScript ani hostingový cron nejsou potřeba. Kontroly vyžadují návštěvy a respektují čekací lhůty GitHubu. Test nanečisto nikdy neinstaluje soubory.',
     'admin.updates.autoupdate_interval_label' => 'Kontrolovat aktualizace každých',
     'admin.updates.autoupdate_interval_option' => '{count} minut',
     'admin.updates.autoupdate_next_eligible_label' => 'Další možná kontrola',

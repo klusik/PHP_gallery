@@ -1,5 +1,241 @@
 # Patch notes
 
+## Version 0.137.6
+
+Completed visitor-started stable updates through sequential authenticated
+server workers, so one eligible gallery visit can carry an existing update job
+to completion without browser polling or hosting cron. Upgraded the Windows
+uploader source to 0.7.0 with configurable logon-to-tray startup and
+single-instance activation, and strengthened develop integration with
+installer-version admission against published main.
+
+### Highlights
+
+#### Autonomous stable-update continuation
+
+- Updated automatic stable discovery to hand a running background installation
+  to independent HTTP workers after a successful visitor response. Each worker
+  advanced a bounded three-second checkpoint slice and dispatched the next
+  request without waiting for its response or requiring another page visit.
+- Supported anonymous visitors and admitted robots through the existing
+  eligible GET/HEAD discovery policy. Preserved the five-minute default and
+  saved 15/30/60-minute intervals, GitHub rate-limit waiting, the
+  disabled-discovery preference and metadata-only dry checks. A later release
+  still requires an eligible visit to initiate discovery.
+- Retained ordinary bounded visitor and optional CLI continuation when
+  server-to-self HTTP is unavailable, and prevented a live server-chain lease
+  from making normal visitors duplicate expensive updater work. Manual/Admin
+  jobs and beta operations stayed outside the autonomous stable chain.
+
+#### Windows uploader 0.7.0 startup and single-instance behavior
+
+- Updated `winapp/VERSION` from `0.6.1` to `0.7.0`. Added **Start with Windows
+  (minimized to tray)** under **Settings > App & integrations**, enabled by
+  default for installed Windows builds. Saved the switch immediately without
+  committing other unsaved settings and preserved an explicit opt-out across
+  configuration migration and upgrades.
+- Added logon startup that withdrew the Tk window before painting, placed the
+  installed app in the system tray and restored a visible window if tray
+  initialization failed or remained unavailable for five seconds. Deferred
+  import-recovery prompts until the window was opened; watching and importing
+  still required their explicit Start action.
+- Added Windows profile-scoped single-instance coordination. Another manual
+  launch requested restoration of the existing window instead of starting
+  duplicate workers or accessing shared configuration; another logon launch
+  left the owner hidden. Overlapping `--once` launches were refused, and native
+  coordination failures did not admit a second state writer.
+- Updated installer registration to apply the saved startup choice for the
+  original Windows user even when the final Launch checkbox was cleared, and to
+  remove its Run entry on uninstall. This release changed source and installer
+  definitions only; it did not build or publish a new Windows installer.
+
+#### Installer version protection during develop integration
+
+- Added a pre-FULL check that compared complete WinApp installer inputs against
+  the current protected `main` tree and required a strictly higher numeric
+  `winapp/VERSION` when distributed runtime, assets, dependencies or build
+  inputs changed.
+- Excluded WinApp tests, `winapp/README.md` and `winapp/AGENTS.md` from
+  rebuild-triggering changes, and allowed multiple integrations of the same
+  upcoming version while `main` still carried an older published version.
+  Rechecked the published baseline before sealing and protected publication.
+
+### Technical Details
+
+#### Backend and automatic-update transport
+
+- Updated `app/bootstrap/maintenance.php` to register a successful-response
+  shutdown handoff only for a running automatic `stable_update` job. The
+  callback closed an active session, finished the response and loaded the
+  deferred worker owner; CLI requests, failed responses and fatal-request
+  endings did not initiate that handoff.
+- Added `app/services/updates_background.php` with installation-wide
+  nonblocking chain locking, one-use 256-bit random tickets, SHA-256-only
+  persisted ticket identities, job-specific leases and serial successor
+  dispatch. Stored bounded state in private
+  `cache/updates/background-chain.json`, including actual ticket arrival,
+  dispatch time and redacted failure codes rather than raw tokens or provider
+  exceptions.
+- Set the chain lease to 120 seconds and failed dispatch retry throttle to 30
+  seconds in `app/services/updates_jobs.php`. Expired or undelivered tickets
+  became recoverable on a later eligible visit; failed workers stopped chaining
+  and retained the existing 60-second, stage-aware retry and cleanup policy.
+- Updated `app/controllers/site_maintenance.php` to accept only an
+  authenticated, strictly shaped POST containing `update_ticket`, reject
+  query-string or mixed-mode tickets, and validate the existing private
+  maintenance token before running updater work. The worker advanced only the
+  originally leased, enabled, running background stable job.
+- Extended `app/services/site_maintenance.php` to deliver updater tickets
+  through the installation's configured `base_url`, never the incoming Host
+  header. Retained verified HTTPS, bounded connection/write admission,
+  independent HTTP execution and the single-worker development-server fallback
+  without waiting for child responses.
+- Updated `app/services/updates_job_lookup.php` and
+  `app/services/updates_request.php` to observe active chain leases before
+  loading the heavy updater path on normal visits. Updated
+  `app/services/updates_install.php` to preserve separate discovery and
+  package-processing requests and integrated the new owner through
+  `app/services/updates.php`.
+- Updated `app/runtime/modules.php`, `scripts/runtime_module_roots.php` and
+  `scripts/runtime_dynamic_dependencies.php` to include the new deferred
+  updater owner and preserve selective loader boundaries and existing runtime
+  include budgets.
+
+#### Windows desktop client and installer
+
+- Added `winapp/uploader/windows_startup.py` for the per-user
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value
+  `PHPGalleryUploader`, a quoted executable path with `--startup`, and native
+  Windows mutex/event activation keyed to the shared profile. Kept source and
+  non-Windows runs free of startup registration.
+- Updated `winapp/gallery_watch_upload.pyw` with `--startup` and
+  `--configure-startup` modes, a 200 ms activation check on the Tk main loop,
+  early ownership acquisition before logging and configuration access,
+  immediate preference persistence and visible fallback after failed tray
+  startup.
+- Updated `winapp/uploader/config.py` to default missing legacy
+  `start_with_windows` values to true while retaining explicit false values.
+  Updated `winapp/installer.iss` to run startup reconciliation as the original
+  user during a normal install, skip the elevated self-update path and register
+  removal of its own startup value during uninstall.
+
+#### CI admission and release provenance
+
+- Updated `.github/scripts/develop-integration.mjs` to compare exact tracked
+  file identities from complete recursive main/candidate trees, verify bounded
+  `winapp/VERSION` Git blobs against their SHA-1 Git object identity, parse
+  canonical numeric `X.Y.Z`, and reject missing, truncated, nonregular or
+  mismatched evidence. Used numeric component comparison rather than
+  lexicographic ordering.
+- Persisted `winapp_version` admission evidence containing the observed main
+  SHA, published and candidate versions, and installer-input change decision.
+  Revalidated against current `main` during publication and blocked the
+  protected `develop` write if `main` moved after admission; existing
+  protected-develop release qualification remained unchanged.
+- Added immutable `.github/release-origins/v_0.137.6.json` and
+  `.github/release-predecessors/v_0.137.6.json` records for the selected
+  develop source, previous stable release and initial protected main lineage.
+  The origin initialization commit referenced
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+#### Tests and documentation
+
+- Added `tests/autoupdate_background_chain_test.php` to exercise the real
+  durable cleanup worker across multiple single-use continuations and 720
+  disposable files. Covered ticket guessing/replay/expiry, duplicate dispatch,
+  chain and worker lock contention, missed-handoff recovery, failed-delivery
+  throttling, disabled installer capability and manual/beta isolation.
+- Added `tests/autoupdate_background_http_test.php` and
+  `tests/fixtures/autoupdate_background_router.php` to run a hosted Linux
+  two-worker HTTP fixture. Verified that one anonymous successful visit
+  launched authenticated independent worker requests and completed real
+  multi-slice cleanup, while a 503 response and an unauthenticated maintenance
+  request did not.
+- Extended `tests/autoupdate_interval_policy_test.php`,
+  `tests/autoupdate_request_latency_safety_test.php` and
+  `tests/cache_transport_maintenance_test.php` to enforce live-chain ownership,
+  token checks before private work, nonblocking handoff and request-maintenance
+  isolation.
+- Repaired `tests/cache_lifecycle_registry_test.php` to track regional journal
+  offsets across fair scheduling turns, reject cursor rewind, require bounded
+  completion and verify exact totals for 1,200 disposable protected files
+  without mistaking an unchanged global turn for replay.
+- Added `winapp/tests/test_windows_startup.py` for configuration migration,
+  registry isolation, immediate preference saving, duplicate-launch ordering,
+  tray fallback, recovery prompts and native Windows mutex/event subprocess
+  behavior. Extended `tests/develop_integration_test.mjs` for installer input
+  additions, edits, removals, renames, mode changes, numeric version ordering,
+  malformed/missing blobs and a moving main baseline.
+- Added `docs/AUTOUPDATE.md` and updated `ARCHITECTURE.md`, `CODEMAP.md`,
+  `README.md`, `TESTING.md`, `docs/CI_COVERAGE_REUSE_CONTRACT.md`,
+  `docs/COMPATIBILITY_LIFECYCLE.md`, `winapp/README.md`, all four
+  English/Czech/German/Swedish manual sources, and automatic-update help
+  translations.
+
+#### Compatibility and operational limits
+
+- Added no database migration or new database schema. Preserved existing update
+  checkpoints, stage validation, activation/rollback recovery, manual and beta
+  update isolation, optional `scripts/application_update.php` scheduling and
+  the installed Windows uploader's independent release channel.
+- Required the server to reach its configured origin with valid TLS and
+  sufficient concurrent PHP workers for autonomous HTTP continuation. An
+  authenticated socket write indicated dispatch, not arrival; the private
+  `last_arrival_at` field distinguished observed execution. Restricted or
+  single-worker hosting retained the existing visitor-driven fallback.
+- Kept Windows startup registration limited to frozen installed applications
+  and the current user's registry hive. Cross-session mutex ownership prevented
+  shared-profile concurrency but could not restore a window in a different
+  Windows session.
+- Kept production hosting/TLS and end-to-end update activation acceptance, as
+  well as installed Windows logon/UAC/upgrade/uninstall behavior, outside the
+  scope of the new isolated regression fixtures. No Windows installer artifact
+  was produced by this source change.
+
+### User Impact
+
+#### For visitors
+
+- Allowed one eligible ordinary gallery visit to initiate a stable update and
+  let the server continue a healthy running installation without further
+  browser activity. Discovery still depended on incoming traffic and respected
+  configured intervals and GitHub waiting periods; the five-minute interval did
+  not promise a five-minute installation.
+- Preserved normal gallery rendering while a valid private chain owned its
+  updater job. Blocked SEO/503 requests did not start a chain, and no new
+  public gallery controls were added.
+
+#### For administrators
+
+- Removed the need to keep the Updates page open, log in, run JavaScript or
+  configure hosting cron for visitor-triggered stable-install continuation on
+  capable hosting. Preserved the existing update switch, saved discovery
+  intervals, dry check behavior and manual recovery paths.
+- Updated automatic-update guidance in English, Czech, German and Swedish,
+  including the configured-origin and hosting constraints. Added no new
+  administrator page or database migration.
+
+#### For Windows uploader users
+
+- Enabled default logon-to-tray startup in a future installed 0.7.0 build, with
+  an immediate opt-out, existing-window activation on manual relaunch and an
+  accessible fallback when tray initialization failed. No upload or watcher job
+  began automatically merely because Windows started.
+- Retained existing settings across upgrades and avoided duplicate processes
+  writing one profile. The 0.7.0 installer remained to be built and qualified
+  separately.
+
+#### For maintainers
+
+- Prevented feature integration from publishing changed WinApp installer inputs
+  without a qualifying version increase over published main, while permitting
+  documentation/test changes and repeated development integrations at one
+  upcoming version.
+- Added isolated regression coverage and persistent, redacted updater-chain
+  diagnostics while keeping production-hosting verification and manual
+  installed-Windows acceptance as separate release checks.
+
 ## Version 0.137.5
 
 Improved release automation with bounded Copilot usage, source-bound external

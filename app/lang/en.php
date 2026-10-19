@@ -1202,7 +1202,7 @@ return [
     'admin.theme.overrides.visual_editor_anonymous_fallback_notice' => 'This gallery is not available in Anonymous view. The preview moved to an accessible page.',
     'admin.updates.autoupdate_kicker' => 'Automatic updates',
     'admin.updates.autoupdate_enable_label' => 'Enable automatic stable updates',
-    'admin.updates.autoupdate_hint' => 'Eligible GET/HEAD requests can check for stable updates at the selected interval and start a resumable installation. Request-driven checks need incoming traffic; unattended checks require a separately configured hosting cron. Dry check bypasses the local interval without installing files.',
+    'admin.updates.autoupdate_hint' => 'After the selected interval, an ordinary visit checks for a stable update and automatically continues installation on the server. Login, JavaScript and hosting cron are unnecessary. Checks require incoming traffic and respect GitHub waiting periods. Dry check never installs files.',
     'admin.updates.autoupdate_interval_label' => 'Check for updates every',
     'admin.updates.autoupdate_interval_option' => '{count} minutes',
     'admin.updates.autoupdate_next_eligible_label' => 'Next eligible discovery',

@@ -20,11 +20,121 @@ import {spawnSync} from 'node:child_process';
 import {runInNewContext} from 'node:vm';
 import {buildBootstrapCandidate,requireBrokenAuthority,resolveIntegrationBootstrap,verifyBootstrapChain,validateBootstrapSource} from '../.github/scripts/integration-bootstrap.mjs';
 import {integrateDevelop,recoverDevelop,publishPreparedCandidate,selectDevelopIntegration,validBranchName,validateDevelopIntegration,requireTrustedBasicEvidence,
-    requireAuthorityUpdateSource,requireAuthorityUpdateSourcePaths,dispatchPreparedBasic,waitForPreparedBasic} from '../.github/scripts/develop-integration.mjs';
+    requireAuthorityUpdateSource,requireAuthorityUpdateSourcePaths,dispatchPreparedBasic,waitForPreparedBasic,
+    requireWinappVersion} from '../.github/scripts/develop-integration.mjs';
 import {bindTrustedBasicRoot,bindTrustedBasicReport} from '../.github/scripts/trusted-basic.mjs';
 import {verifyIntegrationEvidence} from '../.github/scripts/release-promotion.mjs';
 import {ciOwnerWorkflowResponse} from './support/ci_owner_fixture.mjs';
 import {fullMatrixOwners,requireCurrentWorkflowOwners} from '../.github/scripts/ci-owner-contract.mjs';
+
+/** Complete recursive-tree leaf used by version admission fixtures.
+ * @typedef {{path:string,mode:string,type:string,sha:string}} WinappTreeRow
+ */
+/** Build independently mutable main/candidate trees and complete real Git blobs.
+ * @param {string} mainVersion Version retained by the published main baseline.
+ * @param {string} candidateVersion Version proposed by an integration candidate.
+ * @returns {{call:IntegrationApi,main:string,mainTree:string,candidateTree:string,before:WinappTreeRow[],after:WinappTreeRow[],blobs:Map<string,Buffer>}} Read-only fake provider with mutable tree/blob evidence; any unexpected API access fails.
+ */
+function winappVersionFixture(mainVersion='0.6.1',candidateVersion=mainVersion) {
+    const main='1'.repeat(40),mainTree='2'.repeat(40),candidateTree='3'.repeat(40);
+    const blobs=new Map();
+    const version=text=>{
+        const bytes=Buffer.from(text+'\n');
+        const sha=createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+        blobs.set(sha,bytes);
+        return {path:'winapp/VERSION',mode:'100644',type:'blob',sha};
+    };
+    const runtime={path:'winapp/uploader/runtime.py',mode:'100644',type:'blob',sha:'4'.repeat(40)};
+    const before=[version(mainVersion),{...runtime}],after=[version(candidateVersion),{...runtime}];
+    const call=(path,method='GET')=>{
+        assert.equal(method,'GET','version admission never writes remote state');
+        if (path==='repos/owner/gallery/git/ref/heads/main') return {object:{sha:main}};
+        if (path==='repos/owner/gallery/commits/'+main) return {sha:main,commit:{tree:{sha:mainTree}}};
+        for (const [sha,tree] of [[mainTree,before],[candidateTree,after]]) {
+            if (path==='repos/owner/gallery/git/trees/'+sha+'?recursive=1') return {sha,truncated:false,tree};
+        }
+        const sha=path.split('/git/blobs/')[1],bytes=blobs.get(sha);
+        if (bytes) return {sha,encoding:'base64',size:bytes.length,content:bytes.toString('base64')};
+        throw new Error('Unexpected WinApp version fixture API: '+path);
+    };
+    return {call,main,mainTree,candidateTree,before,after,blobs};
+}
+
+{
+    const f=winappVersionFixture();
+    assert.deepEqual(requireWinappVersion(f.call,'owner/gallery',f.candidateTree),{
+        main_sha:f.main,main_version:'0.6.1',candidate_version:'0.6.1',inputs_changed:false,
+    });
+    for (const path of ['winapp/tests/test_runtime.py','winapp/README.md','winapp/AGENTS.md','index.php']) {
+        f.after.push({path,mode:'100644',type:'blob',sha:'5'.repeat(40)});
+    }
+    assert.equal(requireWinappVersion(f.call,'owner/gallery',f.candidateTree).inputs_changed,false,
+        'tests, instructions, readme and CMS edits do not require an installer version bump');
+}
+
+for (const change of ['modified','added','deleted','renamed','mode']) {
+    const f=winappVersionFixture(),runtime=f.after[1];
+    if (change==='modified') runtime.sha='5'.repeat(40);
+    if (change==='added') f.after.push({...runtime,path:'winapp/new_runtime.py'});
+    if (change==='deleted') f.after.pop();
+    if (change==='renamed') runtime.path='winapp/uploader/renamed.py';
+    if (change==='mode') runtime.mode='100755';
+    assert.throws(()=>requireWinappVersion(f.call,'owner/gallery',f.candidateTree),
+        /must be greater than published/,change+' installer input requires a bump');
+}
+
+for (const [published,candidate] of [['0.6.1','0.7.0'],['0.9.0','0.10.0'],['0.7.0','0.7.1']]) {
+    const f=winappVersionFixture(published,candidate);
+    f.after[1].sha='5'.repeat(40);
+    assert.equal(requireWinappVersion(f.call,'owner/gallery',f.candidateTree).candidate_version,candidate);
+    // Another integration within the same upcoming version still compares with
+    // published main, not its preceding develop commit or the previous check.
+    f.after[1].sha='6'.repeat(40);
+    assert.equal(requireWinappVersion(f.call,'owner/gallery',f.candidateTree).candidate_version,candidate);
+}
+
+for (const candidate of ['0.6.1','0.5.9']) {
+    const f=winappVersionFixture('0.6.1',candidate);
+    f.after[1].sha='5'.repeat(40);
+    assert.throws(()=>requireWinappVersion(f.call,'owner/gallery',f.candidateTree),/must be greater than published/);
+}
+{
+    const f=winappVersionFixture('0.7.0','0.7.0');
+    f.after[1].sha='5'.repeat(40);
+    assert.throws(()=>requireWinappVersion(f.call,'owner/gallery',f.candidateTree),/must be greater than published/,
+        'after publishing 0.7.0, its next runtime edit needs another version');
+}
+for (const invalid of ['0.7','v0.7.0','00.7.0','0.7.0-beta','0.7.0\n0.7.1']) {
+    const f=winappVersionFixture('0.6.1',invalid);
+    assert.throws(()=>requireWinappVersion(f.call,'owner/gallery',f.candidateTree),/canonical numeric/);
+}
+{
+    const f=winappVersionFixture('0.6.1','0.7.0');
+    for (const mutate of [
+        response=>({...response,truncated:true}),
+        response=>({...response,tree:response.tree.filter(entry=>entry.path!=='winapp/VERSION')}),
+        response=>({...response,tree:response.tree.map(entry=>entry.path==='winapp/VERSION'
+            ?{...entry,mode:'120000'}:entry)}),
+    ]) {
+        assert.throws(()=>requireWinappVersion(path=>path.endsWith('/git/trees/'+f.candidateTree+'?recursive=1')
+            ?mutate(f.call(path)):f.call(path),'owner/gallery',f.candidateTree),/BLOCKED/);
+    }
+    for (const mutate of [
+        response=>({...response,content:response.content.slice(0,-4)}),
+        response=>({...response,sha:'f'.repeat(40)}),
+        response=>({...response,size:response.size+1}),
+        response=>({...response,content:Buffer.from('0.9.0\n').toString('base64')}),
+    ]) {
+        assert.throws(()=>requireWinappVersion(path=>path.includes('/git/blobs/')
+            ?mutate(f.call(path)):f.call(path),'owner/gallery',f.candidateTree),/BLOCKED/);
+    }
+    let mainReads=0;
+    assert.throws(()=>requireWinappVersion(path=>{
+        // The second main read verifies the initially frozen comparison lease.
+        if (path.endsWith('/git/ref/heads/main') && ++mainReads===2) return {object:{sha:'e'.repeat(40)}};
+        return f.call(path);
+    },'owner/gallery',f.candidateTree),/main moved/);
+}
 
 /** Create real isolated Git objects for the source/origin/overlay recovery ancestry contract.
  * @returns {{record:import('../.github/scripts/integration-bootstrap.mjs').BootstrapRecord,origin:{schema_version:number,version:string,release_branch:string,selected_develop_sha:string,initial_main_sha:string,previous_stable_tag:string,previous_stable_sha:string},git:function(string,string[],(string|null)=):string,cleanup:function():void}} Disposable tree builder and exact recovery identities; no network or user refs are used.
@@ -393,17 +503,33 @@ function fixture(sourceHead=candidateSha) {
     const f=fixture(sourceSha),original=f.call;
     const selectedContext={...context,featureQualification:true,ref:'refs/heads/feature/ci-tests',
         workflowRef:repository+'/.github/workflows/develop-integration.yml@refs/heads/feature/ci-tests'};
+    const versionBytes=Buffer.from('0.6.1\n');
+    const versionSha=createHash('sha1').update(`blob ${versionBytes.length}\0`).update(versionBytes).digest('hex');
     const selectedApi=(path,method='GET',payload=null)=>{
         if (path.endsWith('/collaborators/klusik/permission')) return {permission:'admin'};
+        if (path.endsWith('/git/ref/heads/main')) return {object:{sha:developSha}};
+        if (path.endsWith('/git/blobs/'+versionSha)) return {
+            sha:versionSha,encoding:'base64',size:versionBytes.length,content:versionBytes.toString('base64'),
+        };
         const result=original(path,method,payload);
         if (path.endsWith('/actions/runs/901')) return {...result,head_branch:'feature/ci-tests',
             actor:{login:'klusik'},triggering_actor:{login:'klusik'}};
-        if (path.endsWith('/git/trees/'+sourceTree+'?recursive=1')) return {...result,tree:result.tree.map(entry=>
-            entry.path==='scripts/audit_registry.php'?{...entry,sha:'e'.repeat(40)}:entry)};
+        if ([sourceTree,developTree].some(tree=>path.endsWith('/git/trees/'+tree+'?recursive=1'))) {
+            return {...result,tree:[...result.tree.map(entry=>
+                entry.path==='scripts/audit_registry.php' && path.includes(sourceTree)
+                    ?{...entry,sha:'e'.repeat(40)}:entry),
+            {path:'winapp/VERSION',mode:'100644',type:'blob',sha:versionSha}]};
+        }
         return result;
     };
     assert.equal(selectDevelopIntegration(branch,selectedContext,repository,selectedApi).sourceSha,sourceSha,
         'explicit feature workflow selection accepts actual changed test/audit definitions before main installation');
+    assert.throws(()=>selectDevelopIntegration(branch,selectedContext,repository,(path,method='GET',payload=null)=>{
+        const response=selectedApi(path,method,payload);
+        return path.endsWith('/git/trees/'+sourceTree+'?recursive=1')
+            ? {...response,tree:[...response.tree,{path:'winapp/new_runtime.py',mode:'100644',type:'blob',sha:'f'.repeat(40)}]}
+            : response;
+    }),/must be greater than published/,'unchanged WinApp version rejects selection before preparation or FULL');
     assert.throws(()=>selectDevelopIntegration(branch,selectedContext,repository,(path,method='GET',payload=null)=>
         path.endsWith('/actions/runs/901')?{...selectedApi(path,method,payload),triggering_actor:{login:'attacker'}}
             :selectedApi(path,method,payload)),/BLOCKED/,'an unselected actor cannot authorize feature publication');
