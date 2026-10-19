@@ -9,7 +9,8 @@ Implementation starts at develop `1a658ebe3383f3ac7424b166f6d6304075d346ab` on
 The installed BASIC / one exact-candidate FULL / release delta cadence remains.
 
 Owner update on 2026-10-15: active CI tests only PHP 8.1 (compatibility floor)
-and PHP 8.5 (newest representative). MySQL 8.4 and MariaDB 10.11 move to PHP 8.5;
+and PHP 8.5 (newest representative). MySQL 8.4 and MariaDB 10.11 move to PHP
+8.5;
 MariaDB 11.4 remains on PHP 8.5. No database variant or functional assertion is
 removed. Tool/preparation jobs and macOS packaging also move from 8.3 to 8.5.
 Earlier PHP 8.3 timings below remain historical evidence. Historical release
@@ -23,7 +24,8 @@ Representative **before** evidence, all attempt 1:
   candidate `eda8aade5c78ce969e68640cfcffdb908eee978e`, immutable base
   `23fd6c26a6117e1c5d61d3f6094ca98783a56553`, installed workflow
   `895cc70680dcec52d6b3b83b6e197b413f2a796f`. Workflow created/started
-  13:14:36 UTC, updated/completed 13:22:06 UTC: 450 s, no provider-recorded initial
+  13:14:36 UTC, updated/completed 13:22:06 UTC: 450 s, no provider-recorded
+  initial
   queue delay. Sum of actual native job durations: 1,307 s including integration
   preparation/publish, or 1,217 s for the eleven FULL owners. Longest job: MySQL
   8.4 / PHP 8.3, 268 s. These are elapsed runner walls, not billable usage.
@@ -51,15 +53,19 @@ Both slow children were serial barriers in all five profiles. The three existing
 positive folder jobs lasted Ubuntu 15 s, Windows 38 s and macOS 35 s; they did
 not prove ZIP content hashes. The new single PHP builder replaces shell deploy;
 compact real-builder negative cases and full folder+ZIP SHA proofs belong to
-three explicit OS packaging owners (Ubuntu/PHP 8.1, Windows/PHP 8.5 and macOS/PHP 8.5), without SQL-profile repetition. Runtime
+three explicit OS packaging owners (Ubuntu/PHP 8.1, Windows/PHP 8.5 and
+macOS/PHP 8.5), without SQL-profile repetition. Runtime
 module scenarios remain intact; optimization targets repeated analysis cost.
 
 The same MySQL report's next serial children were the real browser journey
-23.0195 s, session-route contention 11.3324 s, widget browser 7.9808 s and session
+23.0195 s, session-route contention 11.3324 s, widget browser 7.9808 s and
+session
 contention 7.0372 s. These protect actual HTTP/browser or session concurrency;
-their isolation remains. The browser change removes an unconditional per-mutation
+their isolation remains. The browser change removes an unconditional
+per-mutation
 delay and retains observable state waits. WinApp regression itself took 2.9195 s
-(149 PASS / 1 installer-native SKIP), with no observed repeated dependency install
+(149 PASS / 1 installer-native SKIP), with no observed repeated dependency
+install
 that would justify a new Python cache. Node retained 49/49 PASS in 14.9356 s.
 
 At measurement time the complete cache API inventory contained 34 same-key
@@ -80,7 +86,8 @@ freshness requirements. Database initialization remains disposable.
 After measurements must use the exact prepared implementation candidate and
 record setup, audit, package phases and native required results. Baseline and
 implementation change source/configuration and run on fresh hosted machines;
-comparison is observational, not a controlled same-SHA speedup or flakiness rate.
+comparison is observational, not a controlled same-SHA speedup or flakiness
+rate.
 Missing warm-cache/release live acceptance must remain explicit. No percentage
 or billing improvement is inferred.
 
@@ -98,7 +105,8 @@ Both are required failures, not accepted SKIPs.
 All 49 Node fixtures passed in each PHP profile and required Chromium passed
 34/34. The five PHP profiles were red at a computed-import diagnostic contract;
 PHP 8.1 additionally exposed a cache fixture observing directory removal before
-the aggregate log receipt persisted. Fixes retain the refusal/receipt assertions,
+the aggregate log receipt persisted. Fixes retain the refusal/receipt
+assertions,
 use native verified Windows junctions and canonical CRLF-only plan comparison,
 and wait for the actual durable receipt within the existing deadline.
 The first run also exposed discarded successful-child profiling output. The
@@ -107,29 +115,49 @@ and compact logs after PASS; malformed emitted records fail explicitly. The
 runtime test's compiler/isolated-child phase values therefore remain accessible.
 These observations are diagnostic evidence, not a green handoff or a flake rate.
 Fresh exact-candidate qualification and final timings belong to the final run
-linked in the implementation handoff; an earlier partial run never qualifies a fix.
+linked in the implementation handoff; an earlier partial run never qualifies a
+fix.
 
-Snapshot: **2026-10-11**. Source branch: `develop`, commit `5509c865ede3f54df87024ac8692fa5e3166ea1a`. This is an evidence and design artifact, **not an active change to hosted test selection**.
+Snapshot: **2026-10-11**. Source branch: `develop`, commit
+`5509c865ede3f54df87024ac8692fa5e3166ea1a`. This is an evidence and design
+artifact, **not an active change to hosted test selection**.
 
 ## Maintainer cadence replacement (2026-10-12)
 
 All earlier proposals in this historical baseline are superseded where they
-require FULL on feature pushes or after develop has already advanced. The current
-source contract is [CI_COVERAGE_REUSE_CONTRACT.md](CI_COVERAGE_REUSE_CONTRACT.md):
+require FULL on feature pushes or after develop has already advanced. The
+current
+source contract is
+[CI_COVERAGE_REUSE_CONTRACT.md](CI_COVERAGE_REUSE_CONTRACT.md):
 feature/squash BASIC, one FULL on prepared A before the Actions button performs
 develop FF, then BASIC for the actual release A..B delta. Four manual builds,
 notes/manifest preparation, assets and existing reviewed completion remain.
 The button rejects unsquashed source and stale develop. Post-release pure FF
 retains B qualification without another matrix. Source changes require hosted
-qualification and protected installation; no timing reduction or live integration
-is inferred from this design. Historical measurements below retain their original
+qualification and protected installation; no timing reduction or live
+integration
+is inferred from this design. Historical measurements below retain their
+original
 scope and are not measurements of the new cadence.
 ## Sources and ownership
 
-- Source: `.github/workflows/gallery-workflows.yml`, `candidate-preparation.yml`, `scripts/audit.php`, `scripts/audit_registry.php`, `scripts/audit_php_registry.php` and `scripts/gallery_workflow_run.php` at the snapshot SHA.
-- Live GitHub repository rulesets (read-only): `24808873` for `develop` and `24808772` for `main`. No ruleset was edited.
-- Historical hosted run evidence: [38133732170](https://github.com/klusik/PHP_gallery/actions/runs/38133732170), [38134513077](https://github.com/klusik/PHP_gallery/actions/runs/38134513077), [38135383096](https://github.com/klusik/PHP_gallery/actions/runs/38135383096) and the distinct prior [37957193887](https://github.com/klusik/PHP_gallery/actions/runs/37957193887).
-- Existing owners: #94 handles browser diagnostics/flakes; #95 handles general-test duplication in PHP/database jobs; #142 and #143-#148 handle workflow and required-check inventory/cleanup; #101 handles release safeguards; #131 owns the measurement discipline. This document does not supersede those issues.
+- Source: `.github/workflows/gallery-workflows.yml`,
+  `candidate-preparation.yml`, `scripts/audit.php`,
+  `scripts/audit_registry.php`, `scripts/audit_php_registry.php` and
+  `scripts/gallery_workflow_run.php` at the snapshot SHA.
+- Live GitHub repository rulesets (read-only): `24808873` for `develop` and
+  `24808772` for `main`. No ruleset was edited.
+- Historical hosted run evidence:
+  [38133732170](https://github.com/klusik/PHP_gallery/actions/runs/38133732170),
+  [38134513077](https://github.com/klusik/PHP_gallery/actions/runs/38134513077),
+  [38135383096](https://github.com/klusik/PHP_gallery/actions/runs/38135383096)
+  and the distinct prior
+  [37957193887](https://github.com/klusik/PHP_gallery/actions/runs/37957193887).
+- Existing owners: #94 handles browser diagnostics/flakes; #95 handles
+  general-test duplication in PHP/database jobs; #142 and #143-#148 handle
+  workflow and required-check inventory/cleanup; #101 handles release
+  safeguards; #131 owns the measurement discipline. This document does not
+  supersede those issues.
 
 ## Verified inventory (source snapshot)
 
@@ -143,7 +171,11 @@ scope and are not measurements of the new cadence.
 | WinApp Python test modules | 8 | Module count, not Python test-case count |
 | Tracked workflow YAML files under `.github/workflows/` on `develop` | 5 | Triggers and owners require separate classification under #142 |
 
-The five tracked workflow files are `candidate-preparation.yml`, `gallery-workflows.yml`, `release-qualification.yml`, `release-promotion.yml` and `release-retirement.yml`. Historical issue #143 lists a different fifth file (`release-reconciliation.yml`), so that earlier list is not an authoritative current snapshot.
+The five tracked workflow files are `candidate-preparation.yml`,
+`gallery-workflows.yml`, `release-qualification.yml`, `release-promotion.yml`
+and `release-retirement.yml`. Historical issue #143 lists a different fifth file
+(`release-reconciliation.yml`), so that earlier list is not an authoritative
+current snapshot.
 
 ### Hosted execution / coverage ownership
 
@@ -159,20 +191,39 @@ The five tracked workflow files are `candidate-preparation.yml`, `gallery-workfl
 | Aggregate `Complete required CI matrix` and exact candidate gate | Fail-closed protected-branch status and unsuperseded SHA | Keep exact required-check identity and mandatory semantics | #142 / #101 |
 | Conditional `release` audit and release documentation | Complete immutable release qualification and four PDF editions | Keep release-owned, not feature-commit PDF work | #101 |
 
-The current source invokes `--profile=full` in the two PHP source jobs and, via `gallery_workflow_ci.php` and `gallery_workflow_run.php`, in all three real-database jobs. This is **five broad full-audit invocations**, not proof that every individual test is redundantly executed or that engine-specific variants can be deleted. All full profiles include general PHP/Node/WinApp/source suites; the required fixture can produce context-dependent SKIPs.
+The current source invokes `--profile=full` in the two PHP source jobs and, via
+`gallery_workflow_ci.php` and `gallery_workflow_run.php`, in all three
+real-database jobs. This is **five broad full-audit invocations**, not proof
+that every individual test is redundantly executed or that engine-specific
+variants can be deleted. All full profiles include general
+PHP/Node/WinApp/source suites; the required fixture can produce
+context-dependent SKIPs.
 
-`audit_registry.php` also contains a duplicate array-key declaration for `breadcrumb_workflow_integration_test.php`. PHP overwrites the earlier identical key in the array; this is source duplication, **not evidence of two test executions**.
+`audit_registry.php` also contains a duplicate array-key declaration for
+`breadcrumb_workflow_integration_test.php`. PHP overwrites the earlier identical
+key in the array; this is source duplication, **not evidence of two test
+executions**.
 
 ### Live branch rules that must remain valid
 
-- `develop` ruleset `24808873` is active and requires exact check `Complete required CI matrix` from GitHub Actions integration ID `15368`, strict required-status checks, linear history, no non-fast-forward and no deletion.
-- `main` ruleset `24808772` is active and requires `Release qualification` from integration ID `15368`, PR review and thread resolution, no non-fast-forward and no deletion.
-- A passing source preflight, a green renamed job, a skipped mandatory runner, or an older green SHA is not equivalent to the mandatory qualified candidate.
-- No branch rules, workflow triggers, required check identifiers, release gates or job matrices change in the first foundation commit.
+- `develop` ruleset `24808873` is active and requires exact check
+  `Complete required CI matrix` from GitHub Actions integration ID `15368`,
+  strict required-status checks, linear history, no non-fast-forward and no
+  deletion.
+- `main` ruleset `24808772` is active and requires `Release qualification` from
+  integration ID `15368`, PR review and thread resolution, no non-fast-forward
+  and no deletion.
+- A passing source preflight, a green renamed job, a skipped mandatory runner,
+  or an older green SHA is not equivalent to the mandatory qualified candidate.
+- No branch rules, workflow triggers, required check identifiers, release gates
+  or job matrices change in the first foundation commit.
 
 ## Historical latency evidence (not a controlled A/B experiment)
 
-Numbers below come from each completed workflow's `updated_at - run_started_at` and the sum of executed jobs' `completed_at - started_at` in the GitHub Actions API. Summed runner time includes parallel jobs and is not elapsed workflow time or provider billable usage.
+Numbers below come from each completed workflow's `updated_at - run_started_at`
+and the sum of executed jobs' `completed_at - started_at` in the GitHub Actions
+API. Summed runner time includes parallel jobs and is not elapsed workflow time
+or provider billable usage.
 
 | Hosted run | Outcome | Workflow elapsed | Summed executed job time | Scope caveat |
 | --- | --- | ---: | ---: | --- |
@@ -181,31 +232,60 @@ Numbers below come from each completed workflow's `updated_at - run_started_at` 
 | [38135383096](https://github.com/klusik/PHP_gallery/actions/runs/38135383096) | PASS | 425 s | 1,289 s (21.48 runner-min) | Corrected fixture revision of #178 |
 | [37957193887](https://github.com/klusik/PHP_gallery/actions/runs/37957193887) | PASS | 520 s | 1,140 s (19.00 runner-min) | Different branch/revision and runner scheduling |
 
-For run 38135383096 the MySQL 8.4 job lasted 246 s, the MariaDB 11.4 job 218 s and the MariaDB 10.11 job 161 s; the PHP 8.1/8.5 source jobs lasted 178/181 s. The central audit steps inside those jobs were 199/187/130 s for the three DB jobs and 158/156 s for the two source jobs. Setup, waiting and checkout must not be conflated with time executing tests.
+For run 38135383096 the MySQL 8.4 job lasted 246 s, the MariaDB 11.4 job 218 s
+and the MariaDB 10.11 job 161 s; the PHP 8.1/8.5 source jobs lasted 178/181 s.
+The central audit steps inside those jobs were 199/187/130 s for the three DB
+jobs and 158/156 s for the two source jobs. Setup, waiting and checkout must not
+be conflated with time executing tests.
 
-These samples have *different* source SHAs and limited cache/runner data. They do not establish a same-SHA flake rate or a measured optimization. Provider-reported billable milliseconds and cold/warm cache identity were **not independently sampled for this snapshot**. See #131 for older explicitly scoped API billing evidence.
+These samples have *different* source SHAs and limited cache/runner data. They
+do not establish a same-SHA flake rate or a measured optimization.
+Provider-reported billable milliseconds and cold/warm cache identity were **not
+independently sampled for this snapshot**. See #131 for older explicitly scoped
+API billing evidence.
 
 ## First implementation foundation: advisory classifier only
 
-`PhpGallery\Audit\classify_source_change_scope()` in `scripts/audit_lib.php` is a **pure, non-enforcing helper**, covered by `tests/audit_change_scope_test.php` under the existing full/release PHP regression discovery. It has no CLI, workflow trigger, skip logic, new registry, or power to produce green status.
+`PhpGallery\Audit\classify_source_change_scope()` in `scripts/audit_lib.php` is
+a **pure, non-enforcing helper**, covered by `tests/audit_change_scope_test.php`
+under the existing full/release PHP regression discovery. It has no CLI,
+workflow trigger, skip logic, new registry, or power to produce green status.
 
 Current deliberately narrow rule:
 
-1. The caller must have independently verified the **authored source SHA and a trustworthy branch-specific comparison baseline**.
-2. A non-empty diff with **only `M` entries** for the four maintained manual TeX sources yields advisory `manual-source`.
-3. Missing/untrusted comparison base, empty diff, non-modification statuses including rename/add/delete, mixed source, test/CI/security paths, unknown paths or any malformed path yield `full`.
-4. Even `manual-source` is **not proof of prose-only content, valid TeX, localization consistency, or complete qualification**. No CI gate currently consumes this advisory scope.
+1. The caller must have independently verified the **authored source SHA and a
+   trustworthy branch-specific comparison baseline**.
+2. A non-empty diff with **only `M` entries** for the four maintained manual TeX
+   sources yields advisory `manual-source`.
+3. Missing/untrusted comparison base, empty diff, non-modification statuses
+   including rename/add/delete, mixed source, test/CI/security paths, unknown
+   paths or any malformed path yield `full`.
+4. Even `manual-source` is **not proof of prose-only content, valid TeX,
+   localization consistency, or complete qualification**. No CI gate currently
+   consumes this advisory scope.
 
-The regressions intentionally cover positive four-edition changes and negative cases involving Git history, PHP, security, workflows, tests, migrations, generated state, path normalization, renames, additions and deletions. This foundation is safe precisely because **all hosted jobs continue to execute as before**.
+The regressions intentionally cover positive four-edition changes and negative
+cases involving Git history, PHP, security, workflows, tests, migrations,
+generated state, path normalization, renames, additions and deletions. This
+foundation is safe precisely because **all hosted jobs continue to execute as
+before**.
 
 ## Design for later change-aware qualification (not yet enabled)
 
 ### Baseline provenance, prior to classifier use
 
-- Distinguish `source_sha` (maintainer-authored source) from `candidate_sha` (post-preparation, potentially generated commit). Bind each run and status to exact immutable identities.
-- Compare the authored feature/fix change to its appropriate **fork point with `develop`**, using verified ancestry and complete rename-aware Git history. Do **not** assume the existing `origin/main` source-policy merge-base is the authored-change baseline; `develop` can include unrelated unreleased features.
-- Any missing head/base/provenance, shallow or ambiguous history, unexpected generated change, unknown status or unexpected event must require `full`. A path-only advisory result cannot authorize a skip on its own.
-- The release profile remains `release` and exact-Q regardless of classification.
+- Distinguish `source_sha` (maintainer-authored source) from `candidate_sha`
+  (post-preparation, potentially generated commit). Bind each run and status to
+  exact immutable identities.
+- Compare the authored feature/fix change to its appropriate **fork point with
+  `develop`**, using verified ancestry and complete rename-aware Git history. Do
+  **not** assume the existing `origin/main` source-policy merge-base is the
+  authored-change baseline; `develop` can include unrelated unreleased features.
+- Any missing head/base/provenance, shallow or ambiguous history, unexpected
+  generated change, unknown status or unexpected event must require `full`. A
+  path-only advisory result cannot authorize a skip on its own.
+- The release profile remains `release` and exact-Q regardless of
+  classification.
 
 ### Planned gates by risk, with no active changed test map
 
@@ -217,7 +297,11 @@ The regressions intentionally cover positive four-edition changes and negative c
 | Mixed, rename/delete, unknown, stale/missing baseline or generated-state ambiguity | Fail closed | Full required matrix |
 | Release preparation/promotion | Full immutable source and artifact policy | Existing four-edition, exact-SHA release qualification |
 
-Test selection stays owned by `scripts/audit.php` and its registries. No YAML path-to-suite list, new runner, retry-to-green mechanism, mandatory local audit or blanket timeout increase is approved. The conditional final required check needs a separately reviewed status contract; a skipped mandatory job may not masquerade as PASS.
+Test selection stays owned by `scripts/audit.php` and its registries. No YAML
+path-to-suite list, new runner, retry-to-green mechanism, mandatory local audit
+or blanket timeout increase is approved. The conditional final required check
+needs a separately reviewed status contract; a skipped mandatory job may not
+masquerade as PASS.
 
 ## Decisions and next evidence to collect
 
@@ -230,56 +314,166 @@ Test selection stays owned by `scripts/audit.php` and its registries. No YAML pa
 | Existing workflow definitions | KEEP pending #142 inventory | #143/#144 settings and triggers plus reviewed #145 decisions |
 | Change-aware ordinary feedback and skipped matrix | DESIGN ONLY | Trusted baseline, deterministic negative fixtures and intact protected check semantics |
 
-Next increments: finish per-suite ownership and timing inventory; post read-only findings to #95/#94/#142 where their work is implicated; validate the exact-feature SHA via hosted candidate CI; then independently review any **actual** reduced-gate proposal. No performance gains or flaky-test fixes are claimed by this initial commit.
+Next increments: finish per-suite ownership and timing inventory; post read-only
+findings to #95/#94/#142 where their work is implicated; validate the
+exact-feature SHA via hosted candidate CI; then independently review any
+**actual** reduced-gate proposal. No performance gains or flaky-test fixes are
+claimed by this initial commit.
 ## Phase 1: exact authored-source provenance and safe generated-state separation (2026-10-11)
 
-The second implementation increment adds `parse_git_name_status_z()` and `audit_source_change_impact()` to the **existing** `scripts/audit_source_evidence.php` owner. The earlier `classify_source_change_scope()` remains unchanged. `tests/audit_change_evidence_test.php` is discovered by the normal full/release PHP test suite and exercises both the NUL-delimited parser and a private real Git fixture, without touching the working repository.
+The second implementation increment adds `parse_git_name_status_z()` and
+`audit_source_change_impact()` to the **existing**
+`scripts/audit_source_evidence.php` owner. The earlier
+`classify_source_change_scope()` remains unchanged.
+`tests/audit_change_evidence_test.php` is discovered by the normal full/release
+PHP test suite and exercises both the NUL-delimited parser and a private real
+Git fixture, without touching the working repository.
 
 ### Inputs, trust and output
 
-- Caller supplies `source_sha` (the immutable, authored source candidate) and `candidate_sha` (the prepared HEAD being evaluated). The resolver does **not** guess these from a commit subject or choose an untrusted new HEAD.
-- The exact checkout must match `candidate_sha`, be clean and report the expected Git repository root. Worktrees, missing history, invalid IDs, dirty/untracked source, unavailable Git or changing local refs fail closed to advisory `full`.
-- The resolver reads a single unambiguous merge-base of `source_sha` and `refs/remotes/origin/develop` and records both the resolved `develop_sha` and immutable comparison SHA. This separates the feature's authored change from unrelated new `develop` work. The earlier `origin/main` policy comparison remains untouched and is **not** substituted as a feature fork point.
-- Git changes are obtained with literal argv, bounded subprocesses and `--name-status -z --find-renames --no-ext-diff --no-textconv` to preserve tabs/newlines in names and retain add/delete/rename information; malformed and oversized output is rejected. It does not run file code, fetch remotes or create artifacts.
-- If `candidate_sha !== source_sha`, the resolver requires **one immediate source parent**, the exact existing candidate-generator author/email/subject and modifications only to `app/runtime/modules.php`, `app/production-files.json` and `app/core-manifest.json`. Generated paths are recorded separately, never confused with human-authored changes. Unexpected added/deleted/renamed generator outputs fail closed.
-- After reading the diffs, the resolver rechecks HEAD, `develop` ref and worktree identity. The existing hosted candidate publisher remains the authority for remote branch-HEAD checks and status provenance.
-- The result is a structured, **advisory-only** `scope`/`reason` with source, candidate, develop and base SHAs, authored changes and generated output paths. The only narrow scope remains `manual-source`; ordinary PHP/JS/CSS changes still return `full`. An on-disk bot-style author is **not cryptographic proof** of who created a commit and cannot replace trusted GitHub Actions identity or source-policy/manifest verification.
+- Caller supplies `source_sha` (the immutable, authored source candidate) and
+  `candidate_sha` (the prepared HEAD being evaluated). The resolver does **not**
+  guess these from a commit subject or choose an untrusted new HEAD.
+- The exact checkout must match `candidate_sha`, be clean and report the
+  expected Git repository root. Worktrees, missing history, invalid IDs,
+  dirty/untracked source, unavailable Git or changing local refs fail closed to
+  advisory `full`.
+- The resolver reads a single unambiguous merge-base of `source_sha` and
+  `refs/remotes/origin/develop` and records both the resolved `develop_sha` and
+  immutable comparison SHA. This separates the feature's authored change from
+  unrelated new `develop` work. The earlier `origin/main` policy comparison
+  remains untouched and is **not** substituted as a feature fork point.
+- Git changes are obtained with literal argv, bounded subprocesses and
+  `--name-status -z --find-renames --no-ext-diff --no-textconv` to preserve
+  tabs/newlines in names and retain add/delete/rename information; malformed and
+  oversized output is rejected. It does not run file code, fetch remotes or
+  create artifacts.
+- If `candidate_sha !== source_sha`, the resolver requires **one immediate
+  source parent**, the exact existing candidate-generator author/email/subject
+  and modifications only to `app/runtime/modules.php`,
+  `app/production-files.json` and `app/core-manifest.json`. Generated paths are
+  recorded separately, never confused with human-authored changes. Unexpected
+  added/deleted/renamed generator outputs fail closed.
+- After reading the diffs, the resolver rechecks HEAD, `develop` ref and
+  worktree identity. The existing hosted candidate publisher remains the
+  authority for remote branch-HEAD checks and status provenance.
+- The result is a structured, **advisory-only** `scope`/`reason` with source,
+  candidate, develop and base SHAs, authored changes and generated output paths.
+  The only narrow scope remains `manual-source`; ordinary PHP/JS/CSS changes
+  still return `full`. An on-disk bot-style author is **not cryptographic
+  proof** of who created a commit and cannot replace trusted GitHub Actions
+  identity or source-policy/manifest verification.
 
 ### Regression evidence and non-goals
 
-The new regression test checks NUL records, malformed output, renames/copies and paths with whitespace, and constructs disposable clean Git histories: a TeX-only branch, a correct candidate with generated output, a moved `develop` branch, missing refs, wrong/stale IDs, a dirty tree, unauthorized generator metadata and files, a true rename and a mixed runtime change. The test never writes to `develop`, `main` or the actual gallery checkout.
+The new regression test checks NUL records, malformed output, renames/copies and
+paths with whitespace, and constructs disposable clean Git histories: a TeX-only
+branch, a correct candidate with generated output, a moved `develop` branch,
+missing refs, wrong/stale IDs, a dirty tree, unauthorized generator metadata and
+files, a true rename and a mixed runtime change. The test never writes to
+`develop`, `main` or the actual gallery checkout.
 
-**Not yet enabled:** no workflow or required check has been modified; no CI matrix row has been skipped, no new profile/runner created and no speedup claimed. Active use requires a review of the job-to-suite ownership contract (#95), required statuses (#142), exact SHA handoff (#101/#106), and failure diagnostics (#94). The release `release` profile and all four PDFs remain unchanged. A valid `manual-source` classification alone still does **not** validate TeX compilation, structure, localization or authorization to omit required jobs.
+**Not yet enabled:** no workflow or required check has been modified; no CI
+matrix row has been skipped, no new profile/runner created and no speedup
+claimed. Active use requires a review of the job-to-suite ownership contract
+(#95), required statuses (#142), exact SHA handoff (#101/#106), and failure
+diagnostics (#94). The release `release` profile and all four PDFs remain
+unchanged. A valid `manual-source` classification alone still does **not**
+validate TeX compilation, structure, localization or authorization to omit
+required jobs.
 
 ### Additional fail-closed edge cases (same workstream)
 
-The resolver now rejects a shallow or unreadable repository explicitly via `git rev-parse --is-shallow-repository`, before using merge-base evidence. The reviewed candidate commit must match **both** the Git author and Git committer metadata, in addition to its immediate parent, subject and generated-output allowlist. These metadata strings remain forgeable, so active CI must still bind trusted GitHub Actions statuses to the exact SHA.
+The resolver now rejects a shallow or unreadable repository explicitly via
+`git rev-parse --is-shallow-repository`, before using merge-base evidence. The
+reviewed candidate commit must match **both** the Git author and Git committer
+metadata, in addition to its immediate parent, subject and generated-output
+allowlist. These metadata strings remain forgeable, so active CI must still bind
+trusted GitHub Actions statuses to the exact SHA.
 
-**History accumulation limitation, tested conservatively:** after one successful bot-generated candidate, a later manually authored documentation edit on the same feature branch still has earlier generator changes in its `merge-base(develop,source)..source` path diff. This implementation deliberately returns `full` rather than silently deleting those historical generated paths from its impact set. A future fast gate must either verify prior generated commits through trusted hosted provenance or define an equally sound immutable change baseline; this is not authorized or implemented yet. This behavior prefers false-positive full validation to false-negative skipped coverage.
+**History accumulation limitation, tested conservatively:** after one successful
+bot-generated candidate, a later manually authored documentation edit on the
+same feature branch still has earlier generator changes in its
+`merge-base(develop,source)..source` path diff. This implementation deliberately
+returns `full` rather than silently deleting those historical generated paths
+from its impact set. A future fast gate must either verify prior generated
+commits through trusted hosted provenance or define an equally sound immutable
+change baseline; this is not authorized or implemented yet. This behavior
+prefers false-positive full validation to false-negative skipped coverage.
 
 
 ## Phase 2a: read-only historical candidate boundaries (2026-10-11)
 
-This increment extends the existing `audit_source_change_impact()` provenance resolver without adding a runner, workflow, network client, required check, or test selector. It retains the *aggregate* base-to-source Git diff as `changes` and also records per-commit `authored_changes` and `historical_candidates` for diagnostic review.
+This increment extends the existing `audit_source_change_impact()` provenance
+resolver without adding a runner, workflow, network client, required check, or
+test selector. It retains the *aggregate* base-to-source Git diff as `changes`
+and also records per-commit `authored_changes` and `historical_candidates` for
+diagnostic review.
 
-- Walk at most 64 commits from the immutable `merge-base(origin/develop,source)` to the requested authored source SHA, in ascending ancestry order. Each commit must have **exactly one expected parent**, so merges, incomplete history, unexpectedly rewritten ancestry and ambiguous output conservatively return `full`.
-- Parse each commit's rename-aware, NUL-delimited diff with the existing bounded parser. Read exact bot author, committer and generator subject. A structurally recognizable generated revision must change *only* maintained generated files with `M` status. Other generator-shaped changes or suspicious subject/actor mismatches return `full`.
-- Record such candidates with `provenance: requires-hosted-proof`, immutable parent and candidate SHAs, and actual generated paths. This string explicitly means **NOT VERIFIED**. Git metadata, filenames and candidate ancestry do not authenticate GitHub Actions; they remain forgeable by an ordinary committer.
-- Most importantly, **any** historical candidate still forces `scope=full`, `reason=unverified-historical-candidate`. Neither `authored_changes` nor `historical_candidates` authorizes a skip; the original aggregate diff remains intact. This prevents a counterfeit generated commit from hiding an authored manifest/CI/security change.
+- Walk at most 64 commits from the immutable `merge-base(origin/develop,source)`
+  to the requested authored source SHA, in ascending ancestry order. Each commit
+  must have **exactly one expected parent**, so merges, incomplete history,
+  unexpectedly rewritten ancestry and ambiguous output conservatively return
+  `full`.
+- Parse each commit's rename-aware, NUL-delimited diff with the existing bounded
+  parser. Read exact bot author, committer and generator subject. A structurally
+  recognizable generated revision must change *only* maintained generated files
+  with `M` status. Other generator-shaped changes or suspicious subject/actor
+  mismatches return `full`.
+- Record such candidates with `provenance: requires-hosted-proof`, immutable
+  parent and candidate SHAs, and actual generated paths. This string explicitly
+  means **NOT VERIFIED**. Git metadata, filenames and candidate ancestry do not
+  authenticate GitHub Actions; they remain forgeable by an ordinary committer.
+- Most importantly, **any** historical candidate still forces `scope=full`,
+  `reason=unverified-historical-candidate`. Neither `authored_changes` nor
+  `historical_candidates` authorizes a skip; the original aggregate diff remains
+  intact. This prevents a counterfeit generated commit from hiding an authored
+  manifest/CI/security change.
 
-The isolated real-Git fixture now covers one human docs commit, a current generated candidate, subsequent docs-only authored work, two interleaved generator-like commits, modified `develop` and the original negative cases. Regressions validate the list's exact candidate/source identities without considering metadata alone a valid attestation.
+The isolated real-Git fixture now covers one human docs commit, a current
+generated candidate, subsequent docs-only authored work, two interleaved
+generator-like commits, modified `develop` and the original negative cases.
+Regressions validate the list's exact candidate/source identities without
+considering metadata alone a valid attestation.
 
 ### Required hosted provenance contract before any active optimization
 
-Use the existing [candidate-preparation workflow](../.github/workflows/candidate-preparation.yml) rather than a new registry. The recorded GitHub API sample for candidate `4f8225b5cc3a69a9833991496bbb3e4e1d8e880e` binds:
+Use the existing
+[candidate-preparation workflow](../.github/workflows/candidate-preparation.yml)
+rather than a new registry. The recorded GitHub API sample for candidate
+`4f8225b5cc3a69a9833991496bbb3e4e1d8e880e` binds:
 
-1. Exact candidate-SHA check-runs named `Candidate qualification` and `Complete required CI matrix`, with completed/success from installed GitHub Actions app ID `15368`, not caller-supplied Git author metadata.
-2. Both `external_id` values set to `candidate:38140343512:1:4f8225b5cc3a69a9833991496bbb3e4e1d8e880e`. The candidate run `38140343512`, attempt `1`, is a completed/success `push` of the **parent source SHA** `706f97a65adff4dedb3763acc8e4f4045cf1da3a`, executing `.github/workflows/candidate-preparation.yml` on the expected source branch.
-3. The run's immutable jobs include successful `Prepare source candidate at event SHA`, native `Full CI for the published prepared SHA / Complete required CI matrix` and `Reject superseded qualification`. The generated commit itself is unsigned and is **not** verified simply because these names match.
-4. Before using this for historic filtering, independently fetch **all pages** of exact candidate-SHA checks, identify conflicts/older attempts, correlate the source workflow run and reviewed workflow definition, refuse stale/invalid/missing statuses, and maintain unchanged-branch-head checking for the new candidate. An old PASS cannot qualify a later authored SHA. If the provider API or any association is unavailable, retain `full`.
-5. A GitHub Actions app ID alone is not a blanket attestation of trusted workflow contents: repository workflows with permissions can publish same-app checks. Pin the allowed qualification semantics to an independently reviewed workflow version and ensure malicious workflow or generated-file edits never disappear from authored impact.
+1. Exact candidate-SHA check-runs named `Candidate qualification` and
+   `Complete required CI matrix`, with completed/success from installed GitHub
+   Actions app ID `15368`, not caller-supplied Git author metadata.
+2. Both `external_id` values set to
+   `candidate:38140343512:1:4f8225b5cc3a69a9833991496bbb3e4e1d8e880e`. The
+   candidate run `38140343512`, attempt `1`, is a completed/success `push` of
+   the **parent source SHA** `706f97a65adff4dedb3763acc8e4f4045cf1da3a`,
+   executing `.github/workflows/candidate-preparation.yml` on the expected
+   source branch.
+3. The run's immutable jobs include successful
+   `Prepare source candidate at event SHA`, native
+   `Full CI for the published prepared SHA / Complete required CI matrix` and
+   `Reject superseded qualification`. The generated commit itself is unsigned
+   and is **not** verified simply because these names match.
+4. Before using this for historic filtering, independently fetch **all pages**
+   of exact candidate-SHA checks, identify conflicts/older attempts, correlate
+   the source workflow run and reviewed workflow definition, refuse
+   stale/invalid/missing statuses, and maintain unchanged-branch-head checking
+   for the new candidate. An old PASS cannot qualify a later authored SHA. If
+   the provider API or any association is unavailable, retain `full`.
+5. A GitHub Actions app ID alone is not a blanket attestation of trusted
+   workflow contents: repository workflows with permissions can publish same-app
+   checks. Pin the allowed qualification semantics to an independently reviewed
+   workflow version and ensure malicious workflow or generated-file edits never
+   disappear from authored impact.
 
-This increment deliberately **does not** implement authenticated GitHub API retrieval or accept externally provided proof to reduce coverage. The ordinary full/release matrix and existing immutable-source checks remain authoritative. #95 still owns per-test environment coverage decisions and #142 owns ruleset/required-check changes.
+This increment deliberately **does not** implement authenticated GitHub API
+retrieval or accept externally provided proof to reduce coverage. The ordinary
+full/release matrix and existing immutable-source checks remain authoritative.
+#95 still owns per-test environment coverage decisions and #142 owns
+ruleset/required-check changes.
 
 
 ## Phase 2b: bounded GitHub Actions evidence correlation (read-only, 2026-10-11)
@@ -295,7 +489,8 @@ is a regression fixture, **not** an authenticated production attestation.
 
 The input collector, if later approved, must retain the exact GET endpoint
 and requested page/per_page=100 for each response, collecting *all* pages
-of /commits/{candidate}/check-runs and /actions/runs/{id}/attempts/{attempt}/jobs
+of /commits/{candidate}/check-runs and
+/actions/runs/{id}/attempts/{attempt}/jobs
 and rechecking the selected branch/develop refs around the fetch. The current
 PHP functions accept a numbered list of captured API pages, not unverified
 partial arrays. They reject 501+ entries, more than five pages, missing or
@@ -358,7 +553,8 @@ executed. Timing observations vary by runner and are not controlled A/B savings.
 | Positive production packaging | Bash on Linux/macOS, PowerShell on Windows, manifest membership | Dedicated three OS jobs | KEEP all three | Required package matrix, exact generated manifest and aggregate gate | High, cross-OS path/quoting differences; approx. 22s Linux / 28s macOS / 44s Windows job wall in run 38140343512 |
 | Isolated browser-map fixture suite | Chromium discovery and Node/browser runtime, no live DB journey | Required Chromium job | KEEP separate browser owner | Browser-map required job PASS with unavailable-browser failure | High, cannot substitute real MySQL login journey; browser job approx. 72s in run 38140343512 |
 
-Pending decision: collect exact per-suite environment dependencies and reliable test-only
+Pending decision: collect exact per-suite environment dependencies and reliable
+test-only
 timings before reducing any execution. Never treat optional SKIPs as coverage,
 duplicate array keys as duplicate runs or job wall time as billable CI usage.
 
@@ -498,13 +694,15 @@ prerequisite hardening, not a claimed performance improvement.
 ### Phase 2c contract regression repair
 
 The first source commit `d70f130d899024db9cf67bfc2b01cf98d2b8d081`
-failed hosted `release-preflight` in [run 38145342626](https://github.com/klusik/PHP_gallery/actions/runs/38145342626)
+failed hosted `release-preflight` in
+[run 38145342626](https://github.com/klusik/PHP_gallery/actions/runs/38145342626)
 at `tests/gallery_workflow_ci_trigger_policy_test.php`. The CI contract
 fixture previously extracted the real runner's mandatory-test selector
 using an exact source-text `foreach ($requiredTests as $test)` sentinel.
 Replacing the old free-text log parser with structured JSON evidence removed
 that loop, so the old fixture blocked before any candidate generation. This was
-a genuine stale regression contract, not random test flakiness; PHP and JS syntax,
+a genuine stale regression contract, not random test flakiness; PHP and JS
+syntax,
 changed declaration documentation, runtime policy and source inventory passed.
 
 The regression fixture now stops selection extraction immediately before the
@@ -600,15 +798,39 @@ positive OS packaging jobs and full release qualification.
 
 ## Phase 2e: first narrow CI execution consolidation (2026-10-11)
 
-Scope: only the repeated read-only `manifest` suite in the three hosted disposable-database `full` jobs. No PHP, Node, WinApp, browser, syntax, database, HTTP or security child test is omitted, and no separate test selector, new profile, workflow list or runner has been introduced.
+Scope: only the repeated read-only `manifest` suite in the three hosted
+disposable-database `full` jobs. No PHP, Node, WinApp, browser, syntax,
+database, HTTP or security child test is omitted, and no separate test selector,
+new profile, workflow list or runner has been introduced.
 
 ### Owner equivalence and the exact candidate contract
 
-The central `manifest` suite calls `scripts/prepare_candidate.php --check`, which invokes the existing generated module plan, Git-index production membership, and complete-byte manifest freshness checks in three independent PHP child processes. Source inspection found no live MySQL/MariaDB, HTTP, Chromium, session or authentication input to those canonical generators. The preflight already executes precisely this suite on Ubuntu 24.04 / PHP 8.3 after verifying the exact prepared checkout SHA. The three disposable database jobs use the same checked-out candidate ref and depend on that preflight.
+The central `manifest` suite calls `scripts/prepare_candidate.php --check`,
+which invokes the existing generated module plan, Git-index production
+membership, and complete-byte manifest freshness checks in three independent PHP
+child processes. Source inspection found no live MySQL/MariaDB, HTTP, Chromium,
+session or authentication input to those canonical generators. The preflight
+already executes precisely this suite on Ubuntu 24.04 / PHP 8.3 after verifying
+the exact prepared checkout SHA. The three disposable database jobs use the same
+checked-out candidate ref and depend on that preflight.
 
-The canonical `candidate-preflight` profile must have an individual manifest PASS, not an aggregate suite PASS with a concealed SKIP, BLOCKED, FAIL, missing or duplicate manifest task. The existing native `ci-gate` already requires a successful preflight, all three disposable database jobs, both PHP source variants, Chromium and every positive OS packaging job. The candidate-preparation terminal unchanged-HEAD check and both exact-SHA custom checks remain mandatory. Their presence does not independently establish trusted historical workflow authority: #142 remains OPEN.
+The canonical `candidate-preflight` profile must have an individual manifest
+PASS, not an aggregate suite PASS with a concealed SKIP, BLOCKED, FAIL, missing
+or duplicate manifest task. The existing native `ci-gate` already requires a
+successful preflight, all three disposable database jobs, both PHP source
+variants, Chromium and every positive OS packaging job. The
+candidate-preparation terminal unchanged-HEAD check and both exact-SHA custom
+checks remain mandatory. Their presence does not independently establish trusted
+historical workflow authority: #142 remains OPEN.
 
-All PHP 8.1 Unicode and PHP 8.5 ASCII source `full` executions retain their own independent `manifest` checks. The authoritative `release` profile and ordinary/local `full` also retain the suite. Only the bounded GitHub-hosted disposable database environment may delegate manifest execution to the mandatory preflight. Unexpected environment, missing owner registry, or altered non-full profile fails closed to the unchanged complete suite selection. The central JSON report explicitly lists `delegated_to_preflight: [manifest]`; it does not fabricate an individual local PASS.
+All PHP 8.1 Unicode and PHP 8.5 ASCII source `full` executions retain their own
+independent `manifest` checks. The authoritative `release` profile and
+ordinary/local `full` also retain the suite. Only the bounded GitHub-hosted
+disposable database environment may delegate manifest execution to the mandatory
+preflight. Unexpected environment, missing owner registry, or altered non-full
+profile fails closed to the unchanged complete suite selection. The central JSON
+report explicitly lists `delegated_to_preflight: [manifest]`; it does not
+fabricate an individual local PASS.
 
 ### Source-backed baseline from hosted candidate 38149539308
 
@@ -621,34 +843,96 @@ All PHP 8.1 Unicode and PHP 8.5 ASCII source `full` executions retain their own 
 | PHP 8.3 MariaDB 10.11 disposable full | Executed, individual suite time not recovered here | PASS; targeted delegation |
 | PHP 8.5 MariaDB 11.4 disposable full | Executed, individual suite time not recovered here | PASS; targeted delegation |
 
-Thus the planned aggregate count for this single suite is six to three across the hosted matrix, with no new job. The observed 11-13 second figures are individual source/preflight suite samples, **not** before/after elapsed-time or billable-minute savings. Runner jobs execute concurrently. The first post-change candidate run must verify the actual three delegations and three retained mandatory PASSes and provide matched per-suite/job evidence before any speedup claim.
+Thus the planned aggregate count for this single suite is six to three across
+the hosted matrix, with no new job. The observed 11-13 second figures are
+individual source/preflight suite samples, **not** before/after elapsed-time or
+billable-minute savings. Runner jobs execute concurrently. The first post-change
+candidate run must verify the actual three delegations and three retained
+mandatory PASSes and provide matched per-suite/job evidence before any speedup
+claim.
 
 ### Negative and positive coverage contracts
 
-`tests/audit_runner_test.php` exercises the real central ownership helper with valid hosted DB context, all nine independently invalid context keys, non-full profiles, missing preflight or release owners, and required-suite PASS against SKIP/BLOCKED/FAIL/missing/duplicate evidence. `tests/gallery_workflow_ci_trigger_policy_test.php` statically enforces that the actual reusable workflow has the required same-SHA preflight, both source/database `needs: preflight` dependencies and the unchanged native aggregate required owner.
+`tests/audit_runner_test.php` exercises the real central ownership helper with
+valid hosted DB context, all nine independently invalid context keys, non-full
+profiles, missing preflight or release owners, and required-suite PASS against
+SKIP/BLOCKED/FAIL/missing/duplicate evidence.
+`tests/gallery_workflow_ci_trigger_policy_test.php` statically enforces that the
+actual reusable workflow has the required same-SHA preflight, both
+source/database `needs: preflight` dependencies and the unchanged native
+aggregate required owner.
 
-Hosted `php-regression` continues to require actual individual PASS/exit code zero/no timeout for `deploy_app_packaging_test.php` and `runtime_module_plan_test.php` in all five full profiles. All 14 DB/HTTP/race children remain mandatory in all three databases; two real Chromium PHP children remain mandatory in MySQL; 34 browser-map fixtures and Linux/Windows/macOS positive packaging owners are unchanged. `cli_http_boundary_test.php` retains its documented partial Apache SKIP semantics.
+Hosted `php-regression` continues to require actual individual PASS/exit code
+zero/no timeout for `deploy_app_packaging_test.php` and
+`runtime_module_plan_test.php` in all five full profiles. All 14 DB/HTTP/race
+children remain mandatory in all three databases; two real Chromium PHP children
+remain mandatory in MySQL; 34 browser-map fixtures and Linux/Windows/macOS
+positive packaging owners are unchanged. `cli_http_boundary_test.php` retains
+its documented partial Apache SKIP semantics.
 
 ### Outstanding work
 
-Confirm the new exact candidate SHA, 13 required native jobs, terminal unchanged-HEAD gate, both check-run IDs and their exact publisher/external-ID linkage. Fetch all five resulting audit reports, verify three explicit delegations and preserved 14/2 mandatory PHP test passes, then compare the observed suite, job and workflow elapsed times to the prior single-run baseline. Independently validate Node/WinApp fixture ownership before any additional MOVEs. Do not expand the optimization solely to chase a few seconds.
+Confirm the new exact candidate SHA, 13 required native jobs, terminal
+unchanged-HEAD gate, both check-run IDs and their exact publisher/external-ID
+linkage. Fetch all five resulting audit reports, verify three explicit
+delegations and preserved 14/2 mandatory PHP test passes, then compare the
+observed suite, job and workflow elapsed times to the prior single-run baseline.
+Independently validate Node/WinApp fixture ownership before any additional
+MOVEs. Do not expand the optimization solely to chase a few seconds.
 
 ## Phase 2f: preserve final checkout integrity after Phase 2e delegation (2026-10-11)
 
-Phase 2e moved the generated-artifact freshness suite from the end of the three disposable DB `full` audits to their mandatory exact-candidate preflight. Source review established an important sequencing difference: the preflight runs **before** the database/HTTP/race regressions; `audit_source_identity()` captured the initial checkout only, and the non-release profile had no subsequent source-identity comparison. Consequently, a later test-side mutation could invalidate generated inputs without being noticed by the already successful preflight.
+Phase 2e moved the generated-artifact freshness suite from the end of the three
+disposable DB `full` audits to their mandatory exact-candidate preflight. Source
+review established an important sequencing difference: the preflight runs
+**before** the database/HTTP/race regressions; `audit_source_identity()`
+captured the initial checkout only, and the non-release profile had no
+subsequent source-identity comparison. Consequently, a later test-side mutation
+could invalidate generated inputs without being noticed by the already
+successful preflight.
 
-The smallest correction is a read-only, **post-test checkout integrity** task in the existing central `scripts/audit.php`, executed only when `delegated_to_preflight` is nonempty. The common `audit_source_identity()` resolver is called again after all suites. A new pure helper in `scripts/audit_lib.php` requires valid before/after SHA evidence, the same HEAD, unchanged comparison ref and requested base, and an unmodified Git working tree at both endpoints. Missing/unreadable evidence BLOCKS; proven dirty/moved checkout FAILS. The result is a separate machine-readable task, `delegated-manifest-post-test-integrity`, not a fake `manifest` PASS. An unexpected failure propagates through the existing `overall_status()` and mandatory native DB job gate.
+The smallest correction is a read-only, **post-test checkout integrity** task in
+the existing central `scripts/audit.php`, executed only when
+`delegated_to_preflight` is nonempty. The common `audit_source_identity()`
+resolver is called again after all suites. A new pure helper in
+`scripts/audit_lib.php` requires valid before/after SHA evidence, the same HEAD,
+unchanged comparison ref and requested base, and an unmodified Git working tree
+at both endpoints. Missing/unreadable evidence BLOCKS; proven dirty/moved
+checkout FAILS. The result is a separate machine-readable task,
+`delegated-manifest-post-test-integrity`, not a fake `manifest` PASS. An
+unexpected failure propagates through the existing `overall_status()` and
+mandatory native DB job gate.
 
-This check reuses existing Git identity probing and does **not** rerun the generators, fetch artifacts, add YAML steps, introduce a runner/registry/selector, move other tests, or modify preflight/source/release owners. It is not an independent substitute for reexecuting every generator under every database job's environment; the delegation still relies on the documented deterministic, database-independent generator-input assumptions and required PHP 8.1/8.5 source `manifest` owners. Git's ordinary porcelain status intentionally does not inspect ignored local files, which are outside the tracked source/inventory proof. Native full/release and local `full` continue to run the original complete `manifest` suite.
+This check reuses existing Git identity probing and does **not** rerun the
+generators, fetch artifacts, add YAML steps, introduce a
+runner/registry/selector, move other tests, or modify preflight/source/release
+owners. It is not an independent substitute for reexecuting every generator
+under every database job's environment; the delegation still relies on the
+documented deterministic, database-independent generator-input assumptions and
+required PHP 8.1/8.5 source `manifest` owners. Git's ordinary porcelain status
+intentionally does not inspect ignored local files, which are outside the
+tracked source/inventory proof. Native full/release and local `full` continue to
+run the original complete `manifest` suite.
 
-Positive and negative regression contracts cover unchanged clean checkouts; dirty initial/final worktrees; moved HEAD, comparison SHA or requested base; and missing/malformed Git identity. The regression also checks the task is wired into the existing central runner before its final status calculation. This change **restores a safety check**, removes zero additional executions and must not be counted as a performance speedup. Historical candidate trust remains `scope=full` / `workflow-authority-not-independently-attested` (#142).
+Positive and negative regression contracts cover unchanged clean checkouts;
+dirty initial/final worktrees; moved HEAD, comparison SHA or requested base; and
+missing/malformed Git identity. The regression also checks the task is wired
+into the existing central runner before its final status calculation. This
+change **restores a safety check**, removes zero additional executions and must
+not be counted as a performance speedup. Historical candidate trust remains
+`scope=full` / `workflow-authority-not-independently-attested` (#142).
 
-**Qualification status at authoring:** the new commit and its exact prepared SHA require a fresh complete hosted CI run before this guard can be marked qualified. No claims about updated workflow elapsed or runner-job wall times are made from static fixtures.
+**Qualification status at authoring:** the new commit and its exact prepared SHA
+require a fresh complete hosted CI run before this guard can be marked
+qualified. No claims about updated workflow elapsed or runner-job wall times are
+made from static fixtures.
 
 ## Phase 2g: Node/WinApp execution ownership, KEEP decision (2026-10-11)
 
-This is a source/dependency and previously hosted artifact review, **not** an additional
-execution reduction or a newly qualified candidate. Phase 2f remains the last completed
+This is a source/dependency and previously hosted artifact review, **not** an
+additional
+execution reduction or a newly qualified candidate. Phase 2f remains the last
+completed
 runtime change. The comparison is the exact-candidate Phase 2f run
 [38158073314](https://github.com/klusik/PHP_gallery/actions/runs/38158073314)
 on SHA `3a48d75594e0ed95165e751ea30905ccb72b7be2`, **before** the
@@ -721,11 +1005,15 @@ historical evidence, not transferable successful checks.
 
 ### New priority and measured execution overlap
 
-The latest maintainer target is **a complete integration qualification on every authorized
+The latest maintainer target is **a complete integration qualification on every
+authorized
 pre-release integration fast-forward of the prepared candidate to `develop`**.
-The full matrix there must execute final browser, database and WinApp coverage. The earlier proposal to reuse
-same-SHA candidate evidence on `develop` is **superseded and cancelled**; same-SHA
-feature-to-develop reuse is not an optimization target. For a later exact-Q release, the
+The full matrix there must execute final browser, database and WinApp coverage.
+The earlier proposal to reuse
+same-SHA candidate evidence on `develop` is **superseded and cancelled**;
+same-SHA
+feature-to-develop reuse is not an optimization target. For a later exact-Q
+release, the
 proposed gate may reuse only individually eligible child evidence from the
 successful full develop qualification, while newly executing the release delta
 and all release-specific checks. This does not approve a broad whole-tree rerun
@@ -736,13 +1024,15 @@ full matrices remain active. All Phase 0–2h KEEP decisions remain applicable
 inside the full develop matrix.
 
 The maintainer's subsequent clarification distinguishes a pure post-release FF
-to already qualified Q. That synchronization needs no new test matrix and retains
+to already qualified Q. That synchronization needs no new test matrix and
+retains
 Q's completed release qualification. It neither substitutes feature evidence for
 the earlier D integration nor qualifies additional parallel develop work. The
 existing #101 reconciliation keeps refusing parallel advancement; no extra
 post-release dispatch or credentials change is part of this target.
 
-A real current-lifecycle sample, with independently fetched source/run identities:
+A real current-lifecycle sample, with independently fetched source/run
+identities:
 
 | Stage | Immutable input | Actual workflow run | Observed elapsed | Current work |
 | --- | --- | --- | ---: | --- |
@@ -764,10 +1054,13 @@ controlled critical-path or provider-billable duration. They occur in distinct
 lifecycle steps and have different generated inputs. The develop run is retained
 as evidence that the same SHA's full matrix actually executed after the develop
 pre-release integration fast-forward; its execution is required by the current
-target. The actual release prepare runner job lasted 197 seconds and includes document/toolchain work; exact
-per-manual build costs are not separately evidenced. A later Q completion already
+target. The actual release prepare runner job lasted 197 seconds and includes
+document/toolchain work; exact
+per-manual build costs are not separately evidenced. A later Q completion
+already
 verifies the existing exact-Q check, immutable origin, approval and merge
-parents/tree and **does not run another PHP/DB/Chromium/WinApp matrix**. The future
+parents/tree and **does not run another PHP/DB/Chromium/WinApp matrix**. The
+future
 release-delta policy may reduce repeated release-stage execution only after its
 per-profile input closure and child evidence are independently proven. Neither
 five repeated matrices nor a numerical savings estimate is substantiated.
@@ -822,24 +1115,29 @@ plus valid inherited individual coverage. Under the intended future policy,
 unexpected production/authentication, migration, test, CI or runtime changes
 refuse reduced release qualification and return the integration change to
 develop for complete qualification. Current full release execution remains
-mandatory until activation. The release completion check remains an independently
+mandatory until activation. The release completion check remains an
+independently
 validated downstream proof, not a fresh full-matrix execution.
 
 **BLOCKED prerequisite (#142):** current candidate check publishers use mutable
 feature-sourced workflows with `GITHUB_TOKEN` `checks:write`. Matching App ID
 15368, bot commit identity, source SHA, tree, run/attempt and aggregate PASS do
 not independently authenticate approved workflow/test source. No self-attesting
-branch code or caller trust flag may authorize reuse. The independently controlled
+branch code or caller trust flag may authorize reuse. The independently
+controlled
 policy/provenance owner and any maintainer-only server configuration must be
 reviewed and qualified separately. Until then **all current full matrices remain
-required, including the full matrix on the pre-release develop integration fast-forward**.
-Pure post-release FF to qualified Q retains release proof without another matrix. #95 retains
+required, including the full matrix on the pre-release develop integration
+fast-forward**.
+Pure post-release FF to qualified Q retains release proof without another
+matrix. #95 retains
 inside-matrix optimization; #101 owns protected exact-Q lifecycle; #142 owns
 workflow/trust; #94 owns browser reliability.
 
 ## Phase 3 follow-up: source-event and prepared-candidate suite correlation
 
-The existing read-only historical correlator previously compared each prepared-SHA
+The existing read-only historical correlator previously compared each
+prepared-SHA
 custom check's `check_suite.id` with the source-event run's `check_suite_id`.
 Those suites belong to different commits. In actual Phase 3a run
 [38165197107](https://github.com/klusik/PHP_gallery/actions/runs/38165197107),
@@ -847,7 +1145,8 @@ source event `97bd4bfb00e3c615e5cbf8751e45d54fede0ffe0` has native suite
 `103401329988`, while prepared candidate
 `07b641815628858971a1c89a7b76acd286e60c95` has custom-check suite
 `103402547358`. The former equality rejected otherwise consistent real evidence.
-This is a correlation defect, not evidence that Phase 3a's actual qualification failed.
+This is a correlation defect, not evidence that Phase 3a's actual qualification
+failed.
 
 The same owner now requires complete, bounded `candidate_suites_pages` from
 `GET /repos/klusik/PHP_gallery/commits/<prepared-SHA>/check-suites`, alongside
@@ -863,7 +1162,8 @@ as queued GitHub Pages are ignored after the complete listing is validated.
 The existing `audit_change_evidence_test.php` fixture now uses distinct source
 and candidate suite IDs and check-run payloads containing only the real API's
 nested `{id}` suite reference. It rejects missing/truncated/duplicate pages,
-invalid IDs, wrong SHA/commit/app/repository, pending/red/skipped/cancelled suite
+invalid IDs, wrong SHA/commit/app/repository, pending/red/skipped/cancelled
+suite
 outcomes, disagreement between the two required checks, and conflated source
 and candidate suites. A complete two-page listing and an unrelated queued Pages
 suite remain positive correlation cases. All positive cases deliberately retain
@@ -878,9 +1178,11 @@ verifier on protected `main`, for example
 `.github/workflows/candidate-evidence-verification.yml`, is owned by one
 independently approved immutable main revision W. Its `workflow_run` trigger
 must select completed `Isolated gallery workflows` runs only when the actual
-event is a push to `refs/heads/develop`; it must reject pull requests, test-merge
+event is a push to `refs/heads/develop`; it must reject pull requests,
+test-merge
 refs, merge groups, dispatches and other branches. The verifier must bind the
-completed run, attempt, exact candidate SHA and full develop-matrix child ledger.
+completed run, attempt, exact candidate SHA and full develop-matrix child
+ledger.
 At this investigation, current main was
 `a013c54663d8872130e565245c913cf5552155af`; W does not yet exist with this
 verifier. GitHub documents that `workflow_run` uses default-branch source and
@@ -913,15 +1215,18 @@ report only after validating the complete approved executable-input closure for
 each profile. It must execute source/base-sensitive, generated-state, changed
 input, semantic version consumer, release metadata, notes, four-manual, manifest
 and package checks for Q. The approved input policy must account for the
-`CMS_VERSION` marker semantically: a version-only `app/bootstrap.php` blob change
+`CMS_VERSION` marker semantically: a version-only `app/bootstrap.php` blob
+change
 must not by itself invalidate PHP/DB/browser evidence, while version consumers
 and exact-Q inventory/package checks still run. An unexplained functional,
-security, test, CI or workflow delta blocks release-delta qualification and sends
+security, test, CI or workflow delta blocks release-delta qualification and
+sends
 the integration change back through full develop qualification; it does not
 authorize a reduced release gate. Until a separate policy is approved and
 implemented, all current full matrices remain active. Missing proof retains
 current full owners; malformed, red or conflicting proof fails or blocks
-according to the owned contract. Pull request test-merge and merge-group contexts
+according to the owned contract. Pull request test-merge and merge-group
+contexts
 are not release evidence origins.
 
 Maintainer activation needs a reviewed main installation of W plus its approved
@@ -930,7 +1235,8 @@ consumer, and proof that its main-origin decision is consulted before skipping
 expensive owners. No protected source/ref, environment, secret or ruleset change
 is authorized by this proposal. A separate App is not automatically required for
 API-only evidence validation. Conversely, removing `checks:write` from feature
-YAML is not a server restriction, and an App-15368 check does not prove that this
+YAML is not a server restriction, and an App-15368 check does not prove that
+this
 verifier ran. If server-required independent publisher enforcement is desired,
 that is a separate maintainer design, with explicit App/ruleset implications.
 
@@ -939,27 +1245,34 @@ a seven-day required-check condition:
 [required-check semantics](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
 Do not invent a broader suite-result expiry or promise server FF acceptance from
 this source proposal. The active develop ruleset currently requires strict
-`Complete required CI matrix` from App 15368. Legacy branch-protection visibility
+`Complete required CI matrix` from App 15368. Legacy branch-protection
+visibility
 was denied to the connector and remains NOT VERIFIED.
 
 Current status: correlation correction source-ready; the same-SHA develop
 shortcut proposal is superseded and cancelled. Release-delta reuse remains OPEN
-and activation-blocked on independently approved/deployed W, approved per-profile
+and activation-blocked on independently approved/deployed W, approved
+per-profile
 input closures and consumer proof. The source-event reports described below
 identify the original source/prepared candidate runs; they are not reports from
 the actual full matrix after the candidate's pre-release develop integration
-fast-forward. The historical develop run in the table above did execute that full matrix. Existing #101 exact-Q
+fast-forward. The historical develop run in the table above did execute that
+full matrix. Existing #101 exact-Q
 approval/completion behavior is retained. No active workflow optimization is
-authorized, and this proposal removes **zero** required develop matrix executions.
+authorized, and this proposal removes **zero** required develop matrix
+executions.
 The concrete review contract is specified in
-[`CI_COVERAGE_REUSE_CONTRACT.md`](CI_COVERAGE_REUSE_CONTRACT.md). This batch adds
+[`CI_COVERAGE_REUSE_CONTRACT.md`](CI_COVERAGE_REUSE_CONTRACT.md). This batch
+adds
 no standalone advisory layer and does not rerun the already green Phase 3a
-candidate. Its own new prepared candidate requires fresh full hosted qualification.
+candidate. Its own new prepared candidate requires fresh full hosted
+qualification.
 
 ## Origin evidence follow-up: readable artifacts and named WinApp outcomes
 
 After the maintainer authorized the existing local feature checkout, original
-artifacts from [run 38168485907, attempt 1](https://github.com/klusik/PHP_gallery/actions/runs/38168485907)
+artifacts from
+[run 38168485907, attempt 1](https://github.com/klusik/PHP_gallery/actions/runs/38168485907)
 were downloaded through the connector, checked against GitHub's SHA-256 digest
 metadata, and read as data. This removes the earlier inspection limitation for
 that retained report set; it does not change what the original run executed.
@@ -1004,10 +1317,12 @@ failures. The full/release owners actually consume this evidence; it is not an
 unused historical parser, another test graph or a new suite orchestrator.
 
 This is an origin-reporting prerequisite for the proposed verifier W, not a
-release-delta reuse decision. Only newly executed reports contain the added child
+release-delta reuse decision. Only newly executed reports contain the added
+child
 records. The protected-main verifier/approved execution-input policy and its
 pre-expensive/`ci-gate` consumer remain unimplemented and activation-blocked.
-No workflow, required context, selector, matrix owner or #101 completion changes;
+No workflow, required context, selector, matrix owner or #101 completion
+changes;
 no real lifecycle matrix is removed. Current JSON plus native records identify
 outcomes, but do not independently approve the transitive execution inputs.
 
@@ -1082,8 +1397,10 @@ the final integration/release identities separately from this authoring record.
 Attempt 2 completed successfully with unchanged source/candidate SHA and all
 28 required native nodes. Its FULL window was 19:10:30–19:12:32 UTC, **122 s**,
 versus the baseline's 272 s: an observed 150 s (55.1%) reduction. Summed owner
-time increased to **1,320 runner-seconds** (1,316 plus the four-second aggregate),
-293 s (28.5%) above baseline. Peak overlap was twenty jobs. Downstream eligibility
+time increased to **1,320 runner-seconds** (1,316 plus the four-second
+aggregate),
+293 s (28.5%) above baseline. Peak overlap was twenty jobs. Downstream
+eligibility
 began when preflight finished at 19:10:56; actual job starts spanned
 19:10:56–19:11:36. This forty-second range includes queue/provisioning effects
 and is not test execution. A successful runner sample reported four CPUs and

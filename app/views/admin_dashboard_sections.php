@@ -46,11 +46,15 @@ use function Gallery\Services\t;
 /**
  * Return true when an optional dashboard feature should be rendered.
  *
- * @param string $featureKey Feature key value.
+ * @param array{feature_enabled?:array<string,bool>,...} $model Dashboard model
+ *     with feature flags indexed by the dynamic capability key.
+ * @param string $featureKey Feature identifier looked up in that map.
  * @return bool True when the condition matches.
  */
-function view_admin_dashboard_feature_enabled(array $model, string $featureKey): bool
-{
+function view_admin_dashboard_feature_enabled(
+    array $model,
+    string $featureKey,
+): bool {
     return !empty($model['feature_enabled'][$featureKey]);
 }
 
@@ -69,13 +73,18 @@ function view_admin_dashboard_bool(array $model, string $key): bool
 /**
  * Return a safe integer value from the dashboard model.
  *
- * @param array $model Model value.
- * @param string $key Lookup key.
+ * @param array<string,mixed> $model Heterogeneous dashboard model with dynamic
+ *     string keys for counts and nested status records; the selected key must
+ *     contain a value that can be cast to an integer.
+ * @param string $key Dynamic dashboard key whose value is converted to int.
  * @param int $fallback Fallback value.
  * @return int Integer result for the caller.
  */
-function view_admin_dashboard_int(array $model, string $key, int $fallback = 0): int
-{
+function view_admin_dashboard_int(
+    array $model,
+    string $key,
+    int $fallback = 0,
+): int {
     return (int) ($model[$key] ?? $fallback);
 }
 
@@ -100,17 +109,26 @@ function view_admin_dashboard_array(array $model, string $key): array
 function view_render_admin_dashboard_overview_panel(array $model): void
 {
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
-    if (!array_key_exists('overview_loaded', $model) || !empty($model['overview_loaded'])) {
+    if (
+        !array_key_exists('overview_loaded', $model)
+        || !empty($model['overview_loaded'])
+    ) {
         view_render_admin_dashboard_summary($model);
     } else {
         view_render_admin_dashboard_deferred_read('overview');
     }
 
     if ($migrationPending) {
-        view_render_admin_migration_notice(t('admin.dashboard.migration_notice', 'Some admin features still need database migrations.'));
+        view_render_admin_migration_notice(t(
+            'admin.dashboard.migration_notice',
+            'Some admin features still need database migrations.',
+        ));
     }
     echo '<section class="admin-quick-panel">';
-    echo '<h2>' . e(t('admin.dashboard.primary_work_title', 'Primary work')) . '</h2>';
+    echo
+        '<h2>'
+            . e(t('admin.dashboard.primary_work_title', 'Primary work'))
+            . '</h2>';
     echo '<div class="admin-action-grid">';
     view_render_admin_dashboard_settings_card($model);
     view_render_admin_dashboard_manage_galleries_card();
@@ -142,65 +160,162 @@ function view_render_admin_dashboard_summary(array $model): void
  */
 function view_render_admin_dashboard_metric_grid(array $model): void
 {
-    $galleries = is_array($model['galleries'] ?? null) ? $model['galleries'] : [];
+    $galleries = is_array($model['galleries'] ?? null)
+        ? $model['galleries']
+        : [];
     $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
-    $totalGalleries = view_admin_dashboard_int($model, 'total_galleries', count($galleries));
+    $totalGalleries = view_admin_dashboard_int(
+        $model,
+        'total_galleries',
+        count($galleries),
+    );
     $totalImages = view_admin_dashboard_int($model, 'total_images');
-    $unpublishedGalleries = view_admin_dashboard_int($model, 'unpublished_galleries');
+    $unpublishedGalleries = view_admin_dashboard_int(
+        $model,
+        'unpublished_galleries',
+    );
     $privateGalleries = view_admin_dashboard_int($model, 'private_galleries');
-    $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
+    $missingThumbnailVariants = view_admin_dashboard_int(
+        $model,
+        'missing_thumbnail_variants',
+    );
     $originalStorageLabel = (string) ($model['original_storage_label'] ?? '');
-    $galleryDatabaseUsageLabel = (string) ($model['gallery_database_usage_label'] ?? '');
+    $galleryDatabaseUsageLabel = (string) (
+        $model['gallery_database_usage_label'] ?? ''
+    );
     $databaseUsageLabel = (string) ($model['database_usage_label'] ?? '');
-    $databaseUsageAvailable = view_admin_dashboard_bool($model, 'database_usage_available');
+    $databaseUsageAvailable = view_admin_dashboard_bool(
+        $model,
+        'database_usage_available',
+    );
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
-    $systemActionRequired = $migrationPending || view_admin_dashboard_bool($model, 'system_action_required');
+    $systemActionRequired =
+        $migrationPending
+        || view_admin_dashboard_bool($model, 'system_action_required');
 
-    $thumbnailValue = !empty($thumbnailSummary['deferred']) ? t('admin.dashboard.metric_not_checked', 'Not checked') : (string) $missingThumbnailVariants;
+    $thumbnailValue = !empty($thumbnailSummary['deferred'])
+        ? t('admin.dashboard.metric_not_checked', 'Not checked')
+        : (string) $missingThumbnailVariants;
     $thumbnailImagesLabel = !empty($thumbnailSummary['full_check'])
         ? t('admin.dashboard.metric_images_checked', 'images checked')
         : t('admin.dashboard.metric_images_sampled', 'images sampled');
     $thumbnailHelp = !empty($thumbnailSummary['deferred'])
-        ? e(t('admin.dashboard.thumbnail_scan_hint', 'Checked only on request.'))
-            . '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin', ['maintenance_tab' => 'media']) . '#admin-tab-maintenance') . '">'
-            . e(t('admin.dashboard.thumbnail_scan_link', 'Check thumbnails')) . '</a>'
-        : e((int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . $thumbnailImagesLabel);
-    $galleryStorageHelp = e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel]));
+        ? e(t(
+            'admin.dashboard.thumbnail_scan_hint',
+            'Checked only on request.',
+        ))
+        . '<br><a class="admin-metric-inline-link" href="'
+        . e(url_for('admin', ['maintenance_tab' => 'media'])
+            . '#admin-tab-maintenance')
+        . '">'
+        . e(t('admin.dashboard.thumbnail_scan_link', 'Check thumbnails'))
+        . '</a>'
+        : e(
+            (int) ($thumbnailSummary['images_scanned'] ?? 0)
+                . ' '
+                . $thumbnailImagesLabel,
+        );
+    $galleryStorageHelp =
+        e(
+            (int) $unpublishedGalleries
+                . ' '
+                . t('admin.dashboard.metric_unpublished', 'unpublished')
+                . ', '
+                . (int) $privateGalleries
+                . ' '
+                . t('admin.dashboard.metric_private', 'private'),
+        )
+        . '<br>'
+        . e(t(
+            'admin.dashboard.metric_original_storage',
+            'Original files: {size}',
+            ['size' => $originalStorageLabel],
+        ));
     if ($databaseUsageAvailable && $galleryDatabaseUsageLabel !== '') {
-        $galleryStorageHelp .= '<br>' . e(t('admin.dashboard.metric_gallery_database_storage', 'Gallery DB: {size}', ['size' => $galleryDatabaseUsageLabel]));
+        $galleryStorageHelp .=
+            '<br>'
+            . e(t(
+                'admin.dashboard.metric_gallery_database_storage',
+                'Gallery DB: {size}',
+                ['size' => $galleryDatabaseUsageLabel],
+            ));
     }
-    if ($databaseUsageAvailable && $databaseUsageLabel !== '' && $databaseUsageLabel !== $galleryDatabaseUsageLabel) {
-        $galleryStorageHelp .= '<br>' . e(t('admin.dashboard.metric_total_database_storage', 'Total DB: {size}', ['size' => $databaseUsageLabel]));
+    if (
+        $databaseUsageAvailable
+        && $databaseUsageLabel !== ''
+        && $databaseUsageLabel !== $galleryDatabaseUsageLabel
+    ) {
+        $galleryStorageHelp .=
+            '<br>'
+            . e(t(
+                'admin.dashboard.metric_total_database_storage',
+                'Total DB: {size}',
+                ['size' => $databaseUsageLabel],
+            ));
     }
-    $galleryStorageHelp .= '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Storage details')) . '</a>';
-    view_render_admin_metric_grid([
+    $galleryStorageHelp .=
+        '<br><a class="admin-metric-inline-link" href="'
+        . e(url_for('admin_storage_statistics'))
+        . '">'
+        . e(t('admin.storage.open_details', 'Storage details'))
+        . '</a>';
+    view_render_admin_metric_grid(
         [
-            'label' => t('admin.dashboard.metric_galleries', 'Galleries'),
-            'value' => (string) $totalGalleries,
-            'help_html' => $galleryStorageHelp,
-            'state' => $privateGalleries > 0 || $unpublishedGalleries > 0 ? 'care' : 'ready',
+            [
+                'label' => t('admin.dashboard.metric_galleries', 'Galleries'),
+                'value' => (string) $totalGalleries,
+                'help_html' => $galleryStorageHelp,
+                'state' =>
+                    $privateGalleries > 0 || $unpublishedGalleries > 0
+                        ? 'care'
+                        : 'ready',
+            ],
+            [
+                'label' => t(
+                    'admin.dashboard.metric_top_level_images',
+                    'Top-level images',
+                ),
+                'value' => (string) $totalImages,
+                'help' => t(
+                    'admin.dashboard.metric_imported_images_hint',
+                    'Imported images shown in gallery lists',
+                ),
+                'state' => 'neutral',
+            ],
+            [
+                'label' => t(
+                    'admin.dashboard.metric_thumbnail_gaps',
+                    'Thumbnail gaps',
+                ),
+                'value' => $thumbnailValue,
+                'help_html' => $thumbnailHelp,
+                'state' => !empty($thumbnailSummary['deferred'])
+                    ? 'neutral'
+                    : ($missingThumbnailVariants > 0 ? 'care' : 'ready'),
+            ],
+            [
+                'label' => t(
+                    'admin.dashboard.metric_system_state',
+                    'System state',
+                ),
+                'value' => $systemActionRequired
+                    ? t('admin.dashboard.badge_action', 'Action')
+                    : t('admin.dashboard.state_ready', 'Ready'),
+                'help_html' => $systemActionRequired
+                    ? '<a href="' . e(url_for('admin', [
+                        'maintenance_tab' => 'system',
+                    ])
+                        . '#admin-tab-maintenance') . '">' . e(t('admin.dashboard.review_system_health', 'Review system health')) . '</a>'
+                    : e(t(
+                        'admin.dashboard.state_no_migration_warning',
+                        'No migration warning',
+                    )),
+                'state' => $systemActionRequired ? 'care' : 'ready',
+            ],
         ],
-        [
-            'label' => t('admin.dashboard.metric_top_level_images', 'Top-level images'),
-            'value' => (string) $totalImages,
-            'help' => t('admin.dashboard.metric_imported_images_hint', 'Imported images shown in gallery lists'),
-            'state' => 'neutral',
-        ],
-        [
-            'label' => t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps'),
-            'value' => $thumbnailValue,
-            'help_html' => $thumbnailHelp,
-            'state' => !empty($thumbnailSummary['deferred']) ? 'neutral' : ($missingThumbnailVariants > 0 ? 'care' : 'ready'),
-        ],
-        [
-            'label' => t('admin.dashboard.metric_system_state', 'System state'),
-            'value' => $systemActionRequired ? t('admin.dashboard.badge_action', 'Action') : t('admin.dashboard.state_ready', 'Ready'),
-            'help_html' => $systemActionRequired
-                ? '<a href="' . e(url_for('admin', ['maintenance_tab' => 'system']) . '#admin-tab-maintenance') . '">' . e(t('admin.dashboard.review_system_health', 'Review system health')) . '</a>'
-                : e(t('admin.dashboard.state_no_migration_warning', 'No migration warning')),
-            'state' => $systemActionRequired ? 'care' : 'ready',
-        ],
-    ], 'admin-metric-grid', t('admin.dashboard.admin_summary', 'Admin summary'));
+        'admin-metric-grid',
+        t('admin.dashboard.admin_summary', 'Admin summary'),
+    );
 }
 
 /**
@@ -209,7 +324,20 @@ function view_render_admin_dashboard_metric_grid(array $model): void
  */
 function view_render_admin_dashboard_manage_galleries_card(): void
 {
-    echo '<article class="admin-action-card"><strong>' . e(t('admin.dashboard.manage_galleries_title', 'Manage galleries')) . '</strong><span>' . e(t('admin.dashboard.compact_galleries_hint', 'Visibility, ordering and bulk actions.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin', ['dashboard_tab' => 'galleries']) . '#admin-tab-galleries') . '">' . e(t('admin.dashboard.open_gallery_tree', 'Open gallery tree')) . '</a></div></article>';
+    echo
+        '<article class="admin-action-card"><strong>'
+            . e(t('admin.dashboard.manage_galleries_title', 'Manage galleries'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.compact_galleries_hint',
+                'Visibility, ordering and bulk actions.',
+            ))
+            . '</span><div class="nav"><a class="button secondary" href="'
+            . e(url_for('admin', ['dashboard_tab' => 'galleries'])
+                . '#admin-tab-galleries')
+            . '">'
+            . e(t('admin.dashboard.open_gallery_tree', 'Open gallery tree'))
+            . '</a></div></article>';
 }
 
 /**
@@ -219,7 +347,25 @@ function view_render_admin_dashboard_manage_galleries_card(): void
  */
 function view_render_admin_dashboard_settings_card(array $model = []): void
 {
-    echo '<article class="admin-action-card"><strong>' . e(t('admin.settings.title', 'Settings')) . '</strong><span>' . e(t('admin.dashboard.compact_settings_hint', 'Languages, appearance and global preferences.')) . '</span><div class="nav"><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['default'] ?? url_for('admin_settings'))) . '">' . e(t('admin.dashboard.open_settings', 'Open settings')) . '</a></div></article>';
+    echo
+        '<article class="admin-action-card"><strong>'
+            . e(t('admin.settings.title', 'Settings'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.compact_settings_hint',
+                'Languages, appearance and global preferences.',
+            ))
+            . '</span><div class="nav"><a class="button secondary" href="'
+            . e(
+                (string) (
+                    $model['admin_settings_urls']['default'] ?? url_for(
+                        'admin_settings',
+                    )
+                ),
+            )
+            . '">'
+            . e(t('admin.dashboard.open_settings', 'Open settings'))
+            . '</a></div></article>';
 }
 
 /**
@@ -229,7 +375,26 @@ function view_render_admin_dashboard_settings_card(array $model = []): void
  */
 function view_render_admin_dashboard_upload_card(): void
 {
-    echo '<article class="admin-action-card"><strong>' . e(t('admin.dashboard.add_content_title', 'Add content')) . '</strong><span>' . e(t('admin.dashboard.add_content_public_hint', 'Create an empty gallery or open galleries to add photos through the public upload panel.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.dashboard.create_empty_gallery', 'Create empty gallery')) . '</a><a class="button secondary" href="' . e(url_for('home')) . '">' . e(t('admin.dashboard.open_galleries', 'Open galleries')) . '</a></div></article>';
+    echo
+        '<article class="admin-action-card"><strong>'
+            . e(t('admin.dashboard.add_content_title', 'Add content'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.add_content_public_hint',
+                'Create an empty gallery or open galleries to add photos through the public upload panel.',
+            ))
+            . '</span><div class="nav"><a class="button secondary" href="'
+            . e(url_for('admin_new_gallery'))
+            . '">'
+            . e(t(
+                'admin.dashboard.create_empty_gallery',
+                'Create empty gallery',
+            ))
+            . '</a><a class="button secondary" href="'
+            . e(url_for('home'))
+            . '">'
+            . e(t('admin.dashboard.open_galleries', 'Open galleries'))
+            . '</a></div></article>';
 }
 
 /**
@@ -238,9 +403,28 @@ function view_render_admin_dashboard_upload_card(): void
  */
 function view_render_admin_dashboard_discover_card(): void
 {
-    echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="admin-action-card" data-refresh-galleries-form data-admin-discovery-launch data-discovery-endpoint="' . e(url_for('admin_discover')) . '" data-csrf-token="' . e(csrf_token()) . '">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.discover_folders', 'Discover folders')) . '</strong><span>' . e(t('admin.dashboard.discover_folders_hint', 'Scan the galleries directory for new folders.')) . '</span><button type="submit">' . e(t('admin.dashboard.check_folders', 'Check folders')) . '</button>';
-    echo '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status></p><p class="muted" data-admin-discovery-counts></p></div></form>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_discover'))
+            . '" class="admin-action-card" data-refresh-galleries-form data-admin-discovery-launch data-discovery-endpoint="'
+            . e(url_for('admin_discover'))
+            . '" data-csrf-token="'
+            . e(csrf_token())
+            . '">'
+            . csrf_field();
+    echo
+        '<strong>'
+            . e(t('admin.dashboard.discover_folders', 'Discover folders'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.discover_folders_hint',
+                'Scan the galleries directory for new folders.',
+            ))
+            . '</span><button type="submit">'
+            . e(t('admin.dashboard.check_folders', 'Check folders'))
+            . '</button>';
+    echo
+        '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status></p><p class="muted" data-admin-discovery-counts></p></div></form>';
 }
 
 /**
@@ -250,27 +434,86 @@ function view_render_admin_dashboard_discover_card(): void
  */
 function view_render_admin_dashboard_open_maintenance_card(array $model): void
 {
-    $status = is_array($model['maintenance_center_status'] ?? null) ? $model['maintenance_center_status'] : [];
+    $status = is_array($model['maintenance_center_status'] ?? null)
+        ? $model['maintenance_center_status']
+        : [];
     $available = !empty($status['available']);
     $resumable = !empty($status['resumable']);
     $active = !empty($status['active']);
     $jobStatus = (string) ($status['active_status'] ?? '');
-    $percent = max(0.0, min(100.0, (float) ($status['active_progress_percent'] ?? 0)));
+    $percent = max(0.0, min(
+        100.0,
+        (float) ($status['active_progress_percent'] ?? 0),
+    ));
     $lastCompleted = trim((string) ($status['last_completed_at'] ?? ''));
     $actionLabel = $resumable
         ? t('admin.maintenance_center.resume', 'Resume maintenance')
-        : ($active ? t('admin.maintenance_center.view_running', 'View running maintenance') : t('admin.maintenance_center.analyze', 'Analyze & optimize'));
-    echo '<article class="admin-action-card admin-maintenance-center-card"><strong>' . e(t('admin.maintenance_center.title', 'Maintenance Center')) . '</strong>';
+        : (
+            $active
+                ? t(
+                    'admin.maintenance_center.view_running',
+                    'View running maintenance',
+                )
+                : t('admin.maintenance_center.analyze', 'Analyze & optimize')
+        );
+    echo
+        '<article class="admin-action-card admin-maintenance-center-card"><strong>'
+            . e(t('admin.maintenance_center.title', 'Maintenance Center'))
+            . '</strong>';
     if (!$available) {
-        echo '<span>' . e(t('admin.maintenance_center.dashboard_schema_missing', 'Database migration required before central maintenance can run.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.maintenance_center.dashboard_schema_missing',
+                    'Database migration required before central maintenance can run.',
+                ))
+                . '</span>';
     } elseif ($resumable || $active) {
-        echo '<span>' . e(t('admin.maintenance_center.dashboard_active', 'Persisted job:')) . ' ' . e($jobStatus !== '' ? $jobStatus : t('admin.common.unknown', 'Unknown')) . ' · ' . e(number_format($percent, 1)) . '%</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.maintenance_center.dashboard_active',
+                    'Persisted job:',
+                ))
+                . ' '
+                . e(
+                    $jobStatus !== ''
+                        ? $jobStatus
+                        : t('admin.common.unknown', 'Unknown'),
+                )
+                . ' · '
+                . e(number_format($percent, 1))
+                . '%</span>';
     } elseif ($lastCompleted !== '') {
-        echo '<span>' . e(t('admin.maintenance_center.last_completed', 'Last completed central maintenance:')) . ' ' . e($lastCompleted) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.maintenance_center.last_completed',
+                    'Last completed central maintenance:',
+                ))
+                . ' '
+                . e($lastCompleted)
+                . '</span>';
     } else {
-        echo '<span>' . e(t('admin.maintenance_center.dashboard_idle', 'Analyze the installation, review the plan, then run bounded resumable maintenance.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.maintenance_center.dashboard_idle',
+                    'Analyze the installation, review the plan, then run bounded resumable maintenance.',
+                ))
+                . '</span>';
     }
-    echo '<div class="nav"><a class="button secondary" href="' . e(url_for('admin_maintenance_center')) . '">' . e($actionLabel) . '</a><a class="button secondary" href="' . e(url_for('admin', ['dashboard_tab' => 'maintenance']) . '#admin-tab-maintenance') . '">' . e(t('admin.dashboard.open_maintenance', 'Open maintenance')) . '</a></div></article>';
+    echo
+        '<div class="nav"><a class="button secondary" href="'
+            . e(url_for('admin_maintenance_center'))
+            . '">'
+            . e($actionLabel)
+            . '</a><a class="button secondary" href="'
+            . e(url_for('admin', ['dashboard_tab' => 'maintenance'])
+                . '#admin-tab-maintenance')
+            . '">'
+            . e(t('admin.dashboard.open_maintenance', 'Open maintenance'))
+            . '</a></div></article>';
 }
 
 /**
@@ -285,13 +528,37 @@ function view_render_admin_dashboard_open_maintenance_card(array $model): void
 function view_render_admin_dashboard_maintenance_panel(array $model): void
 {
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
-    $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
-    $securitySchemaStatuses = view_admin_dashboard_array($model, 'security_schema_statuses');
-    $runtimeSupport = view_admin_dashboard_array($model, 'runtime_support_status');
-    $systemHealthActionRequired = $migrationPending || !empty($runtimeSupport['policy']['action_required']);
-    $systemHealthActionRequired = $systemHealthActionRequired || !empty($model['image_move_pending_status']['action_required']);
-    foreach (array_merge($securitySchemaStatuses, view_admin_dashboard_array($model, 'mutation_schema_statuses'), view_admin_dashboard_array($model, 'presentation_schema_statuses')) as $securityStatus) {
-        if (is_array($securityStatus) && in_array((string) ($securityStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
+    $missingThumbnailVariants = view_admin_dashboard_int(
+        $model,
+        'missing_thumbnail_variants',
+    );
+    $securitySchemaStatuses = view_admin_dashboard_array(
+        $model,
+        'security_schema_statuses',
+    );
+    $runtimeSupport = view_admin_dashboard_array(
+        $model,
+        'runtime_support_status',
+    );
+    $systemHealthActionRequired =
+        $migrationPending
+        || !empty($runtimeSupport['policy']['action_required']);
+    $systemHealthActionRequired =
+        $systemHealthActionRequired
+        || !empty($model['image_move_pending_status']['action_required']);
+    foreach (array_merge(
+        $securitySchemaStatuses,
+        view_admin_dashboard_array($model, 'mutation_schema_statuses'),
+        view_admin_dashboard_array($model, 'presentation_schema_statuses'),
+    ) as $securityStatus) {
+        if (
+            is_array($securityStatus)
+            && in_array(
+                (string) ($securityStatus['state'] ?? 'unknown'),
+                ['missing', 'unknown'],
+                true,
+            )
+        ) {
             $systemHealthActionRequired = true;
             break;
         }
@@ -304,23 +571,77 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
     $trashProblemCount = (int) ($trashSummary['problem_count'] ?? 0);
 
     $maintenanceSubtabs = [
-        ['id' => 'admin-maintenance-content', 'label' => t('admin.dashboard.maintenance_content_display_tab', 'Content and display'), 'icon' => 'settings'],
-        ['id' => 'admin-maintenance-media', 'label' => t('admin.dashboard.maintenance_media_cache_tab', 'Media and cache'), 'icon' => 'galleries', 'badge' => $missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null],
-        ['id' => 'admin-maintenance-navigation', 'label' => t('admin.dashboard.maintenance_navigation_tab', 'Maps and navdata'), 'icon' => 'navigation'],
-        ['id' => 'admin-maintenance-trash', 'label' => t('admin.trash.title', 'Trash'), 'icon' => 'trash', 'badge' => $trashCount > 0 ? (string) $trashCount : ($trashProblemCount > 0 ? t('admin.dashboard.badge_action', 'Action') : null)],
-        ['id' => 'admin-maintenance-system', 'label' => t('admin.dashboard.maintenance_system_health_tab', 'System health'), 'icon' => 'integrity', 'badge' => $systemHealthActionRequired ? t('admin.dashboard.badge_action', 'Action') : null],
+        [
+            'id' => 'admin-maintenance-content',
+            'label' => t(
+                'admin.dashboard.maintenance_content_display_tab',
+                'Content and display',
+            ),
+            'icon' => 'settings',
+        ],
+        [
+            'id' => 'admin-maintenance-media',
+            'label' => t(
+                'admin.dashboard.maintenance_media_cache_tab',
+                'Media and cache',
+            ),
+            'icon' => 'galleries',
+            'badge' => $missingThumbnailVariants > 0
+                ? (string) $missingThumbnailVariants
+                : null,
+        ],
+        [
+            'id' => 'admin-maintenance-navigation',
+            'label' => t(
+                'admin.dashboard.maintenance_navigation_tab',
+                'Maps and navdata',
+            ),
+            'icon' => 'navigation',
+        ],
+        [
+            'id' => 'admin-maintenance-trash',
+            'label' => t('admin.trash.title', 'Trash'),
+            'icon' => 'trash',
+            'badge' => $trashCount > 0
+                ? (string) $trashCount
+                : (
+                    $trashProblemCount > 0
+                        ? t('admin.dashboard.badge_action', 'Action')
+                        : null
+                ),
+        ],
+        [
+            'id' => 'admin-maintenance-system',
+            'label' => t(
+                'admin.dashboard.maintenance_system_health_tab',
+                'System health',
+            ),
+            'icon' => 'integrity',
+            'badge' => $systemHealthActionRequired
+                ? t('admin.dashboard.badge_action', 'Action')
+                : null,
+        ],
     ];
 
     view_render_admin_tab_intro([
         'kicker' => t('admin.dashboard.maintenance_kicker', 'Maintenance'),
         'title' => t('admin.dashboard.system_tools', 'System tools'),
-        'description' => t('admin.dashboard.system_tools_hint', 'Operational controls are grouped by purpose so display settings, media cache work, map data, and system health do not compete in one long list.'),
+        'description' => t(
+            'admin.dashboard.system_tools_hint',
+            'Operational controls are grouped by purpose so display settings, media cache work, map data, and system health do not compete in one long list.',
+        ),
     ]);
     echo '<div class="admin-maintenance-grid admin-maintenance-featured-grid">';
-    view_render_admin_gallery_report_maintenance_card($model, 'admin-maintenance-card is-featured');
+    view_render_admin_gallery_report_maintenance_card(
+        $model,
+        'admin-maintenance-card is-featured',
+    );
     echo '</div>';
-    echo '<div class="admin-subtab-scope admin-dashboard-maintenance-scope" data-admin-subtab-scope>';
-    $requestedMaintenanceTab = strtolower(trim((string) ($model['requested_maintenance_tab'] ?? '')));
+    echo
+        '<div class="admin-subtab-scope admin-dashboard-maintenance-scope" data-admin-subtab-scope>';
+    $requestedMaintenanceTab = strtolower(trim(
+        (string) ($model['requested_maintenance_tab'] ?? ''),
+    ));
     $maintenanceTabMap = [
         'content' => 'admin-maintenance-content',
         'media' => 'admin-maintenance-media',
@@ -328,20 +649,42 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
         'trash' => 'admin-maintenance-trash',
         'system' => 'admin-maintenance-system',
     ];
-    $activeMaintenanceTab = (string) ($maintenanceTabMap[$requestedMaintenanceTab] ?? 'admin-maintenance-content');
-    view_render_admin_subtabs($maintenanceSubtabs, $activeMaintenanceTab, t('admin.dashboard.maintenance_subtabs_aria', 'Maintenance tool groups'));
+    $activeMaintenanceTab = (string) (
+        $maintenanceTabMap[$requestedMaintenanceTab]
+        ?? 'admin-maintenance-content'
+    );
+    view_render_admin_subtabs(
+        $maintenanceSubtabs,
+        $activeMaintenanceTab,
+        t(
+            'admin.dashboard.maintenance_subtabs_aria',
+            'Maintenance tool groups',
+        ),
+    );
 
     ob_start();
     view_render_admin_dashboard_content_display_tools($model);
-    view_render_admin_subtab_panel('admin-maintenance-content', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-content');
+    view_render_admin_subtab_panel(
+        'admin-maintenance-content',
+        (string) ob_get_clean(),
+        $activeMaintenanceTab === 'admin-maintenance-content',
+    );
 
     ob_start();
     view_render_admin_dashboard_media_tools($model);
-    view_render_admin_subtab_panel('admin-maintenance-media', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-media');
+    view_render_admin_subtab_panel(
+        'admin-maintenance-media',
+        (string) ob_get_clean(),
+        $activeMaintenanceTab === 'admin-maintenance-media',
+    );
 
     ob_start();
     view_render_admin_dashboard_navigation_tools($model);
-    view_render_admin_subtab_panel('admin-maintenance-navigation', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-navigation');
+    view_render_admin_subtab_panel(
+        'admin-maintenance-navigation',
+        (string) ob_get_clean(),
+        $activeMaintenanceTab === 'admin-maintenance-navigation',
+    );
 
     ob_start();
     render_admin_trash_page(
@@ -349,18 +692,43 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
         $trashSummary,
         true,
         [
-            'enabled' => view_admin_dashboard_bool($model, 'gallery_trash_enabled'),
-            'auto_purge_enabled' => view_admin_dashboard_bool($model, 'gallery_trash_auto_purge_enabled'),
-            'auto_purge_active' => view_admin_dashboard_bool($model, 'gallery_trash_auto_purge_active'),
-            'retention_days' => view_admin_dashboard_int($model, 'gallery_trash_retention_days', 30),
-            'purge_batch_size' => view_admin_dashboard_int($model, 'gallery_trash_purge_batch_size', 20),
-        ]
+            'enabled' => view_admin_dashboard_bool(
+                $model,
+                'gallery_trash_enabled',
+            ),
+            'auto_purge_enabled' => view_admin_dashboard_bool(
+                $model,
+                'gallery_trash_auto_purge_enabled',
+            ),
+            'auto_purge_active' => view_admin_dashboard_bool(
+                $model,
+                'gallery_trash_auto_purge_active',
+            ),
+            'retention_days' => view_admin_dashboard_int(
+                $model,
+                'gallery_trash_retention_days',
+                30,
+            ),
+            'purge_batch_size' => view_admin_dashboard_int(
+                $model,
+                'gallery_trash_purge_batch_size',
+                20,
+            ),
+        ],
     );
-    view_render_admin_subtab_panel('admin-maintenance-trash', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-trash');
+    view_render_admin_subtab_panel(
+        'admin-maintenance-trash',
+        (string) ob_get_clean(),
+        $activeMaintenanceTab === 'admin-maintenance-trash',
+    );
 
     ob_start();
     view_render_admin_dashboard_system_tools($model);
-    view_render_admin_subtab_panel('admin-maintenance-system', (string) ob_get_clean(), $activeMaintenanceTab === 'admin-maintenance-system');
+    view_render_admin_subtab_panel(
+        'admin-maintenance-system',
+        (string) ob_get_clean(),
+        $activeMaintenanceTab === 'admin-maintenance-system',
+    );
 
     echo '</div>';
 }
@@ -373,33 +741,80 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
  */
 function view_render_admin_dashboard_content_display_tools(array $model): void
 {
-    $publicSearchEnabled = view_admin_dashboard_feature_enabled($model, 'public_search');
+    $publicSearchEnabled = view_admin_dashboard_feature_enabled(
+        $model,
+        'public_search',
+    );
     $gpsReady = view_admin_dashboard_bool($model, 'gps_map_override_ready');
-    $galleryDatesAvailable = view_admin_dashboard_bool($model, 'gallery_date_range_ready')
-        && view_admin_dashboard_feature_enabled($model, 'exif_gallery_date_suggestions');
-    echo '<header class="admin-content-heading"><h2>' . e(t('admin.dashboard.content_display_title', 'Display, dates, and public URLs')) . '</h2><p>' . e(t('admin.dashboard.content_display_hint', 'Controls that change what visitors see or how galleries resolve public metadata.')) . '</p></header>';
+    $galleryDatesAvailable =
+        view_admin_dashboard_bool($model, 'gallery_date_range_ready')
+        && view_admin_dashboard_feature_enabled(
+            $model,
+            'exif_gallery_date_suggestions',
+        );
+    echo
+        '<header class="admin-content-heading"><h2>'
+            . e(t(
+                'admin.dashboard.content_display_title',
+                'Display, dates, and public URLs',
+            ))
+            . '</h2><p>'
+            . e(t(
+                'admin.dashboard.content_display_hint',
+                'Controls that change what visitors see or how galleries resolve public metadata.',
+            ))
+            . '</p></header>';
     echo '<div class="admin-content-display-workspace">';
     if ($publicSearchEnabled || $gpsReady) {
-        echo '<section class="admin-content-group" data-admin-content-group="public-display"><h3>' . e(t('admin.dashboard.content_public_display', 'Public display')) . '</h3>';
+        echo
+            '<section class="admin-content-group" data-admin-content-group="public-display"><h3>'
+                . e(t(
+                    'admin.dashboard.content_public_display',
+                    'Public display',
+                ))
+                . '</h3>';
         if ($publicSearchEnabled) {
-            view_render_admin_dashboard_public_search_card('admin-content-row', $model);
+            view_render_admin_dashboard_public_search_card(
+                'admin-content-row',
+                $model,
+            );
         }
         if ($gpsReady) {
-            view_render_admin_exif_gps_defaults_card('admin-content-row', view_admin_dashboard_bool($model, 'exif_gps_default_enabled'), view_admin_dashboard_int($model, 'exif_gps_override_count'), $model);
+            view_render_admin_exif_gps_defaults_card(
+                'admin-content-row',
+                view_admin_dashboard_bool($model, 'exif_gps_default_enabled'),
+                view_admin_dashboard_int($model, 'exif_gps_override_count'),
+                $model,
+            );
         }
         echo '</section>';
     }
     if ($galleryDatesAvailable || $gpsReady) {
-        echo '<section class="admin-content-group" data-admin-content-group="gallery-metadata"><h3>' . e(t('admin.dashboard.content_gallery_metadata', 'Gallery metadata')) . '</h3>';
+        echo
+            '<section class="admin-content-group" data-admin-content-group="gallery-metadata"><h3>'
+                . e(t(
+                    'admin.dashboard.content_gallery_metadata',
+                    'Gallery metadata',
+                ))
+                . '</h3>';
         if ($galleryDatesAvailable) {
             view_render_admin_gallery_dates_card('admin-content-row', $model);
         }
         if ($gpsReady) {
-            view_render_admin_dashboard_gps_override_reset(view_admin_dashboard_int($model, 'exif_gps_override_count'));
+            view_render_admin_dashboard_gps_override_reset(view_admin_dashboard_int(
+                $model,
+                'exif_gps_override_count',
+            ));
         }
         echo '</section>';
     }
-    echo '<section class="admin-content-group" data-admin-content-group="urls-protection"><h3>' . e(t('admin.dashboard.content_urls_protection', 'Public URLs and protection')) . '</h3>';
+    echo
+        '<section class="admin-content-group" data-admin-content-group="urls-protection"><h3>'
+            . e(t(
+                'admin.dashboard.content_urls_protection',
+                'Public URLs and protection',
+            ))
+            . '</h3>';
     view_render_admin_url_rewrite_card('admin-content-row', $model, true);
     view_render_admin_dashboard_public_paths_card('admin-content-row');
     view_render_admin_dashboard_seo_guard_card('admin-content-row', $model);
@@ -415,12 +830,52 @@ function view_render_admin_dashboard_content_display_tools(array $model): void
 function view_render_admin_dashboard_gps_override_reset(int $overrideCount): void
 {
     $overrideCount = max(0, $overrideCount);
-    echo '<article class="admin-content-row"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.content_overrides_title', 'GPS map overrides')) . '</strong><span>' . e(t('admin.dashboard.content_overrides_count', '{count} individual override(s).', ['count' => (string) $overrideCount])) . '</span></div>';
+    echo
+        '<article class="admin-content-row"><div class="admin-content-copy"><strong>'
+            . e(t(
+                'admin.dashboard.content_overrides_title',
+                'GPS map overrides',
+            ))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.content_overrides_count',
+                '{count} individual override(s).',
+                ['count' => (string) $overrideCount],
+            ))
+            . '</span></div>';
     if ($overrideCount > 0) {
-        echo '<details class="admin-content-details admin-content-reset-details"><summary>' . e(t('admin.dashboard.content_overrides_details', 'Reset gallery overrides')) . '</summary><p>' . e(t('admin.dashboard.content_overrides_hint', 'Return every gallery\'s individual map choice to the global default. The global default remains unchanged.')) . '</p>';
-        echo '<form method="post" action="' . e(url_for('admin_exif_gps_settings')) . '" class="admin-content-gps-reset">' . csrf_field() . '<input type="hidden" name="maintenance_return" value="content"><input type="hidden" name="reset_gallery_overrides" value="1"><input type="hidden" name="reset_gallery_overrides_only" value="1"><button type="submit" class="secondary">' . e(t('admin.dashboard.content_overrides_action', 'Reset {count} overrides', ['count' => (string) $overrideCount])) . '</button></form></details>';
+        echo
+            '<details class="admin-content-details admin-content-reset-details"><summary>'
+                . e(t(
+                    'admin.dashboard.content_overrides_details',
+                    'Reset gallery overrides',
+                ))
+                . '</summary><p>'
+                . e(t(
+                    'admin.dashboard.content_overrides_hint',
+                    'Return every gallery\'s individual map choice to the global default. The global default remains unchanged.',
+                ))
+                . '</p>';
+        echo
+            '<form method="post" action="'
+                . e(url_for('admin_exif_gps_settings'))
+                . '" class="admin-content-gps-reset">'
+                . csrf_field()
+                . '<input type="hidden" name="maintenance_return" value="content"><input type="hidden" name="reset_gallery_overrides" value="1"><input type="hidden" name="reset_gallery_overrides_only" value="1"><button type="submit" class="secondary">'
+                . e(t(
+                    'admin.dashboard.content_overrides_action',
+                    'Reset {count} overrides',
+                    ['count' => (string) $overrideCount],
+                ))
+                . '</button></form></details>';
     } else {
-        echo '<span class="muted admin-content-status">' . e(t('admin.dashboard.content_overrides_none', 'All galleries currently inherit the global map default.')) . '</span>';
+        echo
+            '<span class="muted admin-content-status">'
+                . e(t(
+                    'admin.dashboard.content_overrides_none',
+                    'All galleries currently inherit the global map default.',
+                ))
+                . '</span>';
     }
     echo '</article>';
 }
@@ -433,20 +888,42 @@ function view_render_admin_dashboard_gps_override_reset(int $overrideCount): voi
  */
 function view_render_admin_dashboard_media_tools(array $model): void
 {
-    echo '<div class="admin-media-cache-workspace"><div class="admin-cache-owner-grid">';
-    view_render_admin_dashboard_cache_cleanup_card(view_admin_dashboard_array($model, 'site_maintenance_status'));
-    $maintenance = view_admin_dashboard_array($model, 'site_maintenance_status');
-    view_render_admin_dashboard_cache_lifecycle_card(is_array($maintenance['cache_lifecycle'] ?? null) ? $maintenance['cache_lifecycle'] : []);
+    echo
+        '<div class="admin-media-cache-workspace"><div class="admin-cache-owner-grid">';
+    view_render_admin_dashboard_cache_cleanup_card(view_admin_dashboard_array(
+        $model,
+        'site_maintenance_status',
+    ));
+    $maintenance = view_admin_dashboard_array(
+        $model,
+        'site_maintenance_status',
+    );
+    view_render_admin_dashboard_cache_lifecycle_card(
+        is_array($maintenance['cache_lifecycle'] ?? null)
+            ? $maintenance['cache_lifecycle']
+            : [],
+    );
     echo '</div><div class="admin-media-cache-tools">';
     if (view_admin_dashboard_feature_enabled($model, 'downloads')) {
-        view_render_admin_dashboard_archive_card('admin-maintenance-card admin-media-shortcut');
+        view_render_admin_dashboard_archive_card(
+            'admin-maintenance-card admin-media-shortcut',
+        );
     }
     if (view_admin_dashboard_feature_enabled($model, 'media_renamer')) {
-        view_render_admin_dashboard_media_renamer_card('admin-maintenance-card admin-media-shortcut');
+        view_render_admin_dashboard_media_renamer_card(
+            'admin-maintenance-card admin-media-shortcut',
+        );
     }
-    echo '</div><div class="admin-maintenance-grid admin-media-maintenance-grid">';
-    view_render_admin_dashboard_thumbnail_card($model, 'admin-maintenance-card');
-    view_render_admin_dashboard_site_maintenance_card($model, 'admin-maintenance-card');
+    echo
+        '</div><div class="admin-maintenance-grid admin-media-maintenance-grid">';
+    view_render_admin_dashboard_thumbnail_card(
+        $model,
+        'admin-maintenance-card',
+    );
+    view_render_admin_dashboard_site_maintenance_card(
+        $model,
+        'admin-maintenance-card',
+    );
     echo '</div></div>';
 }
 
@@ -459,25 +936,54 @@ function view_render_admin_dashboard_cache_regions(array $regions): void
 {
     $labels = [];
     foreach ([
-        'title'=>'Regional checks (sample)', 'empty'=>'No regional evidence recorded.',
-        'sample'=>'Only the supplied sample is shown; it does not describe every region.',
-        'details'=>'Technical details', 'path'=>'Relative path', 'phase'=>'Stored state',
-        'last_completed_at'=>'Last successful completed check', 'next'=>'Next check', 'retry'=>'Retry after',
-        'last_serviced_at'=>'Last serviced', 'next_due_at'=>'Scheduled check', 'retry_at'=>'Retry after',
-        'round'=>'Observation round', 'failures'=>'Failed attempts', 'cursor_path'=>'Saved cursor path',
-        'cursor_offset'=>'Saved cursor offset', 'missing'=>'Not recorded', 'unscheduled'=>'Not scheduled',
-        'idle'=>'Idle', 'unobserved'=>'Not yet observed', 'inventory'=>'Checking',
-        'preview'=>'Check finished; cleanup pending', 'cleanup'=>'Cleaning', 'complete'=>'Pass finished',
-        'unknown'=>'Other state', 'discovery'=>'Discover cache areas', 'files'=>'Files in cache root',
-        'history'=>'Confirmed deletion receipts',
+        'title' => 'Regional checks (sample)',
+        'empty' => 'No regional evidence recorded.',
+        'sample' => 'Only the supplied sample is shown; it does not describe every region.',
+        'details' => 'Technical details',
+        'path' => 'Relative path',
+        'phase' => 'Stored state',
+        'last_completed_at' => 'Last successful completed check',
+        'next' => 'Next check',
+        'retry' => 'Retry after',
+        'last_serviced_at' => 'Last serviced',
+        'next_due_at' => 'Scheduled check',
+        'retry_at' => 'Retry after',
+        'round' => 'Observation round',
+        'failures' => 'Failed attempts',
+        'cursor_path' => 'Saved cursor path',
+        'cursor_offset' => 'Saved cursor offset',
+        'missing' => 'Not recorded',
+        'unscheduled' => 'Not scheduled',
+        'idle' => 'Idle',
+        'unobserved' => 'Not yet observed',
+        'inventory' => 'Checking',
+        'preview' => 'Check finished; cleanup pending',
+        'cleanup' => 'Cleaning',
+        'complete' => 'Pass finished',
+        'unknown' => 'Other state',
+        'discovery' => 'Discover cache areas',
+        'files' => 'Files in cache root',
+        'history' => 'Confirmed deletion receipts',
     ] as $key => $fallback) {
         $labels[$key] = t('admin.cache_lifecycle.region.' . $key, $fallback);
     }
-    echo '<div class="admin-cache-regions" data-cache-region-view data-cache-region-labels="'
-        . e(json_encode($labels, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) . '"><h3>' . e($labels['title'])
-        . '</h3><p class="muted">' . e($labels['sample']) . '</p><p data-cache-region-empty' . ($regions === [] ? '' : ' hidden') . '>'
-        . e($labels['empty']) . '</p><ul class="admin-cache-region-list" role="list" data-cache-region-details>';
-    foreach ($regions as $region) view_render_admin_dashboard_cache_region_row($region, $labels);
+    echo
+        '<div class="admin-cache-regions" data-cache-region-view data-cache-region-labels="'
+            . e(json_encode(
+                $labels,
+                JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+            ))
+            . '"><h3>'
+            . e($labels['title'])
+            . '</h3><p class="muted">'
+            . e($labels['sample'])
+            . '</p><p data-cache-region-empty'
+            . ($regions === [] ? '' : ' hidden')
+            . '>'
+            . e($labels['empty'])
+            . '</p><ul class="admin-cache-region-list" role="list" data-cache-region-details>';
+    foreach ($regions as $region)
+        view_render_admin_dashboard_cache_region_row($region, $labels);
     echo '</ul><template data-cache-region-template>';
     view_render_admin_dashboard_cache_region_row([], $labels);
     echo '</template></div>';
@@ -489,10 +995,17 @@ function view_render_admin_dashboard_cache_regions(array $regions): void
  * @param string $missing Localized missing-evidence or unscheduled label.
  * @return string Time element with an explicit UTC display, or an escaped missing label.
  */
-function view_admin_dashboard_cache_region_timestamp(int $value, string $missing): string
-{
-    return $value > 0 ? '<time datetime="' . e(gmdate('Y-m-d\TH:i:s\Z', $value)) . '">'
-        . e(gmdate('Y-m-d H:i:s', $value) . ' UTC') . '</time>' : e($missing);
+function view_admin_dashboard_cache_region_timestamp(
+    int $value,
+    string $missing,
+): string {
+    return $value > 0
+        ? '<time datetime="'
+        . e(gmdate('Y-m-d\TH:i:s\Z', $value))
+        . '">'
+        . e(gmdate('Y-m-d H:i:s', $value) . ' UTC')
+        . '</time>'
+        : e($missing);
 }
 
 /**
@@ -501,33 +1014,92 @@ function view_admin_dashboard_cache_region_timestamp(int $value, string $missing
  * @param array<string,string> $labels Localized regional field, phase, identity and missing-value labels.
  * @return void Emits an escaped list item; service time never stands in for a successful completion.
  */
-function view_render_admin_dashboard_cache_region_row(array $region, array $labels): void
-{
+function view_render_admin_dashboard_cache_region_row(
+    array $region,
+    array $labels,
+): void {
     $path = (string) ($region['path'] ?? '');
     $name = match ($path) {
-        '@discovery' => $labels['discovery'], '@files' => $labels['files'], '@history' => $labels['history'],
+        '@discovery' => $labels['discovery'],
+        '@files' => $labels['files'],
+        '@history' => $labels['history'],
         default => $path,
     };
     $phase = (string) ($region['phase'] ?? 'unobserved');
-    $phaseLabel = in_array($phase, ['idle','unobserved','inventory','preview','cleanup','complete'], true) ? $labels[$phase] : $labels['unknown'];
-    if ((int) ($region['failures'] ?? 0) > 0) $phaseLabel .= ' · ' . $labels['failures'] . ': ' . (string) $region['failures'];
+    $phaseLabel = in_array(
+        $phase,
+        ['idle', 'unobserved', 'inventory', 'preview', 'cleanup', 'complete'],
+        true,
+    )
+        ? $labels[$phase]
+        : $labels['unknown'];
+    if ((int) ($region['failures'] ?? 0) > 0)
+        $phaseLabel .=
+            ' · ' . $labels['failures'] . ': ' . (string) $region['failures'];
     $due = (int) ($region['next_due_at'] ?? 0);
     $retry = (int) ($region['retry_at'] ?? 0);
-    $nextLabel = $retry > 0 && $retry >= $due ? $labels['retry'] : $labels['next'];
-    echo '<li class="admin-cache-region"><div class="admin-cache-region-heading"><strong data-cache-region-field="name">' . e($name)
-        . '</strong><span data-cache-region-field="state">' . e($phaseLabel) . '</span></div><dl class="admin-cache-region-times"><div><dt>'
-        . e($labels['last_completed_at']) . '</dt><dd data-cache-region-field="last_completed_at">'
-        . view_admin_dashboard_cache_region_timestamp((int) ($region['last_completed_at'] ?? 0), $labels['missing'])
-        . '</dd></div><div><dt data-cache-region-next-label>' . e($nextLabel) . '</dt><dd data-cache-region-field="next">'
-        . view_admin_dashboard_cache_region_timestamp(max($due, $retry), $labels['unscheduled']) . '</dd></div></dl><details><summary>' . e($labels['details'])
-        . '</summary><dl class="admin-cache-region-technical">';
-    foreach (['path','phase','round','last_serviced_at','next_due_at','retry_at','failures','cursor_path','cursor_offset'] as $field) {
+    $nextLabel =
+        $retry > 0 && $retry >= $due ? $labels['retry'] : $labels['next'];
+    echo
+        '<li class="admin-cache-region"><div class="admin-cache-region-heading"><strong data-cache-region-field="name">'
+            . e($name)
+            . '</strong><span data-cache-region-field="state">'
+            . e($phaseLabel)
+            . '</span></div><dl class="admin-cache-region-times"><div><dt>'
+            . e($labels['last_completed_at'])
+            . '</dt><dd data-cache-region-field="last_completed_at">'
+            . view_admin_dashboard_cache_region_timestamp(
+                (int) ($region['last_completed_at'] ?? 0),
+                $labels['missing'],
+            )
+            . '</dd></div><div><dt data-cache-region-next-label>'
+            . e($nextLabel)
+            . '</dt><dd data-cache-region-field="next">'
+            . view_admin_dashboard_cache_region_timestamp(
+                max($due, $retry),
+                $labels['unscheduled'],
+            )
+            . '</dd></div></dl><details><summary>'
+            . e($labels['details'])
+            . '</summary><dl class="admin-cache-region-technical">';
+    foreach ([
+        'path',
+        'phase',
+        'round',
+        'last_serviced_at',
+        'next_due_at',
+        'retry_at',
+        'failures',
+        'cursor_path',
+        'cursor_offset',
+    ] as $field) {
         $value = $region[$field] ?? null;
-        echo '<div><dt>' . e($labels[$field]) . '</dt><dd data-cache-region-field="' . e($field) . '">';
-        if (in_array($field, ['last_serviced_at','next_due_at','retry_at'], true)) {
-            echo view_admin_dashboard_cache_region_timestamp((int) $value, $field === 'last_serviced_at' ? $labels['missing'] : $labels['unscheduled']);
+        echo
+            '<div><dt>'
+                . e($labels[$field])
+                . '</dt><dd data-cache-region-field="'
+                . e($field)
+                . '">';
+        if (in_array(
+            $field,
+            ['last_serviced_at', 'next_due_at', 'retry_at'],
+            true,
+        )) {
+            echo view_admin_dashboard_cache_region_timestamp(
+                (int) $value,
+                $field === 'last_serviced_at'
+                    ? $labels['missing']
+                    : $labels['unscheduled'],
+            );
         } else {
-            echo '<code>' . e($value === null || $value === '' ? $labels['missing'] : (string) $value) . '</code>';
+            echo
+                '<code>'
+                    . e(
+                        $value === null || $value === ''
+                            ? $labels['missing']
+                            : (string) $value,
+                    )
+                    . '</code>';
         }
         echo '</dd></div>';
     }
@@ -543,44 +1115,157 @@ function view_render_admin_dashboard_cache_timing(array $status): void
 {
     $missing = t('admin.cache_lifecycle.region.missing', 'Not recorded');
     $fields = [
-        ['field'=>'last_attempt_at','label'=>t('admin.cache_lifecycle.timing.attempt', 'Last worker arrival')],
-        ['field'=>'last_progress_at','label'=>t('admin.cache_lifecycle.overview.progress', 'Last worker progress')],
-        ['field'=>'next_due','label'=>t('admin.cache_lifecycle.timing.oldest_due', 'Oldest regional due time')],
-        ['field'=>'oldest_completed_at','label'=>t('admin.cache_lifecycle.overview.oldest', 'Oldest completed check')],
-        ['field'=>'last_removed_at','label'=>t('admin.cache_lifecycle.timing.removed', 'Last confirmed deletion')],
+        [
+            'field' => 'last_attempt_at',
+            'label' => t(
+                'admin.cache_lifecycle.timing.attempt',
+                'Last worker arrival',
+            ),
+        ],
+        [
+            'field' => 'last_progress_at',
+            'label' => t(
+                'admin.cache_lifecycle.overview.progress',
+                'Last worker progress',
+            ),
+        ],
+        [
+            'field' => 'next_due',
+            'label' => t(
+                'admin.cache_lifecycle.timing.oldest_due',
+                'Oldest regional due time',
+            ),
+        ],
+        [
+            'field' => 'oldest_completed_at',
+            'label' => t(
+                'admin.cache_lifecycle.overview.oldest',
+                'Oldest completed check',
+            ),
+        ],
+        [
+            'field' => 'last_removed_at',
+            'label' => t(
+                'admin.cache_lifecycle.timing.removed',
+                'Last confirmed deletion',
+            ),
+        ],
     ];
     $healthLabels = [
-        'arrivals_observed'=>t('admin.cache_lifecycle.timing.arrivals', 'Recent worker arrivals'),
-        'single_arrival'=>t('admin.cache_lifecycle.timing.single', 'One worker arrival'),
-        'missing'=>t('admin.cache_lifecycle.overview.worker_missing', 'Worker not observed'), 'unobserved'=>$missing,
+        'arrivals_observed' => t(
+            'admin.cache_lifecycle.timing.arrivals',
+            'Recent worker arrivals',
+        ),
+        'single_arrival' => t(
+            'admin.cache_lifecycle.timing.single',
+            'One worker arrival',
+        ),
+        'missing' => t(
+            'admin.cache_lifecycle.overview.worker_missing',
+            'Worker not observed',
+        ),
+        'unobserved' => $missing,
     ];
     $reasonLabels = [
-        'cache_lifecycle_not_due'=>t('admin.cache_lifecycle.timing.not_due', 'Waiting for due work'),
-        'manual_cache_preview_pending'=>t('admin.cache_lifecycle.timing.manual', 'Manual preview awaits review'),
-        'foreground_requests_active'=>t('admin.cache_lifecycle.timing.foreground', 'Giving priority to visitors'),
-        'foreground_request_arrived'=>t('admin.cache_lifecycle.timing.foreground', 'Giving priority to visitors'),
-        'automatic_cache_cleanup_disabled'=>t('admin.cache_lifecycle.overview.worker_disabled', 'Automatic cleanup is OFF'),
-        'central_maintenance_active'=>t('admin.cache_lifecycle.timing.maintenance', 'Maintenance owns the worker'),
-        'maintenance_already_running'=>t('admin.cache_lifecycle.timing.maintenance', 'Maintenance owns the worker'),
+        'cache_lifecycle_not_due' => t(
+            'admin.cache_lifecycle.timing.not_due',
+            'Waiting for due work',
+        ),
+        'manual_cache_preview_pending' => t(
+            'admin.cache_lifecycle.timing.manual',
+            'Manual preview awaits review',
+        ),
+        'foreground_requests_active' => t(
+            'admin.cache_lifecycle.timing.foreground',
+            'Giving priority to visitors',
+        ),
+        'foreground_request_arrived' => t(
+            'admin.cache_lifecycle.timing.foreground',
+            'Giving priority to visitors',
+        ),
+        'automatic_cache_cleanup_disabled' => t(
+            'admin.cache_lifecycle.overview.worker_disabled',
+            'Automatic cleanup is OFF',
+        ),
+        'central_maintenance_active' => t(
+            'admin.cache_lifecycle.timing.maintenance',
+            'Maintenance owns the worker',
+        ),
+        'maintenance_already_running' => t(
+            'admin.cache_lifecycle.timing.maintenance',
+            'Maintenance owns the worker',
+        ),
     ];
     echo '<dl class="admin-cache-timing" data-cache-timing>';
-    foreach ([['field'=>'scheduler_health','label'=>t('admin.cache_lifecycle.timing.scheduler', 'Scheduler'),'labels'=>$healthLabels],
-        ['field'=>'scheduler_reason','label'=>t('admin.cache_lifecycle.timing.reason', 'Current reason'),'labels'=>$reasonLabels]] as $item) {
+    foreach ([
+        [
+            'field' => 'scheduler_health',
+            'label' => t('admin.cache_lifecycle.timing.scheduler', 'Scheduler'),
+            'labels' => $healthLabels,
+        ],
+        [
+            'field' => 'scheduler_reason',
+            'label' => t(
+                'admin.cache_lifecycle.timing.reason',
+                'Current reason',
+            ),
+            'labels' => $reasonLabels,
+        ],
+    ] as $item) {
         $value = (string) ($status[$item['field']] ?? '');
-        echo '<div><dt>' . e($item['label']) . '</dt><dd data-cache-status-field="' . e($item['field']) . '" data-cache-status-format="enum" data-missing="'
-            . e($missing) . '" data-cache-status-labels="' . e(json_encode($item['labels'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) . '"><span>'
-            . e($item['labels'][$value] ?? $missing) . '</span> <code>' . e($value) . '</code></dd></div>';
+        echo
+            '<div><dt>'
+                . e($item['label'])
+                . '</dt><dd data-cache-status-field="'
+                . e($item['field'])
+                . '" data-cache-status-format="enum" data-missing="'
+                . e($missing)
+                . '" data-cache-status-labels="'
+                . e(json_encode(
+                    $item['labels'],
+                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
+                ))
+                . '"><span>'
+                . e($item['labels'][$value] ?? $missing)
+                . '</span> <code>'
+                . e($value)
+                . '</code></dd></div>';
     }
     foreach ($fields as $item) {
-        echo '<div><dt>' . e($item['label']) . '</dt><dd data-cache-status-field="' . e($item['field']) . '" data-cache-status-format="time" data-missing="'
-            . e($missing) . '">' . view_admin_dashboard_cache_region_timestamp((int) ($status[$item['field']] ?? 0), $missing) . '</dd></div>';
+        echo
+            '<div><dt>'
+                . e($item['label'])
+                . '</dt><dd data-cache-status-field="'
+                . e($item['field'])
+                . '" data-cache-status-format="time" data-missing="'
+                . e($missing)
+                . '">'
+                . view_admin_dashboard_cache_region_timestamp(
+                    (int) ($status[$item['field']] ?? 0),
+                    $missing,
+                )
+                . '</dd></div>';
     }
-    echo '<div><dt>' . e(t('admin.cache_lifecycle.timing.coverage', 'Completed areas')) . '</dt><dd><span data-cache-status-field="regions_completed">'
-        . e((string) ($status['regions_completed'] ?? 0)) . '</span> / <span data-cache-status-field="regions_total">' . e((string) ($status['regions_total'] ?? 0))
-        . '</span></dd></div><div><dt>' . e(t('admin.cache_lifecycle.timing.working', 'Working areas')) . '</dt><dd data-cache-status-field="regions_working">'
-        . e((string) ($status['regions_working'] ?? 0)) . '</dd></div></dl>';
-    if (!empty($status['registry_unavailable'])) echo '<p role="status">' . e(t('admin.cache_lifecycle.unverified',
-        'Registry evidence is unavailable. This is not an empty or successfully checked cache.')) . '</p>';
+    echo
+        '<div><dt>'
+            . e(t('admin.cache_lifecycle.timing.coverage', 'Completed areas'))
+            . '</dt><dd><span data-cache-status-field="regions_completed">'
+            . e((string) ($status['regions_completed'] ?? 0))
+            . '</span> / <span data-cache-status-field="regions_total">'
+            . e((string) ($status['regions_total'] ?? 0))
+            . '</span></dd></div><div><dt>'
+            . e(t('admin.cache_lifecycle.timing.working', 'Working areas'))
+            . '</dt><dd data-cache-status-field="regions_working">'
+            . e((string) ($status['regions_working'] ?? 0))
+            . '</dd></div></dl>';
+    if (!empty($status['registry_unavailable']))
+        echo
+            '<p role="status">'
+                . e(t(
+                    'admin.cache_lifecycle.unverified',
+                    'Registry evidence is unavailable. This is not an empty or successfully checked cache.',
+                ))
+                . '</p>';
 }
 
 /**
@@ -592,12 +1277,34 @@ function view_admin_dashboard_cache_operation_label(array $operation): string
 {
     $phase = (string) ($operation['phase'] ?? 'inventory');
     $fallback = match ($phase) {
-        'preview' => 'Scan ready for review', 'cleanup' => 'Manual cleanup', 'complete' => 'Manual cycle finished', default => 'Manual scan',
+        'preview' => 'Scan ready for review',
+        'cleanup' => 'Manual cleanup',
+        'complete' => 'Manual cycle finished',
+        default => 'Manual scan',
     };
-    return t('admin.cache_lifecycle.operation.progress', '{phase} · {files} files · {bytes}',
-        ['phase'=>t('admin.cache_lifecycle.operation.' . $phase, $fallback),
-            'files'=>(string) ($operation['files'] ?? 0),'bytes'=>format_bytes((int) ($operation['bytes'] ?? 0))])
-        . (!empty($operation['partial']) ? ' · ' . t('admin.cache_lifecycle.operation.partial', 'Incomplete check') : '');
+    return (
+        t(
+            'admin.cache_lifecycle.operation.progress',
+            '{phase} · {files} files · {bytes}',
+            [
+                'phase' => t(
+                    'admin.cache_lifecycle.operation.' . $phase,
+                    $fallback,
+                ),
+                'files' => (string) ($operation['files'] ?? 0),
+                'bytes' => format_bytes((int) ($operation['bytes'] ?? 0)),
+            ],
+        )
+            . (
+                !empty($operation['partial'])
+                    ? ' · '
+                    . t(
+                        'admin.cache_lifecycle.operation.partial',
+                        'Incomplete check',
+                    )
+                    : ''
+            )
+    );
 }
 
 /**
@@ -609,69 +1316,298 @@ function view_render_admin_dashboard_cache_overview(array $status): void
 {
     $missing = t('admin.cache_lifecycle.region.missing', 'Not recorded');
     $worker = (string) ($status['worker_state'] ?? 'missing');
-    $workerLabels = ['disabled'=>'Automatic cleanup is OFF', 'unavailable'=>'Status unavailable',
-        'missing'=>'No recent automatic worker arrival', 'stalled'=>'Worker arriving without recent progress',
-        'partial'=>'Working with incomplete coverage', 'working'=>'Checking or cleaning', 'waiting'=>'Waiting for the next regional check'];
+    $workerLabels = [
+        'disabled' => 'Automatic cleanup is OFF',
+        'unavailable' => 'Status unavailable',
+        'missing' => 'No recent automatic worker arrival',
+        'stalled' => 'Worker arriving without recent progress',
+        'partial' => 'Working with incomplete coverage',
+        'working' => 'Checking or cleaning',
+        'waiting' => 'Waiting for the next regional check',
+    ];
     $now = (int) ($status['snapshot_at'] ?? 0);
     $regionalDue = (int) ($status['next_due'] ?? 0);
     $chainDue = (int) ($status['chain_next_start_at'] ?? 0);
-    $chainAvailable = in_array((string) ($status['chain_health'] ?? ''), ['queued','waiting'], true);
-    $inProgress = (int) ($status['regions_working'] ?? 0) > 0 || $worker === 'working';
-    $due = $chainAvailable && $chainDue > $now ? $chainDue : ($inProgress ? 0 : $regionalDue);
-    $from = $chainAvailable ? (int) ($status['chain_arrival_at'] ?? 0) : (int) ($status['last_attempt_at'] ?? 0);
-    $waitLabel = $chainAvailable ? t('admin.cache_lifecycle.overview.next_worker', 'Next worker check') : t('admin.cache_lifecycle.overview.next', 'Next check');
+    $chainAvailable = in_array(
+        (string) ($status['chain_health'] ?? ''),
+        ['queued', 'waiting'],
+        true,
+    );
+    $inProgress =
+        (int) ($status['regions_working'] ?? 0) > 0 || $worker === 'working';
+    $due = $chainAvailable && $chainDue > $now
+        ? $chainDue
+        : ($inProgress ? 0 : $regionalDue);
+    $from = $chainAvailable
+        ? (int) ($status['chain_arrival_at'] ?? 0)
+        : (int) ($status['last_attempt_at'] ?? 0);
+    $waitLabel = $chainAvailable
+        ? t('admin.cache_lifecycle.overview.next_worker', 'Next worker check')
+        : t('admin.cache_lifecycle.overview.next', 'Next check');
     $seconds = max(0, $due - $now);
-    $wait = $due <= 0 && $inProgress ? t('admin.cache_lifecycle.operation.working', 'Working…') : ($due <= 0 || $now <= 0 ? $missing : ($seconds === 0 ? t('admin.cache_lifecycle.overview.due', 'Due') : intdiv($seconds, 60) . ':' . str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT)));
+    $wait = $due <= 0 && $inProgress
+        ? t('admin.cache_lifecycle.operation.working', 'Working…')
+        : (
+            $due <= 0 || $now <= 0
+                ? $missing
+                : (
+                    $seconds === 0
+                        ? t('admin.cache_lifecycle.overview.due', 'Due')
+                        : intdiv($seconds, 60)
+                            . ':'
+                            . str_pad(
+                                (string) ($seconds % 60),
+                                2,
+                                '0',
+                                STR_PAD_LEFT,
+                            )
+                )
+        );
     $dueTitle = $due > 0 ? gmdate('Y-m-d H:i:s', $due) . ' UTC' : $missing;
-    echo '<div data-cache-overview><div class="admin-cache-worker-row"><strong data-cache-worker-state="' . e($worker) . '">'
-        . '<span class="admin-cache-idle-label">' . e(t('admin.cache_lifecycle.overview.worker_' . $worker, $workerLabels[$worker] ?? $missing))
-        . '</span><span class="admin-cache-busy-label">' . e(t('admin.cache_lifecycle.operation.working', 'Working…')) . '</span></strong>'
-        . '<details class="admin-cache-help" data-cache-help><summary aria-label="' . e(t('admin.cache_lifecycle.overview.help', 'Cache status help')) . '">?</summary><div>';
-    echo '<section><h3>' . e(t('admin.cache_lifecycle.overview.size', 'Recorded cache payload')) . '</h3><p>' . e(!empty($status['partial']) ? t('admin.cache_lifecycle.overview.incomplete', 'Whole-cache size is unknown: some areas are not fully measured.')
-        : t('admin.cache_lifecycle.overview.recorded', 'Last-known regional observations; live journals excluded.')) . '</p><p>'
-        . e(t('admin.cache_lifecycle.overview.oldest', 'Oldest completed check')) . ': '
-        . view_admin_dashboard_cache_region_timestamp((int) ($status['oldest_completed_at'] ?? 0), $missing) . '</p></section><section><h3>'
-        . e(t('admin.cache_lifecycle.overview.removed', 'Confirmed cumulative removal')) . '</h3><p>'
-        . e(t('admin.cache_lifecycle.overview.receipts', 'Persisted removal receipts; older releases may be absent.')) . ' '
-        . e(t('admin.cache_lifecycle.overview.entries', '{count} entries', ['count'=>(string) ($status['removed'] ?? 0)])) . ' · '
-        . view_admin_dashboard_cache_region_timestamp((int) ($status['last_removed_at'] ?? 0), $missing) . '</p></section><section><h3>'
-        . e(t('admin.cache_lifecycle.overview.pending', 'Verified cleanup queue')) . '</h3><p>'
-        . e(t('admin.cache_lifecycle.overview.queue_hint', 'An empty queue does not prove that all cache areas were checked.')) . ' '
-        . e(t('admin.cache_lifecycle.overview.entries', '{count} entries', ['count'=>(string) ($status['pending_candidates'] ?? 0)])) . '</p><p>'
-        . e(t('admin.cache_lifecycle.overview.progress', 'Last worker progress')) . ': '
-        . view_admin_dashboard_cache_region_timestamp((int) ($status['last_progress_at'] ?? 0), $missing) . '</p></section><section><h3>'
-        . e(t('admin.cache_lifecycle.overview.help_coverage', 'Coverage and timing')) . '</h3>';
-    if (!empty($status['legacy_measurement'])) echo '<p>' . e(t('admin.cache_lifecycle.overview.legacy',
-        'The displayed size is a retained whole-cache snapshot while regional coverage is incomplete.')) . '</p>';
+    echo
+        '<div data-cache-overview><div class="admin-cache-worker-row"><strong data-cache-worker-state="'
+            . e($worker)
+            . '">'
+            . '<span class="admin-cache-idle-label">'
+            . e(t(
+                'admin.cache_lifecycle.overview.worker_' . $worker,
+                $workerLabels[$worker] ?? $missing,
+            ))
+            . '</span><span class="admin-cache-busy-label">'
+            . e(t('admin.cache_lifecycle.operation.working', 'Working…'))
+            . '</span></strong>'
+            . '<details class="admin-cache-help" data-cache-help><summary aria-label="'
+            . e(t('admin.cache_lifecycle.overview.help', 'Cache status help'))
+            . '">?</summary><div>';
+    echo
+        '<section><h3>'
+            . e(t(
+                'admin.cache_lifecycle.overview.size',
+                'Recorded cache payload',
+            ))
+            . '</h3><p>'
+            . e(
+                !empty($status['partial'])
+                    ? t(
+                        'admin.cache_lifecycle.overview.incomplete',
+                        'Whole-cache size is unknown: some areas are not fully measured.',
+                    )
+                    : t(
+                        'admin.cache_lifecycle.overview.recorded',
+                        'Last-known regional observations; live journals excluded.',
+                    ),
+            )
+            . '</p><p>'
+            . e(t(
+                'admin.cache_lifecycle.overview.oldest',
+                'Oldest completed check',
+            ))
+            . ': '
+            . view_admin_dashboard_cache_region_timestamp(
+                (int) ($status['oldest_completed_at'] ?? 0),
+                $missing,
+            )
+            . '</p></section><section><h3>'
+            . e(t(
+                'admin.cache_lifecycle.overview.removed',
+                'Confirmed cumulative removal',
+            ))
+            . '</h3><p>'
+            . e(t(
+                'admin.cache_lifecycle.overview.receipts',
+                'Persisted removal receipts; older releases may be absent.',
+            ))
+            . ' '
+            . e(t('admin.cache_lifecycle.overview.entries', '{count} entries', [
+                'count' => (string) ($status['removed'] ?? 0),
+            ]))
+            . ' · '
+            . view_admin_dashboard_cache_region_timestamp(
+                (int) ($status['last_removed_at'] ?? 0),
+                $missing,
+            )
+            . '</p></section><section><h3>'
+            . e(t(
+                'admin.cache_lifecycle.overview.pending',
+                'Verified cleanup queue',
+            ))
+            . '</h3><p>'
+            . e(t(
+                'admin.cache_lifecycle.overview.queue_hint',
+                'An empty queue does not prove that all cache areas were checked.',
+            ))
+            . ' '
+            . e(t('admin.cache_lifecycle.overview.entries', '{count} entries', [
+                'count' => (string) ($status['pending_candidates'] ?? 0),
+            ]))
+            . '</p><p>'
+            . e(t(
+                'admin.cache_lifecycle.overview.progress',
+                'Last worker progress',
+            ))
+            . ': '
+            . view_admin_dashboard_cache_region_timestamp(
+                (int) ($status['last_progress_at'] ?? 0),
+                $missing,
+            )
+            . '</p></section><section><h3>'
+            . e(t(
+                'admin.cache_lifecycle.overview.help_coverage',
+                'Coverage and timing',
+            ))
+            . '</h3>';
+    if (!empty($status['legacy_measurement']))
+        echo
+            '<p>'
+                . e(t(
+                    'admin.cache_lifecycle.overview.legacy',
+                    'The displayed size is a retained whole-cache snapshot while regional coverage is incomplete.',
+                ))
+                . '</p>';
     if (!empty($status['unverified_paths'])) {
-        echo '<details data-cache-unverified><summary>' . e(t('admin.cache_lifecycle.overview.unverified', 'Areas needing a complete check (sample)')) . '</summary><ul>';
+        echo
+            '<details data-cache-unverified><summary>'
+                . e(t(
+                    'admin.cache_lifecycle.overview.unverified',
+                    'Areas needing a complete check (sample)',
+                ))
+                . '</summary><ul>';
         foreach ($status['unverified_paths'] as $area) {
-            echo '<li><code>' . e($area['path']) . '</code> · ' . e(t('admin.cache_lifecycle.overview.reason_' . $area['reason'],
-                $area['reason'] !== '' ? $area['reason'] : $missing)) . '</li>';
+            echo
+                '<li><code>'
+                    . e($area['path'])
+                    . '</code> · '
+                    . e(t(
+                        'admin.cache_lifecycle.overview.reason_'
+                            . $area['reason'],
+                        $area['reason'] !== '' ? $area['reason'] : $missing,
+                    ))
+                    . '</li>';
         }
         echo '</ul></details>';
     }
-    echo '<p>' . e(t('admin.cache_lifecycle.overview.coverage', 'Completed areas: {done}/{total}; working: {working}.',
-        ['done'=>(string) ($status['regions_completed'] ?? 0),'total'=>(string) ($status['regions_total'] ?? 0),'working'=>(string) ($status['regions_working'] ?? 0)])) . '</p>';
-    echo '<p>' . e(t('admin.cache_lifecycle.overview.updated', 'Status read')) . ': '
-        . view_admin_dashboard_cache_region_timestamp($now, $missing) . '</p><p>'
-        . e(t('admin.cache_lifecycle.overview.wait_help', 'The bar measures elapsed waiting time until the scheduled check, not scan completion. Due work can wait for worker admission.')) . '</p><p>'
-        . e(t('admin.cache_lifecycle.automatic')) . '</p></section><section><h3>' . e(t('admin.cache_lifecycle.overview.help_safety', 'What can be removed'))
-        . '</h3><p>' . e(t('admin.cache_lifecycle.scope')) . '</p><p>'
-        . e(t('admin.cache_lifecycle.overview.owner_bar', 'Each owner bar shows measured eligible bytes as a share of its recorded size; it is not scan progress or the current queue.')) . '</p></section></div></details></div>';
-    echo '<dl class="admin-cache-overview-grid" data-cache-metrics><div><dt>' . e(t('admin.cache_lifecycle.overview.size', 'Recorded cache payload')) . '</dt><dd><strong>'
-        . e(!empty($status['measurement_available']) ? format_bytes((int) ($status['bytes'] ?? 0)) : $missing) . '</strong></dd></div><div><dt>'
-        . e(!empty($status['registry']) ? t('admin.cache_lifecycle.overview.removed', 'Confirmed cumulative removal') : t('admin.cache_lifecycle.overview.cycle_removed', 'Confirmed removal in this cycle'))
-        . '</dt><dd><strong>' . e(format_bytes((int) ($status['bytes_removed'] ?? 0))) . '</strong></dd></div><div><dt>'
-        . e(t('admin.cache_lifecycle.overview.pending', 'Verified cleanup queue')) . '</dt><dd><strong>'
-        . e(format_bytes((int) ($status['pending_bytes'] ?? 0))) . '</strong></dd></div></dl>';
-    echo '<div class="admin-cache-wait"><span>' . e($waitLabel) . '</span><progress max="100"'
-        . ($due > 0 && $now > 0 && ($due <= $now || $from > 0 && $due > $from) ? ' value="' . e((string) ($due <= $now ? 100 : ($due > $from && $from > 0 ? round(max(0, min(100, 100 * ($now - $from) / ($due - $from))), 2) : 0))) . '"' : '')
-        . ' data-cache-wait data-start="' . e((string) $from) . '" data-due="' . e((string) $due) . '" data-observed="' . e((string) $now)
-        . '" data-due-label="' . e(t('admin.cache_lifecycle.overview.due', 'Due')) . '" aria-label="' . e(t('admin.cache_lifecycle.overview.next', 'Next check'))
-        . '" aria-valuetext="' . e($dueTitle) . '" title="' . e($dueTitle) . '"' . ($worker === 'disabled' ? ' hidden' : '') . '></progress><span data-cache-wait-label title="'
-        . e($dueTitle) . '">' . e($worker === 'disabled' ? '—' : $wait) . '</span></div></div>';
-
+    echo
+        '<p>'
+            . e(t(
+                'admin.cache_lifecycle.overview.coverage',
+                'Completed areas: {done}/{total}; working: {working}.',
+                [
+                    'done' => (string) ($status['regions_completed'] ?? 0),
+                    'total' => (string) ($status['regions_total'] ?? 0),
+                    'working' => (string) ($status['regions_working'] ?? 0),
+                ],
+            ))
+            . '</p>';
+    echo
+        '<p>'
+            . e(t('admin.cache_lifecycle.overview.updated', 'Status read'))
+            . ': '
+            . view_admin_dashboard_cache_region_timestamp($now, $missing)
+            . '</p><p>'
+            . e(t(
+                'admin.cache_lifecycle.overview.wait_help',
+                'The bar measures elapsed waiting time until the scheduled check, not scan completion. Due work can wait for worker admission.',
+            ))
+            . '</p><p>'
+            . e(t('admin.cache_lifecycle.automatic'))
+            . '</p></section><section><h3>'
+            . e(t(
+                'admin.cache_lifecycle.overview.help_safety',
+                'What can be removed',
+            ))
+            . '</h3><p>'
+            . e(t('admin.cache_lifecycle.scope'))
+            . '</p><p>'
+            . e(t(
+                'admin.cache_lifecycle.overview.owner_bar',
+                'Each owner bar shows measured eligible bytes as a share of its recorded size; it is not scan progress or the current queue.',
+            ))
+            . '</p></section></div></details></div>';
+    echo
+        '<dl class="admin-cache-overview-grid" data-cache-metrics><div><dt>'
+            . e(t(
+                'admin.cache_lifecycle.overview.size',
+                'Recorded cache payload',
+            ))
+            . '</dt><dd><strong>'
+            . e(
+                !empty($status['measurement_available'])
+                    ? format_bytes((int) ($status['bytes'] ?? 0))
+                    : $missing,
+            )
+            . '</strong></dd></div><div><dt>'
+            . e(
+                !empty($status['registry'])
+                    ? t(
+                        'admin.cache_lifecycle.overview.removed',
+                        'Confirmed cumulative removal',
+                    )
+                    : t(
+                        'admin.cache_lifecycle.overview.cycle_removed',
+                        'Confirmed removal in this cycle',
+                    ),
+            )
+            . '</dt><dd><strong>'
+            . e(format_bytes((int) ($status['bytes_removed'] ?? 0)))
+            . '</strong></dd></div><div><dt>'
+            . e(t(
+                'admin.cache_lifecycle.overview.pending',
+                'Verified cleanup queue',
+            ))
+            . '</dt><dd><strong>'
+            . e(format_bytes((int) ($status['pending_bytes'] ?? 0)))
+            . '</strong></dd></div></dl>';
+    echo
+        '<div class="admin-cache-wait"><span>'
+            . e($waitLabel)
+            . '</span><progress max="100"'
+            . (
+                $due > 0
+                && $now > 0
+                && ($due <= $now || $from > 0 && $due > $from)
+                    ? ' value="'
+                    . e(
+                        (string) (
+                            $due <= $now
+                                ? 100
+                                : (
+                                    $due > $from && $from > 0
+                                        ? round(
+                                            max(0, min(
+                                                100,
+                                                (100 * ($now - $from))
+                                                    / ($due - $from),
+                                            )),
+                                            2,
+                                        )
+                                        : 0
+                                )
+                        ),
+                    )
+                    . '"'
+                    : ''
+            )
+            . ' data-cache-wait data-start="'
+            . e((string) $from)
+            . '" data-due="'
+            . e((string) $due)
+            . '" data-observed="'
+            . e((string) $now)
+            . '" data-due-label="'
+            . e(t('admin.cache_lifecycle.overview.due', 'Due'))
+            . '" aria-label="'
+            . e(t('admin.cache_lifecycle.overview.next', 'Next check'))
+            . '" aria-valuetext="'
+            . e($dueTitle)
+            . '" title="'
+            . e($dueTitle)
+            . '"'
+            . ($worker === 'disabled' ? ' hidden' : '')
+            . '></progress><span data-cache-wait-label title="'
+            . e($dueTitle)
+            . '">'
+            . e($worker === 'disabled' ? '—' : $wait)
+            . '</span></div></div>';
 }
 
 /**
@@ -682,57 +1618,204 @@ function view_render_admin_dashboard_cache_overview(array $status): void
 function view_render_admin_dashboard_cache_lifecycle_card(array $status): void
 {
     $phase = (string) ($status['phase'] ?? 'idle');
-    echo '<section class="admin-maintenance-card admin-cache-lifecycle" data-admin-cache-lifecycle data-admin-cache-cleanup data-cache-status-url="'
-        . e(url_for('admin_dashboard_fragment', ['surface'=>'cache'])) . '"><div class="admin-cache-cleanup-header"><h2>'
-        . e(t('admin.cache_lifecycle.title', 'Cache inventory and retention')) . '</h2><div class="admin-cache-actions"><form method="post" action="' . e(url_for('admin_site_maintenance_settings'))
-        . '" data-cache-lifecycle-form>' . csrf_field() . '<input type="hidden" name="preview_id" value="' . e((string) ($status['id'] ?? '')) . '">';
-    foreach (['cache_inventory_start'=>['Scan cache', !in_array($phase, ['inventory','cleanup'], true)],
-        'cache_inventory_step'=>['Continue scan', $phase === 'inventory'],
-        'cache_cleanup_start'=>['Clean eligible cache', $phase === 'preview'],
-        'cache_cleanup_step'=>['Continue cleanup', $phase === 'cleanup']] as $action => [$label, $visible]) {
-        if (!empty($status['registry']) && !empty($status['scheduled'])) $visible = $action === 'cache_inventory_start';
+    echo
+        '<section class="admin-maintenance-card admin-cache-lifecycle" data-admin-cache-lifecycle data-admin-cache-cleanup data-cache-status-url="'
+            . e(url_for('admin_dashboard_fragment', ['surface' => 'cache']))
+            . '"><div class="admin-cache-cleanup-header"><h2>'
+            . e(t(
+                'admin.cache_lifecycle.title',
+                'Cache inventory and retention',
+            ))
+            . '</h2><div class="admin-cache-actions"><form method="post" action="'
+            . e(url_for('admin_site_maintenance_settings'))
+            . '" data-cache-lifecycle-form>'
+            . csrf_field()
+            . '<input type="hidden" name="preview_id" value="'
+            . e((string) ($status['id'] ?? ''))
+            . '">';
+    foreach ([
+        'cache_inventory_start' => [
+            'Scan cache',
+            !in_array($phase, ['inventory', 'cleanup'], true),
+        ],
+        'cache_inventory_step' => ['Continue scan', $phase === 'inventory'],
+        'cache_cleanup_start' => ['Clean eligible cache', $phase === 'preview'],
+        'cache_cleanup_step' => ['Continue cleanup', $phase === 'cleanup'],
+    ] as $action => [$label, $visible]) {
+        if (!empty($status['registry']) && !empty($status['scheduled']))
+            $visible = $action === 'cache_inventory_start';
         $actionLabel = t('admin.cache_lifecycle.' . $action, $label);
-        echo '<button type="submit" class="secondary admin-cache-action-icon" name="site_maintenance_action" value="' . e($action)
-            . '" aria-label="' . e($actionLabel) . '" title="' . e($actionLabel) . '"' . ($visible ? '' : ' hidden') . '>'
-            . '<span class="admin-cache-idle-label" aria-hidden="true">' . view_admin_menu_icon(str_starts_with($action, 'cache_inventory') ? 'search' : 'clean') . '</span><span class="admin-cache-busy-label visually-hidden">'
-            . e(str_starts_with($action, 'cache_inventory') ? t('admin.cache_lifecycle.operation.scanning', 'Scanning…') : t('admin.cache_lifecycle.operation.cleaning', 'Cleaning…')) . '</span></button> ';
+        echo
+            '<button type="submit" class="secondary admin-cache-action-icon" name="site_maintenance_action" value="'
+                . e($action)
+                . '" aria-label="'
+                . e($actionLabel)
+                . '" title="'
+                . e($actionLabel)
+                . '"'
+                . ($visible ? '' : ' hidden')
+                . '>'
+                . '<span class="admin-cache-idle-label" aria-hidden="true">'
+                . view_admin_menu_icon(
+                    str_starts_with($action, 'cache_inventory')
+                        ? 'search'
+                        : 'clean',
+                )
+                . '</span><span class="admin-cache-busy-label visually-hidden">'
+                . e(
+                    str_starts_with($action, 'cache_inventory')
+                        ? t(
+                            'admin.cache_lifecycle.operation.scanning',
+                            'Scanning…',
+                        )
+                        : t(
+                            'admin.cache_lifecycle.operation.cleaning',
+                            'Cleaning…',
+                        ),
+                )
+                . '</span></button> ';
     }
-    echo '</form><button type="button" class="secondary admin-cache-refresh-icon" data-cache-status-refresh aria-label="'
-        . e(t('admin.cache_lifecycle.overview.refresh', 'Refresh status')) . '" title="' . e(t('admin.cache_lifecycle.overview.refresh', 'Refresh status'))
-        . '">' . view_admin_menu_icon('update') . '</button></div></div><span role="status" data-cache-status-feedback data-failed-label="'
-        . e(t('admin.cache_lifecycle.overview.refresh_failed', 'Status refresh failed. Use Refresh status to retry.')) . '"></span>';
+    echo
+        '</form><button type="button" class="secondary admin-cache-refresh-icon" data-cache-status-refresh aria-label="'
+            . e(t('admin.cache_lifecycle.overview.refresh', 'Refresh status'))
+            . '" title="'
+            . e(t('admin.cache_lifecycle.overview.refresh', 'Refresh status'))
+            . '">'
+            . view_admin_menu_icon('update')
+            . '</button></div></div><span role="status" data-cache-status-feedback data-failed-label="'
+            . e(t(
+                'admin.cache_lifecycle.overview.refresh_failed',
+                'Status refresh failed. Use Refresh status to retry.',
+            ))
+            . '"></span>';
     view_render_admin_dashboard_cache_overview($status);
     $operation = $status['operation'] ?? [];
-    echo '<p class="admin-cache-operation-status" role="status" data-cache-lifecycle-status data-working-label="'
-        . e(t('admin.cache_lifecycle.operation.working', 'Working…')) . '"' . ($operation === [] ? ' hidden' : '') . '>'
-        . ($operation !== [] ? e(view_admin_dashboard_cache_operation_label($operation)) : '') . '</p><progress data-cache-lifecycle-progress max="100" hidden aria-label="'
-        . e(t('admin.cache_lifecycle.progress_label', 'Cache action progress')) . '" style="width:100%;height:4px"></progress>';
+    echo
+        '<p class="admin-cache-operation-status" role="status" data-cache-lifecycle-status data-working-label="'
+            . e(t('admin.cache_lifecycle.operation.working', 'Working…'))
+            . '"'
+            . ($operation === [] ? ' hidden' : '')
+            . '>'
+            . (
+                $operation !== []
+                    ? e(view_admin_dashboard_cache_operation_label($operation))
+                    : ''
+            )
+            . '</p><progress data-cache-lifecycle-progress max="100" hidden aria-label="'
+            . e(t(
+                'admin.cache_lifecycle.progress_label',
+                'Cache action progress',
+            ))
+            . '" style="width:100%;height:4px"></progress>';
 
-    echo '<details class="admin-media-details"><summary>' . e(t('admin.cache_lifecycle.policies', 'Sizes and retention by owner')) . '</summary>';
+    echo
+        '<details class="admin-media-details"><summary>'
+            . e(t(
+                'admin.cache_lifecycle.policies',
+                'Sizes and retention by owner',
+            ))
+            . '</summary>';
     view_render_admin_dashboard_cache_timing($status);
-    echo '<table class="admin-cache-owners"><thead><tr><th scope="col">' . e(t('admin.cache_lifecycle.owner', 'Owner')) . '</th><th>' . e(t('admin.cache_lifecycle.lifetime', 'Lifetime'))
-        . '</th><th>' . e(t('admin.cache_lifecycle.observed', 'Observed')) . '</th><th>' . e(t('admin.cache_lifecycle.eligible', 'Eligible')) . '</th></tr></thead><tbody>';
+    echo
+        '<table class="admin-cache-owners"><thead><tr><th scope="col">'
+            . e(t('admin.cache_lifecycle.owner', 'Owner'))
+            . '</th><th>'
+            . e(t('admin.cache_lifecycle.lifetime', 'Lifetime'))
+            . '</th><th>'
+            . e(t('admin.cache_lifecycle.observed', 'Observed'))
+            . '</th><th>'
+            . e(t('admin.cache_lifecycle.eligible', 'Eligible'))
+            . '</th></tr></thead><tbody>';
     foreach ((array) ($status['policies'] ?? []) as $owner => $policy) {
         $total = $status['totals'][$owner] ?? [];
         $seconds = $policy['seconds'] ?? null;
-        $lifetime = $seconds === null ? t('admin.cache_lifecycle.context', 'Context / owner') : ($seconds >= 86400 ? ($seconds / 86400) . ' d' : ($seconds / 60) . ' min');
+        $lifetime = $seconds === null
+            ? t('admin.cache_lifecycle.context', 'Context / owner')
+            : (
+                $seconds >= 86400
+                    ? ($seconds / 86400) . ' d'
+                    : ($seconds / 60) . ' min'
+            );
         $observed = max(0, (int) ($total['bytes'] ?? 0));
-        $eligibleShare = $observed > 0 ? round(max(0, min(100, 100 * (int) ($total['reclaimable_bytes'] ?? 0) / $observed)), 2) : 0;
-        echo '<tr data-cache-owner="' . e((string) $owner) . '"><td title="' . e((string) ($policy['reason'] ?? '')) . '">' . e((string) ($policy['label'] ?? $owner))
-            . '</td><td>' . e($lifetime) . '</td><td colspan="2" class="admin-cache-owner-values"><span data-cache-owner-meter aria-hidden="true" style="--cache-eligible-share:' . e((string) $eligibleShare) . '%"></span><div class="admin-cache-owner-numbers"><span><span class="admin-cache-owner-caption">' . e(t('admin.cache_lifecycle.observed', 'Observed')) . ': </span><span data-cache-owner-bytes>' . (isset($total['bytes']) ? e(format_bytes((int) $total['bytes'])) : '—')
-            . '</span></span><span><span class="admin-cache-owner-caption">' . e(t('admin.cache_lifecycle.eligible', 'Eligible')) . ': </span><span data-cache-owner-eligible>' . (isset($total['reclaimable_bytes']) ? e(format_bytes((int) $total['reclaimable_bytes'])) : '—') . '</span></span></div></td></tr>';
+        $eligibleShare = $observed > 0
+            ? round(
+                max(0, min(
+                    100,
+                    (100 * (int) ($total['reclaimable_bytes'] ?? 0))
+                        / $observed,
+                )),
+                2,
+            )
+            : 0;
+        echo
+            '<tr data-cache-owner="'
+                . e((string) $owner)
+                . '"><td title="'
+                . e((string) ($policy['reason'] ?? ''))
+                . '">'
+                . e((string) ($policy['label'] ?? $owner))
+                . '</td><td>'
+                . e($lifetime)
+                . '</td><td colspan="2" class="admin-cache-owner-values"><span data-cache-owner-meter aria-hidden="true" style="--cache-eligible-share:'
+                . e((string) $eligibleShare)
+                . '%"></span><div class="admin-cache-owner-numbers"><span><span class="admin-cache-owner-caption">'
+                . e(t('admin.cache_lifecycle.observed', 'Observed'))
+                . ': </span><span data-cache-owner-bytes>'
+                . (
+                    isset($total['bytes'])
+                        ? e(format_bytes((int) $total['bytes']))
+                        : '—'
+                )
+                . '</span></span><span><span class="admin-cache-owner-caption">'
+                . e(t('admin.cache_lifecycle.eligible', 'Eligible'))
+                . ': </span><span data-cache-owner-eligible>'
+                . (
+                    isset($total['reclaimable_bytes'])
+                        ? e(format_bytes((int) $total['reclaimable_bytes']))
+                        : '—'
+                )
+                . '</span></span></div></td></tr>';
     }
-    echo '</tbody></table><p>' . e(t('admin.cache_lifecycle.sample', 'Preview examples (up to 16 candidates; totals above describe the full plan):')) . '</p><ul data-cache-lifecycle-sample>';
+    echo
+        '</tbody></table><p>'
+            . e(t(
+                'admin.cache_lifecycle.sample',
+                'Preview examples (up to 16 candidates; totals above describe the full plan):',
+            ))
+            . '</p><ul data-cache-lifecycle-sample>';
     foreach ((array) ($status['sample'] ?? []) as $item) {
-        echo '<li>' . e((string) ($item['path'] ?? '')) . ' — ' . e(format_bytes((int) ($item['bytes'] ?? 0))) . '</li>';
+        echo
+            '<li>'
+                . e((string) ($item['path'] ?? ''))
+                . ' — '
+                . e(format_bytes((int) ($item['bytes'] ?? 0)))
+                . '</li>';
     }
     echo '</ul>';
-    view_render_admin_dashboard_cache_regions((array) ($status['regions_sample'] ?? []));
-    if (!empty($status['partial'])) echo '<p role="status">' . e(t('admin.cache_lifecycle.partial', 'Partial inventory: blocked or unreadable directories are preserved; observed totals are incomplete.')) . '</p>';
-    echo '</details><details class="admin-media-details" data-cache-diagnostics hidden><summary>' . e(t('admin.cache_cleanup.diagnostics', 'Run diagnostics'))
-        . '</summary><button type="button" class="secondary" data-cache-diagnostic-copy data-copied-label="' . e(t('admin.cache_cleanup.copied', 'Log copied.'))
-        . '" data-copy-failed-label="' . e(t('admin.cache_cleanup.copy_failed', 'Copy failed. Select the log and copy it manually.')) . '">'
-        . e(t('admin.cache_cleanup.copy', 'Copy log')) . '</button><span role="status" data-cache-copy-status></span><pre data-cache-diagnostic-events></pre></details></section>';
+    view_render_admin_dashboard_cache_regions(
+        (array) ($status['regions_sample'] ?? []),
+    );
+    if (!empty($status['partial']))
+        echo
+            '<p role="status">'
+                . e(t(
+                    'admin.cache_lifecycle.partial',
+                    'Partial inventory: blocked or unreadable directories are preserved; observed totals are incomplete.',
+                ))
+                . '</p>';
+    echo
+        '</details><details class="admin-media-details" data-cache-diagnostics hidden><summary>'
+            . e(t('admin.cache_cleanup.diagnostics', 'Run diagnostics'))
+            . '</summary><button type="button" class="secondary" data-cache-diagnostic-copy data-copied-label="'
+            . e(t('admin.cache_cleanup.copied', 'Log copied.'))
+            . '" data-copy-failed-label="'
+            . e(t(
+                'admin.cache_cleanup.copy_failed',
+                'Copy failed. Select the log and copy it manually.',
+            ))
+            . '">'
+            . e(t('admin.cache_cleanup.copy', 'Copy log'))
+            . '</button><span role="status" data-cache-copy-status></span><pre data-cache-diagnostic-events></pre></details></section>';
 }
 
 /**
@@ -742,73 +1825,226 @@ function view_render_admin_dashboard_cache_lifecycle_card(array $status): void
  */
 function view_render_admin_dashboard_cache_cleanup_card(array $status): void
 {
-    $cache = is_array($status['cache_cleanup'] ?? null) ? $status['cache_cleanup'] : [];
+    $cache = is_array($status['cache_cleanup'] ?? null)
+        ? $status['cache_cleanup']
+        : [];
     $available = !empty($cache['available']);
-    $label = !$available ? t('admin.cache_cleanup.unknown', 'Cache status is unavailable; the action rechecks safety before deleting.')
-        : (!empty($cache['blocked']) ? t('admin.cache_cleanup.failed', 'Cleanup stopped safely. Check maintenance diagnostics before retrying.')
-            : t(!empty($cache['pending']) ? 'admin.cache_cleanup.pending' : 'admin.cache_cleanup.empty',
-                !empty($cache['pending']) ? 'Updater trash is waiting for cleanup.' : 'No staged updater trash is waiting.'));
-    echo '<section class="admin-cache-cleanup" data-admin-cache-cleanup><div class="admin-cache-cleanup-copy"><h2>'
-        . e(t('admin.cache_cleanup.title', 'Updater cache cleanup')) . '</h2></div>';
-    echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" data-admin-cache-cleanup-form>' . csrf_field()
-        . '<input type="hidden" name="site_maintenance_action" value="cache_cleanup"><button type="submit" class="secondary" data-cache-cleanup-button data-idle-label="'
-        . e(t('admin.cache_cleanup.run', 'Clean updater cache now')) . '" data-continue-label="'
-        . e(t('admin.cache_cleanup.continue', 'Continue cleanup')) . '" data-working-label="'
-        . e(t('admin.cache_cleanup.working', 'Cleaning…')) . '" data-error-label="'
-        . e(t('admin.cache_cleanup.failed', 'Cleanup stopped safely. Check maintenance diagnostics before retrying.')) . '" data-diagnostic-label="'
-        . e(t('admin.cache_cleanup.diagnostic_id', 'Diagnostic ID')) . '" data-log-failure-label="'
-        . e(t('admin.cache_cleanup.log_failed', 'Admin log write failed; see diagnostics / PHP error log.')) . '">'
-        . e(t('admin.cache_cleanup.run', 'Clean updater cache now')) . '</button></form>';
-    echo '<p class="admin-cache-cleanup-result" role="status" aria-live="polite" data-cache-cleanup-result>' . e($label);
+    $label = !$available
+        ? t(
+            'admin.cache_cleanup.unknown',
+            'Cache status is unavailable; the action rechecks safety before deleting.',
+        )
+        : (
+            !empty($cache['blocked'])
+                ? t(
+                    'admin.cache_cleanup.failed',
+                    'Cleanup stopped safely. Check maintenance diagnostics before retrying.',
+                )
+                : t(
+                    !empty($cache['pending'])
+                        ? 'admin.cache_cleanup.pending'
+                        : 'admin.cache_cleanup.empty',
+                    !empty($cache['pending'])
+                        ? 'Updater trash is waiting for cleanup.'
+                        : 'No staged updater trash is waiting.',
+                )
+        );
+    echo
+        '<section class="admin-cache-cleanup" data-admin-cache-cleanup><div class="admin-cache-cleanup-copy"><h2>'
+            . e(t('admin.cache_cleanup.title', 'Updater cache cleanup'))
+            . '</h2></div>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_site_maintenance_settings'))
+            . '" data-admin-cache-cleanup-form>'
+            . csrf_field()
+            . '<input type="hidden" name="site_maintenance_action" value="cache_cleanup"><button type="submit" class="secondary" data-cache-cleanup-button data-idle-label="'
+            . e(t('admin.cache_cleanup.run', 'Clean updater cache now'))
+            . '" data-continue-label="'
+            . e(t('admin.cache_cleanup.continue', 'Continue cleanup'))
+            . '" data-working-label="'
+            . e(t('admin.cache_cleanup.working', 'Cleaning…'))
+            . '" data-error-label="'
+            . e(t(
+                'admin.cache_cleanup.failed',
+                'Cleanup stopped safely. Check maintenance diagnostics before retrying.',
+            ))
+            . '" data-diagnostic-label="'
+            . e(t('admin.cache_cleanup.diagnostic_id', 'Diagnostic ID'))
+            . '" data-log-failure-label="'
+            . e(t(
+                'admin.cache_cleanup.log_failed',
+                'Admin log write failed; see diagnostics / PHP error log.',
+            ))
+            . '">'
+            . e(t('admin.cache_cleanup.run', 'Clean updater cache now'))
+            . '</button></form>';
+    echo
+        '<p class="admin-cache-cleanup-result" role="status" aria-live="polite" data-cache-cleanup-result>'
+            . e($label);
     if ($available) {
-        echo ' ' . e(t('admin.cache_cleanup.reclaimed', 'Reclaimed so far: {bytes}.',
-            ['bytes' => format_bytes(max(0, (int) ($cache['bytes_reclaimed'] ?? 0)))]));
+        echo
+            ' '
+                . e(t(
+                    'admin.cache_cleanup.reclaimed',
+                    'Reclaimed so far: {bytes}.',
+                    ['bytes' => format_bytes(max(
+                        0,
+                        (int) ($cache['bytes_reclaimed'] ?? 0),
+                    ))],
+                ));
     }
-    echo '</p><progress class="admin-cache-progress" data-cache-progress max="100" hidden aria-label="'
-        . e(t('admin.cache_cleanup.progress_label', 'Action progress')) . '"></progress><span role="status" data-cache-job-progress></span>';
-    echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" data-admin-cache-cleanup-form data-cache-job-stop hidden data-update-status-url="'
-        . e(url_for('admin_update', ['update_job_status' => 1])) . '" data-status-failed-label="'
-        . e(t('admin.cache_cleanup.status_failed', 'Could not refresh update progress.')) . '" data-phase-label="'
-        . e(t('admin.cache_cleanup.phase', 'Phase')) . '" data-failed-label="'
-        . e(t('admin.cache_cleanup.updater_failed', 'Update failed. Check Admin Updates.')) . '" data-worker-active-label="'
-        . e(t('admin.cache_cleanup.worker_active', 'Worker lock held')) . '" data-worker-idle-label="'
-        . e(t('admin.cache_cleanup.worker_idle', 'Worker activity not confirmed')) . '">' . csrf_field()
-        . '<input type="hidden" name="site_maintenance_action" value="cache_job_stop"><input type="hidden" name="job_id" value="">'
-        . '<button type="submit" class="button secondary" data-cache-cleanup-button data-idle-label="' . e(t('admin.cache_cleanup.stop', 'Stop update'))
-        . '" data-working-label="' . e(t('admin.cache_cleanup.stopping', 'Stopping…')) . '" data-error-label="' . e(t('admin.cache_cleanup.stop_failed', 'Update could not be stopped safely. Check diagnostics and Admin Updates.'))
-        . '" data-diagnostic-label="' . e(t('admin.cache_cleanup.diagnostic_id', 'Diagnostic ID')) . '">' . e(t('admin.cache_cleanup.stop', 'Stop update')) . '</button></form>';
-    echo '<details class="admin-media-details" data-cache-diagnostics hidden><summary>'
-        . e(t('admin.cache_cleanup.diagnostics', 'Run diagnostics')) . '</summary><button type="button" class="button secondary" data-cache-diagnostic-copy data-copied-label="'
-        . e(t('admin.cache_cleanup.copied', 'Log copied.')) . '" data-copy-failed-label="'
-        . e(t('admin.cache_cleanup.copy_failed', 'Copy failed. Select the log and copy it manually.')) . '">'
-        . e(t('admin.cache_cleanup.copy', 'Copy log')) . '</button><span role="status" data-cache-copy-status></span><pre data-cache-diagnostic-events></pre><a data-cache-diagnostic-log href="'
-        . e(url_for('admin_logs')) . '">' . e(t('admin.cache_cleanup.open_logs', 'Open this run in logs')) . '</a></details>';
-    echo '<details class="admin-media-details"><summary>' . e(t('admin.cache_cleanup.details', 'Scope and automatic cleanup')) . '</summary><p>'
-        . e(t('admin.cache_cleanup.scope', 'Removes only already-staged updater trash. Photos, thumbnails, downloads, rollback backups and unknown cache entries are preserved.')) . '</p><p>'
-        . e(t('admin.cache_cleanup.force_hint', 'One click runs one bounded step immediately, bypassing the timer but respecting active updates and maintenance locks. Continue for another step when needed.'))
-        . '</p><p>' . e(t('admin.cache_cleanup.cron_hint', 'For automatic progress without visitors, run this every minute:'))
-        . ' <code>php scripts/site_maintenance.php --cache-only</code></p><a href="' . e(url_for('admin_maintenance_center')) . '">'
-        . e(t('admin.cache_cleanup.other_owners', 'Open Maintenance Center for download-cache cleanup')) . '</a></details></section>';
+    echo
+        '</p><progress class="admin-cache-progress" data-cache-progress max="100" hidden aria-label="'
+            . e(t('admin.cache_cleanup.progress_label', 'Action progress'))
+            . '"></progress><span role="status" data-cache-job-progress></span>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_site_maintenance_settings'))
+            . '" data-admin-cache-cleanup-form data-cache-job-stop hidden data-update-status-url="'
+            . e(url_for('admin_update', ['update_job_status' => 1]))
+            . '" data-status-failed-label="'
+            . e(t(
+                'admin.cache_cleanup.status_failed',
+                'Could not refresh update progress.',
+            ))
+            . '" data-phase-label="'
+            . e(t('admin.cache_cleanup.phase', 'Phase'))
+            . '" data-failed-label="'
+            . e(t(
+                'admin.cache_cleanup.updater_failed',
+                'Update failed. Check Admin Updates.',
+            ))
+            . '" data-worker-active-label="'
+            . e(t('admin.cache_cleanup.worker_active', 'Worker lock held'))
+            . '" data-worker-idle-label="'
+            . e(t(
+                'admin.cache_cleanup.worker_idle',
+                'Worker activity not confirmed',
+            ))
+            . '">'
+            . csrf_field()
+            . '<input type="hidden" name="site_maintenance_action" value="cache_job_stop"><input type="hidden" name="job_id" value="">'
+            . '<button type="submit" class="button secondary" data-cache-cleanup-button data-idle-label="'
+            . e(t('admin.cache_cleanup.stop', 'Stop update'))
+            . '" data-working-label="'
+            . e(t('admin.cache_cleanup.stopping', 'Stopping…'))
+            . '" data-error-label="'
+            . e(t(
+                'admin.cache_cleanup.stop_failed',
+                'Update could not be stopped safely. Check diagnostics and Admin Updates.',
+            ))
+            . '" data-diagnostic-label="'
+            . e(t('admin.cache_cleanup.diagnostic_id', 'Diagnostic ID'))
+            . '">'
+            . e(t('admin.cache_cleanup.stop', 'Stop update'))
+            . '</button></form>';
+    echo
+        '<details class="admin-media-details" data-cache-diagnostics hidden><summary>'
+            . e(t('admin.cache_cleanup.diagnostics', 'Run diagnostics'))
+            . '</summary><button type="button" class="button secondary" data-cache-diagnostic-copy data-copied-label="'
+            . e(t('admin.cache_cleanup.copied', 'Log copied.'))
+            . '" data-copy-failed-label="'
+            . e(t(
+                'admin.cache_cleanup.copy_failed',
+                'Copy failed. Select the log and copy it manually.',
+            ))
+            . '">'
+            . e(t('admin.cache_cleanup.copy', 'Copy log'))
+            . '</button><span role="status" data-cache-copy-status></span><pre data-cache-diagnostic-events></pre><a data-cache-diagnostic-log href="'
+            . e(url_for('admin_logs'))
+            . '">'
+            . e(t('admin.cache_cleanup.open_logs', 'Open this run in logs'))
+            . '</a></details>';
+    echo
+        '<details class="admin-media-details"><summary>'
+            . e(t('admin.cache_cleanup.details', 'Scope and automatic cleanup'))
+            . '</summary><p>'
+            . e(t(
+                'admin.cache_cleanup.scope',
+                'Removes only already-staged updater trash. Photos, thumbnails, downloads, rollback backups and unknown cache entries are preserved.',
+            ))
+            . '</p><p>'
+            . e(t(
+                'admin.cache_cleanup.force_hint',
+                'One click runs one bounded step immediately, bypassing the timer but respecting active updates and maintenance locks. Continue for another step when needed.',
+            ))
+            . '</p><p>'
+            . e(t(
+                'admin.cache_cleanup.cron_hint',
+                'For automatic progress without visitors, run this every minute:',
+            ))
+            . ' <code>php scripts/site_maintenance.php --cache-only</code></p><a href="'
+            . e(url_for('admin_maintenance_center'))
+            . '">'
+            . e(t(
+                'admin.cache_cleanup.other_owners',
+                'Open Maintenance Center for download-cache cleanup',
+            ))
+            . '</a></details></section>';
 }
 
 /**
  * Render maintenance tools for maps and flight navigation data.
  *
- * @param array $model Model value.
+ * @param array{
+ *     feature_enabled?:array<string,bool>,
+ *     flight_navdata_ready?:bool,
+ *     flight_navdata_status?:array{
+ *         refresh_due?:bool,
+ *         last_update?:string,
+ *         total?:int,
+ *         last_airports?:int,
+ *         last_navaids?:int,
+ *         last_skipped?:int,
+ *         last_deleted?:int,
+ *         hybrid?:array{bundled_count?:int,...},
+ *         ...
+ *     },
+ *     ...
+ * } $model Dashboard model with the navigation capability flag, readiness
+ *     and navdata freshness, count and hybrid status fields consumed by this
+ *     card.
+ * @return void Outputs the navigation introduction and available
+ *     maintenance card.
  */
 function view_render_admin_dashboard_navigation_tools(array $model): void
 {
     view_render_admin_tab_intro([
         'kicker' => t('admin.dashboard.navigation_kicker', 'Maps'),
-        'title' => t('admin.dashboard.navigation_title', 'GPS maps and navdata'),
-        'description' => t('admin.dashboard.navigation_hint', 'Flight-map lookup data lives here. Per-gallery EXIF map defaults are grouped under Content and display.'),
+        'title' => t(
+            'admin.dashboard.navigation_title',
+            'GPS maps and navdata',
+        ),
+        'description' => t(
+            'admin.dashboard.navigation_hint',
+            'Flight-map lookup data lives here. Per-gallery EXIF map defaults are grouped under Content and display.',
+        ),
         'class' => 'admin-dashboard-subtab-heading',
     ]);
     echo '<div class="admin-maintenance-grid">';
     if (view_admin_dashboard_feature_enabled($model, 'navigation_data')) {
-        view_render_admin_navdata_maintenance_card(view_admin_dashboard_bool($model, 'flight_navdata_ready'), view_admin_dashboard_array($model, 'flight_navdata_status'));
+        view_render_admin_navdata_maintenance_card(
+            view_admin_dashboard_bool($model, 'flight_navdata_ready'),
+            view_admin_dashboard_array($model, 'flight_navdata_status'),
+        );
     } else {
-        echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.navigation_data_hidden', 'Navigation data')) . '</strong><span>' . e(t('admin.dashboard.navigation_data_hidden_hint', 'Navigation data maintenance is hidden by Admin > Features.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.open_features', 'Open features')) . '</a></article>';
+        echo
+            '<article class="admin-maintenance-card"><strong>'
+                . e(t(
+                    'admin.dashboard.navigation_data_hidden',
+                    'Navigation data',
+                ))
+                . '</strong><span>'
+                . e(t(
+                    'admin.dashboard.navigation_data_hidden_hint',
+                    'Navigation data maintenance is hidden by Admin > Features.',
+                ))
+                . '</span><a class="button secondary" href="'
+                . e(url_for('admin_features'))
+                . '">'
+                . e(t('admin.dashboard.open_features', 'Open features'))
+                . '</a></article>';
     }
     echo '</div>';
 }
@@ -816,14 +2052,39 @@ function view_render_admin_dashboard_navigation_tools(array $model): void
 /**
  * Render the complete gallery report maintenance card.
  *
+ * @param array{feature_enabled?:array<string,bool>,...} $model Dashboard model
+ *     with feature flags indexed by the dynamic capability key.
  * @param string $className CSS class name for the card wrapper.
+ * @return void Outputs the feature-gated gallery report card when enabled.
  */
-function view_render_admin_gallery_report_maintenance_card(array $model, string $className = 'admin-maintenance-card'): void
-{
-    if (!view_admin_dashboard_feature_enabled($model, 'complete_gallery_report')) {
+function view_render_admin_gallery_report_maintenance_card(
+    array $model,
+    string $className = 'admin-maintenance-card',
+): void {
+    if (!view_admin_dashboard_feature_enabled(
+        $model,
+        'complete_gallery_report',
+    )) {
         return;
     }
-    echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_report', 'Complete gallery report')) . '</strong><span>' . e(t('admin.dashboard.gallery_report_hint', 'Generate one detailed downloadable HTML report with storage, database, telemetry, EXIF, GPS, galleries, and runtime diagnostics.')) . '</span><a class="button secondary" href="' . e(url_for('admin_gallery_report')) . '">' . e(t('admin.dashboard.open_gallery_report', 'Open report generator')) . '</a></article>';
+    echo
+        '<article class="'
+            . e($className)
+            . '"><strong>'
+            . e(t('admin.dashboard.gallery_report', 'Complete gallery report'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.gallery_report_hint',
+                'Generate one detailed downloadable HTML report with storage, database, telemetry, EXIF, GPS, galleries, and runtime diagnostics.',
+            ))
+            . '</span><a class="button secondary" href="'
+            . e(url_for('admin_gallery_report'))
+            . '">'
+            . e(t(
+                'admin.dashboard.open_gallery_report',
+                'Open report generator',
+            ))
+            . '</a></article>';
 }
 
 /**
@@ -838,19 +2099,50 @@ function view_render_admin_gallery_report_maintenance_card(array $model, string 
 function view_render_admin_dashboard_system_tools(array $model): void
 {
     $updatePending = view_admin_dashboard_bool($model, 'update_pending');
-    $updateButtonClass = (string) ($model['update_button_class'] ?? 'button secondary');
-    $updateLabel = (string) ($model['update_label'] ?? t('admin.menu.updates', 'Updates'));
+    $updateButtonClass = (string) (
+        $model['update_button_class'] ?? 'button secondary'
+    );
+    $updateLabel = (string) (
+        $model['update_label'] ?? t('admin.menu.updates', 'Updates')
+    );
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
-    $securitySchemaStatuses = view_admin_dashboard_array($model, 'security_schema_statuses');
-    $mutationSchemaStatuses = view_admin_dashboard_array($model, 'mutation_schema_statuses');
-    $presentationSchemaStatuses = view_admin_dashboard_array($model, 'presentation_schema_statuses');
-    $runtimeSupport = view_admin_dashboard_array($model, 'runtime_support_status');
-    $runtimeActionRequired = !empty($runtimeSupport['policy']['action_required']);
-    $imageMovePending = view_admin_dashboard_array($model, 'image_move_pending_status');
+    $securitySchemaStatuses = view_admin_dashboard_array(
+        $model,
+        'security_schema_statuses',
+    );
+    $mutationSchemaStatuses = view_admin_dashboard_array(
+        $model,
+        'mutation_schema_statuses',
+    );
+    $presentationSchemaStatuses = view_admin_dashboard_array(
+        $model,
+        'presentation_schema_statuses',
+    );
+    $runtimeSupport = view_admin_dashboard_array(
+        $model,
+        'runtime_support_status',
+    );
+    $runtimeActionRequired =
+        !empty($runtimeSupport['policy']['action_required']);
+    $imageMovePending = view_admin_dashboard_array(
+        $model,
+        'image_move_pending_status',
+    );
     $pendingActionRequired = !empty($imageMovePending['action_required']);
     $schemaActionRequired = false;
-    foreach (array_merge($securitySchemaStatuses, $mutationSchemaStatuses, $presentationSchemaStatuses) as $schemaStatus) {
-        if (is_array($schemaStatus) && in_array((string) ($schemaStatus['state'] ?? 'unknown'), ['missing', 'unknown'], true)) {
+    foreach (array_merge(
+        $securitySchemaStatuses,
+        $mutationSchemaStatuses,
+        $presentationSchemaStatuses,
+    ) as $schemaStatus) {
+        if (
+            is_array($schemaStatus)
+            && in_array(
+                (string) ($schemaStatus['state'] ?? 'unknown'),
+                ['missing', 'unknown'],
+                true,
+            )
+        ) {
             $schemaActionRequired = true;
             break;
         }
@@ -858,45 +2150,171 @@ function view_render_admin_dashboard_system_tools(array $model): void
 
     view_render_admin_tab_intro([
         'kicker' => t('admin.dashboard.system_health_kicker', 'System'),
-        'title' => t('admin.dashboard.system_health_title', 'Logs, updates, and diagnostics'),
-        'description' => t('admin.dashboard.system_health_hint', 'Operational status, deployment checks, feature visibility, and developer diagnostics.'),
+        'title' => t(
+            'admin.dashboard.system_health_title',
+            'Logs, updates, and diagnostics',
+        ),
+        'description' => t(
+            'admin.dashboard.system_health_hint',
+            'Operational status, deployment checks, feature visibility, and developer diagnostics.',
+        ),
         'class' => 'admin-dashboard-subtab-heading',
     ]);
-    echo '<div class="admin-system-health-workspace"><div class="admin-system-health-tools">';
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.logs', 'Logs')) . '</strong><span>' . e(t('admin.dashboard.logs_hint', 'Review operational events, failures, and workflow status.')) . '</span><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.open_logs', 'Open logs')) . '</a></article>';
+    echo
+        '<div class="admin-system-health-workspace"><div class="admin-system-health-tools">';
+    echo
+        '<article class="admin-maintenance-card"><strong>'
+            . e(t('admin.dashboard.logs', 'Logs'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.logs_hint',
+                'Review operational events, failures, and workflow status.',
+            ))
+            . '</span><a class="button secondary" href="'
+            . e(url_for('admin_logs'))
+            . '">'
+            . e(t('admin.dashboard.open_logs', 'Open logs'))
+            . '</a></article>';
     if (view_admin_dashboard_feature_enabled($model, 'telemetry')) {
-        echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</strong><span>' . e(t('admin.dashboard.telemetry_hint', 'Inspect anonymous usage telemetry without collecting personal data.')) . '</span><a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.open_telemetry', 'Open telemetry')) . '</a></article>';
+        echo
+            '<article class="admin-maintenance-card"><strong>'
+                . e(t('admin.dashboard.telemetry', 'Telemetry'))
+                . '</strong><span>'
+                . e(t(
+                    'admin.dashboard.telemetry_hint',
+                    'Inspect anonymous usage telemetry without collecting personal data.',
+                ))
+                . '</span><a class="button secondary" href="'
+                . e(url_for('admin_telemetry'))
+                . '">'
+                . e(t('admin.dashboard.open_telemetry', 'Open telemetry'))
+                . '</a></article>';
     }
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.integrity', 'Integrity')) . '</strong><span>' . e(t('admin.dashboard.integrity_hint', 'Check core files and deployment health.')) . '</span><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.run_integrity_check', 'Run integrity check')) . '</a></article>';
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.search_diagnostics.dashboard_title', 'Search diagnostics')) . '</strong><span>' . e(t('admin.search_diagnostics.dashboard_hint', 'Measure progressive public-search phases, SQL timings, indexes, and optimizer plans against the live database.')) . '</span><a class="button secondary" href="' . e(url_for('admin_search_diagnostics')) . '">' . e(t('admin.search_diagnostics.open_button', 'Open search diagnostics')) . '</a></article>';
-    view_render_admin_gallery_report_maintenance_card($model, 'admin-maintenance-card');
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.features', 'Features')) . '</strong><span>' . e(t('admin.dashboard.features_hint', 'Enable or hide unfinished, optional, or site-specific feature areas.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.open_features', 'Open features')) . '</a></article>';
+    echo
+        '<article class="admin-maintenance-card"><strong>'
+            . e(t('admin.dashboard.integrity', 'Integrity'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.integrity_hint',
+                'Check core files and deployment health.',
+            ))
+            . '</span><a class="button secondary" href="'
+            . e(url_for('admin_integrity'))
+            . '">'
+            . e(t('admin.dashboard.run_integrity_check', 'Run integrity check'))
+            . '</a></article>';
+    echo
+        '<article class="admin-maintenance-card"><strong>'
+            . e(t(
+                'admin.search_diagnostics.dashboard_title',
+                'Search diagnostics',
+            ))
+            . '</strong><span>'
+            . e(t(
+                'admin.search_diagnostics.dashboard_hint',
+                'Measure progressive public-search phases, SQL timings, indexes, and optimizer plans against the live database.',
+            ))
+            . '</span><a class="button secondary" href="'
+            . e(url_for('admin_search_diagnostics'))
+            . '">'
+            . e(t(
+                'admin.search_diagnostics.open_button',
+                'Open search diagnostics',
+            ))
+            . '</a></article>';
+    view_render_admin_gallery_report_maintenance_card(
+        $model,
+        'admin-maintenance-card',
+    );
+    echo
+        '<article class="admin-maintenance-card"><strong>'
+            . e(t('admin.dashboard.updates', 'Updates'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.updates_hint',
+                'Check and apply project updates.',
+            ))
+            . '</span><a class="'
+            . e($updateButtonClass)
+            . '" href="'
+            . e(url_for('admin_update'))
+            . '">'
+            . e($updateLabel)
+            . '</a></article>';
+    echo
+        '<article class="admin-maintenance-card"><strong>'
+            . e(t('admin.dashboard.features', 'Features'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.features_hint',
+                'Enable or hide unfinished, optional, or site-specific feature areas.',
+            ))
+            . '</span><a class="button secondary" href="'
+            . e(url_for('admin_features'))
+            . '">'
+            . e(t('admin.dashboard.open_features', 'Open features'))
+            . '</a></article>';
     echo '</div><div class="admin-system-health-controls">';
     view_render_admin_devmode_card('admin-maintenance-card', $model);
     if ($migrationPending) {
         view_render_admin_dashboard_migration_card('admin-maintenance-card');
     }
     echo '</div><div class="admin-system-health-list">';
-    view_render_admin_runtime_support_card($runtimeSupport, 'admin-maintenance-card admin-system-health-row' . ($runtimeActionRequired ? ' is-attention' : ''), true);
-    view_render_admin_image_move_pending_card($imageMovePending, 'admin-maintenance-card admin-system-health-row' . ($pendingActionRequired ? ' is-attention' : ''), true);
+    view_render_admin_runtime_support_card(
+        $runtimeSupport,
+        'admin-maintenance-card admin-system-health-row'
+            . ($runtimeActionRequired ? ' is-attention' : ''),
+        true,
+    );
+    view_render_admin_image_move_pending_card(
+        $imageMovePending,
+        'admin-maintenance-card admin-system-health-row'
+            . ($pendingActionRequired ? ' is-attention' : ''),
+        true,
+    );
     foreach ($securitySchemaStatuses as $feature => $securityStatus) {
         if (is_array($securityStatus)) {
-            view_render_admin_dashboard_security_schema_card((string) $feature, $securityStatus, view_admin_dashboard_health_row_class($securityStatus));
+            view_render_admin_dashboard_security_schema_card(
+                (string) $feature,
+                $securityStatus,
+                view_admin_dashboard_health_row_class($securityStatus),
+            );
         }
     }
     foreach ($mutationSchemaStatuses as $feature => $mutationStatus) {
         if (is_array($mutationStatus)) {
-            view_render_admin_dashboard_mutation_schema_card((string) $feature, $mutationStatus, view_admin_dashboard_health_row_class($mutationStatus));
+            view_render_admin_dashboard_mutation_schema_card(
+                (string) $feature,
+                $mutationStatus,
+                view_admin_dashboard_health_row_class($mutationStatus),
+            );
         }
     }
     foreach ($presentationSchemaStatuses as $feature => $presentationStatus) {
         if (is_array($presentationStatus)) {
-            view_render_admin_dashboard_presentation_schema_card((string) $feature, $presentationStatus, view_admin_dashboard_health_row_class($presentationStatus));
+            view_render_admin_dashboard_presentation_schema_card(
+                (string) $feature,
+                $presentationStatus,
+                view_admin_dashboard_health_row_class($presentationStatus),
+            );
         }
     }
-    if (!$updatePending && !$migrationPending && !$schemaActionRequired && !$runtimeActionRequired && !$pendingActionRequired) {
-        echo '<article class="admin-maintenance-card admin-system-health-row is-state-available"><strong>' . e(t('admin.dashboard.system_ready_title', 'System ready')) . '</strong><span>' . e(t('admin.dashboard.system_ready_hint', 'No update or migration warning is currently active on the dashboard.')) . '</span></article>';
+    if (
+        !$updatePending
+        && !$migrationPending
+        && !$schemaActionRequired
+        && !$runtimeActionRequired
+        && !$pendingActionRequired
+    ) {
+        echo
+            '<article class="admin-maintenance-card admin-system-health-row is-state-available"><strong>'
+                . e(t('admin.dashboard.system_ready_title', 'System ready'))
+                . '</strong><span>'
+                . e(t(
+                    'admin.dashboard.system_ready_hint',
+                    'No update or migration warning is currently active on the dashboard.',
+                ))
+                . '</span></article>';
     }
     echo '</div></div>';
 }
@@ -910,11 +2328,22 @@ function view_render_admin_dashboard_system_tools(array $model): void
 function view_admin_dashboard_health_row_class(array $status): string
 {
     $state = (string) ($status['state'] ?? 'unknown');
-    if (!in_array($state, ['available', 'missing', 'unknown', 'disabled'], true)) {
+    if (!in_array(
+        $state,
+        ['available', 'missing', 'unknown', 'disabled'],
+        true,
+    )) {
         $state = 'unknown';
     }
-    return 'admin-maintenance-card admin-system-health-row is-state-' . $state
-        . (in_array($state, ['missing', 'unknown'], true) ? ' is-attention' : '');
+    return (
+        'admin-maintenance-card admin-system-health-row is-state-'
+            . $state
+            . (
+                in_array($state, ['missing', 'unknown'], true)
+                    ? ' is-attention'
+                    : ''
+            )
+    );
 }
 
 /**
@@ -926,33 +2355,59 @@ function view_admin_dashboard_health_row_class(array $status): string
  * @param bool $compact Whether ancillary support detail belongs in a disclosure.
  * @return void All policy values, localized strings and the official URL are escaped.
  */
-function view_render_admin_runtime_support_card(array $health, string $className = 'admin-maintenance-card', bool $compact = false): void
-{
+function view_render_admin_runtime_support_card(
+    array $health,
+    string $className = 'admin-maintenance-card',
+    bool $compact = false,
+): void {
     $policy = $health['policy'] ?? [];
     $labels = $health['labels'] ?? [];
     if ($policy === [] || $labels === []) {
         return;
     }
-    echo '<article class="' . e($className) . '" data-runtime-support data-runtime-state="' . e((string) $policy['state']) . '">';
+    echo
+        '<article class="'
+            . e($className)
+            . '" data-runtime-support data-runtime-state="'
+            . e((string) $policy['state'])
+            . '">';
     echo '<strong>' . e((string) $labels['title']) . '</strong>';
     if (!empty($policy['action_required'])) {
-        echo '<span class="admin-tab-badge">' . e((string) $labels['action']) . '</span>';
+        echo
+            '<span class="admin-tab-badge">'
+                . e((string) $labels['action'])
+                . '</span>';
     }
     if ($compact) {
         echo '<span>' . e((string) $labels['summary']) . '</span>';
         if (!empty($policy['action_required'])) {
             echo '<span>' . e((string) $labels['guidance']) . '</span>';
         }
-        echo '<details class="admin-system-health-details"><summary>' . e(t('admin.dashboard.health_details', 'Details')) . '</summary>';
+        echo
+            '<details class="admin-system-health-details"><summary>'
+                . e(t('admin.dashboard.health_details', 'Details'))
+                . '</summary>';
     }
-    foreach ($compact ? ['deadline', 'baseline', 'reviewed'] : ['summary', 'deadline', 'baseline', 'guidance', 'reviewed'] as $label) {
+    foreach ($compact
+        ? ['deadline', 'baseline', 'reviewed']
+        : [
+            'summary',
+            'deadline',
+            'baseline',
+            'guidance',
+            'reviewed',
+        ] as $label) {
         echo '<span>' . e((string) $labels[$label]) . '</span>';
     }
     if ($compact && empty($policy['action_required'])) {
         echo '<span>' . e((string) $labels['guidance']) . '</span>';
     }
-    echo '<a href="' . e((string) $policy['reference_url']) . '" rel="noopener noreferrer" target="_blank">'
-        . e((string) $labels['reference']) . '</a>';
+    echo
+        '<a href="'
+            . e((string) $policy['reference_url'])
+            . '" rel="noopener noreferrer" target="_blank">'
+            . e((string) $labels['reference'])
+            . '</a>';
     echo ($compact ? '</details>' : '') . '</article>';
 }
 
@@ -965,21 +2420,35 @@ function view_render_admin_runtime_support_card(array $health, string $className
  * @param bool $compact Whether healthy explanatory guidance belongs in a disclosure.
  * @return void All prepared text and identifiers are HTML-escaped; there are no actions.
  */
-function view_render_admin_image_move_pending_card(array $health, string $className = 'admin-maintenance-card', bool $compact = false): void
-{
+function view_render_admin_image_move_pending_card(
+    array $health,
+    string $className = 'admin-maintenance-card',
+    bool $compact = false,
+): void {
     if ($health === []) {
         return;
     }
     $labels = $health['labels'] ?? [];
-    echo '<article class="' . e($className) . '" data-image-move-pending data-pending-state="' . e((string) ($health['state'] ?? 'unknown')) . '">';
+    echo
+        '<article class="'
+            . e($className)
+            . '" data-image-move-pending data-pending-state="'
+            . e((string) ($health['state'] ?? 'unknown'))
+            . '">';
     echo '<strong>' . e((string) ($labels['title'] ?? '')) . '</strong>';
     if (!empty($health['action_required'])) {
-        echo '<span class="admin-tab-badge">' . e((string) ($labels['action'] ?? '')) . '</span>';
+        echo
+            '<span class="admin-tab-badge">'
+                . e((string) ($labels['action'] ?? ''))
+                . '</span>';
     }
     echo '<span>' . e((string) ($labels['summary'] ?? '')) . '</span>';
     $discloseGuidance = $compact && empty($health['action_required']);
     if ($discloseGuidance) {
-        echo '<details class="admin-system-health-details"><summary>' . e(t('admin.dashboard.health_details', 'Details')) . '</summary>';
+        echo
+            '<details class="admin-system-health-details"><summary>'
+                . e(t('admin.dashboard.health_details', 'Details'))
+                . '</summary>';
     }
     foreach ($health['entries'] ?? [] as $entry) {
         echo '<span>' . e((string) $entry) . '</span>';
@@ -989,7 +2458,12 @@ function view_render_admin_image_move_pending_card(array $health, string $classN
         echo '</details>';
     }
     if ((string) ($health['request_id'] ?? '') !== '') {
-        echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $health['request_id']])) . '</span>';
+        echo
+            '<span>'
+                . e(t('public.request_reference', 'Reference: {request_id}', [
+                    'request_id' => $health['request_id'],
+                ]))
+                . '</span>';
     }
     echo '</article>';
 }
@@ -1003,8 +2477,11 @@ function view_render_admin_image_move_pending_card(array $health, string $classN
  * @param string $className CSS class name for the card wrapper.
  * @return void Emit one escaped diagnosis with actionable readiness details.
  */
-function view_render_admin_dashboard_security_schema_card(string $feature, array $status, string $className): void
-{
+function view_render_admin_dashboard_security_schema_card(
+    string $feature,
+    array $status,
+    string $className,
+): void {
     if ($feature === 'nsfw_guard') {
         view_render_admin_dashboard_nsfw_schema_card($status, $className);
         return;
@@ -1020,23 +2497,69 @@ function view_render_admin_dashboard_security_schema_card(string $feature, array
     ];
     $title = $labels[$feature] ?? 'Security schema capability';
     $state = (string) ($status['state'] ?? 'unknown');
-    echo '<article class="' . e($className) . '"><strong>' . e($title) . '</strong>';
+    echo
+        '<article class="'
+            . e($className)
+            . '"><strong>'
+            . e($title)
+            . '</strong>';
     if ($state === 'available') {
-        echo '<span>' . e(t('admin.dashboard.security_schema_available', 'Required database objects are installed and verified.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.security_schema_available',
+                    'Required database objects are installed and verified.',
+                ))
+                . '</span>';
     } elseif ($state === 'missing') {
-        echo '<span>' . e(t('admin.dashboard.security_schema_missing', 'Database inspection succeeded and confirmed required objects are missing. Apply pending migrations; only explicitly documented legacy compatibility remains active.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.security_schema_missing',
+                    'Database inspection succeeded and confirmed required objects are missing. Apply pending migrations; only explicitly documented legacy compatibility remains active.',
+                ))
+                . '</span>';
     } elseif ($state === 'disabled') {
-        echo '<span>' . e(t('admin.dashboard.security_schema_disabled', 'This integration is intentionally disabled by configuration.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.security_schema_disabled',
+                    'This integration is intentionally disabled by configuration.',
+                ))
+                . '</span>';
     } else {
-        echo '<span>' . e(t('admin.dashboard.security_schema_unknown', 'Required database schema could not be verified. Security-sensitive operations for this capability are temporarily refused until connectivity, selected database, and metadata permissions are healthy.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.security_schema_unknown',
+                    'Required database schema could not be verified. Security-sensitive operations for this capability are temporarily refused until connectivity, selected database, and metadata permissions are healthy.',
+                ))
+                . '</span>';
         $requestId = trim((string) ($status['request_id'] ?? ''));
         if ($requestId !== '') {
-            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</span>';
+            echo
+                '<span>'
+                    . e(t(
+                        'public.request_reference',
+                        'Reference: {request_id}',
+                        ['request_id' => $requestId],
+                    ))
+                    . '</span>';
         }
     }
-    $affectedObjects = array_values(array_filter(array_map('strval', (array) ($status['affected_objects'] ?? []))));
+    $affectedObjects = array_values(array_filter(array_map(
+        'strval',
+        (array) ($status['affected_objects'] ?? []),
+    )));
     if ($affectedObjects !== []) {
-        echo '<span>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.security_schema_objects',
+                    'Affected database objects: {objects}',
+                    ['objects' => implode(', ', $affectedObjects)],
+                ))
+                . '</span>';
     }
     echo '</article>';
 }
@@ -1051,47 +2574,137 @@ function view_render_admin_dashboard_security_schema_card(string $feature, array
  * @param string $className CSS class name for the card wrapper.
  * @return void Render escaped schema state and any centrally prepared protection message.
  */
-function view_render_admin_dashboard_mutation_schema_card(string $feature, array $status, string $className): void
-{
+function view_render_admin_dashboard_mutation_schema_card(
+    string $feature,
+    array $status,
+    string $className,
+): void {
     $labels = [
-        'mutation_gallery_delete' => t('admin.dashboard.mutation_schema_feature_gallery_delete', 'Gallery and image deletion'),
-        'mutation_gallery_trash' => t('admin.dashboard.mutation_schema_feature_gallery_trash', 'Gallery trash bin'),
-        'mutation_gallery_move' => t('admin.dashboard.mutation_schema_feature_gallery_move', 'Gallery and image move/copy'),
-        'mutation_duplicate_photo_ledger' => t('admin.dashboard.mutation_schema_feature_duplicate_ledger', 'Duplicate Photo Detector ledger'),
-        'mutation_upload_ingestion' => t('admin.dashboard.mutation_schema_feature_upload_ingestion', 'Gallery upload ingestion'),
-        'mutation_upload_automation' => t('admin.dashboard.mutation_schema_feature_upload_automation', 'Upload automation tokens'),
-        'mutation_gallery_migration' => t('admin.dashboard.mutation_schema_feature_gallery_migration', 'Gallery migration'),
-        'mutation_mobile_webdav' => t('admin.dashboard.mutation_schema_feature_mobile_webdav', 'Mobile WebDAV uploads'),
-        'mutation_thumbnail_metadata' => t('admin.dashboard.mutation_schema_feature_thumbnail_metadata', 'Thumbnail metadata maintenance'),
-        'mutation_database_maintenance' => t('admin.dashboard.mutation_schema_feature_database_maintenance', 'Database cleanup and repair'),
-        'mutation_application_update' => t('admin.dashboard.mutation_schema_feature_application_update', 'Application update activation'),
+        'mutation_gallery_delete' => t(
+            'admin.dashboard.mutation_schema_feature_gallery_delete',
+            'Gallery and image deletion',
+        ),
+        'mutation_gallery_trash' => t(
+            'admin.dashboard.mutation_schema_feature_gallery_trash',
+            'Gallery trash bin',
+        ),
+        'mutation_gallery_move' => t(
+            'admin.dashboard.mutation_schema_feature_gallery_move',
+            'Gallery and image move/copy',
+        ),
+        'mutation_duplicate_photo_ledger' => t(
+            'admin.dashboard.mutation_schema_feature_duplicate_ledger',
+            'Duplicate Photo Detector ledger',
+        ),
+        'mutation_upload_ingestion' => t(
+            'admin.dashboard.mutation_schema_feature_upload_ingestion',
+            'Gallery upload ingestion',
+        ),
+        'mutation_upload_automation' => t(
+            'admin.dashboard.mutation_schema_feature_upload_automation',
+            'Upload automation tokens',
+        ),
+        'mutation_gallery_migration' => t(
+            'admin.dashboard.mutation_schema_feature_gallery_migration',
+            'Gallery migration',
+        ),
+        'mutation_mobile_webdav' => t(
+            'admin.dashboard.mutation_schema_feature_mobile_webdav',
+            'Mobile WebDAV uploads',
+        ),
+        'mutation_thumbnail_metadata' => t(
+            'admin.dashboard.mutation_schema_feature_thumbnail_metadata',
+            'Thumbnail metadata maintenance',
+        ),
+        'mutation_database_maintenance' => t(
+            'admin.dashboard.mutation_schema_feature_database_maintenance',
+            'Database cleanup and repair',
+        ),
+        'mutation_application_update' => t(
+            'admin.dashboard.mutation_schema_feature_application_update',
+            'Application update activation',
+        ),
     ];
-    $title = (string) ($status['title'] ?? $labels[$feature] ?? 'Mutation schema capability');
+    $title = (string) (
+        $status['title']
+        ?? $labels[$feature]
+        ?? 'Mutation schema capability'
+    );
     $state = (string) ($status['state'] ?? 'unknown');
 
-    echo '<article class="' . e($className) . '"><strong>' . e($title) . '</strong>';
+    echo
+        '<article class="'
+            . e($className)
+            . '"><strong>'
+            . e($title)
+            . '</strong>';
     if (isset($status['message'])) {
         if (in_array($state, ['missing', 'unknown'], true)) {
-            echo '<span class="admin-tab-badge">' . e(t('admin.dashboard.badge_action', 'Action')) . '</span>';
+            echo
+                '<span class="admin-tab-badge">'
+                    . e(t('admin.dashboard.badge_action', 'Action'))
+                    . '</span>';
         }
         echo '<span>' . e((string) $status['message']) . '</span>';
         if ((string) ($status['request_id'] ?? '') !== '') {
-            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => (string) $status['request_id']])) . '</span>';
+            echo
+                '<span>'
+                    . e(t(
+                        'public.request_reference',
+                        'Reference: {request_id}',
+                        ['request_id' => (string) $status['request_id']],
+                    ))
+                    . '</span>';
         }
     } elseif ($state === 'available') {
-        echo '<span>' . e(t('admin.dashboard.mutation_schema_available', 'Required mutation database objects are installed and verified.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.mutation_schema_available',
+                    'Required mutation database objects are installed and verified.',
+                ))
+                . '</span>';
     } elseif ($state === 'missing') {
-        echo '<span>' . e(t('admin.dashboard.mutation_schema_missing', 'Database inspection succeeded and confirmed required mutation objects are missing. Apply pending migrations before using this workflow, except where a documented legacy compatibility path explicitly applies.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.mutation_schema_missing',
+                    'Database inspection succeeded and confirmed required mutation objects are missing. Apply pending migrations before using this workflow, except where a documented legacy compatibility path explicitly applies.',
+                ))
+                . '</span>';
     } else {
-        echo '<span>' . e(t('admin.dashboard.mutation_schema_unknown', 'Required database schema could not be verified. This mutation is temporarily refused so files, rows, credentials, migration state, or active application files are not changed on an indeterminate schema.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.mutation_schema_unknown',
+                    'Required database schema could not be verified. This mutation is temporarily refused so files, rows, credentials, migration state, or active application files are not changed on an indeterminate schema.',
+                ))
+                . '</span>';
         $requestId = trim((string) ($status['request_id'] ?? ''));
         if ($requestId !== '') {
-            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</span>';
+            echo
+                '<span>'
+                    . e(t(
+                        'public.request_reference',
+                        'Reference: {request_id}',
+                        ['request_id' => $requestId],
+                    ))
+                    . '</span>';
         }
     }
-    $affectedObjects = array_values(array_filter(array_map('strval', (array) ($status['affected_objects'] ?? []))));
+    $affectedObjects = array_values(array_filter(array_map(
+        'strval',
+        (array) ($status['affected_objects'] ?? []),
+    )));
     if ($affectedObjects !== []) {
-        echo '<span>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.security_schema_objects',
+                    'Affected database objects: {objects}',
+                    ['objects' => implode(', ', $affectedObjects)],
+                ))
+                . '</span>';
     }
     echo '</article>';
 }
@@ -1105,46 +2718,143 @@ function view_render_admin_dashboard_mutation_schema_card(string $feature, array
  * @param string $className CSS class name for the card wrapper.
  * @return void Emit an escaped diagnosis with actionable readiness details.
  */
-function view_render_admin_dashboard_presentation_schema_card(string $feature, array $status, string $className): void
-{
+function view_render_admin_dashboard_presentation_schema_card(
+    string $feature,
+    array $status,
+    string $className,
+): void {
     $labels = [
-        'presentation_gps_exif' => t('admin.dashboard.presentation_schema_feature_gps_exif', 'GPS and EXIF maps'),
-        'presentation_gps_override' => t('admin.dashboard.presentation_schema_feature_gps_override', 'Per-gallery GPS map overrides'),
-        'presentation_flight_map' => t('admin.dashboard.presentation_schema_feature_flight_map', 'Flight route maps'),
-        'presentation_flight_navdata' => t('admin.dashboard.presentation_schema_feature_flight_navdata', 'Flight-map navigation data'),
-        'presentation_image_voting' => t('admin.dashboard.presentation_schema_feature_image_voting', 'Image voting'),
-        'presentation_picture_game' => t('admin.dashboard.presentation_schema_feature_picture_game', 'Picture game'),
-        'presentation_lightbox_override' => t('admin.dashboard.presentation_schema_feature_lightbox_override', 'Lightbox mode overrides'),
+        'presentation_gps_exif' => t(
+            'admin.dashboard.presentation_schema_feature_gps_exif',
+            'GPS and EXIF maps',
+        ),
+        'presentation_gps_override' => t(
+            'admin.dashboard.presentation_schema_feature_gps_override',
+            'Per-gallery GPS map overrides',
+        ),
+        'presentation_flight_map' => t(
+            'admin.dashboard.presentation_schema_feature_flight_map',
+            'Flight route maps',
+        ),
+        'presentation_flight_navdata' => t(
+            'admin.dashboard.presentation_schema_feature_flight_navdata',
+            'Flight-map navigation data',
+        ),
+        'presentation_image_voting' => t(
+            'admin.dashboard.presentation_schema_feature_image_voting',
+            'Image voting',
+        ),
+        'presentation_picture_game' => t(
+            'admin.dashboard.presentation_schema_feature_picture_game',
+            'Picture game',
+        ),
+        'presentation_lightbox_override' => t(
+            'admin.dashboard.presentation_schema_feature_lightbox_override',
+            'Lightbox mode overrides',
+        ),
         'presentation_gallery_settings' => t('presentation.settings'),
-        'presentation_openai_text' => t('admin.dashboard.presentation_schema_feature_openai_text', 'OpenAI text assistance'),
-        'presentation_openai_image_input' => t('admin.dashboard.presentation_schema_feature_openai_image_input', 'OpenAI image input'),
-        'presentation_ai_image_analysis' => t('admin.dashboard.presentation_schema_feature_ai_image_analysis', 'AI image metadata'),
-        'presentation_simbrief_route_map' => t('admin.dashboard.presentation_schema_feature_simbrief_route_map', 'SimBrief route-map persistence'),
-        'presentation_navigation_cache' => t('admin.dashboard.presentation_schema_feature_navigation_cache', 'Navigation data cache'),
-        'presentation_navigation_account' => t('admin.dashboard.presentation_schema_feature_navigation_account', 'Navigation account storage'),
-        'presentation_telemetry_reporting' => t('admin.dashboard.presentation_schema_feature_telemetry', 'Telemetry reporting'),
-        'presentation_admin_gallery_report' => t('admin.dashboard.presentation_schema_feature_admin_report', 'Complete Admin gallery report'),
+        'presentation_openai_text' => t(
+            'admin.dashboard.presentation_schema_feature_openai_text',
+            'OpenAI text assistance',
+        ),
+        'presentation_openai_image_input' => t(
+            'admin.dashboard.presentation_schema_feature_openai_image_input',
+            'OpenAI image input',
+        ),
+        'presentation_ai_image_analysis' => t(
+            'admin.dashboard.presentation_schema_feature_ai_image_analysis',
+            'AI image metadata',
+        ),
+        'presentation_simbrief_route_map' => t(
+            'admin.dashboard.presentation_schema_feature_simbrief_route_map',
+            'SimBrief route-map persistence',
+        ),
+        'presentation_navigation_cache' => t(
+            'admin.dashboard.presentation_schema_feature_navigation_cache',
+            'Navigation data cache',
+        ),
+        'presentation_navigation_account' => t(
+            'admin.dashboard.presentation_schema_feature_navigation_account',
+            'Navigation account storage',
+        ),
+        'presentation_telemetry_reporting' => t(
+            'admin.dashboard.presentation_schema_feature_telemetry',
+            'Telemetry reporting',
+        ),
+        'presentation_admin_gallery_report' => t(
+            'admin.dashboard.presentation_schema_feature_admin_report',
+            'Complete Admin gallery report',
+        ),
     ];
-    $title = $labels[$feature] ?? t('admin.dashboard.presentation_schema_feature_default', 'Optional presentation schema capability');
+    $title = $labels[$feature] ?? t(
+        'admin.dashboard.presentation_schema_feature_default',
+        'Optional presentation schema capability',
+    );
     $state = (string) ($status['state'] ?? 'unknown');
 
-    echo '<article class="' . e($className) . '"><strong>' . e($title) . '</strong>';
+    echo
+        '<article class="'
+            . e($className)
+            . '"><strong>'
+            . e($title)
+            . '</strong>';
     if ($state === 'available') {
-        echo '<span>' . e(t('admin.dashboard.presentation_schema_available', 'Required optional database objects are installed and verified.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.presentation_schema_available',
+                    'Required optional database objects are installed and verified.',
+                ))
+                . '</span>';
     } elseif ($state === 'missing') {
-        echo '<span>' . e(t('admin.dashboard.presentation_schema_missing', 'Database inspection succeeded and confirmed optional objects are missing. The affected presentation/report feature is omitted until its migration is applied.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.presentation_schema_missing',
+                    'Database inspection succeeded and confirmed optional objects are missing. The affected presentation/report feature is omitted until its migration is applied.',
+                ))
+                . '</span>';
     } elseif ($state === 'disabled') {
-        echo '<span>' . e(t('admin.dashboard.presentation_schema_disabled', 'This optional feature is intentionally disabled by configuration.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.presentation_schema_disabled',
+                    'This optional feature is intentionally disabled by configuration.',
+                ))
+                . '</span>';
     } else {
-        echo '<span>' . e(t('admin.dashboard.presentation_schema_unknown', 'Optional database schema could not be verified. Safe core pages may continue without the affected presentation feature, while writes that depend on it are refused until inspection is healthy.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.presentation_schema_unknown',
+                    'Optional database schema could not be verified. Safe core pages may continue without the affected presentation feature, while writes that depend on it are refused until inspection is healthy.',
+                ))
+                . '</span>';
         $requestId = trim((string) ($status['request_id'] ?? ''));
         if ($requestId !== '') {
-            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</span>';
+            echo
+                '<span>'
+                    . e(t(
+                        'public.request_reference',
+                        'Reference: {request_id}',
+                        ['request_id' => $requestId],
+                    ))
+                    . '</span>';
         }
     }
-    $affectedObjects = array_values(array_filter(array_map('strval', (array) ($status['affected_objects'] ?? []))));
+    $affectedObjects = array_values(array_filter(array_map(
+        'strval',
+        (array) ($status['affected_objects'] ?? []),
+    )));
     if ($affectedObjects !== []) {
-        echo '<span>' . e(t('admin.dashboard.security_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.security_schema_objects',
+                    'Affected database objects: {objects}',
+                    ['objects' => implode(', ', $affectedObjects)],
+                ))
+                . '</span>';
     }
     echo '</article>';
 }
@@ -1155,32 +2865,86 @@ function view_render_admin_dashboard_presentation_schema_card(string $feature, a
  * The card provides actionable operational guidance without exposing raw PDO
  * exceptions, SQL statements, connection details, or filesystem paths.
  *
- * @param array $status Aggregate NSFW Guard schema inspection result.
+ * @param array{state?:string} $status Aggregate NSFW Guard schema state used
+ *     to select the administrator guidance.
  * @param string $className CSS class name for the card wrapper.
+ * @return void Outputs the schema state and corresponding safe operational
+ *     guidance.
  */
-function view_render_admin_dashboard_nsfw_schema_card(array $status, string $className): void
-{
+function view_render_admin_dashboard_nsfw_schema_card(
+    array $status,
+    string $className,
+): void {
     // $state stores the normalized feature state displayed to administrators.
     $state = (string) ($status['state'] ?? 'unknown');
-    echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.nsfw_schema_title', 'NSFW Guard database status')) . '</strong>';
+    echo
+        '<article class="'
+            . e($className)
+            . '"><strong>'
+            . e(t(
+                'admin.dashboard.nsfw_schema_title',
+                'NSFW Guard database status',
+            ))
+            . '</strong>';
     if ($state === 'available') {
-        echo '<span>' . e(t('admin.dashboard.nsfw_schema_available', 'Required gallery and image protection columns are installed and verified.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.nsfw_schema_available',
+                    'Required gallery and image protection columns are installed and verified.',
+                ))
+                . '</span>';
     } elseif ($state === 'missing') {
-        echo '<span>' . e(t('admin.dashboard.nsfw_schema_missing', 'Database inspection succeeded and confirmed that an NSFW Guard column is missing. Apply pending database migrations before enabling this protection.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.nsfw_schema_missing',
+                    'Database inspection succeeded and confirmed that an NSFW Guard column is missing. Apply pending database migrations before enabling this protection.',
+                ))
+                . '</span>';
     } elseif ($state === 'disabled') {
-        echo '<span>' . e(t('admin.dashboard.nsfw_schema_disabled', 'This feature is intentionally disabled by configuration. Its database readiness does not currently affect public requests.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.nsfw_schema_disabled',
+                    'This feature is intentionally disabled by configuration. Its database readiness does not currently affect public requests.',
+                ))
+                . '</span>';
     } else {
-        echo '<span>' . e(t('admin.dashboard.nsfw_schema_unknown', 'The application could not inspect the database schema required by NSFW Guard. Check database connectivity, the selected database, and schema-inspection permissions. Public NSFW-sensitive requests are temporarily refused.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.nsfw_schema_unknown',
+                    'The application could not inspect the database schema required by NSFW Guard. Check database connectivity, the selected database, and schema-inspection permissions. Public NSFW-sensitive requests are temporarily refused.',
+                ))
+                . '</span>';
         // $requestId stores a safe correlation value when telemetry initialized one.
         $requestId = trim((string) ($status['request_id'] ?? ''));
         if ($requestId !== '') {
-            echo '<span>' . e(t('public.request_reference', 'Reference: {request_id}', ['request_id' => $requestId])) . '</span>';
+            echo
+                '<span>'
+                    . e(t(
+                        'public.request_reference',
+                        'Reference: {request_id}',
+                        ['request_id' => $requestId],
+                    ))
+                    . '</span>';
         }
     }
     // $affectedObjects contains only validated table.column identities from the health model.
-    $affectedObjects = array_values(array_filter(array_map('strval', (array) ($status['affected_objects'] ?? []))));
+    $affectedObjects = array_values(array_filter(array_map(
+        'strval',
+        (array) ($status['affected_objects'] ?? []),
+    )));
     if ($affectedObjects !== []) {
-        echo '<span>' . e(t('admin.dashboard.nsfw_schema_objects', 'Affected database objects: {objects}', ['objects' => implode(', ', $affectedObjects)])) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.nsfw_schema_objects',
+                    'Affected database objects: {objects}',
+                    ['objects' => implode(', ', $affectedObjects)],
+                ))
+                . '</span>';
     }
     echo '</article>';
 }
@@ -1192,12 +2956,61 @@ function view_render_admin_dashboard_nsfw_schema_card(array $status, string $cla
  * @param array<string,mixed> $model Prepared public-search preference and global Settings URLs.
  * @return void Emits the existing public-search preference with its owned Content return context.
  */
-function view_render_admin_dashboard_public_search_card(string $className, array $model = []): void
-{
-    echo '<form method="post" action="' . e(url_for('admin_public_search_settings')) . '" class="' . e($className) . ' admin-public-search-settings">' . csrf_field();
-    echo '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.content_search_title', 'Public search')) . '</strong><span title="' . e(t('admin.dashboard.public_search_hint', 'Show a thin live search bar above the public front-page and gallery content. Gallery pages include a visitor checkbox to limit results to that gallery and its subgalleries.')) . '">' . e(t('admin.dashboard.content_search_hint', 'Show a search bar on public gallery pages.')) . '</span></div>';
-    echo '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1" aria-label="' . e(t('admin.dashboard.content_search_title', 'Public search')) . '"' . (!empty($model['public_home_search_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.content_enabled', 'Enabled')) . '</span></label></div>';
-    echo '<div class="admin-content-actions"><button type="submit" class="secondary" aria-label="' . e(t('admin.dashboard.content_save', 'Save') . ': ' . t('admin.dashboard.content_search_title', 'Public search')) . '">' . e(t('admin.dashboard.content_save', 'Save')) . '</button><a href="' . e((string) ($model['admin_settings_urls']['general'] ?? url_for('admin_settings'))) . '">' . e(t('admin.dashboard.content_search_settings', 'Search settings')) . '</a></div></form>';
+function view_render_admin_dashboard_public_search_card(
+    string $className,
+    array $model = [],
+): void {
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_public_search_settings'))
+            . '" class="'
+            . e($className)
+            . ' admin-public-search-settings">'
+            . csrf_field();
+    echo
+        '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>'
+            . e(t('admin.dashboard.content_search_title', 'Public search'))
+            . '</strong><span title="'
+            . e(t(
+                'admin.dashboard.public_search_hint',
+                'Show a thin live search bar above the public front-page and gallery content. Gallery pages include a visitor checkbox to limit results to that gallery and its subgalleries.',
+            ))
+            . '">'
+            . e(t(
+                'admin.dashboard.content_search_hint',
+                'Show a search bar on public gallery pages.',
+            ))
+            . '</span></div>';
+    echo
+        '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1" aria-label="'
+            . e(t('admin.dashboard.content_search_title', 'Public search'))
+            . '"'
+            . (!empty($model['public_home_search_enabled']) ? ' checked' : '')
+            . '> <span>'
+            . e(t('admin.dashboard.content_enabled', 'Enabled'))
+            . '</span></label></div>';
+    echo
+        '<div class="admin-content-actions"><button type="submit" class="secondary" aria-label="'
+            . e(
+                t('admin.dashboard.content_save', 'Save') . ': '
+                    . t(
+                        'admin.dashboard.content_search_title',
+                        'Public search',
+                    ),
+            )
+            . '">'
+            . e(t('admin.dashboard.content_save', 'Save'))
+            . '</button><a href="'
+            . e(
+                (string) (
+                    $model['admin_settings_urls']['general'] ?? url_for(
+                        'admin_settings',
+                    )
+                ),
+            )
+            . '">'
+            . e(t('admin.dashboard.content_search_settings', 'Search settings'))
+            . '</a></div></form>';
 }
 
 /**
@@ -1208,8 +3021,29 @@ function view_render_admin_dashboard_public_search_card(string $className, array
  */
 function view_render_admin_dashboard_public_paths_card(string $className): void
 {
-    echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="' . e($className) . '" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
-    echo '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.content_paths_title', 'Stored public paths')) . '</strong><span>' . e(t('admin.dashboard.content_paths_hint', 'Rebuild saved gallery and photo URLs.')) . '</span></div><div class="admin-content-actions"><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></div></form>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_regenerate_paths'))
+            . '" class="'
+            . e($className)
+            . '" onsubmit="return confirm(\''
+            . e(t(
+                'admin.dashboard.confirm_regenerate_paths',
+                'Regenerate clean public URLs for all galleries and images?',
+            ))
+            . '\');">'
+            . csrf_field();
+    echo
+        '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>'
+            . e(t('admin.dashboard.content_paths_title', 'Stored public paths'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.content_paths_hint',
+                'Rebuild saved gallery and photo URLs.',
+            ))
+            . '</span></div><div class="admin-content-actions"><button type="submit" class="secondary">'
+            . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths'))
+            . '</button></div></form>';
 }
 
 /**
@@ -1219,27 +3053,101 @@ function view_render_admin_dashboard_public_paths_card(string $className): void
  * @param array<string,mixed> $model Prepared crawler safety preferences, bounded logging counters and Settings URLs.
  * @return void Emits safety/logging toggles and the existing bounded diagnostic details.
  */
-function view_render_admin_dashboard_seo_guard_card(string $className, array $model = []): void
-{
-    $status = is_array($model['seo_guard_status'] ?? null) ? $model['seo_guard_status'] : [
-        'enabled' => true,
-        'logging_enabled' => true,
-        'log_day' => '',
-        'log_count' => 0,
-        'log_limit' => 25,
-    ];
+function view_render_admin_dashboard_seo_guard_card(
+    string $className,
+    array $model = [],
+): void {
+    $status = is_array($model['seo_guard_status'] ?? null)
+        ? $model['seo_guard_status']
+        : [
+            'enabled' => true,
+            'logging_enabled' => true,
+            'log_day' => '',
+            'log_count' => 0,
+            'log_limit' => 25,
+        ];
     $logDay = trim((string) ($status['log_day'] ?? ''));
     $logCount = max(0, (int) ($status['log_count'] ?? 0));
     $logLimit = max(1, (int) ($status['log_limit'] ?? 25));
     $logStatus = $logDay !== ''
-        ? t('admin.dashboard.seo_guard_log_status', 'Today logged {count}/{limit} sampled rejection event(s).', ['count' => (string) min($logCount, $logLimit), 'limit' => (string) $logLimit])
-        : t('admin.dashboard.seo_guard_log_status_empty', 'No sampled rejection event has been logged today.');
+        ? t(
+            'admin.dashboard.seo_guard_log_status',
+            'Today logged {count}/{limit} sampled rejection event(s).',
+            [
+                'count' => (string) min($logCount, $logLimit),
+                'limit' => (string) $logLimit,
+            ],
+        )
+        : t(
+            'admin.dashboard.seo_guard_log_status_empty',
+            'No sampled rejection event has been logged today.',
+        );
 
-    echo '<form method="post" action="' . e(url_for('admin_seo_guard_settings')) . '" class="' . e($className) . ' admin-seo-guard-settings">' . csrf_field();
-    echo '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>' . e(t('admin.dashboard.seo_guard_title', 'Crawler safety')) . '</strong><span>' . e(t('admin.dashboard.content_crawler_hint', 'Reject suspicious public query strings.')) . '</span><details class="admin-content-details"><summary>' . e(t('admin.dashboard.content_details', 'Details')) . '</summary><p>' . e(t('admin.dashboard.seo_guard_hint', 'Reject public URLs with unknown query parameters before they render as duplicate gallery pages. Suspicious requests return 404 with X-Robots-Tag: noindex, nofollow.')) . '</p><small class="muted">' . e($logStatus) . '</small></details></div>';
-    echo '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_enabled" value="1"' . (!empty($status['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.content_crawler_enabled', 'Protection enabled')) . '</span></label>';
-    echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_logging_enabled" value="1"' . (!empty($status['logging_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.content_crawler_logging', 'Sample rejection logs')) . '</span></label></div>';
-    echo '<div class="admin-content-actions"><button type="submit" class="secondary" aria-label="' . e(t('admin.dashboard.content_save', 'Save') . ': ' . t('admin.dashboard.seo_guard_title', 'Crawler safety')) . '">' . e(t('admin.dashboard.content_save', 'Save')) . '</button><a href="' . e((string) ($model['admin_settings_urls']['privacy'] ?? url_for('admin_settings'))) . '">' . e(t('admin.dashboard.content_crawler_settings', 'Crawler settings')) . '</a></div></form>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_seo_guard_settings'))
+            . '" class="'
+            . e($className)
+            . ' admin-seo-guard-settings">'
+            . csrf_field();
+    echo
+        '<input type="hidden" name="maintenance_return" value="content"><div class="admin-content-copy"><strong>'
+            . e(t('admin.dashboard.seo_guard_title', 'Crawler safety'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.content_crawler_hint',
+                'Reject suspicious public query strings.',
+            ))
+            . '</span><details class="admin-content-details"><summary>'
+            . e(t('admin.dashboard.content_details', 'Details'))
+            . '</summary><p>'
+            . e(t(
+                'admin.dashboard.seo_guard_hint',
+                'Reject public URLs with unknown query parameters before they render as duplicate gallery pages. Suspicious requests return 404 with X-Robots-Tag: noindex, nofollow.',
+            ))
+            . '</p><small class="muted">'
+            . e($logStatus)
+            . '</small></details></div>';
+    echo
+        '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_enabled" value="1"'
+            . (!empty($status['enabled']) ? ' checked' : '')
+            . '> <span>'
+            . e(t(
+                'admin.dashboard.content_crawler_enabled',
+                'Protection enabled',
+            ))
+            . '</span></label>';
+    echo
+        '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_logging_enabled" value="1"'
+            . (!empty($status['logging_enabled']) ? ' checked' : '')
+            . '> <span>'
+            . e(t(
+                'admin.dashboard.content_crawler_logging',
+                'Sample rejection logs',
+            ))
+            . '</span></label></div>';
+    echo
+        '<div class="admin-content-actions"><button type="submit" class="secondary" aria-label="'
+            . e(
+                t('admin.dashboard.content_save', 'Save') . ': '
+                    . t('admin.dashboard.seo_guard_title', 'Crawler safety'),
+            )
+            . '">'
+            . e(t('admin.dashboard.content_save', 'Save'))
+            . '</button><a href="'
+            . e(
+                (string) (
+                    $model['admin_settings_urls']['privacy'] ?? url_for(
+                        'admin_settings',
+                    )
+                ),
+            )
+            . '">'
+            . e(t(
+                'admin.dashboard.content_crawler_settings',
+                'Crawler settings',
+            ))
+            . '</a></div></form>';
 }
 
 /**
@@ -1249,140 +3157,434 @@ function view_render_admin_dashboard_seo_guard_card(string $className, array $mo
  * @param string $className Card CSS class supplied by the dashboard composer.
  * @return void Emit the dashboard thumbnail maintenance card.
  */
-function view_render_admin_dashboard_thumbnail_card(array $model, string $className): void
-{
+function view_render_admin_dashboard_thumbnail_card(
+    array $model,
+    string $className,
+): void {
     $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
-    $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
-    $compatibilityMode = trim((string) ($model['thumbnail_compatibility_mode'] ?? 'modern'));
+    $missingThumbnailVariants = view_admin_dashboard_int(
+        $model,
+        'missing_thumbnail_variants',
+    );
+    $compatibilityMode = trim(
+        (string) ($model['thumbnail_compatibility_mode'] ?? 'modern'),
+    );
     if (!in_array($compatibilityMode, ['modern', 'legacy'], true)) {
         $compatibilityMode = 'modern';
     }
-    $lastThumbnailCheck = is_array($model['thumbnail_maintenance_last_check'] ?? null) ? $model['thumbnail_maintenance_last_check'] : [];
-    $legacyJpgInventory = is_array($model['thumbnail_legacy_jpg_inventory'] ?? null) ? $model['thumbnail_legacy_jpg_inventory'] : [];
+    $lastThumbnailCheck = is_array(
+        $model['thumbnail_maintenance_last_check'] ?? null,
+    )
+        ? $model['thumbnail_maintenance_last_check']
+        : [];
+    $legacyJpgInventory = is_array(
+        $model['thumbnail_legacy_jpg_inventory'] ?? null,
+    )
+        ? $model['thumbnail_legacy_jpg_inventory']
+        : [];
 
-    echo '<article class="' . e($className) . ' admin-thumbnail-maintenance-card">';
-    echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
+    echo
+        '<article class="'
+            . e($className)
+            . ' admin-thumbnail-maintenance-card">';
+    echo
+        '<strong>'
+            . e(t(
+                'admin.dashboard.thumbnail_maintenance',
+                'Thumbnail maintenance',
+            ))
+            . '</strong>';
     if (!empty($thumbnailSummary['deferred'])) {
-        echo '<span>' . e(t('admin.dashboard.thumbnail_check_deferred', 'Thumbnail status has not been scanned yet on this login. Use Create all thumbnails or the dedicated thumbnail tools when you need a full check.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.dashboard.thumbnail_check_deferred',
+                    'Thumbnail status has not been scanned yet on this login. Use Create all thumbnails or the dedicated thumbnail tools when you need a full check.',
+                ))
+                . '</span>';
     } else {
         $thumbnailScopeText = !empty($thumbnailSummary['full_check'])
-            ? t('admin.dashboard.missing_stale_variants_full_check', 'missing or stale variant(s) in the last full check.')
-            : t('admin.dashboard.missing_stale_variants', 'missing or stale variant(s) in the current sample.');
-        echo '<span>' . (int) $missingThumbnailVariants . ' ' . e($thumbnailScopeText) . '</span>';
+            ? t(
+                'admin.dashboard.missing_stale_variants_full_check',
+                'missing or stale variant(s) in the last full check.',
+            )
+            : t(
+                'admin.dashboard.missing_stale_variants',
+                'missing or stale variant(s) in the current sample.',
+            );
+        echo
+            '<span>'
+                . (int) $missingThumbnailVariants
+                . ' '
+                . e($thumbnailScopeText)
+                . '</span>';
     }
 
     if ($lastThumbnailCheck) {
-        $affectedImages = (int) ($lastThumbnailCheck['images_with_missing'] ?? 0);
-        $affectedGalleries = (int) ($lastThumbnailCheck['affected_gallery_count'] ?? 0);
+        $affectedImages = (int) (
+            $lastThumbnailCheck['images_with_missing'] ?? 0
+        );
+        $affectedGalleries = (int) (
+            $lastThumbnailCheck['affected_gallery_count'] ?? 0
+        );
         $missingVariants = (int) ($lastThumbnailCheck['missing_variants'] ?? 0);
         $checkedAt = (string) ($lastThumbnailCheck['checked_at'] ?? '');
         echo '<div class="admin-thumbnail-check-result">';
-        echo '<span><strong>' . e(t('admin.thumbnails.last_check_title', 'Last full thumbnail check')) . '</strong>' . ($checkedAt !== '' ? ': ' . e($checkedAt) . ' UTC' : '') . '</span>';
-        echo '<span>' . e(t('admin.thumbnails.last_check_summary', 'Checked {images} image(s). {affected_images} image(s) in {galleries} gallery/galleries need {variants} thumbnail variant(s).', [
-            'images' => (string) (int) ($lastThumbnailCheck['images_scanned'] ?? 0),
-            'affected_images' => (string) $affectedImages,
-            'galleries' => (string) $affectedGalleries,
-            'variants' => (string) $missingVariants,
-        ])) . '</span>';
+        echo
+            '<span><strong>'
+                . e(t(
+                    'admin.thumbnails.last_check_title',
+                    'Last full thumbnail check',
+                ))
+                . '</strong>'
+                . ($checkedAt !== '' ? ': ' . e($checkedAt) . ' UTC' : '')
+                . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.thumbnails.last_check_summary',
+                    'Checked {images} image(s). {affected_images} image(s) in {galleries} gallery/galleries need {variants} thumbnail variant(s).',
+                    [
+                        'images' => (string) (int) (
+                            $lastThumbnailCheck['images_scanned'] ?? 0
+                        ),
+                        'affected_images' => (string) $affectedImages,
+                        'galleries' => (string) $affectedGalleries,
+                        'variants' => (string) $missingVariants,
+                    ],
+                ))
+                . '</span>';
         if ((int) ($lastThumbnailCheck['invalid_geometry_detected'] ?? 0) > 0) {
-            echo '<span class="muted">' . e(t('admin.thumbnails.last_check_invalid_geometry', '{count} wrong-ratio thumbnail file(s) were counted as needing regeneration. The check did not delete them.', [
-                'count' => (string) (int) ($lastThumbnailCheck['invalid_geometry_detected'] ?? 0),
-            ])) . '</span>';
+            echo
+                '<span class="muted">'
+                    . e(t(
+                        'admin.thumbnails.last_check_invalid_geometry',
+                        '{count} wrong-ratio thumbnail file(s) were counted as needing regeneration. The check did not delete them.',
+                        [
+                            'count' => (string) (int) (
+                                $lastThumbnailCheck['invalid_geometry_detected']
+                                ?? 0
+                            ),
+                        ],
+                    ))
+                    . '</span>';
         }
-        $affectedGalleryRows = array_values(array_filter((array) ($lastThumbnailCheck['affected_galleries'] ?? []), static fn ($row): bool => is_array($row)));
+        $affectedGalleryRows = array_values(array_filter(
+            (array) ($lastThumbnailCheck['affected_galleries'] ?? []),
+            static fn($row): bool => is_array($row),
+        ));
         if ($affectedGalleryRows !== []) {
-            echo '<details class="admin-thumbnail-check-galleries"><summary>' . e(t('admin.thumbnails.last_check_galleries', 'Affected galleries')) . '</summary><ul>';
+            echo
+                '<details class="admin-thumbnail-check-galleries"><summary>'
+                    . e(t(
+                        'admin.thumbnails.last_check_galleries',
+                        'Affected galleries',
+                    ))
+                    . '</summary><ul>';
             foreach (array_slice($affectedGalleryRows, 0, 10) as $galleryRow) {
                 $galleryLabel = trim((string) ($galleryRow['title'] ?? ''));
                 $folderPath = trim((string) ($galleryRow['folder_path'] ?? ''));
                 if ($folderPath !== '') {
-                    $galleryLabel .= ($galleryLabel !== '' ? ' (' . $folderPath . ')' : $folderPath);
+                    $galleryLabel .= $galleryLabel !== ''
+                        ? ' (' . $folderPath . ')'
+                        : $folderPath;
                 }
                 if ($galleryLabel === '') {
                     $galleryLabel = '#' . (int) ($galleryRow['id'] ?? 0);
                 }
-                echo '<li>' . e(t('admin.thumbnails.last_check_gallery_value', '{gallery}: {images} image(s), {variants} variant(s).', [
-                    'gallery' => $galleryLabel,
-                    'images' => (string) (int) ($galleryRow['images_with_missing'] ?? 0),
-                    'variants' => (string) (int) ($galleryRow['missing_variants'] ?? 0),
-                ])) . '</li>';
+                echo
+                    '<li>'
+                        . e(t(
+                            'admin.thumbnails.last_check_gallery_value',
+                            '{gallery}: {images} image(s), {variants} variant(s).',
+                            [
+                                'gallery' => $galleryLabel,
+                                'images' => (string) (int) (
+                                    $galleryRow['images_with_missing'] ?? 0
+                                ),
+                                'variants' => (string) (int) (
+                                    $galleryRow['missing_variants'] ?? 0
+                                ),
+                            ],
+                        ))
+                        . '</li>';
             }
-            if (count($affectedGalleryRows) > 10 || !empty($lastThumbnailCheck['affected_galleries_truncated'])) {
-                echo '<li>' . e(t('admin.thumbnails.last_check_more_galleries', 'More affected galleries were found; see the admin log for the stored check context.')) . '</li>';
+            if (
+                count($affectedGalleryRows) > 10
+                || !empty($lastThumbnailCheck['affected_galleries_truncated'])
+            ) {
+                echo
+                    '<li>'
+                        . e(t(
+                            'admin.thumbnails.last_check_more_galleries',
+                            'More affected galleries were found; see the admin log for the stored check context.',
+                        ))
+                        . '</li>';
             }
             echo '</ul></details>';
         }
         echo '</div>';
     }
 
-    echo '<details class="admin-media-details"><summary>' . e(t('admin.cache_cleanup.thumbnail_details', 'Compatibility, legacy files and metadata')) . '</summary>';
-    echo '<form method="post" action="' . e(url_for('admin_thumbnail_compatibility_settings')) . '" class="admin-thumbnail-compatibility-form">' . csrf_field();
-    echo '<span class="admin-thumbnail-card-subtitle">' . e(t('admin.thumbnails.compatibility_title', 'Thumbnail compatibility mode')) . '</span>';
-    echo '<label class="admin-compact-toggle"><input type="radio" name="thumbnail_compatibility_mode" value="modern"' . ($compatibilityMode === 'modern' ? ' checked' : '') . '> <span><strong>' . e(t('admin.thumbnails.compatibility_modern_short', 'Modern')) . '</strong> ' . e(t('admin.thumbnails.compatibility_modern_help', 'Generate WebP thumbnails only where the server can write WebP.')) . '</span></label>';
-    echo '<label class="admin-compact-toggle"><input type="radio" name="thumbnail_compatibility_mode" value="legacy"' . ($compatibilityMode === 'legacy' ? ' checked' : '') . '> <span><strong>' . e(t('admin.thumbnails.compatibility_legacy_short', 'Legacy')) . '</strong> ' . e(t('admin.thumbnails.compatibility_legacy_help', 'Generate JPG fallback thumbnails plus WebP thumbnails.')) . '</span></label>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.thumbnails.save_compatibility_mode', 'Save thumbnail mode')) . '</button></form>';
+    echo
+        '<details class="admin-media-details"><summary>'
+            . e(t(
+                'admin.cache_cleanup.thumbnail_details',
+                'Compatibility, legacy files and metadata',
+            ))
+            . '</summary>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_thumbnail_compatibility_settings'))
+            . '" class="admin-thumbnail-compatibility-form">'
+            . csrf_field();
+    echo
+        '<span class="admin-thumbnail-card-subtitle">'
+            . e(t(
+                'admin.thumbnails.compatibility_title',
+                'Thumbnail compatibility mode',
+            ))
+            . '</span>';
+    echo
+        '<label class="admin-compact-toggle"><input type="radio" name="thumbnail_compatibility_mode" value="modern"'
+            . ($compatibilityMode === 'modern' ? ' checked' : '')
+            . '> <span><strong>'
+            . e(t('admin.thumbnails.compatibility_modern_short', 'Modern'))
+            . '</strong> '
+            . e(t(
+                'admin.thumbnails.compatibility_modern_help',
+                'Generate WebP thumbnails only where the server can write WebP.',
+            ))
+            . '</span></label>';
+    echo
+        '<label class="admin-compact-toggle"><input type="radio" name="thumbnail_compatibility_mode" value="legacy"'
+            . ($compatibilityMode === 'legacy' ? ' checked' : '')
+            . '> <span><strong>'
+            . e(t('admin.thumbnails.compatibility_legacy_short', 'Legacy'))
+            . '</strong> '
+            . e(t(
+                'admin.thumbnails.compatibility_legacy_help',
+                'Generate JPG fallback thumbnails plus WebP thumbnails.',
+            ))
+            . '</span></label>';
+    echo
+        '<button type="submit" class="secondary">'
+            . e(t(
+                'admin.thumbnails.save_compatibility_mode',
+                'Save thumbnail mode',
+            ))
+            . '</button></form>';
 
     if (!empty($legacyJpgInventory['available'])) {
-        $legacyVariantCount = max(0, (int) ($legacyJpgInventory['registered_variant_count'] ?? 0));
-        $legacyAffectedImages = max(0, (int) ($legacyJpgInventory['affected_image_count'] ?? 0));
-        $legacyBytes = max(0, (int) ($legacyJpgInventory['registered_bytes'] ?? 0));
-        echo '<div class="admin-thumbnail-check-result" data-legacy-jpg-inventory>';
-        echo '<span><strong>' . e(t('admin.thumbnails.legacy_inventory_title', 'Legacy JPEG thumbnail inventory')) . '</strong></span>';
-        echo '<span data-legacy-jpg-inventory-summary>' . e(t('admin.thumbnails.legacy_inventory_summary', '{variants} registered JPEG variant(s) across {images} image(s), approximately {bytes}.', [
-            'variants' => (string) $legacyVariantCount,
-            'images' => (string) $legacyAffectedImages,
-            'bytes' => format_bytes($legacyBytes),
-        ])) . '</span>';
-        if (!empty($legacyJpgInventory['cleanup_recommended']) && $legacyVariantCount > 0) {
-            echo '<span class="muted" data-legacy-jpg-inventory-recommendation>' . e(t('admin.thumbnails.legacy_inventory_recommendation', 'Modern mode is active. The existing manual cleanup can reclaim approximately this registered JPEG thumbnail space; opening this page does not delete anything.')) . '</span>';
+        $legacyVariantCount = max(
+            0,
+            (int) ($legacyJpgInventory['registered_variant_count'] ?? 0),
+        );
+        $legacyAffectedImages = max(
+            0,
+            (int) ($legacyJpgInventory['affected_image_count'] ?? 0),
+        );
+        $legacyBytes = max(
+            0,
+            (int) ($legacyJpgInventory['registered_bytes'] ?? 0),
+        );
+        echo
+            '<div class="admin-thumbnail-check-result" data-legacy-jpg-inventory>';
+        echo
+            '<span><strong>'
+                . e(t(
+                    'admin.thumbnails.legacy_inventory_title',
+                    'Legacy JPEG thumbnail inventory',
+                ))
+                . '</strong></span>';
+        echo
+            '<span data-legacy-jpg-inventory-summary>'
+                . e(t(
+                    'admin.thumbnails.legacy_inventory_summary',
+                    '{variants} registered JPEG variant(s) across {images} image(s), approximately {bytes}.',
+                    [
+                        'variants' => (string) $legacyVariantCount,
+                        'images' => (string) $legacyAffectedImages,
+                        'bytes' => format_bytes($legacyBytes),
+                    ],
+                ))
+                . '</span>';
+        if (
+            !empty($legacyJpgInventory['cleanup_recommended'])
+            && $legacyVariantCount > 0
+        ) {
+            echo
+                '<span class="muted" data-legacy-jpg-inventory-recommendation>'
+                    . e(t(
+                        'admin.thumbnails.legacy_inventory_recommendation',
+                        'Modern mode is active. The existing manual cleanup can reclaim approximately this registered JPEG thumbnail space; opening this page does not delete anything.',
+                    ))
+                    . '</span>';
         }
         echo '</div>';
     }
 
-    echo '<form method="post" action="' . e(url_for('admin_delete_legacy_jpg_thumbnails')) . '" class="admin-thumbnail-legacy-cleanup-form" data-delete-legacy-jpg-thumbnails-form>' . csrf_field();
-    echo '<span>' . e(t('admin.thumbnails.legacy_cleanup_hint', 'Remove generated JPG thumbnails after switching to Modern mode. Original photos, WebP thumbnails, and DNG display masters are not touched.')) . '</span>';
-    echo '<button type="submit" class="secondary danger" data-delete-legacy-jpg-thumbnails data-confirm-message="' . e(t('admin.thumbnails.legacy_cleanup_confirm', 'Delete generated legacy JPG thumbnails? Original photos and WebP files will be kept.')) . '">' . e(t('admin.thumbnails.delete_legacy_jpg_thumbnails', 'Remove legacy JPG thumbnails')) . '</button>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_delete_legacy_jpg_thumbnails'))
+            . '" class="admin-thumbnail-legacy-cleanup-form" data-delete-legacy-jpg-thumbnails-form>'
+            . csrf_field();
+    echo
+        '<span>'
+            . e(t(
+                'admin.thumbnails.legacy_cleanup_hint',
+                'Remove generated JPG thumbnails after switching to Modern mode. Original photos, WebP thumbnails, and DNG display masters are not touched.',
+            ))
+            . '</span>';
+    echo
+        '<button type="submit" class="secondary danger" data-delete-legacy-jpg-thumbnails data-confirm-message="'
+            . e(t(
+                'admin.thumbnails.legacy_cleanup_confirm',
+                'Delete generated legacy JPG thumbnails? Original photos and WebP files will be kept.',
+            ))
+            . '">'
+            . e(t(
+                'admin.thumbnails.delete_legacy_jpg_thumbnails',
+                'Remove legacy JPG thumbnails',
+            ))
+            . '</button>';
     echo '</form>';
 
-    echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="admin-thumbnail-metadata-actions-form" data-refresh-thumbnail-metadata-form>' . csrf_field();
-    echo '<span>' . e(t('admin.thumbnails.metadata_refresh_hint', 'Refresh the thumbnail database from existing thumbnail files. Wrong-ratio files are deleted and are not displayed.')) . '</span>';
-    echo '<button type="button" class="secondary" data-refresh-thumbnail-metadata>' . e(t('admin.thumbnails.refresh_metadata', 'Refresh thumbnail database')) . '</button>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_create_thumbnails'))
+            . '" class="admin-thumbnail-metadata-actions-form" data-refresh-thumbnail-metadata-form>'
+            . csrf_field();
+    echo
+        '<span>'
+            . e(t(
+                'admin.thumbnails.metadata_refresh_hint',
+                'Refresh the thumbnail database from existing thumbnail files. Wrong-ratio files are deleted and are not displayed.',
+            ))
+            . '</span>';
+    echo
+        '<button type="button" class="secondary" data-refresh-thumbnail-metadata>'
+            . e(t(
+                'admin.thumbnails.refresh_metadata',
+                'Refresh thumbnail database',
+            ))
+            . '</button>';
     echo '</form>';
 
     echo '</details>';
-    echo '<form method="post" action="' . e(url_for('admin_check_thumbnail_maintenance')) . '" class="admin-thumbnail-check-actions-form" data-thumbnail-check-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
-    echo '<span>' . e(t('admin.thumbnails.check_missing_hint', 'Check every imported photo and list galleries that need thumbnail generation. No thumbnails are created.')) . '</span>';
-    echo '<button type="submit" class="secondary" data-check-missing-thumbnails>' . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails')) . '</button>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_check_thumbnail_maintenance'))
+            . '" class="admin-thumbnail-check-actions-form" data-thumbnail-check-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">'
+            . csrf_field();
+    echo
+        '<span>'
+            . e(t(
+                'admin.thumbnails.check_missing_hint',
+                'Check every imported photo and list galleries that need thumbnail generation. No thumbnails are created.',
+            ))
+            . '</span>';
+    echo
+        '<button type="submit" class="secondary" data-check-missing-thumbnails>'
+            . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails'))
+            . '</button>';
     echo '</form>';
 
-    $browserRebuildConfig = is_array($model['browser_thumbnail_rebuild_config'] ?? null)
+    $browserRebuildConfig = is_array(
+        $model['browser_thumbnail_rebuild_config'] ?? null,
+    )
         ? $model['browser_thumbnail_rebuild_config']
         : ['enabled' => false];
-    $browserRebuildJson = json_encode($browserRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $browserRebuildJson = json_encode(
+        $browserRebuildConfig,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($browserRebuildJson)) {
         $browserRebuildJson = '{}';
     }
     $browserRebuildDisabled = empty($browserRebuildConfig['enabled']);
-    $hasUsableThumbnailCheck = !empty($lastThumbnailCheck) && (int) ($lastThumbnailCheck['images_scanned'] ?? 0) > 0;
-    $hasMissingFromLastCheck = $hasUsableThumbnailCheck && (int) ($lastThumbnailCheck['images_with_missing'] ?? 0) > 0;
+    $hasUsableThumbnailCheck =
+        !empty($lastThumbnailCheck)
+        && (int) ($lastThumbnailCheck['images_scanned'] ?? 0) > 0;
+    $hasMissingFromLastCheck =
+        $hasUsableThumbnailCheck
+        && (int) ($lastThumbnailCheck['images_with_missing'] ?? 0) > 0;
     $missingButtonDisabled = !$hasMissingFromLastCheck;
     $missingButtonStatus = $hasUsableThumbnailCheck
-        ? ($hasMissingFromLastCheck
-            ? t('admin.thumbnails.create_missing_ready_hint', 'Targeted repair is ready. Use Create missing thumbnails to process only the images reported by the last full check.')
-            : t('admin.thumbnails.create_missing_none_hint', 'The last full check found no missing or stale thumbnails. Run Check missing thumbnails again after importing or changing files.'))
-        : t('admin.thumbnails.create_missing_requires_check', 'Run Check missing thumbnails first to populate the targeted repair list.');
+        ? (
+            $hasMissingFromLastCheck
+                ? t(
+                    'admin.thumbnails.create_missing_ready_hint',
+                    'Targeted repair is ready. Use Create missing thumbnails to process only the images reported by the last full check.',
+                )
+                : t(
+                    'admin.thumbnails.create_missing_none_hint',
+                    'The last full check found no missing or stale thumbnails. Run Check missing thumbnails again after importing or changing files.',
+                )
+        )
+        : t(
+            'admin.thumbnails.create_missing_requires_check',
+            'Run Check missing thumbnails first to populate the targeted repair list.',
+        );
 
-    echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-thumbnail-maintenance-action-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
-    echo '<label class="admin-compact-toggle browser-thumbnail-rebuild-toggle"><input type="checkbox" name="browser_thumbnail_rebuild" value="1" data-browser-thumbnail-rebuild-toggle data-browser-thumbnail-rebuild-config="' . e($browserRebuildJson) . '"' . ($browserRebuildDisabled ? ' disabled' : ' checked') . '> <span><strong>' . e(t('admin.thumbnails.browser_rebuild_label', 'Browser-side thumbnail rebuild')) . '</strong> ' . e(t('admin.thumbnails.browser_rebuild_help', 'On by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.')) . '</span></label>';
-    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="button" class="secondary" data-create-missing-thumbnails' . ($missingButtonDisabled ? ' disabled' : '') . ' aria-disabled="' . ($missingButtonDisabled ? 'true' : 'false') . '">' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button></div>';
-    echo '<span class="muted" data-create-missing-thumbnails-status>' . e($missingButtonStatus) . '</span></form>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_create_thumbnails'))
+            . '" class="admin-thumbnail-cache-actions-form" data-thumbnail-maintenance-action-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">'
+            . csrf_field();
+    echo
+        '<label class="admin-compact-toggle browser-thumbnail-rebuild-toggle"><input type="checkbox" name="browser_thumbnail_rebuild" value="1" data-browser-thumbnail-rebuild-toggle data-browser-thumbnail-rebuild-config="'
+            . e($browserRebuildJson)
+            . '"'
+            . ($browserRebuildDisabled ? ' disabled' : ' checked')
+            . '> <span><strong>'
+            . e(t(
+                'admin.thumbnails.browser_rebuild_label',
+                'Browser-side thumbnail rebuild',
+            ))
+            . '</strong> '
+            . e(t(
+                'admin.thumbnails.browser_rebuild_help',
+                'On by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.',
+            ))
+            . '</span></label>';
+    echo
+        '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>'
+            . e(t(
+                'admin.dashboard.create_all_thumbnails',
+                'Create all thumbnails',
+            ))
+            . '</button><button type="button" class="secondary" data-create-missing-thumbnails'
+            . ($missingButtonDisabled ? ' disabled' : '')
+            . ' aria-disabled="'
+            . ($missingButtonDisabled ? 'true' : 'false')
+            . '">'
+            . e(t(
+                'admin.thumbnails.create_missing',
+                'Create missing thumbnails',
+            ))
+            . '</button></div>';
+    echo
+        '<span class="muted" data-create-missing-thumbnails-status>'
+            . e($missingButtonStatus)
+            . '</span></form>';
 
-    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>' . csrf_field();
-    echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
-    echo '<div class="nav"><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div></form>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_delete_thumbnails'))
+            . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>'
+            . csrf_field();
+    echo
+        '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
+    echo
+        '<div class="nav"><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">'
+            . e(t(
+                'admin.dashboard.delete_all_thumbnails',
+                'Delete all thumbnails',
+            ))
+            . '</button></div></form>';
     echo '</article>';
 }
-
 
 /**
  * Render the scheduled site-maintenance settings card.
@@ -1391,15 +3593,25 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
  * @param string $className Card CSS classes from the dashboard composer.
  * @return void Emits summarized cron status with settings/diagnostics in native disclosures.
  */
-function view_render_admin_dashboard_site_maintenance_card(array $model, string $className): void
-{
+function view_render_admin_dashboard_site_maintenance_card(
+    array $model,
+    string $className,
+): void {
     $status = view_admin_dashboard_array($model, 'site_maintenance_status');
     $state = is_array($status['state'] ?? null) ? $status['state'] : [];
-    $lastResult = is_array($status['last_result'] ?? null) ? $status['last_result'] : [];
-    $lastSuccess = is_array($status['last_success'] ?? null) ? $status['last_success'] : [];
-    $lastFailure = is_array($status['last_failure'] ?? null) ? $status['last_failure'] : [];
+    $lastResult = is_array($status['last_result'] ?? null)
+        ? $status['last_result']
+        : [];
+    $lastSuccess = is_array($status['last_success'] ?? null)
+        ? $status['last_success']
+        : [];
+    $lastFailure = is_array($status['last_failure'] ?? null)
+        ? $status['last_failure']
+        : [];
     $totals = is_array($state['totals'] ?? null) ? $state['totals'] : [];
-    $lastStep = is_array($state['last_step_summary'] ?? null) ? $state['last_step_summary'] : [];
+    $lastStep = is_array($state['last_step_summary'] ?? null)
+        ? $state['last_step_summary']
+        : [];
     $enabled = !empty($status['enabled']);
     $requestTriggerEnabled = !empty($status['request_trigger_enabled']);
     $requestTriggerSupported = !empty($status['request_trigger_supported']);
@@ -1416,141 +3628,460 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
     $lastCompletedAt = (string) ($status['last_completed_at'] ?? '');
     $lastCompletedDate = (string) ($status['last_completed_date'] ?? '');
     $lastStepAt = (string) ($state['last_step_at'] ?? '');
-    $errors = array_values(array_filter(array_map('strval', (array) ($totals['errors'] ?? []))));
+    $errors = array_values(array_filter(array_map(
+        'strval',
+        (array) ($totals['errors'] ?? []),
+    )));
 
     echo '<article class="' . e($className) . ' admin-site-maintenance-card">';
-    echo '<strong>' . e(t('admin.site_maintenance.title', 'Scheduled site maintenance')) . '</strong>';
-    echo '<p class="admin-site-maintenance-copy">' . e(t('admin.site_maintenance.hint', 'Daily maintenance scans the whole gallery after the configured UTC time. Valid thumbnails are reused. Only missing, stale, wrong-ratio, or metadata-missing variants are repaired. Admin log archiving is managed separately from the Admin Logs page.')) . '</p>';
+    echo
+        '<strong>'
+            . e(t('admin.site_maintenance.title', 'Scheduled site maintenance'))
+            . '</strong>';
+    echo
+        '<p class="admin-site-maintenance-copy">'
+            . e(t(
+                'admin.site_maintenance.hint',
+                'Daily maintenance scans the whole gallery after the configured UTC time. Valid thumbnails are reused. Only missing, stale, wrong-ratio, or metadata-missing variants are repaired. Admin log archiving is managed separately from the Admin Logs page.',
+            ))
+            . '</p>';
 
-    echo '<details class="admin-media-details"><summary>' . e(t('admin.cache_cleanup.schedule_details', 'Schedule, results and diagnostics')) . '</summary>';
+    echo
+        '<details class="admin-media-details"><summary>'
+            . e(t(
+                'admin.cache_cleanup.schedule_details',
+                'Schedule, results and diagnostics',
+            ))
+            . '</summary>';
 
     if ($stateStatus !== '') {
-        echo '<div class="admin-site-maintenance-statusline"><strong>' . e(t('admin.site_maintenance.current_state', 'Current state')) . ':</strong> <span>' . e($stateStatus) . ($phase !== '' ? ' / ' . e($phase) : '') . '</span></div>';
+        echo
+            '<div class="admin-site-maintenance-statusline"><strong>'
+                . e(t('admin.site_maintenance.current_state', 'Current state'))
+                . ':</strong> <span>'
+                . e($stateStatus)
+                . ($phase !== '' ? ' / ' . e($phase) : '')
+                . '</span></div>';
         echo '<dl class="admin-site-maintenance-metrics">';
-        echo '<div><dt>' . e(t('admin.site_maintenance.metric_checked', 'Checked')) . '</dt><dd>' . e((string) (int) ($totals['images_seen'] ?? 0)) . ' / ' . e($totalSourceImages > 0 ? (string) $totalSourceImages : '?') . '</dd></div>';
-        echo '<div><dt>' . e(t('admin.site_maintenance.metric_repair_attempts', 'Repair attempts')) . '</dt><dd>' . e((string) (int) ($totals['images_processed'] ?? 0)) . '</dd></div>';
-        echo '<div><dt>' . e(t('admin.site_maintenance.metric_created', 'Created')) . '</dt><dd>' . e((string) (int) ($totals['thumbs_created'] ?? 0)) . '</dd></div>';
-        echo '<div><dt>' . e(t('admin.site_maintenance.metric_invalid_removed', 'Invalid removed')) . '</dt><dd>' . e((string) (int) ($totals['invalid_geometry_deleted'] ?? 0)) . '</dd></div>';
-        echo '<div><dt>' . e(t('admin.site_maintenance.metric_deferred', 'Deferred')) . '</dt><dd>' . e((string) (int) ($totals['images_deferred'] ?? 0)) . '</dd></div>';
-        echo '<div><dt>' . e(t('admin.site_maintenance.metric_failed', 'Failed')) . '</dt><dd>' . e((string) (int) ($totals['failed'] ?? 0)) . '</dd></div>';
+        echo
+            '<div><dt>'
+                . e(t('admin.site_maintenance.metric_checked', 'Checked'))
+                . '</dt><dd>'
+                . e((string) (int) ($totals['images_seen'] ?? 0))
+                . ' / '
+                . e($totalSourceImages > 0 ? (string) $totalSourceImages : '?')
+                . '</dd></div>';
+        echo
+            '<div><dt>'
+                . e(t(
+                    'admin.site_maintenance.metric_repair_attempts',
+                    'Repair attempts',
+                ))
+                . '</dt><dd>'
+                . e((string) (int) ($totals['images_processed'] ?? 0))
+                . '</dd></div>';
+        echo
+            '<div><dt>'
+                . e(t('admin.site_maintenance.metric_created', 'Created'))
+                . '</dt><dd>'
+                . e((string) (int) ($totals['thumbs_created'] ?? 0))
+                . '</dd></div>';
+        echo
+            '<div><dt>'
+                . e(t(
+                    'admin.site_maintenance.metric_invalid_removed',
+                    'Invalid removed',
+                ))
+                . '</dt><dd>'
+                . e((string) (int) ($totals['invalid_geometry_deleted'] ?? 0))
+                . '</dd></div>';
+        echo
+            '<div><dt>'
+                . e(t('admin.site_maintenance.metric_deferred', 'Deferred'))
+                . '</dt><dd>'
+                . e((string) (int) ($totals['images_deferred'] ?? 0))
+                . '</dd></div>';
+        echo
+            '<div><dt>'
+                . e(t('admin.site_maintenance.metric_failed', 'Failed'))
+                . '</dt><dd>'
+                . e((string) (int) ($totals['failed'] ?? 0))
+                . '</dd></div>';
         echo '</dl>';
         if ($lastStepAt !== '') {
-            echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.last_step', 'Last safe slice: {time}, checked {checked}, repair attempts {repairs}, created {created}, deferred {deferred}.', [
-                'time' => $lastStepAt . ' UTC',
-                'checked' => (string) (int) ($lastStep['images_checked'] ?? 0),
-                'repairs' => (string) (int) ($lastStep['repair_attempts'] ?? 0),
-                'created' => (string) (int) ($lastStep['thumbnails_created'] ?? 0),
-                'deferred' => (string) (int) ($lastStep['deferred_images'] ?? 0),
-            ])) . '</span>';
+            echo
+                '<span class="admin-site-maintenance-note">'
+                    . e(t(
+                        'admin.site_maintenance.last_step',
+                        'Last safe slice: {time}, checked {checked}, repair attempts {repairs}, created {created}, deferred {deferred}.',
+                        [
+                            'time' => $lastStepAt . ' UTC',
+                            'checked' => (string) (int) (
+                                $lastStep['images_checked'] ?? 0
+                            ),
+                            'repairs' => (string) (int) (
+                                $lastStep['repair_attempts'] ?? 0
+                            ),
+                            'created' => (string) (int) (
+                                $lastStep['thumbnails_created'] ?? 0
+                            ),
+                            'deferred' => (string) (int) (
+                                $lastStep['deferred_images'] ?? 0
+                            ),
+                        ],
+                    ))
+                    . '</span>';
         }
         if ($errors !== []) {
-            echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.last_diagnostic', 'Latest diagnostic: {message}', ['message' => (string) end($errors)])) . '</span>';
+            echo
+                '<span class="admin-site-maintenance-note is-warning">'
+                    . e(t(
+                        'admin.site_maintenance.last_diagnostic',
+                        'Latest diagnostic: {message}',
+                        ['message' => (string) end($errors)],
+                    ))
+                    . '</span>';
         }
     } elseif ($lastCompletedAt !== '') {
-        echo '<span><strong>' . e(t('admin.site_maintenance.last_completed', 'Last completed')) . ':</strong> ' . e($lastCompletedAt) . ' UTC</span>';
+        echo
+            '<span><strong>'
+                . e(t(
+                    'admin.site_maintenance.last_completed',
+                    'Last completed',
+                ))
+                . ':</strong> '
+                . e($lastCompletedAt)
+                . ' UTC</span>';
     } else {
-        echo '<span>' . e(t('admin.site_maintenance.not_run_yet', 'No maintenance cycle has completed yet.')) . '</span>';
+        echo
+            '<span>'
+                . e(t(
+                    'admin.site_maintenance.not_run_yet',
+                    'No maintenance cycle has completed yet.',
+                ))
+                . '</span>';
     }
 
     if ($lastCompletedDate !== '') {
-        echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.last_completed_date', 'Last scheduled UTC date: {date}', ['date' => $lastCompletedDate])) . '</span>';
+        echo
+            '<span class="admin-site-maintenance-note">'
+                . e(t(
+                    'admin.site_maintenance.last_completed_date',
+                    'Last scheduled UTC date: {date}',
+                    ['date' => $lastCompletedDate],
+                ))
+                . '</span>';
     }
 
     if (!empty($lastSuccess)) {
         $successAt = (string) ($lastSuccess['occurred_at'] ?? '');
         $successDurationMs = max(0, (int) ($lastSuccess['duration_ms'] ?? 0));
-        echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.last_success_summary', 'Most recent successful maintenance: {time} UTC, duration {duration} ms.', [
-            'time' => $successAt !== '' ? $successAt : '?',
-            'duration' => (string) $successDurationMs,
-        ])) . '</span>';
+        echo
+            '<span class="admin-site-maintenance-note">'
+                . e(t(
+                    'admin.site_maintenance.last_success_summary',
+                    'Most recent successful maintenance: {time} UTC, duration {duration} ms.',
+                    [
+                        'time' => $successAt !== '' ? $successAt : '?',
+                        'duration' => (string) $successDurationMs,
+                    ],
+                ))
+                . '</span>';
     }
 
     if (!empty($lastFailure)) {
-        echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.last_failure_summary', 'Most recent maintenance failure: {time} UTC, operation {operation}, code {code}, class {class}.', [
-            'time' => (string) ($lastFailure['occurred_at'] ?? '?'),
-            'operation' => (string) ($lastFailure['operation'] ?? 'maintenance'),
-            'code' => (string) ($lastFailure['error_code'] ?? 'unknown'),
-            'class' => (string) ($lastFailure['exception_class'] ?? 'unknown'),
-        ])) . '</span>';
+        echo
+            '<span class="admin-site-maintenance-note is-warning">'
+                . e(t(
+                    'admin.site_maintenance.last_failure_summary',
+                    'Most recent maintenance failure: {time} UTC, operation {operation}, code {code}, class {class}.',
+                    [
+                        'time' => (string) ($lastFailure['occurred_at'] ?? '?'),
+                        'operation' => (string) (
+                            $lastFailure['operation'] ?? 'maintenance'
+                        ),
+                        'code' => (string) (
+                            $lastFailure['error_code'] ?? 'unknown'
+                        ),
+                        'class' => (string) (
+                            $lastFailure['exception_class'] ?? 'unknown'
+                        ),
+                    ],
+                ))
+                . '</span>';
     }
 
     if (!empty($lastResult['busy'])) {
-        echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.last_busy', 'The last maintenance call found another invocation already running.')) . '</span>';
+        echo
+            '<span class="admin-site-maintenance-note is-warning">'
+                . e(t(
+                    'admin.site_maintenance.last_busy',
+                    'The last maintenance call found another invocation already running.',
+                ))
+                . '</span>';
     }
 
     if ($requestTriggerEnabled && !$requestTriggerSupported) {
-        echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.request_trigger_unsupported', 'This PHP runtime cannot detach background work from a visible page response, so request-triggered maintenance is suppressed to protect gallery latency. Use hosting cron or Run one safe check now instead.')) . '</span>';
+        echo
+            '<span class="admin-site-maintenance-note is-warning">'
+                . e(t(
+                    'admin.site_maintenance.request_trigger_unsupported',
+                    'This PHP runtime cannot detach background work from a visible page response, so request-triggered maintenance is suppressed to protect gallery latency. Use hosting cron or Run one safe check now instead.',
+                ))
+                . '</span>';
     }
 
     if ($scheduledAtUtc !== '' && $windowEndsAtUtc !== '') {
-        echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.window_summary', 'Active UTC window: {start} to {end}. Current window state: {state}.', [
-            'start' => $scheduledAtUtc,
-            'end' => $windowEndsAtUtc,
-            'state' => $withinWindow ? t('admin.site_maintenance.window_active', 'active') : t('admin.site_maintenance.window_inactive', 'inactive'),
-        ])) . '</span>';
+        echo
+            '<span class="admin-site-maintenance-note">'
+                . e(t(
+                    'admin.site_maintenance.window_summary',
+                    'Active UTC window: {start} to {end}. Current window state: {state}.',
+                    [
+                        'start' => $scheduledAtUtc,
+                        'end' => $windowEndsAtUtc,
+                        'state' => $withinWindow
+                            ? t(
+                                'admin.site_maintenance.window_active',
+                                'active',
+                            )
+                            : t(
+                                'admin.site_maintenance.window_inactive',
+                                'inactive',
+                            ),
+                    ],
+                ))
+                . '</span>';
     }
 
-    echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" class="admin-site-maintenance-settings-form">' . csrf_field();
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_site_maintenance_settings'))
+            . '" class="admin-site-maintenance-settings-form">'
+            . csrf_field();
     echo '<input type="hidden" name="site_maintenance_action" value="save">';
-    echo '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_enabled" value="1"' . ($enabled ? ' checked' : '') . '> <span>' . e(t('admin.site_maintenance.enabled', 'Enable scheduled maintenance')) . '</span></label>';
-    echo '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_request_trigger_enabled" value="1"' . ($requestTriggerEnabled ? ' checked' : '') . '> <span>' . e(t('admin.site_maintenance.request_trigger_enabled', 'Let Admin dashboard requests trigger due maintenance')) . '</span></label>';
-    echo '<label><span>' . e(t('admin.site_maintenance.utc_time', 'Start time, UTC')) . '</span><input type="time" name="site_maintenance_utc_time" value="' . e($utcTime) . '"></label>';
-    echo '<label><span>' . e(t('admin.site_maintenance.window_hours', 'Overall maintenance window, hours')) . '</span><input type="number" name="site_maintenance_window_hours" min="0.25" max="24" step="0.25" value="' . e($windowHours) . '"></label>';
-    echo '<label><span>' . e(t('admin.site_maintenance.batch_size', 'Max images checked per internal batch')) . '</span><input type="number" name="site_maintenance_batch_size" min="1" max="50" value="' . $batchSize . '"></label>';
-    echo '<label><span>' . e(t('admin.site_maintenance.time_budget', 'Time budget per call, seconds')) . '</span><input type="number" name="site_maintenance_time_budget_seconds" min="3" max="120" value="' . $timeBudget . '"></label>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.site_maintenance.save', 'Save maintenance settings')) . '</button>';
+    echo
+        '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_enabled" value="1"'
+            . ($enabled ? ' checked' : '')
+            . '> <span>'
+            . e(t(
+                'admin.site_maintenance.enabled',
+                'Enable scheduled maintenance',
+            ))
+            . '</span></label>';
+    echo
+        '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_request_trigger_enabled" value="1"'
+            . ($requestTriggerEnabled ? ' checked' : '')
+            . '> <span>'
+            . e(t(
+                'admin.site_maintenance.request_trigger_enabled',
+                'Let Admin dashboard requests trigger due maintenance',
+            ))
+            . '</span></label>';
+    echo
+        '<label><span>'
+            . e(t('admin.site_maintenance.utc_time', 'Start time, UTC'))
+            . '</span><input type="time" name="site_maintenance_utc_time" value="'
+            . e($utcTime)
+            . '"></label>';
+    echo
+        '<label><span>'
+            . e(t(
+                'admin.site_maintenance.window_hours',
+                'Overall maintenance window, hours',
+            ))
+            . '</span><input type="number" name="site_maintenance_window_hours" min="0.25" max="24" step="0.25" value="'
+            . e($windowHours)
+            . '"></label>';
+    echo
+        '<label><span>'
+            . e(t(
+                'admin.site_maintenance.batch_size',
+                'Max images checked per internal batch',
+            ))
+            . '</span><input type="number" name="site_maintenance_batch_size" min="1" max="50" value="'
+            . $batchSize
+            . '"></label>';
+    echo
+        '<label><span>'
+            . e(t(
+                'admin.site_maintenance.time_budget',
+                'Time budget per call, seconds',
+            ))
+            . '</span><input type="number" name="site_maintenance_time_budget_seconds" min="3" max="120" value="'
+            . $timeBudget
+            . '"></label>';
+    echo
+        '<button type="submit" class="secondary">'
+            . e(t('admin.site_maintenance.save', 'Save maintenance settings'))
+            . '</button>';
     echo '</form>';
 
     echo '<div class="admin-site-maintenance-cron">';
-    echo '<span><strong>' . e(t('admin.site_maintenance.automatic_trigger', 'Automatic trigger')) . '</strong></span>';
-    echo '<span>' . e(t('admin.site_maintenance.automatic_trigger_hint', 'When a normal public or Admin page is opened during the configured UTC window, the site starts one safe slice after the page response and then queues the next safe slice directly. Chained slices continue until the cycle finishes or the UTC window ends.')) . '</span>';
-    echo '<span>' . e(t('admin.site_maintenance.external_cron_hint', 'For completely unattended execution on a site with no traffic, use the CLI command from hosting cron: {command}', [
-        'command' => 'php ' . dirname(dirname(__DIR__)) . '/scripts/site_maintenance.php --quiet',
-    ])) . '</span>';
+    echo
+        '<span><strong>'
+            . e(t(
+                'admin.site_maintenance.automatic_trigger',
+                'Automatic trigger',
+            ))
+            . '</strong></span>';
+    echo
+        '<span>'
+            . e(t(
+                'admin.site_maintenance.automatic_trigger_hint',
+                'When a normal public or Admin page is opened during the configured UTC window, the site starts one safe slice after the page response and then queues the next safe slice directly. Chained slices continue until the cycle finishes or the UTC window ends.',
+            ))
+            . '</span>';
+    echo
+        '<span>'
+            . e(t(
+                'admin.site_maintenance.external_cron_hint',
+                'For completely unattended execution on a site with no traffic, use the CLI command from hosting cron: {command}',
+                [
+                    'command' =>
+                        'php '
+                            . dirname(dirname(__DIR__))
+                            . '/scripts/site_maintenance.php --quiet',
+                ],
+            ))
+            . '</span>';
     echo '</div>';
 
     echo '</details>';
 
-    echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" class="admin-site-maintenance-actions">' . csrf_field();
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_site_maintenance_settings'))
+            . '" class="admin-site-maintenance-actions">'
+            . csrf_field();
     echo '<div class="nav">';
-    echo '<button type="submit" name="site_maintenance_action" value="run_now" class="secondary">' . e(t('admin.site_maintenance.run_now', 'Run one safe check now')) . '</button>';
-    echo '<button type="submit" name="site_maintenance_action" value="reset_state" class="secondary">' . e(t('admin.site_maintenance.reset_state', 'Reset interrupted state')) . '</button>';
-    echo '<button type="submit" name="site_maintenance_action" value="rotate_token" class="secondary danger" onclick="return confirm(' . e(json_encode(t('admin.site_maintenance.rotate_confirm', 'Rotate the hidden web-cron token? Existing external web cron URLs will stop working until updated.'), JSON_UNESCAPED_UNICODE)) . ');">' . e(t('admin.site_maintenance.rotate_token', 'Rotate hidden web-cron token')) . '</button>';
+    echo
+        '<button type="submit" name="site_maintenance_action" value="run_now" class="secondary">'
+            . e(t('admin.site_maintenance.run_now', 'Run one safe check now'))
+            . '</button>';
+    echo
+        '<button type="submit" name="site_maintenance_action" value="reset_state" class="secondary">'
+            . e(t(
+                'admin.site_maintenance.reset_state',
+                'Reset interrupted state',
+            ))
+            . '</button>';
+    echo
+        '<button type="submit" name="site_maintenance_action" value="rotate_token" class="secondary danger" onclick="return confirm('
+            . e(json_encode(
+                t(
+                    'admin.site_maintenance.rotate_confirm',
+                    'Rotate the hidden web-cron token? Existing external web cron URLs will stop working until updated.',
+                ),
+                JSON_UNESCAPED_UNICODE,
+            ))
+            . ');">'
+            . e(t(
+                'admin.site_maintenance.rotate_token',
+                'Rotate hidden web-cron token',
+            ))
+            . '</button>';
     echo '</div>';
     echo '</form>';
-    echo '<div class="nav"><a class="button secondary" href="' . e((string) ($model['admin_settings_urls']['privacy'] ?? url_for('admin_settings'))) . '">' . e(t('admin.settings.open_centralized', 'Open centralized settings')) . '</a></div>';
+    echo
+        '<div class="nav"><a class="button secondary" href="'
+            . e(
+                (string) (
+                    $model['admin_settings_urls']['privacy'] ?? url_for(
+                        'admin_settings',
+                    )
+                ),
+            )
+            . '">'
+            . e(t(
+                'admin.settings.open_centralized',
+                'Open centralized settings',
+            ))
+            . '</a></div>';
 
     echo '</article>';
 }
-
 
 /**
  * Render the complete gallery archive card.
  *
  * @param string $className Class name value.
+ * @return void Outputs the gallery archive download card.
  */
 function view_render_admin_dashboard_archive_card(string $className): void
 {
-    echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_archive', 'Gallery archive')) . '</strong><span>' . e(t('admin.dashboard.gallery_archive_hint', 'Download a complete ZIP archive through the existing route.')) . '</span><a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a></article>';
+    echo
+        '<article class="'
+            . e($className)
+            . '"><strong>'
+            . e(t('admin.dashboard.gallery_archive', 'Gallery archive'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.gallery_archive_hint',
+                'Download a complete ZIP archive through the existing route.',
+            ))
+            . '</span><a class="button secondary" href="'
+            . e(url_for('download_all'))
+            . '">'
+            . e(t(
+                'admin.dashboard.download_all_galleries',
+                'Download all galleries',
+            ))
+            . '</a></article>';
 }
 
 /**
  * Render the media renamer shortcut card.
  *
  * @param string $className Class name value.
+ * @return void Outputs the media-renamer shortcut card.
  */
 function view_render_admin_dashboard_media_renamer_card(string $className): void
 {
-    echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.media_renamer_title', 'Media renamer')) . '</strong><span>' . e(t('admin.dashboard.media_renamer_hint', 'Preview and apply physical filename cleanup while keeping database rows and generated derivatives aligned.')) . '</span><a class="button secondary" href="' . e(url_for('admin_media_renamer')) . '">' . e(t('admin.dashboard.open_media_renamer', 'Open media renamer')) . '</a></article>';
+    echo
+        '<article class="'
+            . e($className)
+            . '"><strong>'
+            . e(t('admin.dashboard.media_renamer_title', 'Media renamer'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.media_renamer_hint',
+                'Preview and apply physical filename cleanup while keeping database rows and generated derivatives aligned.',
+            ))
+            . '</span><a class="button secondary" href="'
+            . e(url_for('admin_media_renamer'))
+            . '">'
+            . e(t('admin.dashboard.open_media_renamer', 'Open media renamer'))
+            . '</a></article>';
 }
 
 /**
  * Render the pending database migration card.
  *
  * @param string $className Class name value.
+ * @return void Outputs the pending migration form and CSRF field.
  */
 function view_render_admin_dashboard_migration_card(string $className): void
 {
-    echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="' . e($className) . ' is-attention">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.database_migrations', 'Database migrations')) . '</strong><span>' . e(t('admin.dashboard.pending_migrations_hint', 'Pending migrations must be applied before every admin feature is fully available.')) . '</span><button type="submit" class="button is-update-pending">' . e(t('admin.dashboard.run_database_migration', 'Run database migration')) . '</button></form>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_run_migrations'))
+            . '" class="'
+            . e($className)
+            . ' is-attention">'
+            . csrf_field();
+    echo
+        '<strong>'
+            . e(t('admin.dashboard.database_migrations', 'Database migrations'))
+            . '</strong><span>'
+            . e(t(
+                'admin.dashboard.pending_migrations_hint',
+                'Pending migrations must be applied before every admin feature is fully available.',
+            ))
+            . '</span><button type="submit" class="button is-update-pending">'
+            . e(t(
+                'admin.dashboard.run_database_migration',
+                'Run database migration',
+            ))
+            . '</button></form>';
 }

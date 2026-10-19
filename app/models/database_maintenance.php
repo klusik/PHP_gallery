@@ -67,20 +67,93 @@ function database_maintenance_model_schema_inventory_rows(string $databaseName):
     return $result;
 }
 
-/** Compile one deterministic orphan cleanup rule. */
-function database_maintenance_model_orphan_rule(string $key, string $table, string $column, string $parent, string $parentColumn, string $reason, array $identityColumns): array
-{
+/** Compile one deterministic orphan cleanup rule.
+ * @param string $key Stable cleanup rule identifier.
+ * @param string $table Validated child table name.
+ * @param string $column Child reference column.
+ * @param string $parent Validated parent table name.
+ * @param string $parentColumn Referenced parent column.
+ * @param string $reason Safe cleanup audit reason.
+ * @param list<string> $identityColumns Columns uniquely identifying candidate rows.
+ * @return array{
+ *     key:string,
+ *     table_name:string,
+ *     category:string,
+ *     confidence:string,
+ *     reason:string,
+ *     count_sql:string,
+ *     identifiers_sql:string,
+ *     delete_sql:string,
+ *     identifier_columns:list<string>,
+ *     parameters:array<int|string,int|float|string|null>,
+ *     automatic:bool,
+ *     filesystem_effects:false
+ * } Compiled orphan cleanup rule.
+ */
+function database_maintenance_model_orphan_rule(
+    string $key,
+    string $table,
+    string $column,
+    string $parent,
+    string $parentColumn,
+    string $reason,
+    array $identityColumns,
+): array {
     $quotedTable = database_maintenance_model_quote_identifier($table);
     $quotedColumn = database_maintenance_model_quote_identifier($column);
     $quotedParent = database_maintenance_model_quote_identifier($parent);
-    $quotedParentColumn = database_maintenance_model_quote_identifier($parentColumn);
-    $predicate = $quotedTable . '.' . $quotedColumn . ' IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ' . $quotedParent . ' p WHERE p.' . $quotedParentColumn . ' = ' . $quotedTable . '.' . $quotedColumn . ')';
-    return database_maintenance_model_predicate_rule($key, $table, 'orphaned_rows', 'high', $reason, $predicate, $identityColumns);
+    $quotedParentColumn =
+        database_maintenance_model_quote_identifier($parentColumn);
+    $predicate =
+        $quotedTable
+        . '.'
+        . $quotedColumn
+        . ' IS NOT NULL AND NOT EXISTS (SELECT 1 FROM '
+        . $quotedParent
+        . ' p WHERE p.'
+        . $quotedParentColumn
+        . ' = '
+        . $quotedTable
+        . '.'
+        . $quotedColumn
+        . ')';
+    return database_maintenance_model_predicate_rule(
+        $key,
+        $table,
+        'orphaned_rows',
+        'high',
+        $reason,
+        $predicate,
+        $identityColumns,
+    );
 }
 
-/** Compile one known expiry cleanup rule without accepting raw SQL from services. */
-function database_maintenance_model_expiry_rule(string $key, string $table, string $reason, array $identityColumns): array
-{
+/** Compile one known expiry cleanup rule without accepting raw SQL from services.
+ * @param string $key Supported expiry rule identifier.
+ * @param string $table Validated table name.
+ * @param string $reason Safe cleanup audit reason.
+ * @param list<string> $identityColumns Columns uniquely identifying candidate rows.
+ * @return array{
+ *     key:string,
+ *     table_name:string,
+ *     category:string,
+ *     confidence:string,
+ *     reason:string,
+ *     count_sql:string,
+ *     identifiers_sql:string,
+ *     delete_sql:string,
+ *     identifier_columns:list<string>,
+ *     parameters:array<int|string,int|float|string|null>,
+ *     automatic:bool,
+ *     filesystem_effects:false
+ * } Compiled known expiry cleanup rule.
+ */
+function database_maintenance_model_expiry_rule(
+    string $key,
+    string $table,
+    string $reason,
+    array $identityColumns,
+): array {
     $predicates = [
         'expired_admin_remember_tokens' => '(expires_at < NOW() OR revoked_at IS NOT NULL)',
         'expired_password_reset_tokens' => '(expires_at < NOW() OR used_at IS NOT NULL)',
@@ -88,16 +161,58 @@ function database_maintenance_model_expiry_rule(string $key, string $table, stri
         'expired_auth_rate_limits' => 'last_attempt_at < DATE_SUB(NOW(), INTERVAL 1 DAY) AND (locked_until IS NULL OR locked_until < NOW())',
     ];
     if (!isset($predicates[$key])) {
-        throw new RuntimeException('Unsupported database maintenance expiry rule.');
+        throw new RuntimeException(
+            'Unsupported database maintenance expiry rule.',
+        );
     }
-    return database_maintenance_model_predicate_rule($key, $table, 'expired_temporary_state', 'high', $reason, $predicates[$key], $identityColumns);
+    return database_maintenance_model_predicate_rule(
+        $key,
+        $table,
+        'expired_temporary_state',
+        'high',
+        $reason,
+        $predicates[$key],
+        $identityColumns,
+    );
 }
 
-/** Compile one predicate-based cleanup rule inside the persistence layer. */
-function database_maintenance_model_predicate_rule(string $key, string $table, string $category, string $confidence, string $reason, string $predicate, array $identityColumns): array
-{
+/** Compile one predicate-based cleanup rule inside the persistence layer.
+ * @param string $key Stable cleanup rule identifier.
+ * @param string $table Validated table name.
+ * @param string $category Safe cleanup category.
+ * @param string $confidence Rule confidence; only high-confidence rules are automatic.
+ * @param string $reason Safe cleanup audit reason.
+ * @param string $predicate Internally constructed SQL predicate.
+ * @param list<string> $identityColumns Columns uniquely identifying candidate rows.
+ * @return array{
+ *     key:string,
+ *     table_name:string,
+ *     category:string,
+ *     confidence:string,
+ *     reason:string,
+ *     count_sql:string,
+ *     identifiers_sql:string,
+ *     delete_sql:string,
+ *     identifier_columns:list<string>,
+ *     parameters:array<int|string,int|float|string|null>,
+ *     automatic:bool,
+ *     filesystem_effects:false
+ * } Compiled bounded cleanup rule.
+ */
+function database_maintenance_model_predicate_rule(
+    string $key,
+    string $table,
+    string $category,
+    string $confidence,
+    string $reason,
+    string $predicate,
+    array $identityColumns,
+): array {
     $quotedTable = database_maintenance_model_quote_identifier($table);
-    $quotedIdentity = array_map(__NAMESPACE__ . '\\database_maintenance_model_quote_identifier', $identityColumns);
+    $quotedIdentity = array_map(
+        __NAMESPACE__ . '\\database_maintenance_model_quote_identifier',
+        $identityColumns,
+    );
     $identitySelect = implode(', ', $quotedIdentity);
     $identityOrder = implode(', ', $quotedIdentity);
     $automatic = $confidence === 'high' && $identityColumns !== [];
@@ -107,9 +222,28 @@ function database_maintenance_model_predicate_rule(string $key, string $table, s
         'category' => $category,
         'confidence' => $automatic ? $confidence : 'report_only',
         'reason' => $reason,
-        'count_sql' => 'SELECT COUNT(*) FROM ' . $quotedTable . ' WHERE ' . $predicate,
-        'identifiers_sql' => $automatic ? 'SELECT ' . $identitySelect . ' FROM ' . $quotedTable . ' WHERE ' . $predicate . ' ORDER BY ' . $identityOrder . ' LIMIT :batch_size' : '',
-        'delete_sql' => $automatic ? 'DELETE FROM ' . $quotedTable . ' WHERE ' . $predicate . ' ORDER BY ' . $identityOrder . ' LIMIT :batch_size' : '',
+        'count_sql' =>
+            'SELECT COUNT(*) FROM ' . $quotedTable . ' WHERE ' . $predicate,
+        'identifiers_sql' => $automatic
+            ? 'SELECT '
+            . $identitySelect
+            . ' FROM '
+            . $quotedTable
+            . ' WHERE '
+            . $predicate
+            . ' ORDER BY '
+            . $identityOrder
+            . ' LIMIT :batch_size'
+            : '',
+        'delete_sql' => $automatic
+            ? 'DELETE FROM '
+            . $quotedTable
+            . ' WHERE '
+            . $predicate
+            . ' ORDER BY '
+            . $identityOrder
+            . ' LIMIT :batch_size'
+            : '',
         'identifier_columns' => array_values($identityColumns),
         'parameters' => [],
         'automatic' => $automatic,
@@ -117,17 +251,77 @@ function database_maintenance_model_predicate_rule(string $key, string $table, s
     ];
 }
 
-/** Compile one deterministic duplicate cleanup rule. */
-function database_maintenance_model_duplicate_rule(string $key, string $table, string $idColumn, array $identityColumns, string $reason): array
-{
+/** Compile one deterministic duplicate cleanup rule.
+ * @param string $key Stable cleanup rule identifier.
+ * @param string $table Validated table name.
+ * @param string $idColumn Validated primary identifier column.
+ * @param list<string> $identityColumns Columns defining logical duplicates.
+ * @param string $reason Safe cleanup audit reason.
+ * @return array{
+ *     key:string,
+ *     table_name:string,
+ *     category:string,
+ *     confidence:string,
+ *     reason:string,
+ *     count_sql:string,
+ *     identifiers_sql:string,
+ *     delete_sql:string,
+ *     identifier_columns:list<string>,
+ *     parameters:array<int|string,int|float|string|null>,
+ *     automatic:true,
+ *     filesystem_effects:false,
+ *     survivor_rule:string
+ * } Duplicate cleanup rule retaining the lowest identifier.
+ */
+function database_maintenance_model_duplicate_rule(
+    string $key,
+    string $table,
+    string $idColumn,
+    array $identityColumns,
+    string $reason,
+): array {
     $quotedTable = database_maintenance_model_quote_identifier($table);
     $quotedId = database_maintenance_model_quote_identifier($idColumn);
-    $identity = implode(', ', array_map(__NAMESPACE__ . '\\database_maintenance_model_quote_identifier', $identityColumns));
-    $join = implode(' AND ', array_map(static fn (string $column): string => 'candidate.' . database_maintenance_model_quote_identifier($column) . ' <=> duplicates.' . database_maintenance_model_quote_identifier($column), $identityColumns));
-    $groupCount = 'SELECT COALESCE(SUM(duplicate_count - 1), 0) FROM (SELECT COUNT(*) AS duplicate_count FROM ' . $quotedTable . ' GROUP BY ' . $identity . ' HAVING COUNT(*) > 1) duplicate_groups';
-    $duplicateJoin = ' FROM ' . $quotedTable . ' candidate JOIN (SELECT ' . $identity . ', MIN(' . $quotedId . ') AS survivor_id FROM ' . $quotedTable . ' GROUP BY ' . $identity . ' HAVING COUNT(*) > 1) duplicates ON ' . $join . ' WHERE candidate.' . $quotedId . ' <> duplicates.survivor_id ORDER BY candidate.' . $quotedId . ' LIMIT :batch_size';
+    $identity = implode(', ', array_map(
+        __NAMESPACE__ . '\\database_maintenance_model_quote_identifier',
+        $identityColumns,
+    ));
+    $join = implode(' AND ', array_map(
+        static fn(string $column): string => (
+            'candidate.'
+            . database_maintenance_model_quote_identifier($column)
+            . ' <=> duplicates.'
+            . database_maintenance_model_quote_identifier($column)
+        ),
+        $identityColumns,
+    ));
+    $groupCount =
+        'SELECT COALESCE(SUM(duplicate_count - 1), 0) FROM (SELECT COUNT(*) AS duplicate_count FROM '
+        . $quotedTable
+        . ' GROUP BY '
+        . $identity
+        . ' HAVING COUNT(*) > 1) duplicate_groups';
+    $duplicateJoin =
+        ' FROM '
+        . $quotedTable
+        . ' candidate JOIN (SELECT '
+        . $identity
+        . ', MIN('
+        . $quotedId
+        . ') AS survivor_id FROM '
+        . $quotedTable
+        . ' GROUP BY '
+        . $identity
+        . ' HAVING COUNT(*) > 1) duplicates ON '
+        . $join
+        . ' WHERE candidate.'
+        . $quotedId
+        . ' <> duplicates.survivor_id ORDER BY candidate.'
+        . $quotedId
+        . ' LIMIT :batch_size';
     $duplicateIds = 'SELECT candidate.' . $quotedId . $duplicateJoin;
-    $duplicateIdsForDelete = 'SELECT candidate.' . $quotedId . ' AS duplicate_id' . $duplicateJoin;
+    $duplicateIdsForDelete =
+        'SELECT candidate.' . $quotedId . ' AS duplicate_id' . $duplicateJoin;
     return [
         'key' => $key,
         'table_name' => $table,
@@ -136,7 +330,14 @@ function database_maintenance_model_duplicate_rule(string $key, string $table, s
         'reason' => $reason,
         'count_sql' => $groupCount,
         'identifiers_sql' => $duplicateIds,
-        'delete_sql' => 'DELETE FROM ' . $quotedTable . ' WHERE ' . $quotedId . ' IN (SELECT duplicate_id FROM (' . $duplicateIdsForDelete . ') bounded_duplicates)',
+        'delete_sql' =>
+            'DELETE FROM '
+                . $quotedTable
+                . ' WHERE '
+                . $quotedId
+                . ' IN (SELECT duplicate_id FROM ('
+                . $duplicateIdsForDelete
+                . ') bounded_duplicates)',
         'identifier_columns' => [$idColumn],
         'parameters' => [],
         'automatic' => true,
@@ -145,7 +346,40 @@ function database_maintenance_model_duplicate_rule(string $key, string $table, s
     ];
 }
 
-/** Count candidate rows for compiled cleanup rules. */
+/** Count candidate rows for compiled cleanup rules.
+ * @param list<array{
+ *     key:string,
+ *     table_name:string,
+ *     category:string,
+ *     confidence:string,
+ *     reason:string,
+ *     count_sql:string,
+ *     identifiers_sql:string,
+ *     delete_sql:string,
+ *     identifier_columns:list<string>,
+ *     parameters:array<int|string,int|float|string|null>,
+ *     automatic:bool,
+ *     filesystem_effects:false,
+ *     survivor_rule?:string
+ * }> $rules Compiled rules to inspect without mutating rows.
+ * @return list<array{
+ *     key:string,
+ *     table_name:string,
+ *     category:string,
+ *     confidence:string,
+ *     reason:string,
+ *     count_sql:string,
+ *     identifiers_sql:string,
+ *     delete_sql:string,
+ *     identifier_columns:list<string>,
+ *     parameters:array<int|string,int|float|string|null>,
+ *     automatic:bool,
+ *     filesystem_effects:false,
+ *     candidate_count:int,
+ *     inspection_error:string,
+ *     survivor_rule?:string
+ * }> Rules with counts or captured inspection error messages.
+ */
 function database_maintenance_model_inspect_cleanup_candidates(array $rules): array
 {
     $candidates = [];
@@ -154,23 +388,66 @@ function database_maintenance_model_inspect_cleanup_candidates(array $rules): ar
             $statement = db()->prepare((string) ($rule['count_sql'] ?? ''));
             $statement->execute((array) ($rule['parameters'] ?? []));
             $count = max(0, (int) $statement->fetchColumn());
-            $candidates[] = $rule + ['candidate_count' => $count, 'inspection_error' => ''];
+            $candidates[] = $rule
+            + ['candidate_count' => $count, 'inspection_error' => ''];
         } catch (Throwable $exception) {
-            $candidates[] = $rule + ['candidate_count' => 0, 'inspection_error' => $exception->getMessage()];
+            $candidates[] = $rule
+            + [
+                'candidate_count' => 0,
+                'inspection_error' => $exception->getMessage(),
+            ];
         }
     }
     return $candidates;
 }
 
-/** Return grouped thumbnail metadata distribution rows. */
+/** Return grouped thumbnail metadata distribution rows.
+ * @return list<array{
+ *     size_px:int|string,
+ *     format:string,
+ *     status:string,
+ *     row_count:int|string
+ * }> Counts grouped by thumbnail size, format, and status.
+ */
 function database_maintenance_model_thumbnail_distribution_rows(): array
 {
-    return db()->query('SELECT size_px, format, status, COUNT(*) AS row_count FROM image_thumbnail_variants GROUP BY size_px, format, status ORDER BY size_px, format, status')->fetchAll(PDO::FETCH_ASSOC);
+    return db()
+        ->query(
+            'SELECT size_px, format, status, COUNT(*) AS row_count FROM image_thumbnail_variants GROUP BY size_px, format, status ORDER BY size_px, format, status',
+        )
+        ->fetchAll(PDO::FETCH_ASSOC);
 }
 
-/** Execute one bounded cleanup rule and persist the matching exact audit row transactionally. */
-function database_maintenance_model_execute_cleanup_rule(array $rule, int $batchSize, string $operationId): array
-{
+/** Execute one bounded cleanup rule and persist the matching exact audit row transactionally.
+ * @param array{
+ *     key:string,
+ *     table_name:string,
+ *     category:string,
+ *     confidence:string,
+ *     reason:string,
+ *     count_sql:string,
+ *     identifiers_sql:string,
+ *     delete_sql:string,
+ *     identifier_columns:list<string>,
+ *     parameters:array<int|string,int|float|string|null>,
+ *     automatic:bool,
+ *     filesystem_effects:false,
+ *     survivor_rule?:string
+ * } $rule Compiled selection and deletion rule.
+ * @param int $batchSize Maximum candidate rows deleted in this transaction.
+ * @param string $operationId Correlation identifier stored with the audit row.
+ * @return array{
+ *     before_count:int,
+ *     deleted_count:int,
+ *     remaining_count:int,
+ *     removed_identifiers:list<array<string,int|string|null>>
+ * } Counts and exact identifiers for the executed batch.
+ */
+function database_maintenance_model_execute_cleanup_rule(
+    array $rule,
+    int $batchSize,
+    string $operationId,
+): array {
     $batchSize = max(1, $batchSize);
     $pdo = db();
     $countStatement = $pdo->prepare((string) ($rule['count_sql'] ?? ''));
@@ -185,28 +462,58 @@ function database_maintenance_model_execute_cleanup_rule(array $rule, int $batch
             $pdo->beginTransaction();
         }
         try {
-            $identifierStatement = $pdo->prepare((string) ($rule['identifiers_sql'] ?? ''));
+            $identifierStatement = $pdo->prepare(
+                (string) ($rule['identifiers_sql'] ?? ''),
+            );
             foreach ((array) ($rule['parameters'] ?? []) as $name => $value) {
-                $identifierStatement->bindValue(is_int($name) ? $name + 1 : (string) $name, $value);
+                $identifierStatement->bindValue(
+                    is_int($name) ? $name + 1 : (string) $name,
+                    $value,
+                );
             }
-            $identifierStatement->bindValue(':batch_size', $batchSize, PDO::PARAM_INT);
+            $identifierStatement->bindValue(
+                ':batch_size',
+                $batchSize,
+                PDO::PARAM_INT,
+            );
             $identifierStatement->execute();
-            $removedIdentifiers = $identifierStatement->fetchAll(PDO::FETCH_ASSOC);
+            $removedIdentifiers = $identifierStatement->fetchAll(
+                PDO::FETCH_ASSOC,
+            );
             if ($removedIdentifiers === []) {
-                throw new RuntimeException('Cleanup count reported candidates, but no deterministic identifier batch could be selected. The transaction was rolled back.');
+                throw new RuntimeException(
+                    'Cleanup count reported candidates, but no deterministic identifier batch could be selected. The transaction was rolled back.',
+                );
             }
 
-            $deleteStatement = $pdo->prepare((string) ($rule['delete_sql'] ?? ''));
+            $deleteStatement = $pdo->prepare(
+                (string) ($rule['delete_sql'] ?? ''),
+            );
             foreach ((array) ($rule['parameters'] ?? []) as $name => $value) {
-                $deleteStatement->bindValue(is_int($name) ? $name + 1 : (string) $name, $value);
+                $deleteStatement->bindValue(
+                    is_int($name) ? $name + 1 : (string) $name,
+                    $value,
+                );
             }
-            $deleteStatement->bindValue(':batch_size', $batchSize, PDO::PARAM_INT);
+            $deleteStatement->bindValue(
+                ':batch_size',
+                $batchSize,
+                PDO::PARAM_INT,
+            );
             $deleteStatement->execute();
             $deleted = max(0, $deleteStatement->rowCount());
             if ($deleted !== count($removedIdentifiers)) {
-                throw new RuntimeException('Cleanup batch identifier count did not match the deleted row count. The transaction was rolled back.');
+                throw new RuntimeException(
+                    'Cleanup batch identifier count did not match the deleted row count. The transaction was rolled back.',
+                );
             }
-            database_maintenance_model_write_cleanup_audit($pdo, $rule, $removedIdentifiers, $deleted, $operationId);
+            database_maintenance_model_write_cleanup_audit(
+                $pdo,
+                $rule,
+                $removedIdentifiers,
+                $deleted,
+                $operationId,
+            );
             if ($ownsTransaction) {
                 $pdo->commit();
             }
@@ -229,35 +536,89 @@ function database_maintenance_model_execute_cleanup_rule(array $rule, int $batch
     ];
 }
 
-/** Write one exact cleanup audit row inside an existing transaction. */
-function database_maintenance_model_write_cleanup_audit(PDO $pdo, array $rule, array $identifiers, int $deletedCount, string $operationId): void
-{
-    $statement = $pdo->prepare('INSERT INTO database_maintenance_audit_log (operation_id, rule_key, table_name, category, reason, identifier_columns_json, removed_identifiers_json, deleted_count, created_at) VALUES (:operation_id, :rule_key, :table_name, :category, :reason, :identifier_columns_json, :removed_identifiers_json, :deleted_count, NOW())');
+/** Write one exact cleanup audit row inside an existing transaction.
+ * @param PDO $pdo Connection whose transaction contains the deletion.
+ * @param array{
+ *     key:string,
+ *     table_name:string,
+ *     category:string,
+ *     confidence:string,
+ *     reason:string,
+ *     identifier_columns:list<string>
+ * } $rule Compiled metadata copied to the audit row.
+ * @param list<array<string,int|string|null>> $identifiers Exact identifier rows deleted by the batch.
+ * @param int $deletedCount Number of rows deleted in the batch.
+ * @param string $operationId Maintenance operation correlation identifier.
+ * @return void Writes the audit row in the caller-owned transaction.
+ */
+function database_maintenance_model_write_cleanup_audit(
+    PDO $pdo,
+    array $rule,
+    array $identifiers,
+    int $deletedCount,
+    string $operationId,
+): void {
+    $statement = $pdo->prepare(
+        'INSERT INTO database_maintenance_audit_log (operation_id, rule_key, table_name, category, reason, identifier_columns_json, removed_identifiers_json, deleted_count, created_at) VALUES (:operation_id, :rule_key, :table_name, :category, :reason, :identifier_columns_json, :removed_identifiers_json, :deleted_count, NOW())',
+    );
     $statement->execute([
         ':operation_id' => $operationId,
         ':rule_key' => (string) ($rule['key'] ?? ''),
         ':table_name' => (string) ($rule['table_name'] ?? ''),
         ':category' => (string) ($rule['category'] ?? ''),
         ':reason' => (string) ($rule['reason'] ?? ''),
-        ':identifier_columns_json' => json_encode((array) ($rule['identifier_columns'] ?? []), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-        ':removed_identifiers_json' => json_encode($identifiers, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        ':identifier_columns_json' => json_encode(
+            (array) ($rule['identifier_columns'] ?? []),
+            JSON_UNESCAPED_SLASHES
+                | JSON_UNESCAPED_UNICODE
+                | JSON_THROW_ON_ERROR,
+        ),
+        ':removed_identifiers_json' => json_encode(
+            $identifiers,
+            JSON_UNESCAPED_SLASHES
+                | JSON_UNESCAPED_UNICODE
+                | JSON_THROW_ON_ERROR,
+        ),
         ':deleted_count' => $deletedCount,
     ]);
 }
 
-/** Return applied migration versions from the schema ledger. */
+/** Return applied migration versions from the schema ledger.
+ * @return list<string> Migration version strings recorded in the schema ledger.
+ */
 function database_maintenance_model_applied_migration_versions(): array
 {
-    return array_map('strval', db()->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN));
+    return array_map(
+        'strval',
+        db()
+            ->query('SELECT version FROM schema_migrations')
+            ->fetchAll(PDO::FETCH_COLUMN),
+    );
 }
 
-/** Run one explicitly allowed physical/statistics table operation. */
-function database_maintenance_model_run_table_operation(string $operation, string $tableName): array
-{
+/** Run one explicitly allowed physical/statistics table operation.
+ * @param string $operation Allowed ANALYZE or OPTIMIZE operation name.
+ * @param string $tableName Validated table identifier used to compose the operation.
+ * @return list<array{
+ *     Table:string,
+ *     Op:string,
+ *     Msg_type:string,
+ *     Msg_text:string
+ * }> Driver result rows, or an empty list when query() returns false.
+ */
+function database_maintenance_model_run_table_operation(
+    string $operation,
+    string $tableName,
+): array {
     $operation = strtoupper($operation);
     if (!in_array($operation, ['ANALYZE', 'OPTIMIZE'], true)) {
-        throw new RuntimeException('Unsupported database table maintenance operation.');
+        throw new RuntimeException(
+            'Unsupported database table maintenance operation.',
+        );
     }
-    $statement = db()->query($operation . ' TABLE ' . database_maintenance_model_quote_identifier($tableName));
+    $statement = db()->query(
+        $operation . ' TABLE '
+            . database_maintenance_model_quote_identifier($tableName),
+    );
     return $statement ? $statement->fetchAll(PDO::FETCH_ASSOC) : [];
 }

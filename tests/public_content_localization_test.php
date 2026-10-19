@@ -23,6 +23,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 require_once __DIR__ . '/support/module_source.php';
 
 $root = dirname(__DIR__);
@@ -50,7 +52,7 @@ function public_content_assert(bool $condition, string $label): void
 }
 
 public_content_assert(str_contains($galleryPage, "content_localize_entity('gallery'"), 'Selected gallery is not localized.');
-public_content_assert(str_contains($galleryPage, "content_localize_entities('gallery'"), 'Physical subgalleries are not batch localized.');
+public_content_assert(php_source_contains($galleryPage, "content_localize_entities('gallery'"), 'Physical subgalleries are not batch localized.');
 public_content_assert(str_contains($galleryPage, "content_localize_entities('image'"), 'Visible images are not batch localized.');
 public_content_assert(str_contains($galleryPage, "'lang' => \$contentLanguage"), 'Lazy single-photo metadata does not preserve the active content language.');
 public_content_assert(str_contains($lightbox, "content_localize_entities('image'"), 'Lazy lightbox images are not localized.');
@@ -61,7 +63,7 @@ public_content_assert(str_contains($service, "\$entity['source_title']") && str_
 public_content_assert(!str_contains($service, 'slug =') && !str_contains($service, 'folder_path ='), 'Localization service must not mutate URL or filesystem identity.');
 public_content_assert(str_contains($sidecars, "\$data['translations']") && str_contains($sidecars, "\$data['content_language']"), 'Gallery sidecars do not preserve multilingual content.');
 public_content_assert(str_contains($search, 'image_translations content_image_translation') && str_contains($search, 'gallery_translations content_gallery_translation'), 'Public search does not match active-language translations.');
-public_content_assert(str_contains($search, "content_localize_entities('image'") && str_contains($search, "content_localize_entities('gallery'"), 'Public search results are not batch localized.');
+public_content_assert(str_contains($search, "content_localize_entities('image'") && php_source_contains($search, "content_localize_entities('gallery'"), 'Public search results are not batch localized.');
 public_content_assert(substr_count($migration, 'content_save_localizations(') >= 2 && substr_count($migration, "['translations']") >= 2, 'Gallery migration does not preserve gallery and image translations.');
 
 echo "Public content localization checks passed.\n";

@@ -12,7 +12,8 @@ Author: Rudolf Klusal
 # First-party source contract inventory
 
 This records bounded inventory/enforcement work for retained priorities 12–15.
-It is not an assertion that all documentation, constants or MVC debt is resolved.
+It is not an assertion that all documentation, constants or MVC debt is
+resolved.
 Scans inspect source without executing application files, opening live
 configuration, querying a database or mutating gallery data.
 
@@ -23,8 +24,10 @@ runtime integration. Reproduce current path/line/rule evidence with JSON output
 from [check_source_documentation.php](../scripts/check_source_documentation.php)
 and [check_policy_constants.php](../scripts/check_policy_constants.php).
 Counts are observations, not acceptance thresholds or an allowed-debt baseline.
-The earlier whole documentation/constants/header snapshot below covers 997 files;
-later scoped gate checkpoints have separate counts stated below. These observations
+The earlier whole documentation/constants/header snapshot below covers 997
+files;
+later scoped gate checkpoints have separate counts stated below. These
+observations
 reflect concurrent edits, not exclusions. Historical whole-tree counts are not
 recomputed merely because a bounded changed gate improves. Parent's earlier
 Quick5 artifact (20260920-014136-24140) reported 317 changed findings and
@@ -48,7 +51,8 @@ proven parser corrections are reflected in this later source-only observation.
 | HTML / YAML / TeX / Apache .htaccess | 4 / 1 / 1 / 2 |
 | Total | 997 |
 
-Discovery also supports .cjs, .psm1, .cmd, .sql, .yaml, .htm and first-party .svg;
+Discovery also supports .cjs, .psm1, .cmd, .sql, .yaml, .htm and first-party
+.svg;
 this snapshot contained none of those additional variants. It visits the entire
 source tree, not selected example features. Whole-source discovery does not
 establish complete language or semantic coverage.
@@ -78,13 +82,17 @@ findings:
 | Parameter description / duplicate / extra / destructuring review | 12 / 2 / 17 / 1 |
 | Named parameter tag missing its type | 2 |
 
-Largest observed queues: public lightbox JS (415), smart_galleries service (218),
-viewer_registration model (150), admin-side-panel JS (125), admin-gallery-list JS
+Largest observed queues: public lightbox JS (415), smart_galleries service
+(218),
+viewer_registration model (150), admin-side-panel JS (125), admin-gallery-list
+JS
 (121), thumbnail_format_metadata_consistency test (109), admin_telemetry view
-(106), gallery_download_controller test (101), gallery_trash model (97), telemetry
+(106), gallery_download_controller test (101), gallery_trash model (97),
+telemetry
 model (89), smart_galleries model (88), download_artifact_cache service (88).
 Counts overlap; a declaration can trigger several rules. Fix contradictory
-primitive tags in a separately owned bounded batch, then missing typed parameters
+primitive tags in a separately owned bounded batch, then missing typed
+parameters
 and lifecycle/data-shape contracts after reading their implementations. Do not
 infer side effects or caller guarantees merely to force the report to zero.
 
@@ -97,7 +105,8 @@ Installation/private exclusions: config.php, .env-prefixed files, custom.css,
 cache, data, galleries, logs, tmp and generated HTTP monitor logs. Generated and
 third-party tree exclusions: deploy, vendor, node_modules, Python
 bytecode/caches/virtual environments. Tool-state exclusions: Git, IDE and
-documented agent-local folders. The JSON exclusion list records encountered paths;
+documented agent-local folders. The JSON exclusion list records encountered
+paths;
 their contents are neither read nor counted as first-party source.
 
 The exact upstream SVG exclusions are not a first-party header allowlist:
@@ -124,7 +133,8 @@ from filenames. Atomic leading-comment patches preserve executable bodies and
 licenses. Before/after non-comment token hashes matched for 124 PHP/JS repairs.
 Three concurrently edited workflow files changed their bodies through other
 agents; this worker's patch touched only their headers, so whole-file
-byte-equivalence is not claimed. CSS/Python/batch/markup repairs likewise contain
+byte-equivalence is not claimed. CSS/Python/batch/markup repairs likewise
+contain
 only leading-comment hunks. The copied File value in base.css was corrected.
 usage.js and telemetry.js now share the exact two-role identity documented in
 CODE_DOCUMENTATION.md. Their bytes match after the header/line-ending repair;
@@ -142,7 +152,8 @@ JS/MJS/CJS use a conservative lexer masking comments, literal chunks and common
 regex. It recognizes exports, generators, methods, classes, bound arrows,
 callbacks and nested template-expression code. Executable inline HTML scripts
 are also scanned. It is not a full ECMAScript parser: computed/private fields,
-ambiguous regex and destructuring semantics need review. Complex types and aliases need richer
+ambiguous regex and destructuring semantics need review. Complex types and
+aliases need richer
 parsing; primitive disagreement detection is not a general type checker.
 Python/PowerShell/shell/batch declarations and data shapes are not yet parsed.
 Non-callable config/markup receives native header checks. HTML inline JavaScript
@@ -150,7 +161,8 @@ is scanned; unknown script languages block the changed gate. CSS has no
 application-callable contract.
 
 The guard rejects a known generated “Handles ... logic for the gallery
-application” summary and detects named parameter/return contradictions. It cannot
+application” summary and detects named parameter/return contradictions. It
+cannot
 establish truthful side-effect descriptions, complete exception contracts,
 sensitivity or comprehensive record field semantics from comment presence.
 Priority 15 therefore remains substantial semantic work, not a mechanical
@@ -158,7 +170,8 @@ autogeneration task.
 
 ## Constants: owners and remaining work
 
-The policy snapshot found **438 uppercase PHP/JS definitions** and **618 findings**:
+The policy snapshot found **438 uppercase PHP/JS definitions** and **618
+findings**:
 
 | Rule family | Findings |
 | --- | ---: |
@@ -222,7 +235,8 @@ All findings belong to app/policy_constants.php:
 
 Several definitions already contain useful prose; these are missing recognized
 contract fields, not proof that the comments contain no explanation. Parent owns
-their runtime-source annotations. The parent subsequently added each listed field
+their runtime-source annotations. The parent subsequently added each listed
+field
 with reviewed scope, units, consumers and rationale; final qualification is
 recorded in TEMP 02. No value or initializer was changed by this remediation.
 
@@ -231,12 +245,14 @@ unsupported native formats, embedded scripts and unclassified configurable-map
 entries. They are not strict findings or claims of complete semantic coverage.
 Duplicate ownership, dynamic definitions and broader numeric/string semantics
 remain separate review work. Exact rules and report shapes are documented in
-CODE_DOCUMENTATION.md; whole-tree policy inventory remains advisory and separate.
+CODE_DOCUMENTATION.md; whole-tree policy inventory remains advisory and
+separate.
 
 The first-definition/header and valid PHP-interpolation false blockers are fixed
 with disposable regressions. Fixture tests also prove missing history blocks,
 explanation removal fails, field labels cannot borrow one another, copied sites
-remain new, and unchanged moves remain legacy. The flat JavaScript tuple addition
+remain new, and unchanged moves remain legacy. The flat JavaScript tuple
+addition
 fixes the observed side-panel false positives while leaving unsupported patterns
 explicitly reviewable. No active parser blocker remains from these reproduced
 cases. Central full qualification remains parent-owned.
@@ -244,8 +260,10 @@ cases. Central full qualification remains parent-owned.
 ## MVC advisory ownership review
 
 All 27 original rows below were inspected in source context. Three persistence,
-four controller-filesystem, five service-session and one security-filesystem rows
-are resolved by parent migrations; **14 advisory rows remain** across 467 inspected
+four controller-filesystem, five service-session and one security-filesystem
+rows
+are resolved by parent migrations; **14 advisory rows remain** across 467
+inspected
 runtime files.
 Counts in the table are original token signals, not regression-test totals.
 Source inspection after promotion found **zero strict violations** and no
@@ -284,18 +302,24 @@ persistence advisory row. The zero-entry baseline was not edited or refreshed.
 
 The promoted strict scope is app/security.php, app/helpers.php,
 app/helpers_*.php and their split parts. Rules core.direct_db,
-core.pdo_construction, core.pdo_method and core.sql_literal reject direct database
+core.pdo_construction, core.pdo_method and core.sql_literal reject direct
+database
 calls, PDO construction/operations and recognized SQL strings. Comments and PDO
 parameter types are not violations; HTTP/request/session/response behavior is
 not broadly reclassified. Database infrastructure is outside this narrowly
-migrated scope. Existing central MVC registration automatically discovers it. The converted
-admin_gallery_discovery, google_auth, duplicate_photo_detector and viewer_anti_automation services,
+migrated scope. Existing central MVC registration automatically discovers it.
+The converted
+admin_gallery_discovery, google_auth, duplicate_photo_detector and
+viewer_anti_automation services,
 plus admin_gallery_report/job.php and future job split parts, reject direct
 session globals. Dedicated rules are services.discovery_session_global,
 services.google_auth_session_global, services.duplicate_detector_session_global
-services.report_job_session_global and services.viewer_anti_automation_session_global.
-Other report siblings are not silently promoted. Other service request globals were already strict; these session rules
-are not a broad adapter ban. core.security_filesystem_mutation protects the migrated
+services.report_job_session_global and
+services.viewer_anti_automation_session_global.
+Other report siblings are not silently promoted. Other service request globals
+were already strict; these session rules
+are not a broad adapter ban. core.security_filesystem_mutation protects the
+migrated
 security facade and future parts; controllers.mobile_webdav_filesystem_mutation
 protects that converted controller and future parts. Read-only probes, request
 stream handling, inert comments and member calls are outside the direct-write
@@ -303,7 +327,8 @@ rules. Their filesystem services remain allowed owners.
 
 Disposable fixtures prove discovery, all four rules, split-part classification,
 qualified calls, comment shielding, legitimate adapters and infrastructure
-exclusion. This token-based rule does not resolve dynamic calls, imported aliases
+exclusion. This token-based rule does not resolve dynamic calls, imported
+aliases
 or object types; method-name/SQL-string heuristics still require human review.
 The 14 advisory decisions are not new baseline exceptions, nor a claim that all
 remaining session/filesystem ownership has been migrated.
@@ -337,12 +362,14 @@ Exact integration needs:
    with full JSON and advisory counts, plus source-documentation-changed as a
    strict PASS/FAIL/BLOCKED task storing source-documentation-changed.json.
    Parent also registered source-policy-changed in all profiles through the
-   generic changed-source adapter. No further registration is needed for this slice. Whole-tree inventory exit
+   generic changed-source adapter. No further registration is needed for this
+   slice. Whole-tree inventory exit
    zero means the report ran, not compliance. Whole-tree --strict currently
    fails; do not baseline the debt.
 4. Parent owns ARCHITECTURE.md, CODEMAP.md and TESTING.md integration plus the
    managed-file manifest refresh after all source edits. This worker changed no
-   TEMP plan, core manifest, release metadata, version, Git index, commit or tag.
+   TEMP plan, core manifest, release metadata, version, Git index, commit or
+   tag.
 
 ## Changed-declaration gate remediation queue
 
@@ -381,14 +408,17 @@ fixture suite tests both corrections.
 
 Inherited, lexically unused PDO arguments may retain mixed with the documented
 per-parameter opaque rationale in CODE_DOCUMENTATION.md; reading, forwarding or
-introspecting that argument still fails the shape rule. Constructors and abstract
+introspecting that argument still fails the shape rule. Constructors and
+abstract
 signatures supply no unused-body proof. Concurrent owner remediation, not just
 parser corrections, accounts for the reduction from Quick5's 317 findings.
 
 The later parent Quick7 declaration gate reported three findings: the known
 side-panel tuple pair and one parent-owned report parameter contract. Parent
-reported the latter corrected. The tuple parser correction is now fixture-tested;
-read-only inspection finds **zero documentation findings across all 176 side-panel
+reported the latter corrected. The tuple parser correction is now
+fixture-tested;
+read-only inspection finds **zero documentation findings across all 176
+side-panel
 declarations**, without runtime edits. The next integrated central gate, not
 arithmetic over earlier counts, establishes its current overall status.
 
@@ -407,7 +437,8 @@ Implementation, declaration-contract and guide paths (17):
 - [scripts/source_contracts/policy_scan.php](../scripts/source_contracts/policy_scan.php)
 - [scripts/source_contracts/policy_changes.php](../scripts/source_contracts/policy_changes.php)
 - [scripts/check_mvc_boundaries.php](../scripts/check_mvc_boundaries.php)
-- [scripts/recovery/cli.php](../scripts/recovery/cli.php) — usage return docblock only
+- [scripts/recovery/cli.php](../scripts/recovery/cli.php) — usage return
+  docblock only
 - [tests/function_documentation_test.php](../tests/function_documentation_test.php)
 - [tests/source_header_author_test.php](../tests/source_header_author_test.php)
 - [tests/source_contract_inventory_test.php](../tests/source_contract_inventory_test.php)
@@ -416,7 +447,8 @@ Implementation, declaration-contract and guide paths (17):
 - [docs/CODE_DOCUMENTATION.md](CODE_DOCUMENTATION.md)
 - [docs/SOURCE_CONTRACT_INVENTORY.md](SOURCE_CONTRACT_INVENTORY.md)
 
-Leading-header repair paths (191). Apart from the separately noted usage docblock
+Leading-header repair paths (191). Apart from the separately noted usage
+docblock
 in scripts/recovery/cli.php, this worker changed only leading comments in these
 paths. Executable behavior changes belong to their other active owners:
 

@@ -1,9 +1,11 @@
 # Regression and fixture instructions
 
-Read [root AGENTS](../AGENTS.md), the relevant [TESTING.md](../TESTING.md) section,
+Read [root AGENTS](../AGENTS.md), the relevant [TESTING.md](../TESTING.md)
+section,
 and [checked authoring examples](../docs/AGENT_AUTHORING.md) before editing.
 Tests are plain CLI PHP scripts, not PHPUnit; keep new fixtures executable as
-`php tests/<name>_test.php`. Hosted `scripts/audit.php` owns execution and registry
+`php tests/<name>_test.php`. Hosted `scripts/audit.php` owns execution and
+registry
 selection. Root CI-first rules override example commands; do not run local test
 loops by default. Cover behavior with focused existing owners where practical;
 require a browser/database only when the behavior needs one.
@@ -27,9 +29,12 @@ require a browser/database only when the behavior needs one.
 - Give every independent child its own explicit minimal bootstrap, including
   Core path-policy dependencies for passive services. Parent-loaded functions
   do not establish child dependencies. Assert the child's real exit status,
-  stderr and persisted evidence; synchronize exact success markers with coverage.
-- Read a whole split module with `module_source()` from `support/module_source.php`.
-  Never require a part outside its module. Preserve path-depth regression coverage
+  stderr and persisted evidence; synchronize exact success markers with
+  coverage.
+- Read a whole split module with `module_source()` from
+  `support/module_source.php`.
+  Never require a part outside its module. Preserve path-depth regression
+  coverage
   in `module_split_path_resolution_test.php` when moving filesystem expressions.
 - Use named constants for timers/sleeps, child deadlines and other operational
   numeric policies, with actual values and rationale even in fixture bridges.
@@ -53,17 +58,21 @@ require a browser/database only when the behavior needs one.
   as production methods, and describe assertion inputs with their actual scalar,
   ordered-list or row-field shapes.
 - For each async phase, identify the in-flight operation, terminal success/error
-  and next permitted action. Await failed reads before changing mocked connectivity;
+  and next permitted action. Await failed reads before changing mocked
+  connectivity;
   await returned async timer callbacks before asserting their terminal phase,
   including across VM realms, rather than guessing a fixed microtask count.
   Await the released write's expected revision before owner teardown. Serve the
   coordinator's visible URL with the real method/envelope and owner generation.
-  Capture layout immediately before each operation; preserve exact revision, node
-  and scroll assertions after completion, accounting for prior validation reflow.
+  Capture layout immediately before each operation; preserve exact revision,
+  node
+  and scroll assertions after completion, accounting for prior validation
+  reflow.
 - Audit every source-extraction dependency against its adapter table, including
   single/bulk owned delegates and argument shapes. Name missing adapters safely.
   Include stop/cleanup delegates reached only by a newly added terminal path.
-- Assert negative HTTP status, error contract and unchanged persistence separately;
+- Assert negative HTTP status, error contract and unchanged persistence
+  separately;
   report safe test-authored expected/actual values and assertion call sites.
 
 ## Bounded workers, caches and interruption
@@ -88,7 +97,8 @@ separate from retained regional observations and lifetime removal receipts.
 ## Browser and isolated rendering fixtures
 
 After a production media swap, query the currently owned image node again before
-asserting decode or geometry. Keep identity/source assertions: a detached initial
+asserting decode or geometry. Keep identity/source assertions: a detached
+initial
 placeholder cannot establish the state of its decoded replacement.
 When a counter announces navigation intent before media commit, await the target
 image identity and completed decode before asserting its final geometry.
@@ -99,8 +109,10 @@ exercise old responses during debounce and old JSON bodies finishing after newer
 results; commits and history must belong to the captured current request URL.
 
 Send browser-harness controls (such as viewport changes) through the captured
-native fetch, outside application mocks. Keep product method/credential assertions
-strict. Isolated render fixtures explicitly require the owning view module before
+native fetch, outside application mocks. Keep product method/credential
+assertions
+strict. Isolated render fixtures explicitly require the owning view module
+before
 calling its named typed presentation helper.
 
 The required `browser-tests` job sets `PHP_GALLERY_BROWSER_REQUIRED=1` and uses

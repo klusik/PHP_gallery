@@ -69,7 +69,6 @@ use function Gallery\Services\public_image_visible_to_current_visitor;
 use function Gallery\Services\t;
 use function Gallery\Services\visitor_can_access_gallery;
 
-
 /**
  * Stable public gallery-download initialization failure.
  */
@@ -82,11 +81,16 @@ final class GalleryDownloadManifestException extends RuntimeException
      *
      * @param string $message Visitor-safe localized message.
      * @param string $reason Stable internal diagnostic reason.
+     * @return void Initializes the exception message and stable reason.
      */
-    public function __construct(string $message, string $reason = 'manifest_failed')
-    {
+    public function __construct(
+        string $message,
+        string $reason = 'manifest_failed',
+    ) {
         parent::__construct($message);
-        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1 ? $reason : 'manifest_failed';
+        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1
+            ? $reason
+            : 'manifest_failed';
     }
 
     /** Return the stable diagnostic reason without parsing localized text. */
@@ -112,7 +116,9 @@ final class GalleryZipBuildException extends RuntimeException
     public function __construct(string $reason, string $message)
     {
         parent::__construct($message);
-        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1 ? $reason : 'archive_build_failed';
+        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1
+            ? $reason
+            : 'archive_build_failed';
     }
 
     /** Return the stable diagnostic reason without parsing localized text. */
@@ -138,7 +144,9 @@ class LegacyDownloadBuildException extends RuntimeException
     public function __construct(string $reason, string $message)
     {
         parent::__construct($message);
-        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1 ? $reason : 'legacy_build_failed';
+        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1
+            ? $reason
+            : 'legacy_build_failed';
     }
 
     /** Return the stable diagnostic reason without parsing localized text. */
@@ -151,7 +159,8 @@ class LegacyDownloadBuildException extends RuntimeException
 /**
  * Retryable legacy-build refusal when another build owns the required capacity.
  */
-final class LegacyDownloadBuildBusyException extends LegacyDownloadBuildException
+final class LegacyDownloadBuildBusyException extends
+    LegacyDownloadBuildException
 {
     private int $retryAfterSeconds;
 
@@ -161,9 +170,13 @@ final class LegacyDownloadBuildBusyException extends LegacyDownloadBuildExceptio
      * @param string $reason Stable internal diagnostic reason.
      * @param string $message Visitor-safe localized message.
      * @param int $retryAfterSeconds Retry-After delay advertised to the client.
+     * @return void Initializes the retryable exception and bounded delay.
      */
-    public function __construct(string $reason, string $message, int $retryAfterSeconds)
-    {
+    public function __construct(
+        string $reason,
+        string $message,
+        int $retryAfterSeconds,
+    ) {
         parent::__construct($reason, $message);
         $this->retryAfterSeconds = max(1, min(60, $retryAfterSeconds));
     }
@@ -179,21 +192,22 @@ final class LegacyDownloadBuildBusyException extends LegacyDownloadBuildExceptio
  * Stable non-retry-immediate refusal when the managed legacy artifact cache cannot
  * safely reserve enough configured capacity or filesystem free space.
  */
-final class LegacyDownloadBuildCapacityException extends LegacyDownloadBuildException
-{
-}
+final class LegacyDownloadBuildCapacityException extends
+    LegacyDownloadBuildException {}
 
 /**
  * Stable legacy-build refusal when the configured server ZIP fallback is unavailable.
  */
-final class LegacyDownloadBuildUnavailableException extends LegacyDownloadBuildException
-{
-}
+final class LegacyDownloadBuildUnavailableException extends
+    LegacyDownloadBuildException {}
 
 /** Return a stable reason for generic physical-gallery legacy ZIP failures. */
 function gallery_zip_failure_reason(Throwable $exception): string
 {
-    if ($exception instanceof GalleryZipBuildException || $exception instanceof LegacyDownloadBuildException) {
+    if (
+        $exception instanceof GalleryZipBuildException
+        || $exception instanceof LegacyDownloadBuildException
+    ) {
         return $exception->reason();
     }
     return 'archive_build_failed';
@@ -206,9 +220,16 @@ function gallery_zip_failure_reason(Throwable $exception): string
  * ZIP-specific normalization. Control characters, Windows drive separators,
  * traversal segments, and empty segments are removed or replaced while UTF-8
  * display names remain intact.
+ *
+ * @param string $path Candidate path relative to the archive root.
+ * @param string $fallback Path returned when all candidate segments are
+ *     discarded.
+ * @return string Normalized relative path with no traversal or empty segments.
  */
-function gallery_download_safe_zip_path(string $path, string $fallback = 'photo'): string
-{
+function gallery_download_safe_zip_path(
+    string $path,
+    string $fallback = 'photo',
+): string {
     $path = str_replace('\\', '/', $path);
     $segments = [];
     foreach (explode('/', $path) as $segment) {
@@ -229,10 +250,15 @@ function gallery_download_safe_zip_path(string $path, string $fallback = 'photo'
 /**
  * Make one archive entry path unique using deterministic numeric suffixes.
  *
- * @param array<string,bool> $usedNames Case-insensitive entry-name set.
+ * @param string $path Candidate archive-relative path to make unique.
+ * @param array<string,bool> $usedNames Case-insensitive entry-name set updated
+ *     with the selected path.
+ * @return string Unique normalized archive path recorded in $usedNames.
  */
-function gallery_download_unique_zip_path(string $path, array &$usedNames): string
-{
+function gallery_download_unique_zip_path(
+    string $path,
+    array &$usedNames,
+): string {
     $path = gallery_download_safe_zip_path($path);
     $directory = dirname($path);
     $directory = $directory === '.' ? '' : $directory . '/';
@@ -264,12 +290,17 @@ function gallery_download_unique_zip_path(string $path, array &$usedNames): stri
  */
 function gallery_download_gallery_rows(array $gallery): array
 {
-    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    $folderPath = normalize_relative_path(
+        (string) ($gallery['folder_path'] ?? ''),
+    );
     if ($folderPath === '') {
         return [];
     }
 
-    $manifestGalleryLimit = max(1, (int) cms_runtime_limit('download.manifest_max_galleries'));
+    $manifestGalleryLimit = max(
+        1,
+        (int) cms_runtime_limit('download.manifest_max_galleries'),
+    );
     $limit = $manifestGalleryLimit + 1;
     $candidates = downloads_model_gallery_subtree($folderPath, $limit);
     download_manifest_profile_count('gallery_rows', count($candidates));
@@ -277,9 +308,9 @@ function gallery_download_gallery_rows(array $gallery): array
         throw new GalleryDownloadManifestException(
             t(
                 'download.progress.manifest_too_large',
-                'This gallery contains too many files for one browser download.'
+                'This gallery contains too many files for one browser download.',
             ),
-            'manifest_too_large'
+            'manifest_too_large',
         );
     }
 
@@ -309,17 +340,24 @@ function gallery_download_manifest_authorized_items(array $galleries): array
         return [];
     }
 
-    $manifestFileLimit = max(1, (int) cms_runtime_limit('download.manifest_max_files'));
+    $manifestFileLimit = max(
+        1,
+        (int) cms_runtime_limit('download.manifest_max_files'),
+    );
     $limit = $manifestFileLimit + 1;
-    $candidateImages = downloads_model_images_for_galleries($galleryIds, true, $limit);
+    $candidateImages = downloads_model_images_for_galleries(
+        $galleryIds,
+        true,
+        $limit,
+    );
     download_manifest_profile_count('image_rows', count($candidateImages));
     if (count($candidateImages) > $manifestFileLimit) {
         throw new GalleryDownloadManifestException(
             t(
                 'download.progress.manifest_too_large',
-                'This gallery contains too many files for one browser download.'
+                'This gallery contains too many files for one browser download.',
             ),
-            'manifest_too_large'
+            'manifest_too_large',
         );
     }
 
@@ -331,16 +369,19 @@ function gallery_download_manifest_authorized_items(array $galleries): array
     $items = [];
     foreach ($galleries as $sourceGallery) {
         foreach ($imagesByGallery[(int) $sourceGallery['id']] ?? [] as $image) {
-            if (!public_image_visible_to_current_visitor($image, $sourceGallery)) {
+            if (!public_image_visible_to_current_visitor(
+                $image,
+                $sourceGallery,
+            )) {
                 continue;
             }
             if (count($items) >= $manifestFileLimit) {
                 throw new GalleryDownloadManifestException(
                     t(
                         'download.progress.manifest_too_large',
-                        'This gallery contains too many files for one browser download.'
+                        'This gallery contains too many files for one browser download.',
                     ),
-                    'manifest_too_large'
+                    'manifest_too_large',
                 );
             }
             $items[] = ['gallery' => $sourceGallery, 'image' => $image];
@@ -361,8 +402,10 @@ function gallery_download_manifest_authorized_items(array $galleries): array
  * @param array<int,array{gallery:array<string,mixed>,image:array<string,mixed>}> $items Authorized ordered manifest items.
  * @return string Content-only SHA-256 manifest revision.
  */
-function gallery_download_manifest_revision(int $rootGalleryId, array $items): string
-{
+function gallery_download_manifest_revision(
+    int $rootGalleryId,
+    array $items,
+): string {
     $identity = [];
     foreach ($items as $item) {
         $sourceGallery = $item['gallery'];
@@ -370,8 +413,12 @@ function gallery_download_manifest_revision(int $rootGalleryId, array $items): s
         $identity[] = [
             'image_id' => (int) ($image['id'] ?? 0),
             'gallery_id' => (int) ($sourceGallery['id'] ?? 0),
-            'source_folder' => normalize_relative_path((string) ($sourceGallery['folder_path'] ?? '')),
-            'relative_path' => normalize_relative_path((string) ($image['relative_path'] ?? '')),
+            'source_folder' => normalize_relative_path(
+                (string) ($sourceGallery['folder_path'] ?? ''),
+            ),
+            'relative_path' => normalize_relative_path(
+                (string) ($image['relative_path'] ?? ''),
+            ),
             'source_version' => image_public_asset_version($image),
             'database_size' => max(0, (int) ($image['file_size'] ?? 0)),
         ];
@@ -392,7 +439,9 @@ function gallery_download_manifest_revision(int $rootGalleryId, array $items): s
  * source request independently re-authorizes and re-resolves the source path again.
  *
  * @param array<int,array{gallery:array<string,mixed>,image:array<string,mixed>}> $items
+ *     Ordered authorized gallery and image rows whose source metadata is cached.
  * @return array{files:array<int,array{name:string,size:int,image_id:int,version:string}>,total_files:int,total_bytes:int}
+ *     Capability-free file metadata and aggregate file count and byte size.
  */
 function gallery_download_manifest_build_cached_payload(array $items): array
 {
@@ -412,9 +461,9 @@ function gallery_download_manifest_build_cached_payload(array $items): array
             throw new GalleryDownloadManifestException(
                 t(
                     'download.progress.source_missing',
-                    'A source file required for this download is unavailable.'
+                    'A source file required for this download is unavailable.',
                 ),
-                'source_missing'
+                'source_missing',
             );
         }
         download_manifest_profile_count('filesystem_size_reads');
@@ -422,22 +471,30 @@ function gallery_download_manifest_build_cached_payload(array $items): array
         $size = filesize($absolute);
         if ($size === false || $size < 0) {
             throw new GalleryDownloadManifestException(
-                t('download.progress.source_size_failed', 'A source file size could not be determined.'),
-                'source_size_failed'
+                t(
+                    'download.progress.source_size_failed',
+                    'A source file size could not be determined.',
+                ),
+                'source_size_failed',
             );
         }
-        if ($size > PHP_INT_MAX - $totalBytes) {
+        if ($size > (PHP_INT_MAX - $totalBytes)) {
             throw new GalleryDownloadManifestException(
                 t(
                     'download.progress.manifest_too_large',
-                    'This gallery contains too many files for one browser download.'
+                    'This gallery contains too many files for one browser download.',
                 ),
-                'manifest_too_large'
+                'manifest_too_large',
             );
         }
 
-        $relativePath = normalize_relative_path((string) $image['relative_path']);
-        $zipPath = gallery_download_unique_zip_path((string) $sourceGallery['folder_path'] . '/' . $relativePath, $usedNames);
+        $relativePath = normalize_relative_path(
+            (string) $image['relative_path'],
+        );
+        $zipPath = gallery_download_unique_zip_path(
+            (string) $sourceGallery['folder_path'] . '/' . $relativePath,
+            $usedNames,
+        );
         $files[] = [
             'name' => $zipPath,
             'size' => (int) $size,
@@ -474,9 +531,8 @@ function gallery_download_manifest_response_files(
     string $resourceIdKey,
     int $resourceId,
     string $manifestRevision,
-    ?string $sourceCapability
-): array
-{
+    ?string $sourceCapability,
+): array {
     $files = [];
     foreach ($payload['files'] as $file) {
         $sourceParams = [
@@ -507,14 +563,21 @@ function gallery_download_manifest_response_files(
  * visitor identifier, host name, or arbitrary query parameter.
  *
  * @param array<string,mixed> $gallery Authorized root gallery row.
+ * @param ?string $sourceCapability Optional source-download capability included
+ *     only in response URLs.
  * @return array<string,mixed> Browser-safe manifest.
  */
-function gallery_download_manifest(array $gallery, ?string $sourceCapability = null): array
-{
+function gallery_download_manifest(
+    array $gallery,
+    ?string $sourceCapability = null,
+): array {
     if (!visitor_can_access_gallery($gallery)) {
         throw new GalleryDownloadManifestException(
-            t('download.progress.not_available', 'This gallery is not available for download.'),
-            'not_available'
+            t(
+                'download.progress.not_available',
+                'This gallery is not available for download.',
+            ),
+            'not_available',
         );
     }
 
@@ -522,10 +585,19 @@ function gallery_download_manifest(array $gallery, ?string $sourceCapability = n
     $galleries = gallery_download_gallery_rows($gallery);
     $items = gallery_download_manifest_authorized_items($galleries);
     $revision = gallery_download_manifest_revision($galleryId, $items);
-    $payload = download_manifest_cache_read(DOWNLOAD_MANIFEST_RESOURCE_GALLERY, $galleryId, $revision);
+    $payload = download_manifest_cache_read(
+        DOWNLOAD_MANIFEST_RESOURCE_GALLERY,
+        $galleryId,
+        $revision,
+    );
     if ($payload === null) {
         $payload = gallery_download_manifest_build_cached_payload($items);
-        download_manifest_cache_write(DOWNLOAD_MANIFEST_RESOURCE_GALLERY, $galleryId, $revision, $payload);
+        download_manifest_cache_write(
+            DOWNLOAD_MANIFEST_RESOURCE_GALLERY,
+            $galleryId,
+            $revision,
+            $payload,
+        );
     }
 
     $downloadName = slugify((string) ($gallery['title'] ?? ''));
@@ -536,11 +608,24 @@ function gallery_download_manifest(array $gallery, ?string $sourceCapability = n
     return [
         'ok' => true,
         'filename' => $downloadName . '.zip',
-        'files' => gallery_download_manifest_response_files($payload, 'download_gallery_file', 'gallery_id', $galleryId, $revision, $sourceCapability),
+        'files' => gallery_download_manifest_response_files(
+            $payload,
+            'download_gallery_file',
+            'gallery_id',
+            $galleryId,
+            $revision,
+            $sourceCapability,
+        ),
         'total_files' => (int) $payload['total_files'],
         'total_bytes' => (int) $payload['total_bytes'],
-        'memory_fallback_warning_bytes' => max(1, (int) cms_runtime_limit('download.memory_fallback_warning_bytes')),
-        'memory_fallback_max_bytes' => max(1, (int) cms_runtime_limit('download.memory_fallback_max_bytes')),
+        'memory_fallback_warning_bytes' => max(
+            1,
+            (int) cms_runtime_limit('download.memory_fallback_warning_bytes'),
+        ),
+        'memory_fallback_max_bytes' => max(
+            1,
+            (int) cms_runtime_limit('download.memory_fallback_max_bytes'),
+        ),
         'zip64' => true,
     ];
 }
@@ -549,34 +634,63 @@ function gallery_download_manifest(array $gallery, ?string $sourceCapability = n
  * Return whether a no-JavaScript legacy server ZIP is small enough to build safely.
  *
  * @param array<string,mixed> $manifest Browser manifest for the same gallery.
+ * @return bool True when file count and aggregate source bytes fit the
+ *     configured limits.
  */
 function gallery_download_legacy_manifest_is_safe(array $manifest): bool
 {
-    return (int) ($manifest['total_files'] ?? 0) <= max(1, (int) cms_runtime_limit('download.legacy_max_files'))
-        && (int) ($manifest['total_bytes'] ?? 0) <= max(1, (int) cms_runtime_limit('download.legacy_max_source_bytes'));
+    return (
+        (int) ($manifest['total_files'] ?? 0) <= max(
+            1,
+            (int) cms_runtime_limit('download.legacy_max_files'),
+        )
+            && (int) ($manifest['total_bytes'] ?? 0) <= max(
+                1,
+                (int) cms_runtime_limit('download.legacy_max_source_bytes'),
+            )
+    );
 }
 
 /**
  * Resolve and authorize one original source file referenced by a gallery manifest.
  *
+ * @param int $rootGalleryId Authorized root gallery identifier for the
+ *     requested manifest.
+ * @param int $imageId Source image identifier to resolve and authorize.
  * @return array{gallery:array<string,mixed>,image:array<string,mixed>,path:string,filename:string,size:int,version:string}|null
+ *     Authorized source rows with verified path, filename, byte size and
+ *     version, or null when authorization or source checks fail.
  */
-function gallery_download_authorized_source(int $rootGalleryId, int $imageId): ?array
-{
+function gallery_download_authorized_source(
+    int $rootGalleryId,
+    int $imageId,
+): ?array {
     $rootGallery = find_gallery($rootGalleryId);
     $image = find_image($imageId);
     if (!$rootGallery || !$image || !visitor_can_access_gallery($rootGallery)) {
         return null;
     }
     $sourceGallery = find_gallery((int) ($image['gallery_id'] ?? 0));
-    if (!$sourceGallery || !public_image_visible_to_current_visitor($image, $sourceGallery)) {
+    if (
+        !$sourceGallery
+        || !public_image_visible_to_current_visitor($image, $sourceGallery)
+    ) {
         return null;
     }
 
-    $rootFolder = normalize_relative_path((string) ($rootGallery['folder_path'] ?? ''));
-    $sourceFolder = normalize_relative_path((string) ($sourceGallery['folder_path'] ?? ''));
-    if ($sourceFolder !== $rootFolder
-        && ($rootFolder === '' || !str_starts_with($sourceFolder, $rootFolder . '/'))) {
+    $rootFolder = normalize_relative_path(
+        (string) ($rootGallery['folder_path'] ?? ''),
+    );
+    $sourceFolder = normalize_relative_path(
+        (string) ($sourceGallery['folder_path'] ?? ''),
+    );
+    if (
+        $sourceFolder !== $rootFolder
+        && (
+            $rootFolder === ''
+            || !str_starts_with($sourceFolder, $rootFolder . '/')
+        )
+    ) {
         return null;
     }
 
@@ -600,7 +714,6 @@ function gallery_download_authorized_source(int $rootGalleryId, int $imageId): ?
     ];
 }
 
-
 /**
  * Return the browser manifest for one current visitor-authorized Smart Gallery.
  *
@@ -614,41 +727,66 @@ function gallery_download_authorized_source(int $rootGalleryId, int $imageId): ?
 function smart_gallery_download_manifest_authorized_items(array $smartGallery): array
 {
     $total = smart_gallery_count_images($smartGallery, true);
-    $manifestFileLimit = max(1, (int) cms_runtime_limit('download.manifest_max_files'));
+    $manifestFileLimit = max(
+        1,
+        (int) cms_runtime_limit('download.manifest_max_files'),
+    );
     if ($total > $manifestFileLimit) {
         throw new GalleryDownloadManifestException(
             t(
                 'download.progress.manifest_too_large',
-                'This gallery contains too many files for one browser download.'
+                'This gallery contains too many files for one browser download.',
             ),
-            'manifest_too_large'
+            'manifest_too_large',
         );
     }
 
     $items = [];
-    for ($offset = 0; $offset < $total; $offset += SMART_GALLERY_QUERY_MAX_PAGE_SIZE) {
-        $batch = smart_gallery_query_images($smartGallery, true, SMART_GALLERY_QUERY_MAX_PAGE_SIZE, $offset);
+    for (
+        $offset = 0;
+        $offset < $total;
+        $offset += SMART_GALLERY_QUERY_MAX_PAGE_SIZE
+    ) {
+        $batch = smart_gallery_query_images(
+            $smartGallery,
+            true,
+            SMART_GALLERY_QUERY_MAX_PAGE_SIZE,
+            $offset,
+        );
         download_manifest_profile_count('image_rows', count($batch));
         if ($batch === []) {
             break;
         }
         $sourceGalleries = smart_gallery_source_galleries($batch);
-        download_manifest_profile_count('gallery_rows', count($sourceGalleries));
+        download_manifest_profile_count(
+            'gallery_rows',
+            count($sourceGalleries),
+        );
         foreach ($batch as $image) {
             if (count($items) >= $manifestFileLimit) {
                 throw new GalleryDownloadManifestException(
                     t(
                         'download.progress.manifest_too_large',
-                        'This gallery contains too many files for one browser download.'
+                        'This gallery contains too many files for one browser download.',
                     ),
-                    'manifest_too_large'
+                    'manifest_too_large',
                 );
             }
-            $sourceGallery = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
-            if (!$sourceGallery || !public_image_visible_to_current_visitor($image, $sourceGallery)) {
+            $sourceGallery =
+                $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
+            if (
+                !$sourceGallery
+                || !public_image_visible_to_current_visitor(
+                    $image,
+                    $sourceGallery,
+                )
+            ) {
                 throw new GalleryDownloadManifestException(
-                    t('download.progress.not_available', 'This gallery is not available for download.'),
-                    'not_available'
+                    t(
+                        'download.progress.not_available',
+                        'This gallery is not available for download.',
+                    ),
+                    'not_available',
                 );
             }
             $items[] = ['gallery' => $sourceGallery, 'image' => $image];
@@ -661,9 +799,9 @@ function smart_gallery_download_manifest_authorized_items(array $smartGallery): 
         throw new GalleryDownloadManifestException(
             t(
                 'download.progress.source_changed',
-                'A source file changed after the download was prepared. Retry the download.'
+                'A source file changed after the download was prepared. Retry the download.',
             ),
-            'source_changed'
+            'source_changed',
         );
     }
     return $items;
@@ -681,8 +819,10 @@ function smart_gallery_download_manifest_authorized_items(array $smartGallery): 
  * @param array<int,array{gallery:array<string,mixed>,image:array<string,mixed>}> $items Current ordered authorized result items.
  * @return string Content-only SHA-256 result fingerprint.
  */
-function smart_gallery_download_manifest_revision(int $smartGalleryId, array $items): string
-{
+function smart_gallery_download_manifest_revision(
+    int $smartGalleryId,
+    array $items,
+): string {
     $identity = [];
     foreach ($items as $item) {
         $sourceGallery = $item['gallery'];
@@ -690,8 +830,12 @@ function smart_gallery_download_manifest_revision(int $smartGalleryId, array $it
         $identity[] = [
             'image_id' => (int) ($image['id'] ?? 0),
             'gallery_id' => (int) ($sourceGallery['id'] ?? 0),
-            'source_folder' => normalize_relative_path((string) ($sourceGallery['folder_path'] ?? '')),
-            'relative_path' => normalize_relative_path((string) ($image['relative_path'] ?? '')),
+            'source_folder' => normalize_relative_path(
+                (string) ($sourceGallery['folder_path'] ?? ''),
+            ),
+            'relative_path' => normalize_relative_path(
+                (string) ($image['relative_path'] ?? ''),
+            ),
             'source_version' => image_public_asset_version($image),
             'database_size' => max(0, (int) ($image['file_size'] ?? 0)),
         ];
@@ -713,27 +857,50 @@ function smart_gallery_download_manifest_revision(int $smartGalleryId, array $it
  * Gallery semantics or persisting bearer capabilities.
  *
  * @param array<string,mixed> $smartGallery Published Smart Gallery definition.
+ * @param ?string $sourceCapability Optional source-download capability included
+ *     only in response URLs.
  * @return array<string,mixed> Browser-safe progressive-download manifest.
  */
-function smart_gallery_download_manifest(array $smartGallery, ?string $sourceCapability = null): array
-{
-    if ((int) ($smartGallery['id'] ?? 0) <= 0
+function smart_gallery_download_manifest(
+    array $smartGallery,
+    ?string $sourceCapability = null,
+): array {
+    if (
+        (int) ($smartGallery['id'] ?? 0) <= 0
         || (int) ($smartGallery['enabled'] ?? 0) !== 1
         || (string) ($smartGallery['visibility'] ?? '') !== 'public'
-        || empty(smart_gallery_effective_presentation($smartGallery)['download_enabled'])) {
+        || empty(smart_gallery_effective_presentation(
+            $smartGallery,
+        )['download_enabled'])
+    ) {
         throw new GalleryDownloadManifestException(
-            t('download.progress.not_available', 'This gallery is not available for download.'),
-            'not_available'
+            t(
+                'download.progress.not_available',
+                'This gallery is not available for download.',
+            ),
+            'not_available',
         );
     }
 
     $smartGalleryId = (int) $smartGallery['id'];
     $items = smart_gallery_download_manifest_authorized_items($smartGallery);
-    $revision = smart_gallery_download_manifest_revision($smartGalleryId, $items);
-    $payload = download_manifest_cache_read(DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY, $smartGalleryId, $revision);
+    $revision = smart_gallery_download_manifest_revision(
+        $smartGalleryId,
+        $items,
+    );
+    $payload = download_manifest_cache_read(
+        DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY,
+        $smartGalleryId,
+        $revision,
+    );
     if ($payload === null) {
         $payload = gallery_download_manifest_build_cached_payload($items);
-        download_manifest_cache_write(DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY, $smartGalleryId, $revision, $payload);
+        download_manifest_cache_write(
+            DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY,
+            $smartGalleryId,
+            $revision,
+            $payload,
+        );
     }
 
     $downloadName = slugify((string) ($smartGallery['title'] ?? ''));
@@ -744,11 +911,24 @@ function smart_gallery_download_manifest(array $smartGallery, ?string $sourceCap
     return [
         'ok' => true,
         'filename' => $downloadName . '.zip',
-        'files' => gallery_download_manifest_response_files($payload, 'download_smart_gallery_file', 'smart_gallery_id', $smartGalleryId, $revision, $sourceCapability),
+        'files' => gallery_download_manifest_response_files(
+            $payload,
+            'download_smart_gallery_file',
+            'smart_gallery_id',
+            $smartGalleryId,
+            $revision,
+            $sourceCapability,
+        ),
         'total_files' => (int) $payload['total_files'],
         'total_bytes' => (int) $payload['total_bytes'],
-        'memory_fallback_warning_bytes' => max(1, (int) cms_runtime_limit('download.memory_fallback_warning_bytes')),
-        'memory_fallback_max_bytes' => max(1, (int) cms_runtime_limit('download.memory_fallback_max_bytes')),
+        'memory_fallback_warning_bytes' => max(
+            1,
+            (int) cms_runtime_limit('download.memory_fallback_warning_bytes'),
+        ),
+        'memory_fallback_max_bytes' => max(
+            1,
+            (int) cms_runtime_limit('download.memory_fallback_max_bytes'),
+        ),
         'zip64' => true,
     ];
 }
@@ -761,12 +941,24 @@ function smart_gallery_download_manifest(array $smartGallery, ?string $sourceCap
  * source gallery, then the image id is matched inside that canonical predicate.
  * This keeps each media request bounded without enumerating every gallery.
  *
+ * @param int $smartGalleryId Published Smart Gallery id used to recheck current
+ *     membership.
+ * @param int $imageId Source image identifier to resolve within current membership.
  * @return array{gallery:array<string,mixed>,image:array<string,mixed>,path:string,filename:string,size:int,version:string}|null
+ *     Authorized source rows with verified path, filename, byte size and
+ *     version, or null when membership or source checks fail.
  */
-function smart_gallery_download_authorized_source(int $smartGalleryId, int $imageId): ?array
-{
+function smart_gallery_download_authorized_source(
+    int $smartGalleryId,
+    int $imageId,
+): ?array {
     $smartGallery = smart_gallery_find_public_by_id($smartGalleryId);
-    if (!$smartGallery || empty(smart_gallery_effective_presentation($smartGallery)['download_enabled'])) {
+    if (
+        !$smartGallery
+        || empty(smart_gallery_effective_presentation(
+            $smartGallery,
+        )['download_enabled'])
+    ) {
         return null;
     }
 
@@ -775,9 +967,11 @@ function smart_gallery_download_authorized_source(int $smartGalleryId, int $imag
         return null;
     }
     $sourceGallery = find_gallery((int) ($image['gallery_id'] ?? 0));
-    if (!$sourceGallery
+    if (
+        !$sourceGallery
         || !gallery_is_public_listed($sourceGallery)
-        || !public_image_visible_to_current_visitor($image, $sourceGallery)) {
+        || !public_image_visible_to_current_visitor($image, $sourceGallery)
+    ) {
         return null;
     }
 
@@ -785,7 +979,7 @@ function smart_gallery_download_authorized_source(int $smartGalleryId, int $imag
         $smartGallery,
         true,
         [(int) $sourceGallery['id']],
-        $imageId
+        $imageId,
     )) {
         return null;
     }
@@ -826,7 +1020,9 @@ final class SmartGalleryZipBuildException extends RuntimeException
     public function __construct(string $reason, string $message)
     {
         parent::__construct($message);
-        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1 ? $reason : 'archive_build_failed';
+        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1
+            ? $reason
+            : 'archive_build_failed';
     }
 
     /** Return the stable diagnostic reason without exposing the exception message. */
@@ -874,12 +1070,18 @@ function zip_cache_dir(): string
  */
 function legacy_download_build_state_dir(): string
 {
-    if (function_exists(__NAMESPACE__ . '\\legacy_download_artifact_cache_status')) {
+    if (function_exists(__NAMESPACE__
+        . '\\legacy_download_artifact_cache_status')) {
         $status = legacy_download_artifact_cache_status();
         if (empty($status['legacy_server_build_capable'])) {
             throw new LegacyDownloadBuildUnavailableException(
-                legacy_download_artifact_health_exception_reason((string) ($status['reason'] ?? 'unavailable')),
-                t('download.progress.legacy_unavailable', 'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.')
+                legacy_download_artifact_health_exception_reason(
+                    (string) ($status['reason'] ?? 'unavailable'),
+                ),
+                t(
+                    'download.progress.legacy_unavailable',
+                    'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
         return (string) ($status['coordination_dir'] ?? '');
@@ -889,7 +1091,10 @@ function legacy_download_build_state_dir(): string
     if (!is_dir($path) && !@mkdir($path, 0775, true) && !is_dir($path)) {
         throw new LegacyDownloadBuildException(
             'coordination_dir_unavailable',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
     return $path;
@@ -902,7 +1107,10 @@ function legacy_download_build_state_dir(): string
  */
 function legacy_download_busy_retry_after_seconds(): int
 {
-    return max(1, min(60, (int) cms_runtime_limit('download.legacy_busy_retry_after_seconds')));
+    return max(1, min(
+        60,
+        (int) cms_runtime_limit('download.legacy_busy_retry_after_seconds'),
+    ));
 }
 
 /**
@@ -921,15 +1129,21 @@ function legacy_download_build_key(
     string $resourceType,
     int $resourceId,
     string $resourceRevision,
-    array $archiveOptions = []
-): string
-{
+    array $archiveOptions = [],
+): string {
     $resourceType = trim($resourceType);
     $resourceRevision = strtolower(trim($resourceRevision));
-    if ($resourceType === '' || $resourceId <= 0 || preg_match('/^[a-f0-9]{64}$/D', $resourceRevision) !== 1) {
+    if (
+        $resourceType === ''
+        || $resourceId <= 0
+        || preg_match('/^[a-f0-9]{64}$/D', $resourceRevision) !== 1
+    ) {
         throw new LegacyDownloadBuildException(
             'build_key_invalid',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
 
@@ -946,24 +1160,39 @@ function legacy_download_build_key(
 /**
  * Acquire the non-blocking single-flight lock for one canonical legacy build.
  *
+ * PHP 8.1 has no native resource type, so the native mixed return preserves the
+ * existing untyped return contract while PHPDoc records the successful value.
+ *
  * @param string $buildKey Canonical build key from legacy_download_build_key().
- * @return resource Owned lock handle.
+ * @return resource Owned exclusive lock handle. Build refusal throws a
+ *     LegacyDownloadBuildException.
  */
-function legacy_download_build_lock_acquire(string $buildKey)
+function legacy_download_build_lock_acquire(string $buildKey): mixed
 {
     if (preg_match('/^[a-f0-9]{64}$/D', $buildKey) !== 1) {
         throw new LegacyDownloadBuildException(
             'build_key_invalid',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
 
-    $path = legacy_download_build_state_dir() . DIRECTORY_SEPARATOR . 'build-' . $buildKey . '.lock';
+    $path =
+        legacy_download_build_state_dir()
+        . DIRECTORY_SEPARATOR
+        . 'build-'
+        . $buildKey
+        . '.lock';
     $handle = @fopen($path, 'c');
     if ($handle === false) {
         throw new LegacyDownloadBuildException(
             'build_lock_open_failed',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
 
@@ -971,8 +1200,11 @@ function legacy_download_build_lock_acquire(string $buildKey)
         fclose($handle);
         throw new LegacyDownloadBuildBusyException(
             'same_build_in_progress',
-            t('download.progress.legacy_busy', 'Download preparation is temporarily busy. Please retry in a few seconds.'),
-            legacy_download_busy_retry_after_seconds()
+            t(
+                'download.progress.legacy_busy',
+                'Download preparation is temporarily busy. Please retry in a few seconds.',
+            ),
+            legacy_download_busy_retry_after_seconds(),
         );
     }
     @touch($path);
@@ -982,16 +1214,24 @@ function legacy_download_build_lock_acquire(string $buildKey)
 /**
  * Acquire one global non-blocking legacy build-admission slot.
  *
- * @return resource Owned slot handle.
+ * PHP 8.1 has no native resource type, so the native mixed return preserves the
+ * existing untyped return contract while PHPDoc records the successful value.
+ *
+ * @return resource Owned exclusive slot handle. Capacity or filesystem refusal
+ *     throws a LegacyDownloadBuildException.
  */
-function legacy_download_build_slot_acquire()
+function legacy_download_build_slot_acquire(): mixed
 {
-    $slotCount = max(1, (int) cms_runtime_limit('download.legacy_max_concurrent_builds'));
+    $slotCount = max(
+        1,
+        (int) cms_runtime_limit('download.legacy_max_concurrent_builds'),
+    );
     $directory = legacy_download_build_state_dir();
     $openedAny = false;
 
     for ($slot = 1; $slot <= $slotCount; $slot++) {
-        $path = $directory . DIRECTORY_SEPARATOR . sprintf('slot-%03d.lock', $slot);
+        $path =
+            $directory . DIRECTORY_SEPARATOR . sprintf('slot-%03d.lock', $slot);
         $handle = @fopen($path, 'c');
         if ($handle === false) {
             continue;
@@ -1007,14 +1247,20 @@ function legacy_download_build_slot_acquire()
     if (!$openedAny) {
         throw new LegacyDownloadBuildException(
             'build_slots_unavailable',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
 
     throw new LegacyDownloadBuildBusyException(
         'global_build_capacity_busy',
-        t('download.progress.legacy_busy', 'Download preparation is temporarily busy. Please retry in a few seconds.'),
-        legacy_download_busy_retry_after_seconds()
+        t(
+            'download.progress.legacy_busy',
+            'Download preparation is temporarily busy. Please retry in a few seconds.',
+        ),
+        legacy_download_busy_retry_after_seconds(),
     );
 }
 
@@ -1047,16 +1293,32 @@ function zip_cache_ttl_seconds(): int
  *
  * Existing installations that do not yet have the config key use a conservative
  * 2 GiB default so archive generation remains bounded after an application update.
+ *
+ * @return int Maximum aggregate source-file size in bytes for a generated ZIP.
  */
 function smart_gallery_zip_max_source_bytes(): int
 {
     $config = cms_config();
-    $configured = $config['smart_gallery_zip_max_source_bytes'] ?? cms_runtime_limit('download.smart_gallery_zip_max_source_bytes');
+    $configured = $config['smart_gallery_zip_max_source_bytes'] ?? cms_runtime_limit(
+        'download.smart_gallery_zip_max_source_bytes',
+    );
     if (!is_numeric($configured)) {
-        return max(1, (int) cms_runtime_limit('download.smart_gallery_zip_max_source_bytes'));
+        return max(
+            1,
+            (int) cms_runtime_limit(
+                'download.smart_gallery_zip_max_source_bytes',
+            ),
+        );
     }
     $bytes = (int) $configured;
-    return $bytes > 0 ? $bytes : max(1, (int) cms_runtime_limit('download.smart_gallery_zip_max_source_bytes'));
+    return $bytes > 0
+        ? $bytes
+        : max(
+            1,
+            (int) cms_runtime_limit(
+                'download.smart_gallery_zip_max_source_bytes',
+            ),
+        );
 }
 
 /** Return a bounded reason code suitable for persistent Smart Gallery download logs. */
@@ -1072,10 +1334,14 @@ function smart_gallery_zip_failure_reason(Throwable $exception): string
  * Build one Smart Gallery ZIP under an exclusive signature lock and publish it atomically.
  *
  * @param string $filePath Final cache path.
- * @param array $entries Archive entries accepted by create_zip().
+ * @param array<int,array{type:'file',zip_path:string,absolute:string}> $entries
+ *     Smart Gallery file entries with source paths and archive destinations.
+ * @return void Creates or reuses the archive. A build exception reports failure.
  */
-function smart_gallery_zip_create_atomically(string $filePath, array $entries): void
-{
+function smart_gallery_zip_create_atomically(
+    string $filePath,
+    array $entries,
+): void {
     if (zip_cache_file_is_fresh($filePath)) {
         return;
     }
@@ -1083,7 +1349,10 @@ function smart_gallery_zip_create_atomically(string $filePath, array $entries): 
     $lockPath = $filePath . '.lock';
     $lockHandle = @fopen($lockPath, 'c');
     if ($lockHandle === false) {
-        throw new SmartGalleryZipBuildException('lock_open_failed', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+        throw new SmartGalleryZipBuildException('lock_open_failed', t(
+            'smart_gallery.download_failed',
+            'Smart Gallery download could not be prepared.',
+        ));
     }
 
     $partialPath = '';
@@ -1091,8 +1360,11 @@ function smart_gallery_zip_create_atomically(string $filePath, array $entries): 
         if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
             throw new LegacyDownloadBuildBusyException(
                 'artifact_publish_in_progress',
-                t('download.progress.legacy_busy', 'Download preparation is temporarily busy. Please retry in a few seconds.'),
-                legacy_download_busy_retry_after_seconds()
+                t(
+                    'download.progress.legacy_busy',
+                    'Download preparation is temporarily busy. Please retry in a few seconds.',
+                ),
+                legacy_download_busy_retry_after_seconds(),
             );
         }
 
@@ -1107,10 +1379,16 @@ function smart_gallery_zip_create_atomically(string $filePath, array $entries): 
         // A stale destination may exist from an earlier cache generation. The signature
         // lock guarantees no other Smart Gallery builder owns this final path now.
         if (is_file($filePath) && !@unlink($filePath)) {
-            throw new SmartGalleryZipBuildException('stale_archive_remove_failed', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+            throw new SmartGalleryZipBuildException('stale_archive_remove_failed', t(
+                'smart_gallery.download_failed',
+                'Smart Gallery download could not be prepared.',
+            ));
         }
         if (!@rename($partialPath, $filePath)) {
-            throw new SmartGalleryZipBuildException('archive_publish_failed', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+            throw new SmartGalleryZipBuildException('archive_publish_failed', t(
+                'smart_gallery.download_failed',
+                'Smart Gallery download could not be prepared.',
+            ));
         }
         $partialPath = '';
     } finally {
@@ -1150,7 +1428,8 @@ function zip_cache_file_is_fresh(string $filePath, ?int $now = null): bool
  * Remove expired generated ZIP files and database rows from the ZIP cache.
  *
  * @param ?int $now Now value.
- * @return array Structured result data for the caller.
+ * @return array{files:int,rows:int,ttl_seconds:int}
+ *     Removed file and row counts plus the cache lifetime in seconds.
  */
 function cleanup_expired_zip_cache(?int $now = null): array
 {
@@ -1192,7 +1471,9 @@ function cleanup_expired_zip_cache(?int $now = null): array
         }
         if ($removeRow) {
             // Variable $delete stores this steps working value.
-            $deletedRows += downloads_model_delete_zip_archive((int) $archive['id']);
+            $deletedRows += downloads_model_delete_zip_archive(
+                (int) $archive['id'],
+            );
         }
     }
 
@@ -1204,12 +1485,20 @@ function cleanup_expired_zip_cache(?int $now = null): array
         }
         // Variable $path stores this steps working value.
         $path = $entry->getPathname();
-        if ($entry->getMTime() < $cutoff && path_inside($dir, $path) && @unlink($path)) {
+        if (
+            $entry->getMTime() < $cutoff
+            && path_inside($dir, $path)
+            && @unlink($path)
+        ) {
             $deletedFiles++;
         }
     }
 
-    return ['files' => $deletedFiles, 'rows' => $deletedRows, 'ttl_seconds' => zip_cache_ttl_seconds()];
+    return [
+        'files' => $deletedFiles,
+        'rows' => $deletedRows,
+        'ttl_seconds' => zip_cache_ttl_seconds(),
+    ];
 }
 
 /**
@@ -1291,10 +1580,16 @@ function gallery_zip_create_atomically(string $filePath, array $entries): void
                 return;
             }
             if (is_file($filePath) && !@unlink($filePath)) {
-                throw new GalleryZipBuildException('stale_archive_remove_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                throw new GalleryZipBuildException('stale_archive_remove_failed', t(
+                    'download.error.zip_finalize_failed',
+                    'Unable to finalize ZIP archive.',
+                ));
             }
             if (!@rename($partialPath, $filePath)) {
-                throw new GalleryZipBuildException('archive_publish_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                throw new GalleryZipBuildException('archive_publish_failed', t(
+                    'download.error.zip_finalize_failed',
+                    'Unable to finalize ZIP archive.',
+                ));
             }
             $partialPath = '';
         } finally {
@@ -1303,7 +1598,10 @@ function gallery_zip_create_atomically(string $filePath, array $entries): void
             }
         }
     } finally {
-        if (is_resource($lease)) { flock($lease, LOCK_UN); fclose($lease); }
+        if (is_resource($lease)) {
+            flock($lease, LOCK_UN);
+            fclose($lease);
+        }
     }
 }
 
@@ -1315,23 +1613,42 @@ function gallery_zip_create_atomically(string $filePath, array $entries): void
  * @param ?string $contentSignature Optional precomputed canonical content signature.
  * @return string Text result for the caller.
  */
-function build_gallery_zip(int $galleryId, bool $publicOnly, ?string $contentSignature = null): string
-{
+function build_gallery_zip(
+    int $galleryId,
+    bool $publicOnly,
+    ?string $contentSignature = null,
+): string {
     cleanup_expired_zip_cache();
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
-        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
+        throw new RuntimeException(t(
+            'gallery.error.not_found',
+            'Gallery not found.',
+        ));
     }
     // Variable $signature stores this steps working value.
-    $signature = $contentSignature ?? gallery_zip_signature($galleryId, $publicOnly);
+    $signature = $contentSignature ?? gallery_zip_signature(
+        $galleryId,
+        $publicOnly,
+    );
     if (preg_match('/^[a-f0-9]{64}$/D', $signature) !== 1) {
-        throw new GalleryZipBuildException('signature_invalid', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+        throw new GalleryZipBuildException('signature_invalid', t(
+            'download.error.zip_finalize_failed',
+            'Unable to finalize ZIP archive.',
+        ));
     }
     // Variable $scope stores this steps working value.
     $scope = 'gallery';
     // Variable $filePath stores this steps working value.
-    $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-' . $galleryId . '-' . $signature . '.zip';
+    $filePath =
+        zip_cache_dir()
+        . DIRECTORY_SEPARATOR
+        . 'gallery-'
+        . $galleryId
+        . '-'
+        . $signature
+        . '.zip';
     if (zip_cache_file_is_fresh($filePath)) {
         return $filePath;
     }
@@ -1350,9 +1667,18 @@ function build_gallery_zip(int $galleryId, bool $publicOnly, ?string $contentSig
         downloads_model_delete_zip_archive((int) $cached['id']);
     }
 
-    gallery_zip_create_atomically($filePath, gallery_zip_entries($gallery, $publicOnly));
+    gallery_zip_create_atomically($filePath, gallery_zip_entries(
+        $gallery,
+        $publicOnly,
+    ));
     $now = now_sql();
-    downloads_model_insert_zip_archive($scope, $galleryId, $filePath, $signature, $now);
+    downloads_model_insert_zip_archive(
+        $scope,
+        $galleryId,
+        $filePath,
+        $signature,
+        $now,
+    );
     return $filePath;
 }
 
@@ -1367,16 +1693,24 @@ function build_gallery_zip(int $galleryId, bool $publicOnly, ?string $contentSig
  * @param array<string,mixed> $manifest Already-authorized bounded legacy manifest.
  * @return string SHA-256 authorized file-result fingerprint.
  */
-function gallery_legacy_result_fingerprint(int $galleryId, array $manifest): string
-{
+function gallery_legacy_result_fingerprint(
+    int $galleryId,
+    array $manifest,
+): string {
     if ($galleryId <= 0) {
-        throw new LegacyDownloadBuildException('result_fingerprint_invalid', t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.'));
+        throw new LegacyDownloadBuildException('result_fingerprint_invalid', t(
+            'download.progress.legacy_failed',
+            'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+        ));
     }
 
     $items = [];
     foreach ((array) ($manifest['files'] ?? []) as $file) {
         if (!is_array($file)) {
-            throw new LegacyDownloadBuildException('result_fingerprint_invalid', t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.'));
+            throw new LegacyDownloadBuildException('result_fingerprint_invalid', t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ));
         }
         $query = parse_url((string) ($file['url'] ?? ''), PHP_URL_QUERY);
         $params = [];
@@ -1387,8 +1721,16 @@ function gallery_legacy_result_fingerprint(int $galleryId, array $manifest): str
         $version = strtolower(trim((string) ($params['v'] ?? '')));
         $zipPath = (string) ($file['name'] ?? '');
         $size = (int) ($file['size'] ?? -1);
-        if ($imageId <= 0 || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1 || $zipPath === '' || $size < 0) {
-            throw new LegacyDownloadBuildException('result_fingerprint_invalid', t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.'));
+        if (
+            $imageId <= 0
+            || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1
+            || $zipPath === ''
+            || $size < 0
+        ) {
+            throw new LegacyDownloadBuildException('result_fingerprint_invalid', t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ));
         }
         $items[] = [
             'image_id' => $imageId,
@@ -1424,15 +1766,29 @@ function gallery_legacy_entries_source_bytes(array $entries): int
         }
         $absolute = (string) ($entry['absolute'] ?? '');
         $galleryRoot = (string) ($entry['gallery_root'] ?? '');
-        if ($absolute === '' || $galleryRoot === '' || !is_file($absolute) || !path_inside($galleryRoot, $absolute)) {
-            throw new GalleryZipBuildException('result_changed', t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+        if (
+            $absolute === ''
+            || $galleryRoot === ''
+            || !is_file($absolute)
+            || !path_inside($galleryRoot, $absolute)
+        ) {
+            throw new GalleryZipBuildException('result_changed', t(
+                'download.progress.source_changed',
+                'A source file changed after the download was prepared. Retry the download.',
+            ));
         }
         $size = filesize($absolute);
         if ($size === false || $size < 0) {
-            throw new GalleryZipBuildException('result_changed', t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+            throw new GalleryZipBuildException('result_changed', t(
+                'download.progress.source_changed',
+                'A source file changed after the download was prepared. Retry the download.',
+            ));
         }
-        if ($size > PHP_INT_MAX - $totalBytes) {
-            throw new GalleryZipBuildException('legacy_limits_exceeded', t('download.progress.legacy_too_large', 'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.'));
+        if ($size > (PHP_INT_MAX - $totalBytes)) {
+            throw new GalleryZipBuildException('legacy_limits_exceeded', t(
+                'download.progress.legacy_too_large',
+                'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.',
+            ));
         }
         $totalBytes += (int) $size;
     }
@@ -1452,12 +1808,18 @@ function gallery_legacy_entries_source_bytes(array $entries): int
 function build_legacy_gallery_zip(int $galleryId, array $manifest): string
 {
     if (!gallery_download_legacy_manifest_is_safe($manifest)) {
-        throw new GalleryZipBuildException('legacy_limits_exceeded', t('download.progress.legacy_too_large', 'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.'));
+        throw new GalleryZipBuildException('legacy_limits_exceeded', t(
+            'download.progress.legacy_too_large',
+            'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.',
+        ));
     }
 
     // The structural signature captures empty directories/subgallery membership,
     // while the manifest fingerprint captures the current visitor-authorized files.
-    $manifestFingerprint = gallery_legacy_result_fingerprint($galleryId, $manifest);
+    $manifestFingerprint = gallery_legacy_result_fingerprint(
+        $galleryId,
+        $manifest,
+    );
     $gallerySignature = gallery_zip_signature($galleryId, true);
     $revision = hash('sha256', implode('|', [
         'legacy-gallery-revision-v1',
@@ -1469,7 +1831,12 @@ function build_legacy_gallery_zip(int $galleryId, array $manifest): string
         'public_only' => true,
         'zip_layout' => 'gallery_tree_v1',
     ]);
-    $artifact = legacy_download_artifact_find('gallery', $galleryId, $revision, $buildKey);
+    $artifact = legacy_download_artifact_find(
+        'gallery',
+        $galleryId,
+        $revision,
+        $buildKey,
+    );
     if ($artifact !== null) {
         return $artifact;
     }
@@ -1481,7 +1848,12 @@ function build_legacy_gallery_zip(int $galleryId, array $manifest): string
 
         // The winning request may have completed between the first cache probe and
         // this non-blocking lock acquisition. Reuse it without consuming a slot.
-        $artifact = legacy_download_artifact_find('gallery', $galleryId, $revision, $buildKey);
+        $artifact = legacy_download_artifact_find(
+            'gallery',
+            $galleryId,
+            $revision,
+            $buildKey,
+        );
         if ($artifact !== null) {
             return $artifact;
         }
@@ -1489,14 +1861,23 @@ function build_legacy_gallery_zip(int $galleryId, array $manifest): string
         $buildSlot = legacy_download_build_slot_acquire();
         $gallery = find_gallery($galleryId);
         if (!$gallery) {
-            throw new GalleryZipBuildException('gallery_not_found', t('gallery.error.not_found', 'Gallery not found.'));
+            throw new GalleryZipBuildException('gallery_not_found', t(
+                'gallery.error.not_found',
+                'Gallery not found.',
+            ));
         }
 
         // Recheck the cheap structural signature after admission so a mutation that
         // happened between manifest preparation and build never publishes under the
         // previous immutable revision directory.
-        if (!hash_equals($gallerySignature, gallery_zip_signature($galleryId, true))) {
-            throw new GalleryZipBuildException('result_changed', t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+        if (!hash_equals($gallerySignature, gallery_zip_signature(
+            $galleryId,
+            true,
+        ))) {
+            throw new GalleryZipBuildException('result_changed', t(
+                'download.progress.source_changed',
+                'A source file changed after the download was prepared. Retry the download.',
+            ));
         }
 
         $entries = gallery_zip_entries($gallery, true);
@@ -1508,20 +1889,41 @@ function build_legacy_gallery_zip(int $galleryId, array $manifest): string
         }
         $expectedFileCount = max(0, (int) ($manifest['total_files'] ?? 0));
         if ($fileCount !== $expectedFileCount) {
-            download_manifest_cache_invalidate_resource(DOWNLOAD_MANIFEST_RESOURCE_GALLERY, $galleryId);
-            throw new GalleryZipBuildException('result_changed', t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+            download_manifest_cache_invalidate_resource(
+                DOWNLOAD_MANIFEST_RESOURCE_GALLERY,
+                $galleryId,
+            );
+            throw new GalleryZipBuildException('result_changed', t(
+                'download.progress.source_changed',
+                'A source file changed after the download was prepared. Retry the download.',
+            ));
         }
 
         $actualSourceBytes = gallery_legacy_entries_source_bytes($entries);
         $expectedSourceBytes = max(0, (int) ($manifest['total_bytes'] ?? 0));
-        $legacyMaxSourceBytes = max(1, (int) cms_runtime_limit('download.legacy_max_source_bytes'));
+        $legacyMaxSourceBytes = max(
+            1,
+            (int) cms_runtime_limit('download.legacy_max_source_bytes'),
+        );
         if ($actualSourceBytes > $legacyMaxSourceBytes) {
-            download_manifest_cache_invalidate_resource(DOWNLOAD_MANIFEST_RESOURCE_GALLERY, $galleryId);
-            throw new GalleryZipBuildException('legacy_limits_exceeded', t('download.progress.legacy_too_large', 'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.'));
+            download_manifest_cache_invalidate_resource(
+                DOWNLOAD_MANIFEST_RESOURCE_GALLERY,
+                $galleryId,
+            );
+            throw new GalleryZipBuildException('legacy_limits_exceeded', t(
+                'download.progress.legacy_too_large',
+                'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.',
+            ));
         }
         if ($actualSourceBytes !== $expectedSourceBytes) {
-            download_manifest_cache_invalidate_resource(DOWNLOAD_MANIFEST_RESOURCE_GALLERY, $galleryId);
-            throw new GalleryZipBuildException('result_changed', t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+            download_manifest_cache_invalidate_resource(
+                DOWNLOAD_MANIFEST_RESOURCE_GALLERY,
+                $galleryId,
+            );
+            throw new GalleryZipBuildException('result_changed', t(
+                'download.progress.source_changed',
+                'A source file changed after the download was prepared. Retry the download.',
+            ));
         }
 
         return legacy_download_artifact_build(
@@ -1531,14 +1933,13 @@ function build_legacy_gallery_zip(int $galleryId, array $manifest): string
             $buildKey,
             $entries,
             $actualSourceBytes,
-            $expectedFileCount
+            $expectedFileCount,
         );
     } finally {
         legacy_download_build_lock_release($buildSlot);
         legacy_download_build_lock_release($buildLock);
     }
 }
-
 
 /**
  * Build a content signature for a transient selected-photo ZIP archive.
@@ -1560,9 +1961,13 @@ function selected_images_zip_signature(array $gallery, array $images): string
         $absolute = image_abs_path($image, $gallery);
         $parts['items'][] = [
             'id' => (int) ($image['id'] ?? 0),
-            'relative_path' => normalize_relative_path((string) ($image['relative_path'] ?? '')),
+            'relative_path' => normalize_relative_path(
+                (string) ($image['relative_path'] ?? ''),
+            ),
             'file_size' => is_file($absolute) ? (int) filesize($absolute) : 0,
-            'modified_at' => is_file($absolute) ? (int) filemtime($absolute) : 0,
+            'modified_at' => is_file($absolute)
+                ? (int) filemtime($absolute)
+                : 0,
             'updated_at' => (string) ($image['updated_at'] ?? ''),
         ];
     }
@@ -1577,10 +1982,15 @@ function selected_images_zip_signature(array $gallery, array $images): string
  * @param array<string,bool> $usedNames Names already added to this archive.
  * @return string Unique archive filename.
  */
-function selected_images_zip_entry_name(array $image, array $displayFile, array &$usedNames): string
-{
+function selected_images_zip_entry_name(
+    array $image,
+    array $displayFile,
+    array &$usedNames,
+): string {
     // $sourceName stores the display derivative filename or the original source name.
-    $sourceName = basename((string) ($displayFile['filename'] ?: ($image['filename'] ?? 'photo')));
+    $sourceName = basename(
+        (string) ($displayFile['filename'] ?: $image['filename'] ?? 'photo'),
+    );
     // $extension stores a conservative image extension for files without a usable suffix.
     $extension = strtolower(pathinfo($sourceName, PATHINFO_EXTENSION));
     if ($extension === '') {
@@ -1631,7 +2041,12 @@ function selected_images_zip_entries(array $gallery, array $images): array
         $entries[] = [
             'type' => 'file',
             'absolute' => (string) $displayFile['path'],
-            'zip_path' => 'selected-photos/' . selected_images_zip_entry_name($image, $displayFile, $usedNames),
+            'zip_path' => 'selected-photos/'
+                . selected_images_zip_entry_name(
+                    $image,
+                    $displayFile,
+                    $usedNames,
+                ),
         ];
     }
     return $entries;
@@ -1648,8 +2063,10 @@ function selected_images_zip_entries(array $gallery, array $images): array
  * @param array<int> $imageIds Selected image IDs submitted by the public Picture manager.
  * @return string Absolute path to the generated ZIP archive.
  */
-function build_selected_images_zip(int $sourceGalleryId, array $imageIds): string
-{
+function build_selected_images_zip(
+    int $sourceGalleryId,
+    array $imageIds,
+): string {
     cleanup_expired_zip_cache();
     // $sourceGallery stores the gallery currently shown in the public manager.
     $sourceGallery = find_gallery($sourceGalleryId, true);
@@ -1664,7 +2081,11 @@ function build_selected_images_zip(int $sourceGalleryId, array $imageIds): strin
     // $failures stores invalid selected image messages.
     $failures = [];
     // $images stores selected rows sorted in the visible source order.
-    $images = picture_manager_owned_images_for_selection($sourceGalleryId, $normalizedIds, $failures);
+    $images = picture_manager_owned_images_for_selection(
+        $sourceGalleryId,
+        $normalizedIds,
+        $failures,
+    );
     if ($failures) {
         throw new RuntimeException(implode(' ', array_slice($failures, 0, 5)));
     }
@@ -1675,7 +2096,14 @@ function build_selected_images_zip(int $sourceGalleryId, array $imageIds): strin
     // $signature stores a transient archive cache key for this exact selection.
     $signature = selected_images_zip_signature($sourceGallery, $images);
     // $filePath stores the cache path for this selected-photo archive.
-    $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'selected-' . $sourceGalleryId . '-' . $signature . '.zip';
+    $filePath =
+        zip_cache_dir()
+        . DIRECTORY_SEPARATOR
+        . 'selected-'
+        . $sourceGalleryId
+        . '-'
+        . $signature
+        . '.zip';
     if (zip_cache_file_is_fresh($filePath)) {
         return $filePath;
     }
@@ -1683,7 +2111,9 @@ function build_selected_images_zip(int $sourceGalleryId, array $imageIds): strin
     // $entries stores browser-displayable media files ready for extraction or manual sharing.
     $entries = selected_images_zip_entries($sourceGallery, $images);
     if (!$entries) {
-        throw new RuntimeException('No selected photos have a browser-displayable file available.');
+        throw new RuntimeException(
+            'No selected photos have a browser-displayable file available.',
+        );
     }
     create_zip($filePath, $entries);
     return $filePath;
@@ -1696,10 +2126,15 @@ function build_selected_images_zip(int $sourceGalleryId, array $imageIds): strin
  * @param array<int,array{image_id:int,source_version:string,zip_path:string,source_bytes:int}> $items Ordered result identity.
  * @return string SHA-256 result fingerprint.
  */
-function smart_gallery_legacy_result_fingerprint_items(int $smartGalleryId, array $items): string
-{
+function smart_gallery_legacy_result_fingerprint_items(
+    int $smartGalleryId,
+    array $items,
+): string {
     if ($smartGalleryId <= 0) {
-        throw new LegacyDownloadBuildException('result_fingerprint_invalid', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+        throw new LegacyDownloadBuildException('result_fingerprint_invalid', t(
+            'smart_gallery.download_failed',
+            'Smart Gallery download could not be prepared.',
+        ));
     }
 
     return hash('sha256', json_encode([
@@ -1720,12 +2155,17 @@ function smart_gallery_legacy_result_fingerprint_items(int $smartGalleryId, arra
  * @param array<string,mixed> $manifest Already-authorized bounded legacy manifest.
  * @return string SHA-256 result fingerprint.
  */
-function smart_gallery_legacy_result_fingerprint(array $smartGallery, array $manifest): string
-{
+function smart_gallery_legacy_result_fingerprint(
+    array $smartGallery,
+    array $manifest,
+): string {
     $items = [];
     foreach ((array) ($manifest['files'] ?? []) as $file) {
         if (!is_array($file)) {
-            throw new LegacyDownloadBuildException('result_fingerprint_invalid', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+            throw new LegacyDownloadBuildException('result_fingerprint_invalid', t(
+                'smart_gallery.download_failed',
+                'Smart Gallery download could not be prepared.',
+            ));
         }
         $query = parse_url((string) ($file['url'] ?? ''), PHP_URL_QUERY);
         $params = [];
@@ -1736,8 +2176,16 @@ function smart_gallery_legacy_result_fingerprint(array $smartGallery, array $man
         $version = strtolower(trim((string) ($params['v'] ?? '')));
         $zipPath = (string) ($file['name'] ?? '');
         $size = (int) ($file['size'] ?? -1);
-        if ($imageId <= 0 || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1 || $zipPath === '' || $size < 0) {
-            throw new LegacyDownloadBuildException('result_fingerprint_invalid', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+        if (
+            $imageId <= 0
+            || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1
+            || $zipPath === ''
+            || $size < 0
+        ) {
+            throw new LegacyDownloadBuildException('result_fingerprint_invalid', t(
+                'smart_gallery.download_failed',
+                'Smart Gallery download could not be prepared.',
+            ));
         }
         $items[] = [
             'image_id' => $imageId,
@@ -1747,7 +2195,10 @@ function smart_gallery_legacy_result_fingerprint(array $smartGallery, array $man
         ];
     }
 
-    return smart_gallery_legacy_result_fingerprint_items((int) ($smartGallery['id'] ?? 0), $items);
+    return smart_gallery_legacy_result_fingerprint_items(
+        (int) ($smartGallery['id'] ?? 0),
+        $items,
+    );
 }
 
 /**
@@ -1758,18 +2209,38 @@ function smart_gallery_legacy_result_fingerprint(array $smartGallery, array $man
  *
  * @param array<string,mixed> $smartGallery Published Smart Gallery definition.
  * @param ?string $contentSignature Optional precomputed canonical result fingerprint.
- * @return array{entries:array<int,array<string,mixed>>,signature:string,source_bytes:int,file_count:int}
+ * @return array{entries:array<int,array{type:'file',absolute:string,zip_path:string}>,signature:string,source_bytes:int,file_count:int}
+ *     File entries, canonical result fingerprint, source-byte total and count.
  */
-function smart_gallery_zip_build_context(array $smartGallery, ?string $contentSignature = null): array
-{
+function smart_gallery_zip_build_context(
+    array $smartGallery,
+    ?string $contentSignature = null,
+): array {
     $total = smart_gallery_count_images($smartGallery, true);
-    if ($total > max(1, (int) cms_runtime_limit('download.smart_gallery_zip_max_images'))) {
-        throw new SmartGalleryZipBuildException('image_count_limit', t('smart_gallery.download_too_large', 'This Smart Gallery is too large for one server-generated ZIP. Narrow its rules or use pagination to download source galleries individually.'));
+    if (
+        $total > max(
+            1,
+            (int) cms_runtime_limit('download.smart_gallery_zip_max_images'),
+        )
+    ) {
+        throw new SmartGalleryZipBuildException('image_count_limit', t(
+            'smart_gallery.download_too_large',
+            'This Smart Gallery is too large for one server-generated ZIP. Narrow its rules or use pagination to download source galleries individually.',
+        ));
     }
 
     $images = [];
-    for ($offset = 0; $offset < $total; $offset += SMART_GALLERY_QUERY_MAX_PAGE_SIZE) {
-        $batch = smart_gallery_query_images($smartGallery, true, SMART_GALLERY_QUERY_MAX_PAGE_SIZE, $offset);
+    for (
+        $offset = 0;
+        $offset < $total;
+        $offset += SMART_GALLERY_QUERY_MAX_PAGE_SIZE
+    ) {
+        $batch = smart_gallery_query_images(
+            $smartGallery,
+            true,
+            SMART_GALLERY_QUERY_MAX_PAGE_SIZE,
+            $offset,
+        );
         if ($batch === []) {
             break;
         }
@@ -1783,7 +2254,10 @@ function smart_gallery_zip_build_context(array $smartGallery, ?string $contentSi
     $maxSourceBytes = smart_gallery_zip_max_source_bytes();
     foreach ($images as $image) {
         $source = $sourceGalleries[(int) ($image['gallery_id'] ?? 0)] ?? null;
-        if (!$source || !public_image_visible_to_current_visitor($image, $source)) {
+        if (
+            !$source
+            || !public_image_visible_to_current_visitor($image, $source)
+        ) {
             continue;
         }
         $absolute = image_abs_path($image, $source);
@@ -1791,20 +2265,35 @@ function smart_gallery_zip_build_context(array $smartGallery, ?string $contentSi
         if (!is_file($absolute) || !path_inside($sourceRoot, $absolute)) {
             continue;
         }
-        $relative = normalize_relative_path((string) ($image['relative_path'] ?? ''));
-        $zipPath = gallery_download_unique_zip_path((string) ($source['folder_path'] ?? '') . '/' . $relative, $usedNames);
+        $relative = normalize_relative_path(
+            (string) ($image['relative_path'] ?? ''),
+        );
+        $zipPath = gallery_download_unique_zip_path(
+            (string) ($source['folder_path'] ?? '') . '/' . $relative,
+            $usedNames,
+        );
         if ($zipPath === '') {
             continue;
         }
         $fileSize = filesize($absolute);
         if ($fileSize === false) {
-            throw new SmartGalleryZipBuildException('source_size_unavailable', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+            throw new SmartGalleryZipBuildException('source_size_unavailable', t(
+                'smart_gallery.download_failed',
+                'Smart Gallery download could not be prepared.',
+            ));
         }
-        if ($fileSize > $maxSourceBytes - $sourceBytes) {
-            throw new SmartGalleryZipBuildException('source_bytes_limit', t('smart_gallery.download_too_large', 'This Smart Gallery is too large for one server-generated ZIP. Narrow its rules or use pagination to download source galleries individually.'));
+        if ($fileSize > ($maxSourceBytes - $sourceBytes)) {
+            throw new SmartGalleryZipBuildException('source_bytes_limit', t(
+                'smart_gallery.download_too_large',
+                'This Smart Gallery is too large for one server-generated ZIP. Narrow its rules or use pagination to download source galleries individually.',
+            ));
         }
         $sourceBytes += $fileSize;
-        $entries[] = ['type' => 'file', 'absolute' => $absolute, 'zip_path' => $zipPath];
+        $entries[] = [
+            'type' => 'file',
+            'absolute' => $absolute,
+            'zip_path' => $zipPath,
+        ];
         $fingerprintItems[] = [
             'image_id' => (int) ($image['id'] ?? 0),
             'source_version' => image_public_asset_version($image),
@@ -1813,13 +2302,25 @@ function smart_gallery_zip_build_context(array $smartGallery, ?string $contentSi
         ];
     }
 
-    $currentSignature = smart_gallery_legacy_result_fingerprint_items((int) ($smartGallery['id'] ?? 0), $fingerprintItems);
-    if ($contentSignature !== null && !hash_equals($contentSignature, $currentSignature)) {
-        throw new SmartGalleryZipBuildException('result_changed', t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+    $currentSignature = smart_gallery_legacy_result_fingerprint_items(
+        (int) ($smartGallery['id'] ?? 0),
+        $fingerprintItems,
+    );
+    if (
+        $contentSignature !== null
+        && !hash_equals($contentSignature, $currentSignature)
+    ) {
+        throw new SmartGalleryZipBuildException('result_changed', t(
+            'download.progress.source_changed',
+            'A source file changed after the download was prepared. Retry the download.',
+        ));
     }
     $signature = $contentSignature ?? $currentSignature;
     if (preg_match('/^[a-f0-9]{64}$/D', $signature) !== 1) {
-        throw new SmartGalleryZipBuildException('signature_invalid', t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.'));
+        throw new SmartGalleryZipBuildException('signature_invalid', t(
+            'smart_gallery.download_failed',
+            'Smart Gallery download could not be prepared.',
+        ));
     }
 
     return [
@@ -1841,11 +2342,23 @@ function smart_gallery_zip_build_context(array $smartGallery, ?string $contentSi
  * @param ?string $contentSignature Optional precomputed canonical result fingerprint.
  * @return string Absolute path to the generated ZIP archive.
  */
-function build_smart_gallery_zip(array $smartGallery, ?string $contentSignature = null): string
-{
+function build_smart_gallery_zip(
+    array $smartGallery,
+    ?string $contentSignature = null,
+): string {
     cleanup_expired_zip_cache();
-    $context = smart_gallery_zip_build_context($smartGallery, $contentSignature);
-    $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'smart-gallery-' . (int) ($smartGallery['id'] ?? 0) . '-' . $context['signature'] . '.zip';
+    $context = smart_gallery_zip_build_context(
+        $smartGallery,
+        $contentSignature,
+    );
+    $filePath =
+        zip_cache_dir()
+        . DIRECTORY_SEPARATOR
+        . 'smart-gallery-'
+        . (int) ($smartGallery['id'] ?? 0)
+        . '-'
+        . $context['signature']
+        . '.zip';
     smart_gallery_zip_create_atomically($filePath, $context['entries']);
     return $filePath;
 }
@@ -1857,20 +2370,38 @@ function build_smart_gallery_zip(array $smartGallery, ?string $contentSignature 
  * @param array<string,mixed> $manifest Already-authorized bounded legacy manifest.
  * @return string Absolute completed ZIP path.
  */
-function build_legacy_smart_gallery_zip(array $smartGallery, array $manifest): string
-{
+function build_legacy_smart_gallery_zip(
+    array $smartGallery,
+    array $manifest,
+): string {
     if (!gallery_download_legacy_manifest_is_safe($manifest)) {
-        throw new SmartGalleryZipBuildException('legacy_limits_exceeded', t('download.progress.legacy_too_large', 'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.'));
+        throw new SmartGalleryZipBuildException('legacy_limits_exceeded', t(
+            'download.progress.legacy_too_large',
+            'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.',
+        ));
     }
 
     $smartGalleryId = (int) ($smartGallery['id'] ?? 0);
-    $revision = smart_gallery_legacy_result_fingerprint($smartGallery, $manifest);
-    $buildKey = legacy_download_build_key('smart_gallery', $smartGalleryId, $revision, [
-        'compression' => 'store',
-        'public_only' => true,
-        'zip_layout' => 'source_gallery_tree_v1',
-    ]);
-    $artifact = legacy_download_artifact_find('smart_gallery', $smartGalleryId, $revision, $buildKey);
+    $revision = smart_gallery_legacy_result_fingerprint(
+        $smartGallery,
+        $manifest,
+    );
+    $buildKey = legacy_download_build_key(
+        'smart_gallery',
+        $smartGalleryId,
+        $revision,
+        [
+            'compression' => 'store',
+            'public_only' => true,
+            'zip_layout' => 'source_gallery_tree_v1',
+        ],
+    );
+    $artifact = legacy_download_artifact_find(
+        'smart_gallery',
+        $smartGalleryId,
+        $revision,
+        $buildKey,
+    );
     if ($artifact !== null) {
         return $artifact;
     }
@@ -1879,37 +2410,76 @@ function build_legacy_smart_gallery_zip(array $smartGallery, array $manifest): s
     $buildSlot = null;
     try {
         $buildLock = legacy_download_build_lock_acquire($buildKey);
-        $artifact = legacy_download_artifact_find('smart_gallery', $smartGalleryId, $revision, $buildKey);
+        $artifact = legacy_download_artifact_find(
+            'smart_gallery',
+            $smartGalleryId,
+            $revision,
+            $buildKey,
+        );
         if ($artifact !== null) {
             return $artifact;
         }
 
         $buildSlot = legacy_download_build_slot_acquire();
         try {
-            $context = smart_gallery_zip_build_context($smartGallery, $revision);
+            $context = smart_gallery_zip_build_context(
+                $smartGallery,
+                $revision,
+            );
         } catch (SmartGalleryZipBuildException $exception) {
-            download_manifest_cache_invalidate_resource(DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY, $smartGalleryId);
-            if (in_array($exception->reason(), ['image_count_limit', 'source_bytes_limit'], true)) {
-                throw new SmartGalleryZipBuildException('legacy_limits_exceeded', t('download.progress.legacy_too_large', 'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.'));
+            download_manifest_cache_invalidate_resource(
+                DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY,
+                $smartGalleryId,
+            );
+            if (in_array(
+                $exception->reason(),
+                ['image_count_limit', 'source_bytes_limit'],
+                true,
+            )) {
+                throw new SmartGalleryZipBuildException('legacy_limits_exceeded', t(
+                    'download.progress.legacy_too_large',
+                    'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.',
+                ));
             }
             throw $exception;
         }
 
         $expectedFileCount = max(0, (int) ($manifest['total_files'] ?? 0));
         if ((int) $context['file_count'] !== $expectedFileCount) {
-            download_manifest_cache_invalidate_resource(DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY, $smartGalleryId);
-            throw new SmartGalleryZipBuildException('result_changed', t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+            download_manifest_cache_invalidate_resource(
+                DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY,
+                $smartGalleryId,
+            );
+            throw new SmartGalleryZipBuildException('result_changed', t(
+                'download.progress.source_changed',
+                'A source file changed after the download was prepared. Retry the download.',
+            ));
         }
         $actualSourceBytes = max(0, (int) $context['source_bytes']);
         $expectedSourceBytes = max(0, (int) ($manifest['total_bytes'] ?? 0));
-        $legacyMaxSourceBytes = max(1, (int) cms_runtime_limit('download.legacy_max_source_bytes'));
+        $legacyMaxSourceBytes = max(
+            1,
+            (int) cms_runtime_limit('download.legacy_max_source_bytes'),
+        );
         if ($actualSourceBytes > $legacyMaxSourceBytes) {
-            download_manifest_cache_invalidate_resource(DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY, $smartGalleryId);
-            throw new SmartGalleryZipBuildException('legacy_limits_exceeded', t('download.progress.legacy_too_large', 'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.'));
+            download_manifest_cache_invalidate_resource(
+                DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY,
+                $smartGalleryId,
+            );
+            throw new SmartGalleryZipBuildException('legacy_limits_exceeded', t(
+                'download.progress.legacy_too_large',
+                'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.',
+            ));
         }
         if ($actualSourceBytes !== $expectedSourceBytes) {
-            download_manifest_cache_invalidate_resource(DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY, $smartGalleryId);
-            throw new SmartGalleryZipBuildException('result_changed', t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.'));
+            download_manifest_cache_invalidate_resource(
+                DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY,
+                $smartGalleryId,
+            );
+            throw new SmartGalleryZipBuildException('result_changed', t(
+                'download.progress.source_changed',
+                'A source file changed after the download was prepared. Retry the download.',
+            ));
         }
 
         return legacy_download_artifact_build(
@@ -1919,7 +2489,7 @@ function build_legacy_smart_gallery_zip(array $smartGallery, array $manifest): s
             $buildKey,
             $context['entries'],
             $actualSourceBytes,
-            $expectedFileCount
+            $expectedFileCount,
         );
     } finally {
         legacy_download_build_lock_release($buildSlot);
@@ -1956,34 +2526,52 @@ function build_all_zip(): string
     // Variable $entries stores this steps working value.
     $entries = gallery_zip_entries_from_galleries($galleries, false);
     // Variable $filePath stores this steps working value.
-    $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'all-' . $signature . '.zip';
+    $filePath =
+        zip_cache_dir() . DIRECTORY_SEPARATOR . 'all-' . $signature . '.zip';
     create_zip($filePath, $entries);
     $now = now_sql();
-    downloads_model_insert_zip_archive('all', null, $filePath, $signature, $now);
+    downloads_model_insert_zip_archive(
+        'all',
+        null,
+        $filePath,
+        $signature,
+        $now,
+    );
     return $filePath;
 }
 
 /**
  * Produce the directories and files that should be stored in a gallery ZIP.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{folder_path:string,...} $gallery Gallery row containing the
+ *     relative folder path.
  * @param bool $publicOnly Public only value.
- * @return array Structured result data for the caller.
+ * @return array<int,array{type:'directory',zip_path:string}|array{type:'file',zip_path:string,absolute:string,gallery_root:string}>
+ *     Ordered directory and file entries; file entries include their source
+ *     path and gallery containment root.
  */
 function gallery_zip_entries(array $gallery, bool $publicOnly): array
 {
-    return gallery_zip_entries_from_galleries(gallery_zip_gallery_rows($gallery, $publicOnly), $publicOnly);
+    return gallery_zip_entries_from_galleries(
+        gallery_zip_gallery_rows($gallery, $publicOnly),
+        $publicOnly,
+    );
 }
 
 /**
  * Produce ZIP entries from already selected gallery rows.
  *
- * @param array $galleries Galleries value.
+ * @param array<int,array{id:int|string,folder_path:string,...}> $galleries
+ *     Gallery rows used to index image membership and archive-relative paths.
  * @param bool $publicOnly Public only value.
- * @return array Structured result data for the caller.
+ * @return array<int,array{type:'directory',zip_path:string}|array{type:'file',zip_path:string,absolute:string,gallery_root:string}>
+ *     Ordered directory and file entries; file entries include their source
+ *     path and gallery containment root.
  */
-function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly): array
-{
+function gallery_zip_entries_from_galleries(
+    array $galleries,
+    bool $publicOnly,
+): array {
     // Variable $directories stores this steps working value.
     $directories = [];
     // Variable $files stores this steps working value.
@@ -2004,13 +2592,22 @@ function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly):
     // Variable $galleryIds stores this steps working value.
     $galleryIds = gallery_zip_gallery_ids($galleries);
     if ($galleryIds) {
-        foreach (downloads_model_images_for_galleries($galleryIds, $publicOnly) as $image) {
+        foreach (downloads_model_images_for_galleries(
+            $galleryIds,
+            $publicOnly,
+        ) as $image) {
             // Variable $imageGallery stores this steps working value.
             $imageGallery = $galleryById[(int) $image['gallery_id']] ?? null;
             if (!$imageGallery) {
                 continue;
             }
-            if ($publicOnly && !public_image_visible_to_current_visitor($image, $imageGallery)) {
+            if (
+                $publicOnly
+                && !public_image_visible_to_current_visitor(
+                    $image,
+                    $imageGallery,
+                )
+            ) {
                 continue;
             }
             // Variable $absolute stores this steps working value.
@@ -2019,16 +2616,22 @@ function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly):
                 continue;
             }
             // Variable $relativePath stores this steps working value.
-            $relativePath = normalize_relative_path((string) $image['relative_path']);
+            $relativePath = normalize_relative_path(
+                (string) $image['relative_path'],
+            );
             // Variable $zipPath stores this steps working value.
-            $zipPath = normalize_relative_path((string) $imageGallery['folder_path'] . '/' . $relativePath);
+            $zipPath = normalize_relative_path(
+                (string) $imageGallery['folder_path'] . '/' . $relativePath,
+            );
             $files[$zipPath] = [
                 'type' => 'file',
                 'absolute' => $absolute,
                 'zip_path' => $zipPath,
                 // Keep the originating gallery root so bounded legacy builds can
                 // revalidate containment even when manifest metadata was cached.
-                'gallery_root' => gallery_abs_path((string) $imageGallery['folder_path']),
+                'gallery_root' => gallery_abs_path(
+                    (string) $imageGallery['folder_path'],
+                ),
             ];
 
             // Variable $parentDirectory stores this steps working value.
@@ -2069,28 +2672,42 @@ function create_zip(string $filePath, array $entries): void
     $lease = cache_lifecycle_download_lease($filePath);
     try {
         if (!class_exists(ZipArchive::class)) {
-            throw new GalleryZipBuildException('zip_unavailable', t('download.error.zip_unavailable', 'ZipArchive is not available.'));
+            throw new GalleryZipBuildException('zip_unavailable', t(
+                'download.error.zip_unavailable',
+                'ZipArchive is not available.',
+            ));
         }
         // Variable $zip stores this steps working value.
         $zip = new ZipArchive();
-        if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        if (
+            $zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE)
+            !== true
+        ) {
             if (is_file($filePath)) {
                 @unlink($filePath);
             }
-            throw new GalleryZipBuildException('zip_create_failed', t('download.error.zip_create_failed', 'Unable to create ZIP archive.'));
+            throw new GalleryZipBuildException('zip_create_failed', t(
+                'download.error.zip_create_failed',
+                'Unable to create ZIP archive.',
+            ));
         }
 
         $zipIsOpen = true;
         try {
             foreach ($entries as $entry) {
                 // Variable $zipPath stores this steps working value.
-                $zipPath = normalize_relative_path((string) ($entry['zip_path'] ?? ''));
+                $zipPath = normalize_relative_path(
+                    (string) ($entry['zip_path'] ?? ''),
+                );
                 if ($zipPath === '') {
                     continue;
                 }
                 if (($entry['type'] ?? 'file') === 'directory') {
                     if (!$zip->addEmptyDir(rtrim($zipPath, '/') . '/')) {
-                        throw new GalleryZipBuildException('zip_entry_add_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                        throw new GalleryZipBuildException('zip_entry_add_failed', t(
+                            'download.error.zip_finalize_failed',
+                            'Unable to finalize ZIP archive.',
+                        ));
                     }
                     continue;
                 }
@@ -2098,23 +2715,38 @@ function create_zip(string $filePath, array $entries): void
                 $absolute = (string) ($entry['absolute'] ?? '');
                 if ($absolute !== '' && is_file($absolute)) {
                     if (!$zip->addFile($absolute, $zipPath)) {
-                        throw new GalleryZipBuildException('zip_entry_add_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                        throw new GalleryZipBuildException('zip_entry_add_failed', t(
+                            'download.error.zip_finalize_failed',
+                            'Unable to finalize ZIP archive.',
+                        ));
                     }
-                    if (!$zip->setCompressionName($zipPath, ZipArchive::CM_STORE)) {
-                        throw new GalleryZipBuildException('zip_entry_compression_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                    if (!$zip->setCompressionName(
+                        $zipPath,
+                        ZipArchive::CM_STORE,
+                    )) {
+                        throw new GalleryZipBuildException('zip_entry_compression_failed', t(
+                            'download.error.zip_finalize_failed',
+                            'Unable to finalize ZIP archive.',
+                        ));
                     }
                 }
             }
 
             if (!$zip->close()) {
                 $zipIsOpen = false;
-                throw new GalleryZipBuildException('zip_close_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                throw new GalleryZipBuildException('zip_close_failed', t(
+                    'download.error.zip_finalize_failed',
+                    'Unable to finalize ZIP archive.',
+                ));
             }
             $zipIsOpen = false;
 
             $size = is_file($filePath) ? filesize($filePath) : false;
             if ($size === false || $size <= 0) {
-                throw new GalleryZipBuildException('zip_finalize_failed', t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
+                throw new GalleryZipBuildException('zip_finalize_failed', t(
+                    'download.error.zip_finalize_failed',
+                    'Unable to finalize ZIP archive.',
+                ));
             }
         } catch (Throwable $exception) {
             if ($zipIsOpen) {
@@ -2126,7 +2758,10 @@ function create_zip(string $filePath, array $entries): void
             throw $exception;
         }
     } finally {
-        if (is_resource($lease)) { flock($lease, LOCK_UN); fclose($lease); }
+        if (is_resource($lease)) {
+            flock($lease, LOCK_UN);
+            fclose($lease);
+        }
     }
 }
 
@@ -2137,11 +2772,16 @@ function create_zip(string $filePath, array $entries): void
  * @param string $downloadName Download filename.
  * @return array{status:int,path:string,filename:string,mime:string,length:int,message:string,lease_handle?:resource|null} Stream descriptor; a successful cache lease must be retained through output and closed by the controller.
  */
-function download_stream_descriptor(string $filePath, string $downloadName): array
-{
+function download_stream_descriptor(
+    string $filePath,
+    string $downloadName,
+): array {
     $lease = cache_lifecycle_download_lease($filePath);
     if (!is_file($filePath) || !path_inside(zip_cache_dir(), $filePath)) {
-        if (is_resource($lease)) { flock($lease, LOCK_UN); fclose($lease); }
+        if (is_resource($lease)) {
+            flock($lease, LOCK_UN);
+            fclose($lease);
+        }
         return [
             'status' => 404,
             'path' => '',
@@ -2161,4 +2801,3 @@ function download_stream_descriptor(string $filePath, string $downloadName): arr
         'message' => '',
     ];
 }
-

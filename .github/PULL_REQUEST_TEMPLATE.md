@@ -5,9 +5,11 @@
 ## Change details
 
 - [ ] Schema or migration impact (describe below if applicable)
-- [ ] Filesystem, security, compatibility, or configuration impact (describe below if applicable)
+- [ ] Filesystem, security, compatibility, or configuration impact (describe
+  below if applicable)
 - [ ] Documentation or translations updated where needed
-- [ ] Compatibility lifecycle considered: no new/materially changed branch, or reason, protected scenario, and retirement condition recorded below
+- [ ] Compatibility lifecycle considered: no new/materially changed branch, or
+  reason, protected scenario, and retirement condition recorded below
 
 Compatibility changes (write `none` when not applicable):
 
@@ -18,10 +20,12 @@ Compatibility changes (write `none` when not applicable):
 
 ## Verification
 
-- Applicable authoring contracts reviewed (declarations/types/shapes/policy, MVC and documentation as relevant):
+- Applicable authoring contracts reviewed (declarations/types/shapes/policy, MVC
+  and documentation as relevant):
 - Final candidate SHA and immutable source comparison base:
 - Hosted workflow URL, checked working branch, required jobs and result:
-- Material missing/skipped/blocked or stale CI coverage (local evidence is exceptional):
+- Material missing/skipped/blocked or stale CI coverage (local evidence is
+  exceptional):
 - Manual checks performed or still needed:
 
 ## Review notes

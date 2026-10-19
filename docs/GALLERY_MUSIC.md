@@ -5,13 +5,17 @@ ON on new installations and upgrades without a saved preference. Explicit OFF
 preserves all originals, playlist order, download permissions and gallery/Smart
 slideshow defaults, but hides players/tables, removes audio chooser hints and
 rejects music editor actions and protected audio/revision delivery. Enabling it
-again exposes the same stored playlist. The gallery's autoplay preference remains
+again exposes the same stored playlist. The gallery's autoplay preference
+remains
 independently OFF by default. PDF availability uses its own separate capability.
 
 Storage statistics count each stored physical copy, including hidden and
-download-locked tracks, even when this master is OFF. Smart deduplication changes
-playback membership, never physical byte accounting. **Update all** reads durable
-database totals after a one-time import of missing categories. Playlist mutations
+download-locked tracks, even when this master is OFF. Smart deduplication
+changes
+playback membership, never physical byte accounting. **Update all** reads
+durable
+database totals after a one-time import of missing categories. Playlist
+mutations
 update the music totals from committed metadata without rereading audio files;
 see [accounting scope](GALLERY_PDF.md#admin-storage-accounting).
 
@@ -24,7 +28,8 @@ issue #247.
 
 Administrators can use the ordinary Upload photos chooser/drop queue for a
 mixed selection of photographs, PDFs and music. Audio goes to protected original
-attachment storage and never enters image decoding, thumbnails or PDF conversion.
+attachment storage and never enters image decoding, thumbnails or PDF
+conversion.
 Audio-only submissions work with image preparation disabled. The editor's
 Documents / PDFs tab also retains independent upload and playlist controls.
 
@@ -38,8 +43,10 @@ wrap according to the gallery's available width, including a resized window.
 Physical galleries with authorized photographs and enabled lightbox controls
 offer **Presentation** below the attachment cards, even without attachments.
 This explicit action opens photo one and applies its configured soundtrack and
-speed defaults. In **Edit gallery → PDF · Music · Presentation**, the translucent
-Presentation card configures public launcher visibility, autoplay, music and both
+speed defaults. In **Edit gallery → PDF · Music · Presentation**, the
+translucent
+Presentation card configures public launcher visibility, autoplay, music and
+both
 speeds. Autoplay defaults ON for every gallery until explicitly changed.
 Its Save icon uses the same protected gallery form and stale-edit checks as the
 other settings. Preview and Share use the current selections, including before
@@ -85,7 +92,8 @@ unsupported native request keeps that shell rather than repeating the prompt.
 Codec/media failures retain normal player feedback. Explicit Play can retry
 later soundtrack failures.
 The pending soundtrack also resumes on a trusted click on the photo. Its glass
-player hides with the idle HUD even while activation is required; movement restores
+player hides with the idle HUD even while activation is required; movement
+restores
 the normal controls. A trusted photo/Play click also requests native fullscreen
 when the link requested it and the viewer is using the viewport fallback.
 Stop, Close, explicit silence and teardown cancel pending activation. A silent
@@ -95,7 +103,8 @@ bypass is used; fully automatic audible playback depends on browser permission.
 PDFs use the same disclosure. The existing miniplayer remains visible outside
 the list and retains its four controls. The table shows titles, browser-reported
 durations and one context-sensitive Play/Stop icon **before** each title, with
-no playback column or Pause action. Long titles use an ellipsis and full tooltip;
+no playback column or Pause action. Long titles use an ellipsis and full
+tooltip;
 only the playing, overflowing title scrolls horizontally. Reduced-motion users
 retain static ellipsis. An exclusive shared player also offers
 Previous/Play/Stop/Next on the page and in the photo-viewer HUD whenever music
@@ -146,7 +155,8 @@ tracks remain visible and locked for downloads. Public presentation/streaming
 exclude hidden tracks; verified administrators can inspect them. Hiding editor
 controls are future work. The model maps old and current records to the same
 closed field shape and key order;
-merely reading a legacy index does not rewrite its stored bytes. Invalid existing
+merely reading a legacy index does not rewrite its stored bytes. Invalid
+existing
 indexes are preserved and refused, never reset to an empty playlist.
 
 Admission requires a matching extension and server-detected MIME type using
@@ -208,24 +218,33 @@ galleries remain the storage owners. Smart Galleries use the read-only source
 union below; no transcoding or artwork is added.
 
 Gallery autoplay defaults off and changes only through the editor preference.
-Slideshow startup applies that preference synchronously before fullscreen awaits,
+Slideshow startup applies that preference synchronously before fullscreen
+awaits,
 preserving its initiating gesture. An enabled slideshow replaces any table music
-and starts at the first track. The playlist repeats in saved order; both navigation
+and starts at the first track. The playlist repeats in saved order; both
+navigation
 directions wrap. Stop releases its source. Closing/stopping slideshow releases
 music owned by that viewer; independently requested table playback can continue.
-Photo/speed changes do not restart audio. Manual Play remains available regardless
+Photo/speed changes do not restart audio. Manual Play remains available
+regardless
 of the autoplay preference and never changes the saved administrator setting.
-Page teardown releases the source and pending callbacks; back/forward restoration
+Page teardown releases the source and pending callbacks; back/forward
+restoration
 rebinds observation with no automatic playback.
 
-Native autoplay rejection exposes a translated explicit-Play retry. Failed sources
+Native autoplay rejection exposes a translated explicit-Play retry. Failed
+sources
 advance through at most one bounded pass before stopping. Generation guards
-ignore late promise failures after stop/source changes. A successful track starts
-a fresh failure pass on natural advance. These are permanent browser compatibility
+ignore late promise failures after stop/source changes. A successful track
+starts
+a fresh failure pass on natural advance. These are permanent browser
+compatibility
 behaviors owned by the music player. Live codec/device adoption remains unknown.
 
-Durations come from a separate **silent** metadata-only Audio reader, one visible
-row at a time, with a ten-second deadline. It never calls Play. Failed, infinite or
+Durations come from a separate **silent** metadata-only Audio reader, one
+visible
+row at a time, with a ten-second deadline. It never calls Play. Failed, infinite
+or
 unavailable durations show a dash rather than an estimate. IntersectionObserver
 admits visible rows; browsers without it use the same serialized bounded reader
 for connected rows. This permanent fallback preserves duration availability
@@ -236,19 +255,24 @@ needed by the browser; the server performs no decoding or tag extraction.
 ## Compact attachment presentation
 
 The existing shared lightbox view owns native disclosure markup; the new
-`gallery-media-panels.js` browser owner upgrades it to a manual top-layer popover
+`gallery-media-panels.js` browser owner upgrades it to a manual top-layer
+popover
 without moving forms or playlist nodes out of their gallery. Only one applet is
 open. Escape, the close icon, its launcher or an outside click dismiss it;
 Escape/close restores launcher focus. PDF dialogs keep priority over Escape.
-The body is bounded to 12rem (roughly five compact rows) and scrolls independently;
+The body is bounded to 12rem (roughly five compact rows) and scrolls
+independently;
 the floating panel also fits the current visual viewport. Public description
-layout groups PDF/music launchers in one column. Canonical attachment replacement
+layout groups PDF/music launchers in one column. Canonical attachment
+replacement
 reopens the same-identity applet and retains its last connected list scroll;
-removing a top-layer node otherwise resets its layout scroll to zero. Removing the last
+removing a top-layer node otherwise resets its layout scroll to zero. Removing
+the last
 PDF preserves music and its surrounding layout.
 
 Without JavaScript or Popover API support, the native details disclosure keeps
-the same bounded list inline. Without Web Animations, opening/closing is immediate.
+the same bounded list inline. Without Web Animations, opening/closing is
+immediate.
 Reduced-motion preference disables disclosure motion and title scrolling.
 ResizeObserver measures title overflow; without it, play, panel-open and window
 resize events provide the permanent measurement fallback. These paths retain
@@ -256,7 +280,8 @@ one Audio owner, authorization and editor mutation semantics.
 
 This redesign adds one browser module and no PHP source file, route, schema or
 logical runtime owner. The existing attachment closure already contains the
-shared view helper. Expected PHP module/file deltas are zero against the prepared
+shared view helper. Expected PHP module/file deltas are zero against the
+prepared
 music baseline; global logical-module allowance remains fully consumed. Hosted
 preparation/FULL owns the actual unchanged-budget proof.
 
@@ -273,8 +298,10 @@ membership. PDF/OFP originals from these sources render in the same responsive
 hero applets as physical galleries, beside the description and music summary.
 Hidden PDFs are excluded even for signed-in administrators on the public Smart
 page. Aggregate document lists have no physical mutation forms. Each document
-retains its source delivery URL and version; identical copies in different source
-galleries remain separate documents with independent visibility/access authority.
+retains its source delivery URL and version; identical copies in different
+source
+galleries remain separate documents with independent visibility/access
+authority.
 A source must contribute a matching accessible photo to the canonical result;
 an unrelated or empty physical gallery contributes no music merely because it
 exists. Protected source URLs recheck access when audio is requested.
@@ -284,16 +311,19 @@ order, preserving each source's track order. Hidden tracks are excluded; visible
 locked tracks are included. Existing SHA-256 digests identify identical original
 bytes without decoding or hashing every original during page rendering. Renamed
 copies appear once; different same-name/same-duration files remain separate.
-A visible downloadable copy may represent a duplicate at its first list position;
+A visible downloadable copy may represent a duplicate at its first list
+position;
 its own endpoint remains the permission authority. Re-encoded songs or changed
 embedded tags have different digests: acoustic/content fingerprinting is future
 work, and matching name or duration alone is deliberately insufficient.
 
 A damaged source index is counted as unavailable and omitted without rewriting
 it; other independent sources remain playable. The merge service owns this
-permanent read-only degradation. Output memory/markup scales with distinct tracks
+permanent read-only degradation. Output memory/markup scales with distinct
+tracks
 and source count; per-source admission limits remain unchanged. No gallery-wide
-audio download/decoding, metadata-reader fan-out or additional codec is introduced.
+audio download/decoding, metadata-reader fan-out or additional codec is
+introduced.
 
 The same applet, miniplayer and exclusive slideshow owner render the union.
 Negative Smart presentation IDs and source-qualified row IDs avoid collisions
@@ -305,12 +335,15 @@ overrides and the music preference in the Smart editor; manual Play remains
 available when music exists. This does not inherit a source's autoplay setting,
 copy originals or alter per-source download permission.
 
-The public Smart hero also offers the shared Presentation button and configurable
+The public Smart hero also offers the shared Presentation button and
+configurable
 share overlay. Explicit launches use the common autoplay/music ON and medium
 timings; they temporarily request music independently of the ordinary Smart
-slideshow preference above. Shared URLs preserve the active language and selected
+slideshow preference above. Shared URLs preserve the active language and
+selected
 source filter, omit photo pagination/admin preview, and snapshot all playback
-switches/speeds. The existing black introduction, trusted activation confirmation,
+switches/speeds. The existing black introduction, trusted activation
+confirmation,
 exclusive controls and paused/muted overrides apply unchanged. Global lightbox
 and effective Smart slideshow settings gate discovery/launch; PDF and music
 masters independently control their applets. Sharing grants no source access.

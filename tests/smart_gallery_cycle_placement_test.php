@@ -24,6 +24,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    require_once __DIR__ . '/support/php_source.php';
+
     require_once __DIR__ . '/support/module_source.php';
     require_once dirname(__DIR__) . '/app/services/smart_galleries.php';
 
@@ -161,7 +163,7 @@ namespace Gallery\Services {
     $normalPosition = strpos($detailSource, 'view_render_public_subgallery_section', $topPosition === false ? 0 : $topPosition);
     $bottomPosition = strpos($detailSource, "['bottom_smart_group_html']");
     smart_gallery_cycle_test_assert($topPosition !== false && $normalPosition !== false && $bottomPosition !== false && $topPosition < $normalPosition && $normalPosition < $bottomPosition, 'Public rendering places ordered top Smart Galleries before normal content and bottom Smart Galleries after it.');
-    smart_gallery_cycle_test_assert(str_contains((string) $publicSource, 'if ($smartGalleries === []) return;'), 'Filtered or unavailable attachment groups leave no empty public layout block.');
+    smart_gallery_cycle_test_assert(php_source_contains((string) $publicSource, 'if ($smartGalleries === []) return;'), 'Filtered or unavailable attachment groups leave no empty public layout block.');
 
     $galleryMutationSource = file_get_contents(dirname(__DIR__) . '/app/services/gallery_mutations.php');
     $reorderSource = file_get_contents(dirname(__DIR__) . '/app/controllers/admin_galleries_reorder.php');

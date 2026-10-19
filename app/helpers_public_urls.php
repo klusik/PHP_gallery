@@ -128,8 +128,14 @@ function gallery_public_url(array $gallery): string
         $urlPath = trim((string) ($gallery['slug'] ?? ''), '/');
     }
     if ($urlPath === '') {
-        $folderName = basename(str_replace('\\', '/', trim((string) ($gallery['folder_path'] ?? ''), '/')));
-        $urlPath = slugify((string) (($gallery['title'] ?? '') ?: $folderName ?: 'gallery'));
+        $folderName = basename(str_replace(
+            '\\',
+            '/',
+            trim((string) ($gallery['folder_path'] ?? ''), '/'),
+        ));
+        $urlPath = slugify(
+            (string) ($gallery['title'] ?? '' ?: $folderName ?: 'gallery'),
+        );
     }
     if (!url_rewrite_should_emit_clean_urls()) {
         return url_for('gallery', ['public_path' => $urlPath]);
@@ -139,7 +145,10 @@ function gallery_public_url(array $gallery): string
         ? request_mount_url($routePath)
         : public_base_url() . '/' . $routePath;
     return (string) ($_GET['preview'] ?? '') === 'visual'
-        ? public_visual_preview_url($url, (string) ($_GET['view_as'] ?? '') === 'anonymous')
+        ? public_visual_preview_url(
+            $url,
+            (string) ($_GET['view_as'] ?? '') === 'anonymous',
+        )
         : $url;
 }
 
@@ -158,7 +167,10 @@ function image_public_route_path(array $image, array $gallery): string
     // $slug stores the stable public image slug used by both routing modes.
     $slug = trim((string) ($image['url_slug'] ?? ''));
     if ($slug === '') {
-        $slug = slugify(pathinfo((string) ($image['filename'] ?? 'image'), PATHINFO_FILENAME));
+        $slug = slugify(pathinfo(
+            (string) ($image['filename'] ?? 'image'),
+            PATHINFO_FILENAME,
+        ));
     } else {
         $slug = slugify($slug);
     }
@@ -169,8 +181,14 @@ function image_public_route_path(array $image, array $gallery): string
         $urlPath = trim((string) ($gallery['slug'] ?? ''), '/');
     }
     if ($urlPath === '') {
-        $folderName = basename(str_replace('\\', '/', trim((string) ($gallery['folder_path'] ?? ''), '/')));
-        $urlPath = slugify((string) (($gallery['title'] ?? '') ?: $folderName ?: 'gallery'));
+        $folderName = basename(str_replace(
+            '\\',
+            '/',
+            trim((string) ($gallery['folder_path'] ?? ''), '/'),
+        ));
+        $urlPath = slugify(
+            (string) ($gallery['title'] ?? '' ?: $folderName ?: 'gallery'),
+        );
     }
 
     return trim($urlPath . '/' . $slug, '/');
@@ -191,7 +209,13 @@ function image_public_route_url(array $image, array $gallery): string
 {
     $publicPath = image_public_route_path($image, $gallery);
     if (!url_rewrite_should_emit_clean_urls()) {
-        return base_url('index.php?' . http_build_query(['page' => 'gallery', 'public_path' => $publicPath]));
+        return base_url(
+            'index.php?'
+                . http_build_query([
+                    'page' => 'gallery',
+                    'public_path' => $publicPath,
+                ]),
+        );
     }
     $routePath = 'gallery/' . public_path_segment($publicPath) . '/';
     return (string) ($_GET['preview'] ?? '') === 'visual'
@@ -210,10 +234,12 @@ function image_public_url(array $image, array $gallery): string
 {
     $url = image_public_route_url($image, $gallery);
     return (string) ($_GET['preview'] ?? '') === 'visual'
-        ? public_visual_preview_url($url, (string) ($_GET['view_as'] ?? '') === 'anonymous')
+        ? public_visual_preview_url(
+            $url,
+            (string) ($_GET['view_as'] ?? '') === 'anonymous',
+        )
         : $url;
 }
-
 
 /**
  * Build the preferred public media URL for one original image file.
@@ -228,9 +254,18 @@ function image_public_url(array $image, array $gallery): string
 function image_public_media_url(array $image, array $gallery): string
 {
     if (!url_rewrite_should_emit_clean_urls()) {
-        return image_public_asset_url_with_version(url_for('public_media', ['public_path' => image_public_route_path($image, $gallery)]), $image);
+        return image_public_asset_url_with_version(
+            url_for('public_media', ['public_path' => image_public_route_path(
+                $image,
+                $gallery,
+            )]),
+            $image,
+        );
     }
-    return image_public_asset_url_with_version(rtrim(image_public_route_url($image, $gallery), '/') . '/media', $image);
+    return image_public_asset_url_with_version(
+        rtrim(image_public_route_url($image, $gallery), '/') . '/media',
+        $image,
+    );
 }
 
 /**
@@ -251,7 +286,10 @@ function image_public_media_url(array $image, array $gallery): string
 function image_public_asset_url_with_version(string $url, array $image): string
 {
     if ((string) ($_GET['preview'] ?? '') === 'visual') {
-        $url = public_visual_preview_url($url, (string) ($_GET['view_as'] ?? '') === 'anonymous');
+        $url = public_visual_preview_url(
+            $url,
+            (string) ($_GET['view_as'] ?? '') === 'anonymous',
+        );
     }
     // $version stores the source/derivative identity used only for browser cache invalidation.
     $version = image_public_asset_version($image);
@@ -281,10 +319,10 @@ function image_public_asset_version(array $image): string
     // $identity stores only durable image/source fields already present on normal image rows.
     $identity = implode('|', [
         'media-cache-v2',
-        (string) ((int) ($image['id'] ?? 0)),
+        (string) (int) ($image['id'] ?? 0),
         (string) ($image['checksum_sha256'] ?? ''),
         (string) ($image['modified_at'] ?? ''),
-        (string) ((int) ($image['file_size'] ?? 0)),
+        (string) (int) ($image['file_size'] ?? 0),
         (string) ($image['relative_path_hash'] ?? ''),
         (string) max(1, (int) ($image['thumbnail_derivative_version'] ?? 1)),
     ]);
@@ -304,8 +342,12 @@ function image_public_asset_version(array $image): string
  * @param string $format Format value.
  * @return string Versioned thumbnail URL with preview markers after the complete route path.
  */
-function image_public_thumbnail_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
-{
+function image_public_thumbnail_url(
+    array $image,
+    array $gallery,
+    int $size,
+    string $format = 'jpg',
+): string {
     // $format stores an intermediate value used by the surrounding gallery workflow.
     $format = $format === 'webp' ? 'webp' : 'jpg';
     if (!url_rewrite_should_emit_clean_urls()) {
@@ -315,14 +357,21 @@ function image_public_thumbnail_url(array $image, array $gallery, int $size, str
             'format' => $format,
         ]), $image);
     }
-    return image_public_asset_url_with_version(rtrim(image_public_route_url($image, $gallery), '/') . '/thumb-' . $size . '.' . $format, $image);
+    return image_public_asset_url_with_version(
+        rtrim(image_public_route_url($image, $gallery), '/')
+            . '/thumb-'
+            . $size
+            . '.'
+            . $format,
+        $image,
+    );
 }
 
 /**
  * Build the canonical public URL for one gallery.
  *
  * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @return string Canonical public URL for the gallery.
  */
 function canonical_url_for_gallery(array $gallery): string
 {
@@ -358,10 +407,10 @@ function gallery_seo_description(array $gallery): string
 /**
  * Build safe alt text for one gallery image.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @param int $index Index value.
- * @return string Text result for the caller.
+ * @param array{description?:string|null,title?:string|null,filename?:string|null} $image Image caption and filename fields used as ordered alt-text fallbacks.
+ * @param array{title?:string|null} $gallery Gallery title used for the final fallback.
+ * @param int $index One-based position used when neither image text nor a filename is available.
+ * @return string Alt text selected from the image caption, title, filename, or gallery title and position.
  */
 function image_alt_text(array $image, array $gallery, int $index = 1): string
 {
@@ -378,7 +427,10 @@ function image_alt_text(array $image, array $gallery, int $index = 1): string
     // $filename stores an intermediate value used by the surrounding gallery workflow.
     $filename = trim((string) ($image['filename'] ?? ''));
     if ($filename !== '') {
-        return trim(preg_replace('/[-_]+/', ' ', pathinfo($filename, PATHINFO_FILENAME)) ?: $filename);
+        return trim(
+            preg_replace('/[-_]+/', ' ', pathinfo($filename, PATHINFO_FILENAME))
+                ?: $filename,
+        );
     }
     return (string) ($gallery['title'] ?? 'Gallery') . ' image ' . $index;
 }
@@ -393,12 +445,14 @@ function image_alt_text(array $image, array $gallery, int $index = 1): string
  * generated JPEG thumbnail when DB metadata says one exists, but it can use a
  * generated WebP thumbnail for WebP-only galleries instead of probing files.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $images Images value.
+ * @param array{id?:int|string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null,title?:string|null} $gallery Gallery identity, inherited NSFW state, and title used for candidate selection and alt text.
+ * @param array<int,array{id?:int|string|null,gallery_id?:int|string|null,nsfw_enabled?:int|string|null,url_slug?:string|null,filename?:string|null,description?:string|null,title?:string|null,relative_path?:string|null,visibility?:string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null}> $images Ordered image rows considered before cover-image fallbacks.
  * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null Structured result data for the caller.
  */
-function gallery_social_preview_image(array $gallery, array $images = []): ?array
-{
+function gallery_social_preview_image(
+    array $gallery,
+    array $images = [],
+): ?array {
     if (gallery_nsfw_requirement($gallery) !== null) {
         return null;
     }
@@ -410,7 +464,11 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
     foreach ($images as $image) {
         // $imageId stores the normalized image id used for duplicate protection.
         $imageId = (int) ($image['id'] ?? 0);
-        if ($imageId <= 0 || isset($seenIds[$imageId]) || (int) ($image['nsfw_enabled'] ?? 0) === 1) {
+        if (
+            $imageId <= 0
+            || isset($seenIds[$imageId])
+            || (int) ($image['nsfw_enabled'] ?? 0) === 1
+        ) {
             continue;
         }
         $seenIds[$imageId] = true;
@@ -422,16 +480,31 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
     if ($cover) {
         // $coverId stores the normalized cover image id for duplicate protection.
         $coverId = (int) ($cover['id'] ?? 0);
-        if ($coverId > 0 && !isset($seenIds[$coverId]) && !image_nsfw_restricted($cover, find_gallery((int) ($cover['gallery_id'] ?? 0)) ?: $gallery)) {
+        if (
+            $coverId > 0
+            && !isset($seenIds[$coverId])
+            && !image_nsfw_restricted(
+                $cover,
+                find_gallery((int) ($cover['gallery_id'] ?? 0)) ?: $gallery,
+            )
+        ) {
             $seenIds[$coverId] = true;
             array_unshift($candidates, $cover);
         }
     }
 
-    foreach (gallery_cover_collage_images((int) ($gallery['id'] ?? 0), true, 4) as $descendantCover) {
+    foreach (gallery_cover_collage_images(
+        (int) ($gallery['id'] ?? 0),
+        true,
+        4,
+    ) as $descendantCover) {
         // $descendantCoverId stores the normalized image id used for duplicate protection.
         $descendantCoverId = (int) ($descendantCover['id'] ?? 0);
-        if ($descendantCoverId <= 0 || isset($seenIds[$descendantCoverId]) || (int) ($descendantCover['nsfw_enabled'] ?? 0) === 1) {
+        if (
+            $descendantCoverId <= 0
+            || isset($seenIds[$descendantCoverId])
+            || (int) ($descendantCover['nsfw_enabled'] ?? 0) === 1
+        ) {
             continue;
         }
         $seenIds[$descendantCoverId] = true;
@@ -440,7 +513,11 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
 
     foreach ($candidates as $candidate) {
         // $preview stores the crawler-safe metadata for one generated JPEG thumbnail.
-        $preview = social_preview_image_from_thumbnail($candidate, $gallery, 1280);
+        $preview = social_preview_image_from_thumbnail(
+            $candidate,
+            $gallery,
+            1280,
+        );
         if ($preview !== null) {
             return $preview;
         }
@@ -457,8 +534,11 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
  * @param int $preferredSize Preferred crawler thumbnail width in pixels.
  * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null Safe thumbnail metadata, or null for an unavailable or restricted candidate.
  */
-function social_preview_image_from_thumbnail(array $image, array $currentGallery, int $preferredSize = 1280): ?array
-{
+function social_preview_image_from_thumbnail(
+    array $image,
+    array $currentGallery,
+    int $preferredSize = 1280,
+): ?array {
     // $imageGallery stores the real gallery for the candidate image. Descendant
     // cover images can belong to child galleries, so using only the current
     // gallery would produce an invalid thumbnail path for parent galleries.
@@ -472,18 +552,36 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
         ? thumbnail_bound_filter_sizes(thumbnail_sizes(), $image, $imageGallery)
         : thumbnail_sizes();
     // $selected stores the best crawler preview candidate known from DB metadata only.
-    $selected = function_exists('Gallery\\Services\\thumbnail_metadata_select_renderable_variant')
-        ? thumbnail_metadata_select_renderable_variant($image, $sizes, $preferredSize, 'jpg', true)
+    $selected = function_exists(
+        'Gallery\\Services\\thumbnail_metadata_select_renderable_variant',
+    )
+        ? thumbnail_metadata_select_renderable_variant(
+            $image,
+            $sizes,
+            $preferredSize,
+            'jpg',
+            true,
+        )
         : null;
     if ($selected === null) {
         try {
             // $fallback stores the closest existing thumbnail for older installations without metadata.
-            $fallback = thumbnail_existing_fallback($image, $imageGallery, $preferredSize, 'jpg');
+            $fallback = thumbnail_existing_fallback(
+                $image,
+                $imageGallery,
+                $preferredSize,
+                'jpg',
+            );
             if ($fallback === null) {
                 return null;
             }
             // $thumbnailPath stores the local file for legacy dimension extraction only.
-            $thumbnailPath = thumbnail_abs_path($image, $imageGallery, (int) $fallback['size'], (string) $fallback['format']);
+            $thumbnailPath = thumbnail_abs_path(
+                $image,
+                $imageGallery,
+                (int) $fallback['size'],
+                (string) $fallback['format'],
+            );
         } catch (RuntimeException) {
             return null;
         }
@@ -494,7 +592,11 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
 
         // $imageSize stores the actual thumbnail dimensions from disk for legacy installations.
         $imageSize = @getimagesize($thumbnailPath);
-        if ($imageSize === false || (int) $imageSize[0] < 200 || (int) $imageSize[1] < 200) {
+        if (
+            $imageSize === false
+            || (int) $imageSize[0] < 200
+            || (int) $imageSize[1] < 200
+        ) {
             return null;
         }
 
@@ -507,16 +609,27 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
         ];
     }
 
-    if ((int) ($selected['width'] ?? 0) < 200 || (int) ($selected['height'] ?? 0) < 200) {
+    if (
+        (int) ($selected['width'] ?? 0) < 200
+        || (int) ($selected['height'] ?? 0) < 200
+    ) {
         return null;
     }
 
     // $format stores the concrete image format selected from metadata.
     $format = (string) ($selected['format'] ?? 'jpg');
     // $url stores the absolute public URL that social crawlers receive.
-    $url = absolute_public_url(thumbnail_serving_url($image, $imageGallery, (int) $selected['size'], $format));
+    $url = absolute_public_url(thumbnail_serving_url(
+        $image,
+        $imageGallery,
+        (int) $selected['size'],
+        $format,
+    ));
     // $alt stores descriptive text for Open Graph and Twitter image metadata.
-    $localizedImage = \Gallery\Services\content_localize_entity('image', $image);
+    $localizedImage = \Gallery\Services\content_localize_entity(
+        'image',
+        $image,
+    );
     $alt = image_alt_text($localizedImage, $currentGallery);
 
     // $previewUrl stores the crawler URL exactly as generated, without adding
@@ -525,7 +638,8 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
 
     return [
         'url' => $previewUrl,
-        'secure_url' => preg_replace('#^http://#i', 'https://', $previewUrl) ?: $previewUrl,
+        'secure_url' => preg_replace('#^http://#i', 'https://', $previewUrl)
+            ?: $previewUrl,
         'type' => $format === 'webp' ? 'image/webp' : 'image/jpeg',
         'width' => (int) $selected['width'],
         'height' => (int) $selected['height'],
@@ -554,14 +668,21 @@ function social_preview_cache_busted_url(string $url, string $filePath): string
 /**
  * Emit one meta tag followed by a newline so crawler diagnostics are readable.
  *
- * @param string $attributeName Attribute name value.
- * @param string $attributeValue Attribute value value.
- * @param string $content Content value.
+ * @param string $attributeName Raw HTML meta attribute name inserted by the view.
+ * @param string $attributeValue Raw value escaped by the SEO view for its attribute.
+ * @param string $content Raw content escaped by the SEO view for the meta tag.
+ * @return void Delegate rendering; the view escapes attribute value and content.
+ * @throws RuntimeException If the SEO view function has not been loaded.
  */
-function render_meta_tag(string $attributeName, string $attributeValue, string $content): void
-{
+function render_meta_tag(
+    string $attributeName,
+    string $attributeValue,
+    string $content,
+): void {
     if (!function_exists('Gallery\Views\view_render_meta_tag')) {
-        throw new RuntimeException('SEO meta-tag view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'SEO meta-tag view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_meta_tag($attributeName, $attributeValue, $content);
 }
@@ -569,13 +690,17 @@ function render_meta_tag(string $attributeName, string $attributeValue, string $
 /**
  * Emit one link tag followed by a newline so crawler diagnostics are readable.
  *
- * @param string $rel Rel value.
- * @param string $href Href value.
+ * @param string $rel Raw link relation escaped by the SEO view.
+ * @param string $href Raw destination escaped by the SEO view for the `href`.
+ * @return void Delegate rendering; the view escapes the relation and destination.
+ * @throws RuntimeException If the SEO view function has not been loaded.
  */
 function render_link_tag(string $rel, string $href): void
 {
     if (!function_exists('Gallery\Views\view_render_link_tag')) {
-        throw new RuntimeException('SEO link-tag view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'SEO link-tag view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_link_tag($rel, $href);
 }
@@ -583,13 +708,17 @@ function render_link_tag(string $rel, string $href): void
 /**
  * Render SEO tags for a gallery page.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $images Images value.
+ * @param array{id?:int|string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null,title?:string|null,description?:string|null,slug?:string|null,url_path?:string|null,folder_path?:string|null} $gallery Gallery identity, public route, inherited NSFW, title, and description fields used by metadata preparation.
+ * @param array<int,array{id?:int|string|null,gallery_id?:int|string|null,nsfw_enabled?:int|string|null,url_slug?:string|null,filename?:string|null,description?:string|null,title?:string|null,relative_path?:string|null,visibility?:string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null,width?:int|string|null,height?:int|string|null}> $images Public image rows considered for the social preview image.
+ * @return void Prepare and render the public SEO metadata tags.
+ * @throws RuntimeException If the SEO view function has not been loaded.
  */
 function render_public_seo_tags(array $gallery, array $images = []): void
 {
     if (!function_exists('Gallery\Views\view_render_public_seo_tags')) {
-        throw new RuntimeException('Public SEO view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Public SEO view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     view_render_public_seo_tags(public_seo_tags_view_model($gallery, $images));
 }
@@ -603,28 +732,47 @@ function render_public_seo_tags(array $gallery, array $images = []): void
  * large galleries do not perform thumbnail resolution for every image during a
  * normal request.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param array $images Images value.
- * @param array $publicMediaManifest Request-local media manifest keyed by image id.
+ * @param array{id?:int|string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null,title?:string|null,description?:string|null,slug?:string|null,url_path?:string|null,folder_path?:string|null} $gallery Gallery identity, public route, inherited NSFW, title, and description fields used by metadata preparation.
+ * @param array<int,array{id?:int|string|null,gallery_id?:int|string|null,nsfw_enabled?:int|string|null,url_slug?:string|null,filename?:string|null,description?:string|null,title?:string|null,relative_path?:string|null,visibility?:string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null,width?:int|string|null,height?:int|string|null}> $images Images rendered on the current public page, in display order.
+ * @param array<int,array{seo_content_url?:string,seo_thumbnail_url?:string}> $publicMediaManifest Request-local SEO media URLs keyed by image id.
+ * @return void Prepare and render JSON-LD for the current gallery page.
+ * @throws RuntimeException If the JSON-LD view function has not been loaded.
  */
-function render_gallery_json_ld(array $gallery, array $images = [], array $publicMediaManifest = []): void
-{
+function render_gallery_json_ld(
+    array $gallery,
+    array $images = [],
+    array $publicMediaManifest = [],
+): void {
     if (!function_exists('Gallery\Views\view_render_gallery_json_ld')) {
-        throw new RuntimeException('Gallery JSON-LD view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Gallery JSON-LD view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
-    view_render_gallery_json_ld(public_gallery_json_ld_view_model($gallery, $images, $publicMediaManifest));
+    view_render_gallery_json_ld(public_gallery_json_ld_view_model(
+        $gallery,
+        $images,
+        $publicMediaManifest,
+    ));
 }
 
 /**
- * Output the sitemap XML with public gallery URLs and image sitemap metadata.
+ * Prepare public sitemap entries and delegate their XML output to the SEO view.
+ *
+ * @return void Render the generated sitemap XML response body.
+ * @throws RuntimeException If the sitemap view function has not been loaded.
  */
 function output_sitemap_xml(): void
 {
     if (!function_exists('Gallery\Views\view_render_sitemap_xml')) {
-        throw new RuntimeException('Sitemap XML view is unavailable. Ensure app/views.php is loaded before rendering.');
+        throw new RuntimeException(
+            'Sitemap XML view is unavailable. Ensure app/views.php is loaded before rendering.',
+        );
     }
     $entries = function_exists('Gallery\Services\public_sitemap_entries')
         ? public_sitemap_entries()
-        : array_map(static fn (string $url): array => ['loc' => $url, 'images' => []], public_gallery_sitemap_entries());
+        : array_map(static fn(string $url): array => [
+            'loc' => $url,
+            'images' => [],
+        ], public_gallery_sitemap_entries());
     \Gallery\Views\view_render_sitemap_xml($entries);
 }

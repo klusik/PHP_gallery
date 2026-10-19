@@ -22,6 +22,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 $root = dirname(__DIR__);
 $rendererControllerSource = (string) file_get_contents($root . '/app/controllers/public_gallery_lightbox.php');
 $rendererViewSource = (string) file_get_contents($root . '/app/views/public_gallery_lightbox.php');
@@ -74,7 +76,7 @@ lightbox_zoom_quality_rendering_assert(
     'Mobile swipe styling must keep targeting the image child inside the stable zoom surface.'
 );
 lightbox_zoom_quality_rendering_assert(
-    str_contains($galleryPageSource, '$lightboxIndex >= 0 ? $lightboxIndex : null, $thumbnailBundle)'),
+    php_source_contains($galleryPageSource, '$lightboxIndex >= 0 ? $lightboxIndex : null, $thumbnailBundle)'),
     'Physical gallery cards must pass the already-resolved thumbnail bundle.'
 );
 lightbox_zoom_quality_rendering_assert(

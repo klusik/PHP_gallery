@@ -1,0 +1,52 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: docs/experiments/mago-1.57.0-pilot.toml
+# Module Type: Development Experiment Configuration
+# Purpose: Reproduce the complete Mago PHP readability pilot.
+# Responsibilities: Pin the tool and PHP target; record the tested print policy.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+# Compatibility identifiers, rather than runtime limits. The experiment used
+# the official 1.57.0 binary with the application's PHP 8.1 compatibility floor.
+version = "1.57.0"
+php-version = "8.1"
+
+[formatter]
+# Preferred wrapping policy for this experiment.
+# Type: integer. Units: display columns. Scope: explicit pilot PHP paths.
+# Consumers: Mago's formatter. Rationale: 80 matches the advisory preference;
+# indivisible literals and comments may remain wider without changing behavior.
+print-width = 80
+
+# Existing project indentation policy for this experiment.
+# Type: integer. Units: spaces per indentation level. Scope: pilot PHP paths.
+# Consumers: Mago's formatter. Rationale: 4 matches existing PHP indentation.
+tab-width = 4
+use-tabs = false
+end-of-line = "lf"
+
+# Accept the complete formatter output, including trailing commas, redundant
+# parentheses, short-line changes and supported quote normalization. These
+# preferences do not guarantee byte-identical literals or minimal diffs.
+single-quote = true
+trailing-comma = true
+remove-trailing-close-tag = false
+sort-uses = "preserve"
+sort-class-methods = false
+separate-use-types = false
+expand-use-groups = false
+array-table-style-alignment = false
+preserve-breaking-array-like = true
+preserve-breaking-argument-list = true
+preserve-breaking-parameter-list = true
+preserve-breaking-attribute-list = true
+preserve-breaking-conditional-expression = true
+preserve-breaking-condition-expression = true
+preserve-breaking-binary-expression = true
+preserve-breaking-member-access-chain = true
+preserve-breaking-pipe-expression = true
+preserve-redundant-logical-binary-expression-parentheses = true
+indent-heredoc = false
+empty-line-after-opening-tag = false
+empty-line-after-declare = false

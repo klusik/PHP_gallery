@@ -4,7 +4,8 @@ Project: PHP Gallery
 Author: Rudolf Klusal
 
 Apply pending migrations before using image moves. The new
-`gallery_image_move_journal` table preserves intent independently of gallery rows;
+`gallery_image_move_journal` table preserves intent independently of gallery
+rows;
 there are deliberately no cascading foreign keys that could erase recovery
 evidence after unrelated deletion.
 
@@ -12,7 +13,8 @@ Lifecycle: `prepared -> moving -> db_committed -> finalized`. A verified
 pre-commit rollback ends in `rolled_back`; uncertain state becomes
 `needs_reconciliation`. The separate `database_committed` marker is written in
 the **same transaction** as image ownership and cover changes, and survives a
-later reconciliation error. Never infer commit from whether a browser got a reply.
+later reconciliation error. Never infer commit from whether a browser got a
+reply.
 
 The manifest stores original/destination relative paths, image IDs, byte lengths
 and SHA-256 identities. It is private recovery data, not a public diagnostics
@@ -26,7 +28,8 @@ or `file transfer: the original file could not be moved to its destination`.
 It includes the original/derivative manifest entry number and journal operation
 ID when available. The `gallery.image_move_failed` Admin log event records the
 source/destination gallery IDs, requested image count, phase, reason code,
-operation ID, entry number and file kind. Its private `debug` context additionally
+operation ID, entry number and file kind. Its private `debug` context
+additionally
 records the failed source/destination path resolution or transfer step, exact
 gallery-root-relative and absolute file paths, exception class/message, PHP
 source file/line and a bounded call trace without arguments. It also captures
@@ -55,7 +58,8 @@ uses the database commit marker to choose the required location. If an older
 interrupted operation left two regular files, recovery removes the extra file
 only when both match the journaled bytes. Missing, changed or unverified files
 remain for operator reconciliation. Gallery-folder relocation separately uses
-a physical directory rename; this image-move journal does not cover that workflow.
+a physical directory rename; this image-move journal does not cover that
+workflow.
 
 ## Operator workflow
 
@@ -66,7 +70,8 @@ ordinary gallery navigation and public requests do not load the pending queue.
 Missing/unknown journal schema skips the row query and displays an Action state.
 Read failure is unknown, never a claim that the queue is empty.
 
-The card and copyable diagnostics report expose at most 30 operation identifiers,
+The card and copyable diagnostics report expose at most 30 operation
+identifiers,
 source/destination gallery IDs, allowlisted lifecycle states and safe error
 categories. This is a capped sample, not a complete backlog count. Private
 manifests, paths, file fingerprints and database exceptions are excluded.
@@ -76,7 +81,8 @@ files, acquires a recovery lock, moves files or automatically recovers anything.
 
 1. Stop competing storage maintenance and take a verified backup.
 2. Run `php scripts/reconcile_image_moves.php --list` for a bounded, read-only
-   list of pending operations. Output excludes paths, image hashes and raw errors.
+   list of pending operations. Output excludes paths, image hashes and raw
+   errors.
 3. Inspect the affected source/destination galleries and storage availability.
 4. Explicitly run
    `php scripts/reconcile_image_moves.php --recover=<operation-id> --apply`.
@@ -86,12 +92,14 @@ files, acquires a recovery lock, moves files or automatically recovers anything.
    Finalized/rolled-back operations are no-ops on replay. Unrecognized, changed,
    missing or conflicting files are retained rather than overwritten.
 
-This first journal covers **image moves**, not gallery-folder relocation, uploads,
+This first journal covers **image moves**, not gallery-folder relocation,
+uploads,
 FTP changes, deletions or off-host disaster recovery. Journals are retained as
 evidence; there is no automatic deletion of unresolved records. A migration of
 those other workflows must use their own complete mutation boundary.
 
-The isolated `admin_maintenance_health_test.php` verifies the shared registration,
+The isolated `admin_maintenance_health_test.php` verifies the shared
+registration,
 lazy/three-state discovery, 30-entry cap, redaction and both rendered surfaces
 in the four maintained languages. This is service/view fixture evidence, not
 a live-journal inspection or a recovery execution test.

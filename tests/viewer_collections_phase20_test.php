@@ -27,6 +27,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 /** Assert a Phase 2.0 regression condition and throw with its descriptive label. */
 function viewer_phase20_assert(bool $condition, string $label): void
 {
@@ -178,7 +180,7 @@ $detail = viewer_phase20_function_source($controller, 'cms_viewer_collection');
 $visibleState = viewer_phase20_function_source($controller, 'viewer_collection_visible_state');
 viewer_phase20_assert(str_contains($detail, 'viewer_collection_visible_state(') && str_contains($visibleState, 'viewer_collection_item_references(') && str_contains($visibleState, 'viewer_source_images_resolve_authorized('), 'Collection detail must reauthorize stored references on every render.');
 $batch = viewer_phase20_function_source($content, 'viewer_source_images_resolve_authorized');
-viewer_phase20_assert(str_contains($batch, 'visitor_can_access_gallery_without_admin_bypass($gallery)') && str_contains($batch, 'visitor_can_access_nsfw_content_without_admin_bypass()'), 'Batch render authorization must explicitly ignore Admin bypass.');
+viewer_phase20_assert(php_source_contains($batch, 'visitor_can_access_gallery_without_admin_bypass($gallery)') && str_contains($batch, 'visitor_can_access_nsfw_content_without_admin_bypass()'), 'Batch render authorization must explicitly ignore Admin bypass.');
 viewer_phase20_assert(str_contains($batch, 'image_model_public_rows_by_ids(') && str_contains($imagesModel, 'AND visibility = ?') && str_contains($imagesModel, "['public']"), 'Only current public image rows may be returned by collection rendering.');
 viewer_phase20_assert(!str_contains($batch, 'current_user()'), 'Live source authorization must not consult the Admin principal.');
 viewer_phase20_assert(str_contains($detail, '$hiddenCount') && str_contains($collectionView, 'hidden_unavailable'), 'Inaccessible references must be omitted with generic feedback only across the controller/view boundary.');
@@ -206,7 +208,7 @@ viewer_phase20_assert(str_contains($remove, 'viewer_collection_model_item_delete
 viewer_phase20_assert(str_contains(viewer_phase20_function_source($service, 'viewer_collections_storage_available'), 'viewer_accounts_enabled()'), 'Collection storage must respect the existing viewer account feature switch.');
 viewer_phase20_assert(str_contains(viewer_phase20_function_source($controller, 'viewer_collection_require_viewer'), 'viewer_http_auth_available()') && str_contains(viewer_phase20_function_source($controller, 'viewer_collection_require_viewer'), 'viewer_collections_storage_available()'), 'Private collection routes must fail closed on viewer/schema unavailability.');
 viewer_phase20_assert(str_contains(viewer_phase20_function_source($accountsController, 'viewer_http_no_store'), "header('Cache-Control: private, no-store, max-age=0')"), 'Private collection pages must inherit the exact viewer private/no-store cache boundary.');
-viewer_phase20_assert(str_contains($publicGallery, '$viewerPrincipal = $anonymousPreview ? null : current_viewer();') && str_contains($publicGallery, '$viewerCollectionControlsEnabled = $viewerPrincipal !== null'), 'Public gallery collections must stay viewer-only and suppress the Admin viewer during anonymous preview.');
+viewer_phase20_assert(str_contains($publicGallery, '$viewerPrincipal = $anonymousPreview ? null : current_viewer();') && php_source_contains($publicGallery, '$viewerCollectionControlsEnabled = $viewerPrincipal !== null'), 'Public gallery collections must stay viewer-only and suppress the Admin viewer during anonymous preview.');
 viewer_phase20_assert(str_contains($publicGallery, '$viewerCollections = $viewerCollectionControlsEnabled') && str_contains($publicGallery, ': [];'), 'Anonymous public gallery HTML must not query/render private collection metadata.');
 viewer_phase20_assert(str_contains($smartGalleries, '$viewerCollectionRequiresSourceRecheck') && str_contains($smartGalleries, 'viewer_source_image_can_reference'), 'Dual Admin+viewer Smart Gallery controls must recheck source access without Admin authority.');
 viewer_phase20_assert(str_contains($favouritesController, 'render_viewer_collection_add_control_html'), 'Favourites page should reuse the same collection-add control.');

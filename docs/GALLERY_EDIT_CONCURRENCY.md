@@ -20,20 +20,25 @@ reads the target with `FOR UPDATE`, compares the submitted revision, and commits
 a revision reservation. Only then may folder, asset, tag, flight-map,
 localization, Smart Gallery assignment and sidecar work begin. The named lock
 remains held through those operations; no outer PDO transaction remains open.
-The row lock provides an exact compare-and-reserve boundary for the submitted row.
+The row lock provides an exact compare-and-reserve boundary for the submitted
+row.
 
 Every supported application gallery UPDATE explicitly increments the revision,
 including bulk setters, access changes, public-path rebuilds and cover writers.
 Multi-step and filesystem writers acquire the shared application lock before
-reading mutable state and retain it through their last database/file side effect.
+reading mutable state and retain it through their last database/file side
+effect.
 `Gallery\Core\GALLERY_EDIT_LOCK_SUFFIX` in `app/policy_constants.php` owns the
 protocol suffix used by those application writer boundaries.
 
-`gallery_edit_model_lock()` and `gallery_edit_model_release()` accept an optional
+`gallery_edit_model_lock()` and `gallery_edit_model_release()` accept an
+optional
 explicit PDO connection. Ordinary writers retain the configured connection;
 the layout migration supplies its runner connection for both calls. This keeps
-the same database-specific lock and nonblocking policy available to `install.php`
-before `config.php` exists. Missing ownership or a busy peer refuses the callback
+the same database-specific lock and nonblocking policy available to
+`install.php`
+before `config.php` exists. Missing ownership or a busy peer refuses the
+callback
 before layout writes; it never skips the lock for a fresh installation.
 
 This deliberately serializes operations across the whole installation,
@@ -45,16 +50,19 @@ old settings automatically.
 The lock is recursive on one connection and survives commits/rollbacks. Each
 acquisition requires its own `finally` release. All writers must target the same
 primary server; this is not coordination across multiple writable replicas or
-NDB. See [MySQL locking functions](https://dev.mysql.com/doc/refman/8.4/en/locking-functions.html).
+NDB. See
+[MySQL locking functions](https://dev.mysql.com/doc/refman/8.4/en/locking-functions.html).
 
 A killed worker loses its named lock when its connection terminates, while the
 committed reservation remains. This avoids adding an outer-transaction rollback
 of database paths after filesystem work. It does not make existing multi-step
-filesystem workflows crash-atomic; their journal/recovery owners retain that duty.
+filesystem workflows crash-atomic; their journal/recovery owners retain that
+duty.
 
 ## HTTP and browser ownership
 
-`admin_edit_gallery_success_response()` preserves the canonical mutation envelope
+`admin_edit_gallery_success_response()` preserves the canonical mutation
+envelope
 and adds top-level `edit_revision`, a decimal string from the saved row. Update
 only the submitting form under its existing form/gallery/generation ownership
 check, before awaiting mutation-completion refresh. An old success must never
@@ -108,8 +116,10 @@ successful workflow, browser route or crash-recovery path has been exercised.
 | `gallery_editor_mutations.php`, `gallery_dates.php`, `thumbnail_bounds.php`, `gallery_grid.php` | `gallery_editor_set_cover_image`, `gallery_date_save_range`, `save_gallery_thumbnail_bounds`, `reset_all_gallery_grid_overrides` | SQL-first writers need ownership through subsequent sidecars to avoid publishing an older row. |
 
 Internal migration helpers are covered only if every caller uses the guarded
-outer entry points. Preserve original docs, module includes and filesystem depth.
-Theme-only assets do not write gallery rows and are outside this entity boundary.
+outer entry points. Preserve original docs, module includes and filesystem
+depth.
+Theme-only assets do not write gallery rows and are outside this entity
+boundary.
 
 The original implementation bodies remain in their original files as `*_owned`
 delegates. Public wrappers acquire first and release in `finally`, including
@@ -122,7 +132,8 @@ request-local row cache after acquisition. Recursive thumbnail-bound saves
 reload the target before choosing its current branch. Trash reconciliation
 reloads its candidate and refuses a changed lifecycle state before recovery.
 Migration status holds ownership before loading the job that synchronization
-may rewrite. Synchronization also reloads its own durable job by job ID, refusing
+may rewrite. Synchronization also reloads its own durable job by job ID,
+refusing
 an unexpected target instead of overwriting progress from a caller's old array.
 
 ### Array-input freshness
@@ -159,7 +170,8 @@ metadata, not base gallery fields. Their path to gallery writes is through
 scanning/cover/path maintenance above. This does not claim all thumbnail file
 activity is serialized with a folder rename.
 
-Guarding only `write_gallery_sidecar($oldRow)` cannot make an old argument current.
+Guarding only `write_gallery_sidecar($oldRow)` cannot make an old argument
+current.
 Acquire before reading mutable state and retain through writing, or reload and
 compare under ownership. Sidecar-only `normalize_gallery_sidecar_tags_recursive`
 also retains the outer boundary while traversing and rewriting metadata.
@@ -176,7 +188,8 @@ cover setters and thumbnail bounds. Other explicit gallery writers are:
 - `exif.php`: global GPS reset.
 - `picture_game.php`: voting synchronization.
 - `public_paths.php`: parent assignment and gallery/full regeneration.
-- `gallery_mutations.php`: cover cleanup/assignment, paths, hierarchy and deletion.
+- `gallery_mutations.php`: cover cleanup/assignment, paths, hierarchy and
+  deletion.
 - `gallery_trash.php`: restored metadata and cover.
 - `picture_manager.php`: destination-cover assignment.
 
@@ -185,14 +198,17 @@ to the gallery model, so they advance revisions. Render-time legacy encryption
 can invalidate the original row: prepare it before capturing the complete form
 row, or handle its conservative conflict explicitly.
 
-Foreign-key actions bypass application UPDATE statements. The initial schema contains
+Foreign-key actions bypass application UPDATE statements. The initial schema
+contains
 `galleries.parent_id -> galleries.id ON DELETE SET NULL` and
 `galleries.cover_image_id -> images.id ON DELETE SET NULL`. Guarded application
 deletes must explicitly clear these references through gallery UPDATEs first.
 Canonical subtree/image deletion already uses fixed null-dependency lists for
 both references; preserve and test that behavior. Direct SQL image deletion,
-manual cascades, TRUNCATE, DDL and other out-of-application writes are outside this
-guarantee. See [MySQL foreign-key actions](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html).
+manual cascades, TRUNCATE, DDL and other out-of-application writes are outside
+this
+guarantee. See
+[MySQL foreign-key actions](https://dev.mysql.com/doc/refman/8.4/en/create-table-foreign-keys.html).
 
 Independent translations, tags, Smart Gallery placements and flight-map rows
 do not independently advance the base row unless their application workflow
@@ -204,7 +220,8 @@ lost-update protection for those entities.
 ## Deployment and bounded health
 
 System Health and Runtime Diagnostics consume the same
-`mutation_gallery_edit` registration in `admin_mutation_schema_health_statuses()`.
+`mutation_gallery_edit` registration in
+`admin_mutation_schema_health_statuses()`.
 It delegates to `gallery_edit_schema_state()`, which uses the shared three-state
 inspection result for `galleries.edit_revision`. Missing and unknown inspection
 both show Action, a bounded localized explanation and only that fixed affected
@@ -219,7 +236,8 @@ the column and then failed while creating a trigger, the migration ledger still
 lacks the version. Retrying from the Gallery page is safe: the migration runner
 accepts the duplicate-column replay and then records the version as complete.
 No trigger cleanup is required; a previously installed compatibility trigger
-that assigns the same `OLD + 1` revision may coexist with explicit application SQL.
+that assigns the same `OLD + 1` revision may coexist with explicit application
+SQL.
 
 The updater's plan and immediate activation checks, plus its compatibility copy
 entry point, now require actual verified enforcement when the prepared source
@@ -232,7 +250,8 @@ acquire a new prerequisite.
 An older installed updater cannot retroactively execute this new check. For the
 first deployment of this feature, use the existing migration action exposed by
 the Gallery administration page. No external database administration step is
-part of the workflow. Do not publish/deploy this change based on a local fixture pass alone.
+part of the workflow. Do not publish/deploy this change based on a local fixture
+pass alone.
 This implementation does not change live schema, grants or configuration.
 
 ## Verification
@@ -268,13 +287,15 @@ database or target filesystem is used by that unit fixture.
 PHP regression discovery owns these tests. The MySQL test reports SKIP without
 the fixture or BLOCKED when integration is required. The parent owns audit
 timeouts, browser completion evidence and final verification. Test existence
-does not establish every hosted database, worker-kill scenario or complete manual
+does not establish every hosted database, worker-kill scenario or complete
+manual
 filesystem acceptance. Ad hoc SQL executed outside application-owned model and
 writer boundaries is explicitly outside this concurrency contract.
 
 Integration evidence on 2026-09-20: the disposable full audit passed all 234
 PHP regressions, including the actual MySQL partial-install recovery with the
-column present and migration ledger row absent. It also passed 22 Node, 36 WinApp,
+column present and migration ledger row absent. It also passed 22 Node, 36
+WinApp,
 five Chromium integration checks, complete PHP/JavaScript syntax, strict MVC,
 changed-declaration documentation and changed-policy contracts with no failures,
 skips or blockers. The 708-file managed manifest was regenerated and verified.

@@ -1,14 +1,17 @@
 # Bounded administrator gallery-title completion
 
 The create-gallery form exposes `title_completion = {candidates: [], url: ...}`.
-The controller constructs the URL with `url_for('admin_gallery_title_completion')`.
+The controller constructs the URL with
+`url_for('admin_gallery_title_completion')`.
 No title catalog is loaded for this view model. The same empty model is used by
-the full page and an injected side-panel form. Existing galleries and image forms
+the full page and an injected side-panel form. Existing galleries and image
+forms
 have an empty completion URL. Other gallery pickers are outside this change.
 
 ## HTTP and frontend contract
 
-Administrator-only GET accepts `q` and `parent_id`. Omitted `parent_id` means `0`,
+Administrator-only GET accepts `q` and `parent_id`. Omitted `parent_id` means
+`0`,
 the root scope. IDs must be nonnegative decimal integers representable by PHP;
 arrays, negative values, leading-zero strings other than `0`, and overflow are
 rejected. Request IDs select priority only; this is an administrator catalog,
@@ -27,37 +30,47 @@ The envelope on every controller status is:
 }
 ```
 
-`candidates` contains at most eight objects, with only the four documented fields.
+`candidates` contains at most eight objects, with only the four documented
+fields.
 IDs are integers; root parent IDs are represented as `0`, including stored NULL.
 Titles retain their stored spelling after the existing outer-whitespace trim.
 Timestamps retain the SQL `YYYY-MM-DD HH:MM:SS` representation. No folder path,
 access token, authorization policy field, or database exception is exposed.
 
-The endpoint always emits JSON with `Cache-Control: private, no-store, max-age=0`,
-`X-Content-Type-Options: nosniff`, and `X-Robots-Tag: noindex, nofollow`. It never
+The endpoint always emits JSON with
+`Cache-Control: private, no-store, max-age=0`,
+`X-Content-Type-Options: nosniff`, and `X-Robots-Tag: noindex, nofollow`. It
+never
 redirects an unauthenticated JSON caller into a login document. Anonymous users
 and viewers receive 401; a non-GET administrator request receives 405 and
 `Allow: GET`; malformed inputs receive 400. Suggestion/database/authentication
 failures receive 503, `ok:false`, empty candidates, and `truncated:true`. Error
 responses use the same envelope. Successful bounded searches receive 200.
 
-`q` must be valid UTF-8, at most 255 Unicode code points and 1,024 bytes. Oversized
-input is rejected, not silently shortened. Inputs with fewer than two code points
+`q` must be valid UTF-8, at most 255 Unicode code points and 1,024 bytes.
+Oversized
+input is rejected, not silently shortened. Inputs with fewer than two code
+points
 or only Unicode whitespace return an empty success without title queries. The
 prefix otherwise preserves typed whitespace. Candidate titles independently obey
-the same character/byte bounds, and the final encoded body has a 16,384-byte cap.
+the same character/byte bounds, and the final encoded body has a 16,384-byte
+cap.
 
-The frontend may use `ok` and `candidates` alone. `normalization` and `truncated`
+The frontend may use `ok` and `candidates` alone. `normalization` and
+`truncated`
 are optional explanatory metadata for the UI. Empty results must never be used
 as evidence that a title is unique. Suggestion failure must leave ordinary title
-entry and gallery creation available. The frontend owns same-origin URL handling,
-debouncing, cancellation, stale-response suppression, and safe grapheme-to-display
+entry and gallery creation available. The frontend owns same-origin URL
+handling,
+debouncing, cancellation, stale-response suppression, and safe
+grapheme-to-display
 suffix mapping. Acceptance changes only the title, never submits the form.
 
 ## Matching and deliberately incomplete ranking
 
 When both intl and mbstring are present, `normalization` is `nfkc-lowercase`:
-apply NFKC, then locale-independent Unicode lowercase. This follows the browser's
+apply NFKC, then locale-independent Unicode lowercase. This follows the
+browser's
 `normalize('NFKC').toLowerCase()` operation order. It is not accent removal,
 transliteration, locale-sensitive casing, or full Unicode case folding. For
 example, a ligature `ﬀ` matches `ff`, fullwidth letters match their ASCII forms,
@@ -72,7 +85,8 @@ runtime versions, so the browser still validates its matching/display boundary.
 A candidate's normalized title must begin with the normalized query and be
 strictly longer; normalized exact matches are not suggestions. Siblings come
 first, with newest `created_at`, then highest `id`. Fallback uses the same order
-over the disjoint non-sibling scope. Root siblings include NULL and zero parents.
+over the disjoint non-sibling scope. Root siblings include NULL and zero
+parents.
 
 The service's fixed, named deployment constants are:
 
@@ -98,7 +112,8 @@ Matching stops immediately at eight candidates, conservatively setting
 Reaching a scope/scan budget with an extra row also sets `truncated:true`.
 
 **If the sibling scope is truncated, the service stops before fallback.** An
-unexamined older sibling could outrank every non-sibling. Returning fewer or zero
+unexamined older sibling could outrank every non-sibling. Returning fewer or
+zero
 candidates preserves this priority; it is an intentional false negative. For
 example, a matching sibling older than the newest 512 siblings can be omitted,
 even if a newer matching non-sibling exists. Only an exhausted sibling scope
@@ -118,7 +133,8 @@ EXPLAIN QUERY PLAN against the actual model SQL on the isolated SQLite fixture
 shows an indexed `parent_id` lookup plus temporary ordering for siblings, and a
 gallery scan plus temporary ordering for both first and continuing fallback
 pages. Therefore SQL work is **not independent of catalog size**: LIMIT bounds
-returned rows, not the database engine's examined/sorted rows. The worst fallback
+returned rows, not the database engine's examined/sorted rows. The worst
+fallback
 uses two such sorted scans after its sibling lookup. No unbounded page loop or
 per-candidate sorted query is introduced.
 
@@ -165,7 +181,8 @@ Measured on 2026-09-20 using PHP 8.3.30 with intl and mbstring:
 | 1,000 | 193,787 bytes | 2.060 ms / 1,273,656 bytes | 741 bytes / 0.192 ms | 1.919 ms / 499,376 bytes |
 | 10,000 | 1,957,789 bytes | 23.959 ms / 14,766,608 bytes | 749 bytes / 2.057 ms | 15.050 ms / 520,816 bytes |
 
-The new title-completion view-model JSON is 72 bytes for the sample relative URL,
+The new title-completion view-model JSON is 72 bytes for the sample relative
+URL,
 independent of gallery count, with zero title queries during form preparation.
 Exact URL length depends on installation configuration. The title-completion
 payload savings apply equally to full-page and dynamic forms; these figures do
@@ -190,9 +207,12 @@ in a disposable Chromium document, without an application database:
 node scripts/benchmark_title_completion_browser.mjs CHROMIUM_PATH 1b823be89095415b3e0991acb9f0a5b3002df024
 ~~~
 
-It compares the old whole-catalog matcher with eight returned candidates, verifies
-the same newest result, warms up each matcher, and takes the median of nine batches
-of 500 lookups. The fixture uses ASCII titles with tied timestamps. Results include
+It compares the old whole-catalog matcher with eight returned candidates,
+verifies
+the same newest result, warms up each matcher, and takes the median of nine
+batches
+of 500 lookups. The fixture uses ASCII titles with tied timestamps. Results
+include
 the baseline revision, current-source SHA-256 and browser version in ignored
 `cache/benchmarks/title-completion-browser.json`. No virtual-time clock is used.
 
@@ -206,7 +226,8 @@ Measured 2026-09-20 in Windows headless Chromium 153:
 
 Printable ASCII has an inexpensive safe-boundary path; non-ASCII still uses
 grapheme segmentation or declines completion when unavailable. These synchronous
-matching costs exclude DOM layout/painting, the 180 ms debounce, request latency,
+matching costs exclude DOM layout/painting, the 180 ms debounce, request
+latency,
 full-page rendering and device-specific input handling. They do not establish a
 mobile or end-to-end typing SLA. Hard budgets remain eight candidates, 255 code
 points per title and 16 KiB per response, not a flaky wall-clock assertion.
@@ -226,6 +247,7 @@ Coding agents commit and push the authorized working branch; hosted candidate
 preparation and its `full` matrix qualify the exact prepared SHA. `quick` and
 focused local invocations are optional for explicit diagnosis or CI-unavailable
 recovery and cannot qualify handoff. Hosted release preparation uses `release`
-without stacking audit profiles. The registered coverage includes PHP regression,
+without stacking audit profiles. The registered coverage includes PHP
+regression,
 browser-module contracts, syntax and MVC boundaries. Follow `AGENTS.md` for
 generated-artifact ownership when updater-managed files change.

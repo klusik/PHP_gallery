@@ -19,7 +19,8 @@ The migration `202610140002_gallery_cover_image_ids.php` adds the optional
   Each ID is revalidated for direct ownership and visibility during rendering.
   The pre-existing four-photo collage limit also applies to manual selections.
 - `cover_image_id`: retain the first selected ID for legacy consumers and
-  postconditions. The explicit selection list is authoritative for collage cards.
+  postconditions. The explicit selection list is authoritative for collage
+  cards.
 - `cover_image_path`: existing uploaded cover asset retains priority unless
   the administrator explicitly chooses a star, which switches back to photo
   covers.
@@ -41,7 +42,8 @@ to the same bounded automatic cover logic without revealing private data.
 
 In **Edit gallery > Images**: an outline star selects only that photo (gold);
 click the current gold star again to enter blue accumulation mode; clicking any
-outline star in blue mode adds it; clicking any selected blue star resets to that
+outline star in blue mode adds it; clicking any selected blue star resets to
+that
 photo alone (gold). The existing image-bulk endpoint receives atomic semantic
 actions `cover`, `cover_arm`, `cover_add` and `cover_reset`. The drawer uses
 its existing AJAX form owner, CSRF and public mutation coordinator. No separate
@@ -91,9 +93,11 @@ The cover writer and passive reconciliation read the form destination from its
 both the dynamically prepared drawer and the standalone Images form on their
 actual bulk endpoint.
 
-In **Edit gallery > Media > Title picture**, choose **Automatic (2 photos)** to enable
+In **Edit gallery > Media > Title picture**, choose **Automatic (2 photos)** to
+enable
 automatic composition. **Default (original gallery behavior)** retains the
-pre-upgrade fallback and does not silently change when saving other settings. The multi-selection appears as a selected read-only
+pre-upgrade fallback and does not silently change when saving other settings.
+The multi-selection appears as a selected read-only
 option until the administrator intentionally chooses Automatic or another
 single picture. Saving unrelated settings therefore keeps all blue stars.
 

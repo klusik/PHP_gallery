@@ -46,42 +46,71 @@ const GALLERY_MUSIC_FILE_MODE = 0600;
 function gallery_music_model_read(string $directory): array
 {
     $path = $directory . '/index.json';
-    if (storage_observer_call('fs.is_link', static fn(): bool => is_link($directory))
-        || storage_observer_call('fs.is_link', static fn(): bool => is_link($path))) {
+    if (
+        storage_observer_call('fs.is_link', static fn(): bool => is_link(
+            $directory,
+        ))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link(
+            $path,
+        ))
+    ) {
         throw new \RuntimeException('Unsafe music index.');
     }
-    if (!storage_observer_call('fs.file_exists', static fn(): bool => file_exists($path))) {
+    if (!storage_observer_call('fs.file_exists', static fn(): bool => file_exists(
+        $path,
+    ))) {
         // The all-zero revision is the wire identity of a never-created playlist.
-        return ['revision' => str_repeat('0', 32), 'enabled' => false, 'tracks' => []];
+        return [
+            'revision' => str_repeat('0', 32),
+            'enabled' => false,
+            'tracks' => [],
+        ];
     }
-    $bytes = storage_observer_call('fs.read.music_index',
-        static fn(): string|false => @file_get_contents(
-            $path, false, null, 0, GALLERY_MUSIC_INDEX_BYTES + 1
-        ));
+    $bytes = storage_observer_call('fs.read.music_index', static fn(): string|false => @file_get_contents(
+        $path,
+        false,
+        null,
+        0,
+        GALLERY_MUSIC_INDEX_BYTES + 1,
+    ));
     if (!is_string($bytes) || strlen($bytes) > GALLERY_MUSIC_INDEX_BYTES) {
         throw new \RuntimeException('Unreadable music index.');
     }
     $state = json_decode($bytes, true);
-    if (!is_array($state) || ($state['format'] ?? '') !== 'gallery_music_v1'
+    if (
+        !is_array($state)
+        || ($state['format'] ?? '') !== 'gallery_music_v1'
         || !is_string($state['revision'] ?? null)
         || preg_match('/^[a-f0-9]{32}$/D', $state['revision']) !== 1
         || !is_bool($state['enabled'] ?? null)
-        || !is_array($state['tracks'] ?? null) || !array_is_list($state['tracks'])) {
+        || !is_array($state['tracks'] ?? null)
+        || !array_is_list($state['tracks'])
+    ) {
         throw new \RuntimeException('Invalid music index.');
     }
     $seen = [];
     foreach ($state['tracks'] as $track) {
-        if (!is_array($track) || !is_string($track['id'] ?? null)
+        if (
+            !is_array($track)
+            || !is_string($track['id'] ?? null)
             || preg_match('/^[a-f0-9]{32}$/D', $track['id']) !== 1
-            || isset($seen[$track['id']]) || !is_string($track['filename'] ?? null)
-            || !is_string($track['title'] ?? null) || !is_string($track['mime'] ?? null)
-            || !is_int($track['size'] ?? null) || $track['size'] < 1
-            || (array_key_exists('hidden', $track)
-                && !is_bool($track['hidden']))
-            || (array_key_exists('downloadable', $track)
-                && !is_bool($track['downloadable']))
+            || isset($seen[$track['id']])
+            || !is_string($track['filename'] ?? null)
+            || !is_string($track['title'] ?? null)
+            || !is_string($track['mime'] ?? null)
+            || !is_int($track['size'] ?? null)
+            || $track['size'] < 1
+            || (
+                array_key_exists('hidden', $track)
+                && !is_bool($track['hidden'])
+            )
+            || (
+                array_key_exists('downloadable', $track)
+                && !is_bool($track['downloadable'])
+            )
             || !is_string($track['sha256'] ?? null)
-            || preg_match('/^[a-f0-9]{64}$/D', $track['sha256']) !== 1) {
+            || preg_match('/^[a-f0-9]{64}$/D', $track['sha256']) !== 1
+        ) {
             throw new \RuntimeException('Invalid music record.');
         }
         $seen[$track['id']] = true;
@@ -104,8 +133,11 @@ function gallery_music_model_read(string $directory): array
             'downloadable' => $track['downloadable'] ?? false,
         ];
     }, $state['tracks']);
-    return ['revision' => $state['revision'], 'enabled' => $state['enabled'],
-        'tracks' => $state['tracks']];
+    return [
+        'revision' => $state['revision'],
+        'enabled' => $state['enabled'],
+        'tracks' => $state['tracks'],
+    ];
 }
 
 /**
@@ -120,10 +152,15 @@ function gallery_music_model_read(string $directory): array
  */
 function gallery_music_model_write(string $directory, array $state): void
 {
-    $json = json_encode(['format' => 'gallery_music_v1'] + $state,
-        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (strlen($json) > GALLERY_MUSIC_INDEX_BYTES || is_link($directory)
-        || is_link($directory . '/index.json')) {
+    $json = json_encode(
+        ['format' => 'gallery_music_v1'] + $state,
+        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
+    if (
+        strlen($json) > GALLERY_MUSIC_INDEX_BYTES
+        || is_link($directory)
+        || is_link($directory . '/index.json')
+    ) {
         throw new \RuntimeException('Unsafe music index publication.');
     }
     // Random 128-bit names provide exclusive staging identities, not a retry policy.
@@ -144,7 +181,9 @@ function gallery_music_model_write(string $directory, array $state): void
             throw new \RuntimeException('Music index publication failed.');
         }
     } finally {
-        if (is_resource($handle)) fclose($handle);
-        if (is_file($stage)) @unlink($stage);
+        if (is_resource($handle))
+            fclose($handle);
+        if (is_file($stage))
+            @unlink($stage);
     }
 }

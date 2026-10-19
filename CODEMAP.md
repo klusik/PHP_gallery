@@ -28,35 +28,44 @@
 
 - Updater status diagnostics expose nonmutating worker-lock observation and
   server checkpoint age. Cache UI samples compare phase counters and retain one
-  latest observation; retry preserves the prior owner-redacted failure separately.
+  latest observation; retry preserves the prior owner-redacted failure
+  separately.
 
 - `app/bootstrap/maintenance.php`: explicit cache transports/passive updater
-  reads bypass background maintenance before controller dispatch; ordinary routes
+  reads bypass background maintenance before controller dispatch; ordinary
+  routes
   keep the established triggers. The actual dispatch probe is owned by
   `tests/cache_transport_maintenance_test.php`.
 
 - Cache diagnostic controls share document delegation: copy the current JSON,
-  read blocking-job phase counters through Admin Updates, and cancel only through
+  read blocking-job phase counters through Admin Updates, and cancel only
+  through
   its pre-activation owner. The site-maintenance controller's `cache_job_stop`
-  action returns canonical in-place completion; the four-pixel bar stays compact.
+  action returns canonical in-place completion; the four-pixel bar stays
+  compact.
 
 - `app/services/cache_cleanup_diagnostics.php`: safe manual-run correlation,
-  bounded lifecycle traces, confirmed Admin-log receipts and PHP error-log fallback.
+  bounded lifecycle traces, confirmed Admin-log receipts and PHP error-log
+  fallback.
 - `tests/cache_cleanup_diagnostics_test.php`: isolated installed-schema width
   rejection, insertion receipts and secret-redaction regression coverage.
 
 - `public/assets/gallery-modules/admin-cache-cleanup.js`: document-delegated,
-  single-flight manual cache form with canonical completion and owned result text.
+  single-flight manual cache form with canonical completion and owned result
+  text.
 - `app/controllers/site_maintenance.php`: existing authenticated/CSRF settings
-  route also handles the manual `cache_cleanup` action and non-JS return to Media.
+  route also handles the manual `cache_cleanup` action and non-JS return to
+  Media.
 
 - `app/services/updates_jobs/cleanup.php`: independent scheduled prune-trash GC
-  and read-only committed evidence; it never stages live jobs or rollback backups.
+  and read-only committed evidence; it never stages live jobs or rollback
+  backups.
 - `app/services/updates_filesystem.php`: observation/deadline-bounded physical
   deletion with a validated relative directory checkpoint.
 - `scripts/site_maintenance.php --cache-only`: hosting cron entry point for
   updater trash reclamation without thumbnail/telemetry work.
-- `docs/CACHE_MAINTENANCE.md`: owner safety, scheduling and #212 incident boundaries.
+- `docs/CACHE_MAINTENANCE.md`: owner safety, scheduling and #212 incident
+  boundaries.
 
 Hosted source/release lifecycle ownership:
 
@@ -65,40 +74,55 @@ Hosted source/release lifecycle ownership:
 - `scripts/readability_report.py`, `readability_tokens.php` and
   `readability_rules.json`: immutable source inventory, existing token adapters,
   Unicode width/spacing recommendations and narrowly explained exceptions.
-  `scripts/readability_documents.py` owns conservative TeX/Markdown prose analysis
+  `scripts/readability_documents.py` owns conservative TeX/Markdown prose
+  analysis
   and protected command, math, code, table and link boundaries.
-  Central audit profile `readability` owns execution; required profiles are unchanged.
+  Central audit profile `readability` owns execution; required profiles are
+  unchanged.
 
-- `.github/workflows/candidate-preparation.yml`: source-only preflight, canonical
-  generated-state commit on authorized feature/fix/codex branches, exact-SHA full
+- `.github/workflows/candidate-preparation.yml`: source-only preflight,
+  canonical
+  generated-state commit on authorized feature/fix/codex branches, exact-SHA
+  full
   matrix and stale-head gate; agents follow the CI-first contract in AGENTS.md.
-- `.github/workflows/release-qualification.yml`: release preparation/manual batch,
+- `.github/workflows/release-qualification.yml`: release preparation/manual
+  batch,
   authoritative release matrix, candidate-bound check and qualification record.
-- `.github/workflows/release-promotion.yml`: human review-event completion of exact Q,
+- `.github/workflows/release-promotion.yml`: human review-event completion of
+  exact Q,
   protected standard merge, immutable tag and independent safe develop FF.
-- `.github/scripts/release-promotion.mjs`: immutable run/attempt/branch validation,
+- `.github/scripts/release-promotion.mjs`: immutable run/attempt/branch
+  validation,
   complete PR detail and ordered parent/tree verification; no GitHub publisher.
-- `.github/scripts/release-completion.mjs`: automatic qualified PR, reviewed merge,
-  idempotent tag, permanent approval/merge evidence and protected non-force develop
+- `.github/scripts/release-completion.mjs`: automatic qualified PR, reviewed
+  merge,
+  idempotent tag, permanent approval/merge evidence and protected non-force
+  develop
   FF; manual publication only.
 - `.github/scripts/start-new-release.mjs`: origin initialization on an existing
   maintainer-pushed release branch and same-run preparation handoff.
-- `.github/scripts/release-readiness.mjs`: actual workflow-token read-only policy proof.
-- `.github/scripts/release-asset-integrity.mjs`: exact-Q/base complete inventory and
+- `.github/scripts/release-readiness.mjs`: actual workflow-token read-only
+  policy proof.
+- `.github/scripts/release-asset-integrity.mjs`: exact-Q/base complete inventory
+  and
   SHA-256 validation, duplicate-checksum and symlink refusal.
-- `.github/scripts/release-assets.mjs`: deterministic production package, four PDFs,
+- `.github/scripts/release-assets.mjs`: deterministic production package, four
+  PDFs,
   notes, evidence archive and SHA-256 checksums for manual publication.
 - `tests/hosted_release_policy_test.mjs`: central Node regression for stale/red/
   missing evidence, no red overrides, complete policy and branch safety.
 
-This file maps features to source files. It is optimized for fast maintenance and AI-assisted code changes.
+This file maps features to source files. It is optimized for fast maintenance
+and AI-assisted code changes.
 
 ## How to Use This Map
 
 1. Find the feature area below.
 2. Open the listed controller first when the change is request/response related.
-3. Open the listed service first when the change is business logic, storage, validation or shared behavior.
-4. Open the listed migration only to understand schema history. Add a new migration for changes.
+3. Open the listed service first when the change is business logic, storage,
+   validation or shared behavior.
+4. Open the listed migration only to understand schema history. Add a new
+   migration for changes.
 5. Open public assets only for browser-side behavior or styling.
 
 ## Canonical MVC Flow
@@ -124,9 +148,17 @@ ModuleLoader -> existing Controller -------> View
  Core DB / filesystem primitives
 ```
 
-Layer roots are `app/controllers/`, `app/services/`, `app/models/`, and `app/views/`. SQL/data access belongs in models. Domain orchestration belongs in services. HTTP request/response behavior belongs in controllers. HTML belongs in views and should consume prepared view-model arrays rather than request globals or domain-policy calls.
+Layer roots are `app/controllers/`, `app/services/`, `app/models/`, and
+`app/views/`. SQL/data access belongs in models. Domain orchestration belongs in
+services. HTTP request/response behavior belongs in controllers. HTML belongs in
+views and should consume prepared view-model arrays rather than request globals
+or domain-policy calls.
 
-Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `scripts/mvc_boundary_baseline.json` retained at zero occurrences and focused regression coverage in `tests/mvc_layer_contract_test.php` plus the staged MVC boundary tests. All central audit profiles run this check, so any new cross-layer leakage is immediately release-blocking.
+Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with
+`scripts/mvc_boundary_baseline.json` retained at zero occurrences and focused
+regression coverage in `tests/mvc_layer_contract_test.php` plus the staged MVC
+boundary tests. All central audit profiles run this check, so any new
+cross-layer leakage is immediately release-blocking.
 
 ## Core Runtime
 
@@ -260,7 +292,17 @@ Repository enforcement lives in `scripts/check_mvc_boundaries.php`, with `script
 | Phase 0.6 auth/reset/transport regressions | `tests/viewer_authentication_phase06_test.php`, plus updated viewer schema/security/mail tests |
 | Phase 0.7 lifecycle/content regressions | `tests/viewer_account_lifecycle_phase07_test.php`, optional real-DB races in `tests/viewer_phase07_mysql_concurrency_test.php`, plus migration consistency coverage |
 
-There is intentionally no viewer controller, view, route, JavaScript, CSS, mail sender, remember-cookie emission, or Admin setting page in Phase 0 through Phase 0.7. `current_user()` remains administrator-only and `current_viewer()` remains a separate principal. Email verification establishes only short-lived pre-auth activation authority; durable activation, password login, remember rotation, password reset, recent reauthentication, password/email lifecycle transitions, and account deletion exist only as internal services. Collection/favourite rows are canonical `images.id` references and never authorization grants. Future content code must use `viewer_source_image_can_reference()` / `viewer_source_image_can_render_reference()` rather than treating a stored reference or viewer identity as gallery permission.
+There is intentionally no viewer controller, view, route, JavaScript, CSS, mail
+sender, remember-cookie emission, or Admin setting page in Phase 0 through Phase
+0.7. `current_user()` remains administrator-only and `current_viewer()` remains
+a separate principal. Email verification establishes only short-lived pre-auth
+activation authority; durable activation, password login, remember rotation,
+password reset, recent reauthentication, password/email lifecycle transitions,
+and account deletion exist only as internal services. Collection/favourite rows
+are canonical `images.id` references and never authorization grants. Future
+content code must use `viewer_source_image_can_reference()` /
+`viewer_source_image_can_render_reference()` rather than treating a stored
+reference or viewer identity as gallery permission.
 
 ## Centralized Admin Settings
 
@@ -277,7 +319,10 @@ There is intentionally no viewer controller, view, route, JavaScript, CSS, mail 
 | `docs/ADMIN_SETTINGS_INVENTORY.md` | Canonical ownership, defaults, fallbacks, migration and sensitivity inventory. |
 | `tests/admin_settings_*_test.php` | Registry, normalization, navigation and rendering/accessibility contracts. |
 
-Future global settings should be registered summary-only first. Enable central editing only after the entry can call the same service normalizer and setter as its specialized owner. Never register per-gallery/per-image values, raw secrets, file editors or destructive actions as generic centrally editable keys.
+Future global settings should be registered summary-only first. Enable central
+editing only after the entry can call the same service normalizer and setter as
+its specialized owner. Never register per-gallery/per-image values, raw secrets,
+file editors or destructive actions as generic centrally editable keys.
 
 ### Guided Setup Wizard
 
@@ -311,7 +356,10 @@ Future global settings should be registered summary-only first. Enable central e
 | `tests/feature_policy_inventory_test.php` | Static inventory proving routes, UI boundaries, settings metadata, and capability literals stay registered. |
 | `tests/feature_policy_stage13_contract_test.php` | Cross-capability master OFF/ON, dependency restoration, bounded health/redaction, data-preservation policy, navigation metadata, and expensive OFF-path guards. |
 
-When changing a feature master, first decide whether the behavior is a new capability or another surface of an existing capability. Shared pages should normally retain their core/read-only route and gate only the optional mutation or affordance. Persistent subsystem data is preserved on OFF by default.
+When changing a feature master, first decide whether the behavior is a new
+capability or another surface of an existing capability. Shared pages should
+normally retain their core/read-only route and gate only the optional mutation
+or affordance. Persistent subsystem data is preserved on OFF by default.
 
 ## Admin Dashboard and Maintenance
 
@@ -374,8 +422,10 @@ When changing a feature master, first decide whether the behavior is a new capab
 | Schema | `database/migrations/202609070001_gallery_trash_bin.php`, `database/migrations/202609070002_gallery_trash_state_machine.php` |
 | Focused regression model | `tests/gallery_trash_model_test.php` |
 
-The feature is enabled by default, while retention-based automatic purge is disabled by default.
-Disabling Trash affects future deletes only; existing trash entries remain visible and recoverable.
+The feature is enabled by default, while retention-based automatic purge is
+disabled by default.
+Disabling Trash affects future deletes only; existing trash entries remain
+visible and recoverable.
 
 ## Image Administration
 
@@ -394,7 +444,9 @@ Disabling Trash affects future deletes only; existing trash entries remain visib
 
 ## Tags
 
-Public tag-page grid and card overrides are implemented by app/controllers/public_tags.php with app/services/pagination.php and app/services/gallery_description_layout.php.
+Public tag-page grid and card overrides are implemented by
+app/controllers/public_tags.php with app/services/pagination.php and
+app/services/gallery_description_layout.php.
 
 | Task | Files |
 | --- | --- |
@@ -408,7 +460,9 @@ Public tag-page grid and card overrides are implemented by app/controllers/publi
 
 ## Theme, Layout and Branding
 
-The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php and persisted through app_settings; public resolution is shared with the public tag controller through the pagination and description-layout services.
+The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
+and persisted through app_settings; public resolution is shared with the public
+tag controller through the pagination and description-layout services.
 
 | Task | Files |
 | --- | --- |
@@ -560,7 +614,10 @@ The Gallery tags Theme subsection is rendered by app/controllers/admin_theme.php
 | Existing subsystem adapters | `app/services/telemetry_rollup.php`, `app/services/admin_log_archives.php`, `app/services/site_maintenance.php`, `app/services/database_maintenance.php` |
 | Focused source/pure-policy regression | `tests/maintenance_center_test.php` |
 
-The Maintenance Center is core Admin functionality. Existing optional capabilities are respected at analysis and execution time rather than being re-enabled by the orchestrator. Specialized maintenance pages remain available for diagnostics and targeted operations.
+The Maintenance Center is core Admin functionality. Existing optional
+capabilities are respected at analysis and execution time rather than being
+re-enabled by the orchestrator. Specialized maintenance pages remain available
+for diagnostics and targeted operations.
 
 ## Updates and GitHub Integration
 
@@ -592,7 +649,12 @@ The Maintenance Center is core Admin functionality. Existing optional capabiliti
 | Browser translation payload | `app/views/layout.php`, `app/controllers/theme_assets.php` |
 | Catalog and viewer-preference regression coverage | `tests/translation_catalog_consistency_test.php`, `tests/public_language_preference_test.php` |
 
-English is the canonical default and fallback. English, Czech, German, and Swedish are the only selectable languages and their JSON catalogs remain key-for-key complete. Public visitors can override the site default from the shared header and reset to the site default; the preference is local to their browser. Dormant future-language skeletons may contain validated subsets of English keys, but file discovery alone does not make them selectable.
+English is the canonical default and fallback. English, Czech, German, and
+Swedish are the only selectable languages and their JSON catalogs remain
+key-for-key complete. Public visitors can override the site default from the
+shared header and reset to the site default; the preference is local to their
+browser. Dormant future-language skeletons may contain validated subsets of
+English keys, but file discovery alone does not make them selectable.
 
 | Multilingual content model | `app/services/content_localization.php`, `database/migrations/202608150001_multilingual_content.php` |
 | Multilingual Admin editor | `app/views/admin_gallery_forms.php`, `app/controllers/admin_galleries_edit_actions.php`, `app/controllers/admin_public_inline.php`, `public/assets/styles/side-panel.css` |
@@ -635,7 +697,8 @@ English is the canonical default and fallback. English, Czech, German, and Swedi
 | Schema documentation | `DATABASE.md` |
 
 `app/services/database_helpers.php` continues to expose compatibility boolean
-table and column checks for narrow legacy/read callers, but those helpers are not
+table and column checks for narrow legacy/read callers, but those helpers are
+not
 policy evidence when confirmed absence must be distinguished from inspection
 failure. `app/services/schema_inspection.php` provides the audited `available`,
 `missing`, and `unknown` API, request-local cache, safe diagnostics, feature
@@ -646,14 +709,17 @@ process can inspect, modify, and re-inspect safely.
 
 Phase 10 mutation callers use `app/services/mutation_schema_policy.php` instead
 of the legacy boolean schema helpers. Every converted destructive or ingestion
-workflow has a named aggregate status and performs its conclusive preflight before
+workflow has a named aggregate status and performs its conclusive preflight
+before
 the first irreversible target mutation. Confirmed absence may select only a
 documented compatibility or migration-bootstrap path. Unknown metadata state is
-never treated as absence. `admin_mutation_schema_health_statuses()` exposes those
+never treated as absence. `admin_mutation_schema_health_statuses()` exposes
+those
 same ten capabilities to System Health and Runtime Diagnostics.
 
 For gallery access, do not treat feature-level `missing` as legacy by itself.
-`gallery_access_schema_is_confirmed_legacy()` requires all five access columns to
+`gallery_access_schema_is_confirmed_legacy()` requires all five access columns
+to
 be confirmed absent; partial migration and unknown state fail closed. For
 authentication, distinguish optional durable conveniences from the primary PHP
 session: confirmed missing remember-token storage preserves session login, while
@@ -663,20 +729,24 @@ when the optional encrypted display-token column is unavailable.
 
 Phase 11 optional presentation/reporting callers use
 `app/services/presentation_schema_policy.php`. The policy registry owns named
-status aggregates for GPS/EXIF maps, nullable GPS overrides, flight maps and local
+status aggregates for GPS/EXIF maps, nullable GPS overrides, flight maps and
+local
 navdata, voting, Picture Game, lightbox overrides, OpenAI text/image-input
 settings, local AI image-analysis storage, SimBrief route-map persistence,
 navigation cache/account storage, telemetry reporting, and the Complete Admin
-Gallery Report. Read-only presentation wrappers may omit a feature when doing so is
+Gallery Report. Read-only presentation wrappers may omit a feature when doing so
+is
 safe; state-changing callers use explicit write/known assertions instead of the
 boolean wrapper.
 
 `presentation_schema_health_definitions()` is intentionally lazy. It stores
 feature resolvers plus feature-flag identifiers.
-`admin_presentation_schema_health_statuses()` resolves only enabled capabilities,
+`admin_presentation_schema_health_statuses()` resolves only enabled
+capabilities,
 so a disabled optional feature reports `disabled` without metadata queries. The
 resolved objects reuse the same request cache as all other schema policy. The
-Complete Admin Gallery Report is the one intentional direct-schema-query exception:
+Complete Admin Gallery Report is the one intentional direct-schema-query
+exception:
 `admin_gallery_report_exact_database_table_counts()` queries
 `information_schema.TABLES` because it must enumerate every current base table
 dynamically, not test one known table identity.
@@ -695,7 +765,11 @@ Nearby lightbox preview scheduling belongs to
 retains foreground navigation, cache, media authorization inputs, quality, and
 presentation. See `docs/BROWSER_LIFECYCLE.md` for reset/disposal ownership.
 
-The lightbox development dashboard in `public/assets/gallery-modules/lightbox-dev-dashboard.js` consumes bounded read-only snapshots from `lightbox.js`. `public/assets/styles/lightbox.css` owns layout, `app/lang/{en,cs,de,sv}.json` owns labels, and `app/views/layout.php` includes it in the asset revision. Existing Admin DEV policy owns availability.
+The lightbox development dashboard in
+`public/assets/gallery-modules/lightbox-dev-dashboard.js` consumes bounded
+read-only snapshots from `lightbox.js`. `public/assets/styles/lightbox.css` owns
+layout, `app/lang/{en,cs,de,sv}.json` owns labels, and `app/views/layout.php`
+includes it in the asset revision. Existing Admin DEV policy owns availability.
 
 | Task | Files |
 | --- | --- |
@@ -723,7 +797,9 @@ The lightbox development dashboard in `public/assets/gallery-modules/lightbox-de
 
 ## Test Files
 
-`tests/` is the authoritative tracked regression tree. Production packages exclude it. The portable PHP builder has no FTP, interactive, media or source-review mode; source archives remain a separate Git distribution surface.
+`tests/` is the authoritative tracked regression tree. Production packages
+exclude it. The portable PHP builder has no FTP, interactive, media or
+source-review mode; source archives remain a separate Git distribution surface.
 
 | Test | Purpose |
 | --- | --- |
@@ -752,26 +828,35 @@ The lightbox development dashboard in `public/assets/gallery-modules/lightbox-de
 
 ### Add an admin setting
 
-1. Identify the existing canonical service normalizer/setter and whether the setting is global, per-gallery, sensitive, file-backed or destructive.
+1. Identify the existing canonical service normalizer/setter and whether the
+   setting is global, per-gallery, sensitive, file-backed or destructive.
 2. Add or update the specialized page first.
-3. Register the global setting in `app/services/admin_settings_registry.php` as summary-only, with a stable ID and specialized route.
-4. Enable `central_editable` only when central save can delegate to the exact same service boundary and preserve all feature/schema guards and side effects.
-5. Add English, Czech, German, and Swedish PHP/JSON translation keys, navigation/rendering tests, and update `docs/ADMIN_SETTINGS_INVENTORY.md`.
+3. Register the global setting in `app/services/admin_settings_registry.php` as
+   summary-only, with a stable ID and specialized route.
+4. Enable `central_editable` only when central save can delegate to the exact
+   same service boundary and preserve all feature/schema guards and side
+   effects.
+5. Add English, Czech, German, and Swedish PHP/JSON translation keys,
+   navigation/rendering tests, and update `docs/ADMIN_SETTINGS_INVENTORY.md`.
 
 
 ### Add a database column
 
 1. Create a new migration file with the next timestamp prefix.
 2. Use `ALTER TABLE ... ADD COLUMN ...` and indexes where needed.
-3. Add compatibility checks through `db_column_exists()` only if the code may run before migrations complete.
+3. Add compatibility checks through `db_column_exists()` only if the code may
+   run before migrations complete.
 4. Do not edit historical migrations.
 5. Update `DATABASE.md`.
 
 ### Add a public JSON endpoint
 
-1. Add the canonical route and security boundary in `app/bootstrap/dispatch.php`; update the reviewed dependency/root inputs and regenerate `app/runtime/modules.php`.
+1. Add the canonical route and security boundary in
+   `app/bootstrap/dispatch.php`; update the reviewed dependency/root inputs and
+   regenerate `app/runtime/modules.php`.
 2. Add controller handler under `app/controllers/`.
-3. Put reusable orchestration and validation in `app/services/`, and SQL/persistence in the existing domain owner under `app/models/`.
+3. Put reusable orchestration and validation in `app/services/`, and
+   SQL/persistence in the existing domain owner under `app/models/`.
 4. Return a stable JSON shape.
 5. Check visibility and access before exposing records.
 
@@ -780,7 +865,11 @@ The lightbox development dashboard in `public/assets/gallery-modules/lightbox-de
 1. Add DB migration if persistent fields are required.
 2. Add scan or generation logic in a service.
 3. Add admin rendering in image edit or relevant panel.
-4. Add public search integration through the MVC search boundary: SQL/data access in `app/models/public_search*`, ranking/orchestration in `app/services/public_search*`, HTTP handling in `app/controllers/public_search.php`, and markup in `app/views/public_search.php`.
+4. Add public search integration through the MVC search boundary: SQL/data
+   access in `app/models/public_search*`, ranking/orchestration in
+   `app/services/public_search*`, HTTP handling in
+   `app/controllers/public_search.php`, and markup in
+   `app/views/public_search.php`.
 5. Avoid modifying original source files unless explicitly required.
 
 ### Add theme UI
@@ -793,15 +882,28 @@ The lightbox development dashboard in `public/assets/gallery-modules/lightbox-de
 
 ### Smart Galleries
 
-- `database/migrations/202608140001_smart_galleries.php`: definition storage, ratings, and focused indexes.
-- `database/migrations/202608140003_smart_gallery_multiple_placements.php`: many-to-many physical-parent attachment junction.
-- `database/migrations/202608170002_smart_gallery_attachment_ordering.php`: per-parent top/bottom placement plus deterministic attachment ordering.
-- `app/services/smart_galleries.php`: schema capability, rule validation/compiler, request-cached mixed relationship graph, cycle validation, attachment persistence, access intersection, pagination queries, search conversion, and rating writer.
-- `app/controllers/smart_galleries.php`: Admin management/preview, per-parent attachment editing, and published route.
-- `app/controllers/public_gallery_page.php`: physical-gallery boundary that renders top Smart Gallery attachments, normal gallery content, then bottom attachments.
-- `public/assets/gallery-modules/admin-smart-galleries.js`: nested visual rule editor.
-- `tests/smart_gallery_rules_test.php`: validation, nesting, version, injection, and compiler contracts.
-- `tests/smart_gallery_cycle_placement_test.php`: mixed-cycle bounds, placement defaults/order, hierarchy preflight, side-panel/no-JavaScript, and translation contracts.
+- `database/migrations/202608140001_smart_galleries.php`: definition storage,
+  ratings, and focused indexes.
+- `database/migrations/202608140003_smart_gallery_multiple_placements.php`:
+  many-to-many physical-parent attachment junction.
+- `database/migrations/202608170002_smart_gallery_attachment_ordering.php`:
+  per-parent top/bottom placement plus deterministic attachment ordering.
+- `app/services/smart_galleries.php`: schema capability, rule
+  validation/compiler, request-cached mixed relationship graph, cycle
+  validation, attachment persistence, access intersection, pagination queries,
+  search conversion, and rating writer.
+- `app/controllers/smart_galleries.php`: Admin management/preview, per-parent
+  attachment editing, and published route.
+- `app/controllers/public_gallery_page.php`: physical-gallery boundary that
+  renders top Smart Gallery attachments, normal gallery content, then bottom
+  attachments.
+- `public/assets/gallery-modules/admin-smart-galleries.js`: nested visual rule
+  editor.
+- `tests/smart_gallery_rules_test.php`: validation, nesting, version, injection,
+  and compiler contracts.
+- `tests/smart_gallery_cycle_placement_test.php`: mixed-cycle bounds, placement
+  defaults/order, hierarchy preflight, side-panel/no-JavaScript, and translation
+  contracts.
 
 ## Phase 1.0 Viewer Account HTTP Boundary
 
@@ -820,7 +922,10 @@ The lightbox development dashboard in `public/assets/gallery-modules/lightbox-de
 | `app/lang/{en,cs,de,sv}.json` | Maintained translations for the Phase 1.0 viewer and invitation UI/email text. |
 | `tests/viewer_http_phase10_test.php` | Focused static trust-boundary regression coverage for routes, CSRF, scanner-safe GETs, mail authorization ordering, identity separation, remember semantics, no-store, feature switches, and scope exclusions. |
 
-The existing `app/services/viewer_accounts.php`, `viewer_tokens.php`, `viewer_authentication.php`, `viewer_mail.php`, `viewer_lifecycle.php`, and related Phase 0 services remain the authoritative security/state-transition layer. Do not copy their SQL or token rules into future controllers.
+The existing `app/services/viewer_accounts.php`, `viewer_tokens.php`,
+`viewer_authentication.php`, `viewer_mail.php`, `viewer_lifecycle.php`, and
+related Phase 0 services remain the authoritative security/state-transition
+layer. Do not copy their SQL or token rules into future controllers.
 
 ## Phase 1.1 Viewer Favourites
 
@@ -838,7 +943,8 @@ The existing `app/services/viewer_accounts.php`, `viewer_tokens.php`, `viewer_au
 | `app/lang/{en,cs,de,sv}.json` | Maintained favourite action/page/error translations. |
 | `tests/viewer_favourites_phase11_test.php` | Focused regression contract for viewer ownership, CSRF, quota locking, source authorization, fail-closed storage behavior, routes, gallery independence, browser wiring, and later-phase scope exclusions. |
 
-No Phase 1.1 collection, share, profile, upload, comment, open-registration, OIDC, TOTP, passkey, CAPTCHA, or magic-link controller/service is added.
+No Phase 1.1 collection, share, profile, upload, comment, open-registration,
+OIDC, TOTP, passkey, CAPTCHA, or magic-link controller/service is added.
 
 ## Phase 1.2 Viewer Account Lifecycle HTTP Wiring
 
@@ -853,7 +959,10 @@ No Phase 1.1 collection, share, profile, upload, comment, open-registration, OID
 | `tests/viewer_account_lifecycle_phase12_test.php` | Focused route/method/CSRF/reauth/no-store/scanner-safe/Admin-coexistence/scope/runtime-import regression checks. It directly loads the real controller and exercises the bounded destination helpers. |
 | `tests/viewer_account_lifecycle_phase07_test.php` | Keeps the Phase 0.7 lifecycle service authoritative while acknowledging that Phase 1.2 now exposes it through a separate thin controller. |
 
-No Phase 1.2 migration or collection/share/profile/upload/open-registration/optional-auth implementation is added. `app/services/viewer_lifecycle.php` and the existing Phase 0.7 schema remain unchanged and authoritative.
+No Phase 1.2 migration or
+collection/share/profile/upload/open-registration/optional-auth implementation
+is added. `app/services/viewer_lifecycle.php` and the existing Phase 0.7 schema
+remain unchanged and authoritative.
 
 ## Phase 2.0 Private Viewer Collections
 
@@ -872,7 +981,9 @@ No Phase 1.2 migration or collection/share/profile/upload/open-registration/opti
 | `app/lang/{en,cs,de,sv}.json` | Maintained private-collection UI translations with exact selectable-catalog key alignment. |
 | `tests/viewer_collections_phase20_test.php` | Focused ownership/IDOR, CSRF/method, live authorization, Admin coexistence, quota/reorder, privacy/cache, runtime-import, schema reuse, and scope-exclusion contract. |
 
-No Phase 2.0 migration, collection-share route, anonymous collection view, public profile, upload, open-registration, TOTP, OIDC, or passkey implementation is added.
+No Phase 2.0 migration, collection-share route, anonymous collection view,
+public profile, upload, open-registration, TOTP, OIDC, or passkey implementation
+is added.
 
 ## Pre-Phase 3 Administrator Viewer Account Provisioning
 
@@ -889,7 +1000,15 @@ No Phase 2.0 migration, collection-share route, anonymous collection view, publi
 | `app/views/admin_chrome.php`, `app/lang/{en,cs,de,sv}.json` | Renames the Admin entry to Viewer accounts and provides maintained direct-provisioning/first-login UI text. |
 | `tests/viewer_admin_account_management_test.php` | Focused Admin/viewer principal separation, temporary-password gate, remember/session bypass prevention, direct-delete scope, CSRF/no-store, routing, notification secrecy, runtime loading, and scope regression contract. |
 
-Direct account creation is independent of the public/invite-only frontend switch so an administrator may stage accounts while the viewer frontend is disabled. Login remains feature-gated, and open registration remains absent. A direct-created account is active/verified but cannot obtain `current_viewer()` authority until the temporary password is replaced. The plaintext temporary password is show-once Admin output only and is never included in notification mail. Direct deletion removes the viewer identity and viewer-owned dependent state only; canonical gallery/media and administrator state remain outside the cascade direction.
+Direct account creation is independent of the public/invite-only frontend switch
+so an administrator may stage accounts while the viewer frontend is disabled.
+Login remains feature-gated, and open registration remains absent. A
+direct-created account is active/verified but cannot obtain `current_viewer()`
+authority until the temporary password is replaced. The plaintext temporary
+password is show-once Admin output only and is never included in notification
+mail. Direct deletion removes the viewer identity and viewer-owned dependent
+state only; canonical gallery/media and administrator state remain outside the
+cascade direction.
 
 ## Phase 2.5 Administrator Viewer Account Security Controls
 
@@ -903,7 +1022,12 @@ Direct account creation is independent of the public/invite-only frontend switch
 | `app/lang/{en,cs,de,sv}.json` | Maintained labels, confirmations, status names, and results for the three Admin security controls. |
 | `tests/viewer_admin_security_controls_test.php` | Exercises real suspend/restore/logout-all helpers through a deterministic PDO fixture, Admin/viewer session coexistence, old-authority non-resurrection, `must_change_password`, dormant share revocation, feature-disable behavior, schema failure, ID bounds, HTTP/CSRF wiring, translations, and Phase 3 scope exclusion. |
 
-Phase 2.5 adds no migration and no route rename. Suspension/restoration preserve favourites and private collections while invalidating authentication authority; restoration never revives old credentials. Sign out everywhere leaves the account active and does not mutate viewer-owned content. The controls remain available while the viewer frontend is disabled. Collection sharing and anonymous collection viewing remain absent.
+Phase 2.5 adds no migration and no route rename. Suspension/restoration preserve
+favourites and private collections while invalidating authentication authority;
+restoration never revives old credentials. Sign out everywhere leaves the
+account active and does not mutate viewer-owned content. The controls remain
+available while the viewer frontend is disabled. Collection sharing and
+anonymous collection viewing remain absent.
 
 ## Phase 3.0 Unlisted Read-only Collection Sharing
 
@@ -920,7 +1044,10 @@ Phase 2.5 adds no migration and no route rename. Suspension/restoration preserve
 | `tests/viewer_collection_sharing_phase30_test.php` | Focused Phase 3 token, route, CSRF, transaction, session-grant, source-ACL, lifecycle, feature-wrapper, schema-failure, disclosure, localization, and runtime-import contracts. |
 | `tests/viewer_collections_phase20_test.php` | Phase 2 regression now verifies collection ownership/storage remains independent while Phase 3 authority lives in dedicated modules. |
 
-No Phase 3 migration is added. Existing gallery share links, gallery authorization, public media authorization, Admin/viewer principal semantics, Smart Galleries, and anonymous public gallery discovery are not refactored. Shared collections are unlisted and recipients need no viewer account.
+No Phase 3 migration is added. Existing gallery share links, gallery
+authorization, public media authorization, Admin/viewer principal semantics,
+Smart Galleries, and anonymous public gallery discovery are not refactored.
+Shared collections are unlisted and recipients need no viewer account.
 
 ## Phase 4.0 through 4.4 Open Registration, Verification Recovery, Local Anti-automation, and Security Operations
 
@@ -947,83 +1074,131 @@ No Phase 3 migration is added. Existing gallery share links, gallery authorizati
 | `tests/viewer_security_operations_phase44_test.php` | Phase 4.4 Admin-only/read-only boundary, capability and capacity state, fixed event aggregation/trend, active/locked/stale limiter semantics, global budgets, storage-failure distinction, privacy, telemetry independence, schema reuse, and zero-third-party regression. |
 | `docs/VIEWER_SECURITY_FOUNDATIONS.md`, `TESTING.md`, `ARCHITECTURE.md`, `CODEMAP.md`, `DATABASE.md` | Phase 4.4 operations visibility, privacy, schema-reuse, limiter semantics, test coverage, and completed Phase 4 documentation. |
 
-Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verification_tokens` so resend can add a second usable authority without rotating the historical primary token; Phase 4.3 adds no migration and reuses PHP session plus existing bounded rate-limit storage; Phase 4.4 also adds no migration and reads only the existing Viewer security/event/limiter/account/registration storage. The global Viewer Accounts feature remains OFF by default. Open registration remains verified-email only. Phase 4.3 protects only anonymous open registration and explicit verification resend before expensive work. Phase 4.4 observes those systems only and establishes no Viewer/Admin/registration/invitation/verification authority. Public telemetry remains independent. Traditional or third-party CAPTCHA, external reputation/security/monitoring services, browser fingerprinting, public profiles, passkeys, TOTP, and viewer OIDC remain out of scope. Phase 4 is complete after Phase 4.4.
+Phase 4.1 adds no migration; Phase 4.2 adds only
+`viewer_registration_verification_tokens` so resend can add a second usable
+authority without rotating the historical primary token; Phase 4.3 adds no
+migration and reuses PHP session plus existing bounded rate-limit storage; Phase
+4.4 also adds no migration and reads only the existing Viewer
+security/event/limiter/account/registration storage. The global Viewer Accounts
+feature remains OFF by default. Open registration remains verified-email only.
+Phase 4.3 protects only anonymous open registration and explicit verification
+resend before expensive work. Phase 4.4 observes those systems only and
+establishes no Viewer/Admin/registration/invitation/verification authority.
+Public telemetry remains independent. Traditional or third-party CAPTCHA,
+external reputation/security/monitoring services, browser fingerprinting, public
+profiles, passkeys, TOTP, and viewer OIDC remain out of scope. Phase 4 is
+complete after Phase 4.4.
 
 ## Cooperative galleries foundation ownership
 
-- `app/models/cooperative_galleries.php`: isolated identity, peer and group persistence.
-- `app/services/cooperative_galleries.php`: entry point for validation, credentials,
+- `app/models/cooperative_galleries.php`: isolated identity, peer and group
+  persistence.
+- `app/services/cooperative_galleries.php`: entry point for validation,
+  credentials,
   proposal reducers and schema-gated storage in its sibling part directory.
-- `app/services/security_tokens.php`: reusable context-bound authenticated secret encryption.
-- `docs/COOPERATIVE_GALLERIES.md`: integration contracts and remaining group transport/UI work.
+- `app/services/security_tokens.php`: reusable context-bound authenticated
+  secret encryption.
+- `docs/COOPERATIVE_GALLERIES.md`: integration contracts and remaining group
+  transport/UI work.
 
-- `app/models/cooperative_pairing.php`: transactional invitation and peer persistence.
-- `app/services/cooperative_pairing.php`: protocol, safe transport adapter, durable
+- `app/models/cooperative_pairing.php`: transactional invitation and peer
+  persistence.
+- `app/services/cooperative_pairing.php`: protocol, safe transport adapter,
+  durable
   invitation/consent/verification/revocation and nonsecret Admin projections.
 - `app/controllers/cooperative_pairing.php`: capability-owned peer endpoint and
   authenticated Admin state/actions with CSRF and canonical mutation envelopes.
-- `app/services/outbound_http.php`: bounded pinned HTTPS JSON and shared public DNS policy.
+- `app/services/outbound_http.php`: bounded pinned HTTPS JSON and shared public
+  DNS policy.
 
-- `app/controllers/admin_cooperative_galleries.php` and `app/views/admin_cooperative_galleries.php`:
-  prepared friendship presentation, read-only page/drawer and HTML POST fallback.
-- `public/assets/gallery-modules/admin-cooperative-galleries.js`: delegated friendship
+- `app/controllers/admin_cooperative_galleries.php` and
+  `app/views/admin_cooperative_galleries.php`:
+  prepared friendship presentation, read-only page/drawer and HTML POST
+  fallback.
+- `public/assets/gallery-modules/admin-cooperative-galleries.js`: delegated
+  friendship
   forms, retained input and shared coordinator/owned-drawer completion.
 
-- `app/services/cooperative_galleries/sources.php`: bounded local source picker and
-  policy-checked member preparation, loaded only through the cooperative entry point.
+- `app/services/cooperative_galleries/sources.php`: bounded local source picker
+  and
+  policy-checked member preparation, loaded only through the cooperative entry
+  point.
 - `app/services/gallery_access.php`: canonical session-independent public export
   policy, with verified schema and bounded current ancestor traversal.
 - `app/controllers/admin_cooperative_albums.php`: read-only administrator album
   candidates; `app/models/galleries.php` owns its bounded label query.
 
-- `app/services/cooperative_proposals.php`: initial immutable proposal inbox, local
-  decisions, direct participant queries and pinned one-peer delivery; sibling parts
+- `app/services/cooperative_proposals.php`: initial immutable proposal inbox,
+  local
+  decisions, direct participant queries and pinned one-peer delivery; sibling
+  parts
   are loaded only through this entry point. Observations never activate sharing.
 - `app/controllers/cooperative_proposals.php`: bearer-only proposal endpoint and
-  Admin/CSRF preparation, creation, decision, contact and verification/activation adapters.
+  Admin/CSRF preparation, creation, decision, contact and
+  verification/activation adapters.
 
-- `app/services/cooperative_proposals/verification.php`: durable nonce-bound direct
+- `app/services/cooperative_proposals/verification.php`: durable nonce-bound
+  direct
   verification rounds and complete two-ended friendship evidence.
-- `app/services/cooperative_proposals/activation.php`: initial activation, bounded
+- `app/services/cooperative_proposals/activation.php`: initial activation,
+  bounded
   lease validation and direct authenticated local album-metadata authorization.
-- `tests/support/cooperative_exchange_fixture.php`: shared independent SQLite nodes
+- `tests/support/cooperative_exchange_fixture.php`: shared independent SQLite
+  nodes
   and in-process transport for proposal and activation regressions.
 
-- `app/services/cooperative_proposals/maintenance.php`: read-only next-step planning,
+- `app/services/cooperative_proposals/maintenance.php`: read-only next-step
+  planning,
   one-request Admin advancement, and bounded renewal of already active groups.
-- `scripts/cooperative_renew.php`: CLI-only scheduled renewal of one explicitly selected
+- `scripts/cooperative_renew.php`: CLI-only scheduled renewal of one explicitly
+  selected
   active group, with bounded status output and no implicit consent.
-- `tests/cooperative_maintenance_test.php`: isolated multi-node progress, renewal, backoff,
+- `tests/cooperative_maintenance_test.php`: isolated multi-node progress,
+  renewal, backoff,
   lost-response recovery, concurrency and Admin envelope contracts.
 
-- `app/services/cooperative_proposals/review.php`: bounded proposal review data and explicit
+- `app/services/cooperative_proposals/review.php`: bounded proposal review data
+  and explicit
   action opportunities, without peer requests or implicit consent.
-- `app/controllers/admin_cooperative_proposals.php` and `app/views/admin_cooperative_proposals.php`:
+- `app/controllers/admin_cooperative_proposals.php` and
+  `app/views/admin_cooperative_proposals.php`:
   translated proposal inbox, AJAX fragment response and ordinary HTML fallback.
-- `tests/admin_cooperative_proposals_test.php` and `tests/admin_cooperative_proposals_browser_test.mjs`:
+- `tests/admin_cooperative_proposals_test.php` and
+  `tests/admin_cooperative_proposals_browser_test.mjs`:
   actual server markup/envelope and shared dynamic drawer behavior.
 
-- `app/services/cooperative_proposals/composition.php`: bounded metadata-only album
-  locator encoding/decoding and composition through existing immutable proposal storage.
-- `tests/cooperative_composition_test.php`: reference validation, explicit-authority
-  boundaries, source rechecks, stable request retries and UI composition responses.
+- `app/services/cooperative_proposals/composition.php`: bounded metadata-only
+  album
+  locator encoding/decoding and composition through existing immutable proposal
+  storage.
+- `tests/cooperative_composition_test.php`: reference validation,
+  explicit-authority
+  boundaries, source rechecks, stable request retries and UI composition
+  responses.
 
-- `app/services/cooperative_proposals/metadata.php`: strict request binding and minimal
-  public source-title export under current exact membership/credential/lease authority.
-- `app/controllers/cooperative_metadata.php`: POST, header bearer, bounded JSON input
+- `app/services/cooperative_proposals/metadata.php`: strict request binding and
+  minimal
+  public source-title export under current exact membership/credential/lease
+  authority.
+- `app/controllers/cooperative_metadata.php`: POST, header bearer, bounded JSON
+  input
   and safe no-store output for `cooperative_metadata_api`.
-- `tests/cooperative_metadata_test.php`: isolated minimal-export and refusal regressions.
+- `tests/cooperative_metadata_test.php`: isolated minimal-export and refusal
+  regressions.
 
-- app/services/cooperative_content.php: public source catalog, fixed-origin client,
+- app/services/cooperative_content.php: public source catalog, fixed-origin
+  client,
   image policy and encrypted short-lived derivative tickets.
 - app/controllers/cooperative_content.php, app/views/cooperative_gallery.php,
   public/assets/cooperative-gallery.js: attributed shared gallery with bounded
   progressive loading and ordinary HTML fallback.
 - app/services/cooperative_proposals/workflow.php: delivery/verification,
   non-authorizing email links and direct withdrawal notifications.
-- app/services/configured_mail.php: shared existing mail configuration/transport.
+- app/services/configured_mail.php: shared existing mail
+  configuration/transport.
 - tests/cooperative_content_test.php, tests/cooperative_completion_test.php,
-  tests/cooperative_gallery_browser_test.mjs: public workflow and refusal coverage.
+  tests/cooperative_gallery_browser_test.mjs: public workflow and refusal
+  coverage.
 
 ## Compact Admin workspace
 
@@ -1053,28 +1228,48 @@ Phase 4.1 adds no migration; Phase 4.2 adds only `viewer_registration_verificati
 
 ## Cache lifecycle
 
-`app/services/cache_lifecycle.php` owns producer policy, guarded private storage, streamed inventory and bounded reclamation through its sibling `cache_lifecycle/` parts. `site_maintenance.php` and Maintenance Center use that owner; controllers keep HTTP/CSRF and canonical envelopes. `admin-cache-lifecycle.js` delegates mounted/dynamic controls and preserves the preview ID. Native audit/GitHub producers hold shared leases. See `docs/CACHE_MAINTENANCE.md` for retention, pins, contextual rollback and partial-inventory bounds.
+`app/services/cache_lifecycle.php` owns producer policy, guarded private
+storage, streamed inventory and bounded reclamation through its sibling
+`cache_lifecycle/` parts. `site_maintenance.php` and Maintenance Center use that
+owner; controllers keep HTTP/CSRF and canonical envelopes.
+`admin-cache-lifecycle.js` delegates mounted/dynamic controls and preserves the
+preview ID. Native audit/GitHub producers hold shared leases. See
+`docs/CACHE_MAINTENANCE.md` for retention, pins, contextual rollback and
+partial-inventory bounds.
 
-The database model `app/models/cache_lifecycle_registry.php` owns stable regional rows and scheduling queries. `cache_lifecycle_registry_storage.php` owns passive completed/working evidence and the authoritative checkpoint bridge; the `registry.php` service part owns discovery, fair due rotation, legacy draining and bounded retention. Migration `202610150001_cache_lifecycle_regions.php` creates the table. The DB is authoritative for cursors and findings; disk journals retain names, proof plans and detached data.
+The database model `app/models/cache_lifecycle_registry.php` owns stable
+regional rows and scheduling queries. `cache_lifecycle_registry_storage.php`
+owns passive completed/working evidence and the authoritative checkpoint bridge;
+the `registry.php` service part owns discovery, fair due rotation, legacy
+draining and bounded retention. Migration
+`202610150001_cache_lifecycle_regions.php` creates the table. The DB is
+authoritative for cursors and findings; disk journals retain names, proof plans
+and detached data.
 
 Its reclamation part admits external cache-only bursts under a separate
 invocation lock and bounded time/slice budgets. Inventory and reclamation share
 committed plan offsets and alternate without resetting the scan. Durable
 scheduler evidence separates arrivals, progress and gaps from historical
-measurements; idle unapproved manual plans receive a new identity, while approved
-deletion cursors remain resumable. The `visitor.php` part uses the same scheduler lock for ordinary public GET
+measurements; idle unapproved manual plans receive a new identity, while
+approved
+deletion cursors remain resumable. The `visitor.php` part uses the same
+scheduler lock for ordinary public GET
 opportunities, registered by `site_maintenance_register_cache_trigger()` and
 loaded through the existing deferred worker root. The dependency-free Core
 `request_data.php` adapter owns passive response-status observation; services do
 not call the native HTTP response API. Installation/upgrade migration
-`202610140001_automatic_cache_cleanup.php` seeds the single capability ON without
-overwriting OFF. Foreground leases/signals, thirty-second opportunities and 40/120/600 ms
+`202610140001_automatic_cache_cleanup.php` seeds the single capability ON
+without
+overwriting OFF. Foreground leases/signals, thirty-second opportunities and
+40/120/600 ms
 admission preserve bounded occupancy; <=128 MiB selects the small attempt, with
-independent operation/memory limits. Completed inventory is due hourly; unfinished
+independent operation/memory limits. Completed inventory is due hourly;
+unfinished
 work retains checkpoints. Cron is optional for zero-traffic installations.
 
 `app/services/cache_lifecycle_storage.php` is the shared lightweight storage
 owner for guarded paths, producer leases, bounded checkpoints, passive status
 and retention category definitions. Existing lifecycle function names remain
 stable. Public cache writers and passive registration depend on this owner;
-only explicit worker roots load inventory/reclamation through `cache_lifecycle.php`.
+only explicit worker roots load inventory/reclamation through
+`cache_lifecycle.php`.

@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.137.3}
+\newcommand{\version}{0.137.4}
 \newcommand{\manualdate}{19.~října~2026}
 
 \hypersetup{
@@ -3198,6 +3198,11 @@ pozorovatel spuštěný po~sestavení; úspěšný Git push originu nepotřebuje
 REST readback.
 
 Commit přijatý do~chráněného develop je~kvalifikovaný.
+Registrované značky verze v~Markdownu přijímají zalomení uvnitř stejného
+odstavce. Příprava a~kontroly konzistence zachovávají rozložení i~historické
+údaje a~aktualizují pouze registrovanou hodnotu.
+Samotné změny WinApp README, pokynů pro~agenty a~testů nevyvolávají nové
+sestavení instalátoru; změny běhových a~sestavovacích vstupů je~stále vyžadují.
 Z~tohoto zdroje založte samostatně schválenou \codeword{release/v_X.Y[.Z]}.
 Release neopakuje BASIC/FULL ani nestahuje starší kvalifikační archivy.
 Zafixuje zdroj A, upraví metadata a~patch notes, sjednotí všechny čtyři

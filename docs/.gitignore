@@ -10,3 +10,6 @@
 !**/*.tex
 !**/*.pdf
 !**/*.md
+
+# Keep only the reviewed configuration for the isolated formatter experiment.
+!experiments/mago-1.57.0-pilot.toml

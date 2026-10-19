@@ -6,28 +6,34 @@ Author: Rudolf Klusal
 ## Request contract
 
 Generated empty-gallery, existing-gallery upload, and create-with-upload forms
-carry an enabled hidden field named operation_key, marked data-admin-operation-key.
+carry an enabled hidden field named operation_key, marked
+data-admin-operation-key.
 It contains 32 random bytes encoded as 64 lowercase hexadecimal characters.
 It identifies an intent; it is not an authentication token.
 
-The same authenticated actor, key, operation kind and semantic payload return the
+The same authenticated actor, key, operation kind and semantic payload return
+the
 original completed response and stable IDs. A fresh key means an intentional new
 operation: normal suffix selection still allows deliberate duplicates. There is
 no title or filename deduplication.
 
 The admin_new_gallery POST and classic admin_upload modes existing/new require
-keys, including empty create-with-upload requests. The existing upload-preferences
+keys, including empty create-with-upload requests. The existing
+upload-preferences
 action is outside this contract. Prepared ZIP batches retain their established
 session/batch owner; this ledger does not replace prepared-batch replay.
 
 Missing or malformed keys return HTTP 409 with operation_key_required before
-claiming or changing a target. There is deliberately no unprotected compatibility
+claiming or changing a target. There is deliberately no unprotected
+compatibility
 path for old POST clients. Reload a generated form and retain its key for that
 intent. Fixtures should use GalleryWorkflow\Http::operationKey() to read actual
-markup, reuse that key for retries, and fetch fresh keys for deliberate new work.
+markup, reuse that key for retries, and fetch fresh keys for deliberate new
+work.
 Neither CSRF nor session identifiers substitute for operation keys.
 
-Authentication and CSRF run before claiming or returning replay on every request.
+Authentication and CSRF run before claiming or returning replay on every
+request.
 A newly authenticated session for the same administrator can retry the key with
 current CSRF. Another actor cannot obtain that actor's result. Completed replay
 freshly checks the original gallery, its parent context and uploaded image
@@ -44,10 +50,12 @@ explicitly require the service; it requires its model, schema inspection and
 central constants. No extra top-level loader registration is required.
 
 Migration 202609200003_admin_operation_keys.php creates an InnoDB ledger with
-unique (actor_id, key_hash) identity. Explicit available table, column and primary
+unique (actor_id, key_hash) identity. Explicit available table, column and
+primary
 index observations are required. In addition to generic named-index existence,
 the model freshly reads the exact PRIMARY definition from the current database:
-exactly actor_id then key_hash, sequence 1/2, NON_UNIQUE zero and SUB_PART null for
+exactly actor_id then key_hash, sequence 1/2, NON_UNIQUE zero and SUB_PART null
+for
 both columns. The query reads at most three rows, including one extra-column
 lookahead. Missing, unrelated, reordered, prefixed, nonunique or wider indexes
 lack the required guarantee. Incomplete metadata and query failures are unknown;
@@ -55,12 +63,16 @@ neither native exceptions nor raw definitions reach callers. Both missing and
 unknown guarantees use operation_storage_unavailable before lock acquisition or
 claim insertion. Generic schema-inspection semantics remain unchanged. Requests
 never bootstrap or repair this storage. Concurrent privileged schema changes
-still require ordinary coordinated maintenance; this preflight is not a DDL lock.
+still require ordinary coordinated maintenance; this preflight is not a DDL
+lock.
 
-One non-waiting connection lock serializes each database/actor/key. Atomic insert
-preserves any previous claim without overwriting it. Pending is durably committed
+One non-waiting connection lock serializes each database/actor/key. Atomic
+insert
+preserves any previous claim without overwriting it. Pending is durably
+committed
 before target work; claims and completion must not join a target transaction.
-Target operations may use their own transactions while the advisory lock remains.
+Target operations may use their own transactions while the advisory lock
+remains.
 
 | Retained state | Retry behavior |
 | --- | --- |
@@ -81,17 +93,23 @@ recoverable multipart body.
 Completion is projected, validated and durably stored before JSON output or the
 no-JavaScript redirect. Both initial output and replay use that same value:
 the canonical ok/message/mutation/panel/contexts/fallback envelope plus bounded
-identities, URLs and counts. Raw processing events and native errors are replaced
+identities, URLs and counts. Raw processing events and native errors are
+replaced
 by safe typed diagnostics and compatible translated summaries, not silently
-removed from the first response. Credential-shaped fields and unrecognized URL parameters are
-rejected. Canonical query-mode public_path URLs are supported. A posted source URL
+removed from the first response. Credential-shaped fields and unrecognized URL
+parameters are
+rejected. Canonical query-mode public_path URLs are supported. A posted source
+URL
 contributes only bounded positive gallery_page/photo_page values or an approved
-clean pagination suffix of that exact canonical gallery, never an arbitrary path.
+clean pagination suffix of that exact canonical gallery, never an arbitrary
+path.
 Mutation responses are private and no-store.
 
 Immutable ADMIN_OPERATION_* limits live in app/policy_constants.php: 32 bytes of
-key entropy, 256 files per classic operation, 1 MiB fingerprint serialization and
-256 KiB durable response JSON. These are not upload-size or image-decode settings.
+key entropy, 256 files per classic operation, 1 MiB fingerprint serialization
+and
+256 KiB durable response JSON. These are not upload-size or image-decode
+settings.
 
 Classic upload holds the global gallery writer lease from before creation/file
 mutation through ingestion, optional thumbnails and ledger completion. Combined
@@ -99,8 +117,10 @@ upload verifies ingestion and thumbnail metadata prerequisites before creation.
 The three service facades store_uploaded_gallery_images(),
 store_uploaded_gallery_cover() and store_uploaded_gallery_branding_asset() also
 take reentrant leases for other callers, holding them through their complete
-scan/sidecar/persistence bodies. Their _owned functions are internal, not alternate
-entry points. Parent-owned creation wrappers take nested leases. Completed replay
+scan/sidecar/persistence bodies. Their _owned functions are internal, not
+alternate
+entry points. Parent-owned creation wrappers take nested leases. Completed
+replay
 takes no mutation lease.
 Every upload storage body reloads its gallery with find_gallery(id, true) under
 the lease. The classic controller also replaces its pre-claim cached row after
@@ -129,20 +149,25 @@ Existing classic UI consumers retain their shapes:
 All seven diagnostic messages have EN/CS/DE/SV translations. First delivery and
 replay carry identical stored diagnostics, including the original language;
 replay does not regenerate translations. Older completed rows retain exactly
-what was originally stored: missing historic diagnostics cannot be reconstructed.
+what was originally stored: missing historic diagnostics cannot be
+reconstructed.
 
 ## Interrupted operations and retention
 
-There is no automatic expiry, deletion, retry timer, lease stealing, or transition
+There is no automatic expiry, deletion, retry timer, lease stealing, or
+transition
 from pending back to new. Deleting a completed row would allow an old key to run
-again, so ordinary cleanup must not remove these rows. Pending/ambiguous rows are
+again, so ordinary cleanup must not remove these rows. Pending/ambiguous rows
+are
 retained indefinitely until explicitly investigated. This version has no pruning
-job or web reconciliation UI; the operator CLI below supplies counts and actions.
+job or web reconciliation UI; the operator CLI below supplies counts and
+actions.
 
 An exception after admission marks needs_reconciliation when possible. If that
 update cannot be acknowledged, the earlier durable pending row still blocks
 replacement execution. If completion committed but its acknowledgement was lost,
-failure handling never overwrites completed; a later retry can recover its result.
+failure handling never overwrites completed; a later retry can recover its
+result.
 
 This is replay protection, not an atomic filesystem/database transaction or a
 physical create/upload journal. Interrupted ingestion may leave files/rows
@@ -159,7 +184,8 @@ Explicit recovery requires:
    separately authorized corrective maintenance.
 3. Only after establishing the exact successful result, a trusted maintenance
    caller may invoke admin_operation_reconcile_completed(actorId, key,
-   payloadHash, response). This unrouted service verifies binding and references,
+   payloadHash, response). This unrouted service verifies binding and
+   references,
    excludes a live worker and attaches a bounded original canonical response.
    It never reruns work. The caller must prove physical completion; a hash-only
    ledger cannot establish it.
@@ -176,7 +202,8 @@ Native database exceptions and credential data must not appear in them.
 ### Operator CLI
 
 Run these commands only from the intended installation, using its normal trusted
-maintenance account. Help does not load configuration. Listing and inspection are
+maintenance account. Help does not load configuration. Listing and inspection
+are
 read-only; they do not apply migrations or repair missing storage.
 
 ~~~text
@@ -194,14 +221,16 @@ payload, credentials, original response body or paths. These operation/payload
 digests are correlation identifiers, not authentication credentials.
 
 After independently proving the original effects, prepare a private UTF-8 JSON
-evidence file outside the web root. Its only top-level keys are actor_id (integer),
+evidence file outside the web root. Its only top-level keys are actor_id
+(integer),
 key_hash, payload_hash and response. Copy both 64-character hashes and the actor
 from inspection. Prefer an independently retained original canonical success
 receipt as response. If no receipt exists, an operator must establish and
 construct the exact result; neither the CLI nor a matching title proves success.
 
 For illustration, a verified empty-gallery creation receipt has this shape.
-Replace every illustrative ID, hash, URL and postcondition with verified original
+Replace every illustrative ID, hash, URL and postcondition with verified
+original
 values. Placeholder hashes deliberately fail validation.
 
 ~~~json
@@ -232,7 +261,8 @@ values. Placeholder hashes deliberately fail validation.
 Upload receipts additionally need the verified image_ids and original upload
 counters/filenames. Classic upload uses mutation type image.upload with image
 entity IDs; combined creation/upload uses gallery.create_with_upload with the
-original gallery ID. Preserve the original affected contexts, panel and fallback.
+original gallery ID. Preserve the original affected contexts, panel and
+fallback.
 Use the shapes produced by app/helpers_mutation.php; do not invent identities,
 inflate counts, mark partially completed physical work successful, or put SQL,
 native exception messages, credentials or source-system paths in the evidence.
@@ -248,9 +278,11 @@ binding and current references passed checks, not that physical completion was
 proved. After independent verification, --apply changes only the selected
 pending/needs_reconciliation row to completed and stores its safe response.
 Both paths refuse an active key owner, changed fingerprint or invalid result.
-The CLI prints status and stable result IDs, not the response body. Repeated apply
+The CLI prints status and stable result IDs, not the response body. Repeated
+apply
 refuses instead of overwriting completed; inspect its state after an uncertain
-acknowledgement. A retained browser key can then replay the original result after
+acknowledgement. A retained browser key can then replay the original result
+after
 normal authentication/CSRF checks. No command creates, uploads, deletes rows,
 expires keys, rolls back files or automatically retries work.
 
@@ -267,9 +299,11 @@ prepared upload. Do not reuse prepared session/batch identifiers as this key.
 The integrated browser owner is admin-operation-keys.js, used by the side-panel,
 classic multipart and prepared-create handlers. See the
 [create/upload intent-retention contract](ADMIN_PANEL_LIFECYCLE.md#createupload-intent-retention)
-for exact forwarding, per-chunk keys, confirmed-completion rotation, original-form
+for exact forwarding, per-chunk keys, confirmed-completion rotation,
+original-form
 ownership and prepared-batch retry behavior. The first classic request uses the
-rendered key; subsequent chunks have distinct retained keys. Prepared ZIP requests
+rendered key; subsequent chunks have distinct retained keys. Prepared ZIP
+requests
 keep their existing batch owner rather than acquiring operation-ledger keys.
 
 Uncertain work retains the original form, operation keys, scalar snapshot and
@@ -306,12 +340,14 @@ checks the bounded picker. This is not real database crash/concurrency evidence.
 
 tests/upload_writer_ownership_test.php runs all three real upload facades and
 their lock model with missing-gallery/isolated SQL seams. It checks entry
-exclusion, failure release and reentrant ownership, not successful cover/branding
+exclusion, failure release and reentrant ownership, not successful
+cover/branding
 replacement.
 
 tests/admin_operation_keys_http_test.php uses the strictly owned disposable
 workflow runner. It checks actual rendered keys, authenticated create/classic/
-combined HTTP replay, durable JSON, reauthentication, original hashes, deliberate
+combined HTTP replay, durable JSON, reauthentication, original hashes,
+deliberate
 duplicates, another database connection owning the operation/global writer lock,
 old pending retention and no-JavaScript redirect replay. It does not inject TCP
 disconnects, kill an uploading worker, or prove simultaneous mutating workers.
@@ -320,14 +356,16 @@ Without the explicit fixture it reports SKIP (BLOCKED when required), not PASS.
 tests/admin_operation_diagnostics_test.php verifies preserved legacy UI shapes,
 safe filenames and omissions, four-language message registration, rejection of
 raw diagnostics and identical replay after a language change.
-tests/admin_operation_maintenance_test.php verifies model-backed bounded listing,
+tests/admin_operation_maintenance_test.php verifies model-backed bounded
+listing,
 counts, cursor inspection, evidence bounds, dry-run, explicit apply, worker
 exclusion and indefinite retention with isolated SQL seams.
 tests/admin_operation_primary_key_test.php exercises the real bounded model read
 and service admission against independent named-object/definition fixtures. It
 covers integer/string metadata, missing/unknown inspection, unrelated/reordered/
 prefixed/nonunique/extra-column PRIMARY definitions and fresh reinspection after
-a cached named-index observation. Refusals must attempt neither locks nor claims.
+a cached named-index observation. Refusals must attempt neither locks nor
+claims.
 This is not a real MySQL malformed-table fixture or concurrent DDL experiment.
 
 All six use ordinary PHP regression discovery. The parent should register

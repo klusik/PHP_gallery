@@ -2,24 +2,31 @@
 
 Author: Rudolf Klusal
 
-The destination picker uses its own authenticated search endpoint. It is separate
+The destination picker uses its own authenticated search endpoint. It is
+separate
 from optional gallery-title completion: selecting a destination commits an
-existing physical gallery ID. Typed text never commits an ID. Root is an explicit
+existing physical gallery ID. Typed text never commits an ID. Root is an
+explicit
 action only when the caller enables it.
 
 ## Ownership and budgets
 
-`app/controllers/admin_gallery_renderers.php` prepares selection, labels, endpoint
+`app/controllers/admin_gallery_renderers.php` prepares selection, labels,
+endpoint
 URLs and fallback context. `app/services/gallery_picker.php` owns semantic query
 validation, normalized destination records and the existing picker compatibility
 entry points. `app/models/gallery_picker_search.php` owns parameterized SQL;
-`app/models.php` registers it. `app/views/admin_gallery_renderers.php` renders only
+`app/models.php` registers it. `app/views/admin_gallery_renderers.php` renders
+only
 prepared data. No schema change or new feature setting is required.
 
-The Core policy `GALLERY_PICKER_SEARCH_PAGE_SIZE` fixes search pages at 30 rows. No
-request parameter can raise the limit. Initial markup contains at most 30 physical
+The Core policy `GALLERY_PICKER_SEARCH_PAGE_SIZE` fixes search pages at 30 rows.
+No
+request parameter can raise the limit. Initial markup contains at most 30
+physical
 result buttons and one optional root action. The committed gallery is queried
-independently and displayed even when absent from the current page. Full relative
+independently and displayed even when absent from the current page. Full
+relative
 paths and explicit IDs distinguish duplicate names. Selected context never needs
 a whole ancestor tree: the stored relative path supplies the ancestry.
 
@@ -80,7 +87,8 @@ and lookup failures 503. Responses are private/no-store, nosniff and noindex.
 Exception details, access fields, tokens and absolute storage paths are absent.
 
 The JSON envelope is `{ok, rows, selected, next_after_id, more, page_size}`.
-Each row contains `id, title, path, depth, label, selected`. JSON row/context IDs
+Each row contains `id, title, path, depth, label, selected`. JSON row/context
+IDs
 and continuation IDs are decimal strings, preserving BIGINT identity above
 JavaScript's safe-number limit. `next_after_id` is null when no further page is
 offered. Root is a local static action, not a fabricated physical gallery row.
@@ -88,7 +96,8 @@ offered. Root is a local static action, not a fabricated physical gallery row.
 ## Commitment and no-JavaScript use
 
 The browser enables the canonical hidden form field and emits its existing
-`input`/`change` events on commitment or clearing. Editing text clears a previous
+`input`/`change` events on commitment or clearing. Editing text clears a
+previous
 ID immediately. An optional prefilled child label is only a suggestion until
 clicked or accepted. Search/page changes leave an existing committed ID intact.
 An optional search failure while rendering does not silently clear the existing
@@ -96,14 +105,16 @@ parent ID; its bounded ID label remains available.
 
 Parent inputs use native form validity to require an explicit gallery/root
 commitment after text edits, so uncommitted text cannot silently become root on
-submission. Workflow-owned disabled fields remain disabled when the picker binds.
+submission. Workflow-owned disabled fields remain disabled when the picker
+binds.
 
 Requests debounce at 200 ms. Every query, close, selection, outside click and
 fragment disposal invalidates older requests. Aborting is supplemented by an
 ownership generation check. IME interim text does not search. Arrow navigation,
 Enter and pointer events act only on the current page; modified keys are
 preserved. Escape dismisses the control before a second Escape reaches the
-drawer. A single mutation observer binds injected fragments and disposes detached
+drawer. A single mutation observer binds injected fragments and disposes
+detached
 owners. These read-only picker actions never submit a mutation, navigate, reload
 or close the containing panel.
 
@@ -111,12 +122,14 @@ Without JavaScript, the disabled hidden input does not submit. A visible
 `noscript` numeric field submits the same parameter name. The directory link
 opens a separate tab, keeping the unfinished form intact. Its ordinary GET form
 searches the same bounded catalog; Next results traverses the same keyset.
-Administrators copy the chosen ID into the original form. Parent controls explain
+Administrators copy the chosen ID into the original form. Parent controls
+explain
 that ID 0 means no parent. Existing JSON-only Picture manager workflows still
 require JavaScript; the directory lookup does not add a second mutation route.
 
 The lookup is discovery, never mutation authorization. Physical self/descendant
-checks, existence/path/schema checks and Smart Gallery graph validation remain in
+checks, existence/path/schema checks and Smart Gallery graph validation remain
+in
 `move_gallery_folder_to_parent()`, its existing creation/move callers, and
 `smart_gallery_validate_gallery_parent_change()`. Photo moves omit only their
 source, because its children are legitimate destinations. Parent moves omit
@@ -152,7 +165,8 @@ parsing are excluded from timing/memory. Peak allocation uses
 
 EXPLAIN QUERY PLAN on the actual generated search SQL reports
 `SEARCH galleries USING INTEGER PRIMARY KEY (rowid>?)` in SQLite. This is a
-returned-row/application-memory bound, **not a database examined-row or wall-clock
+returned-row/application-memory bound, **not a database examined-row or
+wall-clock
 bound**. An infix miss may examine the remaining catalog. No production
 MySQL/MariaDB query plan, live database latency, browser painting/input-filter
 timing or assistive-technology behavior was measured.
@@ -186,7 +200,8 @@ both when reading a title's parent scope and handling delegated parent changes.
 The browser-owned `admin-side-panel.js` serializer likewise accepts an enabled
 hidden `new_gallery_parent_id` and retains its canonical mutation envelope.
 
-The endpoint/loader and English/Czech translation registrations were completed by
+The endpoint/loader and English/Czech translation registrations were completed
+by
 the parent. The browser entrypoint uses these current imports:
 
 - `searchable-gallery-picker.js?v=20260920-bounded-gallery-picker-v2`
@@ -200,7 +215,8 @@ must continue to receive cache-busting import updates.
 
 `tests/gallery_picker_parent_integration_browser_test.mjs` renders the current
 PHP parent and bulk controls using the disposable SQLite fixture, then runs the
-current picker, policy and title-completion modules in a private Chromium profile.
+current picker, policy and title-completion modules in a private Chromium
+profile.
 It passed on 2026-09-20 using the installed Microsoft Edge executable.
 
 Its real DOM assertions cover bounded initial result nodes, enabled hidden-field
@@ -208,10 +224,12 @@ selection, exclusion of a disabled duplicate, enabled legacy-select fallback,
 delegated title requests with the newly committed parent, exact FormData IDs,
 explicit root selection, native validity after uncommitted text, and replacement
 of the form fragment without changing the URL or removing its containing panel.
-The fixture fetch responses are synthetic; it does not execute a real Admin save,
+The fixture fetch responses are synthetic; it does not execute a real Admin
+save,
 authentication lifecycle or a filesystem move.
 
-For source-checkout development, the runner accepts Chromium and PHP executables:
+For source-checkout development, the runner accepts Chromium and PHP
+executables:
 
 ```text
 node tests/gallery_picker_parent_integration_browser_test.mjs CHROMIUM_PATH PHP_PATH
@@ -236,7 +254,8 @@ seam; it does not require Chromium. The PHP regression fixture also now renders
 the actual bulk toolbar and asserts that no full new-parent select is present.
 
 The subsequent browser policy migration is inventoried in
-[FRONTEND_OPERATIONAL_POLICY.md](FRONTEND_OPERATIONAL_POLICY.md). Title completion
+[FRONTEND_OPERATIONAL_POLICY.md](FRONTEND_OPERATIONAL_POLICY.md). Title
+completion
 now imports `admin-interaction-policy.js`; this fixture's allowlisted server
 serves that dependency. The parent central run owns verification of this newer
 asset graph; the earlier recorded Chromium pass is not relabeled as a rerun.

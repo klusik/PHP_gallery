@@ -9,14 +9,16 @@ lightbox intent. `lightbox.js` creates one owner per setup and reads its
 mutable current-index or generation copy. DEV diagnostics render a copied owner
 snapshot rather than maintaining another navigation state machine.
 
-`begin(index, imageId)` aborts the prior logical signal, advances the generation,
+`begin(index, imageId)` aborts the prior logical signal, advances the
+generation,
 and returns a frozen transaction token. Sparse-card navigation begins before the
 shared metadata-window request; `bindImageId(index, generation, imageId)` binds
 the server-provided ID once the card arrives without changing the generation.
 Callbacks retain the established `(index, generation)` projections and ask
 `isCurrent()` before they can update the image, loading/error UI, quality
 progress, transition, or telemetry. `setPhase()` owns the current diagnostic
-phase; `settle()` records displayed/failed while leaving the displayed generation
+phase; `settle()` records displayed/failed while leaving the displayed
+generation
 current so same-photo quality work remains valid.
 
 The navigation signal retires logical callbacks when a newer intent starts or
@@ -29,7 +31,8 @@ continues to guard cross-fade and zoom presentation work.
 
 `tests/lightbox_navigation_lifecycle_test.mjs` executes the owner directly. It
 covers target identity, sparse-ID binding, phase settlement, stale completion,
-close/reopen, and terminal disposal. `tests/lightbox_navigation_transaction_liveness_test.php`
+close/reopen, and terminal disposal.
+`tests/lightbox_navigation_transaction_liveness_test.php`
 continues to protect coordinator integration and the no-shadow-state contract.
 
 ## Lightbox nearby-preview queue
@@ -54,12 +57,14 @@ listeners, and viewer presentation remain in `lightbox.js`.
 ### API and integration contract
 
 The factory takes the setup owner's `signal`, a `preload(src, {signal}, reason)`
-callback, a `concurrency()` callback, optional `onError(error, src)` diagnostics,
+callback, a `concurrency()` callback, optional `onError(error, src)`
+diagnostics,
 and a scheduler (the viewer passes `window`). The preload callback must return
 its completion promise and honor cancellation. The existing detached loader
 removes its source and settles on abort; the queue does not claim to cancel
 arbitrary promises itself. Concurrency policy returns one or two slots, as
-before: one for mobile/touch, 3G, Save-Data, or slower connections; two otherwise.
+before: one for mobile/touch, 3G, Save-Data, or slower connections; two
+otherwise.
 
 | API | Ownership and effect |
 | --- | --- |
@@ -70,7 +75,8 @@ before: one for mobile/touch, 3G, Save-Data, or slower connections; two otherwis
 | `generation`, `signal` | Read-only access to the single queue generation and current cancellation signal. Immediate current-preview warming shares this signal without occupying a queued slot. |
 | `snapshot()` | Returns copied scalar diagnostics; queue containers and counters cannot be mutated by the viewer. |
 
-Idle scheduling retains a 350 ms timeout and uses an 80 ms `setTimeout` fallback.
+Idle scheduling retains a 350 ms timeout and uses an 80 ms `setTimeout`
+fallback.
 At most one drain is scheduled at a time. The callback checks its captured queue
 generation, so a callback dispatched before cancellation cannot drain a reopened
 queue or clear that queue's handle. Successful or rejected preload promises each
@@ -138,10 +144,13 @@ and the no-JavaScript navigation fallback also retain their existing paths.
 ### Verification and central integration
 
 `tests/lightbox_preload_lifecycle_test.mjs` executes the actual lifecycle module
-with controlled scheduling and promises. It covers FIFO/deduplication, both timer
-APIs (including handle zero), dynamic concurrency, soft/hard reset, stale callback
+with controlled scheduling and promises. It covers FIFO/deduplication, both
+timer
+APIs (including handle zero), dynamic concurrency, soft/hard reset, stale
+callback
 suppression, synchronous throws, rejected promises, diagnostic failure, terminal
-disposal, pre-aborted setup, and 30 repeated close/reopen/fragment-owner replacement
+disposal, pre-aborted setup, and 30 repeated close/reopen/fragment-owner
+replacement
 cycles. It also executes the production viewer factory, resource owner, and
 source-selection/reset adapters with both renderer labels to check preview-only
 warming, actual cache reuse, shared cancellation, and mobile/connection policy.
@@ -152,7 +161,8 @@ The focused fixture passed 12/12 cases on 2026-10-06 using Node v24.18.1.
 A central PASS is not inferred from these focused results.
 
 `lightbox_preload_lifecycle_test.mjs` is registered in the `node_tests` map in
-`scripts/audit_registry.php`. No browser fixture or special arguments are needed.
+`scripts/audit_registry.php`. No browser fixture or special arguments are
+needed.
 The three existing PHP contracts below now read the moved queue code from its
 owner while continuing to check the viewer adapters; their unrelated assertions
 remain in place:
@@ -161,8 +171,10 @@ remain in place:
 - `tests/lightbox_navigation_loading_regression_test.php`
 - `tests/lightbox_cache_eviction_liveness_test.php`
 
-The central audit remains responsible for these contracts, the zoom and slideshow
-contracts, JavaScript syntax, and other registered suites. The measurement helper
+The central audit remains responsible for these contracts, the zoom and
+slideshow
+contracts, JavaScript syntax, and other registered suites. The measurement
+helper
 below is an explicit reporting command, not another runtime test registration.
 
 ### Asset revisions and deployment integration
@@ -173,16 +185,19 @@ Admin side panel import the deferred loader at that revision. The side-panel
 change propagates through the Admin operations re-export and entrypoint.
 The new lifecycle asset participates in both `$scriptVersionPaths` arrays in
 `app/views/layout.php` beside `lightbox.js`.
-Future lifecycle-module edits must also bump the versioned import in `lightbox.js`.
+Future lifecycle-module edits must also bump the versioned import in
+`lightbox.js`.
 
 `lightbox-deferred.js` already propagates `data-gallery-asset-revision`, falling
 back to its own import revision, into the dynamic `lightbox.js` URL. Its loader
-implementation needs no change. Regenerate and check `app/core-manifest.json` after final
+implementation needs no change. Regenerate and check `app/core-manifest.json`
+after final
 source edits and before deployment/handoff packaging.
 
 ## Source and compression measurements
 
-Baseline: Git commit `1b823be89095415b3e0991acb9f0a5b3002df024`. The initial viewer
+Baseline: Git commit `1b823be89095415b3e0991acb9f0a5b3002df024`. The initial
+viewer
 was unmodified relative to this baseline. Measurement uses UTF-8 source with LF
 line endings on both sides, gzip level 9 and Brotli quality 11, compressing each
 asset independently before summing. This removes checkout CRLF differences and
@@ -204,7 +219,8 @@ node tests/support/lightbox_lifecycle_size.mjs 1b823be89095415b3e0991acb9f0a5b30
 ```
 
 The helper prints per-asset SHA-256 fingerprints as well as totals, compression
-versions, and deltas. It reads the baseline directly from Git and the after files
+versions, and deltas. It reads the baseline directly from Git and the after
+files
 from the working tree. Other imports and assets are excluded from this slice's
 totals; the new module adds one static dependency to the deferred viewer graph.
 The parent file shrank by 83 lines and 3,734 bytes, but the combined compressed

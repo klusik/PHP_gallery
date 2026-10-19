@@ -79,7 +79,8 @@ use function Gallery\Services\google_auth_schema_status;
 use function Gallery\Services\auth_persistence_config;
 use function Gallery\Services\auth_persistent_login_schema_status;
 use function Gallery\Services\auth_persistent_login_ready;
-use function Gallery\Core\admin_auth_revoke_current_persistent_login_for_request;
+use function Gallery\Core\admin_auth_revoke_current_persistent_login_for_request
+;
 use function Gallery\Core\admin_auth_revoke_user_persistent_logins_for_request;
 use function Gallery\Services\auth_throttle_check;
 use function Gallery\Services\auth_throttle_clear;
@@ -119,7 +120,7 @@ use function Gallery\Services\admin_settings_url;
 
 /**
  * Admin authentication controller model.
- * 
+ *
  * This module handles login, logout, account updates, and reset workflows. It does not touch theme configuration or visual customization.
  */
 
@@ -155,7 +156,6 @@ function cms_find_admin_user_by_identifier(string $identifier): ?array
     return auth_account_find_by_username($normalizedIdentifier);
 }
 
-
 /**
  * Return password reset settings with safe defaults.
  *
@@ -167,10 +167,22 @@ function cms_password_reset_settings(): array
 }
 
 /**
- * Persist admin-managed password reset delivery settings.
+ * Validate and persist the password reset settings submitted from Admin.
  *
- * @param array $input Input value.
- * @return array<string,mixed> Configured settings or bounded delivery metadata for the caller.
+ * @param array{
+ *     password_reset_enabled?:string,
+ *     password_reset_transport?:string,
+ *     password_reset_from_email?:string,
+ *     password_reset_from_name?:string,
+ *     password_reset_token_lifetime_minutes?:string,
+ *     password_reset_smtp_host?:string,
+ *     password_reset_smtp_port?:string,
+ *     password_reset_smtp_encryption?:string,
+ *     password_reset_smtp_username?:string,
+ *     password_reset_smtp_password?:string,
+ *     keep_existing_smtp_password?:string
+ * } $input Submitted form fields; unchecked checkbox fields are absent.
+ * @return list<string> Validation messages, or an empty list after settings are saved.
  */
 function cms_save_password_reset_settings(array $input): array
 {
@@ -180,20 +192,30 @@ function cms_save_password_reset_settings(array $input): array
     $transport = (string) ($input['password_reset_transport'] ?? 'php_mail');
     $transport = $transport === 'smtp' ? 'smtp' : 'php_mail';
     // $fromEmail stores an intermediate value used by the surrounding gallery workflow.
-    $fromEmail = auth_account_normalize_email((string) ($input['password_reset_from_email'] ?? ''));
+    $fromEmail = auth_account_normalize_email(
+        (string) ($input['password_reset_from_email'] ?? ''),
+    );
     // $fromName stores an intermediate value used by the surrounding gallery workflow.
     $fromName = trim((string) ($input['password_reset_from_name'] ?? ''));
     // $lifetimeMinutes stores an intermediate value used by the surrounding gallery workflow.
-    $lifetimeMinutes = (int) ($input['password_reset_token_lifetime_minutes'] ?? 60);
+    $lifetimeMinutes = (int) (
+        $input['password_reset_token_lifetime_minutes'] ?? 60
+    );
     // $smtpHost stores the SMTP server hostname without protocol prefixes.
     $smtpHost = trim((string) ($input['password_reset_smtp_host'] ?? ''));
     // $smtpPort stores the SMTP server port number.
     $smtpPort = (int) ($input['password_reset_smtp_port'] ?? 587);
     // $smtpEncryption stores whether SMTP uses STARTTLS, implicit TLS, or no encryption.
-    $smtpEncryption = (string) ($input['password_reset_smtp_encryption'] ?? 'tls');
-    $smtpEncryption = in_array($smtpEncryption, ['none', 'tls', 'ssl'], true) ? $smtpEncryption : 'tls';
+    $smtpEncryption = (string) (
+        $input['password_reset_smtp_encryption'] ?? 'tls'
+    );
+    $smtpEncryption = in_array($smtpEncryption, ['none', 'tls', 'ssl'], true)
+        ? $smtpEncryption
+        : 'tls';
     // $smtpUsername stores the SMTP username if authentication is required.
-    $smtpUsername = trim((string) ($input['password_reset_smtp_username'] ?? ''));
+    $smtpUsername = trim(
+        (string) ($input['password_reset_smtp_username'] ?? ''),
+    );
     // $smtpPassword stores the SMTP password if authentication is required.
     $smtpPassword = (string) ($input['password_reset_smtp_password'] ?? '');
     // $existingSettings stores current values so leaving the password field empty does not erase it accidentally.
@@ -205,10 +227,14 @@ function cms_save_password_reset_settings(array $input): array
     $errors = [];
 
     if ($fromEmail !== '' && !filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = t('admin.account.error_password_reset_sender_email_invalid');
+        $errors[] = t(
+            'admin.account.error_password_reset_sender_email_invalid',
+        );
     }
     if ($enabled && $fromEmail === '') {
-        $errors[] = t('admin.account.error_password_reset_sender_required_when_enabled');
+        $errors[] = t(
+            'admin.account.error_password_reset_sender_required_when_enabled',
+        );
     }
     if ($fromName === '') {
         $fromName = site_name();
@@ -224,7 +250,9 @@ function cms_save_password_reset_settings(array $input): array
             $errors[] = t('admin.account.error_smtp_port_range');
         }
         if ($smtpUsername !== '' && $smtpPassword === '') {
-            $errors[] = t('admin.account.error_smtp_password_required_with_username');
+            $errors[] = t(
+                'admin.account.error_smtp_password_required_with_username',
+            );
         }
     }
     if ($errors !== []) {
@@ -235,25 +263,38 @@ function cms_save_password_reset_settings(array $input): array
     set_app_setting('password_reset_transport', $transport);
     set_app_setting('password_reset_from_email', $fromEmail);
     set_app_setting('password_reset_from_name', $fromName);
-    set_app_setting('password_reset_token_lifetime_minutes', (string) $lifetimeMinutes);
+    set_app_setting(
+        'password_reset_token_lifetime_minutes',
+        (string) $lifetimeMinutes,
+    );
     set_app_setting('password_reset_smtp_host', $smtpHost);
     set_app_setting('password_reset_smtp_port', (string) $smtpPort);
     set_app_setting('password_reset_smtp_encryption', $smtpEncryption);
     set_app_setting('password_reset_smtp_username', $smtpUsername);
     set_app_setting('password_reset_smtp_password', $smtpPassword);
 
-    admin_log_event('info', 'auth.password_reset_settings_updated', t('admin.account.log_password_reset_settings_updated'), [
-        'enabled' => $enabled,
-        'transport' => $transport,
-        'from_email_set' => $fromEmail !== '',
-        'from_email_domain' => $fromEmail !== '' && str_contains($fromEmail, '@') ? substr(strrchr($fromEmail, '@'), 1) : '',
-        'token_lifetime_minutes' => $lifetimeMinutes,
-        'smtp_host' => $transport === 'smtp' ? $smtpHost : '',
-        'smtp_port' => $transport === 'smtp' ? $smtpPort : null,
-        'smtp_encryption' => $transport === 'smtp' ? $smtpEncryption : '',
-        'smtp_username_set' => $transport === 'smtp' && $smtpUsername !== '',
-        'smtp_password_set' => $transport === 'smtp' && $smtpPassword !== '',
-    ]);
+    admin_log_event(
+        'info',
+        'auth.password_reset_settings_updated',
+        t('admin.account.log_password_reset_settings_updated'),
+        [
+            'enabled' => $enabled,
+            'transport' => $transport,
+            'from_email_set' => $fromEmail !== '',
+            'from_email_domain' => $fromEmail !== ''
+            && str_contains($fromEmail, '@')
+                ? substr(strrchr($fromEmail, '@'), 1)
+                : '',
+            'token_lifetime_minutes' => $lifetimeMinutes,
+            'smtp_host' => $transport === 'smtp' ? $smtpHost : '',
+            'smtp_port' => $transport === 'smtp' ? $smtpPort : null,
+            'smtp_encryption' => $transport === 'smtp' ? $smtpEncryption : '',
+            'smtp_username_set' =>
+                $transport === 'smtp' && $smtpUsername !== '',
+            'smtp_password_set' =>
+                $transport === 'smtp' && $smtpPassword !== '',
+        ],
+    );
 
     return [];
 }
@@ -305,14 +346,27 @@ function cms_create_password_reset_token(int $userId): ?array
     // $tokenHash stores an intermediate value used by the surrounding gallery workflow.
     $tokenHash = hash('sha256', $token);
     // $expiresAt stores an intermediate value used by the surrounding gallery workflow.
-    $expiresAt = date('Y-m-d H:i:s', time() + ((int) $settings['token_lifetime_minutes'] * 60));
+    $expiresAt = date(
+        'Y-m-d H:i:s',
+        time() + ((int) $settings['token_lifetime_minutes'] * 60),
+    );
     // $requestHash stores an intermediate value used by the surrounding gallery workflow.
     $requestHash = visitor_hash();
 
     // Invalidate older unused tokens for the same user before issuing a new one.
-    auth_account_replace_password_reset_token($userId, $selector, $tokenHash, $expiresAt, $requestHash);
+    auth_account_replace_password_reset_token(
+        $userId,
+        $selector,
+        $tokenHash,
+        $expiresAt,
+        $requestHash,
+    );
 
-    return ['selector' => $selector, 'token' => $token, 'expires_at' => $expiresAt];
+    return [
+        'selector' => $selector,
+        'token' => $token,
+        'expires_at' => $expiresAt,
+    ];
 }
 
 /**
@@ -324,7 +378,10 @@ function cms_create_password_reset_token(int $userId): ?array
  */
 function cms_password_reset_url(string $selector, string $token): string
 {
-    return absolute_public_url(url_for('admin_reset_password', ['selector' => $selector, 'token' => $token]));
+    return absolute_public_url(url_for('admin_reset_password', [
+        'selector' => $selector,
+        'token' => $token,
+    ]));
 }
 
 /**
@@ -363,16 +420,46 @@ function cms_smtp_read_response($socket): array
 /**
  * Send an SMTP command and validate the response code.
  *
- * @param resource $socket Connected SMTP stream.
- * @param string $command Command value.
- * @param list<int> $expectedCodes Expected codes value.
- * @param array<string,mixed> $details Details value.
- * @param string $stage Stage value.
- * @return bool True when the condition matches.
+ * @param resource $socket Connected SMTP stream. PHP 8.1 has no native
+ *     stream-resource type, so the signature uses `mixed` without narrowing
+ *     the existing accepted input type.
+ * @param string $command SMTP command line sent to the connected server.
+ * @param list<int> $expectedCodes SMTP response codes accepted for this command.
+ * @param array{
+ *     sent:bool,
+ *     transport:string,
+ *     enabled:bool,
+ *     reason:string,
+ *     recipient_masked:string,
+ *     from_email_masked:string,
+ *     expires_at:string,
+ *     smtp_host?:string,
+ *     smtp_port?:int,
+ *     smtp_encryption?:string,
+ *     smtp_username_set?:bool,
+ *     smtp_password_set?:bool,
+ *     smtp_stage?:string,
+ *     smtp_last_code?:int,
+ *     smtp_last_response?:list<string>,
+ *     smtp_errno?:int
+ * } $details Delivery diagnostics updated with this command's response.
+ * @param string $stage Bounded SMTP operation label recorded in delivery diagnostics.
+ * @return bool True when the SMTP response code is in the accepted code list.
  */
-function cms_smtp_command($socket, string $command, array $expectedCodes, array &$details, string $stage): bool
-{
-    return \Gallery\Services\cms_smtp_command($socket, $command, $expectedCodes, $details, $stage);
+function cms_smtp_command(
+    mixed $socket,
+    string $command,
+    array $expectedCodes,
+    array &$details,
+    string $stage,
+): bool {
+    return \Gallery\Services\cms_smtp_command(
+        $socket,
+        $command,
+        $expectedCodes,
+        $details,
+        $stage,
+    );
 }
 
 /**
@@ -385,9 +472,20 @@ function cms_smtp_command($socket, string $command, array $expectedCodes, array 
  * @param array<string,mixed> $details Details value.
  * @return bool True when the condition matches.
  */
-function cms_send_smtp_email(array $settings, string $recipient, string $subject, string $body, array &$details): bool
-{
-    return \Gallery\Services\cms_send_smtp_email($settings, $recipient, $subject, $body, $details);
+function cms_send_smtp_email(
+    array $settings,
+    string $recipient,
+    string $subject,
+    string $body,
+    array &$details,
+): bool {
+    return \Gallery\Services\cms_send_smtp_email(
+        $settings,
+        $recipient,
+        $subject,
+        $body,
+        $details,
+    );
 }
 
 /**
@@ -399,21 +497,50 @@ function cms_send_smtp_email(array $settings, string $recipient, string $subject
  * @param string $expiresAt Expires at value.
  * @return array<string,mixed> Configured settings or bounded delivery metadata for the caller.
  */
-function cms_send_configured_password_reset_mail(string $recipient, string $subject, string $body, string $expiresAt = ''): array
-{
-    return \Gallery\Services\cms_send_configured_password_reset_mail($recipient, $subject, $body, $expiresAt);
+function cms_send_configured_password_reset_mail(
+    string $recipient,
+    string $subject,
+    string $body,
+    string $expiresAt = '',
+): array {
+    return \Gallery\Services\cms_send_configured_password_reset_mail(
+        $recipient,
+        $subject,
+        $body,
+        $expiresAt,
+    );
 }
 
 /**
- * Send a password reset message using the configured transport.
+ * Build and send a password reset message through the configured transport.
  *
- * @param array $user User value.
- * @param string $resetUrl Reset url URL.
- * @param string $expiresAt Expires at value.
- * @return array<string,mixed> Configured settings or bounded delivery metadata for the caller.
+ * @param array{email?:string|null} $user Admin account recovery email, when the account has one.
+ * @param string $resetUrl One-time password reset URL included in the message.
+ * @param string $expiresAt Expiration timestamp recorded with the delivery result.
+ * @return array{
+ *     sent:bool,
+ *     transport:string,
+ *     enabled:bool,
+ *     reason:string,
+ *     recipient_masked:string,
+ *     from_email_masked:string,
+ *     expires_at:string,
+ *     smtp_host?:string,
+ *     smtp_port?:int,
+ *     smtp_encryption?:string,
+ *     smtp_username_set?:bool,
+ *     smtp_password_set?:bool,
+ *     smtp_stage?:string,
+ *     smtp_last_code?:int,
+ *     smtp_last_response?:list<string>,
+ *     smtp_errno?:int
+ * } Delivery outcome and privacy-safe transport diagnostics.
  */
-function cms_send_password_reset_email(array $user, string $resetUrl, string $expiresAt): array
-{
+function cms_send_password_reset_email(
+    array $user,
+    string $resetUrl,
+    string $expiresAt,
+): array {
     // $recipient stores an intermediate value used by the surrounding gallery workflow.
     $recipient = trim((string) ($user['email'] ?? ''));
     // $subject stores an intermediate value used by the surrounding gallery workflow.
@@ -423,7 +550,12 @@ function cms_send_password_reset_email(array $user, string $resetUrl, string $ex
         'reset_url' => $resetUrl,
         'expires_at' => $expiresAt,
     ]);
-    return cms_send_configured_password_reset_mail($recipient, $subject, $body, $expiresAt);
+    return cms_send_configured_password_reset_mail(
+        $recipient,
+        $subject,
+        $body,
+        $expiresAt,
+    );
 }
 
 /**
@@ -433,8 +565,10 @@ function cms_send_password_reset_email(array $user, string $resetUrl, string $ex
  * @param string $token Token value.
  * @return ?array Structured result data for the caller.
  */
-function cms_find_valid_password_reset_token(string $selector, string $token): ?array
-{
+function cms_find_valid_password_reset_token(
+    string $selector,
+    string $token,
+): ?array {
     if ($selector === '' || $token === '') {
         return null;
     }
@@ -445,12 +579,14 @@ function cms_find_valid_password_reset_token(string $selector, string $token): ?
     }
     // Variable $row stores this steps working value.
     $row = auth_account_find_valid_password_reset($selector);
-    if (!$row || !hash_equals((string) $row['token_hash'], hash('sha256', $token))) {
+    if (
+        !$row
+        || !hash_equals((string) $row['token_hash'], hash('sha256', $token))
+    ) {
         return null;
     }
     return $row;
 }
-
 
 /**
  * Start Google login or account linking through OpenID Connect.
@@ -462,33 +598,65 @@ function cms_admin_google_start(): void
     $mode = (string) ($_GET['mode'] ?? 'login');
     $mode = $mode === 'link' ? 'link' : 'login';
     // $returnTarget stores the local page that should reopen after successful authentication.
-    $returnTarget = sanitize_login_return_target((string) ($_GET['return'] ?? ''), url_for('admin'));
+    $returnTarget = sanitize_login_return_target(
+        (string) ($_GET['return'] ?? ''),
+        url_for('admin'),
+    );
 
     $googleConfig = google_auth_config();
     if (!google_auth_configuration_ready($googleConfig)) {
-        flash_message('admin_notice', t('admin.google.not_configured', 'Google login is not configured yet. Add the OAuth client ID and secret to config.php, then run the database migrations.'));
-        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+        flash_message('admin_notice', t(
+            'admin.google.not_configured',
+            'Google login is not configured yet. Add the OAuth client ID and secret to config.php, then run the database migrations.',
+        ));
+        redirect_to(
+            $mode === 'link'
+                ? url_for('admin_account')
+                : url_for('admin_login', ['return' => $returnTarget]),
+        );
     }
     $googleSchemaStatus = google_auth_schema_status();
     if (schema_inspection_is_unknown($googleSchemaStatus)) {
-        flash_message('admin_notice', t('admin.auth.schema_temporarily_unavailable', 'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.'));
-        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+        flash_message('admin_notice', t(
+            'admin.auth.schema_temporarily_unavailable',
+            'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.',
+        ));
+        redirect_to(
+            $mode === 'link'
+                ? url_for('admin_account')
+                : url_for('admin_login', ['return' => $returnTarget]),
+        );
     }
     if (schema_inspection_is_missing($googleSchemaStatus)) {
-        flash_message('admin_notice', t('admin.google.migration_required', 'Google login is configured, but its database migration has not been applied yet.'));
-        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+        flash_message('admin_notice', t(
+            'admin.google.migration_required',
+            'Google login is configured, but its database migration has not been applied yet.',
+        ));
+        redirect_to(
+            $mode === 'link'
+                ? url_for('admin_account')
+                : url_for('admin_login', ['return' => $returnTarget]),
+        );
     }
 
     if ($mode === 'link') {
         require_admin();
     }
 
-    if (!isset($_SESSION['google_oauth_states']) || !is_array($_SESSION['google_oauth_states'])) {
+    if (
+        !isset($_SESSION['google_oauth_states'])
+        || !is_array($_SESSION['google_oauth_states'])
+    ) {
         $_SESSION['google_oauth_states'] = [];
     }
     $states = &$_SESSION['google_oauth_states'];
     $user = current_user();
-    redirect_to(google_auth_authorization_url($mode, $returnTarget, $states, $user ? (int) $user['id'] : null));
+    redirect_to(google_auth_authorization_url(
+        $mode,
+        $returnTarget,
+        $states,
+        $user ? (int) $user['id'] : null,
+    ));
 }
 
 /**
@@ -499,32 +667,60 @@ function cms_admin_google_callback(): void
 {
     // $state stores the returned OAuth state used to prevent request forgery.
     $state = (string) ($_GET['state'] ?? '');
-    if (!isset($_SESSION['google_oauth_states']) || !is_array($_SESSION['google_oauth_states'])) {
+    if (
+        !isset($_SESSION['google_oauth_states'])
+        || !is_array($_SESSION['google_oauth_states'])
+    ) {
         $_SESSION['google_oauth_states'] = [];
     }
     $states = &$_SESSION['google_oauth_states'];
     // $stateEntry stores the local state metadata saved before redirecting to Google.
-    $stateEntry = function_exists('Gallery\\Services\\google_auth_consume_state') ? google_auth_consume_state($state, $states) : null;
+    $stateEntry = function_exists(
+        'Gallery\\Services\\google_auth_consume_state',
+    )
+        ? google_auth_consume_state($state, $states)
+        : null;
     if (!$stateEntry) {
-        flash_message('admin_notice', t('admin.google.state_invalid', 'Google login expired or returned an invalid state. Try again.'));
+        flash_message('admin_notice', t(
+            'admin.google.state_invalid',
+            'Google login expired or returned an invalid state. Try again.',
+        ));
         redirect_to(url_for('admin_login'));
     }
 
     // $mode stores whether this callback belongs to login or profile linking.
     $mode = (string) ($stateEntry['mode'] ?? 'login');
     // $returnTarget stores the local target restored after successful login.
-    $returnTarget = sanitize_login_return_target((string) ($stateEntry['return'] ?? ''), url_for('admin'));
+    $returnTarget = sanitize_login_return_target(
+        (string) ($stateEntry['return'] ?? ''),
+        url_for('admin'),
+    );
 
     if (!empty($_GET['error'])) {
-        flash_message('admin_notice', t('admin.google.callback_error', 'Google login failed: {error}', ['error' => (string) $_GET['error']]));
-        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+        flash_message('admin_notice', t(
+            'admin.google.callback_error',
+            'Google login failed: {error}',
+            ['error' => (string) $_GET['error']],
+        ));
+        redirect_to(
+            $mode === 'link'
+                ? url_for('admin_account')
+                : url_for('admin_login', ['return' => $returnTarget]),
+        );
     }
 
     // $code stores the authorization code returned by Google.
     $code = (string) ($_GET['code'] ?? '');
     if ($code === '') {
-        flash_message('admin_notice', t('admin.google.code_missing', 'Google did not return an authorization code.'));
-        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+        flash_message('admin_notice', t(
+            'admin.google.code_missing',
+            'Google did not return an authorization code.',
+        ));
+        redirect_to(
+            $mode === 'link'
+                ? url_for('admin_account')
+                : url_for('admin_login', ['return' => $returnTarget]),
+        );
     }
 
     try {
@@ -533,78 +729,172 @@ function cms_admin_google_callback(): void
         if ($mode === 'link') {
             // $currentUser stores the admin profile that initiated linking.
             $currentUser = current_user();
-            if (!$currentUser || (int) $currentUser['id'] !== (int) ($stateEntry['user_id'] ?? 0)) {
-                flash_message('admin_notice', t('admin.google.link_session_expired', 'Your admin session expired before Google linking finished. Log in again and retry linking.'));
-                redirect_to(url_for('admin_login', ['return' => url_for('admin_account')]));
+            if (
+                !$currentUser
+                || (int) $currentUser['id']
+                    !== (int) ($stateEntry['user_id'] ?? 0)
+            ) {
+                flash_message('admin_notice', t(
+                    'admin.google.link_session_expired',
+                    'Your admin session expired before Google linking finished. Log in again and retry linking.',
+                ));
+                redirect_to(url_for('admin_login', [
+                    'return' => url_for('admin_account'),
+                ]));
             }
             google_auth_link_account((int) $currentUser['id'], $claims);
-            admin_log_event('info', 'auth.google_linked', t('admin.google.log_linked', 'Admin linked a Google account.'), [
-                'user_id' => (int) $currentUser['id'],
-                'google_sub_sha256' => hash('sha256', (string) ($claims['sub'] ?? '')),
-                'email_domain' => str_contains((string) ($claims['email'] ?? ''), '@') ? substr(strrchr((string) $claims['email'], '@'), 1) : '',
-            ]);
+            admin_log_event(
+                'info',
+                'auth.google_linked',
+                t('admin.google.log_linked', 'Admin linked a Google account.'),
+                [
+                    'user_id' => (int) $currentUser['id'],
+                    'google_sub_sha256' => hash(
+                        'sha256',
+                        (string) ($claims['sub'] ?? ''),
+                    ),
+                    'email_domain' => str_contains(
+                        (string) ($claims['email'] ?? ''),
+                        '@',
+                    )
+                        ? substr(strrchr((string) $claims['email'], '@'), 1)
+                        : '',
+                ],
+            );
             redirect_to(url_for('admin_account', ['google' => 'linked']));
         }
 
         // $linkedUser stores the existing admin account connected to this Google account.
-        $linkedUser = google_auth_user_by_subject((string) ($claims['sub'] ?? ''));
+        $linkedUser = google_auth_user_by_subject(
+            (string) ($claims['sub'] ?? ''),
+        );
         if (!$linkedUser || (string) ($linkedUser['role'] ?? '') !== 'admin') {
-            admin_log_event('warning', 'auth.google_unlinked_login', t('admin.google.log_unlinked_login', 'Google login was rejected because the Google account is not linked to an admin profile.'), [
-                'google_sub_sha256' => hash('sha256', (string) ($claims['sub'] ?? '')),
-                'email_domain' => str_contains((string) ($claims['email'] ?? ''), '@') ? substr(strrchr((string) $claims['email'], '@'), 1) : '',
-            ]);
-            redirect_to(url_for('admin_login', ['google' => 'not_linked', 'return' => $returnTarget]));
+            admin_log_event(
+                'warning',
+                'auth.google_unlinked_login',
+                t(
+                    'admin.google.log_unlinked_login',
+                    'Google login was rejected because the Google account is not linked to an admin profile.',
+                ),
+                [
+                    'google_sub_sha256' => hash(
+                        'sha256',
+                        (string) ($claims['sub'] ?? ''),
+                    ),
+                    'email_domain' => str_contains(
+                        (string) ($claims['email'] ?? ''),
+                        '@',
+                    )
+                        ? substr(strrchr((string) $claims['email'], '@'), 1)
+                        : '',
+                ],
+            );
+            redirect_to(url_for('admin_login', [
+                'google' => 'not_linked',
+                'return' => $returnTarget,
+            ]));
         }
 
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int) $linkedUser['id'];
-        if (function_exists('Gallery\\Core\\admin_auth_issue_persistent_login_for_request')) {
+        if (function_exists(
+            'Gallery\\Core\\admin_auth_issue_persistent_login_for_request',
+        )) {
             try {
-                admin_auth_issue_persistent_login_for_request((int) $linkedUser['id']);
+                admin_auth_issue_persistent_login_for_request(
+                    (int) $linkedUser['id'],
+                );
             } catch (AuthenticationSchemaUnavailableException $exception) {
-                admin_log_event('warning', 'auth.persistent_login_schema_unavailable', 'Persistent login was not issued because its schema state is unknown.', [
-                    'operation' => 'google_login_issue',
-                    'feature' => $exception->feature(),
-                    'user_id' => (int) $linkedUser['id'],
-                ]);
-                flash_message('admin_notice', t('admin.auth.remember_temporarily_unavailable', 'You are signed in for this browser session, but persistent login is temporarily unavailable until the database/schema inspection issue is resolved.'));
+                admin_log_event(
+                    'warning',
+                    'auth.persistent_login_schema_unavailable',
+                    'Persistent login was not issued because its schema state is unknown.',
+                    [
+                        'operation' => 'google_login_issue',
+                        'feature' => $exception->feature(),
+                        'user_id' => (int) $linkedUser['id'],
+                    ],
+                );
+                flash_message('admin_notice', t(
+                    'admin.auth.remember_temporarily_unavailable',
+                    'You are signed in for this browser session, but persistent login is temporarily unavailable until the database/schema inspection issue is resolved.',
+                ));
             }
         }
         if (function_exists('Gallery\\Services\\google_auth_touch_login')) {
             google_auth_touch_login((int) $linkedUser['google_account_id']);
         }
-        admin_log_event('info', 'auth.google_login', t('admin.google.log_login', 'Admin logged in with Google.'), [
-            'user_id' => (int) $linkedUser['id'],
-            'username' => (string) $linkedUser['username'],
-        ]);
+        admin_log_event(
+            'info',
+            'auth.google_login',
+            t('admin.google.log_login', 'Admin logged in with Google.'),
+            [
+                'user_id' => (int) $linkedUser['id'],
+                'username' => (string) $linkedUser['username'],
+            ],
+        );
         redirect_to($returnTarget);
     } catch (AuthenticationSchemaUnavailableException $exception) {
-        admin_log_event('warning', 'auth.google_schema_unavailable', 'Google authentication was refused because required schema state is unknown.', [
-            'mode' => $mode,
-            'feature' => $exception->feature(),
-        ]);
-        flash_message('admin_notice', t('admin.auth.schema_temporarily_unavailable', 'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.'));
-        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+        admin_log_event(
+            'warning',
+            'auth.google_schema_unavailable',
+            'Google authentication was refused because required schema state is unknown.',
+            [
+                'mode' => $mode,
+                'feature' => $exception->feature(),
+            ],
+        );
+        flash_message('admin_notice', t(
+            'admin.auth.schema_temporarily_unavailable',
+            'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.',
+        ));
+        redirect_to(
+            $mode === 'link'
+                ? url_for('admin_account')
+                : url_for('admin_login', ['return' => $returnTarget]),
+        );
     } catch (Throwable $exception) {
-        admin_log_event('warning', 'auth.google_callback_failed', t('admin.google.log_callback_failed', 'Google login callback failed.'), [
-            'mode' => $mode,
-            'error_type' => $exception::class,
-        ]);
-        flash_message('admin_notice', t('admin.google.callback_failed_safe', 'Google login could not be completed. Check System Health and the Admin logs, then try again.'));
-        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+        admin_log_event(
+            'warning',
+            'auth.google_callback_failed',
+            t(
+                'admin.google.log_callback_failed',
+                'Google login callback failed.',
+            ),
+            [
+                'mode' => $mode,
+                'error_type' => $exception::class,
+            ],
+        );
+        flash_message('admin_notice', t(
+            'admin.google.callback_failed_safe',
+            'Google login could not be completed. Check System Health and the Admin logs, then try again.',
+        ));
+        redirect_to(
+            $mode === 'link'
+                ? url_for('admin_account')
+                : url_for('admin_login', ['return' => $returnTarget]),
+        );
     }
 }
 
-
 /**
- * Handle cms admin login.
+ * Authenticate an Admin login request and render the login page when needed.
  *
- * Used by HTTP controller routing for this workflow.
+ * POST requests verify CSRF, apply login throttles, establish the session and
+ * redirect after successful authentication; unsuccessful requests render the
+ * login view with controller-prepared notices. The HTTP route dispatcher calls
+ * this controller for the Admin login route.
+ *
+ * @return void Redirect after successful login or render the login response.
  */
 function cms_admin_login(): void
 {
     // $returnTarget stores the local page that should reopen after successful authentication.
-    $returnTarget = sanitize_login_return_target((string) ($_POST['return'] ?? $_GET['return'] ?? ''), url_for('admin'));
+    $returnTarget = sanitize_login_return_target(
+        (string) ($_POST['return'] ?? $_GET['return'] ?? ''),
+        url_for('admin'),
+    );
 
     if (request_method() === 'POST') {
         verify_csrf();
@@ -615,18 +905,39 @@ function cms_admin_login(): void
         // $visitorSubject stores the privacy-safe visitor identifier used by the login throttling service.
         $visitorSubject = admin_auth_throttle_visitor_subject_for_request();
         // $visitorThrottle stores the current visitor-level login throttle status.
-        $visitorThrottle = auth_throttle_check('admin_login_visitor', $visitorSubject);
+        $visitorThrottle = auth_throttle_check(
+            'admin_login_visitor',
+            $visitorSubject,
+        );
         // $identifierThrottle stores the current identifier-level login throttle status.
         $identifierThrottle = $normalizedIdentifier !== ''
-            ? auth_throttle_check('admin_login_identifier', $normalizedIdentifier)
+            ? auth_throttle_check(
+                'admin_login_identifier',
+                $normalizedIdentifier,
+            )
             : ['allowed' => true, 'retry_after_seconds' => 0, 'attempts' => 0];
 
         if (!$visitorThrottle['allowed'] || !$identifierThrottle['allowed']) {
             if (!$visitorThrottle['allowed']) {
-                auth_throttle_log('auth.login_rate_limited', t('admin.auth.log_login_rate_limited'), 'admin_login_visitor', $visitorSubject, $visitorThrottle);
+                auth_throttle_log(
+                    'auth.login_rate_limited',
+                    t('admin.auth.log_login_rate_limited'),
+                    'admin_login_visitor',
+                    $visitorSubject,
+                    $visitorThrottle,
+                );
             }
-            if (!$identifierThrottle['allowed'] && $normalizedIdentifier !== '') {
-                auth_throttle_log('auth.login_rate_limited', t('admin.auth.log_login_rate_limited'), 'admin_login_identifier', $normalizedIdentifier, $identifierThrottle);
+            if (
+                !$identifierThrottle['allowed']
+                && $normalizedIdentifier !== ''
+            ) {
+                auth_throttle_log(
+                    'auth.login_rate_limited',
+                    t('admin.auth.log_login_rate_limited'),
+                    'admin_login_identifier',
+                    $normalizedIdentifier,
+                    $identifierThrottle,
+                );
             }
             $error = t('admin.auth.too_many_attempts');
         } else {
@@ -634,29 +945,64 @@ function cms_admin_login(): void
             try {
                 $user = cms_find_admin_user_by_identifier($identifier);
             } catch (AuthenticationSchemaUnavailableException $exception) {
-                admin_log_event('warning', 'auth.login_schema_unavailable', 'Password login identity lookup was refused because schema inspection is unknown.', [
-                    'feature' => $exception->feature(),
-                ]);
-                $error = t('admin.auth.schema_temporarily_unavailable', 'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.');
+                admin_log_event(
+                    'warning',
+                    'auth.login_schema_unavailable',
+                    'Password login identity lookup was refused because schema inspection is unknown.',
+                    [
+                        'feature' => $exception->feature(),
+                    ],
+                );
+                $error = t(
+                    'admin.auth.schema_temporarily_unavailable',
+                    'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.',
+                );
                 $user = null;
             }
 
-            if (!isset($error) && $user && password_verify((string) ($_POST['password'] ?? ''), (string) $user['password_hash'])) {
+            if (
+                !isset($error)
+                && $user
+                && password_verify(
+                    (string) ($_POST['password'] ?? ''),
+                    (string) $user['password_hash'],
+                )
+            ) {
                 auth_throttle_clear('admin_login_visitor', $visitorSubject);
                 if ($normalizedIdentifier !== '') {
-                    auth_throttle_clear('admin_login_identifier', $normalizedIdentifier);
+                    auth_throttle_clear(
+                        'admin_login_identifier',
+                        $normalizedIdentifier,
+                    );
                 }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
-                if (!empty($_POST['remember_login']) && function_exists('Gallery\Core\admin_auth_issue_persistent_login_for_request')) {
+                if (
+                    !empty($_POST['remember_login'])
+                    && function_exists(
+                        'Gallery\Core\admin_auth_issue_persistent_login_for_request',
+                    )
+                ) {
                     try {
-                        admin_auth_issue_persistent_login_for_request((int) $user['id']);
-                    } catch (AuthenticationSchemaUnavailableException $exception) {
-                        admin_log_event('warning', 'auth.persistent_login_issue_refused', 'Persistent login token issuance was refused because schema inspection is unknown.', [
-                            'feature' => $exception->feature(),
-                            'user_id' => (int) $user['id'],
-                        ]);
-                        flash_message('admin_notice', t('admin.auth.remember_temporarily_unavailable', 'You are signed in for this session, but persistent login is temporarily unavailable.'));
+                        admin_auth_issue_persistent_login_for_request(
+                            (int) $user['id'],
+                        );
+                    } catch (
+                        AuthenticationSchemaUnavailableException $exception
+                    ) {
+                        admin_log_event(
+                            'warning',
+                            'auth.persistent_login_issue_refused',
+                            'Persistent login token issuance was refused because schema inspection is unknown.',
+                            [
+                                'feature' => $exception->feature(),
+                                'user_id' => (int) $user['id'],
+                            ],
+                        );
+                        flash_message('admin_notice', t(
+                            'admin.auth.remember_temporarily_unavailable',
+                            'You are signed in for this session, but persistent login is temporarily unavailable.',
+                        ));
                     }
                 }
                 // Redirect to the page where the visitor clicked the login link, not always to the admin dashboard.
@@ -665,9 +1011,15 @@ function cms_admin_login(): void
 
             // Metadata inspection failure is operational, not an invalid credential attempt.
             if (!isset($error)) {
-                auth_throttle_record_attempt('admin_login_visitor', $visitorSubject);
+                auth_throttle_record_attempt(
+                    'admin_login_visitor',
+                    $visitorSubject,
+                );
                 if ($normalizedIdentifier !== '') {
-                    auth_throttle_record_attempt('admin_login_identifier', $normalizedIdentifier);
+                    auth_throttle_record_attempt(
+                        'admin_login_identifier',
+                        $normalizedIdentifier,
+                    );
                 }
                 // Variable $error stores this steps working value.
                 $error = t('admin.auth.invalid_login');
@@ -680,22 +1032,33 @@ function cms_admin_login(): void
         $notices[] = t('admin.auth.password_reset_completed');
     }
     if ((string) ($_GET['google'] ?? '') === 'not_linked') {
-        $notices[] = t('admin.google.login_not_linked', 'This Google account is not linked to an admin profile yet. Log in with your password first, then link Google in Account settings.');
+        $notices[] = t(
+            'admin.google.login_not_linked',
+            'This Google account is not linked to an admin profile yet. Log in with your password first, then link Google in Account settings.',
+        );
     }
     $flash = flash_message('admin_notice');
     if ($flash !== null && $flash !== '') {
         $notices[] = $flash;
     }
     // $rememberConfig stores persistent login defaults for the checkbox below.
-    $rememberConfig = function_exists('Gallery\Services\auth_persistence_config') ? auth_persistence_config() : ['persistent_login_default_checked' => true];
+    $rememberConfig = function_exists(
+        'Gallery\Services\auth_persistence_config',
+    )
+        ? auth_persistence_config()
+        : ['persistent_login_default_checked' => true];
     // $rememberSchemaStatus distinguishes migration absence from metadata inspection failure.
     $rememberSchemaStatus = auth_persistent_login_schema_status();
     // $rememberReady stores whether DB-backed persistent login can be issued on this installation.
-    $rememberReady = function_exists('Gallery\Services\auth_persistent_login_ready') && auth_persistent_login_ready();
+    $rememberReady =
+        function_exists('Gallery\Services\auth_persistent_login_ready')
+        && auth_persistent_login_ready();
     // $googleSchemaStatus distinguishes migration absence from metadata inspection failure.
     $googleSchemaStatus = google_auth_schema_status();
     // $googleReady stores whether Google sign-in can be used on this installation.
-    $googleReady = function_exists('Gallery\Services\google_auth_ready') && google_auth_ready();
+    $googleReady =
+        function_exists('Gallery\Services\google_auth_ready')
+        && google_auth_ready();
 
     \Gallery\Views\view_render_admin_login([
         'notices' => $notices,
@@ -703,18 +1066,31 @@ function cms_admin_login(): void
         'csrf_html' => csrf_field(),
         'return_target' => $returnTarget,
         'remember_ready' => $rememberReady,
-        'remember_default_checked' => !empty($rememberConfig['persistent_login_default_checked']),
-        'show_remember_schema_unknown' => !empty($rememberConfig['persistent_login_enabled']) && schema_inspection_is_unknown($rememberSchemaStatus),
+        'remember_default_checked' =>
+            !empty($rememberConfig['persistent_login_default_checked']),
+        'show_remember_schema_unknown' =>
+            !empty($rememberConfig['persistent_login_enabled'])
+                && schema_inspection_is_unknown($rememberSchemaStatus),
         'google_ready' => $googleReady,
-        'show_google_schema_unknown' => google_auth_configuration_ready() && schema_inspection_is_unknown($googleSchemaStatus),
-        'google_login_url' => url_for('admin_google_start', ['mode' => 'login', 'return' => $returnTarget]),
+        'show_google_schema_unknown' =>
+            google_auth_configuration_ready()
+                && schema_inspection_is_unknown($googleSchemaStatus),
+        'google_login_url' => url_for('admin_google_start', [
+            'mode' => 'login',
+            'return' => $returnTarget,
+        ]),
         'forgot_password_url' => url_for('admin_forgot_password'),
     ]);
 }
 
-
 /**
- * Request a password reset link for an admin account with a recovery email.
+ * Process a password reset request without revealing whether an account exists.
+ *
+ * POST requests verify CSRF, apply throttles and conditionally issue and email a
+ * reset token. The controller renders the same public-facing notice for normal
+ * available-schema requests.
+ *
+ * @return void Redirect an authenticated user or render the reset-request form.
  */
 function cms_admin_forgot_password(): void
 {
@@ -732,42 +1108,87 @@ function cms_admin_forgot_password(): void
         // $visitorSubject stores the privacy-safe visitor identifier used by the reset throttling service.
         $visitorSubject = admin_auth_throttle_visitor_subject_for_request();
         // $visitorThrottle stores the current visitor-level reset throttle status.
-        $visitorThrottle = auth_throttle_check('password_reset_visitor', $visitorSubject);
+        $visitorThrottle = auth_throttle_check(
+            'password_reset_visitor',
+            $visitorSubject,
+        );
         // $identifierThrottle stores the current identifier-level reset throttle status.
         $identifierThrottle = $normalizedIdentifier !== ''
-            ? auth_throttle_check('password_reset_identifier', $normalizedIdentifier)
+            ? auth_throttle_check(
+                'password_reset_identifier',
+                $normalizedIdentifier,
+            )
             : ['allowed' => true, 'retry_after_seconds' => 0, 'attempts' => 0];
 
         if (!$visitorThrottle['allowed'] || !$identifierThrottle['allowed']) {
             if (!$visitorThrottle['allowed']) {
-                auth_throttle_log('auth.reset_rate_limited', t('admin.auth.log_reset_rate_limited'), 'password_reset_visitor', $visitorSubject, $visitorThrottle);
+                auth_throttle_log(
+                    'auth.reset_rate_limited',
+                    t('admin.auth.log_reset_rate_limited'),
+                    'password_reset_visitor',
+                    $visitorSubject,
+                    $visitorThrottle,
+                );
             }
-            if (!$identifierThrottle['allowed'] && $normalizedIdentifier !== '') {
-                auth_throttle_log('auth.reset_rate_limited', t('admin.auth.log_reset_rate_limited'), 'password_reset_identifier', $normalizedIdentifier, $identifierThrottle);
+            if (
+                !$identifierThrottle['allowed']
+                && $normalizedIdentifier !== ''
+            ) {
+                auth_throttle_log(
+                    'auth.reset_rate_limited',
+                    t('admin.auth.log_reset_rate_limited'),
+                    'password_reset_identifier',
+                    $normalizedIdentifier,
+                    $identifierThrottle,
+                );
             }
         } else {
-            auth_throttle_record_attempt('password_reset_visitor', $visitorSubject);
+            auth_throttle_record_attempt(
+                'password_reset_visitor',
+                $visitorSubject,
+            );
             if ($normalizedIdentifier !== '') {
-                auth_throttle_record_attempt('password_reset_identifier', $normalizedIdentifier);
+                auth_throttle_record_attempt(
+                    'password_reset_identifier',
+                    $normalizedIdentifier,
+                );
             }
 
             // Reset issuance requires both the token table and users.email.
             try {
                 $resetSchemaStatus = auth_password_reset_schema_status();
-                auth_schema_assert_known($resetSchemaStatus, 'auth_password_reset');
+                auth_schema_assert_known(
+                    $resetSchemaStatus,
+                    'auth_password_reset',
+                );
                 if (!schema_inspection_is_available($resetSchemaStatus)) {
-                    $notice = t('admin.auth.password_reset_migration_required', 'Password reset is unavailable until the required database migration is applied.');
+                    $notice = t(
+                        'admin.auth.password_reset_migration_required',
+                        'Password reset is unavailable until the required database migration is applied.',
+                    );
                     $user = null;
                 } else {
                     // Variable $user stores this steps working value.
                     $user = cms_find_admin_user_by_identifier($identifier);
                 }
             } catch (AuthenticationSchemaUnavailableException $exception) {
-                admin_log_event('warning', 'auth.password_reset_schema_unavailable', 'Password reset was refused because required schema inspection is unknown.', [
-                    'feature' => $exception->feature(),
-                    'request_id' => function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '',
-                ]);
-                $notice = t('admin.auth.schema_temporarily_unavailable', 'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.');
+                admin_log_event(
+                    'warning',
+                    'auth.password_reset_schema_unavailable',
+                    'Password reset was refused because required schema inspection is unknown.',
+                    [
+                        'feature' => $exception->feature(),
+                        'request_id' => function_exists(
+                            'Gallery\Services\telemetry_request_id',
+                        )
+                            ? telemetry_request_id()
+                            : '',
+                    ],
+                );
+                $notice = t(
+                    'admin.auth.schema_temporarily_unavailable',
+                    'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.',
+                );
                 $user = null;
             }
 
@@ -776,18 +1197,45 @@ function cms_admin_forgot_password(): void
                 $token = cms_create_password_reset_token((int) $user['id']);
                 if ($token) {
                     // $resetUrl stores an intermediate value used by the surrounding gallery workflow.
-                    $resetUrl = cms_password_reset_url((string) $token['selector'], (string) $token['token']);
+                    $resetUrl = cms_password_reset_url(
+                        (string) $token['selector'],
+                        (string) $token['token'],
+                    );
                     // $delivery stores safe mail diagnostics for the admin log without storing the submitted identifier or token value.
-                    $delivery = cms_send_password_reset_email($user, $resetUrl, (string) $token['expires_at']);
-                    admin_log_event(!empty($delivery['sent']) ? 'info' : 'warning', 'auth.password_reset_requested', !empty($delivery['sent']) ? t('admin.auth.log_password_reset_email_sent') : t('admin.auth.log_password_reset_token_created_no_email'), [
-                        'identifier_sha256' => hash('sha256', auth_account_normalize_email($identifier)),
-                        'identifier_looks_like_email' => filter_var(trim($identifier), FILTER_VALIDATE_EMAIL) !== false,
-                        'visitor_hash' => visitor_hash(),
-                        'request_id' => function_exists('Gallery\Services\telemetry_request_id') ? telemetry_request_id() : '',
-                        'user_id' => (int) $user['id'],
-                        'username' => (string) $user['username'],
-                        'email_delivery' => $delivery,
-                    ]);
+                    $delivery = cms_send_password_reset_email(
+                        $user,
+                        $resetUrl,
+                        (string) $token['expires_at'],
+                    );
+                    admin_log_event(
+                        !empty($delivery['sent']) ? 'info' : 'warning',
+                        'auth.password_reset_requested',
+                        !empty($delivery['sent'])
+                            ? t('admin.auth.log_password_reset_email_sent')
+                            : t(
+                                'admin.auth.log_password_reset_token_created_no_email',
+                            ),
+                        [
+                            'identifier_sha256' => hash(
+                                'sha256',
+                                auth_account_normalize_email($identifier),
+                            ),
+                            'identifier_looks_like_email' =>
+                                filter_var(
+                                    trim($identifier),
+                                    FILTER_VALIDATE_EMAIL,
+                                ) !== false,
+                            'visitor_hash' => visitor_hash(),
+                            'request_id' => function_exists(
+                                'Gallery\Services\telemetry_request_id',
+                            )
+                                ? telemetry_request_id()
+                                : '',
+                            'user_id' => (int) $user['id'],
+                            'username' => (string) $user['username'],
+                            'email_delivery' => $delivery,
+                        ],
+                    );
                 }
             }
         }
@@ -805,7 +1253,12 @@ function cms_admin_forgot_password(): void
 }
 
 /**
- * Accept a one-time password reset link and store the new password.
+ * Validate a one-time password reset link and accept a replacement password.
+ *
+ * The controller verifies CSRF before accepting a POST and renders the
+ * appropriate unavailable, invalid, or password form state.
+ *
+ * @return void Redirect after completion or render the reset-password response.
  */
 function cms_admin_reset_password(): void
 {
@@ -820,9 +1273,14 @@ function cms_admin_reset_password(): void
     try {
         $resetRow = cms_find_valid_password_reset_token($selector, $token);
     } catch (AuthenticationSchemaUnavailableException $exception) {
-        admin_log_event('warning', 'auth.password_reset_consume_schema_unavailable', 'Password reset token consumption was refused because schema inspection is unknown.', [
-            'feature' => $exception->feature(),
-        ]);
+        admin_log_event(
+            'warning',
+            'auth.password_reset_consume_schema_unavailable',
+            'Password reset token consumption was refused because schema inspection is unknown.',
+            [
+                'feature' => $exception->feature(),
+            ],
+        );
         \Gallery\Views\view_render_admin_reset_password([
             'state' => 'schema_unavailable',
         ]);
@@ -850,13 +1308,26 @@ function cms_admin_reset_password(): void
         } elseif ($newPassword !== $confirmPassword) {
             $error = t('admin.auth.password_confirmation_mismatch');
         } else {
-            auth_account_complete_password_reset((int) $resetRow['user_id'], (int) $resetRow['id'], $newPassword);
-            if (function_exists('Gallery\Core\admin_auth_revoke_user_persistent_logins_for_request')) {
-                admin_auth_revoke_user_persistent_logins_for_request((int) $resetRow['user_id']);
+            auth_account_complete_password_reset(
+                (int) $resetRow['user_id'],
+                (int) $resetRow['id'],
+                $newPassword,
+            );
+            if (function_exists(
+                'Gallery\Core\admin_auth_revoke_user_persistent_logins_for_request',
+            )) {
+                admin_auth_revoke_user_persistent_logins_for_request(
+                    (int) $resetRow['user_id'],
+                );
             }
-            admin_log_event('info', 'auth.password_reset_completed', t('admin.auth.log_password_reset_completed'), [
-                'user_id' => (int) $resetRow['user_id'],
-            ]);
+            admin_log_event(
+                'info',
+                'auth.password_reset_completed',
+                t('admin.auth.log_password_reset_completed'),
+                [
+                    'user_id' => (int) $resetRow['user_id'],
+                ],
+            );
             redirect_to(url_for('admin_login', ['reset' => 1]));
         }
     }
@@ -872,11 +1343,15 @@ function cms_admin_reset_password(): void
 }
 
 /**
- * Handles cms admin logout logic for the gallery application.
+ * Revoke the current Admin session and redirect to the public home page.
+ *
+ * @return void Clear session authentication state and redirect to Home.
  */
 function cms_admin_logout(): void
 {
-    if (function_exists('Gallery\\Core\\admin_auth_revoke_current_persistent_login_for_request')) {
+    if (function_exists(
+        'Gallery\\Core\\admin_auth_revoke_current_persistent_login_for_request',
+    )) {
         admin_auth_revoke_current_persistent_login_for_request();
     }
     unset($_SESSION['user_id']);
@@ -886,7 +1361,9 @@ function cms_admin_logout(): void
 }
 
 /**
- * Handles cms admin account logic for the gallery application.
+ * Authorize and render the Admin account settings page.
+ *
+ * @return void Redirect unauthenticated requests or render the account page.
  */
 function cms_admin_account(): void
 {
@@ -894,7 +1371,9 @@ function cms_admin_account(): void
     // Variable $user stores this steps working value.
     $user = current_user();
     if (!$user) {
-        redirect_to(url_for('admin_login', ['return' => current_login_return_target()]));
+        redirect_to(url_for('admin_login', [
+            'return' => current_login_return_target(),
+        ]));
     }
 
     // $emailSchemaStatus distinguishes a proven legacy users table from a metadata inspection failure.
@@ -915,81 +1394,155 @@ function cms_admin_account(): void
             // $errors stores this steps working value.
             $errors = cms_save_password_reset_settings($_POST);
             if ($errors === []) {
-                redirect_to(url_for('admin_account', ['reset_settings_saved' => 1]));
+                redirect_to(url_for('admin_account', [
+                    'reset_settings_saved' => 1,
+                ]));
             }
             // Variable $error stores this steps working value.
             $error = implode(' ', $errors);
         } elseif ($accountAction === 'password_reset_test_email') {
             if (schema_inspection_is_unknown($resetSchemaStatus)) {
-                $error = t('admin.auth.schema_temporarily_unavailable', 'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.');
-            } elseif (schema_inspection_is_missing($resetSchemaStatus)) {
-                $error = t('admin.auth.password_reset_migration_required', 'Password reset storage is not installed yet. Apply the pending database migration before using password reset.');
-            } else {
-            // $testRecipient stores the current account recovery email used for a live delivery test.
-            $testRecipient = trim((string) ($user['email'] ?? ''));
-            if ($testRecipient === '') {
-                $error = t('admin.account.error_test_email_needs_recovery');
-            } else {
-                // $testDelivery stores safe diagnostics from the configured mail transport.
-                $testDelivery = cms_send_configured_password_reset_mail(
-                    $testRecipient,
-                    t('admin.account.test_email_subject', ['site' => site_name()]),
-                    t('admin.account.test_email_body'),
-                    ''
+                $error = t(
+                    'admin.auth.schema_temporarily_unavailable',
+                    'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.',
                 );
-                admin_log_event(!empty($testDelivery['sent']) ? 'info' : 'warning', 'auth.password_reset_test_email', !empty($testDelivery['sent']) ? t('admin.account.log_test_email_sent') : t('admin.account.log_test_email_failed'), [
-                    'user_id' => (int) $user['id'],
-                    'username' => (string) $user['username'],
-                    'email_delivery' => $testDelivery,
-                ]);
-                redirect_to(url_for('admin_account', ['test_email' => !empty($testDelivery['sent']) ? 'sent' : 'failed']));
-            }
+            } elseif (schema_inspection_is_missing($resetSchemaStatus)) {
+                $error = t(
+                    'admin.auth.password_reset_migration_required',
+                    'Password reset storage is not installed yet. Apply the pending database migration before using password reset.',
+                );
+            } else {
+                // $testRecipient stores the current account recovery email used for a live delivery test.
+                $testRecipient = trim((string) ($user['email'] ?? ''));
+                if ($testRecipient === '') {
+                    $error = t('admin.account.error_test_email_needs_recovery');
+                } else {
+                    // $testDelivery stores safe diagnostics from the configured mail transport.
+                    $testDelivery = cms_send_configured_password_reset_mail(
+                        $testRecipient,
+                        t('admin.account.test_email_subject', [
+                            'site' => site_name(),
+                        ]),
+                        t('admin.account.test_email_body'),
+                        '',
+                    );
+                    admin_log_event(
+                        !empty($testDelivery['sent']) ? 'info' : 'warning',
+                        'auth.password_reset_test_email',
+                        !empty($testDelivery['sent'])
+                            ? t('admin.account.log_test_email_sent')
+                            : t('admin.account.log_test_email_failed'),
+                        [
+                            'user_id' => (int) $user['id'],
+                            'username' => (string) $user['username'],
+                            'email_delivery' => $testDelivery,
+                        ],
+                    );
+                    redirect_to(url_for('admin_account', [
+                        'test_email' => !empty($testDelivery['sent'])
+                            ? 'sent'
+                            : 'failed',
+                    ]));
+                }
             }
         } elseif ($accountAction === 'google_disconnect') {
             if (schema_inspection_is_unknown($googleSchemaStatus)) {
-                $error = t('admin.auth.schema_temporarily_unavailable', 'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.');
+                $error = t(
+                    'admin.auth.schema_temporarily_unavailable',
+                    'Authentication storage is temporarily unavailable. Try again after the database/schema inspection issue is resolved.',
+                );
             } elseif (schema_inspection_is_missing($googleSchemaStatus)) {
-                $error = t('admin.google.migration_required', 'Database migration required before Google login can be configured.');
+                $error = t(
+                    'admin.google.migration_required',
+                    'Database migration required before Google login can be configured.',
+                );
             } else {
-            // $currentPassword stores the profile password used to authorize Google unlinking.
-            $currentPassword = (string) ($_POST['current_password'] ?? '');
-            if (!auth_account_password_matches((int) $user['id'], $currentPassword)) {
-                $error = t('admin.account.error_current_password_required');
-            } else {
-                if (function_exists('Gallery\\Services\\google_auth_disconnect_account')) {
-                    google_auth_disconnect_account((int) $user['id']);
+                // $currentPassword stores the profile password used to authorize Google unlinking.
+                $currentPassword = (string) ($_POST['current_password'] ?? '');
+                if (!auth_account_password_matches(
+                    (int) $user['id'],
+                    $currentPassword,
+                )) {
+                    $error = t('admin.account.error_current_password_required');
+                } else {
+                    if (function_exists(
+                        'Gallery\\Services\\google_auth_disconnect_account',
+                    )) {
+                        google_auth_disconnect_account((int) $user['id']);
+                    }
+                    admin_log_event(
+                        'info',
+                        'auth.google_disconnected',
+                        t(
+                            'admin.google.log_disconnected',
+                            'Admin disconnected a Google account.',
+                        ),
+                        [
+                            'user_id' => (int) $user['id'],
+                            'username' => (string) $user['username'],
+                        ],
+                    );
+                    redirect_to(url_for('admin_account', [
+                        'google' => 'disconnected',
+                    ]));
                 }
-                admin_log_event('info', 'auth.google_disconnected', t('admin.google.log_disconnected', 'Admin disconnected a Google account.'), [
-                    'user_id' => (int) $user['id'],
-                    'username' => (string) $user['username'],
-                ]);
-                redirect_to(url_for('admin_account', ['google' => 'disconnected']));
-            }
             }
         } elseif ($accountAction === 'openai_text_settings') {
-            if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('openai_text_assist')) {
-                $error = t('admin.openai.feature_disabled', 'OpenAI text assistance is disabled in Admin > Features.');
+            if (
+                function_exists(
+                    'Gallery\\Services\\feature_capability_effective_enabled',
+                )
+                && !feature_capability_effective_enabled('openai_text_assist')
+            ) {
+                $error = t(
+                    'admin.openai.feature_disabled',
+                    'OpenAI text assistance is disabled in Admin > Features.',
+                );
             } else {
-            // $currentPassword stores the profile password used to authorize credential changes.
-            $currentPassword = (string) ($_POST['current_password'] ?? '');
-            if (!auth_account_password_matches((int) $user['id'], $currentPassword)) {
-                $error = t('admin.account.error_current_password_required');
-            } else {
-                // $result stores the validated and saved OpenAI profile settings.
-                $result = openai_text_assist_save_user_settings((int) $user['id'], $_POST);
-                if (!empty($result['ok'])) {
-                    if (function_exists('Gallery\\Services\\admin_log_event')) {
-                        admin_log_event('info', 'openai_text_assist.settings_updated', t('admin.openai.log_settings_updated', 'Admin updated OpenAI text-assistance profile settings.'), [
-                            'user_id' => (int) $user['id'],
-                            'enabled' => (bool) ($result['enabled'] ?? false),
-                            'api_key_set' => (string) ($result['api_key_hint'] ?? '') !== '',
-                            'model' => (string) ($result['model'] ?? ''),
-                        ]);
+                // $currentPassword stores the profile password used to authorize credential changes.
+                $currentPassword = (string) ($_POST['current_password'] ?? '');
+                if (!auth_account_password_matches(
+                    (int) $user['id'],
+                    $currentPassword,
+                )) {
+                    $error = t('admin.account.error_current_password_required');
+                } else {
+                    // $result stores the validated and saved OpenAI profile settings.
+                    $result = openai_text_assist_save_user_settings(
+                        (int) $user['id'],
+                        $_POST,
+                    );
+                    if (!empty($result['ok'])) {
+                        if (function_exists(
+                            'Gallery\\Services\\admin_log_event',
+                        )) {
+                            admin_log_event(
+                                'info',
+                                'openai_text_assist.settings_updated',
+                                t(
+                                    'admin.openai.log_settings_updated',
+                                    'Admin updated OpenAI text-assistance profile settings.',
+                                ),
+                                [
+                                    'user_id' => (int) $user['id'],
+                                    'enabled' => (bool) (
+                                        $result['enabled'] ?? false
+                                    ),
+                                    'api_key_set' =>
+                                        (string) ($result['api_key_hint'] ?? '')
+                                            !== '',
+                                    'model' => (string) (
+                                        $result['model'] ?? ''
+                                    ),
+                                ],
+                            );
+                        }
+                        redirect_to(url_for('admin_account', [
+                            'openai_saved' => 1,
+                        ]));
                     }
-                    redirect_to(url_for('admin_account', ['openai_saved' => 1]));
+                    $error = implode(' ', (array) ($result['errors'] ?? []));
                 }
-                $error = implode(' ', (array) ($result['errors'] ?? []));
-            }
             }
         } else {
             // Variable $currentPassword stores this steps working value.
@@ -997,7 +1550,9 @@ function cms_admin_account(): void
             // Variable $newUsername stores this steps working value.
             $newUsername = trim((string) ($_POST['username'] ?? ''));
             // Variable $newEmail stores this steps working value only when the optional email column is verified.
-            $newEmail = $emailSchemaAvailable ? auth_account_normalize_email((string) ($_POST['email'] ?? '')) : '';
+            $newEmail = $emailSchemaAvailable
+                ? auth_account_normalize_email((string) ($_POST['email'] ?? ''))
+                : '';
             // Variable $newPassword stores this steps working value.
             $newPassword = (string) ($_POST['new_password'] ?? '');
             // Variable $confirmPassword stores this steps working value.
@@ -1006,14 +1561,27 @@ function cms_admin_account(): void
             $errors = [];
 
             // Variable $account stores this steps working value.
-            $account = auth_account_profile_row((int) $user['id'], $emailSchemaAvailable);
-            if (!$account || !auth_account_password_matches((int) $user['id'], $currentPassword)) {
+            $account = auth_account_profile_row(
+                (int) $user['id'],
+                $emailSchemaAvailable,
+            );
+            if (
+                !$account
+                || !auth_account_password_matches(
+                    (int) $user['id'],
+                    $currentPassword,
+                )
+            ) {
                 $errors[] = t('admin.account.error_current_password_required');
             }
             if ($newUsername === '') {
                 $errors[] = t('admin.account.error_username_required');
             }
-            if ($emailSchemaAvailable && $newEmail !== '' && !filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+            if (
+                $emailSchemaAvailable
+                && $newEmail !== ''
+                && !filter_var($newEmail, FILTER_VALIDATE_EMAIL)
+            ) {
                 $errors[] = t('admin.account.error_recovery_email_invalid');
             }
             if ($newPassword !== '' && $newPassword !== $confirmPassword) {
@@ -1023,7 +1591,10 @@ function cms_admin_account(): void
                 $errors[] = t('admin.account.error_password_length');
             }
             if ($newUsername !== '') {
-                if (auth_account_username_taken($newUsername, (int) $user['id'])) {
+                if (auth_account_username_taken(
+                    $newUsername,
+                    (int) $user['id'],
+                )) {
                     $errors[] = t('admin.account.error_username_taken');
                 }
             }
@@ -1033,22 +1604,52 @@ function cms_admin_account(): void
                 }
             }
             if (!$errors) {
-                auth_account_update_profile((int) $user['id'], $newUsername, $newEmail, $emailSchemaAvailable, $newPassword);
-                if ($newPassword !== '' && function_exists('Gallery\Core\admin_auth_revoke_user_persistent_logins_for_request')) {
-                    admin_auth_revoke_user_persistent_logins_for_request((int) $user['id']);
+                auth_account_update_profile(
+                    (int) $user['id'],
+                    $newUsername,
+                    $newEmail,
+                    $emailSchemaAvailable,
+                    $newPassword,
+                );
+                if (
+                    $newPassword !== ''
+                    && function_exists(
+                        'Gallery\Core\admin_auth_revoke_user_persistent_logins_for_request',
+                    )
+                ) {
+                    admin_auth_revoke_user_persistent_logins_for_request(
+                        (int) $user['id'],
+                    );
                 }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
-                if ($newPassword !== '' && function_exists('Gallery\Core\admin_auth_issue_persistent_login_for_request')) {
+                if (
+                    $newPassword !== ''
+                    && function_exists(
+                        'Gallery\Core\admin_auth_issue_persistent_login_for_request',
+                    )
+                ) {
                     try {
-                        admin_auth_issue_persistent_login_for_request((int) $user['id']);
-                    } catch (AuthenticationSchemaUnavailableException $exception) {
-                        admin_log_event('warning', 'auth.persistent_login_schema_unavailable', 'Persistent login was not reissued after a password change because its schema state is unknown.', [
-                            'operation' => 'account_password_change_issue',
-                            'feature' => $exception->feature(),
-                            'user_id' => (int) $user['id'],
-                        ]);
-                        flash_message('admin_notice', t('admin.auth.remember_temporarily_unavailable', 'You are signed in for this browser session, but persistent login is temporarily unavailable until the database/schema inspection issue is resolved.'));
+                        admin_auth_issue_persistent_login_for_request(
+                            (int) $user['id'],
+                        );
+                    } catch (
+                        AuthenticationSchemaUnavailableException $exception
+                    ) {
+                        admin_log_event(
+                            'warning',
+                            'auth.persistent_login_schema_unavailable',
+                            'Persistent login was not reissued after a password change because its schema state is unknown.',
+                            [
+                                'operation' => 'account_password_change_issue',
+                                'feature' => $exception->feature(),
+                                'user_id' => (int) $user['id'],
+                            ],
+                        );
+                        flash_message('admin_notice', t(
+                            'admin.auth.remember_temporarily_unavailable',
+                            'You are signed in for this browser session, but persistent login is temporarily unavailable until the database/schema inspection issue is resolved.',
+                        ));
                     }
                 }
                 redirect_to(url_for('admin_account', ['saved' => 1]));
@@ -1065,25 +1666,52 @@ function cms_admin_account(): void
     // $accountEmail stores an intermediate value used by the surrounding gallery workflow.
     $accountEmail = trim((string) ($user['email'] ?? ''));
     // $resetReady stores an intermediate value used by the surrounding gallery workflow.
-    $resetReady = schema_inspection_is_available($resetSchemaStatus) && $resetSettings['enabled'] && $accountEmail !== '' && $resetSettings['from_email'] !== '';
+    $resetReady =
+        schema_inspection_is_available($resetSchemaStatus)
+        && $resetSettings['enabled']
+        && $accountEmail !== ''
+        && $resetSettings['from_email'] !== '';
     // $openaiFeatureEnabled stores whether OpenAI profile controls should be visible.
-    $openaiFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled') || feature_capability_effective_enabled('openai_text_assist');
+    $openaiFeatureEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        ) || feature_capability_effective_enabled('openai_text_assist');
     // $openaiSettings stores the current user's optional OpenAI profile integration settings.
-    $openaiSettings = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_user_settings') ? openai_text_assist_user_settings((int) $user['id']) : [];
+    $openaiSettings = $openaiFeatureEnabled
+    && function_exists('Gallery\\Services\\openai_text_assist_user_settings')
+        ? openai_text_assist_user_settings((int) $user['id'])
+        : [];
     // $openaiSchemaReady stores whether the required optional OpenAI settings table exists.
-    $openaiSchemaReady = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_schema_ready') && openai_text_assist_schema_ready();
+    $openaiSchemaReady =
+        $openaiFeatureEnabled
+        && function_exists('Gallery\\Services\\openai_text_assist_schema_ready')
+        && openai_text_assist_schema_ready();
     // $openaiReady stores whether the current account can use OpenAI text assistance right now.
-    $openaiReady = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_available') && openai_text_assist_available((int) $user['id']);
+    $openaiReady =
+        $openaiFeatureEnabled
+        && function_exists('Gallery\\Services\\openai_text_assist_available')
+        && openai_text_assist_available((int) $user['id']);
     // $openaiImageInputColumnReady stores whether the optional thumbnail-consent setting can be saved yet.
-    $openaiImageInputColumnReady = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_image_input_column_ready') && openai_text_assist_image_input_column_ready();
+    $openaiImageInputColumnReady =
+        $openaiFeatureEnabled
+        && function_exists(
+            'Gallery\\Services\\openai_text_assist_image_input_column_ready',
+        )
+        && openai_text_assist_image_input_column_ready();
     // $googleSchemaReady stores whether the linked Google account table exists and was verified.
     $googleSchemaReady = schema_inspection_is_available($googleSchemaStatus);
     // $googleConfig stores the OAuth client readiness state and callback URL.
-    $googleConfig = function_exists('Gallery\\Services\\google_auth_config') ? google_auth_config() : ['redirect_uri' => ''];
+    $googleConfig = function_exists('Gallery\\Services\\google_auth_config')
+        ? google_auth_config()
+        : ['redirect_uri' => ''];
     // $googleReady stores whether Google login has complete config and verified database support.
-    $googleReady = google_auth_configuration_ready($googleConfig) && $googleSchemaReady;
+    $googleReady =
+        google_auth_configuration_ready($googleConfig) && $googleSchemaReady;
     // $googleLinkedAccount stores the Google identity linked to the current admin profile only after schema verification.
-    $googleLinkedAccount = $googleSchemaReady && function_exists('Gallery\\Services\\google_auth_linked_account') ? google_auth_linked_account((int) $user['id']) : null;
+    $googleLinkedAccount = $googleSchemaReady
+    && function_exists('Gallery\\Services\\google_auth_linked_account')
+        ? google_auth_linked_account((int) $user['id'])
+        : null;
 
     // $notices contains request/session messages resolved before presentation.
     $notices = [];
@@ -1094,16 +1722,27 @@ function cms_admin_account(): void
         $notices[] = t('admin.account.notice_reset_settings_saved');
     }
     if (isset($_GET['test_email'])) {
-        $notices[] = $_GET['test_email'] === 'sent' ? t('admin.account.notice_test_email_sent') : t('admin.account.notice_test_email_failed');
+        $notices[] = $_GET['test_email'] === 'sent'
+            ? t('admin.account.notice_test_email_sent')
+            : t('admin.account.notice_test_email_failed');
     }
     if (isset($_GET['openai_saved'])) {
-        $notices[] = t('admin.openai.notice_saved', 'OpenAI text-assistance settings were saved.');
+        $notices[] = t(
+            'admin.openai.notice_saved',
+            'OpenAI text-assistance settings were saved.',
+        );
     }
     if ((string) ($_GET['google'] ?? '') === 'linked') {
-        $notices[] = t('admin.google.notice_linked', 'Google account linked. You can now use Continue with Google on the login page.');
+        $notices[] = t(
+            'admin.google.notice_linked',
+            'Google account linked. You can now use Continue with Google on the login page.',
+        );
     }
     if ((string) ($_GET['google'] ?? '') === 'disconnected') {
-        $notices[] = t('admin.google.notice_disconnected', 'Google account disconnected. Password login remains available.');
+        $notices[] = t(
+            'admin.google.notice_disconnected',
+            'Google account disconnected. Password login remains available.',
+        );
     }
     $flash = flash_message('admin_notice');
     if ($flash !== null && $flash !== '') {
@@ -1124,13 +1763,23 @@ function cms_admin_account(): void
     }
 
     // OpenAI presentation values are normalized here so the view performs no domain-service lookup.
-    $openaiEnabled = $openaiSchemaReady && (int) ($openaiSettings['enabled'] ?? 0) === 1;
-    $openaiAllowImageInput = $openaiSchemaReady && (int) ($openaiSettings['allow_image_input'] ?? 0) === 1;
-    $openaiKeyHint = $openaiSchemaReady ? (string) ($openaiSettings['api_key_hint'] ?? '') : '';
+    $openaiEnabled =
+        $openaiSchemaReady && (int) ($openaiSettings['enabled'] ?? 0) === 1;
+    $openaiAllowImageInput =
+        $openaiSchemaReady
+        && (int) ($openaiSettings['allow_image_input'] ?? 0) === 1;
+    $openaiKeyHint = $openaiSchemaReady
+        ? (string) ($openaiSettings['api_key_hint'] ?? '')
+        : '';
     $openaiModel = $openaiSchemaReady
-        ? openai_text_assist_normalize_model((string) ($openaiSettings['model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL))
+        ? openai_text_assist_normalize_model(
+            (string) (
+                $openaiSettings['model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL
+            ),
+        )
         : OPENAI_TEXT_ASSIST_DEFAULT_MODEL;
-    $openaiModels = $openaiSchemaReady && function_exists('Gallery\Services\openai_text_assist_model_catalog')
+    $openaiModels = $openaiSchemaReady
+    && function_exists('Gallery\Services\openai_text_assist_model_catalog')
         ? openai_text_assist_model_catalog()
         : [];
 
@@ -1143,14 +1792,18 @@ function cms_admin_account(): void
         'central_settings_url' => admin_settings_url('advanced'),
         'account_email' => $accountEmail,
         'email_schema_available' => $emailSchemaAvailable,
-        'email_schema_unknown' => schema_inspection_is_unknown($emailSchemaStatus),
+        'email_schema_unknown' =>
+            schema_inspection_is_unknown($emailSchemaStatus),
         'reset_settings' => $resetSettings,
         'reset_ready' => $resetReady,
         'google_ready' => $googleReady,
         'google_status' => $googleStatus,
         'google_redirect_uri' => (string) ($googleConfig['redirect_uri'] ?? ''),
         'google_linked_account' => $googleLinkedAccount,
-        'google_link_url' => url_for('admin_google_start', ['mode' => 'link', 'return' => url_for('admin_account')]),
+        'google_link_url' => url_for('admin_google_start', [
+            'mode' => 'link',
+            'return' => url_for('admin_account'),
+        ]),
         'openai_feature_enabled' => $openaiFeatureEnabled,
         'openai_schema_ready' => $openaiSchemaReady,
         'openai_ready' => $openaiReady,
@@ -1164,7 +1817,11 @@ function cms_admin_account(): void
 }
 
 /**
- * Handles cms admin reset logic for the gallery application.
+ * Authorize the stable-restore request and render its Admin response page.
+ *
+ * POST requests verify CSRF before starting the restore job.
+ *
+ * @return void Start the requested restore job and render the reset page.
  */
 function cms_admin_reset(): void
 {
@@ -1178,21 +1835,39 @@ function cms_admin_reset(): void
         verify_csrf();
         try {
             // $result stores the durable restore job returned by the shared updater engine.
-            $result = application_update_start_job('stable_restore', [], 'admin');
-            admin_log_event('info', 'update.stable_restore_started', t('admin.reset.log_restore_started'), [
-                'job_id' => (string) ($result['id'] ?? ''),
-                'stage' => (string) ($result['stage'] ?? ''),
-            ]);
+            $result = application_update_start_job(
+                'stable_restore',
+                [],
+                'admin',
+            );
+            admin_log_event(
+                'info',
+                'update.stable_restore_started',
+                t('admin.reset.log_restore_started'),
+                [
+                    'job_id' => (string) ($result['id'] ?? ''),
+                    'stage' => (string) ($result['stage'] ?? ''),
+                ],
+            );
             // $notice stores an intermediate value used by the surrounding gallery workflow.
             $notice = t('admin.reset.restore_started_notice');
         } catch (Throwable $exception) {
             $safeError = application_update_safe_error($exception);
-            admin_log_event('warning', 'update.reset_failed', t('admin.reset.log_reset_failed'), [
-                'reference' => (string) ($safeError['reference'] ?? ''),
-            ]);
+            admin_log_event(
+                'warning',
+                'update.reset_failed',
+                t('admin.reset.log_reset_failed'),
+                [
+                    'reference' => (string) ($safeError['reference'] ?? ''),
+                ],
+            );
             // $error stores only the updater redaction boundary result.
-            $error = (string) ($safeError['message'] ?? t('admin.reset.log_reset_failed'))
-                . ' Reference: ' . (string) ($safeError['reference'] ?? '');
+            $error =
+                (string) (
+                    $safeError['message'] ?? t('admin.reset.log_reset_failed')
+                )
+                . ' Reference: '
+                . (string) ($safeError['reference'] ?? '');
         }
     }
 
@@ -1204,4 +1879,3 @@ function cms_admin_reset(): void
         'csrf_html' => csrf_field(),
     ]);
 }
-

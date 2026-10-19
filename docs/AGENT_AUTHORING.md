@@ -17,31 +17,39 @@ truthful contracts with filler.
 
 Readability is advisory: prefer around 80 display columns, reconsider natural
 breaks at 81-100, and actively seek a readable split above 100. Format lengthy
-arguments, arrays, objects and multi-item lists with one entry per indented line.
+arguments, arrays, objects and multi-item lists with one entry per indented
+line.
 Group boolean terms by meaning. Separate logical steps and neighboring named
 declarations with language-appropriate blank lines, keeping docs/decorators
 attached. Preserve semantics, types, comments and necessary longer literals.
-Use focused changes and review the source in a GitHub split diff; editor soft-wrap
+Use focused changes and review the source in a GitHub split diff; editor
+soft-wrap
 does not improve the stored diff. The [readability guide](CODE_READABILITY.md)
-contains actual-source before/after examples, exceptions and the optional report.
+contains actual-source before/after examples, exceptions and the optional
+report.
 These recommendations never weaken or add to mandatory source gates.
 They also cover TeX and Markdown source prose: wrap at existing spaces while
 preserving paragraph boundaries, TeX `~` bindings, commands, literal blocks and
-Markdown block/list structure. See the scoped documentation rules for exceptions.
+Markdown block/list structure. See the scoped documentation rules for
+exceptions.
 
 PHPDoc/JSDoc goes immediately above the named declaration. Python's docstring is
-the first statement inside the declaration. Start with a factual purpose sentence
+the first statement inside the declaration. Start with a factual purpose
+sentence
 before annotation tags. Every explicit parameter needs its actual name, type and
-description, including optional/defaulted, nullable, variadic and added parameters.
+description, including optional/defaulted, nullable, variadic and added
+parameters.
 Document the actual return variants and their meaning, including `void`/`None`.
-Class-like declarations need a purpose summary. Native PHP/Python signature types
+Class-like declarations need a purpose summary. Native PHP/Python signature
+types
 are independent of the docstring; PHP constructors/destructors cannot declare a
 native return type, but still document their void result.
 
 Anonymous functions, closures, arrows and variable/member-bound callbacks need
 no declaration docstring. Variables and properties have the same exemption.
 Named functions or classes nested inside callbacks remain checked. Do not create
-a named helper solely to satisfy documentation or put a docblock in call arguments.
+a named helper solely to satisfy documentation or put a docblock in call
+arguments.
 
 ### Authoring steps learned from CI findings
 
@@ -63,7 +71,8 @@ When extending a health registry or label map, complete the enclosing function's
 return description and structured input documentation in the same edit.
 
 Always search production imports, re-export modules and every regression
-assertion for the old cache-busting module URL. Update the complete import chain.
+assertion for the old cache-busting module URL. Update the complete import
+chain.
 Covered Admin consumers use `scripts/admin_import_contracts.php` to validate
 actual targets, full shared URL identity and stale payload/importer invalidation
 against the immutable base; do not add a historical revision string assertion
@@ -77,7 +86,8 @@ check validates those entries as route targets.
 
 For SQL embedded in PHP, review the outer PHP string and inner SQL literals as
 two syntax layers. For example, a double-quoted PHP query can contain the fixed
-SQL condition `kind <> 'history'`, while changing values remain bound parameters.
+SQL condition `kind <> 'history'`, while changing values remain bound
+parameters.
 Review this at the declaration edit so hosted syntax feedback reaches the
 intended query rather than stopping at a PHP parse error.
 Use `bindValue(..., PDO::PARAM_INT)` for numeric/boolean placeholders compared
@@ -89,7 +99,8 @@ For an independent PHP process fixture, list and require the minimal Core and
 service dependencies inside the child bootstrap. A passive cache-status reader
 needs the safe-relative-path policy as well as its storage entry point. Read the
 real child exit code, stderr and serialized persisted evidence; the parent
-process's loaded functions do not establish the child's include contract. Keep the parent’s exact success marker synchronized with changed child coverage text.
+process's loaded functions do not establish the child's include contract. Keep
+the parent’s exact success marker synchronized with changed child coverage text.
 
 For resumable work, identify the owner of every counter before initializing it.
 A newly created manual identity starts its own observation round, an existing
@@ -105,12 +116,15 @@ cursor. This establishes the intended crash boundary while preserving the
 production worker cap, time budget and suite limits.
 
 For retained cache measurements, keep a current manual operation's counters
-separate from regional last-known observations and lifetime deletion receipts. Keep the current manual incomplete-check marker visible with its counters.
+separate from regional last-known observations and lifetime deletion receipts.
+Keep the current manual incomplete-check marker visible with its counters.
 Pass that distinction through controller messages, diagnostic events and browser
 progress; a repeatedly displayed retained total cannot prove a stuck cursor.
 For historical ZIP expiry, use positive native-format proof and producer/payload
-age. Use ctime to detect replacement at detachment, not to renew TTL after chmod.
-Retain the shared base lease across archive creation, publication and HTTP output.
+age. Use ctime to detect replacement at detachment, not to renew TTL after
+chmod.
+Retain the shared base lease across archive creation, publication and HTTP
+output.
 
 Pass a named interval constant to each new timer or sleep, including fixtures.
 Document runtime constants
@@ -123,16 +137,30 @@ cover admission exhausting the deadline without requiring a first-attempt slice.
 Hold a follow-up passive read while asserting a mutation response in a browser
 fixture; then release it separately to verify refresh without racing snapshots.
 
-For live filters, invalidate active requests at the input event rather than waiting for the debounce. Capture each request URL once, suppress superseded responses before and after JSON parsing, and derive visible history from the committed response. Extend the existing asynchronous fixture with an older response arriving during debounce and an older body completing after a newer empty result.
+For live filters, invalidate active requests at the input event rather than
+waiting for the debounce. Capture each request URL once, suppress superseded
+responses before and after JSON parsing, and derive visible history from the
+committed response. Extend the existing asynchronous fixture with an older
+response arriving during debounce and an older body completing after a newer
+empty result.
 
-For browser harness controls such as `/__viewport`, use the captured native `fetch` directly. Keep those controls outside the mock that validates application reads/writes, retaining its strict credential and method assertions. This lets viewport tests reach the owned harness without impersonating a dashboard request.
+For browser harness controls such as `/__viewport`, use the captured native
+`fetch` directly. Keep those controls outside the mock that validates
+application reads/writes, retaining its strict credential and method assertions.
+This lets viewport tests reach the owned harness without impersonating a
+dashboard request.
 
-For reusable formatting in runtime-scanned views, call a named typed presentation helper directly. This lets the compiler resolve the owner without an unreviewed variable-call dependency. An isolated render fixture must explicitly require that view module before calling it. Remove the retired dynamic-call review entry when replacing its callback.
+For reusable formatting in runtime-scanned views, call a named typed
+presentation helper directly. This lets the compiler resolve the owner without
+an unreviewed variable-call dependency. An isolated render fixture must
+explicitly require that view module before calling it. Remove the retired
+dynamic-call review entry when replacing its callback.
 
 For runtime-plan ownership, inspect the full historical closure before adding a
 shared dependency edge. Reuse an existing logical owner only when all of its
 files already belong to that consumer's closure. Generate from the authored
-roots/dependencies, inspect plan-wide duplicate entries and each affected route's
+roots/dependencies, inspect plan-wide duplicate entries and each affected
+route's
 transitive modules/file counts, and retain the established baselines and limits.
 Count the dependency's transitive owners against the consumer's remaining module
 allowance as well as checking its file closure: sharing existing PHP files can
@@ -148,7 +176,8 @@ lack one.
 ### PHP: added optional parameter and structured result
 
 The boolean parameter is documented even though it has a default. The documented
-row fields and nullable result describe the actual returned value; native `array`
+row fields and nullable result describe the actual returned value; native
+`array`
 alone cannot express the row shape.
 
 <!-- checked-example: php-declaration -->
@@ -223,7 +252,8 @@ def selected_count(count: int, *, include_pending: bool = False) -> int:
 Use typed Google-style `Args:` and `Returns:` consistently in repository Python
 sources. The scanner retains tag-style support for compatibility; keep legacy
 input fixtures and parser behavior intact. Named nested functions and async
-methods follow the same rule; ordinary bound receivers are excluded from explicit
+methods follow the same rule; ordinary bound receivers are excluded from
+explicit
 parameter entries, while static methods document their explicit parameters.
 Bash/PowerShell named functions use meaningful immediately preceding native
 comments; argument/result typing and execution semantics remain manual. Changed
@@ -235,21 +265,26 @@ callable-docstring requirements.
 
 Constants do not need *declaration* docstrings. Independently, name added or
 materially changed numeric policy choices in runtime code, tools and tests:
-timeouts, sleep/retry intervals, size/count/depth bounds and defaults. Use a purpose
-sentence and meaningful `Type:`, `Units:`, `Scope:`, `Consumers:` and `Rationale:`
-fields; `@var`/`@type` can express the type. Never invent a rationale. Determine it
+timeouts, sleep/retry intervals, size/count/depth bounds and defaults. Use a
+purpose
+sentence and meaningful `Type:`, `Units:`, `Scope:`, `Consumers:` and
+`Rationale:`
+fields; `@var`/`@type` can express the type. Never invent a rationale. Determine
+it
 from the protected behavior or make the design decision explicit before coding.
 The file header cannot document an individual bound. State the actual value,
 policy owner and reason at the constant. For named YAML configuration fields use
 attached native comments; comment-free JSON needs the equivalent permanent
-configuration reference. Explain structural literals (delimiter lengths, indexing,
+configuration reference. Explain structural literals (delimiter lengths,
+indexing,
 wire-format versions) and fixture boundary values locally; they are not tunable
 operational policies.
 
 Tooling, fixtures and advisory heuristics retain their existing scanner scope.
 An exemption from the changed-runtime gate does not exempt whole-tree inventory
 or waive this authoring rule. Review all related new policy sites in the batch,
-including subprocess bridges and delegated children, before the first FULL. Repair
+including subprocess bridges and delegated children, before the first FULL.
+Repair
 undocumented owners without raising inventory caps or moving baseline debt.
 
 These illustrative limits belong to an example preview renderer. They are not
@@ -287,8 +322,10 @@ const EXAMPLE_PREVIEW_SOURCE_LIMIT = 24 * 1024 * 1024;
 Use the file's native leading comment format. Include the actual path, module
 purpose, responsibilities and the established project attribution. This header
 does not replace declaration or policy comments. Copy it only after correcting
-the path and describing the actual module. Keep `declare(strict_types=1);` in new
-PHP files. JavaScript/CSS use block comments; Python/YAML/shell use hash comments;
+the path and describing the actual module. Keep `declare(strict_types=1);` in
+new
+PHP files. JavaScript/CSS use block comments; Python/YAML/shell use hash
+comments;
 TeX uses percent comments and SVG uses XML comments.
 
 <!-- checked-example: php-header -->
@@ -341,42 +378,55 @@ generator or CI-authority exception. Apply the whole-class repair procedure in
 [.github instructions](../.github/AGENTS.md) before retrying a failed batch.
 
 Follow that file's installed automatic preparation/squash path; use the manual
-checkpoint only when automatic mode is disabled or unavailable. Include generated
+checkpoint only when automatic mode is disabled or unavailable. Include
+generated
 bot commits, preserve the prepared tree and verify one commit above the exact
-develop parent, clean checkout and fresh BASIC for the final SHA. FULL must qualify
+develop parent, clean checkout and fresh BASIC for the final SHA. FULL must
+qualify
 that unchanged candidate before the guarded fast-forward.
 
-Feature pushes/final squash run hosted **Basic source checks**, BASIC `--changed`
-against `git merge-base HEAD origin/main`, without preparation/FULL. The approved
+Feature pushes/final squash run hosted **Basic source checks**, BASIC
+`--changed`
+against `git merge-base HEAD origin/main`, without preparation/FULL. The
+approved
 **Integrate into develop** action observes P, prepares A and runs FULL using the
 owner-selected main or feature workflow. Seal execution before publication;
 identical inputs may reuse it. Release trusts protected develop and assembles
 artifacts without another source audit. Missing history/base blocks CI;
 never substitute HEAD. Reports retain candidate/base/dirty-state identity. The
-[CI technical contract](CI_COVERAGE_REUSE_CONTRACT.md) owns authority/installation.
+[CI technical contract](CI_COVERAGE_REUSE_CONTRACT.md) owns
+authority/installation.
 
-BASIC covers syntax and changed declaration docs, not native headers/FULL inventory.
+BASIC covers syntax and changed declaration docs, not native headers/FULL
+inventory.
 Review new/changed headers before commit. Any early gate must reuse the header
-scanner/negative cases and receive separate CI-authority qualification/installation;
+scanner/negative cases and receive separate CI-authority
+qualification/installation;
 documentation changes do not install coverage.
 
 Local diagnostics follow only the root exceptions; do not routinely run audits,
 generators or repeat green coverage. Inaccessible mandatory CI remains BLOCKED;
-local/profile PASS is not release approval. Read scoped rules through the root map.
+local/profile PASS is not release approval. Read scoped rules through the root
+map.
 
 Read hosted `source-failures.md` once per failed batch, then linked evidence;
 repair all related findings before committing/pushing the same authorized branch
-for fresh preparation/qualification. Read no passing child logs. Finish permanent
-Markdown/all-four-TeX edits before commit; leave PDFs/release markers/notes alone
+for fresh preparation/qualification. Read no passing child logs. Finish
+permanent
+Markdown/all-four-TeX edits before commit; leave PDFs/release markers/notes
+alone
 during ordinary development.
 
-Handoff records workflow URL, branch, exact prepared SHA, immutable base, all hosted
-job results and skipped/blocked/manual coverage. Earlier source-event SHAs, green
+Handoff records workflow URL, branch, exact prepared SHA, immutable base, all
+hosted
+job results and skipped/blocked/manual coverage. Earlier source-event SHAs,
+green
 runs or stale candidates cannot qualify the current branch.
 
 ## Measuring prevention
 
-Use existing run reports and commit history; do not add telemetry or a new runner.
+Use existing run reports and commit history; do not add telemetry or a new
+runner.
 For a documented sample of authoring batches, record the first source-preflight
 result, number of source-policy repair commits/runs, audit wall time and time to
 actionable diagnostics. Count overlapping changed-source and inventory findings
