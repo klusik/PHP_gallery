@@ -18,16 +18,31 @@ This is not a new daemon: the existing scheduled maintenance entrypoint still
 has to be invoked regularly. Public gallery requests do not run a retention scan.
 Master telemetry OFF remains non-destructive.
 
-Defaults in `app/configuration_defaults.php`:
+Current supported defaults in `app/configuration_defaults.php`:
+(The original repair used a three-second budget and an hourly completed interval.)
 
 | Setting | Default | Meaning |
 | --- | ---: | --- |
-| `telemetry.maintenance_time_budget_seconds` | 3 | Cooperative slice budget |
-| `telemetry.maintenance_delete_batch_size` | 2000 | Maximum rows per DELETE |
-| `telemetry.maintenance_delete_batches` | 4 | Maximum DELETE batches per target |
+| `telemetry.maintenance_time_budget_seconds` | 10 | Cooperative slice budget |
+| `telemetry.maintenance_delete_batch_size` | 5000 | Maximum rows per DELETE |
+| `telemetry.maintenance_delete_batches` | 8 | Maximum DELETE batches per target |
 | `telemetry.maintenance_rollup_days` | 7 | Maximum stable dates archived per slice |
 | `telemetry.maintenance_retry_seconds` | 300 | Retry/catch-up interval |
-| `telemetry.maintenance_interval_seconds` | 3600 | Normal completed-slice interval |
+| `telemetry.maintenance_interval_seconds` | 300 | Normal completed-slice interval |
+
+Independent retention targets are visited in rounds of one DELETE per table,
+with up to eight rounds (40000 rows per target). A durable
+`telemetry_purge_next_table` setting rotates the first target across opportunities,
+including exhausted deadlines, so a large raw-event backlog does not monopolize
+every slice. Missing or unrecognized cursor values start at the first allowlisted
+target; read/write errors stop the operation. The hourly purge remains a separate
+checkpoint-protected phase. Its per-table cap is also 40000 rows. All phases share
+the cooperative deadline; these counts are ceilings, not throughput guarantees.
+Maintenance Center retains its explicit four-second UI slice while inheriting
+the larger batch capacity and fair scheduling. CLI and the Telemetry action use
+the configured ten-second default. No cron daemon or production schedule is
+installed by changing these defaults: invoke existing maintenance at least every
+five minutes for the configured cadence to take effect.
 
 Deadlines are checked between statements. They are not a database-side query
 cancellation guarantee. Retention ages remain the existing administrator settings.

@@ -2474,6 +2474,13 @@ fyzických klíčů; počítejte s~dočasným místem na disku a~oknem pro změn
 Smazané stránky se uvolní pro další použití; pokles přidělené velikosti databáze
 může vyžadovat ruční fyzickou optimalizaci. Úspora závisí na uložených datech.
 
+Plánovaná telemetrie může běžet každých pět minut s~běžným rozpočtem deseti
+sekund a~nejvýše osmi dávkami po 5000 expirovaných řádcích na tabulku (40000 řádků).
+Tabulky se střídají po dávkách a~první tabulka mezi průchody rotuje. Sdílený časový
+limit může skutečný postup omezit. Centrum údržby zachovává čtyřsekundový úsek.
+Existující cron musí údržbu volat nejméně každých pět minut; změna limitů nezavádí
+časovač ani nezkracuje dobu uchování.
+
 \subsection{Diagnostika běhového prostředí, integrita a~měření galerie}
 \index{d00029@diagnostika běhového prostředí}
 \index{k00067@kontrola integrity}

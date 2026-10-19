@@ -1102,6 +1102,15 @@ Tracks telemetry maintenance and rollup jobs.
 
 ### Telemetry storage lifecycle
 
+Scheduled admission now uses a five-minute interval both while catching up and
+when complete. A normal slice admits ten seconds of work, with up to eight
+5000-row DELETEs per table (40000 rows). Independent targets alternate one batch
+at a time and persist the next first target across slices; expiry of the shared
+deadline can reduce actual progress. Hourly deletion still requires its archival
+checkpoint. Maintenance Center retains its four-second UI budget. Existing cron
+must invoke maintenance regularly; configuration defaults do not create a timer.
+
+
 SQL query fingerprints have independent retention (`telemetry_database_retention_days`):
 seven days by default, configurable from one to 90 days. Upgrades seed this new
 setting without overwriting an explicit value. Missing pre-migration settings use

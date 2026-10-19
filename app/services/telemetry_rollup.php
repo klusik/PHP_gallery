@@ -64,6 +64,25 @@ const TELEMETRY_ROLLUP_CHECKPOINT_KEY = 'telemetry_rollup_next_date';
  * Rationale: a shared throttle bounds recurring work without depending on thumbnail progress.
  */
 const TELEMETRY_MAINTENANCE_NEXT_KEY = 'telemetry_maintenance_next_at';
+/**
+ * Cap row locks acquired by an individual telemetry delete statement.
+ * Type: integer.
+ * Units: rows per DELETE.
+ * Scope: bounded telemetry retention service.
+ * Consumers: round-robin and hourly purge paths.
+ * Rationale: retain the existing 10000-row safety ceiling for configuration overrides.
+ */
+const TELEMETRY_PURGE_MAX_BATCH_ROWS = 10000;
+/**
+ * Cap repeated deletion work even when a caller supplies a very large budget.
+ * Type: integer.
+ * Units: batches per table per slice.
+ * Scope: bounded telemetry retention service.
+ * Consumers: round-robin and hourly purge paths.
+ * Rationale: retain the existing 20-batch override ceiling independently of time.
+ */
+const TELEMETRY_PURGE_MAX_BATCHES = 20;
+
 use function Gallery\Models\telemetry_model_delete_older_than;
 use function Gallery\Models\telemetry_model_rollup_daily;
 use function Gallery\Models\telemetry_model_setting;
@@ -295,7 +314,7 @@ function telemetry_rollup_checkpoint(): ?string
 }
 
 /**
- * Purge bounded batches from independent retention targets.
+ * Purge round-robin batches with a durable rotating first target.
  * @param float $deadline Wall-clock slice deadline.
  * @param bool $pending Set when another slice is needed.
  * @param bool $skipHourly True while daily catch-up has not yet run in this slice.
@@ -314,11 +333,52 @@ function telemetry_purge_bounded(float $deadline, bool &$pending, bool $skipHour
     if (!$skipHourly && $checkpoint !== null) {
         $targets['telemetry_hourly_metrics'] = ['bucket_start', telemetry_maintenance_retention_days('telemetry_hourly_retention_days', 90, 7, 730)];
     }
-    $deleted = [];
-    foreach ($targets as $table => [$column, $days]) {
-        $deleted[$table] = telemetry_purge_table_bounded($table, $column, $days, $deadline, $pending,
-            $table === 'telemetry_hourly_metrics' ? $checkpoint : null);
+    $tables = array_keys($targets);
+    $storedFirst = telemetry_model_setting('telemetry_purge_next_table');
+    $first = array_search($storedFirst, $tables, true);
+    // Missing/obsolete cursors permanently restart at the first owned target;
+    // retention eligibility still comes exclusively from validated age policies.
+    $first = $first === false ? 0 : $first;
+    $tables = array_merge(array_slice($tables, $first), array_slice($tables, 0, $first));
+    // Publish the next first target before SQL. A slow statement, crash or short
+    // opportunity cannot make every following slice restart at raw events.
+    // The cursor is an allowlisted table name, never a dynamic SQL identifier.
+    $nextFirst = $tables[count($tables) > 1 ? 1 : 0];
+    telemetry_set_setting('telemetry_purge_next_table', $nextFirst);
+    $limit = max(1, min(
+        TELEMETRY_PURGE_MAX_BATCH_ROWS,
+        (int) cms_runtime_limit('telemetry.maintenance_delete_batch_size')
+    ));
+    $batches = max(1, min(
+        TELEMETRY_PURGE_MAX_BATCHES,
+        (int) cms_runtime_limit('telemetry.maintenance_delete_batches')
+    ));
+    $deleted = array_fill_keys($tables, 0);
+    $active = $targets;
+    for ($round = 0; $round < $batches; $round++) {
+        foreach ($tables as $table) {
+            if (!isset($active[$table])) {
+                continue;
+            }
+            if (microtime(true) >= $deadline) {
+                $pending = true;
+                return $deleted;
+            }
+            [$column, $days] = $active[$table];
+            $count = telemetry_model_delete_older_than(
+                $table, $column, $days, $limit,
+                $table === 'telemetry_hourly_metrics' ? $checkpoint : null
+            );
+            $deleted[$table] += $count;
+            if ($count < $limit) {
+                unset($active[$table]);
+            }
+        }
+        if ($active === []) {
+            break;
+        }
     }
+    $pending = $pending || $active !== [];
     return $deleted;
 }
 
@@ -334,8 +394,14 @@ function telemetry_purge_bounded(float $deadline, bool &$pending, bool $skipHour
  */
 function telemetry_purge_table_bounded(string $table, string $column, int $days, float $deadline, bool &$pending, ?string $before = null): int
 {
-    $limit = max(1, min(10000, (int) cms_runtime_limit('telemetry.maintenance_delete_batch_size')));
-    $batches = max(1, min(20, (int) cms_runtime_limit('telemetry.maintenance_delete_batches')));
+    $limit = max(1, min(
+        TELEMETRY_PURGE_MAX_BATCH_ROWS,
+        (int) cms_runtime_limit('telemetry.maintenance_delete_batch_size')
+    ));
+    $batches = max(1, min(
+        TELEMETRY_PURGE_MAX_BATCHES,
+        (int) cms_runtime_limit('telemetry.maintenance_delete_batches')
+    ));
     $deleted = 0;
     for ($i = 0; $i < $batches; $i++) {
         if (microtime(true) >= $deadline) {

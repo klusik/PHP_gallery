@@ -2500,6 +2500,13 @@ around short physical keys; plan temporary disk space and~a~DDL maintenance
 window. Deleted data pages become reusable; allocated database size may~require
 manual physical optimization. Actual savings depend on~the~stored data.
 
+Scheduled telemetry is~eligible every five minutes, with a~ten-second normal
+slice and~up~to~eight batches of~5000 expired rows per~table (40000 rows).
+Tables alternate by~batch and~the~first table rotates between slices. The~shared
+clock may~reduce actual progress. Maintenance Center keeps its four-second UI
+slice. Existing cron must invoke maintenance at~least every five minutes;
+changing these limits does not~install a~timer or~shorten retention ages.
+
 \subsection{Runtime diagnostics, integrity, and~gallery benchmark}
 \index{Runtime diagnostics}
 \index{integrity checking}

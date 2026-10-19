@@ -2521,6 +2521,14 @@ kurzen physischen Schlüsseln neu auf; temporären Speicherplatz und ein DDL-Fen
 einplanen. Gelöschte Seiten werden wiederverwendbar; die zugewiesene Größe kann
 eine manuelle physische Optimierung erfordern. Die Ersparnis hängt von den Daten ab.
 
+Geplante Telemetrie kann alle fünf Minuten laufen, mit zehn Sekunden pro
+normalem Durchlauf und höchstens acht Chargen von 5000 abgelaufenen Zeilen je
+Tabelle (40000 Zeilen). Tabellen wechseln nach jeder Charge; die erste Tabelle
+rotiert zwischen Durchläufen. Das gemeinsame Zeitbudget kann den Fortschritt
+begrenzen. Das Wartungszentrum behält vier Sekunden pro UI-Schritt. Der bestehende
+Cron muss die Wartung mindestens alle fünf Minuten aufrufen; die Änderung
+installiert keinen Timer und verkürzt keine Aufbewahrungsfrist.
+
 \subsection{Laufzeitdiagnose, Integrität und Galeriebenchmark}
 \index{l00160@Laufzeitdiagnose}
 \index{i00151@Integritätsprüfung}

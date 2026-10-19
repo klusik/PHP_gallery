@@ -1,6 +1,6 @@
 {
     "version": "0.137.1",
-    "generated_at": "2026-10-19T05:27:01+00:00",
+    "generated_at": "2026-10-19T05:42:41+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -19,7 +19,7 @@
         "app/bootstrap/session.php": "sha256:884a5edeb5753a011b0d45af6cfcc83b2e1b1480236ea2e21407d5e594324217",
         "app/bootstrap/viewer_identity_context.php": "sha256:7990a28931995dabc676273629a06e1e1da793abdd380b764e73808002fe659c",
         "app/bootstrap_full.php": "sha256:856c503d18cb906414ad51a830eac066028e24ea389e157ee9d698083d23aafa",
-        "app/configuration_defaults.php": "sha256:883ebbc9051ccdca33374e76e2c1f605e14d00e63f69ad56c9be7b2b36805274",
+        "app/configuration_defaults.php": "sha256:488780a1d2d537ed5968c645fee768f533b784527516560feb172aaded226ed1",
         "app/controllers.php": "sha256:91e73550e9f6f2468e0f3f3257a5fc18aff3d062f17c669903749214bf2d4c69",
         "app/controllers/admin_auth.php": "sha256:bc69e589c3483eba284cf0a60ae43ddf5507f6ec56e5e1d9f1b97045c7b37094",
         "app/controllers/admin_cooperative_albums.php": "sha256:632427cbf4f45df03cbf443103fc141fa8390d3cc6240f5f2a76f0aeec5b06a7",
@@ -483,7 +483,7 @@
         "app/services/telemetry.php": "sha256:699c4a6295948ef16d3e72579eb91aaf49e9eff73e864ebf0babfd93e62e2325",
         "app/services/telemetry_diagnostics.php": "sha256:6d3cd00d8919668a9179d818f8ee24820e40041da2162cc8716be85c29212393",
         "app/services/telemetry_privacy.php": "sha256:5bce22284d132f27b11c1c6763ae94c760a2f8f4f8fabae9916f29c6c31927b5",
-        "app/services/telemetry_rollup.php": "sha256:a7671d86b0baca91184b7f2b25be9b38e8a502a95daa896f851f10e3963126c1",
+        "app/services/telemetry_rollup.php": "sha256:6cd62410530288e45e6628f0abcba8821e646368d137d30db657e601a6a88a8a",
         "app/services/telemetry_settings.php": "sha256:20342c6afc054af93038f80d674a2f61c41d45b7f5c42538296d2b42fa91400c",
         "app/services/theme.php": "sha256:eb0d8d295577c7eafa8638f16bc1c8905bd707f53090e3ff46c640186625f54e",
         "app/services/theme_layout_settings.php": "sha256:9bb6ed0f4e632dbec6c128a715628d4c8df2a1b968e10e42130052a595318bf6",

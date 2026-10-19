@@ -2,6 +2,16 @@
 
 ## Telemetry storage and historical aggregates
 
+The telemetry rollup service now rotates a persisted allowlisted first-target
+cursor and visits independent targets in one-batch rounds. Missing or obsolete
+cursor values permanently restart the scheduling order without altering retention
+eligibility; unavailable settings refuse the pass. Defaults increase to ten seconds,
+5000 rows times eight batches per table and a five-minute completed interval.
+Existing local runtime-limit overrides remain authoritative. Production deletion
+throughput and cron cadence are unmeasured; the Maintenance Center four-second
+slice and archival safety checks remain supported.
+
+
 Owners: telemetry settings/rollup services, telemetry model and
 `202610190001_telemetry_compact_indexes.php`. Missing independent SQL retention
 permanently supports pre-seed installations with the documented seven-day default;

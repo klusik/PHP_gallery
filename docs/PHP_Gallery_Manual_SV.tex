@@ -2479,6 +2479,13 @@ för tillfälligt diskutrymme och ett DDL-underhållsfönster. Raderade sidor ka
 återanvändas; allokerad databasstorlek kan kräva manuell fysisk optimering.
 Besparingen beror på lagrade data.
 
+Schemalagd telemetri får köras var femte minut, med tio sekunder per normal
+omgång och högst åtta batcher om 5000 utgångna rader per tabell (40000 rader).
+Tabeller växlar efter varje batch och den första tabellen roterar mellan omgångar.
+Den gemensamma tidsbudgeten kan begränsa framstegen. Underhållscentret behåller
+fyra sekunder per UI-steg. Befintlig cron måste anropa underhållet minst var femte
+minut; ändringen installerar ingen timer och förkortar ingen lagringstid.
+
 \subsection{Körningsdiagnostik, integritet och galleriprestandatest}
 \index{k00145@Körningsdiagnostik}
 \index{i00128@integritetskontroll}

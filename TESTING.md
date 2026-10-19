@@ -1,5 +1,9 @@
 # Testing Guide
 
+Telemetry recovery coverage also asserts round-robin visitation, per-table caps,
+rotation after exhausted admission and fail-closed cursor reads. The deterministic
+fixture uses smaller batches to exercise the same production loop without sleeps.
+
 Telemetry storage regressions include independent SQL retention and strict failed
 reads (`telemetry_database_retention_test.php`), compaction cursor recovery in
 `telemetry_maintenance_recovery_test.php`, and populated migration replay, preserved
