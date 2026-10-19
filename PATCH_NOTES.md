@@ -1,5 +1,48 @@
 # Patch notes
 
+## Version 0.137.7
+
+Improved the Windows uploader’s update notice so it resized to fit updated status text and its full action row, and advanced the uploader source version to 0.7.1. Initialized immutable release-origin and predecessor records for this PHP Gallery release.
+
+### Highlights
+
+#### Windows uploader update notice
+
+- Updated the notice to fit wrapped status text and the full row of actions after asynchronous checks changed the message.
+- Matched the notice text and action-row backgrounds to the window while keeping **Update** visually distinct.
+- Advanced `winapp/VERSION` from 0.7.0 to 0.7.1. This uploader version was independent of the PHP Gallery CMS version.
+
+#### Release provenance
+
+- Added immutable origin and predecessor records for `v_0.137.7`, referencing [#101](https://github.com/klusik/PHP_gallery/issues/101) and [#133](https://github.com/klusik/PHP_gallery/issues/133).
+
+### Technical Details
+
+#### Windows uploader
+
+- Updated `winapp/uploader/update_ui.py` to allow the update notice to resize for status changes after its initial placement.
+- Updated `winapp/tests/test_update_ui.py` to cover releasing the notice’s fixed size so it could resize for later messages.
+- Updated `winapp/README.md` and the English, Czech, German, and Swedish manual sources with the uploader update.
+
+#### Release provenance and testing documentation
+
+- Added `.github/release-origins/v_0.137.7.json` and `.github/release-predecessors/v_0.137.7.json`.
+- Updated `TESTING.md` for the uploader version change.
+
+### User Impact
+
+#### For visitors and administrators
+
+- No direct visitor or PHP Gallery administrator behavior changed in this release.
+
+#### For Windows uploader users
+
+- The update notice accommodated longer, wrapped status messages and kept its complete action row visible after asynchronous checks updated the status.
+
+#### For maintainers
+
+- Added immutable provenance records for the release and updated the uploader documentation and UI regression fixture.
+
 ## Version 0.137.6
 
 Completed visitor-started stable updates through sequential authenticated
