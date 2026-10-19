@@ -1,5 +1,132 @@
 # Patch notes
 
+## Version 0.137.5
+
+Improved release automation with bounded Copilot usage, source-bound external
+AI patch notes, and explicit release assembly from qualified develop. Fixed
+installer reuse after companion documentation changes while preserving manual
+release review and publication.
+
+### Highlights
+
+#### Resumable AI release notes
+
+- Added automatic size checks before installing or calling Copilot. Limited the
+  automatic route to 100000 source-diff bytes, 20 source files, and 180000 bytes
+  for the complete prompt, admitting one evidence request plus final synthesis.
+- Exported larger changes to a self-contained external AI handoff. Added the
+  same route for missing Copilot credentials, explicitly selected external
+  generation, installation or provider failures, exhausted allowance, timeouts,
+  and invalid provider prose.
+- Added the explicit `NOTES_PENDING` state. Retained the evidence without a
+  waiting runner, prepared release commit, manual build, qualification check,
+  or release PR until editorial notes were supplied.
+- Preserved completed maintainer-authored notes without invoking AI.
+
+#### Release startup with the current source
+
+- Updated `Begin Release` to read current protected `develop` independently of
+  the branch selected for the workflow definition, freeze its SHA, create the
+  requested release branch, and explicitly dispatch assembly on that branch.
+- Used the release source's workflow and scripts before they reached `main`,
+  removing reliance on downstream push events from `GITHUB_TOKEN` writes.
+- Added recovery for an unchanged release ref after a lost dispatch response,
+  avoided duplicate active assembly, and refused to overwrite an advanced
+  release branch.
+
+#### Windows installer reuse
+
+- Fixed predecessor installer reuse after changes limited to
+  `winapp/AGENTS.md`, aligning the draft attachment reader with the existing
+  assembly exclusions for companion documentation and tests. Runtime and build
+  changes still required a fresh installer.
+
+### Technical Details
+
+#### Release-note evidence and continuation
+
+- Added `.github/scripts/patch_notes_handoff.php` to route provider work and
+  export the complete canonical prompt, external AI prompt, source diff,
+  maintained template, SHA-256 manifest, and continuation instructions in the
+  `release-notes-handoff` Actions artifact, retained for 30 days.
+- Preserved complete commit metadata, changed paths, diff statistics, and source
+  diff evidence rather than applying the former provider-context limits during
+  collection. Kept generated release files, manual PDFs, and installer outputs
+  outside the source text diff.
+- Added `external_notes` and `notes_mode` workflow inputs. Accepted external
+  notes as a JSON envelope bound to repository, version, release branch, source
+  SHA, and the SHA-256 of freshly rebuilt canonical evidence. Limited the
+  envelope to 60000 UTF-8 bytes and preserved Markdown newlines through JSON
+  escapes.
+- Retained strict target-version and editorial-heading validation. Rejected
+  stale or foreign response identities and malformed supplied prose before
+  applying notes. Kept ordinary note continuation dependent on an existing
+  immutable release origin.
+- Separated optional provider setup, generation, and prose validation failures
+  from mandatory evidence export, note application, filesystem, and assembly
+  failures. Retained rejected provider prose separately for seven days while
+  excluding authentication diagnostics from the uploaded artifacts.
+- Updated release completion and draft-asset readers to accept authenticated
+  push and workflow-dispatch assembly runs while retaining exact candidate,
+  repository, branch, attempt, artifact-owner, and integrity checks.
+
+#### Release initialization and permissions
+
+- Added `.github/scripts/begin-release.mjs` and explicit assembly dispatch with
+  frozen source, initiating run ID, and attempt inputs.
+- Bound bot-created initialization to server-owned `Begin Release` metadata,
+  the version-specific run title, the current in-progress or successful
+  attempt, and the original actor's maintainer permission. Rejected incomplete,
+  foreign, failed, or superseded handoffs.
+- Retained source ancestry, immutable origin and tag checks, and release-ref
+  leases. Continued to trust qualified protected develop without another
+  BASIC/FULL source audit during release assembly.
+- Preserved the separate human PR approval, reviewed merge and tag, verified
+  draft attachments, and final manual publication stages.
+
+#### Tests and documentation
+
+- Added `tests/patch_notes_handoff_test.php` coverage for exact routing limits,
+  complete UTF-8 evidence, template export, JSON transport, stale and foreign
+  bindings, oversized responses, and required editorial headings.
+- Expanded `tests/patch_notes_ai_evidence_test.php` to cover complete large
+  commit metadata using the collector's labeled subject and body format.
+- Expanded `tests/start_new_release_test.mjs` with isolated real-Git coverage
+  for workflow/source separation, create-only branch publication, dispatch
+  recovery, duplicate suppression, advanced refs, authenticated bot
+  initialization, and adverse initiating-run identities.
+- Extended hosted workflow, completion, and draft-asset fixtures for resumed
+  assembly and companion installer exclusions. Retained rejection of foreign
+  events, changed runtime/build inputs, and similarly named source files.
+- Updated permanent release, testing, compatibility, and maintainer guidance
+  alongside all four English, Czech, German, and Swedish manual sources.
+
+#### Compatibility
+
+- Added no application database migration or visitor-facing runtime dependency.
+- Preserved existing public and administrator application behavior and the
+  Windows companion's independent version and verified reusable assets.
+- Retained ordinary pushed-release initialization, completed editorial notes,
+  immutable existing release identities, and human publication approval.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Added no direct change to gallery pages or administrator application
+  workflows. This release focused on release tooling and installer reuse.
+
+#### For maintainers
+
+- Avoided automatic Copilot fan-out for large release diffs and provided a
+  complete package for generating notes with a chosen external AI.
+- Enabled release assembly to continue with reviewed, source-bound JSON notes
+  while keeping provider availability separate from package integrity.
+- Enabled new release tooling to run from the qualified source before its
+  release reached main, and preserved verified installer reuse when only
+  companion documentation or tests changed.
+
+
 ## Version 0.137.4
 
 Improved PHP and Markdown source readability and repaired release preparation
