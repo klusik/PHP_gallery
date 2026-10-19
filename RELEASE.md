@@ -62,6 +62,11 @@ including LF and CRLF line endings. Preparation changes only the registered
 version value and retains the surrounding layout and historical version prose;
 consistency checks recognize the same wrapped markers.
 
+Windows installer change detection excludes `winapp/README.md`,
+`winapp/AGENTS.md`, and tests. Changes to these documentation and fixture paths
+alone reuse the verified existing installer; runtime and build inputs still
+require a fresh installer.
+
 ## Review, tag and publish
 
 Approve the bot PR once. Automation performs the protected standard merge,

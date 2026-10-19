@@ -466,9 +466,13 @@ jobs:
           php scripts/generate_production_files.php --check
           php scripts/generate_manifest.php --check
           php scripts/check_release.php "${RELEASE_VERSION}"
-          integration_paths="$(git diff --name-only "${SELECTED_DEVELOP_SHA}" "${PREPARED_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
+          integration_paths="$(git diff --name-only \
+            "${SELECTED_DEVELOP_SHA}" "${PREPARED_SHA}" -- \
+            winapp ':!winapp/tests' ':!winapp/README.md' ':!winapp/AGENTS.md')"
           if [[ -n "${integration_paths}" ]]; then echo 'winapp_changed=true' >> "${GITHUB_OUTPUT}"; else echo 'winapp_changed=false' >> "${GITHUB_OUTPUT}"; fi
-          installer_paths="$(git diff --name-only "${SOURCE_BASE}" "${SELECTED_DEVELOP_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
+          installer_paths="$(git diff --name-only \
+            "${SOURCE_BASE}" "${SELECTED_DEVELOP_SHA}" -- \
+            winapp ':!winapp/tests' ':!winapp/README.md' ':!winapp/AGENTS.md')"
           if [[ -n "${installer_paths}" ]]; then echo 'installer_required=true' >> "${GITHUB_OUTPUT}"; else echo 'installer_required=false' >> "${GITHUB_OUTPUT}"; fi
           echo "ready=true" >> "${GITHUB_OUTPUT}"
           {

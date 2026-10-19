@@ -11,6 +11,7 @@
 #   - Reuse the existing central CI workflow against the exact prepared candidate SHA
 #   - Expose one aggregate release qualification gate
 # Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
 name: Release qualification
 
 on:
@@ -459,7 +460,9 @@ jobs:
           php scripts/generate_production_files.php --check
           php scripts/generate_manifest.php --check
           php scripts/check_release.php "${RELEASE_VERSION}"
-          paths="$(git diff --name-only "${{ steps.origin.outputs.source_base }}" "${PREPARED_SHA}" -- winapp ':!winapp/tests' ':!winapp/README.md')"
+          paths="$(git diff --name-only \
+            "${{ steps.origin.outputs.source_base }}" "${PREPARED_SHA}" -- \
+            winapp ':!winapp/tests' ':!winapp/README.md' ':!winapp/AGENTS.md')"
           if [[ -n "${paths}" ]]; then echo 'winapp_changed=true' >> "${GITHUB_OUTPUT}"; else echo 'winapp_changed=false' >> "${GITHUB_OUTPUT}"; fi
           echo "ready=true" >> "${GITHUB_OUTPUT}"
           {
