@@ -8,55 +8,131 @@ PDF/music original counts and bytes, even while hidden, download-locked or
 globally disabled, plus an overall media total. See the
 [accounting scope](docs/GALLERY_PDF.md#admin-storage-accounting).
 
-Cache operations: [automatic visitor-driven retention, independent updater GC and safe incident remediation](docs/CACHE_MAINTENANCE.md). Installation/update enables the single Admin Features cache preference; explicit OFF survives updates. A suitable public visit starts authenticated server continuations with thirty-second opportunities and at most five seconds of work. A persistent database registry rotates due regions, resumes partial checkpoints and retains last-known measurements and confirmed deletion receipts. Healthy completed regions are rechecked hourly; an interrupted server chain needs a later restart opportunity. Cron is optional.
-Hosting cron can run `php scripts/site_maintenance.php --cache-only` every minute
+Cache operations:
+[automatic visitor-driven retention, independent updater GC and safe incident remediation](docs/CACHE_MAINTENANCE.md).
+Installation/update enables the single Admin Features cache preference; explicit
+OFF survives updates. A suitable public visit starts authenticated server
+continuations with thirty-second opportunities and at most five seconds of work.
+A persistent database registry rotates due regions, resumes partial checkpoints
+and retains last-known measurements and confirmed deletion receipts. Healthy
+completed regions are rechecked hourly; an interrupted server chain needs a
+later restart opportunity. Cron is optional.
+Hosting cron can run `php scripts/site_maintenance.php --cache-only` every
+minute
 to drain already-staged updater trash independently of thumbnail maintenance.
 
 [Project website](https://klusik.github.io/PHP_gallery/) ·
 [Documentation and published-release references](https://klusik.github.io/PHP_gallery/docs/)
 — presentation in English, Czech, German and Swedish. Website source, preview,
-release-link ownership and Pages activation are documented in [website/README.md](website/README.md).
+release-link ownership and Pages activation are documented in
+[website/README.md](website/README.md).
 
-Coding agents use [CI-first, working-branch-only verification](AGENTS.md#mandatory-agent-verification-contract):
+Coding agents use
+[CI-first, working-branch-only verification](AGENTS.md#mandatory-agent-verification-contract):
 commit and push the explicitly authorized feature/fix/codex branch, then inspect
 hosted candidate preparation and full qualification for the exact prepared SHA.
 Agents never directly mutate develop/main. Normal releases use GitHub-hosted
-preparation and [protected promotion/publication](RELEASE.md#protected-promotion-and-publication);
+preparation and
+[protected promotion/publication](RELEASE.md#protected-promotion-and-publication);
 local audits remain exceptional diagnostics or maintainer recovery.
 
-A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
+A modern PHP 8.1+ gallery CMS designed for ordinary shared hosting. The
+application uses the filesystem as the authoritative source for gallery
+structure, while storing all metadata, access rules, votes, user accounts, and
+audit logs in MySQL or MariaDB.
 
-PHP 8.1 is the compatibility minimum. For deployment, use the latest patch release
+PHP 8.1 is the compatibility minimum. For deployment, use the latest patch
+release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
 **Current Version:** 0.137.3
 
-**Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
+**Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
+framework overhead. Just PHP + MySQL.
 
-Configurable public content widgets are available on the #126 working branch through Appearance / Widgets. Administrators can author safe Markdown and manually curated links, select home/gallery page scope, seven in-flow regions or bounded floating placement, and explicitly publish or disable independent widgets. Public content is server-rendered once, with a non-obstructive no-JavaScript fallback. The feature remains under acceptance; see the [widget operations and architecture guide](docs/PUBLIC_CONTENT_WIDGETS.md) for shipped behavior, tests and current limitations.
+Configurable public content widgets are available on the #126 working branch
+through Appearance / Widgets. Administrators can author safe Markdown and
+manually curated links, select home/gallery page scope, seven in-flow regions or
+bounded floating placement, and explicitly publish or disable independent
+widgets. Public content is server-rendered once, with a non-obstructive
+no-JavaScript fallback. The feature remains under acceptance; see the
+[widget operations and architecture guide](docs/PUBLIC_CONTENT_WIDGETS.md) for
+shipped behavior, tests and current limitations.
 
-The Admin gallery workspace shows hierarchy, direct/descendant image counts and branch feature state. Stage Maps, File names, Voting or Picture Game intentions, review their exact descendant scope, then apply the reviewed plan. Own-password quick actions retain unrelated preferences and token protection. Settings > Uploads integrates ordinary upload preferences and mobile connections; its legacy-menu switch restores old links without changing route availability.
+The Admin gallery workspace shows hierarchy, direct/descendant image counts and
+branch feature state. Stage Maps, File names, Voting or Picture Game intentions,
+review their exact descendant scope, then apply the reviewed plan. Own-password
+quick actions retain unrelated preferences and token protection. Settings >
+Uploads integrates ordinary upload preferences and mobile connections; its
+legacy-menu switch restores old links without changing route availability.
 
-Card orientation means vertical/photo above text and horizontal/photo beside text. Migration `202610020001_gallery_description_layout_semantics.php` preserves existing appearance across database values, sidecars, Smart Galleries and Trash. Back up those stores together and use the normal migration runner. Search defaults on only without a saved preference and when its capability is available.
+Card orientation means vertical/photo above text and horizontal/photo beside
+text. Migration `202610020001_gallery_description_layout_semantics.php`
+preserves existing appearance across database values, sidecars, Smart Galleries
+and Trash. Back up those stores together and use the normal migration runner.
+Search defaults on only without a saved preference and when its capability is
+available.
 
-Custom CSS remains installation-owned, is preserved by ordinary saves and is excluded from deployment. Updates use configurable stable-release discovery (five minutes by default); automatic OurAirports imports use weekly freshness and failure backoff. The Windows build writes installer and matching generated JSON together under `winapp/dist/<version>/`, keeping the companion version independent.
+Custom CSS remains installation-owned, is preserved by ordinary saves and is
+excluded from deployment. Updates use configurable stable-release discovery
+(five minutes by default); automatic OurAirports imports use weekly freshness
+and failure backoff. The Windows build writes installer and matching generated
+JSON together under `winapp/dist/<version>/`, keeping the companion version
+independent.
 
-Production packaging uses the exact reviewed [production file inventory](docs/PRODUCTION_FILES.md). The PHP builder requires current integrity data and verifies staged membership and complete file bytes; local agent state, temporary notes and live runtime payloads cannot enter through a directory walk. The historical interactive/FTP deploy scripts have been removed.
+Production packaging uses the exact reviewed
+[production file inventory](docs/PRODUCTION_FILES.md). The PHP builder requires
+current integrity data and verifies staged membership and complete file bytes;
+local agent state, temporary notes and live runtime payloads cannot enter
+through a directory walk. The historical interactive/FTP deploy scripts have
+been removed.
 
-With Flight Maps and Navigation Data enabled, route input and SimBrief draft requests check local navigation-data freshness in the background. Gallery saves remain available during imports; unresolved saved manual routes can gain coordinates while preserving existing points, SimBrief OFP geometry, and newer edits. Side-panel completion keeps the editor draft, drawer, and browser URL in place.
+With Flight Maps and Navigation Data enabled, route input and SimBrief draft
+requests check local navigation-data freshness in the background. Gallery saves
+remain available during imports; unresolved saved manual routes can gain
+coordinates while preserving existing points, SimBrief OFP geometry, and newer
+edits. Side-panel completion keeps the editor draft, drawer, and browser URL in
+place.
 
-Gallery headers and cards share an animated tag panel. The server renders the saved tag preview and row cap immediately; the header panel preserves every direct and contained tag, wraps long names and keeps the header dimensions stable. Native disclosure remains available without JavaScript, and existing Theme limits, sorting, scrollbar and animation settings continue to apply.
+Gallery headers and cards share an animated tag panel. The server renders the
+saved tag preview and row cap immediately; the header panel preserves every
+direct and contained tag, wraps long names and keeps the header dimensions
+stable. Native disclosure remains available without JavaScript, and existing
+Theme limits, sorting, scrollbar and animation settings continue to apply.
 
-Breadcrumb navigation offers nine styles through one accessible component: Minimal, Chevron, Pills, Surface, Ribbon (arrow segments), Nodes (connected dots), Tabs, Tiles (raised cards), and Gradient (theme-colored surface and accent stripe). In **Theme > Layout > Cards & badges**, gallery **Display > Advanced**, and Smart Gallery presentation controls, each native radio-card option shows a real breadcrumb example so administrators can choose by appearance. The inherit card previews the effective Theme style; the controls support keyboard selection and work without JavaScript. **Default / inherit** resolves to the Theme choice and then built-in Chevron. Invalid values safely fall back, and wrapping keeps ancestor links reachable without JavaScript. See the [breadcrumb component contract](docs/BREADCRUMBS.md).
+Breadcrumb navigation offers nine styles through one accessible component:
+Minimal, Chevron, Pills, Surface, Ribbon (arrow segments), Nodes (connected
+dots), Tabs, Tiles (raised cards), and Gradient (theme-colored surface and
+accent stripe). In **Theme > Layout > Cards & badges**, gallery **Display >
+Advanced**, and Smart Gallery presentation controls, each native radio-card
+option shows a real breadcrumb example so administrators can choose by
+appearance. The inherit card previews the effective Theme style; the controls
+support keyboard selection and work without JavaScript. **Default / inherit**
+resolves to the Theme choice and then built-in Chevron. Invalid values safely
+fall back, and wrapping keeps ancestor links reachable without JavaScript. See
+the [breadcrumb component contract](docs/BREADCRUMBS.md).
 
-Ordinary web requests use a small request kernel and a reviewed route-specific module plan, retaining existing procedural controllers and shared-hosting deployment. Saved flight routes remain viewable in galleries before the first photograph is uploaded. Administrator Development diagnostics provides a localized lightbox dashboard for displayed quality, preload/cache ownership, graphs, viewport and lifecycle observations.
+Ordinary web requests use a small request kernel and a reviewed route-specific
+module plan, retaining existing procedural controllers and shared-hosting
+deployment. Saved flight routes remain viewable in galleries before the first
+photograph is uploaded. Administrator Development diagnostics provides a
+localized lightbox dashboard for displayed quality, preload/cache ownership,
+graphs, viewport and lifecycle observations.
 
-Theme > Custom CSS includes a Live Visual CSS Editor for previewing the real public home or gallery page, inspecting stable selectors, and composing a bounded CSS draft. Its preview is authenticated and read-only, while anonymous simulation still applies public visibility and media authorization. Page-width and style edits stay in the CSS draft; a selected background image remains browser-only until the existing explicit CSS Save submits both revisions together. See the [editor contract and coverage](docs/LIVE_VISUAL_CSS_EDITOR.md).
+Theme > Custom CSS includes a Live Visual CSS Editor for previewing the real
+public home or gallery page, inspecting stable selectors, and composing a
+bounded CSS draft. Its preview is authenticated and read-only, while anonymous
+simulation still applies public visibility and media authorization. Page-width
+and style edits stay in the CSS draft; a selected background image remains
+browser-only until the existing explicit CSS Save submits both revisions
+together. See the
+[editor contract and coverage](docs/LIVE_VISUAL_CSS_EDITOR.md).
 
 ## Product manuals
 
-Complete product manuals are available as searchable PDFs and editable LaTeX sources:
+Complete product manuals are available as searchable PDFs and editable LaTeX
+sources:
 
 | Language | PDF | LaTeX source |
 | --- | --- | --- |
@@ -65,85 +141,199 @@ Complete product manuals are available as searchable PDFs and editable LaTeX sou
 | German | [Handbuch](docs/PHP_Gallery_Manual_DE.pdf) | [Quelltext](docs/PHP_Gallery_Manual_DE.tex) |
 | Swedish | [Handbok](docs/PHP_Gallery_Manual_SV.pdf) | [Källkod](docs/PHP_Gallery_Manual_SV.tex) |
 
-The manual language does not change the administrator or public interface language. See [manual build instructions](docs/LATEX_BUILD.md) for rebuilding the PDFs.
+The manual language does not change the administrator or public interface
+language. See [manual build instructions](docs/LATEX_BUILD.md) for rebuilding
+the PDFs.
 
 ## Core Features
 
 ### Cooperative galleries
 
-Enable Cooperative galleries in Features to pair independent HTTPS installations through **Settings > Advanced > Friendly galleries**. Use **Album collaborations** to exchange public album references, review exact scopes and approve participation independently. Friendship alone does not share photographs. Shared pages serve attributed, short-lived existing previews and thumbnails; originals and protected albums remain local. Apply the three new migrations through the ordinary migration workflow before use. See [cooperative administration and security](docs/COOPERATIVE_GALLERIES.md).
+Enable Cooperative galleries in Features to pair independent HTTPS installations
+through **Settings > Advanced > Friendly galleries**. Use **Album
+collaborations** to exchange public album references, review exact scopes and
+approve participation independently. Friendship alone does not share
+photographs. Shared pages serve attributed, short-lived existing previews and
+thumbnails; originals and protected albums remain local. Apply the three new
+migrations through the ordinary migration workflow before use. See
+[cooperative administration and security](docs/COOPERATIVE_GALLERIES.md).
 
-WinApp **0.3.2** loads Windows updater APIs explicitly from System32, retains corrected aircraft reply correlation for SimConnect, and preserves trusted GitHub update discovery, verified installer downloads, and safe update handoff; update checks run at startup and at most hourly afterward. MSFS 2024 camera location with aircraft fallback and MSFS 2020 aircraft location remain supported, with optional coordinates. Aircraft replies match the request and definition IDs; the returned object ID need not be zero. Bounded receive diagnostics retain specific failure reasons after redaction. This fixes a confirmed code bug; the reported FS2020 timeout still requires a live target-PC retest because its response object ID was not recorded. For an upgrade from 0.3.1, manually launch the verified 0.3.2 installer: the running older updater copies its own helper before replacement and may still report its old native-DLL error after installation. Future updates launched from the corrected 0.3.2 app use the repaired helper. Gallery credentials are never sent to GitHub. See [Windows companion](winapp/README.md) for installation, runtime packaging and live simulator verification limits.
+WinApp **0.3.2** loads Windows updater APIs explicitly from System32, retains
+corrected aircraft reply correlation for SimConnect, and preserves trusted
+GitHub update discovery, verified installer downloads, and safe update handoff;
+update checks run at startup and at most hourly afterward. MSFS 2024 camera
+location with aircraft fallback and MSFS 2020 aircraft location remain
+supported, with optional coordinates. Aircraft replies match the request and
+definition IDs; the returned object ID need not be zero. Bounded receive
+diagnostics retain specific failure reasons after redaction. This fixes a
+confirmed code bug; the reported FS2020 timeout still requires a live target-PC
+retest because its response object ID was not recorded. For an upgrade from
+0.3.1, manually launch the verified 0.3.2 installer: the running older updater
+copies its own helper before replacement and may still report its old native-DLL
+error after installation. Future updates launched from the corrected 0.3.2 app
+use the repaired helper. Gallery credentials are never sent to GitHub. See
+[Windows companion](winapp/README.md) for installation, runtime packaging and
+live simulator verification limits.
 
 ### Gallery Management
-- **Filesystem-first design** - Galleries are folders on disk; the database mirrors and enhances them
+- **Filesystem-first design** - Galleries are folders on disk; the database
+  mirrors and enhances them
 - **Nested galleries** - Create gallery hierarchies with unlimited depth
 - **Gallery discovery** - Automatically detect and import new folders
-- **Name-first gallery creation** - Public-page `+` controls create an unpublished gallery from its name and open the full editor in the same Admin panel
-- **Personal creation defaults** - Administrators can remember their SimBrief identifier and source language for later galleries, with a visible indication when a value was pre-filled
-- **Optional title completion** - Reuse recent gallery titles through a bounded Admin-only lookup, with Unicode-safe suffixes, keyboard/pointer acceptance, and accessible help in full-page and side-panel create forms; see [title completion](docs/TITLE_COMPLETION.md)
-- **Bulk operations** - Rename, delete, move, reorder, or change visibility for multiple galleries at once
-- **Gallery metadata** - Title, description, optional date range, cover image, custom slug, and safe external links with local brand icons or cached site favicons
-- **Folder management** - Moving galleries physically relocates the folder tree on disk
+- **Name-first gallery creation** - Public-page `+` controls create an
+  unpublished gallery from its name and open the full editor in the same Admin
+  panel
+- **Personal creation defaults** - Administrators can remember their SimBrief
+  identifier and source language for later galleries, with a visible indication
+  when a value was pre-filled
+- **Optional title completion** - Reuse recent gallery titles through a bounded
+  Admin-only lookup, with Unicode-safe suffixes, keyboard/pointer acceptance,
+  and accessible help in full-page and side-panel create forms; see
+  [title completion](docs/TITLE_COMPLETION.md)
+- **Bulk operations** - Rename, delete, move, reorder, or change visibility for
+  multiple galleries at once
+- **Gallery metadata** - Title, description, optional date range, cover image,
+  custom slug, and safe external links with local brand icons or cached site
+  favicons
+- **Folder management** - Moving galleries physically relocates the folder tree
+  on disk
 
 ### Image Management
-- **Upload interface** - Add multiple images to a gallery via browser; the right-hand Admin upload panel collects repeated pasted screenshots, picked files and dropped images into a removable, reorderable local preview queue before a single ordinary upload
+- **Upload interface** - Add multiple images to a gallery via browser; the
+  right-hand Admin upload panel collects repeated pasted screenshots, picked
+  files and dropped images into a removable, reorderable local preview queue
+  before a single ordinary upload
 - **Automatic scanning** - Detect newly added files on the filesystem
-- **Image editing** - Edit title, caption, tags, visibility, sort order per image
+- **Image editing** - Edit title, caption, tags, visibility, sort order per
+  image
 - **Bulk image operations** - Reorder, tag, or delete multiple images
-- **EXIF display** - Show image metadata (camera, lens, ISO, GPS coordinates) on public pages
-- **EXIF/GPS defaults** - GPS maps and coordinates are enabled globally by default, with per-gallery inherit, force on and force off controls plus a dashboard reset for all overrides
-- **EXIF date suggestions** - Suggest gallery date ranges from original photo capture dates, including subgalleries, with one reusable editor component for full admin pages and side panels plus editable admin approval
-- **Duplicate photo detector** - Compare exact SHA-256 and metadata-supported possible duplicates as left/right pairs, open gallery/photo context directly, remember reviewed pairs or exact galleries in a per-admin ledger, and delete confirmed copies in place
-- **GPS maps** - Render interactive maps when images have location data and the effective EXIF/GPS policy allows display
+- **EXIF display** - Show image metadata (camera, lens, ISO, GPS coordinates) on
+  public pages
+- **EXIF/GPS defaults** - GPS maps and coordinates are enabled globally by
+  default, with per-gallery inherit, force on and force off controls plus a
+  dashboard reset for all overrides
+- **EXIF date suggestions** - Suggest gallery date ranges from original photo
+  capture dates, including subgalleries, with one reusable editor component for
+  full admin pages and side panels plus editable admin approval
+- **Duplicate photo detector** - Compare exact SHA-256 and metadata-supported
+  possible duplicates as left/right pairs, open gallery/photo context directly,
+  remember reviewed pairs or exact galleries in a per-admin ledger, and delete
+  confirmed copies in place
+- **GPS maps** - Render interactive maps when images have location data and the
+  effective EXIF/GPS policy allows display
 
 ### Thumbnails & Performance
-- **Automatic generation** - Create optimized thumbnails during import or on-demand
+- **Automatic generation** - Create optimized thumbnails during import or
+  on-demand
 - **Multiple formats** - JPEG and WebP variants for browser compatibility
-- **Responsive sizing** - Automatically serve appropriately-sized images for device
-- **Two public thumbnail renderers** - Progressive small-first sharpening is the default; selected-gallery photo cards can optionally use the legacy responsive browser-selection pipeline from Admin > Theme > Layout
-- **Quality tuning** - Configurable JPEG quality with automatic size optimization
+- **Responsive sizing** - Automatically serve appropriately-sized images for
+  device
+- **Two public thumbnail renderers** - Progressive small-first sharpening is the
+  default; selected-gallery photo cards can optionally use the legacy responsive
+  browser-selection pipeline from Admin > Theme > Layout
+- **Quality tuning** - Configurable JPEG quality with automatic size
+  optimization
 - **DNG RAW support** - Generate display masters from DNG raw files
 - **Lazy loading** - Deferred thumbnail loading in fullscreen gallery
 - **Maintenance tools** - Regenerate, delete, or verify thumbnail cache
-- **Admin log scalability** - Browse grouped operational events, export large histories in bounded batches, and keep recent records in the live database while archiving older days safely
+- **Admin log scalability** - Browse grouped operational events, export large
+  histories in bounded batches, and keep recent records in the live database
+  while archiving older days safely
 
 #### Public thumbnail rendering modes
 
-The site-level `public_thumbnail_rendering_mode` setting controls photo cards inside a selected gallery and accepts only `responsive` or `progressive`. Missing or invalid values resolve to `progressive`. Gallery cover cards, subgallery collage cells, home-page gallery cards, and Admin thumbnails continue to use responsive browser selection.
+The site-level `public_thumbnail_rendering_mode` setting controls photo cards
+inside a selected gallery and accepts only `responsive` or `progressive`.
+Missing or invalid values resolve to `progressive`. Gallery cover cards,
+subgallery collage cells, home-page gallery cards, and Admin thumbnails continue
+to use responsive browser selection.
 
-**Responsive browser selection - Legacy** renders normal server-side `<picture>/<img>` markup with the complete available WebP/JPEG candidate set immediately. The browser can select among generated 300, 600, 800, and 960 px candidates, subject to actual derivatives and thumbnail bounds. It works fully without JavaScript.
+**Responsive browser selection - Legacy** renders normal server-side
+`<picture>/<img>` markup with the complete available WebP/JPEG candidate set
+immediately. The browser can select among generated 300, 600, 800, and 960 px
+candidates, subject to actual derivatives and thumbnail bounds. It works fully
+without JavaScript.
 
-**Progressive thumbnail sharpening - Default** is the current Admin-facing label for the primary pipeline. PHP still renders a real small thumbnail, normally the 300 px derivative, plus semantic links and alt text. Larger candidates remain inert until the optional browser module sees a visible or near-visible card, measures it, and preloads/decodes the smallest adequate replacement. JavaScript-disabled visitors keep the functional small thumbnail.
+**Progressive thumbnail sharpening - Default** is the current Admin-facing label
+for the primary pipeline. PHP still renders a real small thumbnail, normally the
+300 px derivative, plus semantic links and alt text. Larger candidates remain
+inert until the optional browser module sees a visible or near-visible card,
+measures it, and preloads/decodes the smallest adequate replacement.
+JavaScript-disabled visitors keep the functional small thumbnail.
 
-Progressive rendering prioritizes perceived initial responsiveness, not minimum total transfer. A visitor can download both the initial small thumbnail and a later larger replacement, so total transferred bytes can be higher than responsive mode even when the page feels ready sooner. Default and Legacy are Admin-facing status labels only; neither changes the permanent `progressive` and `responsive` machine values.
+Progressive rendering prioritizes perceived initial responsiveness, not minimum
+total transfer. A visitor can download both the initial small thumbnail and a
+later larger replacement, so total transferred bytes can be higher than
+responsive mode even when the page feels ready sooner. Default and Legacy are
+Admin-facing status labels only; neither changes the permanent `progressive` and
+`responsive` machine values.
 
 ### Access Control
-- **Visibility modes** - Public, unpublished (unlisted but accessible by direct URL), or private (access restricted)
+- **Visibility modes** - Public, unpublished (unlisted but accessible by direct
+  URL), or private (access restricted)
 - **Password protection** - Per-gallery passwords with session-scoped unlock
 - **Share links** - Generate time-limited or permanent share tokens
 - **Inheritance** - Child galleries inherit parent access rules
 - **Admin-only zones** - Some galleries only visible when logged in
 
 ### Viewer Accounts (Invite-only Registration)
-- **Administrator account management** - Admin can create and delete viewer accounts directly, or create/list/revoke invitation links without pre-creating an account
-- **Administrator security controls** - Admin can suspend or restore a viewer account and force sign-out on every viewer device; suspension and restoration rotate viewer security authority without deleting favourites or private collections
-- **Forced first-login password replacement** - Directly created accounts use a generated or Admin-supplied temporary password; normal viewer authority and Remember me stay blocked until the user replaces it
-- **Password-safe notification** - Optional account-created mail contains the trusted login URL but never the temporary password, which is shown once to the administrator for separate delivery
-- **Administrator-issued invitations** - Invitation recipients still follow the existing email-verification activation flow and choose their own initial password
-- **Verified activation** - Invitation recipients verify their email before a durable viewer account is activated and choose a password of at least 15 characters
-- **Separate viewer login** - Viewer identity is independent from administrator identity and never grants protected-gallery access by itself
-- **Remember me** - Dedicated rotating viewer persistent credential, separate from Admin persistent login and recent reauthentication
-- **Password recovery** - Generic, scanner-safe viewer reset flow using the configured bounded mail transport
-- **Private account and favourites** - Signed-in email, viewer-only logout, a private favourites page, and small favourite controls on authorized gallery cards/lightbox images
-- **Private viewer collections** - Viewers can create, rename, delete, order, and browse private collections of authorized image references; source authorization is re-evaluated whenever a collection is rendered
-- **Unlisted read-only collection sharing** - A viewer may issue one revocable 30-day share link for an owned collection; recipients need no account, the secret is exchanged into a narrow session grant and removed from the displayed URL, and every rendered source image still passes the recipient's current gallery/media authorization without Admin bypass
-- **Viewer account lifecycle** - Authenticated viewers can change password, stage and verify a new email address, and permanently delete their own viewer account through the existing Phase 0.7 lifecycle services
-- **Recent reauthentication** - Password change, email-change initiation, and account deletion require recent viewer password proof; remember-me restoration alone is intentionally insufficient
-- **Master feature wrapper** - The complete viewer-account subsystem is registered in **Admin > Features** and is disabled by default. While off, Viewer accounts is hidden from Admin navigation, public viewer Login/Account UI is absent, and viewer routes fail closed without allowing existing accounts to authenticate.
-- **Invite-only mode inside the feature** - After the master feature is enabled, **Admin > Account > Viewer accounts** exposes the existing subordinate viewer-frontend toggle; enabling it selects the supported `invite_only` mode and no `config.php` edit is required.
-- **Authorization remains independent** - Saving a favourite or collection item stores only the canonical image reference and never preserves or grants access to a protected source gallery
-- **Still deliberately absent** - Open signup, public viewer profiles or collection discovery, recipient ACLs/collaboration, uploads, comments, and optional viewer MFA/social-login mechanisms
+- **Administrator account management** - Admin can create and delete viewer
+  accounts directly, or create/list/revoke invitation links without pre-creating
+  an account
+- **Administrator security controls** - Admin can suspend or restore a viewer
+  account and force sign-out on every viewer device; suspension and restoration
+  rotate viewer security authority without deleting favourites or private
+  collections
+- **Forced first-login password replacement** - Directly created accounts use a
+  generated or Admin-supplied temporary password; normal viewer authority and
+  Remember me stay blocked until the user replaces it
+- **Password-safe notification** - Optional account-created mail contains the
+  trusted login URL but never the temporary password, which is shown once to the
+  administrator for separate delivery
+- **Administrator-issued invitations** - Invitation recipients still follow the
+  existing email-verification activation flow and choose their own initial
+  password
+- **Verified activation** - Invitation recipients verify their email before a
+  durable viewer account is activated and choose a password of at least 15
+  characters
+- **Separate viewer login** - Viewer identity is independent from administrator
+  identity and never grants protected-gallery access by itself
+- **Remember me** - Dedicated rotating viewer persistent credential, separate
+  from Admin persistent login and recent reauthentication
+- **Password recovery** - Generic, scanner-safe viewer reset flow using the
+  configured bounded mail transport
+- **Private account and favourites** - Signed-in email, viewer-only logout, a
+  private favourites page, and small favourite controls on authorized gallery
+  cards/lightbox images
+- **Private viewer collections** - Viewers can create, rename, delete, order,
+  and browse private collections of authorized image references; source
+  authorization is re-evaluated whenever a collection is rendered
+- **Unlisted read-only collection sharing** - A viewer may issue one revocable
+  30-day share link for an owned collection; recipients need no account, the
+  secret is exchanged into a narrow session grant and removed from the displayed
+  URL, and every rendered source image still passes the recipient's current
+  gallery/media authorization without Admin bypass
+- **Viewer account lifecycle** - Authenticated viewers can change password,
+  stage and verify a new email address, and permanently delete their own viewer
+  account through the existing Phase 0.7 lifecycle services
+- **Recent reauthentication** - Password change, email-change initiation, and
+  account deletion require recent viewer password proof; remember-me restoration
+  alone is intentionally insufficient
+- **Master feature wrapper** - The complete viewer-account subsystem is
+  registered in **Admin > Features** and is disabled by default. While off,
+  Viewer accounts is hidden from Admin navigation, public viewer Login/Account
+  UI is absent, and viewer routes fail closed without allowing existing accounts
+  to authenticate.
+- **Invite-only mode inside the feature** - After the master feature is enabled,
+  **Admin > Account > Viewer accounts** exposes the existing subordinate
+  viewer-frontend toggle; enabling it selects the supported `invite_only` mode
+  and no `config.php` edit is required.
+- **Authorization remains independent** - Saving a favourite or collection item
+  stores only the canonical image reference and never preserves or grants access
+  to a protected source gallery
+- **Still deliberately absent** - Open signup, public viewer profiles or
+  collection discovery, recipient ACLs/collaboration, uploads, comments, and
+  optional viewer MFA/social-login mechanisms
 
 ### Tagging & Organization
 - **Reusable tags** - Global tag system shared across all galleries and images
@@ -158,43 +348,59 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **Image voting** - Visitors can rate images (+1/-1 or like/dislike)
 - **Gallery voting** - Rate entire galleries
 - **Score display** - Show aggregated scores on public pages
-- **Vote persistence** - Track per-user votes (anonymous via IP hash, logged-in via session)
+- **Vote persistence** - Track per-user votes (anonymous via IP hash, logged-in
+  via session)
 - **Togglable voting** - Enable/disable voting per gallery
 
 ### Gallery Navigation
-- **Top navigation shortcuts** - Optionally show up to three admin-selected favorite galleries or the main gallery page as direct header buttons
+- **Top navigation shortcuts** - Optionally show up to three admin-selected
+  favorite galleries or the main gallery page as direct header buttons
 - **Breadcrumbs** - Navigate hierarchy on public pages
 - **Gallery cards** - Display subgalleries with cover images and metadata
 - **Pagination** - Handle large galleries without overwhelming the browser
-- **Fullscreen viewer** - Lightbox with keyboard navigation, cursor-centered 100-400% zoom/pan, EXIF overlay
+- **Fullscreen viewer** - Lightbox with keyboard navigation, cursor-centered
+  100-400% zoom/pan, EXIF overlay
 - **Picture game** - Side-by-side image comparison game (optional per-gallery)
 
 ### Live Slideshow Speed
 
-Start the existing slideshow with `S` or its play control. Pointer movement reveals two compact, stacked HUD ranges:
-**Photo change speed** and **Transition speed**. Each offers Fast, Medium and Slow. Their default timings are
-1/2/4 seconds of stable photo display and 0.5/1/2 seconds of blending, respectively; Medium preserves existing playback.
-Changes take effect immediately and independently. The interval replaces the pending automatic cycle; transition speed
-is captured by the next blend, leaving an animation already running intact. A photo still waits for full-image decode
-before advancing. Native range arrow keys adjust speed. Actual input restarts the HUD inactivity timer; after inactivity
-all HUD controls and the optional developer panel disappear, even if a range remains focused or hovered. A pointer
-drag holds the controls visible until release, and automatic advances do not shorten the input inactivity window.
+Start the existing slideshow with `S` or its play control. Pointer movement
+reveals two compact, stacked HUD ranges:
+**Photo change speed** and **Transition speed**. Each offers Fast, Medium and
+Slow. Their default timings are
+1/2/4 seconds of stable photo display and 0.5/1/2 seconds of blending,
+respectively; Medium preserves existing playback.
+Changes take effect immediately and independently. The interval replaces the
+pending automatic cycle; transition speed
+is captured by the next blend, leaving an animation already running intact. A
+photo still waits for full-image decode
+before advancing. Native range arrow keys adjust speed. Actual input restarts
+the HUD inactivity timer; after inactivity
+all HUD controls and the optional developer panel disappear, even if a range
+remains focused or hovered. A pointer
+drag holds the controls visible until release, and automatic advances do not
+shorten the input inactivity window.
 Both ranges run from Slow on the left through Medium to Fast on the right.
-Choices remain only in the current viewer instance, including stop/resume and close/reopen; reloading resets them.
+Choices remain only in the current viewer instance, including stop/resume and
+close/reopen; reloading resets them.
 
 ### Gallery music and slideshow soundtrack
 
 Upload music through the ordinary Upload photos chooser/drop queue alongside
 photographs and PDFs, or through the gallery editor's separate Music table.
-Arrange tracks, remove them and save whether slideshow starts music automatically
+Arrange tracks, remove them and save whether slideshow starts music
+automatically
 (initially off). MP3, M4A, AAC, Ogg/Opus, WAV, FLAC and WebM are accepted,
-subject to browser codecs/PHP limits: 64 MiB each, 100 tracks, 512 MiB per gallery.
+subject to browser codecs/PHP limits: 64 MiB each, 100 tracks, 512 MiB per
+gallery.
 
 PDF/music lists open from compact count launchers into bounded scrollable
 applets. Each music row has one Play/Stop icon before its title; long titles
 truncate and scroll only while playing (static with reduced motion). Closing
-the list keeps its miniplayer and audio available. The table shows duration. Compact
-Previous/Play/Stop/Next controls are also available on the page and in the viewer
+the list keeps its miniplayer and audio available. The table shows duration.
+Compact
+Previous/Play/Stop/Next controls are also available on the page and in the
+viewer
 whenever music exists. One shared player prevents overlap between rows, editor
 and slideshow; the playlist repeats in saved order. Enabled slideshow starts at
 the first track and replaces other music. Stopping/closing the viewer releases
@@ -203,7 +409,8 @@ its owned music. Independently started table playback can continue.
 Smart Galleries merge visible music from all accessible canonical photo sources,
 independent of pagination/filtering. Identical original bytes appear once even
 when renamed; equal names/durations do not remove different audio. The Smart
-editor has its own default-off slideshow music preference. No originals are copied.
+editor has its own default-off slideshow music preference. No originals are
+copied.
 
 Downloads start locked for every upload. Administrator row/header icons allow
 individual/all current tracks; visitors see download icons only when allowed.
@@ -214,75 +421,136 @@ omit music. See [the music contract](docs/GALLERY_MUSIC.md).
 
 ### Lightbox Image Zoom
 
-Open any public photograph and use the visible `−`, percentage/reset, and `+` controls to inspect details from 100% to
-400%. The same controls remain available in fullscreen. Keyboard users can press `+`/`=`, `-`/`_`, and `0`.
-Ordinary mouse-wheel input or two-finger trackpad scrolling pans an enlarged photograph in both axes without changing
-its zoom; at 100% this leaves the fitted photograph unchanged. Ctrl+wheel or a trackpad pinch zooms the image around
-the pointer (including Safari's native gesture events), while Command+wheel remains browser-owned. Pinching on a
-touchscreen anchors the midpoint. A single finger drags an enlarged photograph; at 100% a horizontal swipe changes
-photos, and switching between swipe, pinch and pan never also navigates. When no valid pointer anchor is available,
+Open any public photograph and use the visible `−`, percentage/reset, and `+`
+controls to inspect details from 100% to
+400%. The same controls remain available in fullscreen. Keyboard users can press
+`+`/`=`, `-`/`_`, and `0`.
+Ordinary mouse-wheel input or two-finger trackpad scrolling pans an enlarged
+photograph in both axes without changing
+its zoom; at 100% this leaves the fitted photograph unchanged. Ctrl+wheel or a
+trackpad pinch zooms the image around
+the pointer (including Safari's native gesture events), while Command+wheel
+remains browser-owned. Pinching on a
+touchscreen anchors the midpoint. A single finger drags an enlarged photograph;
+at 100% a horizontal swipe changes
+photos, and switching between swipe, pinch and pan never also navigates. When no
+valid pointer anchor is available,
 discrete zoom uses the photograph center.
 
-The 100% photograph is fitted and centered inside the stage. Zoom does not enlarge pixels inside a fixed 100% frame.
-Instead, the real `.lightbox-zoom-surface` grows symmetrically around the fitted photograph center and is translated only
-for pan. Cursor anchoring is calculated from the canonical fitted dimensions, current scale, and current translation,
-rather than from a CSS transition that may still be between frames. Repeated wheel or keyboard zoom therefore does not
-accumulate drift toward a corner. In fullscreen, the stage clips the enlarged photograph to the viewport while preserving
-horizontal and vertical pan range; the close and other HUD controls remain above the zoomed media layer and clickable.
+The 100% photograph is fitted and centered inside the stage. Zoom does not
+enlarge pixels inside a fixed 100% frame.
+Instead, the real `.lightbox-zoom-surface` grows symmetrically around the fitted
+photograph center and is translated only
+for pan. Cursor anchoring is calculated from the canonical fitted dimensions,
+current scale, and current translation,
+rather than from a CSS transition that may still be between frames. Repeated
+wheel or keyboard zoom therefore does not
+accumulate drift toward a corner. In fullscreen, the stage clips the enlarged
+photograph to the viewport while preserving
+horizontal and vertical pan range; the close and other HUD controls remain above
+the zoomed media layer and clickable.
 
-Zoom is temporary browser presentation state. Moving to another photograph, starting slideshow, closing, or reopening
-the viewer returns to a centered 100% view. A pure fullscreen toggle preserves the current scale and reclamps translation
+Zoom is temporary browser presentation state. Moving to another photograph,
+starting slideshow, closing, or reopening
+the viewer returns to a centered 100% view. A pure fullscreen toggle preserves
+the current scale and reclamps translation
 to the new viewport.
 
-The viewer starts with the generated preview when it contains enough pixels for the current 100% stage. A passive
-quality calculation may promote a very large or high-DPI 100% view. The moment the visitor deliberately zooms above
-100%, however, the active image is switched directly to its existing protected full/original display URL in that same
-input action. It does not wait for fullscreen, resize, a density threshold, an animation frame, or a detached decode pass.
-The currently visible preview can remain on screen only while the original response transfers. The zoom frame and pan
-state stay unchanged when the sharper resource becomes visible, so changing between lightbox and fullscreen is never
-required to refresh image quality. A translated loading pill and activity indicator remain visible while the larger source
+The viewer starts with the generated preview when it contains enough pixels for
+the current 100% stage. A passive
+quality calculation may promote a very large or high-DPI 100% view. The moment
+the visitor deliberately zooms above
+100%, however, the active image is switched directly to its existing protected
+full/original display URL in that same
+input action. It does not wait for fullscreen, resize, a density threshold, an
+animation frame, or a detached decode pass.
+The currently visible preview can remain on screen only while the original
+response transfers. The zoom frame and pan
+state stay unchanged when the sharper resource becomes visible, so changing
+between lightbox and fullscreen is never
+required to refresh image quality. A translated loading pill and activity
+indicator remain visible while the larger source
 is being prepared.
 
-Only the active photograph is upgraded. The viewer never constructs a raw-file URL and does not eagerly download full
-sources for neighboring photos. A failed full-source request restores the authorized preview and leaves zoom/pan usable.
-Very large originals can still use substantial bandwidth and decoded memory, and sharpness cannot exceed the detail in
+Only the active photograph is upgraded. The viewer never constructs a raw-file
+URL and does not eagerly download full
+sources for neighboring photos. A failed full-source request restores the
+authorized preview and leaves zoom/pan usable.
+Very large originals can still use substantial bandwidth and decoded memory, and
+sharpness cannot exceed the detail in
 the stored source or DNG display master.
 
-The feature does not store a preference or alter files or metadata. Preview and full requests continue through the same
-authorized thumbnail/media routes, so gallery, share, NSFW, map, voting, pagination, Smart Gallery, and no-JavaScript
+The feature does not store a preference or alter files or metadata. Preview and
+full requests continue through the same
+authorized thumbnail/media routes, so gallery, share, NSFW, map, voting,
+pagination, Smart Gallery, and no-JavaScript
 behavior remains unchanged.
 
 ### Downloading
-- **ZIP archives** - Download a single gallery, Smart Gallery, or all accessible galleries
-- **Progressive browser downloads** - Modern browsers POST for a short-lived resource-scoped capability, receive a bounded private manifest, and stream independently authorized originals into a local ZIP with progress, cancellation, retry, duplicate-name handling, and ZIP64 support
-- **Revision-keyed manifest reuse** - Repeated progressive requests reuse private capability-free metadata for unchanged content; visitor authorization and capability validation still run on every protected request, and Smart Gallery result membership is recomputed before reuse
-- **Explicit no-JavaScript fallback** - Legacy server ZIP preparation is POST-only, separately capability-scoped, file/byte bounded, single-flight/global-admission controlled, and reuses immutable managed artifacts; GET/HEAD compatibility requests never build ZIPs
-- **Unthrottled authorized source transfer** - Original files remain private and are streamed through the authorized PHP source endpoint; the project does not require hosting-specific internal-redirect modules
+- **ZIP archives** - Download a single gallery, Smart Gallery, or all accessible
+  galleries
+- **Progressive browser downloads** - Modern browsers POST for a short-lived
+  resource-scoped capability, receive a bounded private manifest, and stream
+  independently authorized originals into a local ZIP with progress,
+  cancellation, retry, duplicate-name handling, and ZIP64 support
+- **Revision-keyed manifest reuse** - Repeated progressive requests reuse
+  private capability-free metadata for unchanged content; visitor authorization
+  and capability validation still run on every protected request, and Smart
+  Gallery result membership is recomputed before reuse
+- **Explicit no-JavaScript fallback** - Legacy server ZIP preparation is
+  POST-only, separately capability-scoped, file/byte bounded,
+  single-flight/global-admission controlled, and reuses immutable managed
+  artifacts; GET/HEAD compatibility requests never build ZIPs
+- **Unthrottled authorized source transfer** - Original files remain private and
+  are streamed through the authorized PHP source endpoint; the project does not
+  require hosting-specific internal-redirect modules
 - **Signed downloads** - Optional signature verification for secure links
 
-Deployment-tunable download limits are centralized in `app/configuration_defaults.php` and may be selectively overridden through `runtime_limits` in local `config.php`. Stage 7 manifest-cache defaults are 24 hours for physical galleries, 15 minutes for Smart Galleries, 16 MiB maximum metadata-entry size, and 10,000 entries per bounded maintenance scan. Existing installations require no configuration edit after update.
+Deployment-tunable download limits are centralized in
+`app/configuration_defaults.php` and may be selectively overridden through
+`runtime_limits` in local `config.php`. Stage 7 manifest-cache defaults are 24
+hours for physical galleries, 15 minutes for Smart Galleries, 16 MiB maximum
+metadata-entry size, and 10,000 entries per bounded maintenance scan. Existing
+installations require no configuration edit after update.
 
 ### Theming & Customization
-- **Theme editor** - Customize colors, fonts, gallery gaps/padding, elevation, public typography, transparent public header and default lightbox browsing mode, with live preview and independent resets
-- **Lightbox browsing modes** - Use the classic single image viewer, a picture strip, or a focused 3D carousel as a Theme default with per-gallery overrides
+- **Theme editor** - Customize colors, fonts, gallery gaps/padding, elevation,
+  public typography, transparent public header and default lightbox browsing
+  mode, with live preview and independent resets
+- **Lightbox browsing modes** - Use the classic single image viewer, a picture
+  strip, or a focused 3D carousel as a Theme default with per-gallery overrides
 - **Dark mode** - Switch between light and dark themes
-- **Language support** - English, Czech, German, and Swedish; English fallback retained
+- **Language support** - English, Czech, German, and Swedish; English fallback
+  retained
 - **Gallery branding** - Per-gallery logo, background, cover image
 - **Site branding** - Site-wide logo and background
-- **Custom CSS** - Keep preset/upload CSS and edit a separate final public override layer in the browser, with protected saves, stale-tab detection and isolated draft preview
-- **Layout control** - Choose gallery card layout (vertical/horizontal) and favorite gallery/main-page shortcuts
+- **Custom CSS** - Keep preset/upload CSS and edit a separate final public
+  override layer in the browser, with protected saves, stale-tab detection and
+  isolated draft preview
+- **Layout control** - Choose gallery card layout (vertical/horizontal) and
+  favorite gallery/main-page shortcuts
 
 ### Updates & Maintenance
-- **One-click updates** - Check GitHub and install newer versions from admin dashboard
+- **One-click updates** - Check GitHub and install newer versions from admin
+  dashboard
 - **Update channels** - Follow stable or beta release branches
 - **Patch notes viewer** - Cached release notes with version browsing
-- **Backup on update** - Changed/removed application files preserved in each durable job under `cache/updates/jobs/<job-id>/rollback/`
+- **Backup on update** - Changed/removed application files preserved in each
+  durable job under `cache/updates/jobs/<job-id>/rollback/`
 - **Emergency recovery** - Revert to stable branch from `reset.php`
-- **Database migrations** - Automatic schema evolution with admin-triggerable execution
-- **Database inspection** - Explicit full-schema inventory with migration/code audit, cleanup reasons, and protected-table policies
-- **Safe logical cleanup** - Dry-run and bounded resumable removal of proven orphans, deterministic duplicates, and explicitly expired temporary state, with exact row identities audited transactionally
-- **Physical database maintenance** - Selected `ANALYZE TABLE`, selected-table optimization previews, and separately confirmed selected `OPTIMIZE TABLE`, never automatic
-- **Admin log archive maintenance** - Configure live-log retention, create protected day archives, inspect archive state, and recover safely after interrupted archive work
+- **Database migrations** - Automatic schema evolution with admin-triggerable
+  execution
+- **Database inspection** - Explicit full-schema inventory with migration/code
+  audit, cleanup reasons, and protected-table policies
+- **Safe logical cleanup** - Dry-run and bounded resumable removal of proven
+  orphans, deterministic duplicates, and explicitly expired temporary state,
+  with exact row identities audited transactionally
+- **Physical database maintenance** - Selected `ANALYZE TABLE`, selected-table
+  optimization previews, and separately confirmed selected `OPTIMIZE TABLE`,
+  never automatic
+- **Admin log archive maintenance** - Configure live-log retention, create
+  protected day archives, inspect archive state, and recover safely after
+  interrupted archive work
 
 ### Admin Tools
 
@@ -301,25 +569,46 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 
 #### Upload Interface
 - Multi-file upload to existing or new gallery
-- Paste clipboard images/screenshots with Ctrl+V (Windows/Linux) or Cmd+V (macOS) into the focused upload area; images join the same file selection and upload workflow
-- In the right-hand upload drawer, repeated paste/picker/drop choices accumulate in one removable, reorderable preview queue. Submit once using the ordinary upload button. Unsupported or oversized previews keep the original file; an unresolved upload preserves its exact retry selection. The queue is local to the open page, not a persisted draft or a Commit/Reset publishing workflow. See [selection safety and limits](docs/UPLOAD_SELECTION.md).
+- Paste clipboard images/screenshots with Ctrl+V (Windows/Linux) or Cmd+V
+  (macOS) into the focused upload area; images join the same file selection and
+  upload workflow
+- In the right-hand upload drawer, repeated paste/picker/drop choices accumulate
+  in one removable, reorderable preview queue. Submit once using the ordinary
+  upload button. Unsupported or oversized previews keep the original file; an
+  unresolved upload preserves its exact retry selection. The queue is local to
+  the open page, not a persisted draft or a Commit/Reset publishing workflow.
+  See [selection safety and limits](docs/UPLOAD_SELECTION.md).
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
 - Validation of file types and sizes
-- Optional browser-side preparation with client thumbnails, EXIF metadata, bounded ZIP batches, and server-side validation; the configured ZIP size is a normal packing target, while one oversized atomic image package may use a singleton batch up to the detected PHP upload limit; user-selected ZIP archives are unpacked locally and contribute only supported images
-- Explicit browser-side processing for selected photos: when checked, client preparation failures stop before persistence instead of silently switching thumbnail generation to PHP; uncheck the option to choose the standard server-side upload path
+- Optional browser-side preparation with client thumbnails, EXIF metadata,
+  bounded ZIP batches, and server-side validation; the configured ZIP size is a
+  normal packing target, while one oversized atomic image package may use a
+  singleton batch up to the detected PHP upload limit; user-selected ZIP
+  archives are unpacked locally and contribute only supported images
+- Explicit browser-side processing for selected photos: when checked, client
+  preparation failures stop before persistence instead of silently switching
+  thumbnail generation to PHP; uncheck the option to choose the standard
+  server-side upload path
 
 #### Gallery Management
 - Gallery list with filtering and search
 - Expandable/collapsible hierarchy tree
 - Bulk rename, delete, move galleries
-- Recoverable gallery trash bin: gallery subtree deletes move out of the live gallery root, can be restored from Admin > Maintenance > Trash, and remain indefinitely by default unless manually purged; optional retention-based auto-purge is disabled by default
+- Recoverable gallery trash bin: gallery subtree deletes move out of the live
+  gallery root, can be restored from Admin > Maintenance > Trash, and remain
+  indefinitely by default unless manually purged; optional retention-based
+  auto-purge is disabled by default
 - Reorder galleries within parent hierarchy
 - Inline gallery editing with side panel and public-card visibility eye controls
 - Cover image selection and upload
 - Manual gallery date ranges with From and To fields
-- EXIF-derived date range suggestions that can be applied directly from a gallery editor without a full page reload, or reviewed, edited and ignored per gallery branch
-- Duplicate photo detector in the gallery Admin side panel with selected-branch/all-gallery scope, linked gallery/photo context, per-admin reviewed-pair/exact-gallery ledger controls, and AJAX **Delete this** cleanup
+- EXIF-derived date range suggestions that can be applied directly from a
+  gallery editor without a full page reload, or reviewed, edited and ignored per
+  gallery branch
+- Duplicate photo detector in the gallery Admin side panel with
+  selected-branch/all-gallery scope, linked gallery/photo context, per-admin
+  reviewed-pair/exact-gallery ledger controls, and AJAX **Delete this** cleanup
 
 #### Image Management
 - Per-gallery image grid
@@ -349,7 +638,8 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 - File-to-database consistency checking
 - Automatic thumbnail rebuilding when needed
 - Database migration runner
-- Scheduled maintenance for bounded thumbnail checks, metadata refresh, and cleanup work
+- Scheduled maintenance for bounded thumbnail checks, metadata refresh, and
+  cleanup work
 - File permission diagnostics
 
 #### Account Settings
@@ -372,15 +662,18 @@ Deployment-tunable download limits are centralized in `app/configuration_default
 
 ### Fast Shared-Hosting Installation (Recommended)
 
-The easiest way to install on shared hosting is the one-file bootstrap installer:
+The easiest way to install on shared hosting is the one-file bootstrap
+installer:
 
 Before starting, select a maintained PHP version in the hosting control panel
 (PHP 8.3 minimum deployment recommendation; PHP 8.5 preferred). Verify both the
 web runtime and any CLI used for maintenance. The installer's PHP 8.1 check is a
 compatibility floor, not an upstream security-support guarantee.
 
-1. **Create database** - Create an empty MySQL or MariaDB database in your hosting control panel
-2. **Upload one file** - Upload `setup-gallery.php` via FTP to your web directory
+1. **Create database** - Create an empty MySQL or MariaDB database in your
+   hosting control panel
+2. **Upload one file** - Upload `setup-gallery.php` via FTP to your web
+   directory
 3. **Open in browser** - Visit `https://example.com/setup-gallery.php`
 4. **Run installer** - Click "Download and start installer"
 5. **Configure** - Enter database credentials, choose admin username/password
@@ -394,42 +687,58 @@ The bootstrap installer:
 - Generates `config.php` with your settings
 - Creates `galleries/` and `cache/` folders
 
-After successful installation, you can delete `setup-gallery.php` via FTP as an extra hardening step.
+After successful installation, you can delete `setup-gallery.php` via FTP as an
+extra hardening step.
 
-`install.php` applies migrations before creating the administrator, `config.php`,
+`install.php` applies migrations before creating the administrator,
+`config.php`,
 or the installation lock. Migration repairs use the verified installer database
 connection, including the shared gallery-writer lock, and the default gallery
 storage until configuration exists. If a migration fails, correct the reported
 cause and submit the administrator step again: completed migrations remain in
-`schema_migrations`, and the failed callback remains pending. Preserve that ledger;
+`schema_migrations`, and the failed callback remains pending. Preserve that
+ledger;
 do not clear the database or remove configuration/locks from a completed site.
 
 ### Correcting the installed website address
 
-After installation, open **Admin > Settings > Website address** to correct the public URL. Enter an absolute address such as `https://example.com`, including a subdirectory only when the gallery is actually installed there. Saving updates only `base_url` in local `config.php`, preserves other configuration, and requires write access to the file and its directory. No database setting is created or changed. Computed/custom configuration that cannot be safely edited remains a manual file-editing task.
+After installation, open **Admin > Settings > Website address** to correct the
+public URL. Enter an absolute address such as `https://example.com`, including a
+subdirectory only when the gallery is actually installed there. Saving updates
+only `base_url` in local `config.php`, preserves other configuration, and
+requires write access to the file and its directory. No database setting is
+created or changed. Computed/custom configuration that cannot be safely edited
+remains a manual file-editing task.
 
 ### Requirements
 
 **Minimum compatibility:**
 
 - PHP 8.1 or newer (PHP 8.1 is upstream end of life)
-- PDO MySQL connected to a MySQL or MariaDB server; project-tested database versions and legacy guidance are listed in [Database support](docs/DATABASE_SUPPORT.md)
+- PDO MySQL connected to a MySQL or MariaDB server; project-tested database
+  versions and legacy guidance are listed in
+  [Database support](docs/DATABASE_SUPPORT.md)
 - PDO MySQL extension
 - ZipArchive extension
 - GD extension (for thumbnail generation)
 
 **Recommended:**
 
-- Latest patch release of maintained PHP 8.3 or newer; prefer PHP 8.5 after staging checks
-- Both `intl` and `mbstring` for Unicode title completion; the supported fallback matches ASCII only
+- Latest patch release of maintained PHP 8.3 or newer; prefer PHP 8.5 after
+  staging checks
+- Both `intl` and `mbstring` for Unicode title completion; the supported
+  fallback matches ASCII only
 - Apache with `.htaccess` support (for pretty URLs)
 - Outbound HTTPS access (for updates and GitHub release notes)
 
 **Shared hosting considerations:**
 - Query-string routes work without Apache rewrites
-- If FTP upload limits file size, split the upload (e.g., `public/assets/` separately)
+- If FTP upload limits file size, split the upload (e.g., `public/assets/`
+  separately)
 - Contact host support if outbound downloads are blocked
-- Check the exact database series with the [database support policy](docs/DATABASE_SUPPORT.md); a newer server version is not automatically project-qualified
+- Check the exact database series with the
+  [database support policy](docs/DATABASE_SUPPORT.md); a newer server version is
+  not automatically project-qualified
 
 ### Full Package Installation
 
@@ -445,7 +754,8 @@ If you prefer to upload the complete package manually:
 
 ### Manual Shell Setup
 
-If you prefer command-line setup or your host doesn't allow browser installation:
+If you prefer command-line setup or your host doesn't allow browser
+installation:
 
 Check that the CLI and web server use the intended maintained PHP branch and
 extensions; they may load different runtime configurations. After setup, **Admin
@@ -470,7 +780,8 @@ php scripts/migrate.php
 php scripts/create_admin.php myusername mypassword
 ```
 
-Then visit `https://example.com/index.php?page=setup&key=YOUR_SETUP_KEY` to verify schema is current.
+Then visit `https://example.com/index.php?page=setup&key=YOUR_SETUP_KEY` to
+verify schema is current.
 
 ### Local Development
 
@@ -490,25 +801,73 @@ Then open `http://localhost:8000/` in your browser.
 
 ### Centralized Settings
 
-Use **Settings** in the Admin navigation as the central overview for important global configuration. The hub is intentionally not one giant form. It groups stable peer sections for General, Website address, Public appearance, Content, Media and browsing, Uploads and automation, Privacy and diagnostics, and Advanced configuration. Each section shows current values and whether a value is explicitly configured, inherited, or using its default.
+Use **Settings** in the Admin navigation as the central overview for important
+global configuration. The hub is intentionally not one giant form. It groups
+stable peer sections for General, Website address, Public appearance, Content,
+Media and browsing, Uploads and automation, Privacy and diagnostics, and
+Advanced configuration. Each section shows current values and whether a value is
+explicitly configured, inherited, or using its default.
 
-The hub can directly edit only settings that already have a safe canonical service setter: site name, public language, URL rewrite, public search when available, the public thumbnail renderer, the global EXIF/GPS display default when its existing schema is ready, and development diagnostics. Theme layout, tag presentation, upload tuning, telemetry, Account credentials, language-pack editing, raw CSS, API keys, database tools and destructive maintenance remain on their existing specialized pages. Those pages remain fully supported and link back to the relevant Settings section.
+The hub can directly edit only settings that already have a safe canonical
+service setter: site name, public language, URL rewrite, public search when
+available, the public thumbnail renderer, the global EXIF/GPS display default
+when its existing schema is ready, and development diagnostics. Theme layout,
+tag presentation, upload tuning, telemetry, Account credentials, language-pack
+editing, raw CSS, API keys, database tools and destructive maintenance remain on
+their existing specialized pages. Those pages remain fully supported and link
+back to the relevant Settings section.
 
-**Admin > Features** is the separate master-capability surface. A switch records the configured administrator preference; dependencies can make a configured feature temporarily ineffective without erasing that preference. Disabled capability-owned routes and navigation are hidden or guarded centrally. Feature masters are non-destructive: disabling Smart Galleries, Gallery Trash, authored translations, duplicate detection, public tag browsing, Viewer Accounts, or another persistent optional subsystem does not delete its stored data. Re-enabling the master restores access to the existing state. Shared pages retain unrelated core/read-only functions, for example update status/checks and database inspection/dry-run remain available when their installer/advanced-maintenance masters are disabled.
+**Admin > Features** is the separate master-capability surface. A switch records
+the configured administrator preference; dependencies can make a configured
+feature temporarily ineffective without erasing that preference. Disabled
+capability-owned routes and navigation are hidden or guarded centrally. Feature
+masters are non-destructive: disabling Smart Galleries, Gallery Trash, authored
+translations, duplicate detection, public tag browsing, Viewer Accounts, or
+another persistent optional subsystem does not delete its stored data.
+Re-enabling the master restores access to the existing state. Shared pages
+retain unrelated core/read-only functions, for example update status/checks and
+database inspection/dry-run remain available when their
+installer/advanced-maintenance masters are disabled.
 
-Version 0.97 adds a recoverable gallery trash bin. Administrator gallery deletion now moves the complete selected subtree out of the live gallery root and stores a durable metadata snapshot before removing live rows. Administrators can restore an entry to its original path, permanently delete one entry, or empty the trash in bounded batches from **Maintenance > Trash**. Trash is enabled by default; optional retention-based automatic purge is disabled by default and integrates with scheduled Site Maintenance. Existing installations receive the required state-machine storage through two ordered migrations.
+Version 0.97 adds a recoverable gallery trash bin. Administrator gallery
+deletion now moves the complete selected subtree out of the live gallery root
+and stores a durable metadata snapshot before removing live rows. Administrators
+can restore an entry to its original path, permanently delete one entry, or
+empty the trash in bounded batches from **Maintenance > Trash**. Trash is
+enabled by default; optional retention-based automatic purge is disabled by
+default and integrates with scheduled Site Maintenance. Existing installations
+receive the required state-machine storage through two ordered migrations.
 
-Settings links use stable identifiers such as `?page=admin_settings&section=appearance`. JavaScript tab changes preserve the section query without adding a scroll-driving fragment, so Back/Forward and refresh retain the section and the wizard launcher remains visible. Without JavaScript, the tab links load the same section as normal pages. See `docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks, sensitivity and migration status.
+Settings links use stable identifiers such as
+`?page=admin_settings&section=appearance`. JavaScript tab changes preserve the
+section query without adding a scroll-driving fragment, so Back/Forward and
+refresh retain the section and the wizard launcher remains visible. Without
+JavaScript, the tab links load the same section as normal pages. See
+`docs/ADMIN_SETTINGS_INVENTORY.md` for canonical ownership, defaults, fallbacks,
+sensitivity and migration status.
 
 #### Guided Setup Wizard
 
-Choose **Setup Wizard** at the top of Settings to start or resume an administrator-bound session draft. The wizard covers the same eight registry sections and offers short subsections, Advanced/Expert disclosure, localized help and live Theme preview. Next, Back and Skip only stage choices; they do not save configuration. Review the proposed changes, check the approval box and apply once to persist supported values. Cancel or restart discards the draft.
+Choose **Setup Wizard** at the top of Settings to start or resume an
+administrator-bound session draft. The wizard covers the same eight registry
+sections and offers short subsections, Advanced/Expert disclosure, localized
+help and live Theme preview. Next, Back and Skip only stage choices; they do not
+save configuration. Review the proposed changes, check the approval box and
+apply once to persist supported values. Cancel or restart discards the draft.
 
-Supported values include the safe central Settings fields, basic Theme appearance/layout and hero-tag options, bounded upload and telemetry preferences, thumbnail warm-up, SEO guard, Trash, automatic-update and Scheduled Maintenance preferences. Credentials, file uploads, API-key actions, gallery-storage relocation and destructive tools remain informational. Use their specialized pages after leaving the draft. Skips preserve current values; saving checks schema readiness and rejects concurrent changes rather than silently overwriting them. Per-gallery overrides stay with their galleries.
+Supported values include the safe central Settings fields, basic Theme
+appearance/layout and hero-tag options, bounded upload and telemetry
+preferences, thumbnail warm-up, SEO guard, Trash, automatic-update and Scheduled
+Maintenance preferences. Credentials, file uploads, API-key actions,
+gallery-storage relocation and destructive tools remain informational. Use their
+specialized pages after leaving the draft. Skips preserve current values; saving
+checks schema readiness and rejects concurrent changes rather than silently
+overwriting them. Per-gallery overrides stay with their galleries.
 
 ### Initial Setup (First Time)
 
-1. Log in at `?page=admin_login` with the admin account you created during installation
+1. Log in at `?page=admin_login` with the admin account you created during
+   installation
 2. Go to **Discovery** to scan for new gallery folders on disk
 3. Review detected folders and import selected ones
 4. Leave "Create optimized thumbnails" checked for better performance
@@ -523,18 +882,72 @@ Supported values include the safe central Settings fields, basic Theme appearanc
 2. Use admin **Discovery** to import the new folder
 
 **Option B: From Admin Interface**
-1. Use a gallery's **+** control to create a child, or the Admin create action for a root gallery. The right-side create panel asks only for a title; its parent is the gallery from which it was opened. Title completion remains available while typing.
-2. Submit the title. The new gallery is created as **Unpublished** and its full editor opens in the same panel. The public page URL does not change.
-3. In **Identity**, add the description, date or date range, source language, tags, and optional SimBrief flight data. Select **Remember for future galleries** beside the SimBrief identifier or language to save that value for your administrator account. A later editor shows a small note beside a value pre-filled from those saved defaults.
-4. Use **API**, **Access**, **Display**, and **Media** for the remaining settings. The editor's **Save gallery** bar stays at the bottom of the panel as you switch settings tabs. Upload photographs from **Images** or the upload action, then publish when ready.
+1. Use a gallery's **+** control to create a child, or the Admin create action
+   for a root gallery. The right-side create panel asks only for a title; its
+   parent is the gallery from which it was opened. Title completion remains
+   available while typing.
+2. Submit the title. The new gallery is created as **Unpublished** and its full
+   editor opens in the same panel. The public page URL does not change.
+3. In **Identity**, add the description, date or date range, source language,
+   tags, and optional SimBrief flight data. Select **Remember for future
+   galleries** beside the SimBrief identifier or language to save that value for
+   your administrator account. A later editor shows a small note beside a value
+   pre-filled from those saved defaults.
+4. Use **API**, **Access**, **Display**, and **Media** for the remaining
+   settings. The editor's **Save gallery** bar stays at the bottom of the panel
+   as you switch settings tabs. Upload photographs from **Images** or the upload
+   action, then publish when ready.
 
-The direct Admin create page remains available without the side panel. It offers the title, SimBrief import, description, language, and tags up front, with folder, visibility, date, parent, voting, filename display, and count badge under **More options**. Its summary shows the chosen visibility and parent. The upload-and-create workflow still uses its dedicated upload form.
+The direct Admin create page remains available without the side panel. It offers
+the title, SimBrief import, description, language, and tags up front, with
+folder, visibility, date, parent, voting, filename display, and count badge
+under **More options**. Its summary shows the chosen visibility and parent. The
+upload-and-create workflow still uses its dedicated upload form.
 
-SimBrief accepts one visible **Pilot ID or name** field: digits alone mean a Pilot ID; other text is treated as a pilot name. An import into a new-gallery form creates an editable description preview and a private, 30-minute OFP draft bound to the current administrator session. The draft is attached only after gallery creation; a changed identifier invalidates it. If the remote request or optional attachment fails, the gallery can still be edited, and a successful creation reports any attachment warning. Saved creation defaults require migration `202609250001_gallery_creation_preferences.php`; when that storage is unavailable, ordinary name-first creation remains usable, while attempts to save new defaults are refused with migration guidance.
+SimBrief accepts one visible **Pilot ID or name** field: digits alone mean a
+Pilot ID; other text is treated as a pilot name. An import into a new-gallery
+form creates an editable description preview and a private, 30-minute OFP draft
+bound to the current administrator session. The draft is attached only after
+gallery creation; a changed identifier invalidates it. If the remote request or
+optional attachment fails, the gallery can still be edited, and a successful
+creation reports any attachment warning. Saved creation defaults require
+migration `202609250001_gallery_creation_preferences.php`; when that storage is
+unavailable, ordinary name-first creation remains usable, while attempts to save
+new defaults are refused with migration guidance.
 
-SimBrief draft import also fills the existing route editor with the complete filed route, adding missing departure and arrival airports without duplicating endpoint or runway tokens. Descriptions in every maintained language retain the full route, including long routes. Importing stages the OFP and map points until the gallery is saved; editing the route, identifier, description, or source language during a request preserves the entered values and asks for another import. Saved maps retain the original OFP coordinates.
+SimBrief draft import also fills the existing route editor with the complete
+filed route, adding missing departure and arrival airports without duplicating
+endpoint or runway tokens. Descriptions in every maintained language retain the
+full route, including long routes. Importing stages the OFP and map points until
+the gallery is saved; editing the route, identifier, description, or source
+language during a request preserves the entered values and asks for another
+import. Saved maps retain the original OFP coordinates.
 
-Saved SimBrief OFP PDFs open in an independent, gallery-authorized PDF.js lightbox. Reset and width/page fitting restore a readable, proportional PDF after manual zoom or window resizing. **F** toggles fullscreen, while **Escape** exits fullscreen before closing the document. In fullscreen, the PDF header and toolbar float above the document and automatically hide after pointer inactivity, revealing on pointer or keyboard interaction. An ordinary mouse wheel or two-finger trackpad scroll moves the document without changing its scale; **Ctrl+wheel or trackpad pinch** zooms the PDF at the cursor. Command+wheel remains browser-owned. On touchscreens, one finger pans PDF pages and two fingers zoom, including one-finger continuation after a pinch. PDF controls retain a fixed, accessible high-contrast palette independent of gallery theme settings. Whole-page fit is the default; fit width, actual size, and zoom reset remain available. Navigating PDF pages does not navigate gallery photos. View/download links are compact; the separate admin-only private page-subgallery action has localized help under a question-mark control. A fresh anonymous visitor can view and download an OFP saved in a **public or unpublished (unlisted)** gallery through the dedicated same-origin `gallery_ofp_pdf` route, provided that the gallery is accessible to that visitor. The link is rooted at the real installation path, including `/galerie/index.php` without URL rewriting, rather than a possibly different configured host. Unpublished galleries remain accessible via their direct URLs; genuinely private galleries are denied without an existing gallery-access grant, and password, share and NSFW gates are enforced. Failed or unauthorized PDF requests return an opaque uncached text response instead of an HTML error page; historical `media&ofp=1` URLs remain accepted.
+Saved SimBrief OFP PDFs open in an independent, gallery-authorized PDF.js
+lightbox. Reset and width/page fitting restore a readable, proportional PDF
+after manual zoom or window resizing. **F** toggles fullscreen, while **Escape**
+exits fullscreen before closing the document. In fullscreen, the PDF header and
+toolbar float above the document and automatically hide after pointer
+inactivity, revealing on pointer or keyboard interaction. An ordinary mouse
+wheel or two-finger trackpad scroll moves the document without changing its
+scale; **Ctrl+wheel or trackpad pinch** zooms the PDF at the cursor.
+Command+wheel remains browser-owned. On touchscreens, one finger pans PDF pages
+and two fingers zoom, including one-finger continuation after a pinch. PDF
+controls retain a fixed, accessible high-contrast palette independent of gallery
+theme settings. Whole-page fit is the default; fit width, actual size, and zoom
+reset remain available. Navigating PDF pages does not navigate gallery photos.
+View/download links are compact; the separate admin-only private page-subgallery
+action has localized help under a question-mark control. A fresh anonymous
+visitor can view and download an OFP saved in a **public or unpublished
+(unlisted)** gallery through the dedicated same-origin `gallery_ofp_pdf` route,
+provided that the gallery is accessible to that visitor. The link is rooted at
+the real installation path, including `/galerie/index.php` without URL
+rewriting, rather than a possibly different configured host. Unpublished
+galleries remain accessible via their direct URLs; genuinely private galleries
+are denied without an existing gallery-access grant, and password, share and
+NSFW gates are enforced. Failed or unauthorized PDF requests return an opaque
+uncached text response instead of an HTML error page; historical `media&ofp=1`
+URLs remain accepted.
 
 #### Adding Images
 
@@ -549,43 +962,82 @@ Saved SimBrief OFP PDFs open in an independent, gallery-authorized PDF.js lightb
 2. Use admin **Scan for new images** to import them
 3. Create thumbnails from the admin interface
 
-For an existing gallery, open its Admin editor and use **Images > Create all thumbnails** to rebuild only that gallery. Check **Include subgalleries** to cover its descendants as well. Browser-side rebuilding is selected by default when available; clear that option to run generation on the server. **Maintenance > Thumbnails > Create all thumbnails** applies to all galleries and also selects browser generation by default.
+For an existing gallery, open its Admin editor and use **Images > Create all
+thumbnails** to rebuild only that gallery. Check **Include subgalleries** to
+cover its descendants as well. Browser-side rebuilding is selected by default
+when available; clear that option to run generation on the server.
+**Maintenance > Thumbnails > Create all thumbnails** applies to all galleries
+and also selects browser generation by default.
 
 #### Finding Duplicate Photos
 
 1. Open an existing gallery in the Admin editor.
-2. In the Images section, choose **Find duplicate photos**. The detector opens in the existing right-side Admin panel.
-3. Leave **Search all galleries** unchecked to inspect the selected gallery and all nested subgalleries. Enable it explicitly to inspect all galleries available to the administrator.
-4. Start the scan. JavaScript processes stored image metadata in bounded AJAX batches; normal POST forms remain available only as the non-JavaScript/direct-page fallback.
-5. Review deterministic left/right duplicate pairs. Exact pairs use matching SHA-256 content; possible pairs use normalized EXIF evidence. File size is corroborating information only.
-6. Click the gallery title/path to open that public gallery, or the preview/filename/gallery-relative path to open the public photo context. These links open a new tab so the Admin detector panel remains available.
-7. Choose **Ignore this pair from now on** after reviewing one relationship. The canonical image pair is saved to your administrator ledger and is omitted from later searches without suppressing unrelated pair combinations.
-8. Choose **Ignore all from this gallery** independently on the left or right card to suppress future pairs involving that exact gallery. Gallery rules do not imply parent or child galleries, so nested galleries can be reviewed independently.
-9. Use **Clear ledger** to remove your stored pair and gallery decisions and make those findings eligible again.
-10. To remove one confirmed duplicate, choose **Delete this**. With JavaScript enabled, delete and all ledger controls run immediately through AJAX, keep the right-side panel open, do not navigate or reload the page, and refresh only detector state. The delete path reuses the normal gallery image deletion service. POST/redirect behavior is fallback-only.
-11. If older image rows are missing checksums or EXIF metadata, run the existing **Scan/import images** workflow first. The detector reuses stored scanner output and does not re-read every file during result requests.
-12. Apply pending database migrations before using the persistent review ledger. Migration `202608080001_duplicate_photo_ledger.php` creates the two per-administrator ledger tables.
+2. In the Images section, choose **Find duplicate photos**. The detector opens
+   in the existing right-side Admin panel.
+3. Leave **Search all galleries** unchecked to inspect the selected gallery and
+   all nested subgalleries. Enable it explicitly to inspect all galleries
+   available to the administrator.
+4. Start the scan. JavaScript processes stored image metadata in bounded AJAX
+   batches; normal POST forms remain available only as the
+   non-JavaScript/direct-page fallback.
+5. Review deterministic left/right duplicate pairs. Exact pairs use matching
+   SHA-256 content; possible pairs use normalized EXIF evidence. File size is
+   corroborating information only.
+6. Click the gallery title/path to open that public gallery, or the
+   preview/filename/gallery-relative path to open the public photo context.
+   These links open a new tab so the Admin detector panel remains available.
+7. Choose **Ignore this pair from now on** after reviewing one relationship. The
+   canonical image pair is saved to your administrator ledger and is omitted
+   from later searches without suppressing unrelated pair combinations.
+8. Choose **Ignore all from this gallery** independently on the left or right
+   card to suppress future pairs involving that exact gallery. Gallery rules do
+   not imply parent or child galleries, so nested galleries can be reviewed
+   independently.
+9. Use **Clear ledger** to remove your stored pair and gallery decisions and
+   make those findings eligible again.
+10. To remove one confirmed duplicate, choose **Delete this**. With JavaScript
+    enabled, delete and all ledger controls run immediately through AJAX, keep
+    the right-side panel open, do not navigate or reload the page, and refresh
+    only detector state. The delete path reuses the normal gallery image
+    deletion service. POST/redirect behavior is fallback-only.
+11. If older image rows are missing checksums or EXIF metadata, run the existing
+    **Scan/import images** workflow first. The detector reuses stored scanner
+    output and does not re-read every file during result requests.
+12. Apply pending database migrations before using the persistent review ledger.
+    Migration `202608080001_duplicate_photo_ledger.php` creates the two
+    per-administrator ledger tables.
 
 
 #### Organizing Galleries
 
 1. Use **Gallery list** to view the hierarchy
-2. **Bulk actions** to rename, move, or change visibility of multiple galleries at once
+2. **Bulk actions** to rename, move, or change visibility of multiple galleries
+   at once
 3. **Drag-and-drop reordering** to change display order (JavaScript enabled)
-4. **Edit gallery** to change metadata, date range, cover image, tags, description layout, or lightbox browsing-mode override
-5. Use the EXIF date suggestion beside the gallery date range to apply a range computed from that gallery and all subgalleries; the same component is used in the full editor and side-panel editor, JavaScript updates the fields in place, and the normal POST fallback still works
-6. Use **Review branch suggestions** or **Gallery dates** in Admin maintenance to approve, edit or ignore EXIF-derived ranges for a parent trip gallery and its subgalleries
+4. **Edit gallery** to change metadata, date range, cover image, tags,
+   description layout, or lightbox browsing-mode override
+5. Use the EXIF date suggestion beside the gallery date range to apply a range
+   computed from that gallery and all subgalleries; the same component is used
+   in the full editor and side-panel editor, JavaScript updates the fields in
+   place, and the normal POST fallback still works
+6. Use **Review branch suggestions** or **Gallery dates** in Admin maintenance
+   to approve, edit or ignore EXIF-derived ranges for a parent trip gallery and
+   its subgalleries
 
 #### Editing Images
 
 1. Select a gallery to see its images
 2. Click **image thumbnail** to open the side panel editor
-3. Edit title, caption, tags, visibility, or sort order, or use the public-card eye menu to switch visibility directly from the public gallery view
+3. Edit title, caption, tags, visibility, or sort order, or use the public-card
+   eye menu to switch visibility directly from the public gallery view
 4. Or **bulk edit** multiple images at once
 
 #### Managing Tags
 
-Public tag pages can use a dedicated presentation. In Theme > Appearance > Gallery tags, configure galleries per row, rows per page, and the gallery-card design. The Edit tags screen provides a Configure tag display shortcut to these settings.
+Public tag pages can use a dedicated presentation. In Theme > Appearance >
+Gallery tags, configure galleries per row, rows per page, and the gallery-card
+design. The Edit tags screen provides a Configure tag display shortcut to these
+settings.
 
 1. Go to **Tags** in the admin menu
 2. Create new tags with display names, slugs, and descriptions
@@ -614,26 +1066,99 @@ Public tag pages can use a dedicated presentation. In Theme > Appearance > Galle
 
 #### Updating the Application
 
-Public entry points load a dependency-free early runtime guard before the normal bootstrap. During the updater's file-activation critical section, new requests receive a private, non-cacheable `503 Service Unavailable` response until activation is durably complete; authenticated update recovery/status requests remain available. The guard also converts uncaught and catchable fatal PHP failures to bounded `500` responses where PHP can still control the response. Production hosting must keep `display_errors` disabled so the PHP runtime does not print warning or fatal details before the safe response handler runs.
+Public entry points load a dependency-free early runtime guard before the normal
+bootstrap. During the updater's file-activation critical section, new requests
+receive a private, non-cacheable `503 Service Unavailable` response until
+activation is durably complete; authenticated update recovery/status requests
+remain available. The guard also converts uncaught and catchable fatal PHP
+failures to bounded `500` responses where PHP can still control the response.
+Production hosting must keep `display_errors` disabled so the PHP runtime does
+not print warning or fatal details before the safe response handler runs.
 
 1. Go to **Updates** to check GitHub for new versions and read patch notes.
-2. Click **Update**. The Admin panel starts a durable job under `cache/updates/jobs/` and advances it through short authenticated requests instead of holding one PHP request open for the whole release.
-3. The job checkpoints `download`, archive validation, bounded extraction, manifest verification, activation planning, file staging, rollback backup, readiness, activation, migrations, finalization, cleanup, and completion. Archive validation itself checkpoints every 500 entries; individual archive files are capped at 32 MiB and total expanded size at 512 MiB so one extraction unit cannot become an unbounded application payload.
-4. Downloaded archives, extracted files, and the ready tree stay outside the active installation. Every installable release file must be covered by `app/core-manifest.json`; unsafe ZIP paths, symbolic links, oversized archives, missing files, stale manifests, and hash mismatches are rejected before activation.
-5. Preflight hashes the incoming release against the active tree, so byte-identical files are excluded from activation. The complete pre-update snapshot of files that can change or be removed is made durable before activation. `config.php`, gallery media, cache data, custom CSS, hosting INI files, and other protected paths are never replaced by the updater.
-6. If PHP, the browser, FastCGI, or a proxy stops a normal stage, reopen **Updates** and continue. Completed checkpoints are not repeated unnecessarily. The same live job card is visible on both **Status** and **Advanced tools**, so beta/reinstall progress remains visible where the operation starts. Worker access is serialized with per-job `flock()` plus a global active-job start lock; direct requests for an old job cannot run beside the active update, and active-pointer release is compare-and-clear safe. Stale lock-file text cannot keep a job blocked after the operating-system lock is released. A failed or running job can also be **Cancel prepared update** before activation starts; this clears its active-job slot without touching application files. Deterministic release-manifest mismatches are not offered as retryable because downloading the same invalid build again cannot repair it; cancel that job and select a newer release or beta code.
-7. Activation is the only intentionally non-yielding critical section. It contains prepared local replacements for changed files only. Each replacement uses a sibling temporary file plus `rename()`, and replay recognizes files already matching the prepared hash. A host kill can still expose a brief mixed-version tree because ordinary shared hosting has no portable atomic directory swap; the next worker invocation completes the same activation stage.
-8. Migrations run one migration file per updater checkpoint. Individual file copy/hash operations and one migration file remain inherently non-interruptible units; archive entries are capped at 32 MiB and rollback refuses an individual managed active file above 128 MiB rather than starting an unbounded snapshot copy. A completed migration is recorded in `schema_migrations`. If PHP dies inside one migration file, that file may replay, so migration definitions and repair callbacks must remain safely rerunnable.
-9. After activation begins, the Admin job card can roll application files back from the saved snapshot. File rollback does not reverse database migrations. Stable restore and clean reinstall are separate resumable download/install operations.
-10. With JavaScript enabled the Admin side panel stays open and refreshes progress in place. Without JavaScript, **Continue update** and **Retry from checkpoint** submit ordinary authenticated POST requests and preserve the direct-request fallback.
+2. Click **Update**. The Admin panel starts a durable job under
+   `cache/updates/jobs/` and advances it through short authenticated requests
+   instead of holding one PHP request open for the whole release.
+3. The job checkpoints `download`, archive validation, bounded extraction,
+   manifest verification, activation planning, file staging, rollback backup,
+   readiness, activation, migrations, finalization, cleanup, and completion.
+   Archive validation itself checkpoints every 500 entries; individual archive
+   files are capped at 32 MiB and total expanded size at 512 MiB so one
+   extraction unit cannot become an unbounded application payload.
+4. Downloaded archives, extracted files, and the ready tree stay outside the
+   active installation. Every installable release file must be covered by
+   `app/core-manifest.json`; unsafe ZIP paths, symbolic links, oversized
+   archives, missing files, stale manifests, and hash mismatches are rejected
+   before activation.
+5. Preflight hashes the incoming release against the active tree, so
+   byte-identical files are excluded from activation. The complete pre-update
+   snapshot of files that can change or be removed is made durable before
+   activation. `config.php`, gallery media, cache data, custom CSS, hosting INI
+   files, and other protected paths are never replaced by the updater.
+6. If PHP, the browser, FastCGI, or a proxy stops a normal stage, reopen
+   **Updates** and continue. Completed checkpoints are not repeated
+   unnecessarily. The same live job card is visible on both **Status** and
+   **Advanced tools**, so beta/reinstall progress remains visible where the
+   operation starts. Worker access is serialized with per-job `flock()` plus a
+   global active-job start lock; direct requests for an old job cannot run
+   beside the active update, and active-pointer release is compare-and-clear
+   safe. Stale lock-file text cannot keep a job blocked after the
+   operating-system lock is released. A failed or running job can also be
+   **Cancel prepared update** before activation starts; this clears its
+   active-job slot without touching application files. Deterministic
+   release-manifest mismatches are not offered as retryable because downloading
+   the same invalid build again cannot repair it; cancel that job and select a
+   newer release or beta code.
+7. Activation is the only intentionally non-yielding critical section. It
+   contains prepared local replacements for changed files only. Each replacement
+   uses a sibling temporary file plus `rename()`, and replay recognizes files
+   already matching the prepared hash. A host kill can still expose a brief
+   mixed-version tree because ordinary shared hosting has no portable atomic
+   directory swap; the next worker invocation completes the same activation
+   stage.
+8. Migrations run one migration file per updater checkpoint. Individual file
+   copy/hash operations and one migration file remain inherently
+   non-interruptible units; archive entries are capped at 32 MiB and rollback
+   refuses an individual managed active file above 128 MiB rather than starting
+   an unbounded snapshot copy. A completed migration is recorded in
+   `schema_migrations`. If PHP dies inside one migration file, that file may
+   replay, so migration definitions and repair callbacks must remain safely
+   rerunnable.
+9. After activation begins, the Admin job card can roll application files back
+   from the saved snapshot. File rollback does not reverse database migrations.
+   Stable restore and clean reinstall are separate resumable download/install
+   operations.
+10. With JavaScript enabled the Admin side panel stays open and refreshes
+    progress in place. Without JavaScript, **Continue update** and **Retry from
+    checkpoint** submit ordinary authenticated POST requests and preserve the
+    direct-request fallback.
 
-Automatic stable updates use the same state machine. The standalone first-install `setup-gallery.php` bootstrap predates the application and therefore cannot use the authenticated updater engine; it remains a separate one-request bootstrap path and manual ZIP upload remains the fallback on hosts that terminate that initial download/extract request. When enabled, request-time discovery is throttled to at most once per hour per installation, while GitHub rate-limit responses and backoff windows are still respected. Remote version discovery has its own approximately eight-second wall-clock budget shared fairly across configured GitHub branches, and a discovery request only creates the durable background job; package work begins on a later invocation. Normal safe page requests can then advance a short background slice. A caught background failure waits at least 60 seconds and then goes through the same stage-aware retry cleanup before another worker attempt. On an idle site, schedule `php scripts/application_update.php` from hosting cron, for example every five minutes; each invocation either performs bounded discovery or advances the existing background job, not both. The CLI runner does not advance manual/Admin beta jobs. Correctness never depends on `set_time_limit()` or `ignore_user_abort()`.
+Automatic stable updates use the same state machine. The standalone
+first-install `setup-gallery.php` bootstrap predates the application and
+therefore cannot use the authenticated updater engine; it remains a separate
+one-request bootstrap path and manual ZIP upload remains the fallback on hosts
+that terminate that initial download/extract request. When enabled, request-time
+discovery is throttled to at most once per hour per installation, while GitHub
+rate-limit responses and backoff windows are still respected. Remote version
+discovery has its own approximately eight-second wall-clock budget shared fairly
+across configured GitHub branches, and a discovery request only creates the
+durable background job; package work begins on a later invocation. Normal safe
+page requests can then advance a short background slice. A caught background
+failure waits at least 60 seconds and then goes through the same stage-aware
+retry cleanup before another worker attempt. On an idle site, schedule
+`php scripts/application_update.php` from hosting cron, for example every five
+minutes; each invocation either performs bounded discovery or advances the
+existing background job, not both. The CLI runner does not advance manual/Admin
+beta jobs. Correctness never depends on `set_time_limit()` or
+`ignore_user_abort()`.
 
 #### Customizing Appearance
 
-Theme > Appearance > Gallery tags controls the public tag-page grid and card design independently from the normal gallery defaults.
+Theme > Appearance > Gallery tags controls the public tag-page grid and card
+design independently from the normal gallery defaults.
 
-1. Go to **Theme** to customize colors, fonts, layout, the default lightbox browsing mode, and selected-gallery public thumbnail rendering
+1. Go to **Theme** to customize colors, fonts, layout, the default lightbox
+   browsing mode, and selected-gallery public thumbnail rendering
 2. Choose light or dark mode
 3. Set default gallery card layout (vertical or horizontal)
 4. Choose language (English, Czech, German, or Swedish)
@@ -653,7 +1178,9 @@ When you see a "migration pending" notice on the dashboard:
 
 ## Configuration
 
-The application reads configuration from `config.php` (generated during installation). You typically don't need to edit this manually, but key settings include:
+The application reads configuration from `config.php` (generated during
+installation). You typically don't need to edit this manually, but key settings
+include:
 
 ```php
 $config = [
@@ -672,9 +1199,13 @@ $config = [
 
 ## Architecture Overview
 
-Coding agents follow [AGENTS.md](AGENTS.md) and the [scanner-checked authoring examples](docs/AGENT_AUTHORING.md). Write complete declaration and runtime-policy contracts with the code; use the documented source-only feedback path before final candidate qualification.
+Coding agents follow [AGENTS.md](AGENTS.md) and the
+[scanner-checked authoring examples](docs/AGENT_AUTHORING.md). Write complete
+declaration and runtime-policy contracts with the code; use the documented
+source-only feedback path before final candidate qualification.
 
-For developers interested in the codebase structure, see **[ARCHITECTURE.md](ARCHITECTURE.md)** for:
+For developers interested in the codebase structure, see
+**[ARCHITECTURE.md](ARCHITECTURE.md)** for:
 
 - Request routing and controller dispatch
 - Data model and relationships
@@ -690,10 +1221,14 @@ For developers interested in the codebase structure, see **[ARCHITECTURE.md](ARC
 
 ### Thumbnail Generation
 
-By default, thumbnails are generated automatically during import. You can fine-tune this:
+By default, thumbnails are generated automatically during import. You can
+fine-tune this:
 
-1. **Batch generation** - Go to **Thumbnails** to regenerate missing or all thumbnails in bulk, or use a gallery's Images editor to rebuild only that gallery and optionally its descendants
-2. **Quality settings** - Edit in theme settings to balance quality vs. file size
+1. **Batch generation** - Go to **Thumbnails** to regenerate missing or all
+   thumbnails in bulk, or use a gallery's Images editor to rebuild only that
+   gallery and optionally its descendants
+2. **Quality settings** - Edit in theme settings to balance quality vs. file
+   size
 3. **WebP support** - Modern browsers download smaller files automatically
 4. **Lazy loading** - Fullscreen galleries defer thumbnail loading
 
@@ -712,12 +1247,20 @@ On shared hosting with limited resources:
 
 1. **Disable telemetry** if not needed (admin > telemetry settings)
 2. **Delete old logs** (admin > logs, export, then prune)
-3. **Clean thumbnail cache** periodically (admin > thumbnails > delete thumbnails)
+3. **Clean thumbnail cache** periodically (admin > thumbnails > delete
+   thumbnails)
 4. **Use image compression** before uploading (optional but recommended)
 
 ## Security
 
-Admin cookies, generated public URL schemes and Viewer transport checks use the same HTTPS policy. Direct TLS needs no proxy settings. For a TLS-terminating reverse proxy, configure its exact IP or CIDR in `security.trusted_proxies` and enable the actual `x-forwarded-proto` / `x-forwarded-ssl` header in `security.trusted_proxy_protocol_headers` before upgrading. The proxy must overwrite client-supplied values in enabled headers. Client-IP header trust is separate. Untrusted, malformed, multiple or conflicting forwarded protocol values cannot establish HTTPS.
+Admin cookies, generated public URL schemes and Viewer transport checks use the
+same HTTPS policy. Direct TLS needs no proxy settings. For a TLS-terminating
+reverse proxy, configure its exact IP or CIDR in `security.trusted_proxies` and
+enable the actual `x-forwarded-proto` / `x-forwarded-ssl` header in
+`security.trusted_proxy_protocol_headers` before upgrading. The proxy must
+overwrite client-supplied values in enabled headers. Client-IP header trust is
+separate. Untrusted, malformed, multiple or conflicting forwarded protocol
+values cannot establish HTTPS.
 
 ### Passwords
 
@@ -786,13 +1329,15 @@ important:
   feature behavior is used;
 - **missing** means metadata inspection succeeded and confirmed an older or
   incomplete schema. Only explicitly documented compatibility behavior is used;
-- **unknown** means the application could not verify the schema. Security-sensitive
+- **unknown** means the application could not verify the schema.
+  Security-sensitive
   behavior is temporarily refused rather than silently downgraded.
 
 Gallery password/access compatibility is deliberately conservative. The old
 unprotected/listed behavior is used only when all five core access columns are
 confirmed absent. If even one access column exists while another is missing, the
-database is considered partially migrated and protected public routes fail closed.
+database is considered partially migrated and protected public routes fail
+closed.
 This prevents an interrupted migration from turning stored password, listing, or
 token state into permissive defaults.
 
@@ -809,7 +1354,8 @@ behavior used by the NSFW pilot, with bounded request correlation and no SQL,
 credentials, tokens, DSNs, or filesystem paths in the public response.
 
 Authentication keeps the primary PHP session separate from optional persistent
-storage. A confirmed missing `admin_remember_tokens` table disables only “Keep me
+storage. A confirmed missing `admin_remember_tokens` table disables only “Keep
+me
 signed in”; ordinary password/session login remains available. Password reset
 requires both `users.email` and `password_reset_tokens`. Google login requires a
 verified `user_google_accounts` table in addition to valid OAuth configuration.
@@ -817,19 +1363,22 @@ Unknown metadata state never masquerades as “feature not configured” or “i
 credentials”.
 
 Share-token generation/use requires verified token storage. Revocation is a safe
-exception: once the core validating hash columns are verified, the application can
+exception: once the core validating hash columns are verified, the application
+can
 always clear the hash even when the optional encrypted display-token column is
 missing or uninspectable. This means a schema problem cannot prevent an existing
 share link from being revoked.
 
-Admin **System Health** and **Runtime Diagnostics** now show the same bounded state
+Admin **System Health** and **Runtime Diagnostics** now show the same bounded
+state
 for gallery access, visibility, share tokens, NSFW Guard, persistent login,
 password reset, and external identity links. Missing/unknown states produce an
 Action signal and operator guidance without exposing raw database errors.
 
 ### Destructive and ingestion schema safety
 
-Phase 10 extends the same distinction to operations that change persistent data or
+Phase 10 extends the same distinction to operations that change persistent data
+or
 files. Gallery/image deletion and moves, Duplicate Photo Detector ledger writes,
 classic/browser uploads, upload automation, gallery migration, mobile WebDAV,
 thumbnail metadata maintenance, database cleanup/repair, and application update
@@ -838,14 +1387,18 @@ activation now use `app/services/mutation_schema_policy.php`.
 The practical rule is:
 
 - **available**: the workflow continues with its established behavior;
-- **missing**: the workflow either requires the pending migration or uses a narrow
+- **missing**: the workflow either requires the pending migration or uses a
+  narrow
   compatibility/bootstrap path that was specifically audited for that operation;
-- **unknown**: the workflow is paused before it changes target files, database rows,
-  credentials, resumable migration state, derivative files, or active application
+- **unknown**: the workflow is paused before it changes target files, database
+  rows,
+  credentials, resumable migration state, derivative files, or active
+  application
   files.
 
 This matters most during temporary database or metadata-permission problems. A
-legacy boolean “exists” helper can return `false` both when a column is genuinely
+legacy boolean “exists” helper can return `false` both when a column is
+genuinely
 absent and when inspection itself failed. That ambiguity is acceptable only in
 older non-sensitive compatibility code. It is no longer used to authorize the
 Phase 10 mutation paths.
@@ -854,7 +1407,8 @@ Uploads preflight the core gallery/image registration schema and thumbnail write
 shape before a source file is moved from temporary/prepared storage into the
 gallery. Gallery migration performs equivalent checks before target assets,
 originals, metadata, thumbnails, or completion state are committed, so a refusal
-leaves the job resumable. Thumbnail generation and maintenance verify the metadata
+leaves the job resumable. Thumbnail generation and maintenance verify the
+metadata
 write shape before derivative directories/files are changed. A confirmed old
 installation without the thumbnail metadata table can still use the documented
 file-only compatibility mode; an **unknown** metadata state cannot.
@@ -867,111 +1421,158 @@ verified. This keeps a schema problem from unnecessarily preventing a
 security-tightening action.
 
 Database repair and application updates also distinguish confirmed absence from
-inspection failure. A confirmed missing `schema_migrations` table may be handled by
+inspection failure. A confirmed missing `schema_migrations` table may be handled
+by
 the migration/bootstrap workflow itself. An unknown state blocks live cleanup or
-active-file replacement. Update archives may still be downloaded and extracted to
+active-file replacement. Update archives may still be downloaded and extracted
+to
 staging, but activation checks the schema immediately before replacing active
-application files. Source snapshots must include both `schema_inspection.php` and
+application files. Source snapshots must include both `schema_inspection.php`
+and
 `mutation_schema_policy.php`.
 
 Admin **System Health** and **Runtime Diagnostics** show ten additional mutation
 capabilities covering these workflows. Missing and unknown states raise the
 Maintenance **Action** badge. Unknown entries can include validated affected
-table/column names, safe connectivity/permission guidance, and a request reference.
-They do not expose raw SQL, database exception messages, DSNs, passwords, API keys,
+table/column names, safe connectivity/permission guidance, and a request
+reference.
+They do not expose raw SQL, database exception messages, DSNs, passwords, API
+keys,
 WebDAV secrets, upload paths, migration source paths, or updater staging paths.
 
 If an administrator sees a mutation-schema warning, first verify database
-connectivity, the selected database, and metadata-inspection permissions. Apply a
-pending migration only when System Health confirms a **missing** state or the normal
-migration page reports it. After the database becomes inspectable again, retry the
+connectivity, the selected database, and metadata-inspection permissions. Apply
+a
+pending migration only when System Health confirms a **missing** state or the
+normal
+migration page reports it. After the database becomes inspectable again, retry
+the
 operation. A refused Phase 10 workflow is designed to leave its target state
 recoverable rather than guessing through an indeterminate schema.
 
 ### Optional presentation and reporting schema safety
 
-The final schema-reliability phase covers features that enrich the gallery but are
-not required to render its basic public content: GPS/EXIF maps, flight maps, image
+The final schema-reliability phase covers features that enrich the gallery but
+are
+not required to render its basic public content: GPS/EXIF maps, flight maps,
+image
 voting, Picture Game, lightbox mode overrides, OpenAI assistance, local AI image
-metadata, SimBrief route-map persistence, navigation datasets/accounts, telemetry,
+metadata, SimBrief route-map persistence, navigation datasets/accounts,
+telemetry,
 and the Complete Admin Gallery Report. These features now use
 `app/services/presentation_schema_policy.php`.
 
-The important difference from access control and destructive operations is that a
+The important difference from access control and destructive operations is that
+a
 safe optional **read** can sometimes disappear without taking the whole gallery
-offline. For example, if a GPS-map table/column cannot be inspected, the main gallery
+offline. For example, if a GPS-map table/column cannot be inspected, the main
+gallery
 may still render without the map because omitting a map does not make protected
-content public. The unavailable map is logged with bounded context and Admin System
-Health shows the capability as **unknown**. By contrast, a vote, Picture Game pair
-record, telemetry setting, AI queue transition, navigation-account token update, or
+content public. The unavailable map is logged with bounded context and Admin
+System
+Health shows the capability as **unknown**. By contrast, a vote, Picture Game
+pair
+record, telemetry setting, AI queue transition, navigation-account token update,
+or
 other database-backed write is never authorized by an unknown schema result.
 
 Administrator-visible states are now consistent across all three schema-policy
 layers:
 
 - **available**: the required database objects were verified;
-- **missing**: inspection succeeded and confirmed that a migration/optional object is
+- **missing**: inspection succeeded and confirmed that a migration/optional
+  object is
   absent;
 - **unknown**: the database structure could not be verified reliably;
-- **disabled**: an optional feature with a real feature flag is intentionally off.
+- **disabled**: an optional feature with a real feature flag is intentionally
+  off.
 
 System Health evaluates optional feature flags before inspecting their database
-shape. A disabled feature therefore reports **disabled** without spending metadata
-queries on tables/columns that cannot affect the current request. Enabled capability
+shape. A disabled feature therefore reports **disabled** without spending
+metadata
+queries on tables/columns that cannot affect the current request. Enabled
+capability
 checks share the request-local schema cache.
 
 Several compatibility details are deliberate:
 
-- a proven old installation may omit an optional presentation feature, but a partial
+- a proven old installation may omit an optional presentation feature, but a
+  partial
   migration or inspection outage is not silently relabeled as legacy;
-- GPS per-gallery inheritance verifies that `galleries.gps_map_enabled` is nullable
+- GPS per-gallery inheritance verifies that `galleries.gps_map_enabled` is
+  nullable
   before treating `NULL` as a real inherit/default state;
 - lightbox override compatibility verifies the stored column vocabulary before
-  accepting override values. Gallery creation, sidecar import, and metadata-organizer
-  child creation also distinguish confirmed legacy absence from an inspection outage,
-  so an explicit/inherited override is not silently discarded during persistence;
-- enabling voting on a newly created or sidecar-imported gallery requires verified
-  voting storage rather than persisting a feature flag against an indeterminate vote
+  accepting override values. Gallery creation, sidecar import, and
+  metadata-organizer
+  child creation also distinguish confirmed legacy absence from an inspection
+  outage,
+  so an explicit/inherited override is not silently discarded during
+  persistence;
+- enabling voting on a newly created or sidecar-imported gallery requires
+  verified
+  voting storage rather than persisting a feature flag against an indeterminate
+  vote
   schema;
-- Picture Game pair selection is treated as a write because displaying a new pair
+- Picture Game pair selection is treated as a write because displaying a new
+  pair
   records that pair before a vote occurs;
 - Navigraph/OAuth can use historical session-only behavior only when persistent
-  account storage is positively confirmed missing. An inspection outage cannot be
+  account storage is positively confirmed missing. An inspection outage cannot
+  be
   treated as a session-only legacy installation;
-- disconnect/revocation uses the smaller verified account identity shape needed to
-  remove stored credentials, so a security-tightening disconnect is not blocked by
+- disconnect/revocation uses the smaller verified account identity shape needed
+  to
+  remove stored credentials, so a security-tightening disconnect is not blocked
+  by
   unrelated optional account columns;
-- SimBrief description/OFP generation can remain useful even when optional flight
-  route persistence is unavailable. The draft may continue while only the database
+- SimBrief description/OFP generation can remain useful even when optional
+  flight
+  route persistence is unavailable. The draft may continue while only the
+  database
   route-map write is skipped;
-- telemetry dashboards/exports distinguish “migration not installed” from “database
+- telemetry dashboards/exports distinguish “migration not installed” from
+  “database
   status cannot be inspected.” Telemetry setting changes and maintenance do not
   silently succeed on unknown schema;
-- AI worker requests return bounded operational errors when AI queue storage cannot
-  be verified and do not echo raw database/service exception text back to the worker;
+- AI worker requests return bounded operational errors when AI queue storage
+  cannot
+  be verified and do not echo raw database/service exception text back to the
+  worker;
 - the Complete Admin Gallery Report uses structured checks for known optional
   sections. Its database table inventory intentionally enumerates
-  `information_schema.TABLES` dynamically because it must count every base table,
+  `information_schema.TABLES` dynamically because it must count every base
+  table,
   including future/plugin tables whose names are not known in advance. Inventory
   failures produce generic report text rather than raw database errors.
 
 Admin **System Health** and **Runtime Diagnostics** expose fifteen optional
-presentation/reporting capability entries using the same underlying policy results.
+presentation/reporting capability entries using the same underlying policy
+results.
 An unknown entry may show validated affected table/column names, safe database
-connectivity/permission guidance, and a request reference. It never includes raw SQL,
-PDO exception text, DSNs, credentials, OAuth/API tokens, cookies, reset/share tokens,
+connectivity/permission guidance, and a request reference. It never includes raw
+SQL,
+PDO exception text, DSNs, credentials, OAuth/API tokens, cookies, reset/share
+tokens,
 CSRF values, or private filesystem paths.
 
-For troubleshooting, treat **missing** and **unknown** differently. Apply migrations
-when the migration runner or System Health confirms required objects are missing. If
-the state is **unknown**, first restore database connectivity, select the correct
+For troubleshooting, treat **missing** and **unknown** differently. Apply
+migrations
+when the migration runner or System Health confirms required objects are
+missing. If
+the state is **unknown**, first restore database connectivity, select the
+correct
 database, and ensure the application account may read metadata from
-`information_schema`; then retry. Do not apply migrations merely because an optional
+`information_schema`; then retry. Do not apply migrations merely because an
+optional
 feature disappeared during an inspection outage.
 
-This completes the planned repository-wide schema-inspection reliability conversion.
-The permanent architecture, database, testing, operator guidance, and administrator
-manual now own the final rules; there is no release-time temporary phase roadmap.
+This completes the planned repository-wide schema-inspection reliability
+conversion.
+The permanent architecture, database, testing, operator guidance, and
+administrator
+manual now own the final rules; there is no release-time temporary phase
+roadmap.
 
 ### Admin Audit
 
@@ -985,28 +1586,86 @@ manual now own the final rules; there is no release-time temporary phase roadmap
 
 ## Localization and Language Packs
 
-PHP Gallery keeps English (`en`) as the canonical source language and the runtime fallback. English, Czech (`cs`), German (`de`), and Swedish (`sv`) are the currently maintained and selectable interface languages. All four catalogs are kept key-for-key complete.
+PHP Gallery keeps English (`en`) as the canonical source language and the
+runtime fallback. English, Czech (`cs`), German (`de`), and Swedish (`sv`) are
+the currently maintained and selectable interface languages. All four catalogs
+are kept key-for-key complete.
 
-Gallery and photo titles/descriptions may be tagged with their source language and optionally translated into any maintained language. Existing text remains unchanged when unclassified. The viewer-language choice selects matching content where available. Gallery title and description fields fall back independently; a saved photo-language variant is treated as one caption and does not mix blank fields with source-language text. Other-language fields remain behind the language control in gallery and photo editors. Configured OpenAI text assistance can insert a reviewable translation draft; nothing is published until the normal editor form is saved.
+Gallery and photo titles/descriptions may be tagged with their source language
+and optionally translated into any maintained language. Existing text remains
+unchanged when unclassified. The viewer-language choice selects matching content
+where available. Gallery title and description fields fall back independently; a
+saved photo-language variant is treated as one caption and does not mix blank
+fields with source-language text. Other-language fields remain behind the
+language control in gallery and photo editors. Configured OpenAI text assistance
+can insert a reviewable translation draft; nothing is published until the normal
+editor form is saved.
 
-`app/services/translations.php` restricts language selection to the maintained set above. Additional JSON skeletons may remain under `app/lang/` for future translation work, but simply placing a file there does not make that language selectable. English remains the runtime fallback if a maintained translation ever lacks a key.
+`app/services/translations.php` restricts language selection to the maintained
+set above. Additional JSON skeletons may remain under `app/lang/` for future
+translation work, but simply placing a file there does not make that language
+selectable. English remains the runtime fallback if a maintained translation
+ever lacks a key.
 
 Admin and public language choices are independent:
 
-- **Admin interface language** is stored for the administrator in the session and browser cookie.
-- **Public visitor language** is a site-wide default stored in application settings.
-- **Viewer language selector** is enabled by default and can be disabled from Theme > Language or Settings > General. It applies only to public viewers: each viewer's personal selection is persisted in that viewer's browser cookie, not in an account or as a site-wide language change. When disabled, public pages follow the site-wide public language and ignore personal language query/cookie overrides.
-- **Viewer languages** controls which maintained languages are offered for that browser-local viewer preference. All four are enabled by default, and at least one must remain selected when saving. This availability list is site configuration; choosing one of its languages affects only the viewer who makes the choice in that browser.
-- Every public page provides the enabled language control in the shared header. Locally bundled SVG flags provide a visual cue; native language names remain the accessible labels.
-- Selecting a maintained language keeps the current page and its filters, then remembers the per-viewer override in a public-language cookie. The same behavior remains available through `?lang=<code>` links.
-- **Use site default** clears both the visitor session override and public-language cookie so later site-wide default changes apply again.
-- Changing the interface language does not translate gallery titles, descriptions, tags, photo captions, or other owner-authored content.
+- **Admin interface language** is stored for the administrator in the session
+  and browser cookie.
+- **Public visitor language** is a site-wide default stored in application
+  settings.
+- **Viewer language selector** is enabled by default and can be disabled from
+  Theme > Language or Settings > General. It applies only to public viewers:
+  each viewer's personal selection is persisted in that viewer's browser cookie,
+  not in an account or as a site-wide language change. When disabled, public
+  pages follow the site-wide public language and ignore personal language
+  query/cookie overrides.
+- **Viewer languages** controls which maintained languages are offered for that
+  browser-local viewer preference. All four are enabled by default, and at least
+  one must remain selected when saving. This availability list is site
+  configuration; choosing one of its languages affects only the viewer who makes
+  the choice in that browser.
+- Every public page provides the enabled language control in the shared header.
+  Locally bundled SVG flags provide a visual cue; native language names remain
+  the accessible labels.
+- Selecting a maintained language keeps the current page and its filters, then
+  remembers the per-viewer override in a public-language cookie. The same
+  behavior remains available through `?lang=<code>` links.
+- **Use site default** clears both the visitor session override and
+  public-language cookie so later site-wide default changes apply again.
+- Changing the interface language does not translate gallery titles,
+  descriptions, tags, photo captions, or other owner-authored content.
 
-Editable catalogs live in `app/lang/<code>.json`. JSON is the maintained format. The `en.php`, `cs.php`, `de.php`, and `sv.php` dictionaries remain compatibility fallbacks and are loaded only when a JSON pack for that code does not exist. Theme > Language exposes only the currently supported four languages in the Admin and Public selectors and pack editor, reports key coverage against English, and provides JSON edit/import/export tools plus missing-key diagnostics.
+Editable catalogs live in `app/lang/<code>.json`. JSON is the maintained format.
+The `en.php`, `cs.php`, `de.php`, and `sv.php` dictionaries remain compatibility
+fallbacks and are loaded only when a JSON pack for that code does not exist.
+Theme > Language exposes only the currently supported four languages in the
+Admin and Public selectors and pack editor, reports key coverage against
+English, and provides JSON edit/import/export tools plus missing-key
+diagnostics.
 
-The reusable viewer-language settings panel is rendered by `app/views/admin_language_settings.php` in both Theme > Language and Settings > General. Both surfaces persist through the same translation service and `app_settings` keys: `public_language_selector_enabled` (`1` by default) and `public_language_selector_languages` (an ordered JSON list defaulting to all maintained languages). Disabling a language affects only visitor overrides; it does not remove that catalog from Admin language selection, the public site-default selector, editing, import/export, or diagnostics.
+The reusable viewer-language settings panel is rendered by
+`app/views/admin_language_settings.php` in both Theme > Language and Settings >
+General. Both surfaces persist through the same translation service and
+`app_settings` keys: `public_language_selector_enabled` (`1` by default) and
+`public_language_selector_languages` (an ordered JSON list defaulting to all
+maintained languages). Disabling a language affects only visitor overrides; it
+does not remove that catalog from Admin language selection, the public
+site-default selector, editing, import/export, or diagnostics.
 
-The same panel also owns the public selector design. Settings > General intentionally exposes only the basic preset and flag controls and links to Theme > Language for detailed editing without overwriting saved custom values. Five presets are available: Classic (the backward-compatible default), Solid pills, Outline, Soft cards, and Minimal. The compact Theme editor configures codes, native names, orientation, density, alignment, active emphasis, theme/custom colors (each color may instead be transparent), padding, margins, gaps, borders, radii, flag dimensions, and text size while an actual-flag preview appears above the fine controls and updates without saving. Reset all returns the complete design to Classic defaults, Reset this preset restores only the active preset, and every individual control has its own reset. All reset operations remain unsaved until the parent form is submitted and never alter the selector feature switch, enabled viewer languages, public default, or a viewer's browser-local language choice.
+The same panel also owns the public selector design. Settings > General
+intentionally exposes only the basic preset and flag controls and links to
+Theme > Language for detailed editing without overwriting saved custom values.
+Five presets are available: Classic (the backward-compatible default), Solid
+pills, Outline, Soft cards, and Minimal. The compact Theme editor configures
+codes, native names, orientation, density, alignment, active emphasis,
+theme/custom colors (each color may instead be transparent), padding, margins,
+gaps, borders, radii, flag dimensions, and text size while an actual-flag
+preview appears above the fine controls and updates without saving. Reset all
+returns the complete design to Classic defaults, Reset this preset restores only
+the active preset, and every individual control has its own reset. All reset
+operations remain unsaved until the parent form is submitted and never alter the
+selector feature switch, enabled viewer languages, public default, or a viewer's
+browser-local language choice.
 
 Current selectable language packs:
 
@@ -1017,9 +1676,18 @@ Current selectable language packs:
 | `de` | Deutsch | Complete maintained selectable translation |
 | `sv` | Svenska | Complete maintained selectable translation |
 
-The selector flag artwork lives in `public/assets/flags/`: United Kingdom for English, Czechia for Czech, Germany for German, and Sweden for Swedish. The SVGs are pinned from `lipis/flag-icons` v7.2.3 and distributed under its MIT license, included as `public/assets/flags/LICENSE.flag-icons.md`. They are served locally and never fetched from a third party at runtime.
+The selector flag artwork lives in `public/assets/flags/`: United Kingdom for
+English, Czechia for Czech, Germany for German, and Sweden for Swedish. The SVGs
+are pinned from `lipis/flag-icons` v7.2.3 and distributed under its MIT license,
+included as `public/assets/flags/LICENSE.flag-icons.md`. They are served locally
+and never fetched from a third party at runtime.
 
-When adding interface text, add the canonical English key to `app/lang/en.json` first and keep Czech, German, and Swedish synchronized. Placeholder names such as `{count}`, `{gallery}`, or `{time}` are part of the translation contract and must remain unchanged across all four maintained languages. Dormant future-language skeletons may be translated separately without becoming selectable.
+When adding interface text, add the canonical English key to `app/lang/en.json`
+first and keep Czech, German, and Swedish synchronized. Placeholder names such
+as `{count}`, `{gallery}`, or `{time}` are part of the translation contract and
+must remain unchanged across all four maintained languages. Dormant
+future-language skeletons may be translated separately without becoming
+selectable.
 
 ## Extending & Contributing
 
@@ -1029,11 +1697,24 @@ The codebase is organized for easy extension:
 
 1. **New controller** - Add file in `app/controllers/`
 2. **New service** - Add file in `app/services/` for business logic
-3. **New route** - Add the canonical route and security boundary in `app/bootstrap/dispatch.php`, then update the reviewed runtime dependency inputs and regenerate `app/runtime/modules.php` with `php scripts/generate_runtime_modules.php`; keep existing procedural controllers as route handlers
-4. **Optional capability** - Before adding a new toggle, check `app/services/feature_flags/registry.php`. Reuse an existing master when the behavior belongs to the same subsystem. New masters must declare one canonical storage owner, dependencies, owned routes, non-destructive OFF behavior, and Admin/Settings metadata rather than adding controller-local settings.
-5. **New migration** - Add a dated file in `database/migrations/` only when persistence/schema actually changes
-6. **Translations** - Add the canonical key to `app/lang/en.json` and keep `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json` synchronized
-7. **Tests** - Extend the appropriate feature-policy contract when capability metadata/routing changes, then use the central audit runner as the authoritative verification interface
+3. **New route** - Add the canonical route and security boundary in
+   `app/bootstrap/dispatch.php`, then update the reviewed runtime dependency
+   inputs and regenerate `app/runtime/modules.php` with
+   `php scripts/generate_runtime_modules.php`; keep existing procedural
+   controllers as route handlers
+4. **Optional capability** - Before adding a new toggle, check
+   `app/services/feature_flags/registry.php`. Reuse an existing master when the
+   behavior belongs to the same subsystem. New masters must declare one
+   canonical storage owner, dependencies, owned routes, non-destructive OFF
+   behavior, and Admin/Settings metadata rather than adding controller-local
+   settings.
+5. **New migration** - Add a dated file in `database/migrations/` only when
+   persistence/schema actually changes
+6. **Translations** - Add the canonical key to `app/lang/en.json` and keep
+   `app/lang/cs.json`, `app/lang/de.json`, and `app/lang/sv.json` synchronized
+7. **Tests** - Extend the appropriate feature-policy contract when capability
+   metadata/routing changes, then use the central audit runner as the
+   authoritative verification interface
 
 ### Code Standards
 
@@ -1045,21 +1726,66 @@ The codebase is organized for easy extension:
 
 ### Testing
 
-The normal agent handoff runs the complete centrally registered regression suite in GitHub Actions through candidate preparation and the required hosted matrix. For explicitly requested local recovery or targeted diagnosis, the runner remains available:
+The normal agent handoff runs the complete centrally registered regression suite
+in GitHub Actions through candidate preparation and the required hosted matrix.
+For explicitly requested local recovery or targeted diagnosis, the runner
+remains available:
 
 ```bash
 php scripts/audit.php --profile=full
 ```
 
-The tracked `tests/` tree is the authoritative framework-free suite, and `php scripts/audit.php` is its canonical orchestration entrypoint. `--profile=quick` uses the curated `php-fast` subset for edit-cycle feedback; it does not run the complete PHP regression tree, whole-tree advisory inventory, WinApp suite, slow Node fixtures, or Chromium. `--profile=full` retains complete PHP regression and source-tree coverage; `--profile=release` retains that coverage and adds release qualification. All profiles probe early-runtime and small application-bootstrap includes in fresh CLI children, enforcing file-count and peak-memory ceilings, and run nine actual route-lifecycle probes when an owned disposable workflow fixture is available. Without that fixture, route coverage is an explicit SKIP. Wall time is observational. See [TESTING.md](TESTING.md) for exact limits and the private-MySQL workflow. The runner also executes explicitly registered Node, WinApp Python, syntax, contract, and release-specific checks without streaming successful child output into the agent context. It writes a compact `cache/test-audit/latest.md`, a machine-readable `latest.json`, and per-suite drill-down logs. Direct focused PHP/Node commands are for diagnosis, not the default full-suite workflow. `php tests/run.php` remains a compatibility wrapper for the complete PHP regression suite. Production packages exclude tests and gallery media. Use `php scripts/package_production.php --root=<source> --directory=<new-directory> --zip=<new-archive.zip> --timestamp=<candidate-epoch>` for a production folder, ZIP, or both. Git source archives remain available for source review; the retired interactive/FTP deploy scripts are no longer distributed.
+The tracked `tests/` tree is the authoritative framework-free suite, and
+`php scripts/audit.php` is its canonical orchestration entrypoint.
+`--profile=quick` uses the curated `php-fast` subset for edit-cycle feedback; it
+does not run the complete PHP regression tree, whole-tree advisory inventory,
+WinApp suite, slow Node fixtures, or Chromium. `--profile=full` retains complete
+PHP regression and source-tree coverage; `--profile=release` retains that
+coverage and adds release qualification. All profiles probe early-runtime and
+small application-bootstrap includes in fresh CLI children, enforcing file-count
+and peak-memory ceilings, and run nine actual route-lifecycle probes when an
+owned disposable workflow fixture is available. Without that fixture, route
+coverage is an explicit SKIP. Wall time is observational. See
+[TESTING.md](TESTING.md) for exact limits and the private-MySQL workflow. The
+runner also executes explicitly registered Node, WinApp Python, syntax,
+contract, and release-specific checks without streaming successful child output
+into the agent context. It writes a compact `cache/test-audit/latest.md`, a
+machine-readable `latest.json`, and per-suite drill-down logs. Direct focused
+PHP/Node commands are for diagnosis, not the default full-suite workflow.
+`php tests/run.php` remains a compatibility wrapper for the complete PHP
+regression suite. Production packages exclude tests and gallery media. Use
+`php scripts/package_production.php --root=<source> --directory=<new-directory> --zip=<new-archive.zip> --timestamp=<candidate-epoch>`
+for a production folder, ZIP, or both. Git source archives remain available for
+source review; the retired interactive/FTP deploy scripts are no longer
+distributed.
 
 ### Release preparation
 
-Recovery and qualification have separate evidence requirements. The [recovery CLI](docs/RECOVERY_ASSURANCE.md) validates isolated recovery files; the [off-host runbook](docs/RECOVERY_OFF_HOST.md) explains the real restore exercise it cannot replace. [Disposable workflow testing](docs/GALLERY_WORKFLOWS.md) exercises generated data without using the live installation. The [qualification ledger](docs/RELEASE_QUALIFICATION.md) binds audit reports and explicit manual reviews to exact source/PDF bytes; automated PASS alone is not publication approval.
+Recovery and qualification have separate evidence requirements. The
+[recovery CLI](docs/RECOVERY_ASSURANCE.md) validates isolated recovery files;
+the [off-host runbook](docs/RECOVERY_OFF_HOST.md) explains the real restore
+exercise it cannot replace.
+[Disposable workflow testing](docs/GALLERY_WORKFLOWS.md) exercises generated
+data without using the live installation. The
+[qualification ledger](docs/RELEASE_QUALIFICATION.md) binds audit reports and
+explicit manual reviews to exact source/PDF bytes; automated PASS alone is not
+publication approval.
 
-`RELEASE.md` is the authoritative release playbook. A trusted maintainer prepares a `release/v_*` branch, and GitHub-hosted release qualification performs the source preflight, release metadata and patch-note preparation, one final batch build of all four manual PDFs, generated-state/manifest preparation, and the authoritative `release` audit for the exact prepared candidate SHA. Protected promotion, tagging and publication are separate maintainer-controlled steps with an explicit evidence gate. The local preparation and audit commands in `RELEASE.md` are exceptional recovery or diagnosis paths, not routine agent steps; neither a quick PASS nor an earlier or different-SHA full run establishes release readiness. Preserve human/manual acceptance and report every required SKIP, BLOCKED or failed job.
+`RELEASE.md` is the authoritative release playbook. A trusted maintainer
+prepares a `release/v_*` branch, and GitHub-hosted release qualification
+performs the source preflight, release metadata and patch-note preparation, one
+final batch build of all four manual PDFs, generated-state/manifest preparation,
+and the authoritative `release` audit for the exact prepared candidate SHA.
+Protected promotion, tagging and publication are separate maintainer-controlled
+steps with an explicit evidence gate. The local preparation and audit commands
+in `RELEASE.md` are exceptional recovery or diagnosis paths, not routine agent
+steps; neither a quick PASS nor an earlier or different-SHA full run establishes
+release readiness. Preserve human/manual acceptance and report every required
+SKIP, BLOCKED or failed job.
 
-The runner discovers every tracked `tests/*_test.php` script deterministically. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
+The runner discovers every tracked `tests/*_test.php` script deterministically.
+Individual scripts can still be run directly when isolating a behavior. The
+project intentionally has no Composer or PHPUnit dependency.
 
 ## Troubleshooting
 
@@ -1100,21 +1826,84 @@ If you lose the admin password and can't log in:
 
 ## Smart Galleries
 
-Smart Galleries are saved, dynamic image queries. Create one from **Admin > Galleries > Smart Galleries**, combine conditions with nested **AND**, **OR**, and **NOT** groups, preview real matching cards, then optionally publish it. Images stay in their original galleries and filesystem locations; metadata or private editorial-rating changes alter membership immediately.
+Smart Galleries are saved, dynamic image queries. Create one from **Admin >
+Galleries > Smart Galleries**, combine conditions with nested **AND**, **OR**,
+and **NOT** groups, preview real matching cards, then optionally publish it.
+Images stay in their original galleries and filesystem locations; metadata or
+private editorial-rating changes alter membership immediately.
 
-Published Smart Galleries use `?page=smart_gallery&slug=...` everywhere and `/smart/<slug>` when clean URLs are enabled. Root and physical-gallery placements expose only enabled, published Smart Galleries. Public counts, covers, page rows, lightbox metadata, and downloads are generated from one service-layer result query that intersects the Smart Gallery rules with public/listed physical galleries the current visitor may actually access, public image visibility, and NSFW policy. Private, locked, unpublished, share-only-without-valid-access, and otherwise inaccessible source content does not contribute to counts or URLs.
+Published Smart Galleries use `?page=smart_gallery&slug=...` everywhere and
+`/smart/<slug>` when clean URLs are enabled. Root and physical-gallery
+placements expose only enabled, published Smart Galleries. Public counts,
+covers, page rows, lightbox metadata, and downloads are generated from one
+service-layer result query that intersects the Smart Gallery rules with
+public/listed physical galleries the current visitor may actually access, public
+image visibility, and NSFW policy. Private, locked, unpublished,
+share-only-without-valid-access, and otherwise inaccessible source content does
+not contribute to counts or URLs.
 
-Placement can remain **Unlisted** for URL-only access, appear as a **Root gallery** on the homepage, or use **Subgallery placement**. For each physical parent, an attachment independently stores **Above gallery content** or **Below gallery content** plus an integer order. Top attachments render before normal subgalleries/photos, bottom attachments render afterward, and equal order values are resolved by Smart Gallery ID. Existing and newly created attachments default to bottom. The same Smart Gallery may be attached beneath any number of physical galleries, while the composite relationship prevents duplicate instances under one parent. Migration `202608170002_smart_gallery_attachment_ordering.php` adds the per-parent placement/order columns. Until it is applied, existing attachments continue to read as bottom and attachment mutations are refused rather than partially saved.
+Placement can remain **Unlisted** for URL-only access, appear as a **Root
+gallery** on the homepage, or use **Subgallery placement**. For each physical
+parent, an attachment independently stores **Above gallery content** or **Below
+gallery content** plus an integer order. Top attachments render before normal
+subgalleries/photos, bottom attachments render afterward, and equal order values
+are resolved by Smart Gallery ID. Existing and newly created attachments default
+to bottom. The same Smart Gallery may be attached beneath any number of physical
+galleries, while the composite relationship prevents duplicate instances under
+one parent. Migration `202608170002_smart_gallery_attachment_ordering.php` adds
+the per-parent placement/order columns. Until it is applied, existing
+attachments continue to read as bottom and attachment mutations are refused
+rather than partially saved.
 
-Each Smart Gallery can inherit the current Theme/site presentation or persist its own versioned presentation overrides for grid columns/rows, pagination, thumbnail bounds and renderer, gallery-card layout, metadata overlays, lightbox, lightbox mode, slideshow, download, and voting. Sorting remains the existing allowlisted Smart Gallery sort mode/direction. Presentation does not inherit from a physical placement because a Smart Gallery can have multiple parents. Invalid or missing presentation values fall back to current Theme/site defaults. Migration `202608170001_smart_gallery_presentation.php` adds the nullable `presentation_json` storage.
+Each Smart Gallery can inherit the current Theme/site presentation or persist
+its own versioned presentation overrides for grid columns/rows, pagination,
+thumbnail bounds and renderer, gallery-card layout, metadata overlays, lightbox,
+lightbox mode, slideshow, download, and voting. Sorting remains the existing
+allowlisted Smart Gallery sort mode/direction. Presentation does not inherit
+from a physical placement because a Smart Gallery can have multiple parents.
+Invalid or missing presentation values fall back to current Theme/site defaults.
+Migration `202608170001_smart_gallery_presentation.php` adds the nullable
+`presentation_json` storage.
 
-Lightbox navigation is not limited to the current HTML page. Cards carry global result indexes and the existing sparse lightbox cache requests authorized nearby metadata from `smart_gallery_lightbox_data` in windows capped at 80 records. The endpoint uses the same rules, access predicate, sort, direction, and image-id tie breaker as public rendering, so previous/next movement crosses pagination boundaries without preloading the full result set or original files. Normal gallery lightbox behavior is unchanged.
+Lightbox navigation is not limited to the current HTML page. Cards carry global
+result indexes and the existing sparse lightbox cache requests authorized nearby
+metadata from `smart_gallery_lightbox_data` in windows capped at 80 records. The
+endpoint uses the same rules, access predicate, sort, direction, and image-id
+tie breaker as public rendering, so previous/next movement crosses pagination
+boundaries without preloading the full result set or original files. Normal
+gallery lightbox behavior is unchanged.
 
-The Admin editor works as a full-page server form and through the existing right-side drawer. Side-panel saves reuse the normal POST controller and re-inject the returned editor without a page reload or URL change. Physical gallery editing exposes every attachment's placement/order; Smart Gallery editing shows the same values independently for every parent and allows in-place save or detach. Plain POST remains the no-JavaScript fallback. The preview renders real matching cards with effective presentation settings. Smart Gallery ZIP downloads reuse the same authorized result query, refuse more than 5,000 matching images, and also enforce an aggregate source-byte cap. Existing installations use 2 GiB unless `smart_gallery_zip_max_source_bytes` is set in `config.php`. Concurrent requests for the same archive signature are serialized and the finished ZIP is published atomically from a unique partial file.
+The Admin editor works as a full-page server form and through the existing
+right-side drawer. Side-panel saves reuse the normal POST controller and
+re-inject the returned editor without a page reload or URL change. Physical
+gallery editing exposes every attachment's placement/order; Smart Gallery
+editing shows the same values independently for every parent and allows in-place
+save or detach. Plain POST remains the no-JavaScript fallback. The preview
+renders real matching cards with effective presentation settings. Smart Gallery
+ZIP downloads reuse the same authorized result query, refuse more than 5,000
+matching images, and also enforce an aggregate source-byte cap. Existing
+installations use 2 GiB unless `smart_gallery_zip_max_source_bytes` is set in
+`config.php`. Concurrent requests for the same archive signature are serialized
+and the finished ZIP is published atomically from a unique partial file.
 
-Relationship validation builds a request-cached graph from Smart Gallery attachment edges and positive physical-gallery references in Smart Gallery rules, using the current or proposed physical hierarchy to expand `under` references to their descendant branch while keeping exact references exact. Proposed rules, attachments, ordinary hierarchy moves, filesystem-derived parent synchronization, and public-path parent repair are validated before new hierarchy writes. Complete Admin drag-and-drop trees are validated once as the final parent map, then moved through a prevalidated batch path so temporary intermediate states do not cause false cycle failures. Every committed physical hierarchy mutation clears the request-local graph cache. Legacy malformed/cyclic rows are skipped in public placement rendering and reported in Admin rather than recursively expanded. Traversal is bounded by depth, expanded-node, Smart-Gallery-node, source-row, edge, and per-parent attachment ceilings. The current rule catalog has no Smart-Gallery-to-Smart-Gallery reference field, so no unsupported relation is inferred.
+Relationship validation builds a request-cached graph from Smart Gallery
+attachment edges and positive physical-gallery references in Smart Gallery
+rules, using the current or proposed physical hierarchy to expand `under`
+references to their descendant branch while keeping exact references exact.
+Proposed rules, attachments, ordinary hierarchy moves, filesystem-derived parent
+synchronization, and public-path parent repair are validated before new
+hierarchy writes. Complete Admin drag-and-drop trees are validated once as the
+final parent map, then moved through a prevalidated batch path so temporary
+intermediate states do not cause false cycle failures. Every committed physical
+hierarchy mutation clears the request-local graph cache. Legacy malformed/cyclic
+rows are skipped in public placement rendering and reported in Admin rather than
+recursively expanded. Traversal is bounded by depth, expanded-node,
+Smart-Gallery-node, source-row, edge, and per-parent attachment ceilings. The
+current rule catalog has no Smart-Gallery-to-Smart-Gallery reference field, so
+no unsupported relation is inferred.
 
-See **[docs/SMART_GALLERIES.md](docs/SMART_GALLERIES.md)** for the service, access, presentation, lightbox, Admin, and download contracts.
+See **[docs/SMART_GALLERIES.md](docs/SMART_GALLERIES.md)** for the service,
+access, presentation, lightbox, Admin, and download contracts.
 
 ## Support & Resources
 
@@ -1133,8 +1922,10 @@ commitment and reporting guidance.
 
 ## Changelog
 
-See **[PATCH_NOTES.md](PATCH_NOTES.md)** for detailed version history and recent changes.
+See **[PATCH_NOTES.md](PATCH_NOTES.md)** for detailed version history and recent
+changes.
 
 ---
 
-**PHP Gallery CMS** - Simple, powerful, and designed for ordinary shared hosting.
+**PHP Gallery CMS** - Simple, powerful, and designed for ordinary shared
+hosting.

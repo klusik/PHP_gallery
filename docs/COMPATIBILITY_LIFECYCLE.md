@@ -4,7 +4,8 @@
 
 Successful public HTML visits now supply private telemetry-only worker requests
 through the existing maintenance endpoint and configured installation origin.
-The site-maintenance service owns admission, attempt throttling and shared socket
+The site-maintenance service owns admission, attempt throttling and shared
+socket
 transport; the controller owns token/method validation. Retention still belongs
 to the original telemetry worker. Single-worker HTTP regressions establish real
 handoff and security/opt-out behavior; production TLS loopback and worker-pool
@@ -16,8 +17,10 @@ bounded transport remains in visitor shutdown, never the retention SQL itself.
 
 The telemetry rollup service now rotates a persisted allowlisted first-target
 cursor and visits independent targets in one-batch rounds. Missing or obsolete
-cursor values permanently restart the scheduling order without altering retention
-eligibility; unavailable settings refuse the pass. Defaults increase to ten seconds,
+cursor values permanently restart the scheduling order without altering
+retention
+eligibility; unavailable settings refuse the pass. Defaults increase to ten
+seconds,
 5000 rows times eight batches per table and a five-minute completed interval.
 Existing local runtime-limit overrides remain authoritative. Production deletion
 throughput and cron cadence are unmeasured; the Maintenance Center four-second
@@ -26,14 +29,16 @@ slice and archival safety checks remain supported.
 
 Owners: telemetry settings/rollup services, telemetry model and
 `202610190001_telemetry_compact_indexes.php`. Missing independent SQL retention
-permanently supports pre-seed installations with the documented seven-day default;
+permanently supports pre-seed installations with the documented seven-day
+default;
 unknown reads never authorize purge. Existing administrator hourly/daily choices
 are preserved. Unknown metric families retain their dimensions permanently until
 an explicit reporting contract permits normalization. No measurement totals,
 photo identity or bot segmentation are retired. Historical daily compaction does
 not reconstruct from partially purged hourly data. Production savings and DDL
 lock duration are unknown until deployed. Hosted regressions cover populated
-migration replay, logical uniqueness, archival/compaction idempotence, historical
+migration replay, logical uniqueness, archival/compaction idempotence,
+historical
 source independence and rollback on a real constraint failure.
 
 ## Optional WinApp dispatch and maps (0.6.0)
@@ -41,7 +46,8 @@ source independence and rollback on a real constraint failure.
 Owners: `flight_simbrief.py`, `flight_navdata.py`, `flight_maps.py`,
 `flight_ui.py`, `flight_data.py` and `flight_report.py` in `winapp/uploader`.
 Legacy sessions without simbrief.json remain valid. Dispatch values are planned
-evidence and never overwrite simulator measurements. The OFP snapshot participates
+evidence and never overwrite simulator measurements. The OFP snapshot
+participates
 in the analysis checksum; template 9 prevents reuse of earlier report layouts.
 Explicit local regeneration retains all previous PDF revisions and receipts.
 Version 0.6.1 fits both map extents independently of print DPI and omits the
@@ -58,7 +64,8 @@ SimBrief identity is stored only after a successful explicit fetch; archived
 JSON/XML imports need no account. The next session consumes a staged plan once.
 An explicit historical load/file selection attaches without a second prompt;
 a changed active session
-rejects late results. A separate AIRAC-scoped SQLite cache retains exact provider
+rejects late results. A separate AIRAC-scoped SQLite cache retains exact
+provider
 fix coordinates, including ambiguous identifiers; it does not guess unresolved
 airway points. Snapshots remain authoritative after cache eviction.
 
@@ -67,7 +74,8 @@ bounded displayed-viewport requests. Missing tiles retain an explicitly labelled
 route-only background. This permanent fallback supports offline postflight work;
 its retirement would require an equivalent offline report path. Polar map
 latitudes are clamped by Web Mercator; original coordinates remain in
-the saved raw data. Gallery credentials and pilot identity never enter tile URLs.
+the saved raw data. Gallery credentials and pilot identity never enter tile
+URLs.
 
 Regression owners: `test_flight_simbrief.py`, `test_flight_ui.py` and
 `test_flight_report.py`. These fixtures do not establish live SimBrief account,
@@ -95,9 +103,12 @@ that began airborne: at least two ordered OFP fixes must match captured legs
 within 10 NM, with no extrapolation across jumps/gaps. It compares at positions
 and does not invent a takeoff time. Retirement requires equivalent comparison
 for airborne-start recordings. Missing matching data/units suppress the overlay
-with a visible explanation. Purple dashed plans remain distinct from amber recorded-gap
-interpolation. No delay score, actual passenger count or unseen fuel is inferred.
-New regressions cover source-pixel density, vector routes, simulator-rate mapping,
+with a visible explanation. Purple dashed plans remain distinct from amber
+recorded-gap
+interpolation. No delay score, actual passenger count or unseen fuel is
+inferred.
+New regressions cover source-pixel density, vector routes, simulator-rate
+mapping,
 unit conversion, legacy snapshot defaults and preservation of old filenames.
 
 Saved-flight regeneration automatically uses an already loaded OFP before the
@@ -105,12 +116,14 @@ worker starts. With none loaded, the saved session's OFP remains unchanged.
 It creates all four editions without a second confirmation. The next-flight
 plan remains staged and historical attachment status is shown
 separately. This corrects the observed case where an accepted main-window load
-was mistaken for a historical attachment. Focused replay of the affected captured
+was mistaken for a historical attachment. Focused replay of the affected
+captured
 flight and an isolated retained OFP confirmed positional profile availability;
 it does not qualify a fresh provider fetch or full native UI acceptance.
 
 The SimBrief identity sheet uses the existing dark theme, inline validation and
-owner-relative positioning. Main controls retain only the staged/current flight's
+owner-relative positioning. Main controls retain only the staged/current
+flight's
 accepted plan and airport pair; failed reloads leave accepted evidence intact.
 Saved-flight headings toggle direction with UTC-aware time/count/name sorting,
 preserving native expanded groups and multi-selection. Missing pypdf is a
@@ -118,7 +131,8 @@ permanent catalog fallback to unknown pages, owned by `flight_jobs.py`; it keeps
 old PDFs accessible during source-environment repair. Its retirement requires
 an equally independent saved-file recovery path. Missing renderer packages are
 reported as dependency repair tasks by `flight_workflow.py`/`flight_ui.py`.
-Local diagnosis on Python 3.14.4 recovered page counts for 20 existing PDFs after
+Local diagnosis on Python 3.14.4 recovered page counts for 20 existing PDFs
+after
 installing the already-declared requirements; original files were unchanged.
 
 The independent update helper publishes a typed result after its durable
@@ -192,7 +206,8 @@ from arming rejected-takeoff evidence. Gaps and unavailable rates stay explicit.
 Optional measured fuel is stored as fuel_weight_kg, null for old recordings;
 existing gallons stay intact. Unit heuristics default to kg, use lb for
 Boeing/PMDG and gallons for common light GA. Historical mass conversion assumes
-0.80 kg/L and is visibly marked estimated. This permanent display policy supports
+0.80 kg/L and is visibly marked estimated. This permanent display policy
+supports
 volume-only sessions without rewriting their raw data or qualifying aircraft
 accuracy. Live optional mass and Windows/PDF delivery remain manual acceptance.
 
@@ -207,7 +222,8 @@ the local app was deliberately not launched, stopped or attached for inspection.
 Portable regressions cover local/remote isolation, preservation, cancellation,
 passive history and instrument freshness/conversion. Actual compact Windows
 layout, installed upgrade, simulator and end-to-end report acceptance remain
-manual. Retain existing Stop/Revoke and old-session recovery paths until separate
+manual. Retain existing Stop/Revoke and old-session recovery paths until
+separate
 live and deployed-usage evidence supports a deliberate retirement.
 
 ## Windows flight telemetry definitions and diagnostics (0.5.2)
@@ -267,11 +283,14 @@ simulator/aircraft/build and installed-upgrade acceptance remain separate.
 Owner: `app/services/media_renamer.php`. Same-directory staging permanently uses
 a fixed 83-byte hash basename instead of appending the original name. Production
 logs reported staging refusal for 172-byte originals because the former
-temporary name grew to 256 bytes. The hosting filesystem type remains unverified.
+temporary name grew to 256 bytes. The hosting filesystem type remains
+unverified.
 Existing source naming, image order, writer ownership, rollback and sidecars
 remain supported; no migration or metadata-dependent filename scheme is added.
-`media_renamer_staging_test.php` owns real long-name/rollback regression coverage;
-the upload-selection fixture owns gallery-context and continued-numbering checks.
+`media_renamer_staging_test.php` owns real long-name/rollback regression
+coverage;
+the upload-selection fixture owns gallery-context and continued-numbering
+checks.
 Live production acceptance and installation-wide incidence remain unknown.
 
 ## Attachment masters and accounting snapshots
@@ -280,32 +299,44 @@ Database inspection keeps legacy case-insensitive PCRE word-boundary matching
 for identifiers outside the ASCII word index. This permanent fallback belongs
 to `database_maintenance.php`, because deployed schema names may include
 punctuation or non-ASCII characters; actual installation-wide usage is unknown.
-Boundary and scoped SQL-evidence regressions protect equivalence. Source inspection
-still distinguishes production SQL, test SQL and lexical mentions without treating
-this supporting evidence as authorization to remove schema objects. No source-cache
-freshness fallback is introduced. A local paired run preserved the full reference
-map while reducing inspection from 4.71 to 1.19 seconds; other-host timings remain
+Boundary and scoped SQL-evidence regressions protect equivalence. Source
+inspection
+still distinguishes production SQL, test SQL and lexical mentions without
+treating
+this supporting evidence as authorization to remove schema objects. No
+source-cache
+freshness fallback is introduced. A local paired run preserved the full
+reference
+map while reducing inspection from 4.71 to 1.19 seconds; other-host timings
+remain
 unknown and are available through the new stage/operation diagnostic breakdown.
 
-With durable thumbnail metadata, new storage jobs finish ordinary-photo accounting
-in their initial source DB pass; only DNG display masters retain bounded disk work.
+With durable thumbnail metadata, new storage jobs finish ordinary-photo
+accounting
+in their initial source DB pass; only DNG display masters retain bounded disk
+work.
 The previous full-image derivative cursor remains for schemas without thumbnail
 metadata and already-running jobs without `display_masters_only`. This permanent
 support belongs to storage statistics; removing it requires complete installed
 schema/old-job retirement proof, currently unknown. Required thumbnail aggregate
 failures propagate instead of silently authorizing empty fast-path totals.
-The observed 1,744-photo run needed 89 file-phase requests despite only 0.40 seconds
-of phase work. A 40,000-row regression checks one-request ordinary-photo completion;
-production-scale timing and other-host acceptance remain separate from that fixture.
+The observed 1,744-photo run needed 89 file-phase requests despite only 0.40
+seconds
+of phase work. A 40,000-row regression checks one-request ordinary-photo
+completion;
+production-scale timing and other-host acceptance remain separate from that
+fixture.
 
 Storage statistics no longer degrade required photo-query failures to empty
-collections. A local 2026-10-19 run reported 1,744 source photos but zero derivative
+collections. A local 2026-10-19 run reported 1,744 source photos but zero
+derivative
 batch rows and false completion. The owner now binds PDO cursor/LIMIT parameters
 as integers, propagates required-query errors and rejects premature exhaustion.
 The previous catch-and-empty behavior is retired because it cannot distinguish
 database failure from completed work. Existing optional thumbnail-schema policy
 is unchanged. Real database regression covers native/emulated prepares; job
-regression covers failures and retained snapshots. Other-host incidence is unknown.
+regression covers failures and retained snapshots. Other-host incidence is
+unknown.
 
 Database attachment accounting retains legacy sidecar ownership. A bounded
 first-use import reads missing PDF/music/OFP categories, including empty ones;
@@ -317,14 +348,18 @@ changes. Optional accounting failures retain committed originals, log safe
 owner/category diagnostics and drop stale categories where possible. A complete
 database outage may also prevent invalidation and requires operator recovery.
 The regression owner `tests/admin_storage_statistics_test.php` covers repeated
-updates with source directories offline and insert-if-absent mutation protection.
+updates with source directories offline and insert-if-absent mutation
+protection.
 Hosted execution is required to establish regression evidence.
 
 Owners: canonical capability registry, shared upload/editor controllers,
 attachment readers and Admin storage statistics. Independent PDF/music masters
-default ON when no preference exists, including upgrades; fresh seeding preserves
-explicit OFF. OFF retains files, indexes, preferences and the incomplete-PDF-child
-publication guard. The historical `media&ofp=1` alias remains supported and applies
+default ON when no preference exists, including upgrades; fresh seeding
+preserves
+explicit OFF. OFF retains files, indexes, preferences and the
+incomplete-PDF-child
+publication guard. The historical `media&ofp=1` alias remains supported and
+applies
 the same PDF master. Stored page photos retain their normal image ownership.
 Both attachment masters OFF retain the core Presentation card when lightbox is
 enabled. The tab is omitted only when all three capabilities are OFF; an old
@@ -337,18 +372,22 @@ The existing optional snapshot argument remains supported for pure/legacy
 photo-only consumers and contributes zero attachment bytes when omitted.
 
 The attachment accounting owner omits corrupt indexes and unsafe/unreadable
-originals with visible partial-coverage warnings, preserving independent readable
-categories and all original bytes. This is permanent read-only reporting behavior,
+originals with visible partial-coverage warnings, preserving independent
+readable
+categories and all original bytes. This is permanent read-only reporting
+behavior,
 not permission to repair indexes. A post-commit advisory revision write may fail
 without failing the successful attachment response. Missing derived categories
 are reimported by the next update; complete database-outage recovery requires
-explicit invalidation as described above. This permanent fallback avoids duplicate
+explicit invalidation as described above. This permanent fallback avoids
+duplicate
 retries after optional reporting failures. Out-of-band file changes require
 accounting invalidation followed by manual refresh.
 
 Regression owners: canonical feature core/inventory, real MySQL/MariaDB HTTP
 workflow and the existing storage-statistics fixture. Real-host library sizes,
-permissions and media usage remain unknown; no performance/usage-based retirement
+permissions and media usage remain unknown; no performance/usage-based
+retirement
 of these compatibility paths is claimed.
 
 ## Gallery soundtrack browser support
@@ -372,7 +411,8 @@ installed-host acceptance. See `docs/GALLERY_MUSIC.md` and `TESTING.md`.
 The same player owns a permanent serialized metadata fallback when
 IntersectionObserver is unavailable: connected duration cells share one silent
 reader and ten-second deadlines. Unknown duration remains explicit. Live usage
-of this fallback is unknown; retire only with supported-browser/deployment proof.
+of this fallback is unknown; retire only with supported-browser/deployment
+proof.
 The music model also owns permanent v1 compatibility: a missing download flag
 means false. New tracks always start locked; bulk permission affects current
 tracks only. This prevents old indexes or later uploads inheriting permission.
@@ -415,17 +455,22 @@ PDF/OFP discovery uses canonical complete matching sources, excludes hidden
 documents for all audiences and keeps physical endpoint access checks. Existing
 ordinary Smart `music_enabled` defaults remain unchanged; explicit presentation
 links snapshot common autoplay/music ON and medium speeds without persisting.
-This permanent shared path preserves pagination-independent media, current source
+This permanent shared path preserves pagination-independent media, current
+source
 filter/language in share links and the established activation fallback. Adoption
 and large deployed PDF unions remain unknown; no retirement is inferred.
 
 ## Compact attachment browser presentation
 
-The physical-gallery presentation settings owner is the existing lightbox service,
-gallery model and guarded editor writer. Nullable version-1 JSON keeps pre-feature
-galleries enabled with autoplay, music and medium timings. Unknown versions/types render
+The physical-gallery presentation settings owner is the existing lightbox
+service,
+gallery model and guarded editor writer. Nullable version-1 JSON keeps
+pre-feature
+galleries enabled with autoplay, music and medium timings. Unknown
+versions/types render
 those compatible defaults. Public reads need no new schema probes; explicit
-editor/import writes fail before filesystem effects on missing or unknown schema.
+editor/import writes fail before filesystem effects on missing or unknown
+schema.
 Older forms preserve the stored field. Sidecars, Organizer children and Trash
 retain preferences. Live usage statistics for the new settings are unknown.
 
@@ -433,7 +478,8 @@ New links snapshot all supported playback options. Legacy `presentation=1` links
 remain supported and `autoplay=1` is an alias. Invalid values cannot introduce
 arbitrary timers or change gallery/media grants. Requested automatic fullscreen
 or audible playback refusal now holds the decoded first photo behind black and
-offers one Start presentation confirmation, including exclusive links. Its trusted
+offers one Start presentation confirmation, including exclusive links. Its
+trusted
 click requests shared audio before fullscreen without an asynchronous boundary.
 After confirmation the existing viewport fallback protects unsupported native
 fullscreen; media failures keep player feedback without a repeated prompt.
@@ -443,11 +489,15 @@ protects browsers requiring activation; retire only with supported-browser and
 deployment evidence that audible autoplay is assured. Required Chromium covers
 allowed/refused/muted starts and idle-HUD hiding with controlled audio; real
 codecs, Safari and physical devices remain manual acceptance.
-Autoplay defaults ON until explicitly changed. Share applets snapshot it alongside
-music, speeds and link-only fullscreen/exclusive choices. Exclusive mode defaults
+Autoplay defaults ON until explicitly changed. Share applets snapshot it
+alongside
+music, speeds and link-only fullscreen/exclusive choices. Exclusive mode
+defaults
 OFF, hides controls/metadata/diagnostics when selected, and retains Escape exit;
-it grants no access and does not bypass browser sound policy. A one-second minimum
-black opening also waits for first-photo decode, uses the existing slideshow timer
+it grants no access and does not bypass browser sound policy. A one-second
+minimum
+black opening also waits for first-photo decode, uses the existing slideshow
+timer
 and never repeats as a gallery item. These are permanent supported behaviors;
 live usage statistics and real-device permission behavior remain unknown.
 
@@ -455,18 +505,23 @@ The gallery-only `presentation` query flag is allowed through the SEO guard;
 it grants no visitor authority. Public direct links must reach the same gallery
 controller in a fresh anonymous session. Desktop native fullscreen rejection
 keeps `.is-fullscreen` geometry with `.is-css-fullscreen` stacking rather than
-entering a mobile-only CSS shell. This permanent viewer-owned capability fallback
+entering a mobile-only CSS shell. This permanent viewer-owned capability
+fallback
 protects links without user activation. Retire only with supported-browser proof
 that native fullscreen is assured. Actual Chromium regressions decode synthetic
 images, assert nonzero stage geometry, advance from photo one and close/release
-audio after controlled native fullscreen/autoplay rejection. Live browser policy,
-codec and mobile-device coverage remains manual; adoption statistics are unknown.
+audio after controlled native fullscreen/autoplay rejection. Live browser
+policy,
+codec and mobile-device coverage remains manual; adoption statistics are
+unknown.
 
-Owners: `gallery-media-panels.js`, shared lightbox view helpers and music player.
+Owners: `gallery-media-panels.js`, shared lightbox view helpers and music
+player.
 Native details is the permanent no-JavaScript and missing-Popover fallback: the
 bounded list opens inline while forms keep their original ownership. Optional
 Web Animations is feature-detected; missing support closes immediately. User
-reduced-motion preference disables both disclosure motion and row-title scrolling.
+reduced-motion preference disables both disclosure motion and row-title
+scrolling.
 ResizeObserver is optional: play/open/resize events still measure title overflow
 without it. These paths protect attachment access, keyboard dismissal and
 exclusive audio without requiring newer browser APIs.
@@ -503,7 +558,8 @@ state changes and longer gaps stay separate. Neither landing fits nor telemetry
 are filled. Original landing-window frames are retained before overview thinning
 with disclosed per-landing/session bounds. Existing in-memory analysis objects
 without a raw window permanently retain their overview display fallback;
-reanalysis of saved raw data populates the new window. Dense final approach through sustained
+reanalysis of saved raw data populates the new window. Dense final approach
+through sustained
 taxi preserves every acquired frame, remains at a 20 Hz target, and returns to
 normal by observed speed rather than an invented runway boundary. Native cadence
 remains a separate live acceptance check; replacement-key upload was
@@ -550,7 +606,8 @@ deliberate retirement.
 Owners: `winapp/uploader/simconnect_time.py`, the watcher GUI and updater drain.
 The saved `sync_utc_time` field is additive and defaults off for existing
 configurations. Both identified MSFS 2020/2024 connections use the common clock
-API, separate from per-photo camera/aircraft connections. Missing or incompatible
+API, separate from per-photo camera/aircraft connections. Missing or
+incompatible
 simulators preserve the preference and uploads. Three failed corrections suspend
 only that connection; reconnection probes capability again. This is permanent
 optional-host support, not a reason to remove either simulator generation.
@@ -570,10 +627,13 @@ Installed release/upgrade acceptance remains separate from build mocks/BASIC.
 ## Reviewed main ancestry and historical synchronization receipts
 
 Owners: release assembly, completion, policy, origin and reconciliation readers.
-Current schema-4 completion fast-forwards unchanged selected develop to the actual
+Current schema-4 completion fast-forwards unchanged selected develop to the
+actual
 reviewed/tagged main merge M. A `RECONCILED_FF` receipt binds M/tree/source and
-retirement verifies original assembly, owner approval, source ancestry and retained
-M. Equal contents in a sibling commit are insufficient. Readiness and PR creation
+retirement verifies original assembly, owner approval, source ancestry and
+retained
+M. Equal contents in a sibling commit are insufficient. Readiness and PR
+creation
 block the old merge prohibition; only the maintainer changes installed policy.
 Non-force updates, exact Actions checks, no bypass and concurrent-ref protection
 remain required. No content-copy commit or forced protected update is generated.
@@ -581,7 +641,8 @@ remain required. No content-copy commit or forced protected update is generated.
 Published schema-4 `RECONCILED_EQUIVALENT` receipts (observed through v_0.133.3)
 retain their original single-parent result above selected develop, complete tree
 and authenticated assembly/approval. Readers keep that historical format while
-its published receipts remain supported; later reviewed main FFs may descend from
+its published receipts remain supported; later reviewed main FFs may descend
+from
 the retained result. Historical schemas retain their original linear-Q FF and
 reconciliation proof readers. Existing divergent refs are joined by a later
 release retaining current develop, or by a separately authorized migration.
@@ -598,7 +659,8 @@ uses the post-assembly observer; normal Git push acknowledges origin publication
 without a redundant cached REST readback. Live main-following synchronization
 awaits reviewed policy installation and a separately human-approved release;
 registered real-Git regressions own
-tree preservation, concurrency refusal, idempotence and successor initialization.
+tree preservation, concurrency refusal, idempotence and successor
+initialization.
 
 ## Gallery title-picture selection compatibility
 
@@ -625,19 +687,24 @@ qualification remain separate evidence.
 
 ## Owner-selected feature qualification and protected-develop releases (#235)
 
-Owners: integration/evidence and release origin/promotion readers. New integration
+Owners: integration/evidence and release origin/promotion readers. New
+integration
 schema 2 permits explicit owner-selected feature workflows and seals successful
-FULL before publication. New release schema 4 trusts the frozen protected develop
+FULL before publication. New release schema 4 trusts the frozen protected
+develop
 source and records assembly, without reopening older source qualification.
 Historical integration schema 1 and release schemas 1–3 remain supported for
 immutable existing records. Their actual usage is unknown; retain their readers
 until supported historical origin/completion consumers can be proven absent.
-The old finite 0.132.9 bridge below is historical compatibility only. New releases
+The old finite 0.132.9 bridge below is historical compatibility only. New
+releases
 resolve protected main first-parent history to the unchanged stable tag without
-another version-specific exception. Regression coverage includes complete adverse
+another version-specific exception. Regression coverage includes complete
+adverse
 native owners, changed inputs, corrupt archives, release assembly failures and
 Git/tag identity preservation. Live acceptance is pending hosted qualification
-and human-reviewed installation; no production publication is part of this batch.
+and human-reviewed installation; no production publication is part of this
+batch.
 
 Protected publication retains Checks IDs and an optional `matrix_status_id` from
 the same verified FULL. Commit Statuses cover GitHub's dispatch-suite rollup
@@ -649,7 +716,8 @@ provider representations and historical records; neither changes test ownership.
 
 Owner: `release-origin.mjs`, `start-new-release.mjs` and the shared release
 promotion readers. PR #230 advanced main through normal human-reviewed protected
-merge while the existing `v_0.132.8` tag stayed immutable. The old origin equality
+merge while the existing `v_0.132.8` tag stayed immutable. The old origin
+equality
 assumption would reject the next release. The finite `0.132.9` bridge preserves
 both truthful identities and authenticates the exact maintenance merge, human
 review, immutable caller/matrix blobs, twelve native CI owners, exact-SHA check
@@ -678,7 +746,8 @@ blanket name-based deletion is introduced. This read compatibility is permanent
 until supported installed releases no longer need older ownership records;
 removal requires migration/installed-consumer evidence. Regression owners are
 `production_file_policy_test.php`, `updater_inventory_compatibility_test.php`,
-`updater_resumable_state_machine_test.php` and the compact production package test.
+`updater_resumable_state_machine_test.php` and the compact production package
+test.
 
 ## Admin log clipboard and native text downloads
 
@@ -686,7 +755,8 @@ Owner: `admin-logs.js` and the existing `admin_log_export` controller/service.
 The native selected-text copy command is attempted first because the embedded
 browser's asynchronous Clipboard API acknowledged writes to its browser-session
 clipboard without updating the user's Windows clipboard during #219 acceptance.
-The standard asynchronous API remains the fallback when native copying is absent.
+The standard asynchronous API remains the fallback when native copying is
+absent.
 HTTP installations or browsers denying asynchronous Clipboard API access retain
 the full diagnostic text in a selectable modal; no successful copy is reported
 when clipboard writing fails. Native authenticated TXT links and scoped POST
@@ -694,35 +764,41 @@ downloads remain supported without JavaScript. This is permanent support for
 ordinary hosting and browser permission policies; usage is **unknown**. Retiring
 the manual-copy alternative requires acceptance evidence for supported HTTP and
 permission-denied environments. Regression evidence belongs to
-`tests/admin_log_export_selection_test.php`, `tests/fixtures/admin_log_exports.mjs`
+`tests/admin_log_export_selection_test.php`,
+`tests/fixtures/admin_log_exports.mjs`
 and the browser verification in #219. Native HTTP downloads are retained because
 Blob URL downloads did not produce a file in the embedded browser; acceptance
 verified actual UTF-8 files containing six group events and eleven selected
-events in Windows Downloads. Ordinary clipboard and HTTP download support remains
+events in Windows Downloads. Ordinary clipboard and HTTP download support
+remains
 permanent until supported-browser acceptance proves an equivalent replacement.
 
 ## Independent updater cache reclamation
 
 Owner: updater filesystem/prune cleanup and site-maintenance service.
 The existing three-argument `application_update_delete_tree_slice()` API remains
-supported with an optional relative cursor and additional result fields. Existing
+supported with an optional relative cursor and additional result fields.
+Existing
 updater/CLI callers retain their `removed`, `done` and `elapsed_ms` fields. The
 protected environment is PHP 8.1+ shared hosting; cursor-free calls remain valid
 for bounded shallow updater work, while the independent GC persists depth state.
 This is permanent support for existing callers rather than a timed fallback.
-Usage is unknown. `tests/updater_cache_gc_test.php` supplies synthetic safety and
+Usage is unknown. `tests/updater_cache_gc_test.php` supplies synthetic safety
+and
 progress coverage; hosted FULL and production acceptance are distinct gates.
 
 ## Develop required-check propagation
 
-Owner: `.github/scripts/develop-integration.mjs`, `integrateDevelop()`. Integration
+Owner: `.github/scripts/develop-integration.mjs`, `integrateDevelop()`.
+Integration
 [38899855917](https://github.com/klusik/PHP_gallery/actions/runs/38899855917)
 passed FULL but GitHub rejected FF one second after creating its required check.
 Propagation is the suspected cause; frequency is **unknown**. The narrow retry
 retains exact evidence and leases, rejects other/ambiguous errors and is covered
 by `tests/develop_integration_test.mjs`. Keep this provider compatibility until
 GitHub guarantees immediate enforcement visibility and hosted acceptance proves
-safe removal. Feature fixtures do not prove protected installation or live recovery.
+safe removal. Feature fixtures do not prove protected installation or live
+recovery.
 
 ## Retained Actions job inventory provider failures
 
@@ -730,42 +806,53 @@ Owner: `.github/scripts/release-promotion.mjs`, `command()` and `fetchJobs()`.
 Release qualification must independently read the complete job inventory of the
 exact retained integration attempt. GitHub returned HTTP 502 for the 100-job
 page of integration run 38465847308 attempt 2; a complete one-job-page read
-returned all 16 jobs. This is a provider read failure, not failed Gallery runtime
+returned all 16 jobs. This is a provider read failure, not failed Gallery
+runtime
 qualification. Usage frequency is **unknown**; the incident is documented in
 issue #202.
 
 Only an explicitly classified HTTP 5xx allows one alternate paginated read with
-one job per page, on the identical run and attempt. Permission, missing-resource,
+one job per page, on the identical run and attempt. Permission,
+missing-resource,
 malformed/incomplete evidence and unclassified command errors remain terminal.
 The smaller-page read retains total-count completeness, exact check identities
 and all mandatory job gates; it cannot authorize writes or accept partial proof.
 Regression coverage belongs to `tests/hosted_release_policy_test.mjs`.
 Retire the fallback only after supported GitHub retained-job collections have
-reliable large-page reads and exact-coverage regression acceptance remains intact.
+reliable large-page reads and exact-coverage regression acceptance remains
+intact.
 
 ## Public iCloud exports and bounded ZIP sources
 
-Owner: `admin-icloud-source.js`, `admin-icloud-download.js`, the existing browser
+Owner: `admin-icloud-source.js`, `admin-icloud-download.js`, the existing
+browser
 uploader and image worker. The observed anonymous Photos sharing protocol can
 produce CORS-readable compatible ZIPs for the owner-provided Shared Album. It is
 undocumented and may change; strict schema/host/availability failures retain the
 explicit manual alternative. No Apple credentials, cookies or Gallery proxy are
-introduced. Historical Photos fragments and Shared Album `#/sc,` redirects remain
-separate source inputs. Usage is **unknown**; live Photos Link, physical large-source
+introduced. Historical Photos fragments and Shared Album `#/sc,` redirects
+remain
+separate source inputs. Usage is **unknown**; live Photos Link, physical
+large-source
 and Safari/Firefox/mobile qualification remain separate evidence requirements.
 Retirement of the manual alternative requires those supported-source/client
 acceptance proofs; it is not inferred from one successful Shared Album export.
 
-Manual ZIP selections retain the 64 MiB aggregate-original cap. Automatic sources
+Manual ZIP selections retain the 64 MiB aggregate-original cap. Automatic
+sources
 use OPFS and the existing pull-driven worker/batcher seam, bounding one original
-to 64 MiB/the effective server limit instead of retaining every image. Both modes
-retain 4 MiB directory, 10,000-entry and 2 GiB expanded-data bounds, and explicit
-ZIP64/multi-disk refusal. Apple's actual exported ZIP appends 205 zero bytes after
+to 64 MiB/the effective server limit instead of retaining every image. Both
+modes
+retain 4 MiB directory, 10,000-entry and 2 GiB expanded-data bounds, and
+explicit
+ZIP64/multi-disk refusal. Apple's actual exported ZIP appends 205 zero bytes
+after
 the end record. The shared parser accepts only all-zero suffixes up to 4 KiB,
 with unchanged directory/entry/CRC/signature checks; nonzero trailers remain
 invalid. Permanent compatibility is justified by ordinary ZIP-library acceptance
 and the observed Apple producer; regression fixtures cover both acceptance and
-hostile/nonzero/oversized suffix refusal. Tail allocation is at most 69,653 bytes.
+hostile/nonzero/oversized suffix refusal. Tail allocation is at most 69,653
+bytes.
 Disk files are locked across active/retry work, removed on success/safe failure,
 and aged unlocked orphans are reclaimed at the next acquisition. Synthetic
 protocol/storage/incremental/replay and existing PDF scenarios run under the
@@ -776,7 +863,8 @@ inherited central ZIP owner; BASIC alone does not execute them.
 Owner: `app/services/gallery_pdf_conversion.php`. Existing v1 markers omit
 `render_key` and `generation`; their conversion identity remains the render key
 and they remain generation zero. Confirmed replacement of a missing or changed
-child creates a new identity while preserving prior markers and their publication
+child creates a new identity while preserving prior markers and their
+publication
 guards. Empty newer generations advance rather than replacing generation zero.
 Legacy-marker usage is **unknown**; preserve this interpretation until supported
 installations have an accepted migration. The lifecycle fixture contains
@@ -786,10 +874,12 @@ functional execution remains deferred during BASIC-only implementation.
 ## Gallery PDF index visibility defaults
 
 Owner: `app/services/gallery_pdf_documents.php` and protected PDF delivery in
-`app/controllers/public_media.php`. Existing v1 attachment indexes omit the manual
+`app/controllers/public_media.php`. Existing v1 attachment indexes omit the
+manual
 `hidden` flag and legacy `ofp_hidden` envelope value; both default to visible to
 preserve previously shared documents. New hidden state is enforced for visitors,
-including share tokens and anonymous Admin preview. Replacement and index rewrites
+including share tokens and anonymous Admin preview. Replacement and index
+rewrites
 retain those values. Usage of legacy indexes is **unknown**; keep this fallback
 while supported installations can contain v1 records without visibility fields.
 Retirement requires a verified migration and supported-installation acceptance.
@@ -801,14 +891,17 @@ implementation and must not be claimed as verified functional coverage.
 
 Pages handoff protects the main-only `github-pages` environment. A main checkout
 cannot change a release run's tag ref (observed run 38225431172).
-`project-website-dispatch.mjs` validates latest stable publication and Actions-based
+`project-website-dispatch.mjs` validates latest stable publication and
+Actions-based
 Pages, then dispatches the same workflow only on main. The handoff has no Pages
 write or OIDC token. Legacy Pages setup requires explicit owner configuration.
-`hosted_release_policy_test.mjs` covers wrong contexts, superseded/draft releases,
+`hosted_release_policy_test.mjs` covers wrong contexts, superseded/draft
+releases,
 legacy configuration and the exact allowed dispatch.
 Website evidence uses the existing owned DevTools browser session after fonts,
 images and layout assertions, replacing the CLI screenshot startup that timed
-out in run 38230411649. PNG format, viewport width and all six evidence files are
+out in run 38230411649. PNG format, viewport width and all six evidence files
+are
 required; native route, keyboard, contrast and overflow checks remain enforced.
 
 The reconciliation owner recognizes automatic completion when protected linear
@@ -819,9 +912,11 @@ removes dependence on the retired reconciliation workflow for automatic FF;
 legacy equivalent-replay receipts keep their path. Missing permanent evidence
 stays BLOCKED with instructions to attach the original completion artifact.
 Cleanup never generates/uploads a replacement receipt. Tests in
-`release_retirement_test.mjs` cover isolated real merge/tag/FF, red qualification,
+`release_retirement_test.mjs` cover isolated real merge/tag/FF, red
+qualification,
 absent/altered approval, forged receipt fields and missing evidence/Q ancestry.
-Expired native qualification artifacts remain a blocker. Live deployment/retirement
+Expired native qualification artifacts remain a blocker. Live
+deployment/retirement
 acceptance is unknown until maintainer execution. Keep legacy parsing until all
 published receipt consumers are migrated.
 
@@ -835,38 +930,57 @@ existing product metric actually observes adoption.
 
 ### CI recovery — retained integration artifact protocol
 
-- **Reason / protected behavior:** Existing immutable release origins may select a
-  FULL-qualified develop SHA advanced outside the integration action. A main-owned,
+- **Reason / protected behavior:** Existing immutable release origins may select
+  a
+  FULL-qualified develop SHA advanced outside the integration action. A
+  main-owned,
   owner-dispatched recovery qualifies that same SHA without changing any ref.
-- **Owner:** `develop-integration.yml` and `develop-integration.mjs`; release consumers
-  continue using the existing `coverage-artifacts.mjs` and schema-1 integration proof.
-- **Permanent support rationale:** Keep retained origins and their selected commits
-  usable. Recovery records preserve real historical ancestry and fresh same-run native
-  FULL owners, with explicit no-ref-write metadata. There is no red override or forged
-  replacement of historical checks, and ordinary integration guards remain strict.
-  Recovery does not relax main/predecessor pins; an origin frozen before installing
-  this authority cannot be moved to the newer main and remains historical evidence.
-- **Evidence / usage:** `tests/develop_integration_test.mjs` covers owner/attempt/ref
-  rejection, old and fresh FULL owners, metadata races and unchanged release-consumer
-  verification. Live recovery usage is **unknown** until a reviewed installation on
+- **Owner:** `develop-integration.yml` and `develop-integration.mjs`; release
+  consumers
+  continue using the existing `coverage-artifacts.mjs` and schema-1 integration
+  proof.
+- **Permanent support rationale:** Keep retained origins and their selected
+  commits
+  usable. Recovery records preserve real historical ancestry and fresh same-run
+  native
+  FULL owners, with explicit no-ref-write metadata. There is no red override or
+  forged
+  replacement of historical checks, and ordinary integration guards remain
+  strict.
+  Recovery does not relax main/predecessor pins; an origin frozen before
+  installing
+  this authority cannot be moved to the newer main and remains historical
+  evidence.
+- **Evidence / usage:** `tests/develop_integration_test.mjs` covers
+  owner/attempt/ref
+  rejection, old and fresh FULL owners, metadata races and unchanged
+  release-consumer
+  verification. Live recovery usage is **unknown** until a reviewed installation
+  on
   main and successful owner recovery are recorded.
 
 ### CI-1 — Local maintainer recovery after CI-first migration
 
 - **Reason / protected environment:** Maintainers may need existing local
   generators/audits when GitHub is genuinely inaccessible or for explicitly
-  requested environment-specific diagnosis. Red or slow CI is not inaccessible CI.
-- **Owner:** AGENTS.md owns agent execution; RELEASE.md and the existing canonical
-  generator/audit scripts own recovery. No parallel runner or test registry exists.
+  requested environment-specific diagnosis. Red or slow CI is not inaccessible
+  CI.
+- **Owner:** AGENTS.md owns agent execution; RELEASE.md and the existing
+  canonical
+  generator/audit scripts own recovery. No parallel runner or test registry
+  exists.
 - **Permanent support rationale:** Keep local development and emergency recovery
   possible without treating local PASS as hosted qualification. Ordinary agents
   commit/push only an explicitly authorized working branch; protected release
-  workflows own approved promotion/publication. Production-host smoke stays manual.
-- **Regression evidence:** `tests/hosted_release_policy_test.mjs` exercises missing,
+  workflows own approved promotion/publication. Production-host smoke stays
+  manual.
+- **Regression evidence:** `tests/hosted_release_policy_test.mjs` exercises
+  missing,
   stale and red evidence refusal, exact overrides and CI-first/branch contracts
   through the central hosted Node registry. Actual hosted write-mode acceptance
   requires configured server protections and independent environment approval.
-- **Usage / introduction:** Local recovery usage is unknown; this policy transition
+- **Usage / introduction:** Local recovery usage is unknown; this policy
+  transition
   was authored for #100/#124 on 2026-10-08, without inferring older adoption.
 
 Compatibility is a supported behavior when users, installed data, older
@@ -887,52 +1001,106 @@ not a source parser or a commitment to remove anything on a calendar date.
 
 ### UI-3 — Clipboard exposure and writable FileList availability
 
-- **Reason / protected environment:** Desktop browsers or clipboard sources may expose no image files, and older/restricted browsers may not construct a DataTransfer or assign an input FileList. Their established chooser/drop and ordinary no-JavaScript POST uploads remain usable.
-- **Owner:** `admin-upload-selection.js` owns clipboard extraction; `admin-upload-queue.js` and `admin-upload-preview.js` own the right-drawer local selection, previews and disposal. Existing upload controllers/services and the side-panel completion owner retain persistence, progress and security.
-- **Evidence:** `admin_upload_clipboard_test.mjs` and the registered `admin_upload_clipboard_browser_test.mjs` cover file-only exposure, selection preservation on assignment failure, ordinary multipart submission and dynamic panel controls. The OS/browser matrix in `TESTING.md` remains manual evidence.
-- **Usage:** Clipboard API availability and fallback frequency are `unknown`; no new telemetry is collected.
-- **Support rationale:** Chooser/drop and no-JavaScript POST remain permanently supported input methods. Clipboard input is additive and may never require permission polling or a second upload endpoint.
+- **Reason / protected environment:** Desktop browsers or clipboard sources may
+  expose no image files, and older/restricted browsers may not construct a
+  DataTransfer or assign an input FileList. Their established chooser/drop and
+  ordinary no-JavaScript POST uploads remain usable.
+- **Owner:** `admin-upload-selection.js` owns clipboard extraction;
+  `admin-upload-queue.js` and `admin-upload-preview.js` own the right-drawer
+  local selection, previews and disposal. Existing upload controllers/services
+  and the side-panel completion owner retain persistence, progress and security.
+- **Evidence:** `admin_upload_clipboard_test.mjs` and the registered
+  `admin_upload_clipboard_browser_test.mjs` cover file-only exposure, selection
+  preservation on assignment failure, ordinary multipart submission and dynamic
+  panel controls. The OS/browser matrix in `TESTING.md` remains manual evidence.
+- **Usage:** Clipboard API availability and fallback frequency are `unknown`; no
+  new telemetry is collected.
+- **Support rationale:** Chooser/drop and no-JavaScript POST remain permanently
+  supported input methods. Clipboard input is additive and may never require
+  permission polling or a second upload endpoint.
 
 ### UI-4: Bounded local miniature fallback
 
-- **Reason / protected environment:** A browser may lack `createImageBitmap` or canvas encoding, reject a codec, or receive animated, oversized, unknown or metadata-heavy image data. Preview admission must not narrow the existing server upload formats or replace the original with a thumbnail.
-- **Owner:** `admin-upload-thumbnail.js` owns bounded raster admission and serialized decoding; `admin-upload-preview.js` owns format fallback and URL/callback disposal. Upload processing, metadata and authorization remain with the existing transport/service owners.
-- **Evidence:** Registered `admin_upload_thumbnail_test.mjs`, the expanded clipboard Chromium fixture, and the real Worker/ZIP operation-key fixture cover fallback, original preservation, resource bounds, reset and uncertain acknowledgment. Actual OS clipboard/browser results remain in the `TESTING.md` manual matrix.
-- **Usage:** Decoder support, oversized-image frequency, fallback usage and real browser-process memory are `unknown`; no telemetry is added.
-- **Support rationale:** A missing local miniature is permanently allowed for an otherwise uploadable original. Retirement would require a separate accepted browser/format support-policy change, not merely a passing Chromium test.
+- **Reason / protected environment:** A browser may lack `createImageBitmap` or
+  canvas encoding, reject a codec, or receive animated, oversized, unknown or
+  metadata-heavy image data. Preview admission must not narrow the existing
+  server upload formats or replace the original with a thumbnail.
+- **Owner:** `admin-upload-thumbnail.js` owns bounded raster admission and
+  serialized decoding; `admin-upload-preview.js` owns format fallback and
+  URL/callback disposal. Upload processing, metadata and authorization remain
+  with the existing transport/service owners.
+- **Evidence:** Registered `admin_upload_thumbnail_test.mjs`, the expanded
+  clipboard Chromium fixture, and the real Worker/ZIP operation-key fixture
+  cover fallback, original preservation, resource bounds, reset and uncertain
+  acknowledgment. Actual OS clipboard/browser results remain in the `TESTING.md`
+  manual matrix.
+- **Usage:** Decoder support, oversized-image frequency, fallback usage and real
+  browser-process memory are `unknown`; no telemetry is added.
+- **Support rationale:** A missing local miniature is permanently allowed for an
+  otherwise uploadable original. Retirement would require a separate accepted
+  browser/format support-policy change, not merely a passing Chromium test.
 
 ## Database and migrations
 
 ### WIDGET-2 — Public geometry without resize observation
 
-- **Reason / protected environment:** Browsers without `ResizeObserver` must still display the original published article and retain viewport/scroll-based floating placement. Dynamic control-size invalidation is an additive browser enhancement.
-- **Owner:** `setupPublicContentWidgets()` in `public-content-widgets.js` owns observation and the shared bounded geometry scheduler.
-- **Evidence:** The public placement Chromium fixture covers size changes of protected controls with observation available; it does not qualify older browser engines. Server-rendered and no-JavaScript coverage remain independent of this API.
-- **Usage:** Browser API availability and fallback frequency are unknown; no telemetry is added.
-- **Support rationale:** The original in-flow article remains permanently supported. Removing the observer guard requires an accepted browser-support policy and proof that supported engines provide the API.
+- **Reason / protected environment:** Browsers without `ResizeObserver` must
+  still display the original published article and retain viewport/scroll-based
+  floating placement. Dynamic control-size invalidation is an additive browser
+  enhancement.
+- **Owner:** `setupPublicContentWidgets()` in `public-content-widgets.js` owns
+  observation and the shared bounded geometry scheduler.
+- **Evidence:** The public placement Chromium fixture covers size changes of
+  protected controls with observation available; it does not qualify older
+  browser engines. Server-rendered and no-JavaScript coverage remain independent
+  of this API.
+- **Usage:** Browser API availability and fallback frequency are unknown; no
+  telemetry is added.
+- **Support rationale:** The original in-flow article remains permanently
+  supported. Removing the observer guard requires an accepted browser-support
+  policy and proof that supported engines provide the API.
 
 ### WIDGET-1 — Unsupported persisted source-language metadata
 
-- **Reason / protected scenario:** A restored, older or directly edited published widget may have missing or unsupported optional `source_language` metadata. Public reads label that content as English so the otherwise valid title and body remain visible; current Admin writes still reject unsupported codes.
-- **Owner:** `public_widget_normalize_public_row()` in `app/services/public_content_widgets.php` owns the read fallback. `public_widget_normalize()` remains the strict validation path for Admin writes.
-- **Evidence:** `tests/public_content_widget_public_render_test.php` checks the safe fallback label and strict-write rejection. The owned MySQL/MariaDB `tests/public_content_widget_db_workflow_test.php` writes an unsupported code directly to its disposable row, then verifies the public reader and planner keep the content visible with an English label and do not rewrite storage. `docs/PUBLIC_CONTENT_WIDGETS.md` defines the visitor-facing language behavior.
-- **Usage / introduction:** Unsupported stored values are unmeasured; the introduction date of any such rows is unknown.
-- **Support rationale:** Keep this fallback while imported, restored or directly edited rows can contain optional unsupported language metadata. Retirement requires a measured inventory and a documented data-repair policy that guarantees those rows cannot silently disappear from public pages.
+- **Reason / protected scenario:** A restored, older or directly edited
+  published widget may have missing or unsupported optional `source_language`
+  metadata. Public reads label that content as English so the otherwise valid
+  title and body remain visible; current Admin writes still reject unsupported
+  codes.
+- **Owner:** `public_widget_normalize_public_row()` in
+  `app/services/public_content_widgets.php` owns the read fallback.
+  `public_widget_normalize()` remains the strict validation path for Admin
+  writes.
+- **Evidence:** `tests/public_content_widget_public_render_test.php` checks the
+  safe fallback label and strict-write rejection. The owned MySQL/MariaDB
+  `tests/public_content_widget_db_workflow_test.php` writes an unsupported code
+  directly to its disposable row, then verifies the public reader and planner
+  keep the content visible with an English label and do not rewrite storage.
+  `docs/PUBLIC_CONTENT_WIDGETS.md` defines the visitor-facing language behavior.
+- **Usage / introduction:** Unsupported stored values are unmeasured; the
+  introduction date of any such rows is unknown.
+- **Support rationale:** Keep this fallback while imported, restored or directly
+  edited rows can contain optional unsupported language metadata. Retirement
+  requires a measured inventory and a documented data-repair policy that
+  guarantees those rows cannot silently disappear from public pages.
 
 ### UI-2 — Authored metadata language and source-field compatibility
 
 - **Reason / protected scenario:** Existing galleries and photos may have no
-  translation row or source-language tag. Gallery fields fall back independently;
+  translation row or source-language tag. Gallery fields fall back
+  independently;
   an existing photo translation retains blank caption fields. Admin source
   editors must never save a presentation overlay as canonical text.
 - **Owner:** `app/services/content_localization.php` and request language policy
   in `app/services/translations.php`. Admin and public browser preferences stay
-  independent; explicit language arguments remain supported for existing callers.
+  independent; explicit language arguments remain supported for existing
+  callers.
 - **Evidence / tests:** `content_request_language_test.php`,
   `content_localization_model_test.php`, and
   `content_language_workflow_integration_test.php`; investigation scope is in
   `docs/ISSUE_93_LOCALIZATION.md`.
-- **Usage:** Missing authored translations and legacy cookie adoption are unknown.
+- **Usage:** Missing authored translations and legacy cookie adoption are
+  unknown.
 - **Support rationale:** Source fallback and explicit language arguments are
   permanent compatibility contracts. Legacy cookie removal would require an
   accepted migration of persisted browser preferences and regression proof.
@@ -949,7 +1117,8 @@ not a source parser or a commitment to remove anything on a calendar date.
 - **Evidence / tests:** `breadcrumb_component_test.php`,
   `breadcrumb_gallery_settings_test.php`, `breadcrumb_theme_settings_test.php`
   and the registered `breadcrumb_browser_test.mjs`.
-- **Usage:** Preference absence and obsolete identifiers are unmeasured (`unknown`).
+- **Usage:** Preference absence and obsolete identifiers are unmeasured
+  (`unknown`).
 - **Support rationale:** Missing preferences and unknown style identifiers are
   permanently supported upgrade states. The public gallery helper delegates to
   the shared renderer so existing page composition retains its include contract.
@@ -1008,19 +1177,24 @@ not a source parser or a commitment to remove anything on a calendar date.
 ### DB-5 — Layout repair before first-install configuration
 
 - **Reason / protected scenario:** `install.php` runs the layout-semantics
-  callback before `config.php` and the first administrator exist. The repair must
+  callback before `config.php` and the first administrator exist. The repair
+  must
   use the installer PDO for the shared writer lock and the installer-owned
   `galleries/` root rather than assume application bootstrap has run. Configured
-  upgrades retain their configured gallery root and legacy/persistent Trash roots.
+  upgrades retain their configured gallery root and legacy/persistent Trash
+  roots.
 - **Era / owner:** Repair for issue #123, reported on 0.124.3. Owner:
-  `gallery_description_layout_compatibility.php` and the canonical gallery edit model.
+  `gallery_description_layout_compatibility.php` and the canonical gallery edit
+  model.
 - **Evidence / tests:** `installer_first_install_test.php` exercises config-free
-  HTTP installation, busy refusal and retry; `gallery_description_layout_compatibility_test.php`
+  HTTP installation, busy refusal and retry;
+  `gallery_description_layout_compatibility_test.php`
   retains upgrade, fresh-state and interrupted sidecar/database replay coverage.
 - **Usage:** Unknown; the issue documents one failed installation.
 - **Lifecycle:** Permanent while standalone pre-configuration installation is
   supported. Retirement requires an equivalent tested installation protocol that
-  supplies configuration before callbacks without weakening writer exclusion or replay.
+  supplies configuration before callbacks without weakening writer exclusion or
+  replay.
 
 ### DB-4 — Unsupported database-floor and former query-workaround rationale
 
@@ -1046,9 +1220,11 @@ not a source parser or a commitment to remove anything on a calendar date.
 
 ### HTTP-1 — Explicitly trusted TLS-terminating proxies and HTTPS wrappers
 
-- **Reason / protected scenario:** Shared-hosting proxies may deliver browser TLS
+- **Reason / protected scenario:** Shared-hosting proxies may deliver browser
+  TLS
   over HTTP to PHP. Core/Admin and Viewer transport use one resolver, accepting
-  this topology only with both `security.trusted_proxies` (exact IPv4/IPv6 or CIDR)
+  this topology only with both `security.trusted_proxies` (exact IPv4/IPv6 or
+  CIDR)
   and `security.trusted_proxy_protocol_headers`. Client-IP header opt-in remains
   independent. Direct TLS and HTTP installations retain their existing behavior.
 - **Owner:** `app/services/client_ip.php::request_transport_is_https()`;
@@ -1061,9 +1237,11 @@ not a source parser or a commitment to remove anything on a calendar date.
   upgrading a TLS-terminating installation. The proxy must overwrite enabled
   client-supplied headers. Ambiguous or conflicting enabled values cannot prove
   HTTPS. Existing configured HTTPS base URLs are not downgraded by the resolver.
-- **Evidence / tests:** `tests/request_https_proxy_test.php` first reproduced the
+- **Evidence / tests:** `tests/request_https_proxy_test.php` first reproduced
+  the
   forged HTTPS assertion, then covers direct transport, exact/CIDR proxy trust,
-  IPv6, header opt-in/ambiguity, public URL schemes and Admin cookie Secure flags.
+  IPv6, header opt-in/ambiguity, public URL schemes and Admin cookie Secure
+  flags.
   `viewer_authentication_phase06_test.php` retains Viewer policy coverage.
 - **Usage:** Proxy topology and wrapper adoption are unknown; no production
   measurement is inferred from source age or test coverage.
@@ -1079,15 +1257,19 @@ not a source parser or a commitment to remove anything on a calendar date.
 ### FILES-1 — Windows layout-migration sidecar sharing locks
 
 - **Reason / protected scenario:** Windows briefly refused atomic replacement of
-  an owned `gallery.json` during the release audit. The existing layout-migration
-  owner retries the same complete staging file for at most ten attempts with nine
+  an owned `gallery.json` during the release audit. The existing
+  layout-migration
+  owner retries the same complete staging file for at most ten attempts with
+  nine
   50 ms pauses; other platforms retain one attempt.
 - **Owner:** `app/services/gallery_description_layout_compatibility.php`.
 - **Safety:** Recheck the original bytes before each retry, refuse concurrent
   edits or persistent storage refusal, never delete the previous sidecar, retain
-  its permission-mode behavior, and remove only the owned staging file. A staging
+  its permission-mode behavior, and remove only the owned staging file. A
+  staging
   file that inherited read-only mode becomes owner-writable only for cleanup.
-- **Evidence / tests:** `tests/gallery_description_layout_compatibility_test.php`
+- **Evidence / tests:**
+  `tests/gallery_description_layout_compatibility_test.php`
   injects a transient refusal, verifies bounded Windows recovery and unchanged
   non-Windows refusal, intervening-edit preservation, read-only refusal and
   staging cleanup; existing rollback and per-document replay cases remain.
@@ -1105,7 +1287,8 @@ not a source parser or a commitment to remove anything on a calendar date.
   at most ten rename attempts with nine 50 ms pauses; never delete the prior
   checkpoint to obtain replacement permission. Other platforms use one attempt.
 - **Owner:** `app/services/updates_jobs.php` and
-  `app/services/updates_jobs/state.php`, the existing updater state persistence owner.
+  `app/services/updates_jobs/state.php`, the existing updater state persistence
+  owner.
 - **Evidence / tests:** An owned Windows probe refused its 29th consecutive
   checkpoint replacement, then committed after one pause (66 ms observed).
   `tests/updater_resumable_state_machine_test.php` covers complete replacement,
@@ -1173,7 +1356,8 @@ not a source parser or a commitment to remove anything on a calendar date.
   this schema-generation boundary.
 - **Owner:** `app/release_file_policy.php` and
   `scripts/generate_production_files.php`. Schema 1 adds optional
-  `companion_resource_files`, strictly limited to reviewed non-updater resources.
+  `companion_resource_files`, strictly limited to reviewed non-updater
+  resources.
   Stable companion entries remain in the original field. Current readers also
   retain the original published resource placement. No installed-version
   dispatch, incoming-code execution or weaker path/ownership checks are added.
@@ -1182,7 +1366,8 @@ not a source parser or a commitment to remove anything on a calendar date.
   resources with unchanged CMS activation ownership. It retains the existing
   pre-companion fixture. Policy regressions reject malformed, unsafe, duplicate,
   unordered or updater-owned resources. The real folder/ZIP builder checks full
-  font/license bytes, with complete package coverage on all three hosted systems.
+  font/license bytes, with complete package coverage on all three hosted
+  systems.
 - **Usage / retirement:** The supplied production failure confirms this reader
   generation remains deployed; aggregate adoption is unknown. Preserve the
   additive format until supported installed readers no longer validate the old
@@ -1217,7 +1402,8 @@ not a source parser or a commitment to remove anything on a calendar date.
   that JSON file is absent. A present malformed JSON pack does not silently
   switch formats; it resolves to empty catalog data.
 - **Era / owner:** JSON foundation evidence exists by 2026-05-11; the PHP
-  fallback's first introduction is unknown. Owner: `app/services/translations.php` and
+  fallback's first introduction is unknown. Owner:
+  `app/services/translations.php` and
   `app/lang/`.
 - **Evidence / tests:** `tests/translation_catalog_consistency_test.php`
   validates maintained catalogs, but current evidence does not prove it
@@ -1248,7 +1434,8 @@ not a source parser or a commitment to remove anything on a calendar date.
   older shared `cms_language` cookie, and a `cms_language` session mirror.
   Public language preference remains separate and current.
 - **Era / owner:** Base translation/session evidence exists by 2026-05-11;
-  selector evidence by 2026-08-13. Owner: `app/services/translations.php` and request
+  selector evidence by 2026-08-13. Owner: `app/services/translations.php` and
+  request
   language/session bootstrap.
 - **Evidence / tests:** `tests/public_language_preference_test.php` and
   `tests/session_context_test.php` cover Admin/Public separation, mirrors,
@@ -1268,8 +1455,10 @@ not a source parser or a commitment to remove anything on a calendar date.
   task steps without a request kernel loader. Selective HTTP routes inject one
   for each separate analysis/execution request.
 - **Owner:** `app/services/maintenance_center.php` and its analysis/execution
-  workers; HTTP injection belongs to `app/controllers/admin_maintenance_center.php`.
-- **Evidence / tests:** `tests/maintenance_center_test.php` covers phase-specific
+  workers; HTTP injection belongs to
+  `app/controllers/admin_maintenance_center.php`.
+- **Evidence / tests:** `tests/maintenance_center_test.php` covers
+  phase-specific
   module selection, controller injection and loading before task callbacks;
   `scripts/runtime_dynamic_dependencies.php` registers the reviewed loader.
 - **Usage:** Full-bootstrap consumer adoption is unknown.
@@ -1366,8 +1555,10 @@ not a source parser or a commitment to remove anything on a calendar date.
   `image_public_display_file()`; `tests/image_decode_pipeline_test.php` covers
   JPEG content with a misleading extension, supported raster MIME values,
   SVG fallback, and rejection of non-image content.
-  Upstream PHP 8.5.11 defines the [7 MiB read bound](https://github.com/php/php-src/blob/php-8.5.11/ext/fileinfo/libmagic/file.h#L471)
-  and [allocates that buffer before reading the file](https://github.com/php/php-src/blob/php-8.5.11/ext/fileinfo/libmagic/magic.c#L201).
+  Upstream PHP 8.5.11 defines the
+  [7 MiB read bound](https://github.com/php/php-src/blob/php-8.5.11/ext/fileinfo/libmagic/file.h#L471)
+  and
+  [allocates that buffer before reading the file](https://github.com/php/php-src/blob/php-8.5.11/ext/fileinfo/libmagic/magic.c#L201).
 - **Usage:** Per-format media requests and fallback rates are not measured.
 - **Lifecycle:** Keep header inspection for recognized raster content and the
   fileinfo compatibility path for other formats and historical MIME aliases.
@@ -1403,7 +1594,11 @@ not a source parser or a commitment to remove anything on a calendar date.
   stable document ID and same-origin protected route while retaining original
   PDF bytes. Their index is separate from the SimBrief OFP manifest so manual
   documents and OFP imports do not overwrite one another. Conversion supports
-  either a reserved private child or PNG pages appended after existing photos. A source-bound reserved PDF child cannot be made public or unpublished until its conversion is complete; incomplete or cancelled work must first be finished or safely reconciled. This guard applies only to the reserved PDF child and leaves append targets and existing JPG page galleries unchanged.
+  either a reserved private child or PNG pages appended after existing photos. A
+  source-bound reserved PDF child cannot be made public or unpublished until its
+  conversion is complete; incomplete or cancelled work must first be finished or
+  safely reconciled. This guard applies only to the reserved PDF child and
+  leaves append targets and existing JPG page galleries unchanged.
 - **Owner:** `app/services/gallery_pdf_documents.php` owns original documents;
   `app/services/gallery_pdf_conversion.php` owns resumable conversion state;
   source-gallery `.gallery-pdf-conversions/` sidecars hold markers for both
@@ -1413,12 +1608,15 @@ not a source parser or a commitment to remove anything on a calendar date.
   reload prompt; the server-rasterizer helper remains only for CLI/test
   compatibility consumers and is not called by browser actions.
 - **Ordinary upload default:** The browser document workflow attaches only the
-  original PDF unless the administrator explicitly checks the Advanced conversion
+  original PDF unless the administrator explicitly checks the Advanced
+  conversion
   option. Missing controls also mean attachment only, so an older form cannot
   silently create a private child. The operation retains that choice across
   retries; acknowledged originals are not attached again. This opt-in policy is
-  permanent, and existing separately launched document conversion remains supported.
-- **Evidence:** The document service fixture covers exact bytes, stable identity,
+  permanent, and existing separately launched document conversion remains
+  supported.
+- **Evidence:** The document service fixture covers exact bytes, stable
+  identity,
   explicit replacement/deletion confirmation and digest changes. Hosted
   qualification, browser device coverage, and live deployment authorization
   remain pending for the exact candidate.
@@ -1545,11 +1743,32 @@ not a source parser or a commitment to remove anything on a calendar date.
 
 ## Visual CSS resize across a scriptless preview frame
 
-- **Reason / protected environment:** During a native drag over the scriptless preview iframe, hosted Chromium delivered a trusted held pointer move to the parent overlay after handle capture was lost. The active gesture must continue only through the existing pointerId-guarded transaction while the parent overlay shields hit testing; the implementation does not assume a specific browser cause for capture loss.
-- **Owner:** `public/assets/gallery-modules/theme-visual-css-resize.js` owns the existing resize transaction, temporary overlay shield, one overlay move/up/cancel listener set, capture attempt, cancellation and restoration. It does not add a second pointer pipeline or alter public-page interaction outside an active drag.
-- **Evidence:** `tests/theme_visual_css_resize_model_test.mjs` covers the bounded transaction model; `tests/theme_visual_editor_browser_test.mjs` exercises native pointer movement, transient preview, commit and Escape restoration. The [W3C Pointer Events capture algorithm](https://www.w3.org/TR/pointerevents3/#setting-pointer-capture) keeps capture pending until subsequent event processing and requires the capture element to be in the pointer's active document. The [W3C cross-iframe capture issue](https://github.com/w3c/pointerevents/issues/493) documents unresolved boundary behavior; the `TESTING.md` browser matrix is the manual evidence owner.
+- **Reason / protected environment:** During a native drag over the scriptless
+  preview iframe, hosted Chromium delivered a trusted held pointer move to the
+  parent overlay after handle capture was lost. The active gesture must continue
+  only through the existing pointerId-guarded transaction while the parent
+  overlay shields hit testing; the implementation does not assume a specific
+  browser cause for capture loss.
+- **Owner:** `public/assets/gallery-modules/theme-visual-css-resize.js` owns the
+  existing resize transaction, temporary overlay shield, one overlay
+  move/up/cancel listener set, capture attempt, cancellation and restoration. It
+  does not add a second pointer pipeline or alter public-page interaction
+  outside an active drag.
+- **Evidence:** `tests/theme_visual_css_resize_model_test.mjs` covers the
+  bounded transaction model; `tests/theme_visual_editor_browser_test.mjs`
+  exercises native pointer movement, transient preview, commit and Escape
+  restoration. The
+  [W3C Pointer Events capture algorithm](https://www.w3.org/TR/pointerevents3/#setting-pointer-capture)
+  keeps capture pending until subsequent event processing and requires the
+  capture element to be in the pointer's active document. The
+  [W3C cross-iframe capture issue](https://github.com/w3c/pointerevents/issues/493)
+  documents unresolved boundary behavior; the `TESTING.md` browser matrix is the
+  manual evidence owner.
 - **Usage:** Unknown; no gesture or browser telemetry is collected.
-- **Lifecycle:** Permanent while resize handles are parent-owned and the public preview remains in an iframe. The shield must be enabled only for an active transaction and restored on every commit, cancel, capture failure, frame teardown and workspace cleanup path.
+- **Lifecycle:** Permanent while resize handles are parent-owned and the public
+  preview remains in an iframe. The shield must be enabled only for an active
+  transaction and restored on every commit, cancel, capture failure, frame
+  teardown and workspace cleanup path.
 
 ## Visual-preview audience fallback for inaccessible galleries
 
@@ -1589,12 +1808,72 @@ not a source parser or a commitment to remove anything on a calendar date.
 
 ## Installed CSS and separate public manual overrides
 
-- **Owner and reason:** Theme/Custom CSS preserves the existing `public/assets/custom.css` preset/upload contract while a separate editor owns `public/assets/custom-overrides.css`. Ordinary Theme saves, skin replacement and unrelated resets must not erase manual edits.
-- **Protected behavior:** Existing installations retain their appearance when advanced controls are unset or invalid. Manual CSS is an optional final public layer; an absent, invalid-transport or unreadable override file is omitted without blocking public rendering, and the protected editor exposes a bounded error. CSS syntax recovery remains the browser's responsibility. Native editor POST/redirect remains supported with its own CSRF and explicit clear checkbox.
-- **Composite background-save compatibility:** The existing `custom_css_overrides_save($text, $revision)` call and `css_override_action=save` route remain CSS-only when no background operation is requested. The visual editor's explicit global Theme target carries `keep`, `replace`, or `remove` plus the opaque background revision; replacement attaches the reviewed File and remove stages only deletion of the global Theme image. The operation preserves `theme_background_source` (the gallery fallback mode), per-gallery `background_source` values and gallery cover assets. Its controller-prepared public context distinguishes the global Theme image, Theme gallery fallback, explicit gallery source, and no image; when an independent gallery-derived layer is active, the visual editor disables the Theme image target on that route and directs the administrator to Home. If background revision inspection is unavailable, only image operations are disabled and the existing CSS-only editor/save path remains usable; a ready empty image state still permits first upload. An unavailable preview URL hides the visual launch without claiming that a preview exists, while the editor controls remain initialized. Owner: `app/services/custom_css.php`, `app/services/custom_css/visual_background_save.php`, `app/services/gallery_backgrounds.php`, and the application-settings model transaction. CSS lock precedes the shared Theme background writer lock. Legacy direct POST/redirect remains supported.
-- **Visual-preview stylesheet compatibility:** `app/controllers/shared_layout.php` prepares the marked stylesheet URLs by starting with `Gallery\Core\asset_url()` and then adding the cache revision and visual-preview/audience query context; `app/views/layout.php` only emits that controller model. The canonical helper examines both `SCRIPT_NAME` and `SCRIPT_FILENAME`, preserving the same public asset path for repository-root, `public/` document-root, and subdirectory-mounted deployments. `app/bootstrap/request.php` carries the marker to otherwise unmarked dependent resources only for same-origin, in-mount GET/HEAD requests whose referrer has the exact request origin; ordinary public stylesheet URLs and non-preview requests retain their existing form. `app/services/custom_css.php` owns the fail-closed `@import` and stylesheet-inspection decisions, while dispatch enforces them after preview authorization and before rendering. Keep this request-context bridge limited to those resources and methods; it is not a general route authorization or cross-origin referrer fallback.
-- **Evidence:** `tests/custom_css_visual_preview_inspection_test.php`, `tests/public_visual_preview_policy_test.php`, `tests/public_visual_preview_workflow_test.php`, and `tests/public_visual_preview_asset_url_test.php` cover stylesheet inspection, route/resource boundaries, and canonical asset URL composition. The real-route `tests/support/gallery_workflow_browser.js` asserts preview/public `base.css` path and marker behavior, loaded body reset, and strict saved-width parity. Existing `theme_advanced_appearance_test.php`, `custom_css_preservation_test.php`, `app_settings_atomic_activation_model_test.php`, `theme_custom_css_rendering_test.php`, and Appearance/Custom CSS Chromium fixtures cover defaults, independent assets/resets, transaction rollback, failed writes, stale editors, escaping, isolation and header restoration. Installed usage and document-root distribution are **unknown**.
-- **Retirement:** Permanent support for installed preset/upload assets, CSS-only callers, direct/no-JavaScript editor forms, and repository-root, `public/` document-root, and subdirectory-mounted installations. Removing any contract requires an explicitly approved migration of saved CSS, supported administrator clients and deployment configurations, plus acceptance evidence; no age-based expiry.
+- **Owner and reason:** Theme/Custom CSS preserves the existing
+  `public/assets/custom.css` preset/upload contract while a separate editor owns
+  `public/assets/custom-overrides.css`. Ordinary Theme saves, skin replacement
+  and unrelated resets must not erase manual edits.
+- **Protected behavior:** Existing installations retain their appearance when
+  advanced controls are unset or invalid. Manual CSS is an optional final public
+  layer; an absent, invalid-transport or unreadable override file is omitted
+  without blocking public rendering, and the protected editor exposes a bounded
+  error. CSS syntax recovery remains the browser's responsibility. Native editor
+  POST/redirect remains supported with its own CSRF and explicit clear checkbox.
+- **Composite background-save compatibility:** The existing
+  `custom_css_overrides_save($text, $revision)` call and
+  `css_override_action=save` route remain CSS-only when no background operation
+  is requested. The visual editor's explicit global Theme target carries `keep`,
+  `replace`, or `remove` plus the opaque background revision; replacement
+  attaches the reviewed File and remove stages only deletion of the global Theme
+  image. The operation preserves `theme_background_source` (the gallery fallback
+  mode), per-gallery `background_source` values and gallery cover assets. Its
+  controller-prepared public context distinguishes the global Theme image, Theme
+  gallery fallback, explicit gallery source, and no image; when an independent
+  gallery-derived layer is active, the visual editor disables the Theme image
+  target on that route and directs the administrator to Home. If background
+  revision inspection is unavailable, only image operations are disabled and the
+  existing CSS-only editor/save path remains usable; a ready empty image state
+  still permits first upload. An unavailable preview URL hides the visual launch
+  without claiming that a preview exists, while the editor controls remain
+  initialized. Owner: `app/services/custom_css.php`,
+  `app/services/custom_css/visual_background_save.php`,
+  `app/services/gallery_backgrounds.php`, and the application-settings model
+  transaction. CSS lock precedes the shared Theme background writer lock. Legacy
+  direct POST/redirect remains supported.
+- **Visual-preview stylesheet compatibility:**
+  `app/controllers/shared_layout.php` prepares the marked stylesheet URLs by
+  starting with `Gallery\Core\asset_url()` and then adding the cache revision
+  and visual-preview/audience query context; `app/views/layout.php` only emits
+  that controller model. The canonical helper examines both `SCRIPT_NAME` and
+  `SCRIPT_FILENAME`, preserving the same public asset path for repository-root,
+  `public/` document-root, and subdirectory-mounted deployments.
+  `app/bootstrap/request.php` carries the marker to otherwise unmarked dependent
+  resources only for same-origin, in-mount GET/HEAD requests whose referrer has
+  the exact request origin; ordinary public stylesheet URLs and non-preview
+  requests retain their existing form. `app/services/custom_css.php` owns the
+  fail-closed `@import` and stylesheet-inspection decisions, while dispatch
+  enforces them after preview authorization and before rendering. Keep this
+  request-context bridge limited to those resources and methods; it is not a
+  general route authorization or cross-origin referrer fallback.
+- **Evidence:** `tests/custom_css_visual_preview_inspection_test.php`,
+  `tests/public_visual_preview_policy_test.php`,
+  `tests/public_visual_preview_workflow_test.php`, and
+  `tests/public_visual_preview_asset_url_test.php` cover stylesheet inspection,
+  route/resource boundaries, and canonical asset URL composition. The real-route
+  `tests/support/gallery_workflow_browser.js` asserts preview/public `base.css`
+  path and marker behavior, loaded body reset, and strict saved-width parity.
+  Existing `theme_advanced_appearance_test.php`,
+  `custom_css_preservation_test.php`,
+  `app_settings_atomic_activation_model_test.php`,
+  `theme_custom_css_rendering_test.php`, and Appearance/Custom CSS Chromium
+  fixtures cover defaults, independent assets/resets, transaction rollback,
+  failed writes, stale editors, escaping, isolation and header restoration.
+  Installed usage and document-root distribution are **unknown**.
+- **Retirement:** Permanent support for installed preset/upload assets, CSS-only
+  callers, direct/no-JavaScript editor forms, and repository-root, `public/`
+  document-root, and subdirectory-mounted installations. Removing any contract
+  requires an explicitly approved migration of saved CSS, supported
+  administrator clients and deployment configurations, plus acceptance evidence;
+  no age-based expiry.
 
 ## Retiring a record
 
@@ -1607,25 +1886,32 @@ contracts rather than accumulating expiry dates.
 
 ## Release provenance schema v1 and v_0.125 legacy predecessor
 
-Owner: hosted release-origin/promotion tooling. Schema v1 is permanently supported
+Owner: hosted release-origin/promotion tooling. Schema v1 is permanently
+supported
 for immutable origins, including the already initialized v_0.126. Extended tag,
 release-side and tree identities live in separate evidence and future immutable
 predecessor records. Never rewrite the existing origin to migrate its schema.
 Usage: one confirmed v_0.126 initialization; other usage unknown.
 
-The repository-specific v_0.125 legacy pin protects the actual annotated historical
+The repository-specific v_0.125 legacy pin protects the actual annotated
+historical
 tag and identical published/release-side tree. Historical qualification is
 UNKNOWN_LEGACY. It grants no write/publication authority and cannot qualify any
-other predecessor. Retain this historical proof permanently; future initializations
-use normal durable qualification evidence. Regression: release_origin_test.mjs and
-linear_release_graph_test.mjs, registered in the central audit. Direct CLI release
-notes retain their explicit tag-based default; hosted preparation supplies verified
+other predecessor. Retain this historical proof permanently; future
+initializations
+use normal durable qualification evidence. Regression: release_origin_test.mjs
+and
+linear_release_graph_test.mjs, registered in the central audit. Direct CLI
+release
+notes retain their explicit tag-based default; hosted preparation supplies
+verified
 release-side SHA and checks tree equality. Direct CLI usage is unknown.
 
 Tagged releases can precede manual GitHub Release publication. This permanent
 ordering is owned by `release-origin.mjs`: when published permanent assets are
 unavailable, schema-3 predecessor validation loads that predecessor's original
-FULL integration and BASIC release-delta archives through `coverage-artifacts.mjs`
+FULL integration and BASIC release-delta archives through
+`coverage-artifacts.mjs`
 and supplies their authenticated payload/provider pairs to the shared verifier.
 Current-release evidence is never reused for the predecessor. This protects the
 supported ability to begin another release before publishing the prior draft;
@@ -1646,16 +1932,20 @@ Usage is unknown. Retire a parser only after inventorying all retained release
 records and proving replacement validation against original bytes and fixtures.
 Missing legacy evidence never becomes approval.
 
-New tagged releases may precede manual GitHub Release publication. Their owner is
+New tagged releases may precede manual GitHub Release publication. Their owner
+is
 `release-origin.mjs`; the protected behavior is valid successor initialization
-from previous release-side Q without previous-M ancestry or automatic publication.
+from previous release-side Q without previous-M ancestry or automatic
+publication.
 Complete exact hosted qualification plus the bound reviewed merge is mandatory;
 unavailable or expired evidence blocks initialization. This remains supported
 while manual GitHub publication is the normal contract. The real-Git linear and
 completion contracts cover parent/tree identity and independent publication.
 
-Permanent repairs from hotfix `9d187d3663f96f7fa10451001d61ddb31e276479` are recorded
-in `docs/RELEASE_LIFECYCLE.md`. No hardcoded recovery identity, attestation comment
+Permanent repairs from hotfix `9d187d3663f96f7fa10451001d61ddb31e276479` are
+recorded
+in `docs/RELEASE_LIFECYCLE.md`. No hardcoded recovery identity, attestation
+comment
 or one-off environment is part of the normal path. Its cleanup stays PENDING
 until final CI and durable transfer are proven.
 
@@ -1674,12 +1964,16 @@ owner approval is part of the release contract.
 
 Ruleset installation-token omission of `bypass_actors` is supported for both
 protected branches. Missing is explicitly distinguished from visible empty or
-malformed/nonempty. Server protection remains authoritative for hidden membership;
-visible policy identity, active target, effective checks/review/history requirements
+malformed/nonempty. Server protection remains authoritative for hidden
+membership;
+visible policy identity, active target, effective checks/review/history
+requirements
 and current-user bypass are independently validated. Usage: observed for both
-production Actions-token responses; hidden membership is never claimed as checked.
+production Actions-token responses; hidden membership is never claimed as
+checked.
 Retire omission handling only if GitHub guarantees this field for the existing
-token permission scope and live/negative regression evidence proves that contract.
+token permission scope and live/negative regression evidence proves that
+contract.
 
 ## Visual CSS availability and synchronous draft helpers
 
@@ -1704,12 +1998,15 @@ token permission scope and live/negative regression evidence proves that contrac
   production trigger remains unverified until deployment is checked.
 # Historical integration digest bootstrap evidence (superseded for new installs)
 
-The earlier owner-only integration bootstrap preserved release-path evidence while the exact
-installed main `7dcfadf153b1c941fd81edee43272f8accb475a1` rejects bare upload-action
+The earlier owner-only integration bootstrap preserved release-path evidence
+while the exact
+installed main `7dcfadf153b1c941fd81edee43272f8accb475a1` rejects bare
+upload-action
 digests (observed run 38218271690). Its owner is the release lifecycle, not the
 normal integration selector. It accepts a narrowly scoped repair feature and
 uses actual develop -> immutable origin -> exact source overlay ancestry. For
-unpublished `0.127.3` it retains the exact original `d4f9abd7` origin and metadata
+unpublished `0.127.3` it retains the exact original `d4f9abd7` origin and
+metadata
 bytes, with independently checked unchanged main/predecessor pins; it never
 reinitializes that version after a branch deletion.
 Existing schema-2 release qualification consumers retain their native job names,
@@ -1717,13 +2014,18 @@ require fresh complete FULL/release owners and ignore only the additive recovery
 provenance field. No schema-3 inherited integration coverage is claimed.
 
 Regression evidence: `develop_integration_test.mjs` verifies real Git ancestry,
-tree preservation, absence of ref/index/worktree writes, changed marker and wrong
-authority/scope refusal; `hosted_release_policy_test.mjs` verifies old FULL-owner
+tree preservation, absence of ref/index/worktree writes, changed marker and
+wrong
+authority/scope refusal; `hosted_release_policy_test.mjs` verifies old
+FULL-owner
 requirements including rejection of skipped Chromium. Live usage is **unknown**;
-feature fixtures and maintenance FULL do not prove production recovery acceptance.
-After a new main installation the exact-authority guard makes this path unusable.
+feature fixtures and maintenance FULL do not prove production recovery
+acceptance.
+After a new main installation the exact-authority guard makes this path
+unusable.
 Retire executable preparation only after no pending recovery origin uses it;
-retain or migrate immutable marker/qualification readers before removing parsing.
+retain or migrate immutable marker/qualification readers before removing
+parsing.
 
 For the current CI-authority evaluator update, this release-before-develop
 bootstrap is superseded by the staged develop-first path in
@@ -1738,13 +2040,15 @@ bootstrap's recovery provenance, alter ordinary main guards, or enable bypass.
 Stage 1 repairs publisher/workflow/readers/root binding while leaving the full
 pinned BASIC closure unchanged; its existing main-owned FULL integration and
 guarded FF establish W*. Stage 2 is dispatched by the owner from develop with
-`ci_authority_update: true`. It binds retained stage-1 proof and exact W*, permits
+`ci_authority_update: true`. It binds retained stage-1 proof and exact W*,
+permits
 only six approved evaluator transition paths with unchanged scanner closure,
 uses trusted inherited BASIC against a clean candidate checkout, and runs FULL
 from W* on exact S with PHP 8.1 and 8.5 before leased non-force FF. Records
 identify `authority_update` and `inherited_basic` explicitly without claiming
 that W* is in main history. Ordinary main review, separate recovery, human PR
-approval and manual publication remain in force. Report PENDING until real hosted
+approval and manual publication remain in force. Report PENDING until real
+hosted
 runs prove both stages and every write guard; fixtures and maintenance green do
 not establish installation.
 
@@ -1754,17 +2058,21 @@ Owner: `.github/scripts/release-draft-assets.mjs`. CMS-only releases retain the
 original installer/update-metadata pair from the pinned published predecessor
 when shipped WinApp inputs and the independent version are unchanged. Provider
 SHA-256, byte size, metadata installer hash and the already authenticated
-predecessor receipt/tag protect this download/update compatibility. Missing proof
+predecessor receipt/tag protect this download/update compatibility. Missing
+proof
 fails closed. Usage is unknown until a future approved production release.
-`tests/support/release_draft_assets_scenarios.mjs` covers fresh artifacts, reuse, changed-source
+`tests/support/release_draft_assets_scenarios.mjs` covers fresh artifacts,
+reuse, changed-source
 refusal, version mismatch and corruption. Permanent support is required while
-clients discover the companion through each release's assets; retirement requires
+clients discover the companion through each release's assets; retirement
+requires
 migration of that discovery contract and supported-client acceptance evidence.
 
 ## Interrupted GitHub release transfers
 
 Ready-draft automatic cleanup is owned by
-`.github/scripts/release-draft-retirement.mjs`. It requires a schema-4 synchronized
+`.github/scripts/release-draft-retirement.mjs`. It requires a schema-4
+synchronized
 completion with the retained complete byte inventory. Historical schema-1--3
 completions and published/manual retirement keep their existing approval and
 publication controls; automatic cleanup skips unsupported/incomplete completion
@@ -1777,16 +2085,24 @@ unperformed coverage. Removing the manual compatibility path requires proof that
 all retained historical refs were retired through their existing controls.
 
 Owner: `.github/scripts/release-completion.mjs` and
-`.github/scripts/release-draft-assets.mjs`. A failed create response may follow a
-successful server write. Read-only inventory reconciliation preserves that draft,
-manual edits and any publication without a duplicate POST. Binary transfers retry
-at most three times for the documented temporary HTTP/process categories; uploaded
+`.github/scripts/release-draft-assets.mjs`. A failed create response may follow
+a
+successful server write. Read-only inventory reconciliation preserves that
+draft,
+manual edits and any publication without a duplicate POST. Binary transfers
+retry
+at most three times for the documented temporary HTTP/process categories;
+uploaded
 bytes and mutable draft/tag identities are checked before every upload retry.
-Permission, integrity and conflict failures remain terminal. The existing central
-`release_draft_test.mjs` exercises CLI headers, absolute upload URL, original input
+Permission, integrity and conflict failures remain terminal. The existing
+central
+`release_draft_test.mjs` exercises CLI headers, absolute upload URL, original
+input
 bytes, cleanup, bounded recovery and publication/conflict refusal. Production
-complete upload usage is **unknown** after the observed v_0.127.5 transport failure
-and manual publication. Retain recovery while GitHub responses may be interrupted;
+complete upload usage is **unknown** after the observed v_0.127.5 transport
+failure
+and manual publication. Retain recovery while GitHub responses may be
+interrupted;
 retirement requires an accepted replacement preserving create-only idempotence,
 original bytes and published-release immutability.
 
@@ -1797,11 +2113,13 @@ Drawer `panel=1` responses defer Images through the same authenticated route and
 canonical row renderer. Retain the full-page path for supported browsers without
 scripting and direct Admin navigation; usage is unknown. Retirement requires a
 replacement that preserves all row actions, keyboard/accessibility and accepted
-no-JavaScript journeys. `thumbnail_readonly_existing_response_file(..., exactOnly)`
+no-JavaScript journeys.
+`thumbnail_readonly_existing_response_file(..., exactOnly)`
 defaults to false so existing visual-preview nearest-derivative fallback remains
 compatible. The editor's explicit `existing_only=1` opt-in protects read-only
 300px preload; ordinary media loading and generation keep their current owner.
-Evidence owners and live acceptance limits are in [ADMIN_IMAGES_PRELOAD.md](ADMIN_IMAGES_PRELOAD.md).
+Evidence owners and live acceptance limits are in
+[ADMIN_IMAGES_PRELOAD.md](ADMIN_IMAGES_PRELOAD.md).
 
 ## Manual cache diagnostic logging (#212)
 
@@ -1809,7 +2127,8 @@ Updater status JSON gains an additive diagnostic field with a nonblocking probe
 of the existing worker lock and server-clock checkpoint age. Existing clients
 can keep consuming ok/job; unsupported lock probes remain explicit unavailable
 evidence and do not manufacture process activity. Usage is unknown. Status reads
-never create a missing lock or rewrite lease metadata. Retry now retains the last
+never create a missing lock or rewrite lease metadata. Retry now retains the
+last
 owner-redacted failure separately from the current error; legacy jobs without
 that history remain supported without reconstruction. The cache fixture covers
 metadata preservation, held/free/missing locks and retry history; the browser
@@ -1818,7 +2137,8 @@ fixture covers unchanged counter observations and compact activity labels.
 Startup retains traffic-driven maintenance for ordinary routes/settings while
 explicit cache actions and passive updater status reads own their work. This
 permanent routing boundary prevents a status/stop request from advancing updater
-work before authorization/CSRF controller handling. Security checks remain in the
+work before authorization/CSRF controller handling. Security checks remain in
+the
 existing dispatch path. Usage is unknown; the actual startup-dispatch fixture
 `cache_transport_maintenance_test.php` protects both the exemptions and retained
 ordinary behavior. The dashboard fixture protects failed phase counters and safe
@@ -1826,13 +2146,15 @@ owner-provided error/reference presentation.
 
 The cache diagnostic copy control follows the existing Clipboard API plus legacy
 selection/copy interaction used by Admin controls. It supports HTTP hosting and
-denied Clipboard API access, reports actual copy failure and remains owned by the
+denied Clipboard API access, reports actual copy failure and remains owned by
+the
 cache UI module. Usage is unknown; retain this fallback until supported hosting
 and browsers all provide accepted clipboard access. Job progress reuses the
 existing authenticated Admin Updates status endpoint; stop reuses the locked
 pre-activation cancellation service with canonical panel completion. Existing
 direct/no-JavaScript POST fallback remains supported permanently. The dashboard
-browser fixture covers copying after injection, phase counters and in-place stop.
+browser fixture covers copying after injection, phase counters and in-place
+stop.
 
 The log service preserves the existing void best-effort API and adds a safe
 insertion receipt for explicit diagnostic consumers. The cache diagnostic owner
@@ -1840,9 +2162,12 @@ stores a 26-character request-ID prefix to support the installed observability
 migration while retaining the full 32-character ID in searchable JSON context.
 This is permanent support for existing installations; usage is unknown.
 Retirement requires a qualified schema migration covering every supported
-installation. `cache_cleanup_diagnostics_test.php` covers column width rejection,
-confirmed insertion, safe failure receipts and redaction. Manual internal-browser
-verification additionally checked real persisted log entries on the local install.
+installation. `cache_cleanup_diagnostics_test.php` covers column width
+rejection,
+confirmed insertion, safe failure receipts and redaction. Manual
+internal-browser
+verification additionally checked real persisted log entries on the local
+install.
 
 ## Floating navigation shell refresh (#208)
 
@@ -1877,16 +2202,21 @@ unchanged. Regression uses real updater filesystem declarations rather than
 redeclaration stubs and confines all destructive work to its random temporary
 installation.
 
-The token-protected cron retains GET-token fallback for existing provider URL-only
-schedulers, while preferring a header or POST. Owner: site maintenance controller.
-Usage is unknown. Retire the URL fallback only after supported installations have
-migrated scheduler credentials and accepted header/POST calls; do not log tokens.
+The token-protected cron retains GET-token fallback for existing provider
+URL-only
+schedulers, while preferring a header or POST. Owner: site maintenance
+controller.
+Usage is unknown. Retire the URL fallback only after supported installations
+have
+migrated scheduler credentials and accepted header/POST calls; do not log
+tokens.
 Ordinary external cache-only requests still disable legacy thumbnail chaining.
 The automatic cache owner now uses a separate authenticated POST/header chain
 with committed single-use tickets, a dedicated live lock and bounded timer hops.
 It permanently supports generic configured-origin HTTP hosting without requiring
 a provider API or browser continuation. Missing absolute `base_url`, unsupported
-network functions, loopback refusal or insufficient runtime is reported as a safe
+network functions, loopback refusal or insufficient runtime is reported as a
+safe
 chain refusal; direct short visitor opportunities and optional external workers
 remain available. A socket write is not an arrival receipt. Usage is unknown
 until deployment shows independent worker arrivals. The required serial hosted
@@ -1907,13 +2237,51 @@ Approved cleanup and detached cursors remain protected without an idle expiry.
 Disposable regression evidence covers new-ID rejection and uninterrupted owned
 cleanup; production scheduler configuration remains a separate deployment step.
 
-Age-only legacy backup/orphaned-running-job pruning is retired because it cannot prove current/previous recovery ownership. Existing legacy payloads remain protected pending an owner migration; usage is unknown. Known terminal job pruning preserves the last successful rollback, active/source and selected beta references, and new scheduled ownership revalidates them under updater locks. Windows releases the terminal job child worker handle immediately before directory rename while retaining the start lock; terminal workers only read payloads and retries/rollback transitions use the start lock. The disposable lifecycle fixture covers contextual protection.
+Age-only legacy backup/orphaned-running-job pruning is retired because it cannot
+prove current/previous recovery ownership. Existing legacy payloads remain
+protected pending an owner migration; usage is unknown. Known terminal job
+pruning preserves the last successful rollback, active/source and selected beta
+references, and new scheduled ownership revalidates them under updater locks.
+Windows releases the terminal job child worker handle immediately before
+directory rename while retaining the start lock; terminal workers only read
+payloads and retries/rollback transitions use the start lock. The disposable
+lifecycle fixture covers contextual protection.
 
-New GitHub/consumer leases use 256 stable buckets. Reclamation also checks any full-identity lease left by an earlier live checkout of this feature, protecting still-running producers while migrating lock granularity. Usage is unknown; retirement requires proof every earlier producer has exited and no supported caller uses that lease scheme. Bucket collisions are intentionally conservative and delay reclamation rather than weaken safety. The inherited BASIC audit runner remains unchanged. Native completed reports require matching JSON and the final in-run Markdown footer with subsequent publications outside that subtree; interrupted owner-only, missing/truncated Markdown and custom in-subtree publications remain protected. The lifecycle fixture covers these refusal paths and a held consumer lease.
+New GitHub/consumer leases use 256 stable buckets. Reclamation also checks any
+full-identity lease left by an earlier live checkout of this feature, protecting
+still-running producers while migrating lock granularity. Usage is unknown;
+retirement requires proof every earlier producer has exited and no supported
+caller uses that lease scheme. Bucket collisions are intentionally conservative
+and delay reclamation rather than weaken safety. The inherited BASIC audit
+runner remains unchanged. Native completed reports require matching JSON and the
+final in-run Markdown footer with subsequent publications outside that subtree;
+interrupted owner-only, missing/truncated Markdown and custom in-subtree
+publications remain protected. The lifecycle fixture covers these refusal paths
+and a held consumer lease.
 
-Historical schema-1 audit reports without `source` are accepted only when recognized profile/environment/task statuses, their canonical run-directory identity and final native Markdown publication match. Downloaded exports retain the completed JSON contract because their native run Markdown may be outside the export. This protects real September audit reports observed during analysis without permitting filename-only pruning. Usage is confirmed locally; retirement requires migration/removal of these historical reports. The lifecycle fixture includes historical/current completed pairs and protected interrupted-run markers.
+Historical schema-1 audit reports without `source` are accepted only when
+recognized profile/environment/task statuses, their canonical run-directory
+identity and final native Markdown publication match. Downloaded exports retain
+the completed JSON contract because their native run Markdown may be outside the
+export. This protects real September audit reports observed during analysis
+without permitting filename-only pruning. Usage is confirmed locally; retirement
+requires migration/removal of these historical reports. The lifecycle fixture
+includes historical/current completed pairs and protected interrupted-run
+markers.
 
-Registered legacy browser profiles and versioned release working copies lack reliable creation markers. Their fixed 24-hour retention uses a filesystem-derived age anchor persisted once; PHP ctime is not treated as portable birth time. Native browser fixtures now write creation evidence. The fallback is owned by cache lifecycle and permanently supports explicitly registered historical disposable roots; usage is confirmed from the incident screenshots. It can retire only after those roots are migrated/removed and all supported producers record creation. Regression fixtures cover recent writes without renewed expiry, the exact 24-hour boundary, fresh/pinned roots, legacy anchor stability and preserved persistent release controls. In-progress inventories initialize newly registered category counters without rewriting already approved previews; earlier observations remain in their original categories until a new scan.
+Registered legacy browser profiles and versioned release working copies lack
+reliable creation markers. Their fixed 24-hour retention uses a
+filesystem-derived age anchor persisted once; PHP ctime is not treated as
+portable birth time. Native browser fixtures now write creation evidence. The
+fallback is owned by cache lifecycle and permanently supports explicitly
+registered historical disposable roots; usage is confirmed from the incident
+screenshots. It can retire only after those roots are migrated/removed and all
+supported producers record creation. Regression fixtures cover recent writes
+without renewed expiry, the exact 24-hour boundary, fresh/pinned roots, legacy
+anchor stability and preserved persistent release controls. In-progress
+inventories initialize newly registered category counters without rewriting
+already approved previews; earlier observations remain in their original
+categories until a new scan.
 
 ### Visitor cache opportunities and strict central ownership
 
@@ -1929,14 +2297,18 @@ This is a hosting compatibility path, not a measured disk reserve or quota.
 Usage of the reported symptom is confirmed by the deployed Admin screenshot;
 the exact site's exception trace was not available. The hosted serial HTTP
 fixture disables the real native function in both processes and requires
-ordinary-visit reclamation plus protected-data/OFF assertions. Retirement requires
+ordinary-visit reclamation plus protected-data/OFF assertions. Retirement
+requires
 a hosting support contract that guarantees the native probe for every supported
 installation; generic shared hosting currently needs permanent support.
 
 The cache lifecycle owner permanently supports PHP webhosts without
-`fastcgi_finish_request`/`litespeed_finish_request`: a 40 ms admission opportunity
-runs at shutdown and may add to client latency. Supported response finishing still
-occupies the PHP worker and receives 120/600 ms admission; this is not a separate
+`fastcgi_finish_request`/`litespeed_finish_request`: a 40 ms admission
+opportunity
+runs at shutdown and may add to client latency. Supported response finishing
+still
+occupies the PHP worker and receives 120/600 ms admission; this is not a
+separate
 thread. Usage is unknown until deployed arrival/progress evidence is observed.
 The hosted public HTTP fixture covers the unsupported finishing path; disposable
 visitor fixtures cover both budgets, contention and resumed deletion metrics.
@@ -1947,7 +2319,8 @@ current generic PHP 8.1+ support requires it permanently.
 `maintenance_center_model_mutation_owner(true)` refuses unknown storage before a
 new visitor mutation. Existing nullable callers retain their historical
 observation contract; the optional strict parameter is owned by the persistence
-model and tested by the visitor unknown-claim fixture. Upgrade preference seeding
+model and tested by the visitor unknown-claim fixture. Upgrade preference
+seeding
 uses insert-if-absent, never an override of explicit administrator OFF. The old
 900/3600-second deployed due markers are interpreted using the new thirty-second
 completion/observation anchor; existing unfinished/approved cursors are never
@@ -1959,9 +2332,25 @@ can provide that recovery without changing the generic cache owner.
 
 ## Cache registry transition and standalone previews
 
-The cache lifecycle service preserves pre-registry JSON manual/automatic plans, committed queue fences and detached deletion payloads until their original owner drains them. Usage is unknown. The DB registry starts afterwards and retains the last legacy observation as historical until regional coverage is available. Invalid legacy state fails closed. Explicit manual previews and database-free standalone fixture consumers keep the historical API; production automatic workers require the migrated registry and refuse unavailable evidence. Removal requires proof that no deployed unfinished legacy jobs remain and supported standalone consumers have migrated. Regression owners: `cache_lifecycle_scheduler_test.php`, `cache_lifecycle_registry_test.php` and the real autonomous HTTP fixture. New regional work never restarts its root scan merely because a work opportunity or process restart occurred.
+The cache lifecycle service preserves pre-registry JSON manual/automatic plans,
+committed queue fences and detached deletion payloads until their original owner
+drains them. Usage is unknown. The DB registry starts afterwards and retains the
+last legacy observation as historical until regional coverage is available.
+Invalid legacy state fails closed. Explicit manual previews and database-free
+standalone fixture consumers keep the historical API; production automatic
+workers require the migrated registry and refuse unavailable evidence. Removal
+requires proof that no deployed unfinished legacy jobs remain and supported
+standalone consumers have migrated. Regression owners:
+`cache_lifecycle_scheduler_test.php`, `cache_lifecycle_registry_test.php` and
+the real autonomous HTTP fixture. New regional work never restarts its root scan
+merely because a work opportunity or process restart occurred.
 
-Workspace age records now bind their fixed anchor to the current producer marker and filesystem device/inode identity. An unbound historical age record is re-anchored conservatively, and changed identity is revalidated under the exclusive deletion lease before detachment. This protects a replacement at the same path from inheriting expiry. Producer-free legacy workspace usage is unknown; retain the conservative path while supported legacy roots remain.
+Workspace age records now bind their fixed anchor to the current producer marker
+and filesystem device/inode identity. An unbound historical age record is
+re-anchored conservatively, and changed identity is revalidated under the
+exclusive deletion lease before detachment. This protects a replacement at the
+same path from inheriting expiry. Producer-free legacy workspace usage is
+unknown; retain the conservative path while supported legacy roots remain.
 
 
 ## Historical flat download and updater archive ownership (#212, #220)
@@ -1969,17 +2358,22 @@ Workspace age records now bind their fixed anchor to the current producer marker
 Owners: cache lifecycle policy/storage, the existing download producer and HTTP
 stream boundary. Production screenshots confirm native flat gallery ZIPs with
 40/64-hex signatures and older updater ZIP snapshot names remain deployed; exact
-installation-wide adoption is unknown. Older cleanup only classified these bytes,
+installation-wide adoption is unknown. Older cleanup only classified these
+bytes,
 while positive eligibility covered newer metadata-backed artifacts. Permanent
 historical support now requires native path plus ZIP/header or source-snapshot
 proof, stable physical identity and producer/serving leases. Completed download
 ZIPs keep the existing seven-day lifetime from payload modification, independent
-of permission-change ctime. Native abandoned partials retain six-hour inactivity.
+of permission-change ctime. Native abandoned partials retain six-hour
+inactivity.
 The updater keeps current installed code and a two-copy recovery window, with
 active/selected/unknown recovery protected independently. No age-only general
-backup/original deletion is restored. Retire this recognition only after deployed
-historical payloads are migrated/drained and all supported producers use explicit
-metadata. `cache_lifecycle_test.php` covers real ZIP shapes, expiry, active leases,
+backup/original deletion is restored. Retire this recognition only after
+deployed
+historical payloads are migrated/drained and all supported producers use
+explicit
+metadata. `cache_lifecycle_test.php` covers real ZIP shapes, expiry, active
+leases,
 unknown content and retained copies; exact hosted FULL and production acceptance
 remain separate gates. Existing API fields retain their meanings; the optional
 manual `operation` evidence separates current progress from historical totals.

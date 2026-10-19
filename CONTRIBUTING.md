@@ -26,9 +26,11 @@ architecture documentation before changing code. In particular:
   conventions. Do not add `from __future__ import annotations` to Python code.
   Write each named declaration and its complete contract in the same edit:
   purpose before tags, every parameter, actual return variants, concrete shapes
-  and native types. Runtime policy sites independently need purpose, type, units,
+  and native types. Runtime policy sites independently need purpose, type,
+  units,
   scope, consumers and rationale. Use the scanner-checked examples in
-  [the authoring reference](docs/AGENT_AUTHORING.md); tag-only comments are incomplete.
+  [the authoring reference](docs/AGENT_AUTHORING.md); tag-only comments are
+  incomplete.
 - Add schema changes as new timestamp-prefixed migration files. Preserve
   upgrade compatibility and cover behavior through the central audit where
   practical.
@@ -50,7 +52,8 @@ architecture documentation before changing code. In particular:
 
 ## Preparing and verifying an ordinary source candidate
 
-Read the top-priority [CI-first contract](AGENTS.md#mandatory-agent-verification-contract).
+Read the top-priority
+[CI-first contract](AGENTS.md#mandatory-agent-verification-contract).
 Before writing, verify the current working branch/HEAD, remote head and explicit
 branch-scoped user authorization plus usable write permission. Agents must never
 directly mutate `develop` or `main`, even through APIs or broad credentials.
@@ -58,39 +61,52 @@ Missing authorization or access is BLOCKED before writes.
 
 Finish source, tests, relevant permanent Markdown and all four maintained TeX
 manual sources. Leave PDFs, manual version/date metadata and patch notes to
-release preparation. Make atomic source commits and push only the exact authorized
-`feature/*`, `fix/*`, `bugfix/*`, `hotfix/*` or `codex/*` ref with a normal push.
-Check for concurrent writers and incorporate bot commits before subsequent fixes.
+release preparation. Make atomic source commits and push only the exact
+authorized
+`feature/*`, `fix/*`, `bugfix/*`, `hotfix/*` or `codex/*` ref with a normal
+push.
+Check for concurrent writers and incorporate bot commits before subsequent
+fixes.
 
 [Candidate preparation](.github/workflows/candidate-preparation.yml) generates
 runtime plans, indexed production inventory and complete-file integrity hashes,
-commits only changed artifacts, then calls full central CI for its exact prepared
-SHA. Its lease and final gate refuse stale branches. Read-only candidate preflight
+commits only changed artifacts, then calls full central CI for its exact
+prepared
+SHA. Its lease and final gate refuse stale branches. Read-only candidate
+preflight
 blocks expensive jobs for stale artifacts or source violations. Bot commits do
 not trigger recursion: the caller owns the reusable qualification.
 
 Inspect hosted summaries, required jobs and `source-failures.md`/linked JSON or
 failure logs. Repair the complete batch, commit and push the same branch until
-fresh required CI is green. Do not routinely prepare generated artifacts, execute
+fresh required CI is green. Do not routinely prepare generated artifacts,
+execute
 audits, run test loops or duplicate lint locally. Focused local reproduction is
-exceptional for an observed environment-specific CI failure, genuinely inaccessible
-CI or explicit user request. Red or slow CI is not unavailable CI; local evidence
+exceptional for an observed environment-specific CI failure, genuinely
+inaccessible
+CI or explicit user request. Red or slow CI is not unavailable CI; local
+evidence
 never replaces hosted qualification.
 
 The central audit remains the only test orchestrator in GitHub Actions. Ordinary
-handoffs need full hosted coverage; release qualification uses the release profile
-and matrix in `RELEASE.md`. Required FAIL/BLOCKED/SKIP/missing/cancelled/stale jobs
+handoffs need full hosted coverage; release qualification uses the release
+profile
+and matrix in `RELEASE.md`. Required FAIL/BLOCKED/SKIP/missing/cancelled/stale
+jobs
 prevent a green handoff. Report workflow URL, branch, prepared SHA, immutable
 comparison base, required job results and material/manual gaps. Preserve all
-PHP, Node, Python, browser, database, WinApp, runtime and source-policy coverage.
+PHP, Node, Python, browser, database, WinApp, runtime and source-policy
+coverage.
 
-Local generator/audit commands documented elsewhere are recovery/diagnostic tools,
+Local generator/audit commands documented elsewhere are recovery/diagnostic
+tools,
 not mandatory agent steps. Source debt budgets remain decrease-only; never add
 baselines or weaken assertions to obtain green CI.
 
 ## Guarded release contribution policy
 
-The authoritative contract is [docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md).
+The authoritative contract is
+[docs/RELEASE_LIFECYCLE.md](docs/RELEASE_LIFECYCLE.md).
 A release begins from an explicitly selected immutable `develop` SHA and a
 reviewed previous stable `main` tag. Hosted source-only Stage A and Stage B
 precede Copilot/TeX, and the exact prepared candidate is qualified through the
@@ -131,5 +147,6 @@ exact-Q hosted qualification, then approve the bot PR once. Automation performs
 a protected standard merge, immutable tag and safe develop FF; GitHub Release
 publication stays manual. Feature integration remains a maintainer-performed
 true non-force FF of one qualified logical squash commit. See
-[the release lifecycle](docs/RELEASE_LIFECYCLE.md) for policy visibility, retries,
+[the release lifecycle](docs/RELEASE_LIFECYCLE.md) for policy visibility,
+retries,
 parallel develop and separately authorized live acceptance.

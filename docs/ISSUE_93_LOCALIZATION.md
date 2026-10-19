@@ -1,6 +1,7 @@
 # Issue 93: effective language and authored metadata
 
-Investigation: 2026-10-06. Source: https://github.com/klusik/PHP_gallery/issues/93.
+Investigation: 2026-10-06. Source:
+https://github.com/klusik/PHP_gallery/issues/93.
 
 ## Cause and request contract
 
@@ -14,7 +15,8 @@ language arguments remain supported. Admin session preference precedes the
 persisted Admin cookie, with the historical shared cookie as fallback. Public
 requests use permitted query selection, public session override, public cookie,
 then site-wide `public_language`; `lang=default` clears the visitor override.
-The cacheable browser-i18n asset's `lang` is an asset key, not a preference write.
+The cacheable browser-i18n asset's `lang` is an asset key, not a preference
+write.
 Admin and public preferences remain separate. There is no persisted per-account
 language column: personal language persistence is browser-local, not a users-row
 setting. Logging in does not make public requests use the Admin language.
@@ -48,14 +50,16 @@ variant to edit or overwrite. EXIF facts, tags, AI indexing metadata and flight
 waypoint identifiers have no authored per-language storage.
 
 Gallery fallback remains independent per field. A missing photo translation
-falls back to source; a present photo translation retains its intentionally blank
+falls back to source; a present photo translation retains its intentionally
+blank
 fields. Disabled authored-content capability renders source text while keeping
 UI translation active. Reapplying an overlay or changing language restores the
 preserved source instead of treating a previous translation as source.
 
 ## Regression evidence
 
-`content_request_language_test.php` exercises UI/content agreement, public query,
+`content_request_language_test.php` exercises UI/content agreement, public
+query,
 session and cookie precedence, persisted Admin and legacy cookies, independent
 Admin/public scopes, source reset, missing/blank fallback, explicit overrides,
 capability OFF, repeated overlays and colliding virtual/physical IDs.

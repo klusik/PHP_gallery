@@ -38,6 +38,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    require_once __DIR__ . '/support/php_source.php';
+
     /**
      * Minimal database accessor used by the tag-usage sorting fixture.
      *
@@ -103,10 +105,11 @@ require_once __DIR__ . '/../app/services/tag_metadata.php';
      * @param string $source Source text.
      * @param string $needle Required fragment.
      * @param string $label Assertion label.
+     * @return void Throws when neither the exact fragment nor its PHP tokens occur.
      */
     function assert_hero_tag_source_contains(string $source, string $needle, string $label): void
     {
-        if (!str_contains($source, $needle)) {
+        if (!php_source_contains($source, $needle)) {
             throw new RuntimeException($label . ' is missing required source fragment: ' . $needle);
         }
     }

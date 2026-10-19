@@ -32,6 +32,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    require_once __DIR__ . '/support/php_source.php';
+
     /**
      * Identify DNG paths for the isolated display-file fixture.
      *
@@ -380,7 +382,7 @@ namespace {
         // These are source call-chain checks, not HTTP/browser/database acceptance.
         foreach (['admin_uploads.php', 'upload_automation.php'] as $controller) {
             $controllerSource = file_get_contents(__DIR__ . '/../app/controllers/' . $controller);
-            image_decode_pipeline_assert(str_contains($controllerSource, 'create_image_thumbnails_result($image, $gallery)'), 'Upload fallback must retain the shared thumbnail boundary: ' . $controller);
+            image_decode_pipeline_assert(php_source_contains($controllerSource, 'create_image_thumbnails_result($image, $gallery)'), 'Upload fallback must retain the shared thumbnail boundary: ' . $controller);
             image_decode_pipeline_assert(!preg_match('/imagecreatefrom(?:jpeg|png|gif|webp)\s*\(/', $controllerSource), 'An upload controller bypasses the shared decoder.');
         }
         echo "Image decode pipeline tests passed (small native GD fixtures, injected metadata, public repair, upload call-chain checks).\n";

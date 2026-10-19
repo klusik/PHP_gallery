@@ -27,6 +27,7 @@ require_once __DIR__ . '/gallery_pdf_settings.php';
  *     work.
  */
 const GALLERY_MUSIC_MAX_BYTES = 64 * 1024 * 1024;
+
 /**
  * Bound playlist metadata and traversal independently of individual audio
  *     sizes.
@@ -35,6 +36,7 @@ const GALLERY_MUSIC_MAX_BYTES = 64 * 1024 * 1024;
  * Rationale: 100 tracks support a soundtrack without an unbounded public list.
  */
 const GALLERY_MUSIC_MAX_TRACKS = 100;
+
 /**
  * Bound retained indexed originals per gallery.
  * Type: int. Units: bytes. Scope: one physical gallery playlist.
@@ -42,6 +44,7 @@ const GALLERY_MUSIC_MAX_TRACKS = 100;
  * Rationale: 512 MiB limits shared-host storage even for many large originals.
  */
 const GALLERY_MUSIC_TOTAL_BYTES = 512 * 1024 * 1024;
+
 /**
  * Bound user-facing metadata independently of filesystem paths.
  * Type: int. Units: UTF-8 bytes. Scope: one filename or title.
@@ -70,13 +73,25 @@ function gallery_music_directory(array $gallery): string
     $candidate = gallery_abs_path($gallery['folder_path']);
     $root = realpath($candidate);
     $base = realpath(galleries_root());
-    if ($gallery['id'] < 1 || $gallery['folder_path'] === '' || $root === false
-        || $base === false || !is_dir($root) || is_link($candidate)
-        || !\Gallery\Core\path_inside($base, $root)) {
+    if (
+        $gallery['id'] < 1
+        || $gallery['folder_path'] === ''
+        || $root === false
+        || $base === false
+        || !is_dir($root)
+        || is_link($candidate)
+        || !\Gallery\Core\path_inside($base, $root)
+    ) {
         throw new \RuntimeException('Unavailable gallery.');
     }
     $directory = $root . '/.gallery-music';
-    if (is_link($directory) || (file_exists($directory) && !is_dir($directory))) {
+    if (
+        is_link($directory)
+        || (
+            file_exists($directory)
+            && !is_dir($directory)
+        )
+    ) {
         throw new \RuntimeException('Unsafe music storage.');
     }
     return $directory;
@@ -90,19 +105,46 @@ function gallery_music_directory(array $gallery): string
 function gallery_music_formats(): array
 {
     return [
-        'mp3' => ['mime' => 'audio/mpeg', 'detected' => ['audio/mpeg', 'audio/mp3']],
-        'm4a' => ['mime' => 'audio/mp4',
-            'detected' => ['audio/mp4', 'audio/x-m4a', 'video/mp4']],
-        'aac' => ['mime' => 'audio/aac',
-            'detected' => ['audio/aac', 'audio/x-hx-aac-adts', 'audio/x-aac']],
-        'ogg' => ['mime' => 'audio/ogg', 'detected' => ['audio/ogg', 'application/ogg']],
-        'oga' => ['mime' => 'audio/ogg', 'detected' => ['audio/ogg', 'application/ogg']],
-        'opus' => ['mime' => 'audio/ogg', 'detected' => ['audio/ogg', 'application/ogg']],
-        'wav' => ['mime' => 'audio/wav',
-            'detected' => ['audio/wav', 'audio/x-wav', 'audio/vnd.wave']],
-        'flac' => ['mime' => 'audio/flac', 'detected' => ['audio/flac', 'audio/x-flac']],
-        'webm' => ['mime' => 'audio/webm', 'detected' => ['audio/webm', 'video/webm']],
-        'weba' => ['mime' => 'audio/webm', 'detected' => ['audio/webm', 'video/webm']],
+        'mp3' => [
+            'mime' => 'audio/mpeg',
+            'detected' => ['audio/mpeg', 'audio/mp3'],
+        ],
+        'm4a' => [
+            'mime' => 'audio/mp4',
+            'detected' => ['audio/mp4', 'audio/x-m4a', 'video/mp4'],
+        ],
+        'aac' => [
+            'mime' => 'audio/aac',
+            'detected' => ['audio/aac', 'audio/x-hx-aac-adts', 'audio/x-aac'],
+        ],
+        'ogg' => [
+            'mime' => 'audio/ogg',
+            'detected' => ['audio/ogg', 'application/ogg'],
+        ],
+        'oga' => [
+            'mime' => 'audio/ogg',
+            'detected' => ['audio/ogg', 'application/ogg'],
+        ],
+        'opus' => [
+            'mime' => 'audio/ogg',
+            'detected' => ['audio/ogg', 'application/ogg'],
+        ],
+        'wav' => [
+            'mime' => 'audio/wav',
+            'detected' => ['audio/wav', 'audio/x-wav', 'audio/vnd.wave'],
+        ],
+        'flac' => [
+            'mime' => 'audio/flac',
+            'detected' => ['audio/flac', 'audio/x-flac'],
+        ],
+        'webm' => [
+            'mime' => 'audio/webm',
+            'detected' => ['audio/webm', 'video/webm'],
+        ],
+        'weba' => [
+            'mime' => 'audio/webm',
+            'detected' => ['audio/webm', 'video/webm'],
+        ],
     ];
 }
 
@@ -120,13 +162,24 @@ function gallery_music_formats(): array
 function gallery_music_validate_source(string $source, string $filename): array
 {
     $filename = basename(str_replace('\\', '/', $filename));
-    $format = gallery_music_formats()[strtolower(pathinfo($filename, PATHINFO_EXTENSION))] ?? null;
+    $format =
+        gallery_music_formats()[strtolower(pathinfo(
+            $filename,
+            PATHINFO_EXTENSION,
+        ))] ?? null;
     $size = @filesize($source);
-    if (!is_file($source) || is_link($source) || $size === false || $size < 1
-        || $size > GALLERY_MUSIC_MAX_BYTES || $filename === ''
+    if (
+        !is_file($source)
+        || is_link($source)
+        || $size === false
+        || $size < 1
+        || $size > GALLERY_MUSIC_MAX_BYTES
+        || $filename === ''
         || strlen($filename) > GALLERY_MUSIC_LABEL_BYTES
-        || preg_match('/[\x00-\x1f\x7f]/u', $filename) !== 0 || $format === null
-        || !class_exists(\finfo::class)) {
+        || preg_match('/[\x00-\x1f\x7f]/u', $filename) !== 0
+        || $format === null
+        || !class_exists(\finfo::class)
+    ) {
         throw new \RuntimeException(t('music.invalid_file'));
     }
     $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($source);
@@ -134,9 +187,14 @@ function gallery_music_validate_source(string $source, string $filename): array
         throw new \RuntimeException(t('music.invalid_file'));
     }
     $digest = hash_file('sha256', $source);
-    if (!is_string($digest)) throw new \RuntimeException(t('music.failed'));
-    return ['filename' => $filename, 'mime' => $format['mime'],
-        'size' => $size, 'sha256' => $digest];
+    if (!is_string($digest))
+        throw new \RuntimeException(t('music.failed'));
+    return [
+        'filename' => $filename,
+        'mime' => $format['mime'],
+        'size' => $size,
+        'sha256' => $digest,
+    ];
 }
 
 /**
@@ -149,7 +207,9 @@ function gallery_music_validate_source(string $source, string $filename): array
  */
 function gallery_music_playlist(array $gallery): array
 {
-    return \Gallery\Models\gallery_music_model_read(gallery_music_directory($gallery));
+    return \Gallery\Models\gallery_music_model_read(gallery_music_directory(
+        $gallery,
+    ));
 }
 
 /**
@@ -174,15 +234,20 @@ function gallery_music_track_visible(array $track): bool
  */
 function gallery_music_merge_playlists(array $sources): array
 {
-    usort($sources, static fn(array $left, array $right): int =>
-        $left['id'] <=> $right['id']);
+    usort(
+        $sources,
+        static fn(array $left, array $right): int => (
+            $left['id'] <=> $right['id']
+        ),
+    );
     $tracks = [];
     $versions = [];
     $seen = [];
     $unavailable = 0;
     foreach ($sources as $source) {
         $galleryId = $source['id'];
-        if ($galleryId <= 0 || isset($versions[$galleryId])) continue;
+        if ($galleryId <= 0 || isset($versions[$galleryId]))
+            continue;
         try {
             $playlist = gallery_music_playlist($source);
         } catch (\RuntimeException) {
@@ -195,15 +260,18 @@ function gallery_music_merge_playlists(array $sources): array
         }
         $versions[$galleryId] = $playlist['revision'];
         foreach ($playlist['tracks'] as $track) {
-            if (!gallery_music_track_visible($track)) continue;
+            if (!gallery_music_track_visible($track))
+                continue;
             $key = $track['sha256'];
             $candidate = ['source_gallery_id' => $galleryId] + $track;
             if (isset($seen[$key])) {
                 $position = $seen[$key];
                 // A downloadable visible copy may represent the same bytes.
                 // Its own protected endpoint remains the permission owner.
-                if ($track['downloadable']
-                    && !$tracks[$position]['downloadable']) {
+                if (
+                    $track['downloadable']
+                    && !$tracks[$position]['downloadable']
+                ) {
                     $tracks[$position] = $candidate;
                 }
                 continue;
@@ -213,7 +281,10 @@ function gallery_music_merge_playlists(array $sources): array
         }
     }
     return [
-        'revision' => hash('sha256', json_encode($versions, JSON_THROW_ON_ERROR)),
+        'revision' => hash('sha256', json_encode(
+            $versions,
+            JSON_THROW_ON_ERROR,
+        )),
         'enabled' => false,
         'unavailable' => $unavailable,
         'tracks' => $tracks,
@@ -231,18 +302,29 @@ function gallery_music_merge_playlists(array $sources): array
  */
 function gallery_music_track(array $gallery, string $id): ?array
 {
-    if (preg_match('/^[a-f0-9]{32}$/D', $id) !== 1) return null;
+    if (preg_match('/^[a-f0-9]{32}$/D', $id) !== 1)
+        return null;
     $directory = gallery_music_directory($gallery);
     foreach (gallery_music_playlist($gallery)['tracks'] as $track) {
-        if ($track['id'] !== $id) continue;
+        if ($track['id'] !== $id)
+            continue;
         $path = $directory . '/' . $id . '.bin';
         $extension = strtolower(pathinfo(
-            $track['filename'], PATHINFO_EXTENSION
+            $track['filename'],
+            PATHINFO_EXTENSION,
         ));
         $format = gallery_music_formats()[$extension] ?? null;
-        if ($format === null || $format['mime'] !== $track['mime'] || is_link($path)
-            || !is_file($path) || @filesize($path) !== $track['size']
-            || !hash_equals($track['sha256'], (string) @hash_file('sha256', $path))) {
+        if (
+            $format === null
+            || $format['mime'] !== $track['mime']
+            || is_link($path)
+            || !is_file($path)
+            || @filesize($path) !== $track['size']
+            || !hash_equals(
+                $track['sha256'],
+                (string) @hash_file('sha256', $path),
+            )
+        ) {
             return null;
         }
         return ['path' => $path, 'track' => $track];
@@ -278,36 +360,55 @@ function gallery_music_mutate(
     string $source = '',
     string $filename = '',
     bool $enabled = false,
-    bool $downloadable = false
+    bool $downloadable = false,
 ): array {
-    if (!in_array($action, [
-        'upload', 'delete', 'previous', 'next', 'settings',
-        'download', 'download_all',
-    ], true)) {
+    if (!in_array(
+        $action,
+        [
+            'upload',
+            'delete',
+            'previous',
+            'next',
+            'settings',
+            'download',
+            'download_all',
+        ],
+        true,
+    )) {
         throw new \RuntimeException(t('music.failed'));
     }
-    $validated = $action === 'upload' ? gallery_music_validate_source($source, $filename) : null;
+    $validated = $action === 'upload'
+        ? gallery_music_validate_source($source, $filename)
+        : null;
     $directory = gallery_music_directory($gallery);
-    if ((!is_dir($directory)
-        && !@mkdir($directory, GALLERY_MUSIC_DIRECTORY_MODE))
-        || is_link($directory . '/.lock')) {
+    if (
+        (
+            !is_dir($directory)
+            && !@mkdir($directory, GALLERY_MUSIC_DIRECTORY_MODE)
+        )
+        || is_link($directory . '/.lock')
+    ) {
         throw new \RuntimeException(t('music.failed'));
     }
     $lock = @fopen($directory . '/.lock', 'c');
-    if ($lock === false) throw new \RuntimeException(t('music.failed'));
+    if ($lock === false)
+        throw new \RuntimeException(t('music.failed'));
     @chmod($directory . '/.lock', \Gallery\Models\GALLERY_MUSIC_FILE_MODE);
     $newPath = '';
     $committed = false;
     try {
-        if (!flock($lock, LOCK_EX)) throw new \RuntimeException(t('music.failed'));
+        if (!flock($lock, LOCK_EX))
+            throw new \RuntimeException(t('music.failed'));
         $state = gallery_music_playlist($gallery);
         if (!hash_equals($state['revision'], $revision)) {
             throw new \RuntimeException(t('music.conflict'));
         }
         if ($validated !== null) {
             $total = array_sum(array_column($state['tracks'], 'size'));
-            if (count($state['tracks']) >= GALLERY_MUSIC_MAX_TRACKS
-                || $total + $validated['size'] > GALLERY_MUSIC_TOTAL_BYTES) {
+            if (
+                count($state['tracks']) >= GALLERY_MUSIC_MAX_TRACKS
+                || ($total + $validated['size']) > GALLERY_MUSIC_TOTAL_BYTES
+            ) {
                 throw new \RuntimeException(t('music.quota'));
             }
             // A random 128-bit id names this immutable original; filenames stay metadata.
@@ -321,26 +422,35 @@ function gallery_music_mutate(
             $input = @fopen($source, 'rb');
             try {
                 @chmod($newPath, \Gallery\Models\GALLERY_MUSIC_FILE_MODE);
-                if ($input === false
+                if (
+                    $input === false
                     || stream_copy_to_stream(
-                        $input, $output, GALLERY_MUSIC_MAX_BYTES + 1
+                        $input,
+                        $output,
+                        GALLERY_MUSIC_MAX_BYTES + 1,
                     ) !== $validated['size']
-                    || !fflush($output)) {
+                    || !fflush($output)
+                ) {
                     throw new \RuntimeException(t('music.failed'));
                 }
             } finally {
-                if (is_resource($input)) fclose($input);
+                if (is_resource($input))
+                    fclose($input);
                 fclose($output);
             }
-            if (!hash_equals($validated['sha256'], (string) @hash_file('sha256', $newPath))) {
+            if (!hash_equals(
+                $validated['sha256'],
+                (string) @hash_file('sha256', $newPath),
+            )) {
                 throw new \RuntimeException(t('music.failed'));
             }
-            $state['tracks'][] = [
-                'id' => $id,
-                'title' => $validated['filename'],
-                'hidden' => false,
-                'downloadable' => false,
-            ] + $validated;
+            $state['tracks'][] =
+                [
+                    'id' => $id,
+                    'title' => $validated['filename'],
+                    'hidden' => false,
+                    'downloadable' => false,
+                ] + $validated;
         } elseif ($action === 'settings') {
             $state['enabled'] = $enabled;
         } elseif ($action === 'download_all') {
@@ -349,8 +459,13 @@ function gallery_music_mutate(
             }
             unset($track);
         } else {
-            $position = array_search($trackId, array_column($state['tracks'], 'id'), true);
-            if ($position === false) throw new \RuntimeException(t('music.conflict'));
+            $position = array_search(
+                $trackId,
+                array_column($state['tracks'], 'id'),
+                true,
+            );
+            if ($position === false)
+                throw new \RuntimeException(t('music.conflict'));
             if ($action === 'delete') {
                 array_splice($state['tracks'], $position, 1);
             } elseif ($action === 'download') {
@@ -358,8 +473,10 @@ function gallery_music_mutate(
             } else {
                 $other = $position + ($action === 'previous' ? -1 : 1);
                 if (isset($state['tracks'][$other])) {
-                    [$state['tracks'][$position], $state['tracks'][$other]] =
-                        [$state['tracks'][$other], $state['tracks'][$position]];
+                    [$state['tracks'][$position], $state['tracks'][$other]] = [
+                        $state['tracks'][$other],
+                        $state['tracks'][$position],
+                    ];
                 }
             }
         }
@@ -367,17 +484,24 @@ function gallery_music_mutate(
         \Gallery\Models\gallery_music_model_write($directory, $state);
         $committed = true;
         gallery_attachment_storage_record(
-            (int) $gallery['id'], 'music', $state['tracks']
+            (int) $gallery['id'],
+            'music',
+            $state['tracks'],
         );
         // Metadata is authoritative: an interrupted unlink leaves an inaccessible
         // orphan rather than a playlist that points to a deleted original.
         if ($action === 'delete') {
             $path = $directory . '/' . $trackId . '.bin';
-            if (!is_link($path) && is_file($path)) @unlink($path);
+            if (!is_link($path) && is_file($path))
+                @unlink($path);
         }
-        return ['revision' => $state['revision'], 'track_id' => $action === 'upload' ? $id : null];
+        return [
+            'revision' => $state['revision'],
+            'track_id' => $action === 'upload' ? $id : null,
+        ];
     } finally {
-        if (!$committed && $newPath !== '' && is_file($newPath)) @unlink($newPath);
+        if (!$committed && $newPath !== '' && is_file($newPath))
+            @unlink($newPath);
         flock($lock, LOCK_UN);
         fclose($lock);
     }
@@ -394,22 +518,39 @@ function gallery_music_mutate(
  */
 function gallery_music_byte_range(string $header, int $size): ?array
 {
-    if ($size < 1) return null;
-    if ($header === '') return ['start' => 0, 'end' => $size - 1, 'partial' => false];
-    if (preg_match('/^bytes=([0-9]*)-([0-9]*)$/D', trim($header), $match) !== 1
-        || ($match[1] === '' && $match[2] === '')) return null;
-    $start = $match[1] === '' ? null : filter_var($match[1], FILTER_VALIDATE_INT,
-        ['options' => ['min_range' => 0]]);
-    $end = $match[2] === '' ? null : filter_var($match[2], FILTER_VALIDATE_INT,
-        ['options' => ['min_range' => 0]]);
-    if ($start === false || $end === false) return null;
+    if ($size < 1)
+        return null;
+    if ($header === '')
+        return ['start' => 0, 'end' => $size - 1, 'partial' => false];
+    if (
+        preg_match('/^bytes=([0-9]*)-([0-9]*)$/D', trim($header), $match) !== 1
+        || (
+            $match[1] === ''
+            && $match[2] === ''
+        )
+    )
+        return null;
+    $start = $match[1] === ''
+        ? null
+        : filter_var($match[1], FILTER_VALIDATE_INT, ['options' => [
+            'min_range' => 0,
+        ]]);
+    $end = $match[2] === ''
+        ? null
+        : filter_var($match[2], FILTER_VALIDATE_INT, ['options' => [
+            'min_range' => 0,
+        ]]);
+    if ($start === false || $end === false)
+        return null;
     if ($start === null) {
-        if ($end === null || $end < 1) return null;
+        if ($end === null || $end < 1)
+            return null;
         $start = max(0, $size - $end);
         $end = $size - 1;
     } else {
         $end = $end === null ? $size - 1 : min($end, $size - 1);
     }
-    if ($start >= $size || $end < $start) return null;
+    if ($start >= $size || $end < $start)
+        return null;
     return ['start' => $start, 'end' => $end, 'partial' => true];
 }

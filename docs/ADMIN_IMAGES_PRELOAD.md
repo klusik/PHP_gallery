@@ -11,7 +11,8 @@ The ordinary editor URL retains its complete table and no-JavaScript behavior.
 ## Transport and persistence
 
 The existing authenticated editor route serves read-only `action=images_batch`
-JSON. It has no public authorization bypass and does not mutate gallery settings.
+JSON. It has no public authorization bypass and does not mutate gallery
+settings.
 The model owns SQL; `gallery_lookup.php` owns the bounded read contract; the
 controller normalizes offset, authorizes, renders and sends the response.
 
@@ -21,7 +22,8 @@ The maximum is 100 direct images, excluding nested relative paths and including
 all administrator-visible visibility classes. Order is sort_order, filename, id;
 id makes ties deterministic. The original row renderer is shared by full pages
 and deferred fragments, including cover, visibility, preview and bulk controls.
-The empty shell contains the existing toolbar and form rather than a parallel UI.
+The empty shell contains the existing toolbar and form rather than a parallel
+UI.
 
 The inventory observation combines count, newest update, identity sum and
 identity-weighted order with the gallery edit revision. It is checked before
@@ -53,8 +55,10 @@ The completed DOM necessarily retains the gallery's complete image table.
 Preload URLs select the existing protected thumbnail route with 300px size,
 the existing browser format policy, source cache version and `existing_only=1`.
 That opt-in resolver accepts only the exact existing size/format, uses the
-existing source-ownership guard and reads only the derivative's own format/dimensions, and never creates, deletes, repairs
-or records derivatives. Missing files become explicit failures. Original-file geometry/EXIF reads are excluded. The ordinary
+existing source-ownership guard and reads only the derivative's own
+format/dimensions, and never creates, deletes, repairs
+or records derivatives. Missing files become explicit failures. Original-file
+geometry/EXIF reads are excluded. The ordinary
 thumbnail resolver and visual-preview fallback remain supported by default.
 900px previews are merely retained as on-demand button URLs.
 
@@ -63,7 +67,8 @@ shared activation function during preparation. Direct Images query intent is
 remembered and selected only after readiness. Other tab clicks do not change
 the public drawer URL. The three-pixel progress track first exposes an honest
 indeterminate state, then counts settled resources. It cannot show 100 before
-both end-of-list and resource settlement. Load/decode errors and timeout failures
+both end-of-list and resource settlement. Load/decode errors and timeout
+failures
 count separately, receive stable placeholders, and leave a retry action.
 After all requested resources settle, Images becomes usable even if some
 thumbnails failed. Batch errors keep Images unavailable but never disable
@@ -76,8 +81,10 @@ Photo-owned successful local mutation events also restart the preload when
 canonical draft protection keeps the settings fragment mounted.
 Canonical `gallery.cover` completions retain the prepared table: the star owner
 already applies their authoritative state in place. They preserve row/thumbnail
-nodes, bulk selection and Images readiness while the shared coordinator refreshes
-public fragments. Other photo metadata/inventory mutations still restart preload.
+nodes, bulk selection and Images readiness while the shared coordinator
+refreshes
+public fragments. Other photo metadata/inventory mutations still restart
+preload.
 Existing image-specific initialization runs on the completed table; the
 side-panel owner marks its bulk form for the existing delegated AJAX pipeline.
 
@@ -85,7 +92,8 @@ side-panel owner marks its bulk form for the existing delegated AJAX pipeline.
 
 Hosted BASIC checks syntax and declaration documentation only. It does not run
 these regressions, provide performance evidence or qualify browser/database
-behavior. The central PHP tree contains `admin_gallery_images_deferred_test.php`;
+behavior. The central PHP tree contains
+`admin_gallery_images_deferred_test.php`;
 the existing Node delegation owner unconditionally awaits its Images queue
 scenarios without changing the protected BASIC registry.
 

@@ -1,58 +1,136 @@
 # Admin Settings Inventory
 
-This inventory defines canonical ownership for site-wide PHP Gallery settings. The centralized `admin_settings` page is a discovery and safe-editing layer over these owners. It is not a second persistence implementation.
+This inventory defines canonical ownership for site-wide PHP Gallery settings.
+The centralized `admin_settings` page is a discovery and safe-editing layer over
+these owners. It is not a second persistence implementation.
 
 ## Source audit
 
 The Settings work audited the requested sources and their effective owners:
 
-- `app/controllers/admin_theme.php`: Theme, public appearance, pagination/grid defaults, hero tags, tag-page presentation, lightbox default, thumbnail renderer, branding, language UI and custom CSS.
-- `app/controllers/admin_dashboard.php`: URL rewrite, public search, EXIF/GPS global default, SEO request guard and developer diagnostics. The requested standalone `admin_exif_gps_settings.php`, `admin_public_search_settings.php`, and `admin_seo_guard_settings.php` do not exist in this tree; their route handlers are in this controller.
-- `app/controllers/admin_uploads.php`: normal upload preferences and browser-assisted upload settings. Rendering is in `app/views/admin_upload_settings.php`.
-- `app/controllers/admin_tags.php`: tag metadata and normalization workflow. Tag-page presentation itself is Theme-owned.
-- `app/controllers/admin_auth.php`: account, password-reset mail settings, Google account linking and per-user OpenAI configuration. The requested `admin_account.php` does not exist in this tree; `cms_admin_account()` is here.
-- `app/controllers/admin_telemetry.php`: privacy/telemetry controls and retention UI, persisted by `app/services/telemetry_settings.php`.
-- `app/controllers/site_maintenance.php`: scheduled maintenance configuration and destructive/runtime actions. The requested `admin_site_maintenance_settings.php` does not exist as a separate file; the route handler is here.
-- `app/services/app_settings.php`: generic `app_settings` storage plus focused site-name, URL-rewrite and diagnostics helpers.
+- `app/controllers/admin_theme.php`: Theme, public appearance, pagination/grid
+  defaults, hero tags, tag-page presentation, lightbox default, thumbnail
+  renderer, branding, language UI and custom CSS.
+- `app/controllers/admin_dashboard.php`: URL rewrite, public search, EXIF/GPS
+  global default, SEO request guard and developer diagnostics. The requested
+  standalone `admin_exif_gps_settings.php`, `admin_public_search_settings.php`,
+  and `admin_seo_guard_settings.php` do not exist in this tree; their route
+  handlers are in this controller.
+- `app/controllers/admin_uploads.php`: normal upload preferences and
+  browser-assisted upload settings. Rendering is in
+  `app/views/admin_upload_settings.php`.
+- `app/controllers/admin_tags.php`: tag metadata and normalization workflow.
+  Tag-page presentation itself is Theme-owned.
+- `app/controllers/admin_auth.php`: account, password-reset mail settings,
+  Google account linking and per-user OpenAI configuration. The requested
+  `admin_account.php` does not exist in this tree; `cms_admin_account()` is
+  here.
+- `app/controllers/admin_telemetry.php`: privacy/telemetry controls and
+  retention UI, persisted by `app/services/telemetry_settings.php`.
+- `app/controllers/site_maintenance.php`: scheduled maintenance configuration
+  and destructive/runtime actions. The requested
+  `admin_site_maintenance_settings.php` does not exist as a separate file; the
+  route handler is here.
+- `app/services/app_settings.php`: generic `app_settings` storage plus focused
+  site-name, URL-rewrite and diagnostics helpers.
 - `app/services/theme.php`: Theme defaults and normalization.
-- `app/services/pagination.php`: global/home/tag grid normalization and inheritance.
-- `app/services/gallery_description_layout.php`: global/tag/per-gallery card-layout normalization and fallback.
-- `app/services/public_thumbnail_rendering.php`: `responsive` / `progressive` renderer contract with progressive default/fallback and responsive legacy selection.
-- `app/services/gallery_lightbox_mode.php`: `single` / `picture_strip` / `3d_carousel` contract and per-gallery inheritance.
-- `app/views/admin_chrome.php`, `app/views/admin_dashboard.php`, `app/views/admin_dashboard_sections.php`: navigation and specialized settings surfaces.
+- `app/services/pagination.php`: global/home/tag grid normalization and
+  inheritance.
+- `app/services/gallery_description_layout.php`: global/tag/per-gallery
+  card-layout normalization and fallback.
+- `app/services/public_thumbnail_rendering.php`: `responsive` / `progressive`
+  renderer contract with progressive default/fallback and responsive legacy
+  selection.
+- `app/services/gallery_lightbox_mode.php`: `single` / `picture_strip` /
+  `3d_carousel` contract and per-gallery inheritance.
+- `app/views/admin_chrome.php`, `app/views/admin_dashboard.php`,
+  `app/views/admin_dashboard_sections.php`: navigation and specialized settings
+  surfaces.
 - `app/bootstrap.php`: route registration.
 
-`app/services/admin_settings_registry.php` is now the machine-readable ownership registry for settings surfaced by the central hub. It records stable IDs, canonical keys, ownership, current/default resolvers, validation metadata, migration status, sensitivity and specialized routes.
+`app/services/admin_settings_registry.php` is now the machine-readable ownership
+registry for settings surfaced by the central hub. It records stable IDs,
+canonical keys, ownership, current/default resolvers, validation metadata,
+migration status, sensitivity and specialized routes.
 
 ## Compact Settings workspace
 
-General groups website address/name, Admin/public languages and navigation controls. Historical `section=site` links normalize to General. The authenticated workspace loads sections on demand and saves through canonical mutation envelopes in place, with dirty-setting counts, draft revert and explicit links after address or Admin-language changes. An unchanged address does not rewrite `config.php`. Advanced summaries are collapsed; ordinary section URLs and POST forms remain the no-JavaScript fallback. Specialist ownership and inherited values remain unchanged.
+General groups website address/name, Admin/public languages and navigation
+controls. Historical `section=site` links normalize to General. The
+authenticated workspace loads sections on demand and saves through canonical
+mutation envelopes in place, with dirty-setting counts, draft revert and
+explicit links after address or Admin-language changes. An unchanged address
+does not rewrite `config.php`. Advanced summaries are collapsed; ordinary
+section URLs and POST forms remain the no-JavaScript fallback. Specialist
+ownership and inherited values remain unchanged.
 
 ## Settings search
 
-The central Settings page renders a local Spotlight-style search directly below its title. Its index is generated from every visible registry entry, using the translated setting label, description, section, stable ID and sensitivity classification. Results update while the administrator types; no request, external API or separate search index is involved. Matching is case-insensitive, accent-insensitive and token-based, with label-prefix matches ranked first and a maximum of twelve visible results.
+The central Settings page renders a local Spotlight-style search directly below
+its title. Its index is generated from every visible registry entry, using the
+translated setting label, description, section, stable ID and sensitivity
+classification. Results update while the administrator types; no request,
+external API or separate search index is involved. Matching is case-insensitive,
+accent-insensitive and token-based, with label-prefix matches ranked first and a
+maximum of twelve visible results.
 
-Selecting a result activates the owning Settings section, scrolls to and highlights the exact editable control or summary card, and preserves the existing specialized-page link where applicable. Arrow keys move through results, Enter opens the active result, Escape closes the result list, and the clear control resets the query. Without JavaScript, the normal section tabs, stable URLs and complete Settings content remain available.
+Selecting a result activates the owning Settings section, scrolls to and
+highlights the exact editable control or summary card, and preserves the
+existing specialized-page link where applicable. Arrow keys move through
+results, Enter opens the active result, Escape closes the result list, and the
+clear control resets the query. Without JavaScript, the normal section tabs,
+stable URLs and complete Settings content remain available.
 
-The registry also contains an exhaustive discovery-only catalog for global controls that remain on specialist screens. It indexes individual Theme colors, typography, corners, width, GPS-pin presentation, hero-tag behavior, shortcuts, card/grid options, branding, backgrounds, favicons, language import/export, and custom CSS; every browser-upload bound; telemetry collection and retention controls; thumbnail generation and cleanup tools; scheduled-maintenance timing and execution; navigation data; logs, updates, integrity, diagnostics, reports, feature flags, and database operations; plus account, password-reset mail, Google linking, and per-user OpenAI controls. Discovery-only entries appear in search but do not create hundreds of duplicate cards in ordinary Settings sections. Selecting one opens its canonical owner.
+The registry also contains an exhaustive discovery-only catalog for global
+controls that remain on specialist screens. It indexes individual Theme colors,
+typography, corners, width, GPS-pin presentation, hero-tag behavior, shortcuts,
+card/grid options, branding, backgrounds, favicons, language import/export, and
+custom CSS; every browser-upload bound; telemetry collection and retention
+controls; thumbnail generation and cleanup tools; scheduled-maintenance timing
+and execution; navigation data; logs, updates, integrity, diagnostics, reports,
+feature flags, and database operations; plus account, password-reset mail,
+Google linking, and per-user OpenAI controls. Discovery-only entries appear in
+search but do not create hundreds of duplicate cards in ordinary Settings
+sections. Selecting one opens its canonical owner.
 
-Per-gallery and per-image values are intentionally not global registry entries. Their controls depend on the selected gallery or photograph and remain searchable only within those contextual editors. Secret values are never copied into the registry; only a safe setting name and destination are indexed.
+Per-gallery and per-image values are intentionally not global registry entries.
+Their controls depend on the selected gallery or photograph and remain
+searchable only within those contextual editors. Secret values are never copied
+into the registry; only a safe setting name and destination are indexed.
 
-Version 0.108 also adds optional **per-administrator** gallery creation defaults. SimBrief Pilot ID/name and source-content language are stored in `user_gallery_creation_preferences` by `app/services/gallery_creation_preferences.php`, edited through the gallery create/editor controls, and kept out of the global Settings registry. These defaults belong to the authenticated administrator; they are not site-wide Theme settings and do not grant gallery or API access. An explicit Remember save requires migration `202609250001_gallery_creation_preferences.php` and verified storage.
+Version 0.108 also adds optional **per-administrator** gallery creation
+defaults. SimBrief Pilot ID/name and source-content language are stored in
+`user_gallery_creation_preferences` by
+`app/services/gallery_creation_preferences.php`, edited through the gallery
+create/editor controls, and kept out of the global Settings registry. These
+defaults belong to the authenticated administrator; they are not site-wide Theme
+settings and do not grant gallery or API access. An explicit Remember save
+requires migration `202609250001_gallery_creation_preferences.php` and verified
+storage.
 
-PDF page resolution (`gallery_pdf_render_dpi`) belongs to `gallery_pdf_settings`.
+PDF page resolution (`gallery_pdf_render_dpi`) belongs to
+`gallery_pdf_settings`.
 Ownership lookup returns service metadata without inspecting submitted values;
 central normalization validates the selected DPI before persistence. Supported
-values are 96, 150, 200, 300, 600, 1200 and 2400 DPI. Runtime ownership and entry
+values are 96, 150, 200, 300, 600, 1200 and 2400 DPI. Runtime ownership and
+entry
 construction coverage is described in `TESTING.md`.
 
 ## Classification legend
 
-- **Edit**: safe central editing is enabled and the save delegates to the existing canonical service setter.
-- **Summary**: current value/source is visible centrally, but mutation stays on the specialized page.
-- **Specialized**: status/link only because the workflow is sensitive, destructive, file-backed, user-specific, migration-oriented or otherwise contextual.
-- **Revision**: changing the setting through its current canonical Theme workflow bumps `theme_public_content_revision` when the rendered public HTML contract changes.
-- **Migration**: `No` means the central hub itself adds no schema requirement. A conditional entry may still depend on an already-existing optional schema before it is editable.
+- **Edit**: safe central editing is enabled and the save delegates to the
+  existing canonical service setter.
+- **Summary**: current value/source is visible centrally, but mutation stays on
+  the specialized page.
+- **Specialized**: status/link only because the workflow is sensitive,
+  destructive, file-backed, user-specific, migration-oriented or otherwise
+  contextual.
+- **Revision**: changing the setting through its current canonical Theme
+  workflow bumps `theme_public_content_revision` when the rendered public HTML
+  contract changes.
+- **Migration**: `No` means the central hub itself adds no schema requirement. A
+  conditional entry may still depend on an already-existing optional schema
+  before it is editable.
 
 ## Website address
 
@@ -60,7 +138,13 @@ construction coverage is described in `TESTING.md`.
 |---|---|---|---|---|---|---|---|
 | `base_url` | `site_url.php`; Settings > Website address (`site`) | absolute HTTP/HTTPS URL; optional installation path; no credentials, query, or fragment | displays current local configuration; malformed/empty submissions are rejected | replaces only the top-level literal in `config.php`; requires writable file and directory; no DB write or migration | Edit | none | operational |
 
-This section has its own form, so saving the website address does not save the General section's database settings. `site_url_save()` serializes writes, preserves unrelated source bytes and existing permissions, atomically replaces the configuration, and invalidates OPcache. Computed or ambiguous configuration is refused and remains available for manual editing. A successful save redirects to the newly configured URL. The setting changes generated addresses; filesystem placement, DNS, and web-server configuration remain separate responsibilities.
+This section has its own form, so saving the website address does not save the
+General section's database settings. `site_url_save()` serializes writes,
+preserves unrelated source bytes and existing permissions, atomically replaces
+the configuration, and invalidates OPcache. Computed or ambiguous configuration
+is refused and remains available for manual editing. A successful save redirects
+to the newly configured URL. The setting changes generated addresses; filesystem
+placement, DNS, and web-server configuration remain separate responsibilities.
 
 ## General
 
@@ -101,7 +185,10 @@ This section has its own form, so saving the website address does not save the G
 | `theme_radius` | `theme.php`; Theme Appearance | integer 0..32 | CSS-derived default, normally 16 | Theme CSS output changes; no migration | Specialized | Theme Appearance | advanced styling |
 | `theme_font` | `theme.php`; Theme Appearance | `serif` / `sans` | CSS-derived Theme default | Theme CSS output changes; no migration | Specialized | Theme Appearance | advanced styling |
 
-Tag names, slugs, descriptions and usage metadata are not global `app_settings` values. They remain owned by the Tags subsystem and database tables. The central Content section links to `admin_tags` without duplicating that mutation workflow.
+Tag names, slugs, descriptions and usage metadata are not global `app_settings`
+values. They remain owned by the Tags subsystem and database tables. The central
+Content section links to `admin_tags` without duplicating that mutation
+workflow.
 
 ## Media and browsing
 
@@ -121,21 +208,49 @@ Tag names, slugs, descriptions and usage metadata are not global `app_settings` 
 | `theme_branding_separator_height` | `theme.php`; Theme Media | integer 8..512 px | 72 | file presentation; no migration | Specialized | Theme Media | file-backed |
 | `theme_branding_separator_stretch` | `theme.php`; Theme Media | boolean | false | file presentation; no migration | Specialized | Theme Media | file-backed |
 
-Uploaded theme backgrounds and branding assets are file-backed resources rather than scalar settings. They are status/link-only in Advanced Settings. Gallery-specific lightbox, description-layout, branding and EXIF/GPS overrides remain per-gallery and are intentionally outside the central global form.
+Uploaded theme backgrounds and branding assets are file-backed resources rather
+than scalar settings. They are status/link-only in Advanced Settings.
+Gallery-specific lightbox, description-layout, branding and EXIF/GPS overrides
+remain per-gallery and are intentionally outside the central global form.
 
 ### Smart Gallery scoped presentation
 
-Smart Gallery presentation is intentionally not represented as global `app_settings` rows. It is owned by `app/services/smart_galleries.php` and the Smart Gallery editor, with optional overrides persisted in `smart_galleries.presentation_json` by migration `202608170001_smart_gallery_presentation.php`.
+Smart Gallery presentation is intentionally not represented as global
+`app_settings` rows. It is owned by `app/services/smart_galleries.php` and the
+Smart Gallery editor, with optional overrides persisted in
+`smart_galleries.presentation_json` by migration
+`202608170001_smart_gallery_presentation.php`.
 
-The editor exposes columns, rows, pagination, thumbnail minimum/maximum generated size, responsive/progressive thumbnail renderer, canonical vertical/horizontal gallery-card layout, metadata overlays, lightbox enablement and browsing mode, slideshow, download, and voting. With **Override Theme defaults** disabled, the Smart Gallery uses the current global pagination, thumbnail-renderer, lightbox, and feature defaults. Invalid/missing override keys inherit those defaults. Sorting remains the Smart Gallery definition's existing `sort_mode`/`sort_direction`.
+The editor exposes columns, rows, pagination, thumbnail minimum/maximum
+generated size, responsive/progressive thumbnail renderer, canonical
+vertical/horizontal gallery-card layout, metadata overlays, lightbox enablement
+and browsing mode, slideshow, download, and voting. With **Override Theme
+defaults** disabled, the Smart Gallery uses the current global pagination,
+thumbnail-renderer, lightbox, and feature defaults. Invalid/missing override
+keys inherit those defaults. Sorting remains the Smart Gallery definition's
+existing `sort_mode`/`sort_direction`.
 
-A Smart Gallery never inherits presentation from a physical parent gallery. Since one virtual gallery may appear beneath several physical galleries, parent precedence would be ambiguous. Physical gallery/image thumbnail guardrails remain authoritative even when a Smart Gallery presentation override is active.
+A Smart Gallery never inherits presentation from a physical parent gallery.
+Since one virtual gallery may appear beneath several physical galleries, parent
+precedence would be ambiguous. Physical gallery/image thumbnail guardrails
+remain authoritative even when a Smart Gallery presentation override is active.
 
 ### Smart Gallery attachment placement
 
-Smart Gallery attachment placement is also scoped data rather than a global setting. Migration `202608170002_smart_gallery_attachment_ordering.php` stores `placement` and `placement_order` on each `(smart_gallery_id, gallery_id)` junction row. The physical gallery editor owns the complete attachment set for that parent, while the Smart Gallery editor exposes per-parent placement/order updates and detach actions. Existing rows default to `bottom` with order `0`; equal orders resolve by Smart Gallery ID.
+Smart Gallery attachment placement is also scoped data rather than a global
+setting. Migration `202608170002_smart_gallery_attachment_ordering.php` stores
+`placement` and `placement_order` on each `(smart_gallery_id, gallery_id)`
+junction row. The physical gallery editor owns the complete attachment set for
+that parent, while the Smart Gallery editor exposes per-parent placement/order
+updates and detach actions. Existing rows default to `bottom` with order `0`;
+equal orders resolve by Smart Gallery ID.
 
-Attachment writes require the dedicated mutation-schema capability before any parent relationship is deleted or changed. The Admin controls remain standard form fields for no-JavaScript operation and are enhanced by the existing side-panel AJAX workflows when rendered in a drawer. Cycle diagnostics are relationship state, not editable settings, and are produced from the canonical mixed gallery/Smart Gallery graph.
+Attachment writes require the dedicated mutation-schema capability before any
+parent relationship is deleted or changed. The Admin controls remain standard
+form fields for no-JavaScript operation and are enhanced by the existing
+side-panel AJAX workflows when rendered in a drawer. Cycle diagnostics are
+relationship state, not editable settings, and are produced from the canonical
+mixed gallery/Smart Gallery graph.
 
 ## Uploads and automation
 
@@ -153,7 +268,18 @@ Attachment writes require the dedicated mutation-schema capability before any pa
 | `browser_upload_max_zip_batch_bytes` | `browser_uploads.php`; Settings Uploads (Browser) | bounded byte size | service default, bounded by hard maximum | clamped | Edit | Settings Uploads (Browser) | operational |
 | `browser_thumbnail_rebuild_source_chunk_bytes` | `browser_thumbnail_rebuild.php`; Settings Uploads (Browser) | bounded byte size | 512 MiB service default | controls browser-side thumbnail rebuild source ZIP chunking | Edit | Settings Uploads (Browser) | operational |
 
-The Setup Wizard may edit only the bounded scalar subset `admin_upload_client_format_mode`, `admin_upload_auto_rename_enabled`, `browser_upload_enabled`, `browser_upload_default_worker_count`, and `browser_upload_max_items_per_batch`. It calls the upload-owned strict adapters and revalidates the current worker maximum before apply. When default worker count is changed, the transaction also locks `browser_upload_max_worker_count` and `browser_upload_hard_worker_cap` as read dependencies before the fresh comparison. Coupled max/hard worker caps, ZIP ratio/byte policies, thumbnail rebuild chunk tuning, and gallery-scoped automation API keys remain specialist/status-only items. API keys are never exposed as values. The staged Setup Wizard intentionally does not navigate to `admin_api_manager` or any other immediately-persisting specialist page.
+The Setup Wizard may edit only the bounded scalar subset
+`admin_upload_client_format_mode`, `admin_upload_auto_rename_enabled`,
+`browser_upload_enabled`, `browser_upload_default_worker_count`, and
+`browser_upload_max_items_per_batch`. It calls the upload-owned strict adapters
+and revalidates the current worker maximum before apply. When default worker
+count is changed, the transaction also locks `browser_upload_max_worker_count`
+and `browser_upload_hard_worker_cap` as read dependencies before the fresh
+comparison. Coupled max/hard worker caps, ZIP ratio/byte policies, thumbnail
+rebuild chunk tuning, and gallery-scoped automation API keys remain
+specialist/status-only items. API keys are never exposed as values. The staged
+Setup Wizard intentionally does not navigate to `admin_api_manager` or any other
+immediately-persisting specialist page.
 
 ## Privacy, diagnostics and maintenance
 
@@ -182,17 +308,45 @@ The Setup Wizard may edit only the bounded scalar subset `admin_upload_client_fo
 | `site_maintenance_window_minutes` | `site_maintenance.php`; Dashboard Maintenance | integer 15..1440 | 180 | bounds schedule window | Specialized | Dashboard Maintenance | operational |
 | `site_maintenance_token` | `site_maintenance.php`; Dashboard Maintenance | 64 hex chars generated from 32 random bytes | generated/rotated by canonical service | secret, token rotation invalidates old web-cron URL | Specialized, redacted | Dashboard Maintenance | secret |
 
-The Setup Wizard may edit the eleven telemetry preference rows listed above, but only after `telemetry_settings` schema inspection is positively available. Their strict owner adapter validates checkbox values and the documented numeric bounds, while apply locks changed telemetry rows separately from `app_settings`. Telemetry export and maintenance remain specialist/status-only actions and are never invoked by wizard navigation or summary approval.
+The Setup Wizard may edit the eleven telemetry preference rows listed above, but
+only after `telemetry_settings` schema inspection is positively available. Their
+strict owner adapter validates checkbox values and the documented numeric
+bounds, while apply locks changed telemetry rows separately from `app_settings`.
+Telemetry export and maintenance remain specialist/status-only actions and are
+never invoked by wizard navigation or summary approval.
 
 ### Setup Wizard presentation and staged apply
 
-The Setup Wizard represents every entry from the canonical Settings registry inside the same eight top-level sections, but it does not make every entry an editable field. Each entry is classified for presentation as essential, advanced, expert, or status-only and is grouped into short in-step subsections. Advanced and expert groups use progressive disclosure so the normal path remains compact. Without JavaScript all subsection content remains readable; with JavaScript subsection switching is presentation-only and never commits the draft.
+The Setup Wizard represents every entry from the canonical Settings registry
+inside the same eight top-level sections, but it does not make every entry an
+editable field. Each entry is classified for presentation as essential,
+advanced, expert, or status-only and is grouped into short in-step subsections.
+Advanced and expert groups use progressive disclosure so the normal path remains
+compact. Without JavaScript all subsection content remains readable; with
+JavaScript subsection switching is presentation-only and never commits the
+draft.
 
-The final review is change-first: changed settings are visible immediately, while unchanged, skipped, and informational/status items are collapsed by default with an explicit show-all control. During a staged draft the wizard renders no outbound configuration link to a specialist page, because those pages can persist immediately and would break the draft/approval model. Secrets, credentials, file-backed operations, destructive maintenance actions, API-key lifecycle operations, database repair/optimize actions, and similar workflows therefore remain status-only inside the wizard.
+The final review is change-first: changed settings are visible immediately,
+while unchanged, skipped, and informational/status items are collapsed by
+default with an explicit show-all control. During a staged draft the wizard
+renders no outbound configuration link to a specialist page, because those pages
+can persist immediately and would break the draft/approval model. Secrets,
+credentials, file-backed operations, destructive maintenance actions, API-key
+lifecycle operations, database repair/optimize actions, and similar workflows
+therefore remain status-only inside the wizard.
 
-Safe scalar owner adapters currently include Theme layout/hero-tag controls, bounded upload and telemetry preferences, thumbnail background warm-up, SEO request guard preferences, Gallery Trash preferences, application auto-update, and Scheduled Maintenance preferences. Gallery Trash and Scheduled Maintenance are coupled owners: when any member changes, apply locks the complete sibling preference set and persists the changed group through one canonical owner call (`set_gallery_trash_settings(...)` or `set_site_maintenance_settings(...)`) instead of producing intermediate side-effect states.
+Safe scalar owner adapters currently include Theme layout/hero-tag controls,
+bounded upload and telemetry preferences, thumbnail background warm-up, SEO
+request guard preferences, Gallery Trash preferences, application auto-update,
+and Scheduled Maintenance preferences. Gallery Trash and Scheduled Maintenance
+are coupled owners: when any member changes, apply locks the complete sibling
+preference set and persists the changed group through one canonical owner call
+(`set_gallery_trash_settings(...)` or `set_site_maintenance_settings(...)`)
+instead of producing intermediate side-effect states.
 
-Maintenance run state, last-result and completion marker settings are runtime state, not administrator preferences. They are intentionally omitted from central editing.
+Maintenance run state, last-result and completion marker settings are runtime
+state, not administrator preferences. They are intentionally omitted from
+central editing.
 
 ## Account, credentials and advanced resources
 
@@ -212,19 +366,44 @@ Maintenance run state, last-result and completion marker settings are runtime st
 | Language pack JSON editor | translations/Theme | JSON string catalog | default catalog/fallback language | filesystem write/import/export | Specialized | Theme Language | advanced |
 | Database repair, cleanup, migrations, optimize/analyze | database maintenance/migrations | explicit operation, not scalar setting | no automatic central action | potentially destructive/DDL; existing migrations | Specialized | Storage > DB maintenance | destructive |
 
-The Live Visual CSS Editor is part of Theme Custom CSS, not a new persisted setting or upload endpoint. Its page-width preview writes only the managed CSS draft and never changes `theme_page_width` or `theme_page_width_custom`; Reset reveals the width supplied by Theme Appearance. A selected background image remains in the browser until the administrator uses the existing explicit CSS Save action, which sends CSS and the reviewed image together through the Theme background owner. CSS-only saves remain supported. The browser preview and file selection do not write Theme settings or assets.
+The Live Visual CSS Editor is part of Theme Custom CSS, not a new persisted
+setting or upload endpoint. Its page-width preview writes only the managed CSS
+draft and never changes `theme_page_width` or `theme_page_width_custom`; Reset
+reveals the width supplied by Theme Appearance. A selected background image
+remains in the browser until the administrator uses the existing explicit CSS
+Save action, which sends CSS and the reviewed image together through the Theme
+background owner. CSS-only saves remain supported. The browser preview and file
+selection do not write Theme settings or assets.
 
 ## Inheritance and override rules
 
-1. Tag landing-page grid settings inherit global pagination dimensions when their dedicated keys are missing.
-2. Tag landing-page card layout inherits `theme_gallery_description_layout` when `tag_page_gallery_description_layout` is missing.
-3. Hero-tag settings are a separate Theme concern and never substitute for tag landing-page settings.
-4. Gallery description layout, lightbox mode and EXIF/GPS display can have per-gallery overrides. The central page displays the global fallback only and never rewrites per-gallery values.
-5. `gallery_breadcrumb_style.<gallery-id>` accepts `minimal`, `chevron`, `pills`, `surface`, `ribbon`, `nodes`, `tabs`, `tiles`, `gradient`, or `inherit`. The `inherit` sentinel applies only to gallery-level inheritance and is not a Theme visual style. Missing or invalid gallery values inherit `theme_breadcrumb_style`; missing or invalid Theme values fall back to `chevron`.
-6. `public_thumbnail_rendering_mode` accepts only `responsive` and `progressive`; invalid/missing state falls back to `progressive`, while `responsive` remains selectable as the legacy renderer.
-7. `theme_lightbox_browsing_mode` accepts only `single`, `picture_strip` and `3d_carousel`; invalid state falls back to `single` and the feature flag can force `single`.
-8. The viewer-language selector is independent from Admin language and the site-wide public default. Disabling the feature suppresses personal overrides; filtering its languages never removes maintained catalogs from administrative tools.
-9. Sensitive resources are represented only as status such as `Configured`, `Not configured` or `Specialized page only`.
+1. Tag landing-page grid settings inherit global pagination dimensions when
+   their dedicated keys are missing.
+2. Tag landing-page card layout inherits `theme_gallery_description_layout` when
+   `tag_page_gallery_description_layout` is missing.
+3. Hero-tag settings are a separate Theme concern and never substitute for tag
+   landing-page settings.
+4. Gallery description layout, lightbox mode and EXIF/GPS display can have
+   per-gallery overrides. The central page displays the global fallback only and
+   never rewrites per-gallery values.
+5. `gallery_breadcrumb_style.<gallery-id>` accepts `minimal`, `chevron`,
+   `pills`, `surface`, `ribbon`, `nodes`, `tabs`, `tiles`, `gradient`, or
+   `inherit`. The `inherit` sentinel applies only to gallery-level inheritance
+   and is not a Theme visual style. Missing or invalid gallery values inherit
+   `theme_breadcrumb_style`; missing or invalid Theme values fall back to
+   `chevron`.
+6. `public_thumbnail_rendering_mode` accepts only `responsive` and
+   `progressive`; invalid/missing state falls back to `progressive`, while
+   `responsive` remains selectable as the legacy renderer.
+7. `theme_lightbox_browsing_mode` accepts only `single`, `picture_strip` and
+   `3d_carousel`; invalid state falls back to `single` and the feature flag can
+   force `single`.
+8. The viewer-language selector is independent from Admin language and the
+   site-wide public default. Disabling the feature suppresses personal
+   overrides; filtering its languages never removes maintained catalogs from
+   administrative tools.
+9. Sensitive resources are represented only as status such as `Configured`,
+   `Not configured` or `Specialized page only`.
 
 `breadcrumb_style_registry()` in `app/services/breadcrumbs.php` is authoritative
 for the breadcrumb style IDs listed above. When adding a style, update both the
@@ -245,24 +424,69 @@ Shared upload/editor routes gate the individual attachment action. PDF OFF also
 guards its historical delivery alias, optional SimBrief PDF import and prepared
 conversion batches; source descriptions and normal photos remain available.
 
-Admin > Features and the centralized Settings hub intentionally share discovery metadata but not persistence ownership. `app/services/feature_flags/registry.php` is authoritative for optional-capability keys, configured/effective semantics, dependencies, route ownership, storage source, behavior tags, and specialized destinations. `app/services/admin_settings_registry.php` may index those capabilities so search and status pages can find them, but it must not create a second copy of a feature master or write arbitrary `feature_flag.*` keys. Feature changes are saved through the feature policy/domain adapter that already owns the value.
+Admin > Features and the centralized Settings hub intentionally share discovery
+metadata but not persistence ownership.
+`app/services/feature_flags/registry.php` is authoritative for
+optional-capability keys, configured/effective semantics, dependencies, route
+ownership, storage source, behavior tags, and specialized destinations.
+`app/services/admin_settings_registry.php` may index those capabilities so
+search and status pages can find them, but it must not create a second copy of a
+feature master or write arbitrary `feature_flag.*` keys. Feature changes are
+saved through the feature policy/domain adapter that already owns the value.
 
-Three capability storage patterns are valid: the historical `feature_flag.<key>.enabled` app-setting convention, an explicit existing scalar app-setting key, or a domain adapter around an established subsystem setting. Existing masters such as Gallery Trash, public thumbnail self-healing, and Development Diagnostics therefore keep their established storage. A specialized Settings link is navigation metadata only; it does not transfer ownership to the central registry.
+Three capability storage patterns are valid: the historical
+`feature_flag.<key>.enabled` app-setting convention, an explicit existing scalar
+app-setting key, or a domain adapter around an established subsystem setting.
+Existing masters such as Gallery Trash, public thumbnail self-healing, and
+Development Diagnostics therefore keep their established storage. A specialized
+Settings link is navigation metadata only; it does not transfer ownership to the
+central registry.
 
-The feature policy may declare a one-time `fresh_default_enabled` only for writable persisted sources. Fresh defaults do not overwrite explicit upgrade state. Disabled persistent capabilities preserve their subsystem data and subordinate preferences.
+The feature policy may declare a one-time `fresh_default_enabled` only for
+writable persisted sources. Fresh defaults do not overwrite explicit upgrade
+state. Disabled persistent capabilities preserve their subsystem data and
+subordinate preferences.
 
 ## Future registration rule
 
-A new global setting should be added to the registry only after its canonical owner and normalization path are known. Prefer summary-only registration first. Central editing is allowed only when the registry save callback can delegate to the same service setter used by the specialized page, including the same feature/schema guards and side effects. Do not register per-gallery/per-image values, raw secrets, destructive actions or file editors as centrally editable controls.
+A new global setting should be added to the registry only after its canonical
+owner and normalization path are known. Prefer summary-only registration first.
+Central editing is allowed only when the registry save callback can delegate to
+the same service setter used by the specialized page, including the same
+feature/schema guards and side effects. Do not register per-gallery/per-image
+values, raw secrets, destructive actions or file editors as centrally editable
+controls.
 
 ## Cooperative galleries
 
-`cooperative_galleries` uses the canonical `feature_flag.cooperative_galleries.enabled` switch, disabled by default. Effective availability controls its routes and Advanced Settings discovery. **Friendly galleries** (`admin_cooperative_galleries`) owns pairing; **Album collaborations** (`admin_cooperative_collaborations`) owns proposal composition, explicit consent, email invitations, verification and withdrawal. Both use the existing side panel and specialized service owners rather than central scalar saves. Disabling cooperation preserves stored identities, peers, proposals and preferences and avoids optional schema/network work. Required missing or unknown storage refuses authority and mutation; revocation retains its narrower verified storage contract. See `docs/COOPERATIVE_GALLERIES.md`.
+`cooperative_galleries` uses the canonical
+`feature_flag.cooperative_galleries.enabled` switch, disabled by default.
+Effective availability controls its routes and Advanced Settings discovery.
+**Friendly galleries** (`admin_cooperative_galleries`) owns pairing; **Album
+collaborations** (`admin_cooperative_collaborations`) owns proposal composition,
+explicit consent, email invitations, verification and withdrawal. Both use the
+existing side panel and specialized service owners rather than central scalar
+saves. Disabling cooperation preserves stored identities, peers, proposals and
+preferences and avoids optional schema/network work. Required missing or unknown
+storage refuses authority and mutation; revocation retains its narrower verified
+storage contract. See `docs/COOPERATIVE_GALLERIES.md`.
 
 ## Integrated Uploads ownership
 
-`admin_legacy_upload_navigation_enabled` is a registry-owned `app_settings` boolean, default `0`. Hidden Upload photos/Upload settings/Mobile uploads links do not disable their routes. Settings Uploads is the preference/connection workspace; the public-side creation/upload panel remains the contextual ingestion surface.
+`admin_legacy_upload_navigation_enabled` is a registry-owned `app_settings`
+boolean, default `0`. Hidden Upload photos/Upload settings/Mobile uploads links
+do not disable their routes. Settings Uploads is the preference/connection
+workspace; the public-side creation/upload panel remains the contextual
+ingestion surface.
 
-Browser values enter `set_browser_upload_settings()` together. ZIP target/chunk controls display MB and persist bytes. Mobile connection controls use existing capability/schema owners and skip disabled inventory; successful issuance retains its one-time password if list refresh fails. Owned fragments use canonical in-place mutation completion.
+Browser values enter `set_browser_upload_settings()` together. ZIP target/chunk
+controls display MB and persist bytes. Mobile connection controls use existing
+capability/schema owners and skip disabled inventory; successful issuance
+retains its one-time password if list refresh fails. Owned fragments use
+canonical in-place mutation completion.
 
-Vertical cards place photos above descriptions; horizontal cards place them beside descriptions. Migration `202610020001_gallery_description_layout_semantics.php` converts established global/gallery/tag/Smart/Trash preferences and sidecars while fresh installs retain vertical. Setting keys and capability ownership remain unchanged.
+Vertical cards place photos above descriptions; horizontal cards place them
+beside descriptions. Migration
+`202610020001_gallery_description_layout_semantics.php` converts established
+global/gallery/tag/Smart/Trash preferences and sidecars while fresh installs
+retain vertical. Setting keys and capability ownership remain unchanged.

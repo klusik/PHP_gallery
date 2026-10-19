@@ -11,11 +11,15 @@ Author: Rudolf Klusal
 
 # Frontend operational policy
 
-This is a bounded P12 source migration, not a whole-JavaScript or whole-repository
+This is a bounded P12 source migration, not a whole-JavaScript or
+whole-repository
 completion claim. It covers title completion, Settings search, navigation-data,
-gallery migration and report interaction policy, and reviews the existing bounded
-gallery-picker policy. Migrated client values and scheduling semantics are unchanged;
-the report browser now omits its fixed batch size so the server default owns that value.
+gallery migration and report interaction policy, and reviews the existing
+bounded
+gallery-picker policy. Migrated client values and scheduling semantics are
+unchanged;
+the report browser now omits its fixed batch size so the server default owns
+that value.
 
 ## Ownership
 
@@ -65,7 +69,8 @@ by `admin-settings-search.js`, and the last three by `admin-navdata-panel.js`
 The previous local `MIN_COMPLETION_CHARACTERS` definition was removed.
 Settings keeps additive token scoring, label tie-breaking and exactly the same
 keyboard navigation. Navigation submission still waits for two animation frames,
-then 250 milliseconds; there is no new network timeout, redirect or confirmation.
+then 250 milliseconds; there is no new network timeout, redirect or
+confirmation.
 The existing ordinary POST fallback was not converted or otherwise redesigned.
 
 ## Reviewed picker policy and PHP refactor status
@@ -87,14 +92,16 @@ The existing ordinary POST fallback was not converted or otherwise redesigned.
 The eight PHP symbols are in namespace `Gallery\Core`; model/service/controller
 consumers use explicit `use const` imports and the dependency-free central file.
 The browser receives the page-size policy through its existing prepared
-`data-page-size` field, not a copied browser constant or an editable query limit.
+`data-page-size` field, not a copied browser constant or an editable query
+limit.
 The follow-up moved the distinct server title constants from the service to the
 same dependency-free Core owner, preserving their values:
 `GALLERY_TITLE_COMPLETION_MAX_CANDIDATES=8`,
 `GALLERY_TITLE_COMPLETION_SCAN_BUDGET=1024`,
 `GALLERY_TITLE_COMPLETION_SIBLING_BUDGET=512`, and
 `GALLERY_TITLE_COMPLETION_PAGE_SIZE=512`.
-The service now imports all four explicitly, with no duplicate Services-namespace
+The service now imports all four explicitly, with no duplicate
+Services-namespace
 definitions. These are immutable application work ceilings, not configurable
 deployment defaults: the service never read them from config.php or a form.
 The 512-row sibling allowance suppresses fallback when unexamined siblings could
@@ -102,10 +109,13 @@ outrank it; SQL lookahead is not counted as an examined row.
 
 The parent-owned galleries model retains its independent 512 default / 513
 defensive fetch cap. The exact coordinated follow-up is to import
-`Gallery\Core\GALLERY_TITLE_COMPLETION_PAGE_SIZE`, use it as the function default,
+`Gallery\Core\GALLERY_TITLE_COMPLETION_PAGE_SIZE`, use it as the function
+default,
 and use `GALLERY_TITLE_COMPLETION_PAGE_SIZE + 1` in the existing clamp. Ensure
-the standalone model include contract loads `dirname(__DIR__) . '/policy_constants.php'`
-before any call relies on that default, rather than depending on service load order.
+the standalone model include contract loads
+`dirname(__DIR__) . '/policy_constants.php'`
+before any call relies on that default, rather than depending on service load
+order.
 This worker did not edit that owned file. The new disposable PHP fixture checks
 that its current defensive cap remains aligned with Core policy.
 The title service's separate literal query/title admission rules remain outside
@@ -128,7 +138,8 @@ claimed as fully reviewed behavior modules.
 
 ## Broader lexical inventory, not semantic acceptance
 
-A read-only `check_policy_constants.php --json` inventory initially selected the 66
+A read-only `check_policy_constants.php --json` inventory initially selected the
+66
 `.js` files directly discovered under `public/assets/gallery-modules` on
 2026-09-20 after this migration. It observed 82 uppercase definitions and
 94 advisory findings: 60 constant-documentation findings, 5 named numeric
@@ -137,7 +148,8 @@ reported in that selected set. Concurrent work can change these counts.
 
 The earlier same-session observation before the five selector documentation
 repairs had 99 findings; that is a documentation delta, not five policy moves.
-Outside the explicit review above, the following paths remain lexical candidates:
+Outside the explicit review above, the following paths remain lexical
+candidates:
 
 | Paths relative to gallery-modules | Remaining finding counts in this snapshot |
 | --- | --- |
@@ -160,8 +172,10 @@ maps, function arguments, strings and complex syntax are not completely covered.
 No finding is not proof that a module contains no operational policy.
 This inventory excludes assets outside this directory, inline view scripts, CSS,
 PHP, other languages, and generated/vendor output. It is not a repository-wide
-P12 audit. Browser-agent-owned panel/lifecycle/drafts/policy/reordering/organizer
-modules and the P5 upload module were not edited; zoom and renderer behavior were
+P12 audit. Browser-agent-owned
+panel/lifecycle/drafts/policy/reordering/organizer
+modules and the P5 upload module were not edited; zoom and renderer behavior
+were
 also left untouched. Expansion requires a separate semantic review.
 
 ## Import/cache handoff and verification
@@ -171,13 +185,15 @@ All four consumers import
 `gallery.js` now references the corresponding refreshed Settings/navigation
 imports, title completion `20260920-gallery-title-completion-policy-v4`, and
 `admin-operations.js?v=20260920-panel-lifecycle-interaction-policy-v2`.
-The operations facade refreshes its navigation-data-update export while retaining
+The operations facade refreshes its navigation-data-update export while
+retaining
 other agents' unrelated export changes.
 
 The already registered picker parent Chromium fixture allowlists the policy
 route. The follow-up also added `/admin-interaction-policy.js` to the title
 Chromium fixture and title benchmark, preserving existing headers and private
-fixture routing. The benchmark records the current policy source SHA-256 alongside
+fixture routing. The benchmark records the current policy source SHA-256
+alongside
 the current module hash, without claiming fresh measurements. Parent central
 runs remain the browser verification authority.
 
@@ -187,12 +203,14 @@ New `tests/frontend_operational_policy_test.mjs` was developed and passed with:
 node tests/frontend_operational_policy_test.mjs
 ```
 
-It imports the real policy exports and executes current title/Settings/navigation
+It imports the real policy exports and executes current
+title/Settings/navigation
 consumer bodies in disposable DOM/timer seams. It checks exact unchanged values,
 attached policy documentation, no policy runtime dependencies, code-point title
 admission, debounce/deadline/result cap, Settings ranking/result cap/highlight,
 clipboard feedback, short identifier rejection, two paint frames before delayed
-submission, and import cache revisions. It is a Node seam, not browser acceptance.
+submission, and import cache revisions. It is a Node seam, not browser
+acceptance.
 Parent registration is `'frontend_operational_policy_test.mjs' => []`, not
 `browser => true`.
 
@@ -216,7 +234,8 @@ These are this worker's P12 changes, not the complete concurrent worktree diff:
 - `public/assets/gallery-modules/admin-operations.js` (navigation import only)
 - `public/assets/gallery.js` (owned import revisions only)
 - `tests/frontend_operational_policy_test.mjs` (new)
-- `tests/gallery_picker_parent_integration_browser_test.mjs` (policy asset route only)
+- `tests/gallery_picker_parent_integration_browser_test.mjs` (policy asset route
+  only)
 - `docs/FRONTEND_OPERATIONAL_POLICY.md` (new)
 - `docs/GALLERY_PICKER.md` (registration status and policy-evidence distinction)
 
@@ -251,7 +270,8 @@ PHP nonpositive fallback differ; this refactor does not silently reconcile them.
 
 Operational retry order is unchanged: after each failed package request, inspect
 target receipt before deciding whether to resend. A confirmed package stops
-resends. When all status observations fail, the existing error exits the transfer
+resends. When all status observations fail, the existing error exits the
+transfer
 instead of guessing receipt state. Cancellation still stops the next attempt.
 The local canonical mutation envelope/event is untouched.
 
@@ -277,8 +297,10 @@ Only these newly developed fixtures were executed for this follow-up:
   bounded real model queries and sibling-first truncation.
 - `node tests/gallery_migration_policy_test.mjs` — PASS with disposable request
   and timer seams: exact six values, range/fallback/parse behavior, deadline
-  cleanup, four-probe spacing, six total attempts, confirmed-receipt suppression,
-  unknown-receipt refusal, cancellation, cache imports and fixture route presence.
+  cleanup, four-probe spacing, six total attempts, confirmed-receipt
+  suppression,
+  unknown-receipt refusal, cancellation, cache imports and fixture route
+  presence.
 
 The PHP test is automatically discoverable by the central PHP runner.
 Parent registration for the new Node test is
@@ -292,16 +314,21 @@ access was performed by this follow-up.
 Exact follow-up paths, separate from the previous batch:
 
 - `app/policy_constants.php` — four documented Core definitions
-- `app/services/gallery_picker.php` — explicit imports and removal of local definitions
-- `public/assets/gallery-modules/gallery-migration-policy.js` — new focused browser owner
-- `public/assets/gallery-modules/admin-gallery-migration.js` — constant consumers only
+- `app/services/gallery_picker.php` — explicit imports and removal of local
+  definitions
+- `public/assets/gallery-modules/gallery-migration-policy.js` — new focused
+  browser owner
+- `public/assets/gallery-modules/admin-gallery-migration.js` — constant
+  consumers only
 - `public/assets/gallery.js` — migration cache import only
-- `scripts/benchmark_title_completion_browser.mjs` — allowlisted policy source and provenance hash
+- `scripts/benchmark_title_completion_browser.mjs` — allowlisted policy source
+  and provenance hash
 - `tests/admin_gallery_title_completion_browser_test.mjs` — policy asset route
 - `tests/gallery_title_completion_service_test.php` — Core ownership assertions
 - `tests/gallery_title_completion_policy_test.php` — new disposable PHP fixture
 - `tests/gallery_migration_policy_test.mjs` — new Node policy fixture
-- `docs/FRONTEND_OPERATIONAL_POLICY.md` — current status, inventory and limitations
+- `docs/FRONTEND_OPERATIONAL_POLICY.md` — current status, inventory and
+  limitations
 
 ## Changed-declaration gate and Quick5 follow-up
 
@@ -313,7 +340,8 @@ browser agent's changed `view_render_admin_image_reorder_script()` declaration
 at `app/views/admin_gallery_edit_components.php`: its existing docblock needed
 `@return void` describing emitted inline reorder initialization. The parent then
 explicitly assigned that documentation fix to this worker. It is now fixed; the
-one-file changed-declaration gate passed with zero findings. The earlier combined
+one-file changed-declaration gate passed with zero findings. The earlier
+combined
 33-path report was not rerun and is not a claimed central PASS.
 
 Repairs describe callback parameters, return values, request/event lifetimes,
@@ -333,11 +361,13 @@ Both reported regressions were then run individually and passed:
 - `php tests/stage4_mutation_hardening_contract_test.php`
 
 No other normal regression, browser run or central audit was executed in this
-documentation/Quick5 follow-up. Parent central orchestration remains authoritative.
+documentation/Quick5 follow-up. Parent central orchestration remains
+authoritative.
 
 Exact documentation/Quick5 paths changed by this worker:
 
-- `app/controllers/admin_galleries_edit_views.php` — owned bulk toolbar input shape
+- `app/controllers/admin_galleries_edit_views.php` — owned bulk toolbar input
+  shape
 - `app/controllers/admin_gallery_picker_search.php` — parsed query input shape
 - `public/assets/gallery-modules/admin-gallery-title-completion.js`
 - `public/assets/gallery-modules/admin-navdata-update.js`
@@ -350,7 +380,8 @@ Exact documentation/Quick5 paths changed by this worker:
 - `tests/gallery_picker_browser_test.mjs`
 - `tests/fixtures/gallery_picker_parent_integration.js`
 - `tests/gallery_picker_parent_integration_browser_test.mjs`
-- `tests/smart_gallery_high_priority_hardening_test.php` — one revision assertion
+- `tests/smart_gallery_high_priority_hardening_test.php` — one revision
+  assertion
 - `tests/stage4_mutation_hardening_contract_test.php` — one revision assertion
 - `docs/FRONTEND_OPERATIONAL_POLICY.md` — evidence and ownership handoff
 
@@ -362,7 +393,8 @@ checkpoint, telemetry collection/storage, side-panel handler or other browser
 agent module was edited. The parent owns the PHP report policy and batching
 source assertion.
 
-Seven client definitions were appended to `admin-interaction-policy.js`, bringing
+Seven client definitions were appended to `admin-interaction-policy.js`,
+bringing
 that owner's exact export count to 21. They are immutable client behavior, not
 new administrator settings or a server-configuration projection.
 
@@ -384,20 +416,25 @@ authoritative. The browser no longer duplicates or overrides that work default.
 
 Retry ordering and response semantics are preserved. Successful or non-retryable
 HTTP responses return immediately; the fourth HTTP response is returned even if
-unsuccessful, and a fourth transport rejection keeps its original error identity.
+unsuccessful, and a fourth transport rejection keeps its original error
+identity.
 JSON-decoding errors are not retried. Requests remain serial, reusing the same
-FormData on retry. There is no new deadline, overall job-step budget, Retry-After
-handling, status probe, jitter or cancellation behavior. These are explicit limits
+FormData on retry. There is no new deadline, overall job-step budget,
+Retry-After
+handling, status probe, jitter or cancellation behavior. These are explicit
+limits
 of this policy-only refactor, not claims that a whole job is time-bounded.
 
 Window input keeps the existing Number conversion, including fractional values
 and whitespace-to-zero followed by the one-day clamp. Browser bounds do not
 replace PHP validation. Download headers and the existing JSON/HTML response
 adapter are unchanged. The expected consumed response fields now have a named
-JSDoc shape; this documents the contract without claiming runtime schema validation.
+JSDoc shape; this documents the contract without claiming runtime schema
+validation.
 
 Reviewed local exceptions remain local: loop zero/one counters and final-attempt
-offset; progress 0/100 and decimal precision; byte-format base 1024, display units
+offset; progress 0/100 and decimal precision; byte-format base 1024, display
+units
 and precision thresholds; DOM roles, action/status/header vocabulary; per-panel
 WeakMap object-URL ownership. These are algorithm, protocol or presentation
 details, not additional global operational knobs. No download or renderer
@@ -405,29 +442,37 @@ behavior was redesigned.
 
 ### Report cache edges and verification
 
-- `gallery.js` imports `admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3`.
-- The report imports `admin-interaction-policy.js?v=20260920-admin-interaction-policy-report-v2`.
+- `gallery.js` imports
+  `admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3`.
+- The report imports
+  `admin-interaction-policy.js?v=20260920-admin-interaction-policy-report-v2`.
 - The older four policy consumers keep their existing v1 imports: their fourteen
   exports and behavior are unchanged, and the dependency-free asset's additive
   exports do not require touching those other handlers.
 
 New `tests/gallery_report_policy_test.mjs` was developed and executed with
-`node tests/gallery_report_policy_test.mjs`: PASS. It exercises the actual report
+`node tests/gallery_report_policy_test.mjs`: PASS. It exercises the actual
+report
 functions in isolated Node VM/request/timer seams, with synthetic Responses and
 in-memory FormData only. It covers exact seven values and documentation, frozen
-status membership, window edge cases, all six retryable statuses, seven immediate
-HTTP refusals, four-attempt exhaustion, ordered 750/1500/3000 ms waits, transport
-failure/success mixtures, final error identity, both actions' omitted batch field,
+status membership, window edge cases, all six retryable statuses, seven
+immediate
+HTTP refusals, four-attempt exhaustion, ordered 750/1500/3000 ms waits,
+transport
+failure/success mixtures, final error identity, both actions' omitted batch
+field,
 preserved request fields and completed HTML/invalid-JSON response handling.
 
 Parent registry requirement: `'gallery_report_policy_test.mjs' => []` in the
 plain Node suite, not `browser => true`. The already registered
-`frontend_operational_policy_test.mjs` now expects exactly 21 documented exports,
+`frontend_operational_policy_test.mjs` now expects exactly 21 documented
+exports,
 including the frozen report-status array. It was updated but not independently
 rerun; its title/Settings/navigation runtime seams remain unchanged.
 
 Read-only scoped changed-documentation gate: PASS, zero findings or blocked
-coverage across the five changed JS/test paths. Read-only strict policy inspection
+coverage across the five changed JS/test paths. Read-only strict policy
+inspection
 of the report consumer plus shared owner: 21 definitions, zero findings. These
 are bounded source results, not a whole-JavaScript or central-audit PASS.
 No existing PHP regression, Chromium fixture, authenticated report generation,

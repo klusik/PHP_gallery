@@ -28,7 +28,8 @@ python -m http.server 8090 --directory cache/website-preview
 Open `http://localhost:8090/PHP_gallery/`, including direct `/cs/docs/`, `/de/`
 and `/sv/docs/` navigation. The output directory must not already exist: choose
 a fresh directory for every build. Output under `cache/` is ignored and must
-never be committed. No local application audit is part of ordinary website edits.
+never be committed. No local application audit is part of ordinary website
+edits.
 
 ## Release ownership
 
@@ -37,36 +38,44 @@ to a commit and verifies that README, PATCH_NOTES and all four PDFs exist there.
 Document links use that full release commit; download links use the canonical
 release page. Development README version markers never determine the public
 website version. `release.json` records the selected release, publication date
-and immutable document commit. API/build failure blocks deployment and leaves the
+and immutable document commit. API/build failure blocks deployment and leaves
+the
 last successful site available rather than publishing incorrect release data.
 
 Publication events rebuild the site; a daily refresh also covers maintainer
 publication through a workflow token that does not trigger another workflow.
 The site therefore may lag a publication until the next successful daily run.
 No fabricated live version or browser API fallback is used. Maintainers own
-translations, screenshots and presentation claims; the published tag owns manuals,
+translations, screenshots and presentation claims; the published tag owns
+manuals,
 README and patch notes. Releases and historical notes are never modified here.
 
 ## Assets and privacy
 
-`gallery-preview.svg` is original synthetic landscape artwork, **an illustration,
+`gallery-preview.svg` is original synthetic landscape artwork, **an
+illustration,
 not a screenshot**. `ofp-description-actions.webp` is the existing reviewed
-interface crop from `docs/issue-assets/112/`: it contains Czech action labels and
+interface crop from `docs/issue-assets/112/`: it contains Czech action labels
+and
 help text, with no photographs, account identifiers, credentials or flight-plan
 personal data. Keep the screenshot caption truthful. Review every replacement
-asset for private galleries, tokens, account data and licensing before committing.
+asset for private galleries, tokens, account data and licensing before
+committing.
 
 ## Verification and publishing
 
 `project-website.yml` uses the central `scripts/audit.php --suite=website`
 entry point for website artifact, route and owned Chromium checks. It does not
-rerun application/database/WinApp regressions. Feature pushes build and verify an
+rerun application/database/WinApp regressions. Feature pushes build and verify
+an
 artifact without deployment. BASIC source qualification remains the installed
 feature gate; FULL belongs to the maintainer's develop-integration action.
 Hosted evidence includes desktop/mobile overview and documentation screenshots
-for visual review. Deployment refuses an artifact whose main source was superseded.
+for visual review. Deployment refuses an artifact whose main source was
+superseded.
 
-Only `cache/website-output/` is uploaded as the Pages artifact, with eight static
+Only `cache/website-output/` is uploaded as the Pages artifact, with eight
+static
 documents, reviewed assets, `.nojekyll` and `release.json`. There is no PHP,
 runtime data, application repository copy or CMS deployment path. The production
 inventory already excludes the `website/` root. Workflow source and fixtures
@@ -77,14 +86,18 @@ After normal reviewed integration and release promotion install this workflow on
 Source → GitHub Actions** once. The current legacy root-of-main source must not
 remain active. This feature branch does not change the server setting, publish
 the site, mutate protected branches or dispatch release promotion. Main pushes,
-published releases, daily refresh and manual main dispatch can then deploy through
-the `github-pages` environment. A publication event retains the tag ref even when
-checkout selects main: run 38225431172 was rejected by the main-only environment.
+published releases, daily refresh and manual main dispatch can then deploy
+through
+the `github-pages` environment. A publication event retains the tag ref even
+when
+checkout selects main: run 38225431172 was rejected by the main-only
+environment.
 Stable publication now validates the latest published release and Actions-based
 Pages configuration, then dispatches a fresh **Project website** run on `main`.
 Only that new main-context build may deploy. The release-context handoff has
 Actions write and Pages read permission, with no Pages write or OIDC token.
-Feature dispatches only verify, and the main dispatch cannot recurse into another
+Feature dispatches only verify, and the main dispatch cannot recurse into
+another
 publication handoff. Keep the environment restricted to the `main` branch; tags
 do not need deployment access.
 Screenshot evidence is captured from the same fully loaded DevTools session that
@@ -92,5 +105,6 @@ asserts each route. The suite retains six full-document desktop/mobile PNGs and
 checks their viewport width and format; it does not start a second CLI browser
 whose navigation can stall before producing an image.
 Do not enable bypass or change branch protections. The public project URL stays
-unchanged. Inspect the website build summary, audit evidence and Pages deployment
+unchanged. Inspect the website build summary, audit evidence and Pages
+deployment
 URL, then review desktop/mobile presentation at that URL after first activation.

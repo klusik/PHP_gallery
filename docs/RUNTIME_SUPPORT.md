@@ -24,14 +24,16 @@ release records retain the runtime actually used; a CI representative does not
 redefine the operator deployment policy below.
 
 Use the latest patch release of a maintained PHP branch for deployment. The
-reviewed deployment minimum is PHP 8.3; prefer PHP 8.5 for a new deployment after
+reviewed deployment minimum is PHP 8.3; prefer PHP 8.5 for a new deployment
+after
 checking the application and image extensions in staging. PHP 8.4 is also a
 maintained deployment target. PHP 8.2 has limited remaining upstream support and
 is below the project's recommended deployment minimum.
 
 ## Reviewed upstream schedule
 
-Verified against the official [PHP supported versions table](https://www.php.net/supported-versions.php)
+Verified against the official
+[PHP supported versions table](https://www.php.net/supported-versions.php)
 and [unsupported branches table](https://www.php.net/eol.php) on **2026-09-20**.
 End dates are inclusive UTC calendar dates.
 
@@ -61,17 +63,20 @@ installation before switching the host runtime.
 The baseline remains PHP with PDO MySQL and the existing feature dependencies.
 The CI workflow explicitly provisions `pdo_mysql`, `pdo_sqlite` (tests only),
 `curl`, `gd`, `zip`, `dom` and `mbstring`; Unicode jobs also provision `intl`.
-Imagick/HEIC/DNG capabilities still belong to Runtime Diagnostics' existing image
+Imagick/HEIC/DNG capabilities still belong to Runtime Diagnostics' existing
+image
 checks. Their availability is not implied by the PHP version.
 
-`app/policy_constants.php` owns all six immutable `Gallery\Core\RUNTIME_SUPPORT_*`
+`app/policy_constants.php` owns all six immutable
+`Gallery\Core\RUNTIME_SUPPORT_*`
 definitions, including the reviewed inclusive UTC schedule. The runtime service
 explicitly loads this dependency-free owner and imports only these definitions;
 there is no bootstrap, configuration or database dependency and no service-local
 constant alias. `app/services/runtime_support.php` remains the offline policy
 evaluation and localized presentation-data owner.
 `runtime_support_status()` returns the bounded advisory policy.
-`runtime_support_health_status()` wraps that same policy with centrally localized
+`runtime_support_health_status()` wraps that same policy with centrally
+localized
 plain-text labels and seven copy-report lines for the existing Admin dashboard
 and Runtime Diagnostics. It has no SQL, network lookup, feature
 flag, persistence, raw `phpinfo()` output, paths or request/cookie inputs. Its
@@ -79,7 +84,8 @@ flag, persistence, raw `phpinfo()` output, paths or request/cookie inputs. Its
 attestation. Its `deployment_recommended` field also requires a reviewed branch
 whose upstream support has not expired.
 
-The lifecycle states are `active`, `security_only`, `end_of_life`, and `unknown`.
+The lifecycle states are `active`, `security_only`, `end_of_life`, and
+`unknown`.
 Unlisted branches and evaluation before the review date are `unknown`; future
 versions never acquire a green recommendation by numerical comparison alone.
 Unknown, obsolete and below-policy branches set `action_required`. The model
@@ -90,7 +96,8 @@ An expired minimum produces an advisory; it never changes application access.
 ## CI coverage and evidence
 
 The existing `.github/workflows/gallery-workflows.yml` keeps central audit
-orchestration and defines five intentional environments plus a dedicated required
+orchestration and defines five intentional environments plus a dedicated
+required
 Chromium job. Database qualification details and current server lifecycle status
 are owned by [Database support](DATABASE_SUPPORT.md):
 
@@ -106,8 +113,10 @@ are owned by [Database support](DATABASE_SUPPORT.md):
 The `browser-tests` job discovers Chrome/Chromium and prints its version before
 running `php scripts/audit.php --suite=browser-map` with
 `PHP_GALLERY_BROWSER_REQUIRED=1`. Missing or unstartable browser coverage and
-silently skipped browser fixtures fail the job. The database/runtime jobs disable
-browser discovery locally in their job environments, so browser fixtures run once
+silently skipped browser fixtures fail the job. The database/runtime jobs
+disable
+browser discovery locally in their job environments, so browser fixtures run
+once
 rather than in each matrix combination.
 
 This is not the Cartesian product of every PHP/database/extension combination.
@@ -117,16 +126,20 @@ tuples is an exact project-tested representative; it does not certify other
 combinations or make a newer vendor-maintained database series automatically
 qualified. All three database jobs retain mandatory disposable workflows and
 their no-skip check. CI uses
-`GALLERY_SESSION_REQUIRED=1` so the lightweight session fixture cannot silently skip.
+`GALLERY_SESSION_REQUIRED=1` so the lightweight session fixture cannot silently
+skip.
 The actual-route follow-up below additionally needs the disposable database job;
 source-only jobs do not claim that coverage.
 
 The required database semantic fixture covers migration-created InnoDB/`utf8mb4`
 schema, vote `CHECK` behavior, JSON validation/extraction, and advisory
 `GET_LOCK()` behavior on both database families. The real-database workflow's
-concurrency scenarios exercise transactional row locking separately. The workflow
-provisioner grants only the disposable test account the temporary-table privilege
-needed by the fixture. This is test setup; normal Gallery installation credentials
+concurrency scenarios exercise transactional row locking separately. The
+workflow
+provisioner grants only the disposable test account the temporary-table
+privilege
+needed by the fixture. This is test setup; normal Gallery installation
+credentials
 do not receive an additional privilege requirement.
 
 `runtime_normalization_environment_test.php` asserts that the actual installed
@@ -139,7 +152,8 @@ in every other test. Existing complete title-service contracts remain part of
 the central regression suite. The fallback retains the documented conservative
 ASCII semantics from [Title completion](TITLE_COMPLETION.md).
 
-Local development evidence on 2026-09-20: PHP **8.3.30**, lifecycle boundary test
+Local development evidence on 2026-09-20: PHP **8.3.30**, lifecycle boundary
+test
 passed; installed Unicode normalization passed; `php -n` normalization with
 neither optional extension passed. `runtime_support_surfaces_test.php` passed
 five lifecycle cases across both actual rendered surfaces (ten primary renders),
@@ -148,7 +162,8 @@ wiring assertions. It also renders all five states on both surfaces in each of
 the four maintained JSON languages (40 further renders), checks all 14 runtime
 keys and their placeholders, and compares the English/Czech PHP fallbacks.
 It checks expired 8.1, below-policy 8.2, maintained 8.3,
-active 8.4 and unreviewed 8.6 without changing the installed runtime or database.
+active 8.4 and unreviewed 8.6 without changing the installed runtime or
+database.
 No hosted matrix case has been executed as part of this change. PHP 8.1/8.5
 hosted results, browser visual review and the parent's central full audit remain
 separate evidence to collect. Workflow configuration alone is not evidence that
@@ -157,19 +172,22 @@ these environments pass.
 ## Session contention measurement
 
 `tests/session_contention_test.php` owns a separate disposable fixture in
-`tests/support/session_contention.php`, `tests/support/session_contention_runtime.php` and
+`tests/support/session_contention.php`,
+`tests/support/session_contention_runtime.php` and
 `tests/fixtures/session_contention_router.php`. It does not edit or require the
 existing `gallery_workflow*` fixture and never reads the site's configuration,
 connects to its database, or copies its sessions. It needs CLI PHP, cURL,
 `pdo_sqlite`, `proc_open`, and loopback listeners. The central PHP regression
-discovery runs the test with its registered 90-second timeout; missing prerequisites are explicit SKIP locally and
+discovery runs the test with its registered 90-second timeout; missing
+prerequisites are explicit SKIP locally and
 BLOCKED when `GALLERY_SESSION_REQUIRED=1`.
 
 Three independent PHP HTTP workers share one newly owned temporary files-session
 directory. One request enters a bounded slow-work barrier. Two authenticated
 suggestion requests then run concurrently: one with the holder's cookie and one
 with a different cookie. Three repetitions compare holding the session against
-closing only the synthetic holder's session before slow work. The minimum overlap
+closing only the synthetic holder's session before slow work. The minimum
+overlap
 window is 900 ms **after both reader-start barriers are observed**. Holder and
 reader readiness are each bounded to five seconds; the holder self-releases
 after fifteen seconds, leaving room for both readiness phases and observation
@@ -183,9 +201,11 @@ It captures the existing `session_start_begin` and `session_start_end` marks.
 HTTP first-byte and total times are reported separately. `session_start_ms`
 includes lock acquisition, session storage I/O and decode time; PHP does not
 expose pure lock-wait time. The barrier additionally proves whether each reader
-finishes before the holder is released, without imposing a production timing SLA.
+finishes before the holder is released, without imposing a production timing
+SLA.
 
-Measured on 2026-09-20, PHP 8.3.30 on Windows, files handler. Two original development
+Measured on 2026-09-20, PHP 8.3.30 on Windows, files handler. Two original
+development
 runs passed, each with three samples per scenario. Across both runs this is
 12 contention comparisons: six retained-lock and six synthetic early-close
 cases, containing 24 measured suggestion responses and 12 holder responses.
@@ -208,7 +228,8 @@ names; they exclude cookie values, owner tokens, credentials, paths, raw HTTP
 bodies and database errors. A killed parent can leave its owned temporary tree;
 verify the exact marker and worker identity before manual cleanup.
 
-This proves contention for the controlled files handler workload. Session issuance
+This proves contention for the controlled files handler workload. Session
+issuance
 is synthetic, not the real login form or remember-cookie restoration. It does
 not measure a production upload, production database, other session handlers,
 logout races, all translation/flash paths or mutation-lock safety.
@@ -218,7 +239,8 @@ original fixture printed only the failing stage. One diagnostic rerun passed;
 that does not identify the historical failing assertion. The fixture now prints
 only its own safe, static assertion descriptions, never arbitrary exceptions.
 It also closes a readiness gap: both readers must acknowledge the real
-`session_start_begin` boundary before the 900 ms observation starts. Starting the
+`session_start_begin` boundary before the 900 ms observation starts. Starting
+the
 clock merely when cURL handles were queued could confuse slow worker startup
 with lock waiting. A retained-lock sample deliberately delays its reader by
 1,150 ms, longer than the observation window. Connect readiness now uses the
@@ -229,7 +251,8 @@ Two barrier-aware development runs passed: 12 further comparisons, 24 suggestion
 responses, 12 holder responses, four fixture session issuances, two anonymous
 401 checks and four persisted CSRF/preference checks. Both delayed samples
 observed reader readiness before timing the full overlap (1,178.314 and
-1,180.372 ms readiness; 910.812 and 909.928 ms subsequent overlap). Each retained
+1,180.372 ms readiness; 910.812 and 909.928 ms subsequent overlap). Each
+retained
 reader still waited for release; each independent or synthetic early-close
 reader completed before release. Both runs removed their owned workers and
 temporary stores. These are focused reruns, not a central-audit pass or proof
@@ -242,7 +265,8 @@ Admin application lifecycle. Its new support files are
 `tests/support/session_contention_application.php`,
 `tests/support/session_contention_application_router.php`, and
 `tests/support/session_contention_database.php`. It reuses the existing workflow
-allocator to create a fresh application clone and migrated MySQL database, without
+allocator to create a fresh application clone and migrated MySQL database,
+without
 editing any `gallery_workflow*` support file. Measurements use three separately
 owned workers/listeners, not the allocator's shared HTTP listener. Sessions,
 configuration changes, translations and credentials exist only in the clone.
@@ -286,13 +310,15 @@ child's identity, so the child's health check correctly refused the request.
 This was reproduced locally using conflicting inherited identity sentinels.
 The fixture now copies only the allocator's explicit child identity/database
 fields over the runner environment, checks them before launch, and asserts this
-precedence on every run. The final successful run above includes that regression.
+precedence on every run. The final successful run above includes that
+regression.
 The five-second readiness deadline and 900 ms observation were not relaxed.
 This focused repair is not a claim that the parent's central rerun has passed.
 
 The central runner discovers the test with a 180-second whole-test timeout in
 `php_test_requirements`; no new orchestration path is introduced. It requires
-`pdo_mysql`, `curl`, `gd`, `zip`, `dom`, `mbstring`, child processes and loopback
+`pdo_mysql`, `curl`, `gd`, `zip`, `dom`, `mbstring`, child processes and
+loopback
 listeners. Use explicit `GALLERY_WORKFLOW_ENABLE=disposable-only` with the
 existing dedicated database runner, or `GALLERY_SESSION_ENABLE=disposable-only`
 plus `GALLERY_SESSION_MYSQL_BIN` pointing to a MySQL daemon for a newly owned
@@ -300,7 +326,8 @@ temporary data directory. Private-daemon startup verifies its data-directory
 identity before creating any credential. It never discovers a site's database.
 Missing prerequisites are SKIP, or BLOCKED with `GALLERY_WORKFLOW_REQUIRED=1`
 or `GALLERY_SESSION_ROUTE_REQUIRED=1`; the lightweight fixture's separate
-`GALLERY_SESSION_REQUIRED` switch does not force a database test in source-only CI.
+`GALLERY_SESSION_REQUIRED` switch does not force a database test in source-only
+CI.
 
 ### Session-write review and decision
 
@@ -320,7 +347,8 @@ the lock. Moving an upload close earlier requires a separate lifecycle review:
 - `app/security.php::current_user()` can call
   `admin_auth_restore_persistent_login_from_request()`, which regenerates the
   session ID and persists `user_id`. Restoration must finish before closing.
-- `app/bootstrap/request.php::cms_initialize_request()` runs translation bootstrap
+- `app/bootstrap/request.php::cms_initialize_request()` runs translation
+  bootstrap
   and Viewer remember restoration before dispatch. Translation context/language
   writes and missing-translation diagnostics in `app/services/translations.php`
   must remain persistent wherever the complete route lifecycle can reach them.
@@ -333,16 +361,22 @@ the lock. Moving an upload close earlier requires a separate lifecycle review:
 - `upload_automation_with_gallery_lock()` exists for automation ingestion, but
   this review does not establish that every classic/browser upload path uses
   sufficient operation/entity locking. The session lock must not be removed on
-  that assumption. The parent's durable-move and retry-safety work is independent.
+  that assumption. The parent's durable-move and retry-safety work is
+  independent.
 
 The title JSON success path showed no late write in these cases, but closing it
-after session acquisition cannot remove the incoming wait measured here. A benefit
-from reducing its own short lock-holding time has not been established. A blanket
-title/picker close is therefore neither necessary for this measured wait nor safe
+after session acquisition cannot remove the incoming wait measured here. A
+benefit
+from reducing its own short lock-holding time has not been established. A
+blanket
+title/picker close is therefore neither necessary for this measured wait nor
+safe
 for the demonstrated HTML fallback.
 
-Keep Admin reads out of `cms_route_is_read_only_media_asset()`. A further proposal
-to shorten a long-running upload's session hold needs a representative disposable
+Keep Admin reads out of `cms_route_is_read_only_media_asset()`. A further
+proposal
+to shorten a long-running upload's session hold needs a representative
+disposable
 upload/suggestion comparison and complete upload error/domain-lock review. This
 investigation does not justify a global session-close refactor.
 
@@ -356,7 +390,8 @@ existing copy report without changing the positional environment rows.
 
 The prepared field has three documented members: `policy` is the unchanged
 offline lifecycle model, `labels` contains localized plain text, and
-`report_lines` reuses those same labels. `policy.action_required` drives the main
+`report_lines` reuses those same labels. `policy.action_required` drives the
+main
 Maintenance badge, the deferred System Health subtab badge and suppression of
 the System ready card. `view_render_admin_runtime_support_card()` in
 `admin_dashboard_sections.php` is the shared escaping/markup owner; both the
@@ -370,7 +405,8 @@ unchanged. `docs/OPERATIONS.md` did not exist at inspection, so no parallel
 operations document was created.
 
 The four new PHP regression entry points are `runtime_support_test.php`,
-`runtime_normalization_environment_test.php`, `runtime_support_surfaces_test.php`
+`runtime_normalization_environment_test.php`,
+`runtime_support_surfaces_test.php`
 and `session_contention_test.php`. The central runner discovers all four;
 `scripts/audit_registry.php` gives the session fixture a 90-second timeout.
 Parent orchestration owns the central audit and manifest refresh.

@@ -1,7 +1,8 @@
 # Release qualification evidence
 
 Normal release qualification is automatic after pushing `release/v_X.Y[.Z]`.
-The maintainer approves the resulting exact-Q PR once; automation merges and tags,
+The maintainer approves the resulting exact-Q PR once; automation merges and
+tags,
 while GitHub Release publication remains manual. The steps below describe the
 retained local evidence/recovery utility, not additional required release steps.
 See [RELEASE_LIFECYCLE.md](RELEASE_LIFECYCLE.md) for hosted ownership and live
@@ -33,7 +34,8 @@ cache/release-qualification/<version>/<fingerprint>/record.json
 
 That directory is already covered by the repository's `/cache/*` ignore rule.
 Repeated initialization of identical content preserves all evidence. A different
-fingerprint creates a new record with every manual check pending and no automated
+fingerprint creates a new record with every manual check pending and no
+automated
 result. Earlier records remain available for comparison.
 
 The fingerprint uses sorted repository-relative filenames and raw SHA-256 file
@@ -41,8 +43,10 @@ hashes, plus the target version and fingerprint-scope version. It reads actual
 bytes rather than trusting Git revision, file size, modification time, or hashes
 listed in the core manifest. The scope is deliberately conservative:
 
-- All regular files under `.github/`, `app/`, `database/`, `public/`, `scripts/`, `docs/`,
-  `tests/`, and `winapp/`, except local/runtime state and compiler intermediates.
+- All regular files under `.github/`, `app/`, `database/`, `public/`,
+  `scripts/`, `docs/`,
+  `tests/`, and `winapp/`, except local/runtime state and compiler
+  intermediates.
 - Registered root release inputs: `.htaccess`, `.gitignore`, `.gitattributes`,
   `index.php`, `install.php`, `reset.php`, `setup-gallery.php`,
   `config.example.php`, `README.md`, `PATCH_NOTES.md`,
@@ -54,7 +58,8 @@ listed in the core manifest. The scope is deliberately conservative:
 
 `fingerprint.php` owns the exact exclusions: caches, installation data/media,
 local agent folders, local `config.php` files, custom installation CSS, logs,
-Python bytecode, and LaTeX auxiliary outputs. No Git command is needed. Symlinked
+Python bytecode, and LaTeX auxiliary outputs. No Git command is needed.
+Symlinked
 inputs are refused. Newly added files and deletions within the scope change the
 fingerprint, including files not yet added to Git.
 
@@ -81,7 +86,8 @@ absolute paths are also supported. The importer requires the release profile,
 every currently registered release suite exactly once, a consistent result
 schema, exact before/after content fingerprints, and a run started after
 initialization and already completed.
-`quick`, `full`, partial suites, older runs and inconsistent summaries are refused.
+`quick`, `full`, partial suites, older runs and inconsistent summaries are
+refused.
 Record failures and blocked runs too: they are useful evidence, never approval.
 
 This command copies and hashes the report, preserving suite results, environment
@@ -106,13 +112,15 @@ publication authorization.
 
 PDF visual-review fields are optional during routine release preparation under
 the maintainer policy in `AGENTS.md` and `RELEASE.md`. Do not render, read or
-extract generated PDFs merely to fill these fields, and do not make their pending
+extract generated PDFs merely to fill these fields, and do not make their
+pending
 status an extra preparation gate. Use them only for an explicitly requested
 visual review or diagnosis of a concrete build/layout problem. Compiler success,
 relevant warnings and automated release consistency remain the normal checks;
 they must not be recorded as a human visual approval.
 
-Use one of `pending`, `pass`, or `fail`. Each write requires the exact fingerprint
+Use one of `pending`, `pass`, or `fail`. Each write requires the exact
+fingerprint
 reviewed, a named reviewer, and concise evidence. The command rejects a stale
 fingerprint rather than attaching a review to a newly changed artifact.
 
@@ -140,14 +148,16 @@ recorded with the same syntax:
 php scripts/release_qualification.php record 0.104 pdf-title pass --fingerprint=HASH --reviewer="Actual reviewer" --evidence="REPLACE with the actual inspected pages, viewer and observed result."
 ```
 
-Replace the evidence text; do not use the example as an approval. Include preview
+Replace the evidence text; do not use the example as an approval. Include
+preview
 directory/page references where useful. A pass is an explicit human attestation.
 PDF text extraction, a successful compiler, generated previews, automated
 browser fixtures, and an audit PASS do not supply it. Inspect links/bookmarks
 in a PDF viewer because raster pages cannot demonstrate interactive behavior.
 
 For `browser-smoke`, describe the applicable release-specific matrix from
-`TESTING.md`, browsers/devices, environment and observed results. Exercise affected
+`TESTING.md`, browsers/devices, environment and observed results. Exercise
+affected
 workflows; for relevant panel actions include unchanged URL, open panel and
 controls still working after fragment replacement. Do not substitute a
 synthetic map fixture for a full authenticated workflow. Keep unavailable checks
@@ -215,12 +225,14 @@ php scripts/release_qualification.php check 0.104 --phase=post-publication
 The report shows the version, exact fingerprint, captured automated result and
 suite summaries, manual states/evidence, outstanding reviews and environment
 gaps. Skips nested inside a passing suite remain visible. With changed content,
-the current check cannot use the old record and reports missing current evidence.
+the current check cannot use the old record and reports missing current
+evidence.
 It never silently changes an old approval to apply to the new artifact.
 
 `check` exits 0 only when all checks for the selected phase passed, a current
 release audit passed, and no reported coverage gaps remain. It exits 1 for
-incomplete evidence (including skips) and 2 for malformed input, missing required
+incomplete evidence (including skips) and 2 for malformed input, missing
+required
 artifacts or tooling errors. Pre-publication is the default; pending
 post-publication smoke remains visible for later work without making the
 pre-publication phase impossible to complete. Post-publication includes all
@@ -247,7 +259,8 @@ audit suite: human evidence intentionally lives in ignored local cache.
 
 After the actual release audit, attach its report with `record-audit`, collect
 actual manual evidence, and use `check` output in the handoff. Retain visible
-post-publication follow-up. Regenerate the manifest and reinitialize qualification
+post-publication follow-up. Regenerate the manifest and reinitialize
+qualification
 after relevant source or artifact changes.
 
 The focused fixture exercises pending/pass/fail transitions, explicit reviewed
@@ -264,7 +277,8 @@ The GitHub-hosted release qualification records the exact operator-selected
 stable peeled tag SHA from the immutable, reviewed release-origin marker.
 Supplemental provenance pins the tag object/type, previous release-side commit
 and identical tree. Audit, notes and WinApp scopes use the explicit release-side
-base, without requiring the previous published main merge in candidate ancestry. The marker
+base, without requiring the previous published main merge in candidate ancestry.
+The marker
 must have been introduced in a commit whose single parent was that selected
 `develop` SHA. The hosted validator checks Git/GitHub ancestry and unchanged
 marker bytes before preparing any expensive release artifacts. Those fields are
@@ -274,10 +288,13 @@ is a hard failure, never reconstructed from today's moving `develop`.
 
 After publication, follow the separate reviewed synchronization workflow and
 verify its evidence; do not translate a published tag into a completed release
-lifecycle status. Only an owner-approved true FF retaining exact Q (`RECONCILED_FF`) or a verified
-single-parent replay L (`RECONCILED_EQUIVALENT`) with full tree/patch/parallel-history
+lifecycle status. Only an owner-approved true FF retaining exact Q
+(`RECONCILED_FF`) or a verified
+single-parent replay L (`RECONCILED_EQUIVALENT`) with full
+tree/patch/parallel-history
 evidence and exact-SHA hosted CI completes reconciliation. Automation prepares
 working branches and proof; the owner alone updates develop. Details, failure
 states, server-control prerequisites and optional branch retirement are in
-[RELEASE_LIFECYCLE.md](RELEASE_LIFECYCLE.md). Synthetic regression results do not
+[RELEASE_LIFECYCLE.md](RELEASE_LIFECYCLE.md). Synthetic regression results do
+not
 imply operational server approval.

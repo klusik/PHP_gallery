@@ -51,7 +51,8 @@ use function Gallery\Core\viewer_identity_session_set;
 use function Gallery\Core\viewer_identity_session_unset;
 use function Gallery\Models\viewer_account_model_lock;
 use function Gallery\Models\viewer_account_model_transaction;
-use function Gallery\Models\viewer_authentication_model_account_by_normalized_email;
+use function Gallery\Models\viewer_authentication_model_account_by_normalized_email
+;
 use function Gallery\Models\viewer_authentication_model_complete_first_login;
 use function Gallery\Models\viewer_authentication_model_complete_password_reset;
 use function Gallery\Models\viewer_authentication_model_consume_password_reset;
@@ -59,11 +60,15 @@ use function Gallery\Models\viewer_authentication_model_first_login_account;
 use function Gallery\Models\viewer_authentication_model_password_reset_inspect;
 use function Gallery\Models\viewer_authentication_model_password_reset_lock;
 use function Gallery\Models\viewer_authentication_model_record_login;
-use function Gallery\Models\viewer_authentication_model_revoke_after_first_login_password_change;
-use function Gallery\Models\viewer_authentication_model_revoke_after_password_reset;
+use function Gallery\Models\viewer_authentication_model_revoke_after_first_login_password_change
+;
+use function Gallery\Models\viewer_authentication_model_revoke_after_password_reset
+;
 
 const VIEWER_PASSWORD_RESET_NAMESPACE = 'viewer_password_reset';
+
 const VIEWER_FIRST_LOGIN_PASSWORD_NAMESPACE = 'viewer_first_login_password';
+
 const VIEWER_FIRST_LOGIN_PASSWORD_LIFETIME_SECONDS = 900;
 
 /**
@@ -86,7 +91,10 @@ function viewer_authentication_public_failure_code(): string
  */
 function viewer_authentication_dummy_password_hash(): string
 {
-    if (defined('PASSWORD_ARGON2ID') && in_array('argon2id', password_algos(), true)) {
+    if (
+        defined('PASSWORD_ARGON2ID')
+        && in_array('argon2id', password_algos(), true)
+    ) {
         return '$argon2id$v=19$m=65536,t=4,p=1$UUouUEg3Y2dDa09CeVFhRA$CuogUm2oI6AP5xRNgVDGb4flQhYz3vLGqUO/tsxv+MM';
     }
     return '$2y$10$LfGo3R.NEOiqJKb9ne7VvOga/pjHejPp1BJzJr/Bt0X52ohA.OET.';
@@ -99,34 +107,68 @@ function viewer_authentication_dummy_password_hash(): string
  * @param string $clientIp Trusted exact client IP.
  * @return array{allowed:bool,reason:string,retry_after_seconds:int,bucket:string} Admission result.
  */
-function viewer_login_rate_limits_consume(string $normalizedEmail, string $clientIp): array
-{
+function viewer_login_rate_limits_consume(
+    string $normalizedEmail,
+    string $clientIp,
+): array {
     if ($clientIp === '') {
-        return ['allowed' => false, 'reason' => 'client_ip_unavailable', 'retry_after_seconds' => 0, 'bucket' => ''];
+        return [
+            'allowed' => false,
+            'reason' => 'client_ip_unavailable',
+            'retry_after_seconds' => 0,
+            'bucket' => '',
+        ];
     }
 
     $plan = [
         ['bucket' => 'viewer_login_ip', 'kind' => 'ip', 'subject' => $clientIp],
-        ['bucket' => 'viewer_login_subnet', 'kind' => 'subnet', 'subject' => $clientIp],
-        ['bucket' => 'viewer_login_identifier', 'kind' => 'identifier', 'subject' => $normalizedEmail],
-        ['bucket' => 'viewer_login_global', 'kind' => 'global', 'subject' => 'global'],
+        [
+            'bucket' => 'viewer_login_subnet',
+            'kind' => 'subnet',
+            'subject' => $clientIp,
+        ],
+        [
+            'bucket' => 'viewer_login_identifier',
+            'kind' => 'identifier',
+            'subject' => $normalizedEmail,
+        ],
+        [
+            'bucket' => 'viewer_login_global',
+            'kind' => 'global',
+            'subject' => 'global',
+        ],
     ];
     try {
         foreach ($plan as $dimension) {
-            $decision = viewer_rate_limit_consume($dimension['bucket'], $dimension['kind'], $dimension['subject']);
+            $decision = viewer_rate_limit_consume(
+                $dimension['bucket'],
+                $dimension['kind'],
+                $dimension['subject'],
+            );
             if (!$decision['allowed']) {
                 return [
                     'allowed' => false,
                     'reason' => 'rate_limited',
-                    'retry_after_seconds' => (int) $decision['retry_after_seconds'],
+                    'retry_after_seconds' =>
+                        (int) $decision['retry_after_seconds'],
                     'bucket' => $dimension['bucket'],
                 ];
             }
         }
     } catch (Throwable) {
-        return ['allowed' => false, 'reason' => 'limiter_unavailable', 'retry_after_seconds' => 0, 'bucket' => ''];
+        return [
+            'allowed' => false,
+            'reason' => 'limiter_unavailable',
+            'retry_after_seconds' => 0,
+            'bucket' => '',
+        ];
     }
-    return ['allowed' => true, 'reason' => 'ok', 'retry_after_seconds' => 0, 'bucket' => ''];
+    return [
+        'allowed' => true,
+        'reason' => 'ok',
+        'retry_after_seconds' => 0,
+        'bucket' => '',
+    ];
 }
 
 /**
@@ -138,16 +180,23 @@ function viewer_login_rate_limits_consume(string $normalizedEmail, string $clien
  * @param string $eventKey Stable viewer event key.
  * @param ?int $viewerAccountId Known viewer account id or null.
  * @param string $outcome Short outcome.
- * @param array $context Allowlisted event context.
+ * @param array<string,int|string|bool|null> $context
+ *     Allowlisted scalar metadata keyed by supported viewer event context names.
+ * @return void Attempts to record the event while swallowing logging failures.
  */
 function viewer_security_event_record_best_effort(
     string $eventKey,
     ?int $viewerAccountId = null,
     string $outcome = '',
-    array $context = []
+    array $context = [],
 ): void {
     try {
-        viewer_security_event_record($eventKey, $viewerAccountId, $outcome, $context);
+        viewer_security_event_record(
+            $eventKey,
+            $viewerAccountId,
+            $outcome,
+            $context,
+        );
     } catch (Throwable) {
         // A diagnostic failure must never grant authority or change a generic denial result.
     }
@@ -185,14 +234,21 @@ function viewer_first_login_password_state_clear(): void
  * @param string $passwordHash Current administrator-issued temporary password hash.
  * @return string HMAC integrity context.
  */
-function viewer_first_login_password_context(int $viewerAccountId, int $securityVersion, string $passwordHash): string
-{
-    if ($viewerAccountId <= 0 || $securityVersion <= 0 || $passwordHash === '') {
+function viewer_first_login_password_context(
+    int $viewerAccountId,
+    int $securityVersion,
+    string $passwordHash,
+): string {
+    if (
+        $viewerAccountId <= 0
+        || $securityVersion <= 0
+        || $passwordHash === ''
+    ) {
         return '';
     }
     return viewer_security_fingerprint(
         'viewer-first-login-password-state',
-        $viewerAccountId . "\0" . $securityVersion . "\0" . $passwordHash
+        $viewerAccountId . "\0" . $securityVersion . "\0" . $passwordHash,
     );
 }
 
@@ -203,27 +259,57 @@ function viewer_first_login_password_context(int $viewerAccountId, int $security
  * touched. The resulting state is short-lived and is revalidated against the account row on every
  * request before the forced password-change form is allowed to operate.
  *
- * @param array $account Locked viewer account row.
+ * @param array{
+ *     id:int|string,
+ *     security_version:int|string,
+ *     password_hash:string,
+ *     status:string,
+ *     email_verified_at:?string,
+ *     must_change_password:int|string
+ * } $account
+ *     Locked viewer account fields used to establish limited first-login
+ *     authority.
+ * @return void Clears normal viewer authority and establishes short-lived
+ *     password-change state. Throws when prerequisites or session rotation fail.
  */
 function viewer_first_login_password_establish(array $account): void
 {
-    if (!viewer_accounts_enabled() || !viewer_auth_storage_available() || !viewer_security_transport_allowed()) {
-        throw new RuntimeException('Viewer first-login password replacement is unavailable.');
+    if (
+        !viewer_accounts_enabled()
+        || !viewer_auth_storage_available()
+        || !viewer_security_transport_allowed()
+    ) {
+        throw new RuntimeException(
+            'Viewer first-login password replacement is unavailable.',
+        );
     }
-    if (!viewer_account_can_authenticate($account) || !viewer_account_requires_password_change($account)) {
-        throw new RuntimeException('Viewer first-login password replacement is unavailable.');
+    if (
+        !viewer_account_can_authenticate($account)
+        || !viewer_account_requires_password_change($account)
+    ) {
+        throw new RuntimeException(
+            'Viewer first-login password replacement is unavailable.',
+        );
     }
     $accountId = (int) ($account['id'] ?? 0);
     $securityVersion = (int) ($account['security_version'] ?? 0);
     $passwordHash = (string) ($account['password_hash'] ?? '');
-    $context = viewer_first_login_password_context($accountId, $securityVersion, $passwordHash);
+    $context = viewer_first_login_password_context(
+        $accountId,
+        $securityVersion,
+        $passwordHash,
+    );
     if ($context === '') {
-        throw new RuntimeException('Viewer first-login password replacement state is invalid.');
+        throw new RuntimeException(
+            'Viewer first-login password replacement state is invalid.',
+        );
     }
     viewer_session_clear();
     viewer_password_reset_state_clear();
     if (!viewer_identity_session_regenerate()) {
-        throw new RuntimeException('Viewer first-login session rotation failed.');
+        throw new RuntimeException(
+            'Viewer first-login session rotation failed.',
+        );
     }
     viewer_identity_session_set(viewer_first_login_password_namespace_key(), [
         'account_id' => $accountId,
@@ -240,11 +326,15 @@ function viewer_first_login_password_establish(array $account): void
  */
 function viewer_first_login_password_state(): ?array
 {
-    $state = viewer_identity_session_get(viewer_first_login_password_namespace_key());
-    if (!is_array($state)
+    $state = viewer_identity_session_get(
+        viewer_first_login_password_namespace_key(),
+    );
+    if (
+        !is_array($state)
         || !viewer_accounts_enabled()
         || !viewer_auth_storage_available()
-        || !viewer_security_transport_allowed()) {
+        || !viewer_security_transport_allowed()
+    ) {
         viewer_first_login_password_state_clear();
         return null;
     }
@@ -252,19 +342,42 @@ function viewer_first_login_password_state(): ?array
     $securityVersion = (int) ($state['security_version'] ?? 0);
     $expiresAt = (int) ($state['expires_at'] ?? 0);
     $context = (string) ($state['context'] ?? '');
-    if ($accountId <= 0 || $securityVersion <= 0 || $expiresAt < time() || preg_match('/^[a-f0-9]{64}$/D', $context) !== 1) {
+    if (
+        $accountId <= 0
+        || $securityVersion <= 0
+        || $expiresAt < time()
+        || preg_match('/^[a-f0-9]{64}$/D', $context) !== 1
+    ) {
         viewer_first_login_password_state_clear();
         return null;
     }
     try {
         $account = viewer_authentication_model_first_login_account($accountId);
-        $expected = $account ? viewer_first_login_password_context((int) $account['id'], (int) $account['security_version'], (string) $account['password_hash']) : '';
-        if (!$account || !viewer_account_can_authenticate($account) || !viewer_account_requires_password_change($account)
-            || (int) $account['security_version'] !== $securityVersion || $expected === '' || !hash_equals($expected, $context)) {
+        $expected = $account
+            ? viewer_first_login_password_context(
+                (int) $account['id'],
+                (int) $account['security_version'],
+                (string) $account['password_hash'],
+            )
+            : '';
+        if (
+            !$account
+            || !viewer_account_can_authenticate($account)
+            || !viewer_account_requires_password_change($account)
+            || (int) $account['security_version'] !== $securityVersion
+            || $expected === ''
+            || !hash_equals($expected, $context)
+        ) {
             viewer_first_login_password_state_clear();
             return null;
         }
-        return ['account_id'=>$accountId,'security_version'=>$securityVersion,'expires_at'=>$expiresAt,'context'=>$context,'email'=>(string)$account['email']];
+        return [
+            'account_id' => $accountId,
+            'security_version' => $securityVersion,
+            'expires_at' => $expiresAt,
+            'context' => $context,
+            'email' => (string) $account['email'],
+        ];
     } catch (Throwable) {
         viewer_first_login_password_state_clear();
         return null;
@@ -283,40 +396,93 @@ function viewer_first_login_password_state(): ?array
  */
 function viewer_first_login_password_complete(string $newPassword): array
 {
-    if (!viewer_accounts_enabled()) return ['changed'=>false,'reason'=>'viewer_disabled'];
-    if (!viewer_auth_storage_available()) return ['changed'=>false,'reason'=>'storage_unavailable'];
-    if (!viewer_security_transport_allowed()) return ['changed'=>false,'reason'=>'secure_transport_required'];
+    if (!viewer_accounts_enabled())
+        return ['changed' => false, 'reason' => 'viewer_disabled'];
+    if (!viewer_auth_storage_available())
+        return ['changed' => false, 'reason' => 'storage_unavailable'];
+    if (!viewer_security_transport_allowed())
+        return ['changed' => false, 'reason' => 'secure_transport_required'];
     $state = viewer_first_login_password_state();
-    if ($state === null) return ['changed'=>false,'reason'=>'first_login_state_invalid'];
-    if (!viewer_password_input_is_acceptable($newPassword)) return ['changed'=>false,'reason'=>'password_policy'];
+    if ($state === null)
+        return ['changed' => false, 'reason' => 'first_login_state_invalid'];
+    if (!viewer_password_input_is_acceptable($newPassword))
+        return ['changed' => false, 'reason' => 'password_policy'];
     try {
-        return viewer_account_model_transaction(static function () use ($newPassword, $state): array {
+        return viewer_account_model_transaction(static function () use (
+            $newPassword,
+            $state,
+        ): array {
             $account = viewer_account_model_lock($state['account_id']);
-            $expected = $account ? viewer_first_login_password_context((int)$account['id'], (int)$account['security_version'], (string)$account['password_hash']) : '';
-            if (!$account || !viewer_account_can_authenticate($account) || !viewer_account_requires_password_change($account)
-                || (int)$account['security_version'] !== $state['security_version'] || $expected === '' || !hash_equals($expected, $state['context'])) {
+            $expected = $account
+                ? viewer_first_login_password_context(
+                    (int) $account['id'],
+                    (int) $account['security_version'],
+                    (string) $account['password_hash'],
+                )
+                : '';
+            if (
+                !$account
+                || !viewer_account_can_authenticate($account)
+                || !viewer_account_requires_password_change($account)
+                || (int) $account['security_version']
+                    !== $state['security_version']
+                || $expected === ''
+                || !hash_equals($expected, $state['context'])
+            ) {
                 viewer_first_login_password_state_clear();
-                return ['changed'=>false,'reason'=>'first_login_state_invalid'];
+                return [
+                    'changed' => false,
+                    'reason' => 'first_login_state_invalid',
+                ];
             }
-            if (viewer_password_verify($newPassword, (string)$account['password_hash'])) return ['changed'=>false,'reason'=>'password_reuse'];
+            if (viewer_password_verify(
+                $newPassword,
+                (string) $account['password_hash'],
+            ))
+                return ['changed' => false, 'reason' => 'password_reuse'];
             $now = now_sql();
-            $newSecurityVersion = (int)$account['security_version'] + 1;
+            $newSecurityVersion = (int) $account['security_version'] + 1;
             $newPasswordHash = viewer_password_hash($newPassword);
-            if (!viewer_authentication_model_complete_first_login((int)$account['id'], (int)$account['security_version'], $newPasswordHash, $newSecurityVersion, $now)) {
-                throw new RuntimeException('Viewer first-login password replacement lost the account state race.');
+            if (!viewer_authentication_model_complete_first_login(
+                (int) $account['id'],
+                (int) $account['security_version'],
+                $newPasswordHash,
+                $newSecurityVersion,
+                $now,
+            )) {
+                throw new RuntimeException(
+                    'Viewer first-login password replacement lost the account state race.',
+                );
             }
-            viewer_authentication_model_revoke_after_first_login_password_change((int)$account['id'], $now);
-            viewer_security_event_record('viewer.first_login_password_changed', (int)$account['id'], 'success', ['security_version'=>$newSecurityVersion]);
-            $account['password_hash']=$newPasswordHash; $account['must_change_password']=0; $account['password_changed_at']=$now; $account['security_version']=$newSecurityVersion; $account['updated_at']=$now;
+            viewer_authentication_model_revoke_after_first_login_password_change(
+                (int) $account['id'],
+                $now,
+            );
+            viewer_security_event_record(
+                'viewer.first_login_password_changed',
+                (int) $account['id'],
+                'success',
+                ['security_version' => $newSecurityVersion],
+            );
+            $account['password_hash'] = $newPasswordHash;
+            $account['must_change_password'] = 0;
+            $account['password_changed_at'] = $now;
+            $account['security_version'] = $newSecurityVersion;
+            $account['updated_at'] = $now;
             viewer_first_login_password_state_clear();
             viewer_session_establish($account);
-            if (function_exists(__NAMESPACE__ . '\\viewer_reauthentication_establish')) {
-                $viewer=current_viewer(); if ($viewer !== null) viewer_reauthentication_establish($viewer);
+            if (function_exists(__NAMESPACE__
+                . '\\viewer_reauthentication_establish')) {
+                $viewer = current_viewer();
+                if ($viewer !== null)
+                    viewer_reauthentication_establish($viewer);
             }
-            return ['changed'=>true,'reason'=>'password_changed'];
+            return ['changed' => true, 'reason' => 'password_changed'];
         });
     } catch (Throwable $exception) {
-        viewer_first_login_password_state_clear(); viewer_session_clear(); throw $exception;
+        viewer_first_login_password_state_clear();
+        viewer_session_clear();
+        throw $exception;
     }
 }
 
@@ -331,50 +497,146 @@ function viewer_first_login_password_complete(string $newPassword): array
  * @param string $password Submitted plaintext password.
  * @param ?string $clientIp Explicit test/internal client IP, otherwise trusted resolver result.
  * @return array{authenticated:bool,reason:string,public_result:string,account_id:?int,retry_after_seconds:int,password_change_required:bool}
+ *     Authentication decision with a generic public result, internal reason,
+ *     optional account id, retry delay and forced-password-change state.
  */
-function viewer_authenticate_password(string $email, string $password, ?string $clientIp = null): array
-{
+function viewer_authenticate_password(
+    string $email,
+    string $password,
+    ?string $clientIp = null,
+): array {
     $publicFailure = viewer_authentication_public_failure_code();
-    $failure = static fn (string $reason, int $retry = 0): array => ['authenticated'=>false,'reason'=>$reason,'public_result'=>$publicFailure,'account_id'=>null,'retry_after_seconds'=>$retry,'password_change_required'=>false];
-    if (!viewer_accounts_enabled()) return $failure('viewer_disabled');
-    if (!viewer_auth_storage_available()) return $failure('storage_unavailable');
-    if (!viewer_security_transport_allowed()) return $failure('secure_transport_required');
+    $failure = static fn(string $reason, int $retry = 0): array => [
+        'authenticated' => false,
+        'reason' => $reason,
+        'public_result' => $publicFailure,
+        'account_id' => null,
+        'retry_after_seconds' => $retry,
+        'password_change_required' => false,
+    ];
+    if (!viewer_accounts_enabled())
+        return $failure('viewer_disabled');
+    if (!viewer_auth_storage_available())
+        return $failure('storage_unavailable');
+    if (!viewer_security_transport_allowed())
+        return $failure('secure_transport_required');
     $normalized = viewer_email_normalize($email);
-    if ($normalized === null || !viewer_password_input_is_safe($password)) return $failure('invalid_input');
-    $resolvedIp = $clientIp === null ? request_client_ip() : request_client_ip_normalize($clientIp);
+    if ($normalized === null || !viewer_password_input_is_safe($password))
+        return $failure('invalid_input');
+    $resolvedIp = $clientIp === null
+        ? request_client_ip()
+        : request_client_ip_normalize($clientIp);
     // Intentionally before account lookup and password_verify(): keep slow hashing behind cheap budgets.
     $rateDecision = viewer_login_rate_limits_consume($normalized, $resolvedIp);
-    if (!$rateDecision['allowed']) return $failure($rateDecision['reason'], (int)$rateDecision['retry_after_seconds']);
-    $account = viewer_authentication_model_account_by_normalized_email($normalized);
-    $passwordHash = $account ? (string)($account['password_hash'] ?? '') : viewer_authentication_dummy_password_hash();
-    if ($passwordHash === '') $passwordHash = viewer_authentication_dummy_password_hash();
+    if (!$rateDecision['allowed'])
+        return $failure(
+            $rateDecision['reason'],
+            (int) $rateDecision['retry_after_seconds'],
+        );
+    $account =
+        viewer_authentication_model_account_by_normalized_email($normalized);
+    $passwordHash = $account
+        ? (string) ($account['password_hash'] ?? '')
+        : viewer_authentication_dummy_password_hash();
+    if ($passwordHash === '')
+        $passwordHash = viewer_authentication_dummy_password_hash();
     $passwordValid = viewer_password_verify($password, $passwordHash);
-    $eligible = $account && $passwordValid && viewer_password_input_is_acceptable($password) && viewer_account_can_authenticate($account);
+    $eligible =
+        $account
+        && $passwordValid
+        && viewer_password_input_is_acceptable($password)
+        && viewer_account_can_authenticate($account);
     if (!$eligible) {
-        viewer_security_event_record_best_effort('viewer.login_failure', $account ? (int)$account['id'] : null, 'denied', ['reason'=>'authentication_failed']);
+        viewer_security_event_record_best_effort(
+            'viewer.login_failure',
+            $account ? (int) $account['id'] : null,
+            'denied',
+            ['reason' => 'authentication_failed'],
+        );
         return $failure('authentication_failed');
     }
     try {
-        return viewer_account_model_transaction(static function () use ($account, $password, $failure): array {
-            $lockedAccount = viewer_account_model_lock((int)$account['id']);
-            if (!$lockedAccount || !viewer_account_can_authenticate($lockedAccount)
-                || (int)$lockedAccount['security_version'] !== (int)$account['security_version']
-                || !hash_equals((string)$lockedAccount['password_hash'], (string)$account['password_hash'])) return $failure('authentication_state_changed');
-            $now = now_sql(); $newPasswordHash = null;
-            if (viewer_password_needs_rehash((string)$lockedAccount['password_hash'])) $newPasswordHash = viewer_password_hash($password);
-            viewer_authentication_model_record_login((int)$lockedAccount['id'], $now, $newPasswordHash);
-            if ($newPasswordHash !== null) $lockedAccount['password_hash'] = $newPasswordHash;
+        return viewer_account_model_transaction(static function () use (
+            $account,
+            $password,
+            $failure,
+        ): array {
+            $lockedAccount = viewer_account_model_lock((int) $account['id']);
+            if (
+                !$lockedAccount
+                || !viewer_account_can_authenticate($lockedAccount)
+                || (int) $lockedAccount['security_version']
+                    !== (int) $account['security_version']
+                || !hash_equals(
+                    (string) $lockedAccount['password_hash'],
+                    (string) $account['password_hash'],
+                )
+            )
+                return $failure('authentication_state_changed');
+            $now = now_sql();
+            $newPasswordHash = null;
+            if (viewer_password_needs_rehash(
+                (string) $lockedAccount['password_hash'],
+            ))
+                $newPasswordHash = viewer_password_hash($password);
+            viewer_authentication_model_record_login(
+                (int) $lockedAccount['id'],
+                $now,
+                $newPasswordHash,
+            );
+            if ($newPasswordHash !== null)
+                $lockedAccount['password_hash'] = $newPasswordHash;
             if (viewer_account_requires_password_change($lockedAccount)) {
                 viewer_first_login_password_establish($lockedAccount);
-                viewer_security_event_record('viewer.login_password_change_required', (int)$lockedAccount['id'], 'success', ['security_version'=>(int)$lockedAccount['security_version']]);
-                return ['authenticated'=>true,'reason'=>'password_change_required','public_result'=>'authenticated','account_id'=>(int)$lockedAccount['id'],'retry_after_seconds'=>0,'password_change_required'=>true];
+                viewer_security_event_record(
+                    'viewer.login_password_change_required',
+                    (int) $lockedAccount['id'],
+                    'success',
+                    [
+                        'security_version' =>
+                            (int) $lockedAccount['security_version'],
+                    ],
+                );
+                return [
+                    'authenticated' => true,
+                    'reason' => 'password_change_required',
+                    'public_result' => 'authenticated',
+                    'account_id' => (int) $lockedAccount['id'],
+                    'retry_after_seconds' => 0,
+                    'password_change_required' => true,
+                ];
             }
-            viewer_first_login_password_state_clear(); viewer_session_establish($lockedAccount);
-            if (function_exists(__NAMESPACE__ . '\\viewer_reauthentication_establish')) { $viewer=current_viewer(); if ($viewer !== null) viewer_reauthentication_establish($viewer); }
-            viewer_security_event_record('viewer.login_success', (int)$lockedAccount['id'], 'success', ['security_version'=>(int)$lockedAccount['security_version']]);
-            return ['authenticated'=>true,'reason'=>'authenticated','public_result'=>'authenticated','account_id'=>(int)$lockedAccount['id'],'retry_after_seconds'=>0,'password_change_required'=>false];
+            viewer_first_login_password_state_clear();
+            viewer_session_establish($lockedAccount);
+            if (function_exists(__NAMESPACE__
+                . '\\viewer_reauthentication_establish')) {
+                $viewer = current_viewer();
+                if ($viewer !== null)
+                    viewer_reauthentication_establish($viewer);
+            }
+            viewer_security_event_record(
+                'viewer.login_success',
+                (int) $lockedAccount['id'],
+                'success',
+                [
+                    'security_version' =>
+                        (int) $lockedAccount['security_version'],
+                ],
+            );
+            return [
+                'authenticated' => true,
+                'reason' => 'authenticated',
+                'public_result' => 'authenticated',
+                'account_id' => (int) $lockedAccount['id'],
+                'retry_after_seconds' => 0,
+                'password_change_required' => false,
+            ];
         });
-    } catch (Throwable $exception) { viewer_first_login_password_state_clear(); viewer_session_clear(); throw $exception; }
+    } catch (Throwable $exception) {
+        viewer_first_login_password_state_clear();
+        viewer_session_clear();
+        throw $exception;
+    }
 }
 
 /**
@@ -402,7 +664,10 @@ function viewer_password_reset_state_clear(): void
  */
 function viewer_password_reset_authorization_lifetime_seconds(): int
 {
-    return (int) viewer_accounts_config()['password_reset_authorization_lifetime_minutes'] * 60;
+    return (
+        (int) viewer_accounts_config()['password_reset_authorization_lifetime_minutes']
+            * 60
+    );
 }
 
 /**
@@ -418,14 +683,25 @@ function viewer_password_reset_context(
     int $tokenId,
     int $viewerAccountId,
     int $securityVersion,
-    string $expiresAt
+    string $expiresAt,
 ): string {
-    if ($tokenId <= 0 || $viewerAccountId <= 0 || $securityVersion <= 0 || $expiresAt === '') {
+    if (
+        $tokenId <= 0
+        || $viewerAccountId <= 0
+        || $securityVersion <= 0
+        || $expiresAt === ''
+    ) {
         return '';
     }
     return viewer_security_fingerprint(
         'viewer-password-reset-state',
-        $tokenId . "\0" . $viewerAccountId . "\0" . $securityVersion . "\0" . $expiresAt
+        $tokenId
+            . "\0"
+            . $viewerAccountId
+            . "\0"
+            . $securityVersion
+            . "\0"
+            . $expiresAt,
     );
 }
 
@@ -436,30 +712,61 @@ function viewer_password_reset_context(
  * @param string $clientIp Trusted exact client IP.
  * @return array{allowed:bool,reason:string,retry_after_seconds:int} Admission result.
  */
-function viewer_password_reset_rate_limits_consume(string $normalizedEmail, string $clientIp): array
-{
+function viewer_password_reset_rate_limits_consume(
+    string $normalizedEmail,
+    string $clientIp,
+): array {
     if ($clientIp === '') {
-        return ['allowed' => false, 'reason' => 'client_ip_unavailable', 'retry_after_seconds' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'client_ip_unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
     $plan = [
-        ['bucket' => 'viewer_password_reset_ip', 'kind' => 'ip', 'subject' => $clientIp],
-        ['bucket' => 'viewer_password_reset_subnet', 'kind' => 'subnet', 'subject' => $clientIp],
-        ['bucket' => 'viewer_password_reset_identifier', 'kind' => 'identifier', 'subject' => $normalizedEmail],
-        ['bucket' => 'viewer_password_reset_global', 'kind' => 'global', 'subject' => 'global'],
+        [
+            'bucket' => 'viewer_password_reset_ip',
+            'kind' => 'ip',
+            'subject' => $clientIp,
+        ],
+        [
+            'bucket' => 'viewer_password_reset_subnet',
+            'kind' => 'subnet',
+            'subject' => $clientIp,
+        ],
+        [
+            'bucket' => 'viewer_password_reset_identifier',
+            'kind' => 'identifier',
+            'subject' => $normalizedEmail,
+        ],
+        [
+            'bucket' => 'viewer_password_reset_global',
+            'kind' => 'global',
+            'subject' => 'global',
+        ],
     ];
     try {
         foreach ($plan as $dimension) {
-            $decision = viewer_rate_limit_consume($dimension['bucket'], $dimension['kind'], $dimension['subject']);
+            $decision = viewer_rate_limit_consume(
+                $dimension['bucket'],
+                $dimension['kind'],
+                $dimension['subject'],
+            );
             if (!$decision['allowed']) {
                 return [
                     'allowed' => false,
                     'reason' => 'rate_limited',
-                    'retry_after_seconds' => (int) $decision['retry_after_seconds'],
+                    'retry_after_seconds' =>
+                        (int) $decision['retry_after_seconds'],
                 ];
             }
         }
     } catch (Throwable) {
-        return ['allowed' => false, 'reason' => 'limiter_unavailable', 'retry_after_seconds' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'limiter_unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
     return ['allowed' => true, 'reason' => 'ok', 'retry_after_seconds' => 0];
 }
@@ -470,28 +777,80 @@ function viewer_password_reset_rate_limits_consume(string $normalizedEmail, stri
  * @param string $email Submitted viewer email identifier.
  * @param ?string $clientIp Explicit test/internal client IP, otherwise trusted resolver result.
  * @return array{accepted:bool,mail_eligible:bool,reason:string,public_result:string,reset_token:?string,expires_at:?string}
+ *     Reset admission decision with a generic public result and, only when
+ *     eligible, the one-time token and expiry for the mail workflow.
  */
-function viewer_password_reset_request(string $email, ?string $clientIp = null): array
-{
-    $publicResult=viewer_mail_public_result_code();
-    $result=static fn(bool $accepted,bool $mailEligible,string $reason,?string $token=null,?string $expiresAt=null):array=>['accepted'=>$accepted,'mail_eligible'=>$mailEligible,'reason'=>$reason,'public_result'=>$publicResult,'reset_token'=>$token,'expires_at'=>$expiresAt];
-    if (!viewer_accounts_enabled()) return $result(false,false,'viewer_disabled');
-    if (!viewer_auth_storage_available()) return $result(false,false,'storage_unavailable');
-    if (!viewer_security_transport_allowed()) return $result(false,false,'secure_transport_required');
-    $normalized=viewer_email_normalize($email); if ($normalized===null) return $result(false,false,'invalid_input');
-    $resolvedIp=$clientIp===null?request_client_ip():request_client_ip_normalize($clientIp);
+function viewer_password_reset_request(
+    string $email,
+    ?string $clientIp = null,
+): array {
+    $publicResult = viewer_mail_public_result_code();
+    $result = static fn(
+        bool $accepted,
+        bool $mailEligible,
+        string $reason,
+        ?string $token = null,
+        ?string $expiresAt = null,
+    ): array => [
+        'accepted' => $accepted,
+        'mail_eligible' => $mailEligible,
+        'reason' => $reason,
+        'public_result' => $publicResult,
+        'reset_token' => $token,
+        'expires_at' => $expiresAt,
+    ];
+    if (!viewer_accounts_enabled())
+        return $result(false, false, 'viewer_disabled');
+    if (!viewer_auth_storage_available())
+        return $result(false, false, 'storage_unavailable');
+    if (!viewer_security_transport_allowed())
+        return $result(false, false, 'secure_transport_required');
+    $normalized = viewer_email_normalize($email);
+    if ($normalized === null)
+        return $result(false, false, 'invalid_input');
+    $resolvedIp = $clientIp === null
+        ? request_client_ip()
+        : request_client_ip_normalize($clientIp);
     // Intentionally before account lookup and before the separate mail-abuse budget reservation.
-    $rateDecision=viewer_password_reset_rate_limits_consume($normalized,$resolvedIp); if(!$rateDecision['allowed']) return $result(false,false,$rateDecision['reason']);
-    $account=viewer_authentication_model_account_by_normalized_email($normalized);
-    $mailDecision=viewer_mail_authorize_send(VIEWER_MAIL_ACTION_PASSWORD_RESET,$normalized,$resolvedIp); if(!$mailDecision['allowed']) return $result(false,false,$mailDecision['reason']);
-    if(!$account || !viewer_account_can_authenticate($account)) return $result(true,false,'request_received');
-    return viewer_account_model_transaction(static function() use($account,$result):array {
-        $lockedAccount=viewer_account_model_lock((int)$account['id']); if(!$lockedAccount || !viewer_account_can_authenticate($lockedAccount)) return $result(true,false,'request_received');
-        $tokenLifetimeSeconds=(int)viewer_accounts_config()['password_reset_token_lifetime_minutes']*60;
-        $token=viewer_password_reset_token_issue((int)$lockedAccount['id'],(int)$lockedAccount['security_version'],$tokenLifetimeSeconds);
-        $expiresAt=date('Y-m-d H:i:s',time()+$tokenLifetimeSeconds);
-        viewer_security_event_record('viewer.password_reset_requested',(int)$lockedAccount['id'],'accepted');
-        return $result(true,true,'reset_token_issued',$token,$expiresAt);
+    $rateDecision = viewer_password_reset_rate_limits_consume(
+        $normalized,
+        $resolvedIp,
+    );
+    if (!$rateDecision['allowed'])
+        return $result(false, false, $rateDecision['reason']);
+    $account =
+        viewer_authentication_model_account_by_normalized_email($normalized);
+    $mailDecision = viewer_mail_authorize_send(
+        VIEWER_MAIL_ACTION_PASSWORD_RESET,
+        $normalized,
+        $resolvedIp,
+    );
+    if (!$mailDecision['allowed'])
+        return $result(false, false, $mailDecision['reason']);
+    if (!$account || !viewer_account_can_authenticate($account))
+        return $result(true, false, 'request_received');
+    return viewer_account_model_transaction(static function () use (
+        $account,
+        $result,
+    ): array {
+        $lockedAccount = viewer_account_model_lock((int) $account['id']);
+        if (!$lockedAccount || !viewer_account_can_authenticate($lockedAccount))
+            return $result(true, false, 'request_received');
+        $tokenLifetimeSeconds =
+            (int) viewer_accounts_config()['password_reset_token_lifetime_minutes']
+            * 60;
+        $token = viewer_password_reset_token_issue(
+            (int) $lockedAccount['id'],
+            (int) $lockedAccount['security_version'],
+            $tokenLifetimeSeconds,
+        );
+        $expiresAt = date('Y-m-d H:i:s', time() + $tokenLifetimeSeconds);
+        viewer_security_event_record(
+            'viewer.password_reset_requested',
+            (int) $lockedAccount['id'],
+            'accepted',
+        );
+        return $result(true, true, 'reset_token_issued', $token, $expiresAt);
     });
 }
 
@@ -506,12 +865,37 @@ function viewer_password_reset_request(string $email, ?string $clientIp = null):
  */
 function viewer_password_reset_inspect(string $token): ?array
 {
-    if (!viewer_accounts_enabled() || !viewer_auth_storage_available() || !viewer_security_transport_allowed()) return null;
-    if ($token === '' || strlen($token) > 512) return null;
-    $row=viewer_authentication_model_password_reset_inspect(security_authority_token_hash($token));
-    $account=$row?['status'=>$row['status']??'','password_hash'=>$row['password_hash']??'','email_verified_at'=>$row['email_verified_at']??null]:[];
-    if(!$row || !viewer_one_time_token_row_is_usable($row) || !viewer_account_can_authenticate($account) || (int)$row['token_security_version'] !== (int)$row['account_security_version']) return null;
-    return ['token_id'=>(int)$row['token_id'],'account_id'=>(int)$row['viewer_account_id'],'security_version'=>(int)$row['token_security_version'],'expires_at'=>(string)$row['expires_at']];
+    if (
+        !viewer_accounts_enabled()
+        || !viewer_auth_storage_available()
+        || !viewer_security_transport_allowed()
+    )
+        return null;
+    if ($token === '' || strlen($token) > 512)
+        return null;
+    $row = viewer_authentication_model_password_reset_inspect(security_authority_token_hash(
+        $token,
+    ));
+    $account = $row
+        ? [
+            'status' => $row['status'] ?? '',
+            'password_hash' => $row['password_hash'] ?? '',
+            'email_verified_at' => $row['email_verified_at'] ?? null,
+        ] : [];
+    if (
+        !$row
+        || !viewer_one_time_token_row_is_usable($row)
+        || !viewer_account_can_authenticate($account)
+        || (int) $row['token_security_version']
+            !== (int) $row['account_security_version']
+    )
+        return null;
+    return [
+        'token_id' => (int) $row['token_id'],
+        'account_id' => (int) $row['viewer_account_id'],
+        'security_version' => (int) $row['token_security_version'],
+        'expires_at' => (string) $row['expires_at'],
+    ];
 }
 
 /**
@@ -524,11 +908,37 @@ function viewer_password_reset_inspect(string $token): ?array
  */
 function viewer_password_reset_authorize(string $token): bool
 {
-    $inspected=viewer_password_reset_inspect($token); if($inspected===null){viewer_password_reset_state_clear();return false;}
-    $context=viewer_password_reset_context($inspected['token_id'],$inspected['account_id'],$inspected['security_version'],$inspected['expires_at']);
-    $tokenExpiry=strtotime($inspected['expires_at']); if($context===''||$tokenExpiry===false||$tokenExpiry<time()){viewer_password_reset_state_clear();return false;}
-    if(!viewer_identity_session_regenerate()) throw new RuntimeException('Viewer password-reset session rotation failed.');
-    viewer_identity_session_set(viewer_password_reset_namespace_key(),['token_id'=>$inspected['token_id'],'account_id'=>$inspected['account_id'],'security_version'=>$inspected['security_version'],'token_expires_at'=>$inspected['expires_at'],'expires_at'=>min($tokenExpiry,time()+viewer_password_reset_authorization_lifetime_seconds()),'context'=>$context]);
+    $inspected = viewer_password_reset_inspect($token);
+    if ($inspected === null) {
+        viewer_password_reset_state_clear();
+        return false;
+    }
+    $context = viewer_password_reset_context(
+        $inspected['token_id'],
+        $inspected['account_id'],
+        $inspected['security_version'],
+        $inspected['expires_at'],
+    );
+    $tokenExpiry = strtotime($inspected['expires_at']);
+    if ($context === '' || $tokenExpiry === false || $tokenExpiry < time()) {
+        viewer_password_reset_state_clear();
+        return false;
+    }
+    if (!viewer_identity_session_regenerate())
+        throw new RuntimeException(
+            'Viewer password-reset session rotation failed.',
+        );
+    viewer_identity_session_set(viewer_password_reset_namespace_key(), [
+        'token_id' => $inspected['token_id'],
+        'account_id' => $inspected['account_id'],
+        'security_version' => $inspected['security_version'],
+        'token_expires_at' => $inspected['expires_at'],
+        'expires_at' => min(
+            $tokenExpiry,
+            time() + viewer_password_reset_authorization_lifetime_seconds(),
+        ),
+        'context' => $context,
+    ]);
     return true;
 }
 
@@ -536,13 +946,39 @@ function viewer_password_reset_authorize(string $token): bool
  * Parse current viewer password-reset pre-authentication state.
  *
  * @return ?array{token_id:int,account_id:int,security_version:int,token_expires_at:string,expires_at:int,context:string}
+ *     Valid reset pre-authentication authority, or null when session state is
+ *     absent, expired or invalid.
  */
 function viewer_password_reset_state(): ?array
 {
-    $state=viewer_identity_session_get(viewer_password_reset_namespace_key()); if(!is_array($state)) return null;
-    $tokenId=(int)($state['token_id']??0);$accountId=(int)($state['account_id']??0);$securityVersion=(int)($state['security_version']??0);$tokenExpiresAt=(string)($state['token_expires_at']??'');$expiresAt=(int)($state['expires_at']??0);$context=(string)($state['context']??'');
-    if($tokenId<=0||$accountId<=0||$securityVersion<=0||$tokenExpiresAt===''||$expiresAt<time()||preg_match('/^[a-f0-9]{64}$/D',$context)!==1){viewer_password_reset_state_clear();return null;}
-    return ['token_id'=>$tokenId,'account_id'=>$accountId,'security_version'=>$securityVersion,'token_expires_at'=>$tokenExpiresAt,'expires_at'=>$expiresAt,'context'=>$context];
+    $state = viewer_identity_session_get(viewer_password_reset_namespace_key());
+    if (!is_array($state))
+        return null;
+    $tokenId = (int) ($state['token_id'] ?? 0);
+    $accountId = (int) ($state['account_id'] ?? 0);
+    $securityVersion = (int) ($state['security_version'] ?? 0);
+    $tokenExpiresAt = (string) ($state['token_expires_at'] ?? '');
+    $expiresAt = (int) ($state['expires_at'] ?? 0);
+    $context = (string) ($state['context'] ?? '');
+    if (
+        $tokenId <= 0
+        || $accountId <= 0
+        || $securityVersion <= 0
+        || $tokenExpiresAt === ''
+        || $expiresAt < time()
+        || preg_match('/^[a-f0-9]{64}$/D', $context) !== 1
+    ) {
+        viewer_password_reset_state_clear();
+        return null;
+    }
+    return [
+        'token_id' => $tokenId,
+        'account_id' => $accountId,
+        'security_version' => $securityVersion,
+        'token_expires_at' => $tokenExpiresAt,
+        'expires_at' => $expiresAt,
+        'context' => $context,
+    ];
 }
 
 /**
@@ -553,24 +989,88 @@ function viewer_password_reset_state(): ?array
  */
 function viewer_password_reset_complete(string $newPassword): array
 {
-    if(!viewer_accounts_enabled()) return ['reset'=>false,'reason'=>'viewer_disabled'];
-    if(!viewer_auth_storage_available()) return ['reset'=>false,'reason'=>'storage_unavailable'];
-    if(!viewer_security_transport_allowed()) return ['reset'=>false,'reason'=>'secure_transport_required'];
-    $state=viewer_password_reset_state(); if($state===null) return ['reset'=>false,'reason'=>'reset_state_invalid'];
-    if(!viewer_password_input_is_acceptable($newPassword)) return ['reset'=>false,'reason'=>'password_policy'];
-    $result=viewer_account_model_transaction(static function() use($newPassword,$state):array {
-        $account=viewer_account_model_lock($state['account_id']);
-        if(!$account||!viewer_account_can_authenticate($account)||(int)$account['security_version']!==$state['security_version']){viewer_password_reset_state_clear();return ['reset'=>false,'reason'=>'reset_state_invalid'];}
-        $token=viewer_authentication_model_password_reset_lock($state['token_id']);
-        $context=$token?viewer_password_reset_context((int)$token['id'],(int)$token['viewer_account_id'],(int)$token['security_version'],(string)$token['expires_at']):'';
-        if(!$token||!viewer_one_time_token_row_is_usable($token)||(int)$token['viewer_account_id']!==$state['account_id']||(int)$token['security_version']!==$state['security_version']||$context===''||!hash_equals($context,$state['context'])){viewer_password_reset_state_clear();return ['reset'=>false,'reason'=>'reset_state_invalid'];}
-        $passwordHash=viewer_password_hash($newPassword);$now=now_sql();$newSecurityVersion=$state['security_version']+1;
-        if(!viewer_authentication_model_complete_password_reset($state['account_id'],$state['security_version'],$passwordHash,$newSecurityVersion,$now)) throw new RuntimeException('Viewer password reset lost the account security-version race.');
-        if(!viewer_authentication_model_consume_password_reset($state['token_id'],$now)) throw new RuntimeException('Viewer password reset token consumption lost a concurrent race.');
-        viewer_authentication_model_revoke_after_password_reset($state['account_id'],$state['token_id'],$now);
-        viewer_security_event_record('viewer.password_reset_completed',$state['account_id'],'success',['security_version'=>$newSecurityVersion]);
-        return ['reset'=>true,'reason'=>'reset_completed'];
+    if (!viewer_accounts_enabled())
+        return ['reset' => false, 'reason' => 'viewer_disabled'];
+    if (!viewer_auth_storage_available())
+        return ['reset' => false, 'reason' => 'storage_unavailable'];
+    if (!viewer_security_transport_allowed())
+        return ['reset' => false, 'reason' => 'secure_transport_required'];
+    $state = viewer_password_reset_state();
+    if ($state === null)
+        return ['reset' => false, 'reason' => 'reset_state_invalid'];
+    if (!viewer_password_input_is_acceptable($newPassword))
+        return ['reset' => false, 'reason' => 'password_policy'];
+    $result = viewer_account_model_transaction(static function () use (
+        $newPassword,
+        $state,
+    ): array {
+        $account = viewer_account_model_lock($state['account_id']);
+        if (
+            !$account
+            || !viewer_account_can_authenticate($account)
+            || (int) $account['security_version'] !== $state['security_version']
+        ) {
+            viewer_password_reset_state_clear();
+            return ['reset' => false, 'reason' => 'reset_state_invalid'];
+        }
+        $token = viewer_authentication_model_password_reset_lock(
+            $state['token_id'],
+        );
+        $context = $token
+            ? viewer_password_reset_context(
+                (int) $token['id'],
+                (int) $token['viewer_account_id'],
+                (int) $token['security_version'],
+                (string) $token['expires_at'],
+            )
+            : '';
+        if (
+            !$token
+            || !viewer_one_time_token_row_is_usable($token)
+            || (int) $token['viewer_account_id'] !== $state['account_id']
+            || (int) $token['security_version'] !== $state['security_version']
+            || $context === ''
+            || !hash_equals($context, $state['context'])
+        ) {
+            viewer_password_reset_state_clear();
+            return ['reset' => false, 'reason' => 'reset_state_invalid'];
+        }
+        $passwordHash = viewer_password_hash($newPassword);
+        $now = now_sql();
+        $newSecurityVersion = $state['security_version'] + 1;
+        if (!viewer_authentication_model_complete_password_reset(
+            $state['account_id'],
+            $state['security_version'],
+            $passwordHash,
+            $newSecurityVersion,
+            $now,
+        ))
+            throw new RuntimeException(
+                'Viewer password reset lost the account security-version race.',
+            );
+        if (!viewer_authentication_model_consume_password_reset(
+            $state['token_id'],
+            $now,
+        ))
+            throw new RuntimeException(
+                'Viewer password reset token consumption lost a concurrent race.',
+            );
+        viewer_authentication_model_revoke_after_password_reset(
+            $state['account_id'],
+            $state['token_id'],
+            $now,
+        );
+        viewer_security_event_record(
+            'viewer.password_reset_completed',
+            $state['account_id'],
+            'success',
+            ['security_version' => $newSecurityVersion],
+        );
+        return ['reset' => true, 'reason' => 'reset_completed'];
     });
-    if(!empty($result['reset'])){viewer_password_reset_state_clear();viewer_session_clear();}
+    if (!empty($result['reset'])) {
+        viewer_password_reset_state_clear();
+        viewer_session_clear();
+    }
     return $result;
 }

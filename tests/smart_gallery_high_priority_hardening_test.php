@@ -28,6 +28,8 @@
  */
 
 declare(strict_types=1);
+
+require_once __DIR__ . '/support/php_source.php';
 require_once dirname(__DIR__) . '/scripts/admin_import_contracts.php';
 
 /** Fail this standalone test with one concise contract message. */
@@ -83,7 +85,7 @@ smart_gallery_high_priority_assert(
 smart_gallery_high_priority_assert(
     str_contains($home, 'home_smart_gallery_card_context_preload')
     && str_contains($home, 'smart_gallery_card_summaries($smartGalleries, true)')
-    && str_contains($page, 'smart_gallery_card_summaries(array_merge($topSmartChildren, $bottomSmartChildren), true)'),
+    && php_source_contains($page, 'smart_gallery_card_summaries(array_merge($topSmartChildren, $bottomSmartChildren), true)'),
     'Home and physical-gallery pages preload Smart Gallery card summaries before entering card render loops.'
 );
 

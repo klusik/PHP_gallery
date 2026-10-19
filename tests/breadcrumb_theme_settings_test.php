@@ -330,12 +330,14 @@ namespace Gallery\Tests\BreadcrumbThemeSettings {
     assert_true(array_values(array_unique($documentedThemeFallbacks[1])) === [\Gallery\Services\BREADCRUMB_STYLE_DEFAULT],
         'The inventory Theme fallback must match the shared breadcrumb default.');
 
-    assert_true(preg_match('/^\d+\. `gallery_breadcrumb_style\.<gallery-id>` accepts ([^.]+)\.([^\r\n]+)/m',
+    assert_true(preg_match('/^\d+\. `gallery_breadcrumb_style\.<gallery-id>` accepts ([^.]+)\.((?:[^\r\n]|\r?\n[ \t]+)+)/m',
         $settingsInventory, $galleryInventoryMatch) === 1,
         'The inventory must document the physical-gallery breadcrumb override.');
     preg_match_all('/`([^`]+)`/', $galleryInventoryMatch[1], $documentedGalleryStyles);
     assert_true($documentedGalleryStyles[1] === [...array_keys($registry), \Gallery\Services\BREADCRUMB_STYLE_INHERIT],
         'The inventory gallery values must list every registered style and the gallery-only inherit sentinel.');
+    // Markdown continuation lines retain the same paragraph and fallback order.
+    $galleryInventoryMatch[2] = preg_replace('/\s+/', ' ', $galleryInventoryMatch[2]);
     assert_true(preg_match('/Missing or invalid gallery values inherit `([^`]+)`; missing or invalid Theme values fall back to `([^`]+)`/',
         $galleryInventoryMatch[2], $documentedGalleryFallbacks) === 1,
         'The inventory must document the gallery-to-Theme fallback order.');

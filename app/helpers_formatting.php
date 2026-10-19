@@ -46,7 +46,7 @@ function format_bytes(int|float $bytes, int $precision = 1): string
     $bytes = (float) $bytes;
     $units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB'];
     $index = 0;
-    while ($bytes >= 1024 && $index < count($units) - 1) {
+    while ($bytes >= 1024 && $index < (count($units) - 1)) {
         $bytes /= 1024;
         $index++;
     }

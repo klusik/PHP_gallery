@@ -1,7 +1,9 @@
 # Breadcrumb navigation
 
-`app/services/breadcrumbs.php` owns the presentation registry, style inheritance,
-and normalized view model. `app/views/breadcrumbs.php` renders the prepared data as
+`app/services/breadcrumbs.php` owns the presentation registry, style
+inheritance,
+and normalized view model. `app/views/breadcrumbs.php` renders the prepared data
+as
 `nav.breadcrumbs > ol.breadcrumbs__list > li.breadcrumbs__item`, using
 `.breadcrumbs__link` for links and `.breadcrumbs__current[aria-current="page"]`
 for the current page. Visual separators belong to CSS. The view preserves the
@@ -11,7 +13,8 @@ domain services.
 The old generic `.breadcrumbs` and `.breadcrumbs a` rules were removed from
 `public/assets/styles/public.css` when the shared stylesheet was introduced.
 `public/assets/styles/public-shared.css` still gives breadcrumbs inside a public
-hero their established zero margin and compact font size. The same hero selectors
+hero their established zero margin and compact font size. The same hero
+selectors
 remain in the bundled legacy `admin.css` and `admin-layout.css` stylesheets for
 their combined-page compatibility paths; their old `opacity: 0.7` treatment was
 removed so ancestor labels use the full theme foreground color. The public page
@@ -20,9 +23,11 @@ layout does not expose an Admin breadcrumb navigation landmark today.
 ## Style contract
 
 The stable style IDs are `minimal`, `chevron`, `pills`, `surface`, `ribbon`,
-`nodes`, `tabs`, `tiles`, and `gradient`; the original four IDs remain unchanged.
+`nodes`, `tabs`, `tiles`, and `gradient`; the original four IDs remain
+unchanged.
 The built-in theme default is `chevron`. Physical galleries may store `inherit`
-or one of those IDs. `inherit` resolves through the selected theme style. Unknown
+or one of those IDs. `inherit` resolves through the selected theme style.
+Unknown
 theme values fall back to `chevron`; unknown gallery values behave as `inherit`.
 `minimal` is the retained low-decoration style for existing breadcrumb
 presentation. `ribbon` uses arrow segments, `nodes` connects decorative dots,
@@ -34,13 +39,15 @@ the current theme style, so a Smart Gallery ID never addresses the physical
 gallery settings namespace.
 
 The style registry's labels use the translation keys
-`breadcrumbs.style.<style-id>`. Persisted IDs and CSS modifier classes are machine
+`breadcrumbs.style.<style-id>`. Persisted IDs and CSS modifier classes are
+machine
 contracts; translated labels are presentation only.
 
 The Theme enum and physical-gallery values in `ADMIN_SETTINGS_INVENTORY.md`
 must stay aligned with `breadcrumb_style_registry()`. The registered
 `breadcrumb_theme_settings_test.php` compares those documented lists with the
-real registry and checks the `chevron` fallback and gallery-only `inherit` value.
+real registry and checks the `chevron` fallback and gallery-only `inherit`
+value.
 
 ## Admin visual selection
 
@@ -66,7 +73,8 @@ radio controls support keyboard selection and remain usable without JavaScript.
 - `app/views/picture_game.php` receives captured breadcrumb HTML from its
   controller.
 - Smart Gallery source provenance in `app/services/smart_galleries.php`,
-  `app/controllers/gallery_lightbox.php`, `app/controllers/public_gallery_lightbox.php`,
+  `app/controllers/gallery_lightbox.php`,
+  `app/controllers/public_gallery_lightbox.php`,
   and the lightbox/map views describes an image's physical source path. Those
   labels and links provide image provenance, not page navigation.
 - Search results currently do not render breadcrumbs.
@@ -81,6 +89,7 @@ controller/view integration. The helper is permanent compatibility support;
 existing usage volume is `unknown`.
 
 The nine registry styles and `inherit` sentinel are permanent supported IDs.
-They preserve a stable stored preference contract across theme, physical-gallery,
+They preserve a stable stored preference contract across theme,
+physical-gallery,
 and Smart Gallery configuration. Retaining those IDs is the permanent-support
 rationale; presentation may evolve through CSS while stored values remain valid.

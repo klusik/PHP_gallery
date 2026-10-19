@@ -30,14 +30,19 @@ files supplied to that separate API.
 
 Only the file freshly allocated for this invocation is eligible for cleanup.
 The service checks its canonical temporary directory, expected native prefix,
-regular-file/non-symlink status and file identity. It checks identity again before
-deleting an ordinary failed staging/validation attempt. A rejected or unverifiable
-path does not authorize deletion. The native prefix remains `pg-webdav-`; Windows
-`tempnam()` keeps only its first three characters. These checks do not replace the
+regular-file/non-symlink status and file identity. It checks identity again
+before
+deleting an ordinary failed staging/validation attempt. A rejected or
+unverifiable
+path does not authorize deletion. The native prefix remains `pg-webdav-`;
+Windows
+`tempnam()` keeps only its first three characters. These checks do not replace
+the
 host's isolation and permissions on its temporary directory.
 
 If a later credential or ingestion schema check refuses the operation, both
-`missing` and `unknown` retain the staged file instead of deleting the recoverable
+`missing` and `unknown` retain the staged file instead of deleting the
+recoverable
 body. The exception is rethrown unchanged. Previously retained files are never
 searched for, retried, expired or purged by another request. This follows the
 [Phase 10 preflight/recoverability rules](../ARCHITECTURE.md#phase-10-destructive-and-ingestion-mutation-policy).
@@ -47,14 +52,20 @@ retry protocol**. Hosting cleanup can still remove the file. No path, token,
 password or body is added to responses/logs; no recovery metadata or destination
 binding is persisted. Operators needing recovery must protect the relevant host
 temp storage, resolve the schema problem, and independently verify the intended
-destination and current gallery state before arranging an intentional upload from
-the original sender or securely recovered bytes. Do not blindly retry all matching
+destination and current gallery state before arranging an intentional upload
+from
+the original sender or securely recovered bytes. Do not blindly retry all
+matching
 temp files or assume WebDAV has the create/classic-upload replay ledger.
 
-Retention preserves a body only while it is still staged. If the existing installer
-has already consumed it and a later scan fails, this facade neither rolls back the
-installed original nor reconstructs temporary input. Extending that boundary to a
-durable resumable workflow, adding a recovery index, or changing retention/expiry
+Retention preserves a body only while it is still staged. If the existing
+installer
+has already consumed it and a later scan fails, this facade neither rolls back
+the
+installed original nor reconstructs temporary input. Extending that boundary to
+a
+durable resumable workflow, adding a recovery index, or changing
+retention/expiry
 policy requires a separate design decision. This tranche does not change schema
 requirements or their existing installation order.
 
@@ -75,17 +86,21 @@ into a PHP string. Partial reads, copy failure and flush failure stop before
 installation. The service never closes its caller's input; the controller closes
 it on success and failure. This change introduces no new application byte quota,
 timeout or background cleanup. Existing staging prefixes now have documented
-immutable definitions in Core policy; their values are unchanged. Existing server/request/disk
+immutable definitions in Core policy; their values are unchanged. Existing
+server/request/disk
 limits still apply; bounded-memory copying is not a disk-exhaustion guarantee.
 
 ## Isolated regression evidence
 
-`tests/mobile_webdav_body_test.php` executes the real controller, authentication,
-three-state policy, stream facade and guarded installation using a one-pixel PNG,
+`tests/mobile_webdav_body_test.php` executes the real controller,
+authentication,
+three-state policy, stream facade and guarded installation using a one-pixel
+PNG,
 memory input streams, unique disposable files and fake persistence/scanning.
 It covers move and copy success, stream ownership, allocation/read/partial-copy/
 flush faults, rejected unowned paths, unauthorized and early-schema refusals,
-late credential/ingestion missing/unknown body retention, safe responses, ordinary
+late credential/ingestion missing/unknown body retention, safe responses,
+ordinary
 failure cleanup, and preservation of earlier retained inputs.
 
 The test needs ordinary PHP streams, hashing/password support and image-header

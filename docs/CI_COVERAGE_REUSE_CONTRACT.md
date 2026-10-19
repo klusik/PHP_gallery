@@ -7,21 +7,25 @@ declaration checks. `scripts/audit.php` and its registries remain the sole test
 orchestrator. BASIC is feedback; it does not replace complete integration.
 
 In **Integrate into develop → Run workflow**, select **main or the intended
-feature branch** in GitHub's workflow-ref selector, then select the source branch.
+feature branch** in GitHub's workflow-ref selector, then select the source
+branch.
 An explicit repository-owner dispatch authorizes that immutable workflow/test
 revision. Ordinary test, registry and evaluator changes need no preliminary main
 installation. The selected workflow actually executes its changed tests.
 
 The final source must be one commit S above observed develop P. Unprivileged
-hosted preparation generates runtime modules, inventory and manifest in dependency
+hosted preparation generates runtime modules, inventory and manifest in
+dependency
 order. The privileged publisher accepts only those generated files, leases the
-feature head, folds them into one final A when necessary and obtains fresh BASIC.
+feature head, folds them into one final A when necessary and obtains fresh
+BASIC.
 A separate authority checkout scans clean A with BASIC; candidate execution has
 read-only permissions and no persisted write credentials.
 
 FULL runs the complete required matrix on A: shared source contracts, portable
 Node/WinApp, packaging on three operating systems, four shards for each of three
-databases, four shards for each PHP 8.1/8.5 source environment, required Chromium
+databases, four shards for each PHP 8.1/8.5 source environment, required
+Chromium
 and the aggregate. All 28 actual native owners must pass. Failed, missing,
 duplicated, cancelled or skipped mandatory owners are not successful evidence.
 
@@ -45,7 +49,8 @@ reuse. Cancelled or superseded execution is rejected.
 
 Integration records use schema 2 with `feature_qualification`: input tree,
 independent BASIC plus original artifact identity, and original FULL execution
-run/attempt/workflow SHA. Publication has its own run identity and exact-candidate
+run/attempt/workflow SHA. Publication has its own run identity and
+exact-candidate
 Actions checks. Whole-tree input identity is the conservative shared closure;
 release-owned generation does not become a new functional candidate.
 
@@ -55,11 +60,13 @@ remain failures; use sealed execution to recover rather than rerunning tests.
 The unchanged required context is `Complete required CI matrix`, Actions app
 15368. The final integration record is retained for provenance and diagnostics.
 
-The publisher exposes that verified FULL through both Checks and Commit Statuses.
+The publisher exposes that verified FULL through both Checks and Commit
+Statuses.
 GitHub can omit dispatch-suite Checks from its branch-rule rollup despite their
 successful REST response. Only the privileged publisher has `statuses: write`;
 it authenticates the Actions creator in the creation response and binds the same
-required context to the exact SHA/run. Before every FF it rechecks that immutable
+required context to the exact SHA/run. Before every FF it rechecks that
+immutable
 status ID, successful state and workflow URL, retaining `matrix_status_id`.
 Combined Status omits creator; its unchanged ID binds the authenticated author.
 Both representations use the same real FULL.
@@ -67,7 +74,8 @@ Both representations use the same real FULL.
 ## CI-only installation on main
 
 When the maintainer needs changes installed on main before the next release,
-base a CI-only feature on observed main and dispatch **Basic source checks** with
+base a CI-only feature on observed main and dispatch **Basic source checks**
+with
 `install_ci`. Squash the complete prepared tree, including bot commits, to one
 commit above observed main first. The workflow rejects multiple commits before
 generation and stops before FULL if generation publishes a child; apply the
@@ -85,7 +93,8 @@ created by installation. Product changes stay on the normal develop path.
 ## Release trusts protected develop
 
 **A commit admitted to protected develop is qualified.** A separately authorized
-release freezes source A from that branch. It does not rerun BASIC/FULL, download
+release freezes source A from that branch. It does not rerun BASIC/FULL,
+download
 historical test archives, compare evaluator versions or requalify the preceding
 release. Historical Actions artifact expiry cannot invalidate a new release.
 
@@ -111,9 +120,11 @@ already completed tag/draft.
 After `DRAFT_READY` and retention of the completion artifact, a final same-run
 job automatically retires the exact release ref with a Q lease. It independently
 checks assembly/review, immutable M/tag, retained M ancestry on both protected
-branches, uploaded asset sizes/digests and branch dependencies. Failed or missing
+branches, uploaded asset sizes/digests and branch dependencies. Failed or
+missing
 proof blocks cleanup; incomplete synchronization keeps the ref. Cleanup retries
-use immutable Q and the retained artifact, including after a lost delete response.
+use immutable Q and the retained artifact, including after a lost delete
+response.
 Publication remains manual. The existing separately reviewed retirement path
 continues to serve historical refs; automatic cleanup never sweeps them.
 
@@ -149,4 +160,5 @@ changed ownership; do not weaken product assertions or add baseline debt.
 Operational acceptance requires hosted feature qualification and the reviewed
 installation. Report the exact candidate/base/workflow/run, required owner
 results, repair iterations, avoidable FULL starts and unperformed live lifecycle
-coverage. Human approval, publication and production smoke tests remain distinct.
+coverage. Human approval, publication and production smoke tests remain
+distinct.

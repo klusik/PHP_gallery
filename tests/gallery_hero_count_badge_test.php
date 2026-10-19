@@ -35,16 +35,19 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 /**
  * Require a source fragment to remain present.
  *
  * @param string $source Source text.
  * @param string $needle Required fragment.
  * @param string $label Assertion label.
+ * @return void Throws when neither the exact fragment nor its PHP tokens occur.
  */
 function assert_gallery_hero_count_contains(string $source, string $needle, string $label): void
 {
-    if (!str_contains($source, $needle)) {
+    if (!php_source_contains($source, $needle)) {
         throw new RuntimeException($label . ' is missing required source fragment: ' . $needle);
     }
 }

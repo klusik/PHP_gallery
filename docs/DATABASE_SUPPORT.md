@@ -1,6 +1,7 @@
 # Database support policy
 
-Reviewed 2026-10-05. This document owns PHP Gallery's database-version status, the
+Reviewed 2026-10-05. This document owns PHP Gallery's database-version status,
+the
 project's direct CI evidence, and the difference between vendor maintenance and
 project qualification. The workflow matrix is in
 [`.github/workflows/gallery-workflows.yml`](../.github/workflows/gallery-workflows.yml).
@@ -21,7 +22,8 @@ server versions. In particular, PHP 8.1 remains the application's source/runtime
 compatibility floor and is checked by a source-only job; it does not qualify a
 MySQL or MariaDB combination. The separate browser job also has no external
 server. CI status is evidence for the listed representative and workflow at the
-revision tested, not a statement that every provider configuration, server patch,
+revision tested, not a statement that every provider configuration, server
+patch,
 plugin, SQL mode, or production dataset behaves identically.
 
 The required jobs use disposable databases, run the central real workflow and
@@ -41,7 +43,8 @@ DDL. Transactional admission and mutation paths use `SELECT ... FOR UPDATE`;
 the real-database workflow includes race checks for those paths. Admin operation
 keys, gallery edit/move coordination, upload automation, telemetry maintenance,
 and other bounded jobs use `GET_LOCK()` advisory locks. The disposable semantic
-fixture checks lock exclusion and release behavior without involving a live site.
+fixture checks lock exclusion and release behavior without involving a live
+site.
 
 The initial image-vote schema declares
 `CHECK (vote IN (-1, 1))`. MySQL before 8.0.16 accepted but did not enforce
@@ -53,13 +56,15 @@ The anonymous-telemetry migration declares two `context_json JSON` columns, and
 telemetry diagnostics query them with `JSON_VALID`, `JSON_EXTRACT`, and
 `JSON_UNQUOTE`. The semantic fixture verifies JSON validation, extraction,
 Unicode round-tripping, and rejection of malformed values. MariaDB implements
-`JSON` as a `LONGTEXT` alias with JSON validation, while MySQL uses a native JSON
+`JSON` as a `LONGTEXT` alias with JSON validation, while MySQL uses a native
+JSON
 representation. The Gallery relies on the shared SQL operations and does not
 require byte-identical storage formats. Cooperative-gallery state also uses JSON
 extraction from a text column.
 
 The migration runner accounts for MySQL/MariaDB differences around
-`ALTER TABLE ... IF NOT EXISTS`: it treats known duplicate-object DDL errors as a
+`ALTER TABLE ... IF NOT EXISTS`: it treats known duplicate-object DDL errors as
+a
 successful replay when an interrupted migration already made the change. Do not
 remove that replay path based on one engine's behavior, and do not assume all
 server DDL can be rolled back as one transaction. Schema inspection queries
@@ -74,7 +79,8 @@ floor and the Smart Gallery query's former window-function-avoidance rationale
 are policy/documentation retirement candidates for Issue #73. That review must
 also assess the existing digest index on correctness, performance, and safety;
 keep the query and index behavior until that evidence supports a change. The
-cross-engine duplicate-DDL replay path remains necessary for maintained MySQL and
+cross-engine duplicate-DDL replay path remains necessary for maintained MySQL
+and
 MariaDB releases. Changing the support policy alone does not justify deleting
 compatibility or index behavior.
 
@@ -84,7 +90,8 @@ Vendor maintenance and PHP Gallery's test status answer different questions.
 As reviewed on 2026-10-05, MySQL 8.4 is an LTS line; MySQL's LTS model specifies
 five years of Premier Support and three years of Extended Support. MySQL 8.0
 reached vendor end of life with 8.0.46 in April 2026. MariaDB Foundation policy
-lists Community maintenance through 2028-02-16 for 10.11 and 2029-05-29 for 11.4.
+lists Community maintenance through 2028-02-16 for 10.11 and 2029-05-29 for
+11.4.
 The Foundation also lists newer maintained LTS lines, including 11.8 and 12.3;
 they remain unqualified by PHP Gallery until required CI directly covers them.
 
@@ -106,7 +113,8 @@ Before changing a production database server:
 
 Cross-family migration (MySQL to MariaDB or MariaDB to MySQL) is not implied by
 this project matrix. Compare collation, SQL mode, authentication, JSON behavior,
-backup format, and vendor-supported import/upgrade procedures before planning it.
+backup format, and vendor-supported import/upgrade procedures before planning
+it.
 
 ## Primary references
 

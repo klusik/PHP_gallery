@@ -60,54 +60,111 @@ const IMAGE_MODEL_AUTOMATIC_COVER_CANDIDATE_LIMIT = 2;
  * @param list<string> $candidatePathHashes Canonical lowercase SHA-256 relative-path digests.
  * @param bool $hasIdentityVersion Whether the naming-version column is verified available.
  * @param int $limit Positive shared candidate/lookahead bound, at most 4097 rows.
- * @return list<array{id:int|string,filename:string,relative_path:string,thumbnail_source_identity_version:int|string}> Potential conflicts across every access class.
+ * @return list<array{
+ *     id:int|string,
+ *     filename:string,
+ *     relative_path:string,
+ *     thumbnail_source_identity_version:int|string
+ * }> Potential conflicts across every access class.
  */
-function image_model_thumbnail_identity_candidates(int $galleryId, array $imageIds, array $effectiveStems,
-    array $candidatePathHashes, bool $hasIdentityVersion, int $limit): array
-{
-    if ($galleryId < 1 || $limit < 1 || $limit > 4097 || count($imageIds) > 256
-        || count($effectiveStems) > 128 || count($candidatePathHashes) > 256) {
-        throw new InvalidArgumentException('Invalid thumbnail identity candidate bounds.');
+function image_model_thumbnail_identity_candidates(
+    int $galleryId,
+    array $imageIds,
+    array $effectiveStems,
+    array $candidatePathHashes,
+    bool $hasIdentityVersion,
+    int $limit,
+): array {
+    if (
+        $galleryId < 1
+        || $limit < 1
+        || $limit > 4097
+        || count($imageIds) > 256
+        || count($effectiveStems) > 128
+        || count($candidatePathHashes) > 256
+    ) {
+        throw new InvalidArgumentException(
+            'Invalid thumbnail identity candidate bounds.',
+        );
     }
     foreach ($imageIds as $id) {
-        if (!is_int($id) || $id < 1) { throw new InvalidArgumentException('Invalid thumbnail source identifier.'); }
+        if (!is_int($id) || $id < 1) {
+            throw new InvalidArgumentException(
+                'Invalid thumbnail source identifier.',
+            );
+        }
     }
     foreach ($effectiveStems as $stem) {
         if (!is_string($stem) || $stem === '' || strlen($stem) > 255) {
-            throw new InvalidArgumentException('Invalid thumbnail identity stem.');
+            throw new InvalidArgumentException(
+                'Invalid thumbnail identity stem.',
+            );
         }
     }
     foreach ($candidatePathHashes as $hash) {
-        if (!is_string($hash) || preg_match('/\A[a-f0-9]{64}\z/', $hash) !== 1) {
-            throw new InvalidArgumentException('Invalid thumbnail identity digest.');
+        if (
+            !is_string($hash)
+            || preg_match('/\A[a-f0-9]{64}\z/', $hash) !== 1
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid thumbnail identity digest.',
+            );
         }
     }
-    $version = $hasIdentityVersion ? 'thumbnail_source_identity_version' : '0 AS thumbnail_source_identity_version';
-    $select = 'SELECT id, filename, relative_path, ' . $version . ' FROM images WHERE gallery_id = ? AND ';
+    $version = $hasIdentityVersion
+        ? 'thumbnail_source_identity_version'
+        : '0 AS thumbnail_source_identity_version';
+    $select =
+        'SELECT id, filename, relative_path, '
+        . $version
+        . ' FROM images WHERE gallery_id = ? AND ';
     $database = db();
     $sqlite = $database->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'sqlite';
     $branches = [];
     $params = [];
     if ($imageIds !== []) {
-        $branches[] = $select . 'id IN (' . implode(',', array_fill(0, count($imageIds), '?')) . ')';
+        $branches[] =
+            $select
+            . 'id IN ('
+            . implode(',', array_fill(0, count($imageIds), '?'))
+            . ')';
         array_push($params, $galleryId, ...$imageIds);
     }
     foreach (array_unique($effectiveStems) as $stem) {
-        $branches[] = $select . "(filename = ? OR filename LIKE ? ESCAPE '=' OR filename LIKE ? ESCAPE '=')";
+        $branches[] =
+            $select
+            . "(filename = ? OR filename LIKE ? ESCAPE '=' OR filename LIKE ? ESCAPE '=')";
         $prefix = str_replace(['=', '%', '_'], ['==', '=%', '=_'], $stem);
         $prefix = preg_replace('/[^\x00-\x7F]/u', '_', $prefix);
-        if ($prefix === null) { throw new InvalidArgumentException('Invalid thumbnail identity encoding.'); }
+        if ($prefix === null) {
+            throw new InvalidArgumentException(
+                'Invalid thumbnail identity encoding.',
+            );
+        }
         // SQLite's ASCII-only LIKE misses Unicode folds K/K and S/ſ. MySQL's
         // installed Unicode collation already includes their primary UCA weights.
-        if ($sqlite) { $prefix = str_replace(['k', 'K', 's', 'S'], '_', $prefix); }
+        if ($sqlite) {
+            $prefix = str_replace(['k', 'K', 's', 'S'], '_', $prefix);
+        }
         array_push($params, $galleryId, $stem, $prefix, $prefix . '.%');
     }
     if ($hasIdentityVersion && $candidatePathHashes !== []) {
-        $branches[] = $select . 'relative_path_hash IN (' . implode(',', array_fill(0, count($candidatePathHashes), '?')) . ')';
+        $branches[] =
+            $select
+            . 'relative_path_hash IN ('
+            . implode(',', array_fill(0, count($candidatePathHashes), '?'))
+            . ')';
         array_push($params, $galleryId, ...$candidatePathHashes);
     }
-    if ($branches === []) { return []; }
-    $stmt = $database->prepare('SELECT * FROM (' . implode(' UNION ', $branches) . ') AS identity_candidates LIMIT ' . $limit);
+    if ($branches === []) {
+        return [];
+    }
+    $stmt = $database->prepare(
+        'SELECT * FROM ('
+            . implode(' UNION ', $branches)
+            . ') AS identity_candidates LIMIT '
+            . $limit,
+    );
     $stmt->execute($params);
     return $stmt->fetchAll() ?: [];
 }
@@ -117,22 +174,34 @@ function image_model_thumbnail_identity_candidates(int $galleryId, array $imageI
  *
  * @param array<int,int> $imageIds Positive image identifiers.
  * @param string $column Supported images column name.
- * @param mixed $value Scalar value written to every selected image.
+ * @param int|string $value Integer NSFW state or visibility string written to selected images.
  * @param string $now Shared SQL timestamp for every touched row.
  * @return int Number of rows reported as changed by the database driver.
  */
-function image_model_update_scalar_for_ids(array $imageIds, string $column, mixed $value, string $now): int
-{
+function image_model_update_scalar_for_ids(
+    array $imageIds,
+    string $column,
+    mixed $value,
+    string $now,
+): int {
     if ($imageIds === []) {
         return 0;
     }
 
     if (!in_array($column, ['visibility', 'nsfw_enabled'], true)) {
-        throw new InvalidArgumentException('Unsupported image bulk-update column.');
+        throw new InvalidArgumentException(
+            'Unsupported image bulk-update column.',
+        );
     }
 
     $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
-    $stmt = db()->prepare('UPDATE images SET ' . $column . ' = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+    $stmt = db()->prepare(
+        'UPDATE images SET '
+            . $column
+            . ' = ?, updated_at = ? WHERE id IN ('
+            . $placeholders
+            . ')',
+    );
     $stmt->execute(array_merge([$value, $now], $imageIds));
     return $stmt->rowCount();
 }
@@ -145,9 +214,17 @@ function image_model_update_scalar_for_ids(array $imageIds, string $column, mixe
  * @param string $now Shared SQL timestamp.
  * @return int Number of rows reported as changed.
  */
-function image_model_set_visibility(array $imageIds, string $visibility, string $now): int
-{
-    return image_model_update_scalar_for_ids($imageIds, 'visibility', $visibility, $now);
+function image_model_set_visibility(
+    array $imageIds,
+    string $visibility,
+    string $now,
+): int {
+    return image_model_update_scalar_for_ids(
+        $imageIds,
+        'visibility',
+        $visibility,
+        $now,
+    );
 }
 
 /**
@@ -158,9 +235,17 @@ function image_model_set_visibility(array $imageIds, string $visibility, string 
  * @param string $now Shared SQL timestamp.
  * @return int Number of rows reported as changed.
  */
-function image_model_set_nsfw_enabled(array $imageIds, bool $enabled, string $now): int
-{
-    return image_model_update_scalar_for_ids($imageIds, 'nsfw_enabled', $enabled ? 1 : 0, $now);
+function image_model_set_nsfw_enabled(
+    array $imageIds,
+    bool $enabled,
+    string $now,
+): int {
+    return image_model_update_scalar_for_ids(
+        $imageIds,
+        'nsfw_enabled',
+        $enabled ? 1 : 0,
+        $now,
+    );
 }
 
 /**
@@ -180,11 +265,24 @@ function image_model_count_for_gallery(int $galleryId): int
  * Persist a semantic set of editable image fields for one image row.
  *
  * @param int $imageId Image identifier.
- * @param array<string,mixed> $fields Column-value map prepared by service/controller orchestration.
+ * @param array{
+ *     title?:string|null,
+ *     description?:string|null,
+ *     visibility?:string,
+ *     sort_order?:int,
+ *     editorial_rating?:int|null,
+ *     nsfw_enabled?:int,
+ *     thumbnail_min_size?:int|null,
+ *     thumbnail_max_size?:int|null
+ * } $fields Allowlisted editable fields prepared by service orchestration.
  * @param string $now SQL timestamp written to updated_at.
+ * @return void Persists supplied fields and updates the row timestamp; invalid columns raise InvalidArgumentException.
  */
-function image_model_update_fields(int $imageId, array $fields, string $now): void
-{
+function image_model_update_fields(
+    int $imageId,
+    array $fields,
+    string $now,
+): void {
     if ($imageId <= 0 || $fields === []) {
         return;
     }
@@ -204,7 +302,9 @@ function image_model_update_fields(int $imageId, array $fields, string $now): vo
     $params = [];
     foreach ($fields as $column => $value) {
         if (!is_string($column) || !in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported image update field.');
+            throw new InvalidArgumentException(
+                'Unsupported image update field.',
+            );
         }
         $assignments[] = $column . ' = ?';
         $params[] = $value;
@@ -213,7 +313,9 @@ function image_model_update_fields(int $imageId, array $fields, string $now): vo
     $params[] = $now;
     $params[] = $imageId;
 
-    $stmt = db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?',
+    );
     $stmt->execute($params);
 }
 
@@ -224,14 +326,19 @@ function image_model_update_fields(int $imageId, array $fields, string $now): vo
  * @param bool $publicOnly Whether only public image rows are counted.
  * @return array<int,int> Direct image counts keyed by gallery id.
  */
-function image_model_counts_for_galleries(array $galleryIds, bool $publicOnly): array
-{
+function image_model_counts_for_galleries(
+    array $galleryIds,
+    bool $publicOnly,
+): array {
     if ($galleryIds === []) {
         return [];
     }
 
     $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-    $sql = 'SELECT gallery_id, COUNT(*) AS image_count FROM images WHERE gallery_id IN (' . $placeholders . ')';
+    $sql =
+        'SELECT gallery_id, COUNT(*) AS image_count FROM images WHERE gallery_id IN ('
+        . $placeholders
+        . ')';
     $params = $galleryIds;
     if ($publicOnly) {
         $sql .= ' AND visibility = ?';
@@ -272,9 +379,13 @@ function image_model_find_by_id(int $imageId): ?array
  * @param string $relativePathHash SHA-256 normalized relative path hash.
  * @return array<string,mixed>|null Matching row.
  */
-function image_model_find_by_path_hash(int $galleryId, string $relativePathHash): ?array
-{
-    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ?');
+function image_model_find_by_path_hash(
+    int $galleryId,
+    string $relativePathHash,
+): ?array {
+    $stmt = db()->prepare(
+        'SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ?',
+    );
     $stmt->execute([$galleryId, $relativePathHash]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -306,10 +417,23 @@ function image_model_rows_for_gallery(int $galleryId, bool $publicOnly): array
  * @param int $galleryId Physical gallery owner.
  * @param bool $publicOnly Restrict candidates to published photos for visitors.
  * @param int $limit Number of candidates; default 2 and accepted range 1-4.
- * @return list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order:int|string,nsfw_enabled?:int|string|null,title?:string|null,exif_taken_at?:string|null}> Ordered direct image rows for the cover resolver.
+ * @return list<array{
+ *     id:int|string,
+ *     gallery_id:int|string,
+ *     relative_path:string,
+ *     filename:string,
+ *     visibility:string,
+ *     sort_order:int|string,
+ *     nsfw_enabled?:int|string|null,
+ *     title?:string|null,
+ *     exif_taken_at?:string|null
+ * }> Ordered direct image rows for the cover resolver.
  */
-function image_model_direct_cover_candidates(int $galleryId, bool $publicOnly, int $limit = IMAGE_MODEL_AUTOMATIC_COVER_CANDIDATE_LIMIT): array
-{
+function image_model_direct_cover_candidates(
+    int $galleryId,
+    bool $publicOnly,
+    int $limit = IMAGE_MODEL_AUTOMATIC_COVER_CANDIDATE_LIMIT,
+): array {
     if ($galleryId <= 0 || $limit < 1 || $limit > 4) {
         return [];
     }
@@ -317,7 +441,9 @@ function image_model_direct_cover_candidates(int $galleryId, bool $publicOnly, i
     if ($publicOnly) {
         $sql .= " AND visibility = 'public'";
     }
-    $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename, id LIMIT " . $limit;
+    $sql .=
+        " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename, id LIMIT "
+        . $limit;
     $stmt = db()->prepare($sql);
     $stmt->execute([$galleryId]);
     return $stmt->fetchAll() ?: [];
@@ -328,11 +454,26 @@ function image_model_direct_cover_candidates(int $galleryId, bool $publicOnly, i
  *
  * @param int $galleryId Gallery identifier.
  * @param bool $publicOnly Whether the candidate must be public.
- * @return array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order:int|string,nsfw_enabled?:int|string|null,title?:string|null,exif_taken_at?:string|null}|null Preferred direct image row, or null when no candidate exists.
+ * @return array{
+ *     id:int|string,
+ *     gallery_id:int|string,
+ *     relative_path:string,
+ *     filename:string,
+ *     visibility:string,
+ *     sort_order:int|string,
+ *     nsfw_enabled?:int|string|null,
+ *     title?:string|null,
+ *     exif_taken_at?:string|null
+ * }|null Preferred direct image row, or null when no candidate exists.
  */
-function image_model_first_direct_cover_candidate(int $galleryId, bool $publicOnly): ?array
-{
-    return image_model_direct_cover_candidates($galleryId, $publicOnly, 1)[0] ?? null;
+function image_model_first_direct_cover_candidate(
+    int $galleryId,
+    bool $publicOnly,
+): ?array {
+    return (
+        image_model_direct_cover_candidates($galleryId, $publicOnly, 1)[0]
+            ?? null
+    );
 }
 
 /**
@@ -348,6 +489,7 @@ function image_model_gallery_exif_date_ranges(): array
         GROUP BY gallery_id";
     return db()->query($sql)->fetchAll();
 }
+
 /**
  * Persist scanner-owned display metadata fields for one image row.
  *
@@ -355,10 +497,18 @@ function image_model_gallery_exif_date_ranges(): array
  * primitive can remain independent of migration and feature policy services.
  *
  * @param int $imageId Image identifier.
- * @param array<string,mixed> $fields Scanner display metadata values.
+ * @param array{
+ *     display_width?:int|null,
+ *     display_height?:int|null,
+ *     exif_orientation?:int|null,
+ *     thumbnail_metadata_refreshed_at?:string|null
+ * } $fields Allowlisted scanner display metadata values.
+ * @return void Persists supplied display metadata; invalid columns raise InvalidArgumentException.
  */
-function image_model_update_scan_display_metadata(int $imageId, array $fields): void
-{
+function image_model_update_scan_display_metadata(
+    int $imageId,
+    array $fields,
+): void {
     if ($imageId <= 0 || $fields === []) {
         return;
     }
@@ -373,14 +523,18 @@ function image_model_update_scan_display_metadata(int $imageId, array $fields): 
     $params = [];
     foreach ($fields as $column => $value) {
         if (!is_string($column) || !in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported image scan display field.');
+            throw new InvalidArgumentException(
+                'Unsupported image scan display field.',
+            );
         }
         $assignments[] = '`' . $column . '` = ?';
         $params[] = $value;
     }
     $params[] = $imageId;
 
-    $stmt = db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?',
+    );
     $stmt->execute($params);
 }
 
@@ -388,10 +542,13 @@ function image_model_update_scan_display_metadata(int $imageId, array $fields): 
  * Increment the scanner-owned thumbnail derivative generation for one image.
  *
  * @param int $imageId Image identifier.
+ * @return void Increments the persisted thumbnail generation for the image.
  */
 function image_model_increment_thumbnail_derivative_version(int $imageId): void
 {
-    $stmt = db()->prepare('UPDATE images SET thumbnail_derivative_version = thumbnail_derivative_version + 1 WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE images SET thumbnail_derivative_version = thumbnail_derivative_version + 1 WHERE id = ?',
+    );
     $stmt->execute([$imageId]);
 }
 
@@ -399,10 +556,13 @@ function image_model_increment_thumbnail_derivative_version(int $imageId): void
  * Delete compact thumbnail variant metadata for one image.
  *
  * @param int $imageId Image identifier.
+ * @return void Deletes all stored thumbnail-variant metadata rows for the image.
  */
 function image_model_delete_thumbnail_variants(int $imageId): void
 {
-    $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ?');
+    $stmt = db()->prepare(
+        'DELETE FROM image_thumbnail_variants WHERE image_id = ?',
+    );
     $stmt->execute([$imageId]);
 }
 
@@ -410,13 +570,44 @@ function image_model_delete_thumbnail_variants(int $imageId): void
  * Insert one scanner-discovered image row.
  * New sources explicitly use canonical naming even after interrupted default DDL.
  *
- * @param array<string,mixed> $fields Schema-aware scanner persistence values.
+ * @param array{
+ *     gallery_id?:int,
+ *     relative_path?:string,
+ *     relative_path_hash?:string,
+ *     filename?:string,
+ *     title?:string|null,
+ *     width?:int|null,
+ *     height?:int|null,
+ *     mime_type?:string|null,
+ *     file_size?:int|null,
+ *     modified_at?:string|null,
+ *     exif_taken_at?:string|null,
+ *     exif_camera_make?:string|null,
+ *     exif_camera_model?:string|null,
+ *     exif_lens_model?:string|null,
+ *     exif_focal_length?:string|null,
+ *     exif_aperture?:string|null,
+ *     exif_exposure_time?:string|null,
+ *     exif_iso?:int|null,
+ *     gps_lat?:float|null,
+ *     gps_lng?:float|null,
+ *     gps_altitude?:float|null,
+ *     gps_extracted_at?:string|null,
+ *     checksum_sha256?:string|null,
+ *     sort_order?:int,
+ *     created_at?:string,
+ *     updated_at?:string
+ * } $fields Allowlisted insert columns. Scanner registration supplies gallery
+ *     id, relative path and hash, filename, title, sort order, and timestamps.
+ *     EXIF metadata is optional.
  * @return int Newly created image identifier.
  */
 function image_model_insert_scan_row(array $fields): int
 {
     if ($fields === []) {
-        throw new InvalidArgumentException('Image scan insert fields cannot be empty.');
+        throw new InvalidArgumentException(
+            'Image scan insert fields cannot be empty.',
+        );
     }
 
     $allowedColumns = [
@@ -451,7 +642,9 @@ function image_model_insert_scan_row(array $fields): int
     $values = [];
     foreach ($fields as $column => $value) {
         if (!is_string($column) || !in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported image scan insert field.');
+            throw new InvalidArgumentException(
+                'Unsupported image scan insert field.',
+            );
         }
         $columns[] = $column;
         $values[] = $value;
@@ -460,7 +653,13 @@ function image_model_insert_scan_row(array $fields): int
     $columns[] = 'thumbnail_source_identity_version';
     $values[] = 1;
     $pdo = db();
-    $stmt = $pdo->prepare('INSERT INTO images (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
+    $stmt = $pdo->prepare(
+        'INSERT INTO images ('
+            . implode(', ', $columns)
+            . ') VALUES ('
+            . implode(', ', array_fill(0, count($columns), '?'))
+            . ')',
+    );
     $stmt->execute($values);
     return (int) $pdo->lastInsertId();
 }
@@ -469,11 +668,35 @@ function image_model_insert_scan_row(array $fields): int
  * Update scanner-owned source and EXIF metadata for one image row.
  *
  * @param int $imageId Image identifier.
- * @param array<string,mixed> $fields Schema-aware scanner persistence values.
+ * @param array{
+ *     filename?:string,
+ *     width?:int|null,
+ *     height?:int|null,
+ *     mime_type?:string|null,
+ *     file_size?:int|null,
+ *     modified_at?:string|null,
+ *     exif_taken_at?:string|null,
+ *     exif_camera_make?:string|null,
+ *     exif_camera_model?:string|null,
+ *     exif_lens_model?:string|null,
+ *     exif_focal_length?:string|null,
+ *     exif_aperture?:string|null,
+ *     exif_exposure_time?:string|null,
+ *     exif_iso?:int|null,
+ *     gps_lat?:float|null,
+ *     gps_lng?:float|null,
+ *     gps_altitude?:float|null,
+ *     gps_extracted_at?:string|null,
+ *     checksum_sha256?:string|null
+ * } $fields Allowlisted scanner source and metadata values.
  * @param string $now SQL timestamp written to updated_at.
+ * @return void Persists scanner-owned fields and the shared update timestamp.
  */
-function image_model_update_scan_row(int $imageId, array $fields, string $now): void
-{
+function image_model_update_scan_row(
+    int $imageId,
+    array $fields,
+    string $now,
+): void {
     if ($imageId <= 0 || $fields === []) {
         return;
     }
@@ -503,7 +726,9 @@ function image_model_update_scan_row(int $imageId, array $fields, string $now): 
     $params = [];
     foreach ($fields as $column => $value) {
         if (!is_string($column) || !in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported image scan update field.');
+            throw new InvalidArgumentException(
+                'Unsupported image scan update field.',
+            );
         }
         $assignments[] = $column . ' = ?';
         $params[] = $value;
@@ -512,7 +737,9 @@ function image_model_update_scan_row(int $imageId, array $fields, string $now): 
     $params[] = $now;
     $params[] = $imageId;
 
-    $stmt = db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?',
+    );
     $stmt->execute($params);
 }
 
@@ -524,11 +751,12 @@ function image_model_update_scan_row(int $imageId, array $fields, string $now): 
  */
 function image_model_next_sort_order(int $galleryId): int
 {
-    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?');
+    $stmt = db()->prepare(
+        'SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?',
+    );
     $stmt->execute([$galleryId]);
     return (int) $stmt->fetchColumn() + 10;
 }
-
 
 /**
  * Return metadata-organizer image rows for one gallery in deterministic order.
@@ -538,14 +766,17 @@ function image_model_next_sort_order(int $galleryId): int
  * @param int $limit Maximum rows, or zero for all rows.
  * @return array<int,array<string,mixed>> Organizer source image rows.
  */
-function image_model_metadata_organizer_rows(int $galleryId, int $offset = 0, int $limit = 0): array
-{
+function image_model_metadata_organizer_rows(
+    int $galleryId,
+    int $offset = 0,
+    int $limit = 0,
+): array {
     $offset = max(0, $offset);
     $limit = max(0, $limit);
-    $sql = "SELECT id, gallery_id, relative_path, filename, title, exif_taken_at, sort_order, visibility
+    $sql = 'SELECT id, gallery_id, relative_path, filename, title, exif_taken_at, sort_order, visibility
         FROM images
         WHERE gallery_id = ?
-        ORDER BY exif_taken_at, sort_order, filename, id";
+        ORDER BY exif_taken_at, sort_order, filename, id';
     if ($limit > 0) {
         $sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
     }
@@ -563,8 +794,12 @@ function image_model_metadata_organizer_rows(int $galleryId, int $offset = 0, in
  * @param int $limit Maximum candidate rows.
  * @return array<int,array<string,mixed>> Candidate image rows.
  */
-function image_model_metadata_organizer_candidates(int $galleryId, string $minDate, string $maxDate, int $limit): array
-{
+function image_model_metadata_organizer_candidates(
+    int $galleryId,
+    string $minDate,
+    string $maxDate,
+    int $limit,
+): array {
     $limit = max(1, min(100, $limit));
     $stmt = db()->prepare("SELECT id, gallery_id, relative_path, filename, title, exif_taken_at, sort_order, visibility
         FROM images
@@ -587,8 +822,11 @@ function image_model_metadata_organizer_candidates(int $galleryId, string $minDa
  * @param string $maxDate Inclusive upper YYYY-MM-DD boundary.
  * @return int Number of remaining candidate rows.
  */
-function image_model_metadata_organizer_candidate_count(int $galleryId, string $minDate, string $maxDate): int
-{
+function image_model_metadata_organizer_candidate_count(
+    int $galleryId,
+    string $minDate,
+    string $maxDate,
+): int {
     $stmt = db()->prepare("SELECT COUNT(*)
         FROM images
         WHERE gallery_id = ?
@@ -608,7 +846,9 @@ function image_model_metadata_organizer_candidate_count(int $galleryId, string $
  */
 function image_model_direct_inventory_summary(int $galleryId): array
 {
-    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(updated_at), '') AS newest_update, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS total_size FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'");
+    $stmt = db()->prepare(
+        "SELECT COUNT(*) AS image_count, COALESCE(MAX(updated_at), '') AS newest_update, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS total_size FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'",
+    );
     $stmt->execute([$galleryId]);
     $row = $stmt->fetch() ?: [];
     return [
@@ -625,13 +865,17 @@ function image_model_direct_inventory_summary(int $galleryId): array
  * @param array<int,string> $hashes Lowercase SHA-256 checksums.
  * @return array<int,array<string,mixed>> Matching image rows.
  */
-function image_model_direct_rows_by_checksums(int $galleryId, array $hashes): array
-{
+function image_model_direct_rows_by_checksums(
+    int $galleryId,
+    array $hashes,
+): array {
     if ($hashes === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($hashes), '?'));
-    $stmt = db()->prepare("SELECT id, filename, relative_path, file_size, checksum_sha256 FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' AND checksum_sha256 IN ($placeholders)");
+    $stmt = db()->prepare(
+        "SELECT id, filename, relative_path, file_size, checksum_sha256 FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' AND checksum_sha256 IN ($placeholders)",
+    );
     $stmt->execute(array_merge([$galleryId], $hashes));
     return $stmt->fetchAll() ?: [];
 }
@@ -644,13 +888,18 @@ function image_model_direct_rows_by_checksums(int $galleryId, array $hashes): ar
  * @param string $now Shared update timestamp.
  * @return array{updated:int,skipped:int} Persistence counters.
  */
-function image_model_set_checksums_for_gallery_ids(int $galleryId, array $checksumsByImageId, string $now): array
-{
+function image_model_set_checksums_for_gallery_ids(
+    int $galleryId,
+    array $checksumsByImageId,
+    string $now,
+): array {
     if ($galleryId <= 0 || $checksumsByImageId === []) {
         return ['updated' => 0, 'skipped' => count($checksumsByImageId)];
     }
 
-    $stmt = db()->prepare('UPDATE images SET checksum_sha256 = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
+    $stmt = db()->prepare(
+        'UPDATE images SET checksum_sha256 = ?, updated_at = ? WHERE id = ? AND gallery_id = ?',
+    );
     $updated = 0;
     $skipped = 0;
     foreach ($checksumsByImageId as $imageId => $checksum) {
@@ -683,16 +932,32 @@ function image_model_set_checksums_for_gallery_ids(int $galleryId, array $checks
  * @param string $now Shared extraction/update timestamp.
  * @return array{updated:int,skipped:int} Persistence counters.
  */
-function image_model_set_gps_metadata_for_ids(int $galleryId, array $imageIds, float $latitude, float $longitude, ?float $altitude, string $now): array
-{
+function image_model_set_gps_metadata_for_ids(
+    int $galleryId,
+    array $imageIds,
+    float $latitude,
+    float $longitude,
+    ?float $altitude,
+    string $now,
+): array {
     if ($imageIds === []) {
         return ['updated' => 0, 'skipped' => 0];
     }
-    $stmt = db()->prepare('UPDATE images SET gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
+    $stmt = db()->prepare(
+        'UPDATE images SET gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, updated_at = ? WHERE id = ? AND gallery_id = ?',
+    );
     $updated = 0;
     $skipped = 0;
     foreach ($imageIds as $imageId) {
-        $stmt->execute([$latitude, $longitude, $altitude, $now, $now, $imageId, $galleryId]);
+        $stmt->execute([
+            $latitude,
+            $longitude,
+            $altitude,
+            $now,
+            $now,
+            $imageId,
+            $galleryId,
+        ]);
         if ($stmt->rowCount() > 0) {
             $updated++;
         } else {
@@ -710,14 +975,21 @@ function image_model_set_gps_metadata_for_ids(int $galleryId, array $imageIds, f
  */
 function image_model_public_rows_by_ids(array $imageIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return [];
     }
     $rows = [];
     foreach (array_chunk($ids, 200) as $chunk) {
         $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-        $stmt = db()->prepare('SELECT * FROM images WHERE id IN (' . $placeholders . ') AND visibility = ?');
+        $stmt = db()->prepare(
+            'SELECT * FROM images WHERE id IN ('
+                . $placeholders
+                . ') AND visibility = ?',
+        );
         $stmt->execute(array_merge($chunk, ['public']));
         foreach ($stmt->fetchAll() as $row) {
             $imageId = (int) ($row['id'] ?? 0);
@@ -729,42 +1001,64 @@ function image_model_public_rows_by_ids(array $imageIds): array
     return $rows;
 }
 
-
 /**
  * Return existing image identifiers constrained to one gallery while preserving caller order.
  *
  * @param array<int,int> $imageIds Candidate image identifiers.
+ * @param int $galleryId Gallery that must own each returned image.
  * @return array<int,int> Existing identifiers in the same order as the input set.
  */
-function image_model_existing_ids_for_gallery(int $galleryId, array $imageIds): array
-{
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+function image_model_existing_ids_for_gallery(
+    int $galleryId,
+    array $imageIds,
+): array {
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($galleryId <= 0 || $ids === []) {
         return [];
     }
 
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
+    $stmt = db()->prepare(
+        'SELECT id FROM images WHERE gallery_id = ? AND id IN ('
+            . $placeholders
+            . ')',
+    );
     $stmt->execute(array_merge([$galleryId], $ids));
-    $existingMap = array_fill_keys(array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN)), true);
-    return array_values(array_filter($ids, static fn (int $id): bool => isset($existingMap[$id])));
+    $existingMap = array_fill_keys(
+        array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN)),
+        true,
+    );
+    return array_values(array_filter(
+        $ids,
+        static fn(int $id): bool => isset($existingMap[$id]),
+    ));
 }
 
 /**
  * Return relative paths keyed by image id for rows constrained to one gallery.
  *
  * @param array<int,int> $imageIds Candidate image identifiers.
+ * @param int $galleryId Gallery that must own each returned path.
  * @return array<int,string> Relative paths keyed by image id.
  */
-function image_model_relative_paths_for_gallery_ids(int $galleryId, array $imageIds): array
-{
+function image_model_relative_paths_for_gallery_ids(
+    int $galleryId,
+    array $imageIds,
+): array {
     $ids = image_model_existing_ids_for_gallery($galleryId, $imageIds);
     if ($ids === []) {
         return [];
     }
 
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id, relative_path FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
+    $stmt = db()->prepare(
+        'SELECT id, relative_path FROM images WHERE gallery_id = ? AND id IN ('
+            . $placeholders
+            . ')',
+    );
     $stmt->execute(array_merge([$galleryId], $ids));
     $paths = [];
     foreach ($stmt->fetchAll() as $row) {
@@ -784,7 +1078,10 @@ function image_model_relative_paths_for_gallery_ids(int $galleryId, array $image
  */
 function image_model_rows_by_ids(array $imageIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return [];
     }
@@ -792,7 +1089,9 @@ function image_model_rows_by_ids(array $imageIds): array
     $rows = [];
     foreach (array_chunk($ids, 200) as $chunk) {
         $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-        $stmt = db()->prepare('SELECT * FROM images WHERE id IN (' . $placeholders . ')');
+        $stmt = db()->prepare(
+            'SELECT * FROM images WHERE id IN (' . $placeholders . ')',
+        );
         $stmt->execute($chunk);
         foreach ($stmt->fetchAll() as $row) {
             $imageId = (int) ($row['id'] ?? 0);
@@ -808,19 +1107,33 @@ function image_model_rows_by_ids(array $imageIds): array
  * Apply deterministic upload-session sort orders using precomputed relative-path hashes.
  *
  * @param array<string,int> $sourceIndexByPathHash Source indexes keyed by SHA-256 relative-path hash.
+ * @param int $galleryId Gallery containing candidate image rows.
+ * @param int $sortBase Starting sort order before source-index offsets are applied.
+ * @param string $now Shared SQL timestamp written to changed rows.
  * @return int Number of rows reported as changed.
  */
-function image_model_apply_upload_sort_order(int $galleryId, array $sourceIndexByPathHash, int $sortBase, string $now): int
-{
+function image_model_apply_upload_sort_order(
+    int $galleryId,
+    array $sourceIndexByPathHash,
+    int $sortBase,
+    string $now,
+): int {
     if ($galleryId <= 0 || $sourceIndexByPathHash === []) {
         return 0;
     }
 
-    $select = db()->prepare('SELECT id FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
-    $update = db()->prepare('UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ?');
+    $select = db()->prepare(
+        'SELECT id FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1',
+    );
+    $update = db()->prepare(
+        'UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ?',
+    );
     $changed = 0;
     foreach ($sourceIndexByPathHash as $pathHash => $sourceIndex) {
-        if (!is_string($pathHash) || preg_match('/^[a-f0-9]{64}$/', $pathHash) !== 1) {
+        if (
+            !is_string($pathHash)
+            || preg_match('/^[a-f0-9]{64}$/', $pathHash) !== 1
+        ) {
             continue;
         }
         $select->execute([$galleryId, $pathHash]);
@@ -828,7 +1141,7 @@ function image_model_apply_upload_sort_order(int $galleryId, array $sourceIndexB
         if ($imageId <= 0) {
             continue;
         }
-        $sortOrder = $sortBase + max(0, (int) $sourceIndex) * 10;
+        $sortOrder = $sortBase + (max(0, (int) $sourceIndex) * 10);
         $update->execute([$sortOrder, $now, $imageId]);
         $changed += $update->rowCount() > 0 ? 1 : 0;
     }
@@ -843,20 +1156,31 @@ function image_model_apply_upload_sort_order(int $galleryId, array $sourceIndexB
  */
 function image_model_direct_ids_for_galleries(array $galleryIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id IN ($placeholders) AND relative_path NOT LIKE '%/%' ORDER BY gallery_id, sort_order, filename");
+    $stmt = db()->prepare(
+        "SELECT id FROM images WHERE gallery_id IN ($placeholders) AND relative_path NOT LIKE '%/%' ORDER BY gallery_id, sort_order, filename",
+    );
     $stmt->execute($ids);
     return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
 }
 
-/** Return every direct image identifier in stable gallery-folder/image order. */
+/** Return every direct image identifier in stable gallery-folder/image order.
+ * @return list<int> Image identifiers ordered by gallery folder, sort order, and filename.
+ */
 function image_model_all_direct_ids_ordered(): array
 {
-    $rows = db()->query("SELECT i.id FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename")->fetchAll(\PDO::FETCH_COLUMN);
+    $rows = db()
+        ->query(
+            "SELECT i.id FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename",
+        )
+        ->fetchAll(\PDO::FETCH_COLUMN);
     return array_map('intval', $rows);
 }
 
@@ -875,8 +1199,12 @@ function image_model_all_direct_ids_ordered(): array
  * @param string $now Shared SQL timestamp.
  * @return int Persisted image identifier.
  */
-function image_model_migration_upsert(int $galleryId, ?int $existingImageId, array $fields, string $now): int
-{
+function image_model_migration_upsert(
+    int $galleryId,
+    ?int $existingImageId,
+    array $fields,
+    string $now,
+): int {
     $allowedColumns = [
         'relative_path',
         'relative_path_hash',
@@ -911,13 +1239,18 @@ function image_model_migration_upsert(int $galleryId, ?int $existingImageId, arr
 
     foreach (array_keys($fields) as $column) {
         if (!is_string($column) || !in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported gallery migration image field.');
+            throw new InvalidArgumentException(
+                'Unsupported gallery migration image field.',
+            );
         }
     }
 
     if ($existingImageId !== null && $existingImageId > 0) {
         $updateFields = $fields;
-        unset($updateFields['relative_path'], $updateFields['relative_path_hash']);
+        unset(
+            $updateFields['relative_path'],
+            $updateFields['relative_path_hash'],
+        );
         if ($updateFields !== []) {
             $assignments = [];
             $values = [];
@@ -928,7 +1261,11 @@ function image_model_migration_upsert(int $galleryId, ?int $existingImageId, arr
             $assignments[] = 'updated_at = ?';
             $values[] = $now;
             $values[] = $existingImageId;
-            $stmt = db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?');
+            $stmt = db()->prepare(
+                'UPDATE images SET '
+                    . implode(', ', $assignments)
+                    . ' WHERE id = ?',
+            );
             $stmt->execute($values);
         }
         return $existingImageId;
@@ -940,7 +1277,13 @@ function image_model_migration_upsert(int $galleryId, ?int $existingImageId, arr
     $insertFields['updated_at'] = $now;
     $insertFields['thumbnail_source_identity_version'] = 1;
     $columns = array_keys($insertFields);
-    $stmt = db()->prepare('INSERT INTO images (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
+    $stmt = db()->prepare(
+        'INSERT INTO images ('
+            . implode(', ', $columns)
+            . ') VALUES ('
+            . implode(', ', array_fill(0, count($columns), '?'))
+            . ')',
+    );
     $stmt->execute(array_values($insertFields));
     return (int) db()->lastInsertId();
 }
@@ -952,14 +1295,38 @@ function image_model_migration_upsert(int $galleryId, ?int $existingImageId, arr
  * @param int $galleryId Positive gallery identity.
  * @param int $offset Nonnegative row offset.
  * @param int $limit Page size between one and one hundred rows.
- * @return list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> Stored direct image identities, presentation values and optional derivative metadata; unprojected persistence fields are preserved for compatibility.
+ * @return list<array{
+ *     id:int|string,
+ *     gallery_id:int|string,
+ *     relative_path:string,
+ *     filename:string,
+ *     visibility:string,
+ *     sort_order:int|string,
+ *     exif_taken_at?:string|null,
+ *     title?:string|null,
+ *     width?:int|string|null,
+ *     height?:int|string|null,
+ *     updated_at?:string|null,
+ *     modified_at?:string|null,
+ *     thumbnail_source_identity_version?:int|string|null,
+ *     thumbnail_derivative_version?:int|string|null,
+ *     thumbnail_min_size?:int|string|null,
+ *     thumbnail_max_size?:int|string|null
+ * }>  Stored direct image identities, presentation values and optional
+ *     derivative metadata; unprojected persistence fields are preserved for
+ *     compatibility.
  */
 function image_model_editor_page(int $galleryId, int $offset, int $limit): array
 {
     if ($galleryId < 1 || $offset < 0 || $limit < 1 || $limit > 100) {
         throw new InvalidArgumentException('Invalid editor page bounds.');
     }
-    $stmt = db()->prepare("SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' ORDER BY sort_order, filename, id LIMIT " . $limit . ' OFFSET ' . $offset);
+    $stmt = db()->prepare(
+        "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' ORDER BY sort_order, filename, id LIMIT "
+            . $limit
+            . ' OFFSET '
+            . $offset,
+    );
     $stmt->execute([$galleryId]);
     return $stmt->fetchAll();
 }
@@ -973,10 +1340,15 @@ function image_model_editor_page(int $galleryId, int $offset, int $limit): array
  */
 function image_model_editor_inventory(int $galleryId): array
 {
-    $stmt = db()->prepare("SELECT COUNT(*) AS total, COALESCE(MAX(updated_at), '') AS newest,
+    $stmt = db()->prepare(
+        "SELECT COUNT(*) AS total, COALESCE(MAX(updated_at), '') AS newest,
         COALESCE(SUM(id), 0) AS identities, COALESCE(SUM(id * sort_order), 0) AS ordering
-        FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'");
+        FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'",
+    );
     $stmt->execute([$galleryId]);
     $row = $stmt->fetch() ?: [];
-    return ['total' => (int) ($row['total'] ?? 0), 'revision' => hash('sha256', (string) json_encode($row))];
+    return [
+        'total' => (int) ($row['total'] ?? 0),
+        'revision' => hash('sha256', (string) json_encode($row)),
+    ];
 }

@@ -37,6 +37,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 /**
  * Throw when one administrator viewer-account management expectation fails.
  *
@@ -151,7 +153,7 @@ viewer_admin_account_assert(str_contains($firstState, 'VIEWER_FIRST_LOGIN_PASSWO
 viewer_admin_account_assert(str_contains($firstState, 'viewer_account_requires_password_change($account)') && str_contains($firstState, 'hash_equals($expected, $context)'), 'Forced first-login state must be revalidated against live account state and an integrity context.');
 viewer_admin_account_assert(str_contains($firstComplete, 'viewer_authentication_model_complete_first_login(') && str_contains((string) file_get_contents($root . '/app/models/viewer_authentication.php'), 'must_change_password = 0'), 'Successful first-login password replacement must atomically clear the forced-change flag.');
 viewer_admin_account_assert((bool) preg_match('/\$newSecurityVersion\s*=\s*\(int\)\s*\$account\[\'security_version\'\]\s*\+\s*1/', $firstComplete), 'Successful replacement must increment viewer security_version.');
-viewer_admin_account_assert(str_contains($firstComplete, 'viewer_password_verify($newPassword') && str_contains($firstComplete, "['password_hash']"), 'Replacement must reject reuse of the administrator-issued temporary password.');
+viewer_admin_account_assert(php_source_contains($firstComplete, 'viewer_password_verify($newPassword') && str_contains($firstComplete, "['password_hash']"), 'Replacement must reject reuse of the administrator-issued temporary password.');
 viewer_admin_account_assert(str_contains($firstComplete, 'viewer_authentication_model_revoke_after_first_login_password_change(') && str_contains($authenticationModel, 'UPDATE viewer_sessions SET revoked_at') && str_contains($authenticationModel, 'UPDATE viewer_remember_tokens SET revoked_at'), 'Replacement must revoke older normal/persistent viewer authority.');
 $clearFlagPosition = strpos($firstComplete, 'viewer_authentication_model_complete_first_login(');
 $newNormalSessionPosition = strpos($firstComplete, 'viewer_session_establish($account)');

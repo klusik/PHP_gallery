@@ -1,26 +1,60 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.137.3. Version 0.97 adds the recoverable gallery-trash state machine through migrations `202609070001_gallery_trash_bin.php` and `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6 introduced no schema changes. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of
+application version 0.137.3. Version 0.97 adds the recoverable gallery-trash
+state machine through migrations `202609070001_gallery_trash_bin.php` and
+`202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
+introduced no schema changes. The source of truth remains the migration files in
+`database/migrations/`, but this file summarizes the final model and the purpose
+of each table.
 
-Version 0.108 adds `database/migrations/202609250001_gallery_creation_preferences.php`. Its one new table stores optional per-administrator SimBrief and source-language defaults for later gallery editing; it does not alter gallery rows, visibility, media ownership, or the existing creation replay ledger. The table uses ordinary `CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the installation's normal migration/table-creation authority. The application can still create a name-only gallery before this optional migration, but an explicit request to remember defaults needs verified table and column readiness.
+Version 0.108 adds
+`database/migrations/202609250001_gallery_creation_preferences.php`. Its one new
+table stores optional per-administrator SimBrief and source-language defaults
+for later gallery editing; it does not alter gallery rows, visibility, media
+ownership, or the existing creation replay ledger. The table uses ordinary
+`CREATE TABLE IF NOT EXISTS` DDL, InnoDB and `utf8mb4`, and requires only the
+installation's normal migration/table-creation authority. The application can
+still create a name-only gallery before this optional migration, but an explicit
+request to remember defaults needs verified table and column readiness.
 
-Version 0.105 adds three integrity structures. Migration `202609200001_gallery_image_move_journal.php` records durable image-move intent and recovery state; `202609200002_gallery_edit_revision.php` adds the application-owned `galleries.edit_revision` concurrency value; and `202609200003_admin_operation_keys.php` stores actor-bound replay outcomes for gallery creation and classic uploads. The edit-revision migration is a column-only alteration: it creates no trigger, routine, function, or server-global setting and requires no `SUPER`-style privilege. A retry after an interrupted attempt that already added the column is accepted and records the migration normally.
+Version 0.105 adds three integrity structures. Migration
+`202609200001_gallery_image_move_journal.php` records durable image-move intent
+and recovery state; `202609200002_gallery_edit_revision.php` adds the
+application-owned `galleries.edit_revision` concurrency value; and
+`202609200003_admin_operation_keys.php` stores actor-bound replay outcomes for
+gallery creation and classic uploads. The edit-revision migration is a
+column-only alteration: it creates no trigger, routine, function, or
+server-global setting and requires no `SUPER`-style privilege. A retry after an
+interrupted attempt that already added the column is accepted and records the
+migration normally.
 
-Version 0.104.1 introduces no schema migration, table, column, index, or stored-data conversion. Title completion reads existing gallery metadata through bounded keyset queries and performs normalization in the service layer; it adds no persisted normalized-title storage. Disposable workflow databases belong only to isolated test fixtures, not to the installation's application schema.
+Version 0.104.1 introduces no schema migration, table, column, index, or
+stored-data conversion. Title completion reads existing gallery metadata through
+bounded keyset queries and performs normalization in the service layer; it adds
+no persisted normalized-title storage. Disposable workflow databases belong only
+to isolated test fixtures, not to the installation's application schema.
 
-Version 0.120 adds no schema migration, table, column or index. Its database changes are support-policy documentation and direct disposable engine regression coverage; existing schema inspection and interrupted-DDL replay semantics remain unchanged.
+Version 0.120 adds no schema migration, table, column or index. Its database
+changes are support-policy documentation and direct disposable engine regression
+coverage; existing schema inspection and interrupted-DDL replay semantics remain
+unchanged.
 
 ## Gallery music storage
 
-Physical-gallery presentation defaults use nullable `galleries.presentation_json`,
+Physical-gallery presentation defaults use nullable
+`galleries.presentation_json`,
 added by `202610170001_gallery_presentation_settings.php`. Its version-1 object
-contains launcher visibility, default-ON autoplay, presentation music and the slow/medium/fast interval
+contains launcher visibility, default-ON autoplay, presentation music and the
+slow/medium/fast interval
 and transition presets. Missing, malformed or unknown versions render the prior
-enabled/music/medium defaults. Public reads consume the fetched gallery row without
+enabled/music/medium defaults. Public reads consume the fetched gallery row
+without
 new schema probes. Explicit writes require verified column readiness before any
 editor filesystem effects and advance the existing edit revision in the same
 gallery update. Older forms omit the marker and preserve stored settings.
-Gallery sidecars, folder import, Organizer-created children and Trash restoration
+Gallery sidecars, folder import, Organizer-created children and Trash
+restoration
 retain the supported preferences. The migration uses ordinary ALTER TABLE only;
 duplicate-column recovery remains owned by the existing migration runner.
 The lazy `presentation_gallery_settings` health resolver shares the same schema
@@ -33,7 +67,8 @@ Attachment accounting adds migration
 PDF, music or OFP category, including empty categories. It stores count, bytes
 and import warnings. The gallery foreign key cascades deletion; restoring or
 importing a gallery leaves its missing categories for the next bounded import.
-Original ownership and integrity metadata remain in the existing sidecar indexes.
+Original ownership and integrity metadata remain in the existing sidecar
+indexes.
 Committed attachment writers publish category totals from their validated
 metadata. `Update all` imports missing categories once, then reads SQL sums.
 Import uses insert-if-absent semantics so a concurrent writer's totals win.
@@ -43,8 +78,10 @@ zero or repeatedly scanning all galleries; run the normal upgrade migrations.
 PDF/music capability switches add no separate preference table.
 The canonical keys `feature_flag.gallery_pdf_documents.enabled` and
 `feature_flag.gallery_music.enabled` use existing `app_settings` storage.
-Both missing-key upgrade fallbacks and fresh-install defaults are ON. An explicit
-OFF value is preserved, and no playlist/document metadata or original is deleted.
+Both missing-key upgrade fallbacks and fresh-install defaults are ON. An
+explicit
+OFF value is preserved, and no playlist/document metadata or original is
+deleted.
 
 Manual storage snapshots use `admin_storage_statistics_cache_v3`; resumable
 photo/gallery cursors use `admin_storage_statistics_job_v3`. Older derived keys
@@ -72,14 +109,32 @@ to the music service. Backups must include the entire hidden sidecar. See
 
 ## Cache lifecycle regions
 
-Migration `202610150001_cache_lifecycle_regions.php` creates `cache_lifecycle_regions` with stable SHA-256 `region_key`, safe relative path and owner, last service/successful completion, indexed next-due/retry times, failure count, discovery generation, missing-since and drained state. Bounded JSON columns retain the authoritative working checkpoint, compact current finding and last completed measurement. Fixed discovery/root-file rows avoid per-file registration; the receipt row retains actual confirmed removals across cycles and tombstone retirement. Checkpoint and receipt writes commit in one model-owned transaction. Runtime workers never issue DDL.
+Migration `202610150001_cache_lifecycle_regions.php` creates
+`cache_lifecycle_regions` with stable SHA-256 `region_key`, safe relative path
+and owner, last service/successful completion, indexed next-due/retry times,
+failure count, discovery generation, missing-since and drained state. Bounded
+JSON columns retain the authoritative working checkpoint, compact current
+finding and last completed measurement. Fixed discovery/root-file rows avoid
+per-file registration; the receipt row retains actual confirmed removals across
+cycles and tombstone retirement. Checkpoint and receipt writes commit in one
+model-owned transaction. Runtime workers never issue DDL.
 
-There are at most 4099 admitted rows, including three internal identities. A complete readable root discovery can mark drained absent directories; partial scans cannot. Seven-day tombstones are pruned in batches of at most sixteen only after their private journals have been retired. Repeated checks update the existing row. Missing or corrupt DB/checkpoint evidence is unverified and never becomes an empty successful inventory. Existing unfinished legacy JSON plans stay recoverable until drained; [cache maintenance](docs/CACHE_MAINTENANCE.md#persistent-rotating-regions) describes the authority and recovery boundary.
+There are at most 4099 admitted rows, including three internal identities. A
+complete readable root discovery can mark drained absent directories; partial
+scans cannot. Seven-day tombstones are pruned in batches of at most sixteen only
+after their private journals have been retired. Repeated checks update the
+existing row. Missing or corrupt DB/checkpoint evidence is unverified and never
+becomes an empty successful inventory. Existing unfinished legacy JSON plans
+stay recoverable until drained;
+[cache maintenance](docs/CACHE_MAINTENANCE.md#persistent-rotating-regions)
+describes the authority and recovery boundary.
 
 ## Database Engine
 
-Database version status is maintained separately from schema inventory. PHP Gallery's
-directly tested server/PHP representatives, legacy best-effort guidance, unsupported
+Database version status is maintained separately from schema inventory. PHP
+Gallery's
+directly tested server/PHP representatives, legacy best-effort guidance,
+unsupported
 historical versions, and unqualified newer lines are defined in
 [Database support](docs/DATABASE_SUPPORT.md). A `+` suffix must not be read as
 qualification for every later server series. PHP 8.1 remains a source/runtime
@@ -87,37 +142,74 @@ compatibility floor and does not imply a database test combination.
 
 ### Public content widgets (#126 / #170)
 
-Migration `202610100001_public_content_widgets.php` creates the empty `public_content_widgets` table (InnoDB/utf8mb4). Each row has a random 32-character stable identifier, optional title, bounded Markdown content, draft/published/disabled status, home/gallery/all page scope, normal-flow or floating mode, seven flow slots, preset/custom viewport anchor, X/Y in 0..1000 permille, bounded pixel width, mobile flow fallback, card/minimal appearance, ordering, source language, a positive monotonic revision and UTC timestamps. The compound status/scope/order index supports bounded public reads. No rows are seeded and no public layout is changed by applying this migration alone.
+Migration `202610100001_public_content_widgets.php` creates the empty
+`public_content_widgets` table (InnoDB/utf8mb4). Each row has a random
+32-character stable identifier, optional title, bounded Markdown content,
+draft/published/disabled status, home/gallery/all page scope, normal-flow or
+floating mode, seven flow slots, preset/custom viewport anchor, X/Y in 0..1000
+permille, bounded pixel width, mobile flow fallback, card/minimal appearance,
+ordering, source language, a positive monotonic revision and UTC timestamps. The
+compound status/scope/order index supports bounded public reads. No rows are
+seeded and no public layout is changed by applying this migration alone.
 
-The service `app/services/public_content_widgets.php` validates one complete semantic draft, including supported link destinations and mode/position combinations. The model `app/models/public_content_widgets.php` owns all SQL, conditional revision updates and transactional ordering. The Admin controller handles authenticated, CSRF-protected widget mutations and preview. Public Home/Gallery controllers prepare published widget plans after existing access checks, and the shared view renders escaped markup. Public reads fail closed to an empty plan if widget storage is unavailable. Existing Theme settings do not own these rows. The explicit source language field does not imply that translated widget variants are implemented yet.
+The service `app/services/public_content_widgets.php` validates one complete
+semantic draft, including supported link destinations and mode/position
+combinations. The model `app/models/public_content_widgets.php` owns all SQL,
+conditional revision updates and transactional ordering. The Admin controller
+handles authenticated, CSRF-protected widget mutations and preview. Public
+Home/Gallery controllers prepare published widget plans after existing access
+checks, and the shared view renders escaped markup. Public reads fail closed to
+an empty plan if widget storage is unavailable. Existing Theme settings do not
+own these rows. The explicit source language field does not imply that
+translated widget variants are implemented yet.
 
 ### Multilingual content
 
-Migration `202608150001_multilingual_content.php` adds nullable `content_language` tags to `galleries` and `images`, plus `gallery_translations` and `image_translations`. Existing titles/descriptions are not copied or reclassified; null means the source language is unspecified. Translation tables use owner/language unique keys and cascading foreign keys. Nullable title and description fields permit independent fallback, and rows with both fields blank are removed.
+Migration `202608150001_multilingual_content.php` adds nullable
+`content_language` tags to `galleries` and `images`, plus `gallery_translations`
+and `image_translations`. Existing titles/descriptions are not copied or
+reclassified; null means the source language is unspecified. Translation tables
+use owner/language unique keys and cascading foreign keys. Nullable title and
+description fields permit independent fallback, and rows with both fields blank
+are removed.
 
-Base fields remain the compatibility/source representation. Additional-language rows never affect slugs, filesystem paths, ordering, visibility, passwords, NSFW policy, or media authorization. Gallery sidecars may contain validated `content_language` and `translations` data; unsupported language keys are ignored by persistence normalization.
+Base fields remain the compatibility/source representation. Additional-language
+rows never affect slugs, filesystem paths, ordering, visibility, passwords, NSFW
+policy, or media authorization. Gallery sidecars may contain validated
+`content_language` and `translations` data; unsupported language keys are
+ignored by persistence normalization.
 
-Version 0.111 adds no schema migration. Setup Wizard writes reuse existing `app_settings` and `telemetry_settings` rows, with separate ordered row locks and a database transaction. Missing or unknown required settings storage refuses apply; `base_url` remains filesystem configuration with reversible-save compensation.
+Version 0.111 adds no schema migration. Setup Wizard writes reuse existing
+`app_settings` and `telemetry_settings` rows, with separate ordered row locks
+and a database transaction. Missing or unknown required settings storage refuses
+apply; `base_url` remains filesystem configuration with reversible-save
+compensation.
 
 Migrations target MySQL or MariaDB through PDO MySQL. They use InnoDB tables,
 foreign keys, unique keys, transactions, and `utf8mb4`; transactional workflows
 also depend on `SELECT ... FOR UPDATE`. Several maintenance and replay-safe
-workflows use server-level `GET_LOCK()` advisory locks. Required disposable MySQL
-and MariaDB CI runs cover these paths; see [Database support](docs/DATABASE_SUPPORT.md)
+workflows use server-level `GET_LOCK()` advisory locks. Required disposable
+MySQL
+and MariaDB CI runs cover these paths; see
+[Database support](docs/DATABASE_SUPPORT.md)
 and [Testing](TESTING.md) for the exact evidence boundary.
 
 The initial voting schema declares a `CHECK` constraint on vote values. MySQL
-versions before 8.0.16 parse but do not enforce `CHECK`, so application-side vote
+versions before 8.0.16 parse but do not enforce `CHECK`, so application-side
+vote
 validation remains required. The anonymous-telemetry migration uses `JSON`
 columns and telemetry reports use `JSON_VALID`, `JSON_EXTRACT`, and
-`JSON_UNQUOTE`. MariaDB's `JSON` type is a `LONGTEXT` alias with JSON validation;
+`JSON_UNQUOTE`. MariaDB's `JSON` type is a `LONGTEXT` alias with JSON
+validation;
 the application relies on these shared SQL operations, not identical storage
 formats. The required direct MariaDB row exercises migration and reporting SQL.
 
 Migration replay is deliberately portable. MySQL and MariaDB differ in support
 for `ALTER TABLE ... IF NOT EXISTS`; `app/migrations.php` treats recognized
-duplicate-object DDL errors as safe replay after an interrupted migration. Do not
-replace this path with an engine-version guess or assume all DDL is transactional.
+duplicate-object DDL errors as safe replay after an interrupted migration. Do
+not
+replace this path with an engine-version guess or assume all DDL is
+transactional.
 
 Default table options used by migrations:
 
@@ -125,14 +217,23 @@ Default table options used by migrations:
 ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ```
 
-The database connection is configured in `config.php` and opened by `app/database.php` through the shared `db()` function.
+The database connection is configured in `config.php` and opened by
+`app/database.php` through the shared `db()` function.
 
 
 ## MVC Persistence Ownership
 
-Application persistence is owned by `app/models/`. SQL strings, PDO calls, schema-facing reads/writes, and row mapping for feature code must remain in Model modules. Services orchestrate those model APIs and may apply domain policy, but they do not construct SQL or access PDO directly. Controllers and Views have no application persistence authority.
+Application persistence is owned by `app/models/`. SQL strings, PDO calls,
+schema-facing reads/writes, and row mapping for feature code must remain in
+Model modules. Services orchestrate those model APIs and may apply domain
+policy, but they do not construct SQL or access PDO directly. Controllers and
+Views have no application persistence authority.
 
-This ownership is mechanically enforced by `scripts/check_mvc_boundaries.php`; the reviewed MVC baseline is zero occurrences as of 2026-09-14. Infrastructure-level schema migration and connection code remains in `database/migrations/` and `app/database.php` and is not a bypass for feature persistence.
+This ownership is mechanically enforced by `scripts/check_mvc_boundaries.php`;
+the reviewed MVC baseline is zero occurrences as of 2026-09-14.
+Infrastructure-level schema migration and connection code remains in
+`database/migrations/` and `app/database.php` and is not a bypass for feature
+persistence.
 
 ## Migration System
 
@@ -143,14 +244,21 @@ schema_migrations(version, applied_at)
 ```
 
 The standalone `install.php` runner executes the complete chain before writing
-configuration or creating the administrator. The layout-semantics repair acquires
-the canonical gallery-writer advisory lock on the runner's explicit PDO connection;
+configuration or creating the administrator. The layout-semantics repair
+acquires
+the canonical gallery-writer advisory lock on the runner's explicit PDO
+connection;
 acquisition and release use that same connection, without opening the configured
-application database. Its transaction/checkpoint and sidecar replay markers remain
-unchanged. A refused or failed callback is not recorded, so a retry resumes pending
-migrations. This repair requires no new migration, trigger or elevated server role.
+application database. Its transaction/checkpoint and sidecar replay markers
+remain
+unchanged. A refused or failed callback is not recorded, so a retry resumes
+pending
+migrations. This repair requires no new migration, trigger or elevated server
+role.
 
-Migration files are PHP files returning validated definitions with SQL statements and optional repair callbacks. Legacy statement-list files remain supported. Files are sorted by filename and applied in order.
+Migration files are PHP files returning validated definitions with SQL
+statements and optional repair callbacks. Legacy statement-list files remain
+supported. Files are sorted by filename and applied in order.
 
 Current migration sequence:
 
@@ -315,52 +423,200 @@ app/services/auth_throttle.php
 
 ### Viewer identity and security foundation tables
 
-The viewer domain is deliberately separate from `users`. `current_user()` remains the administrator principal and must never resolve a row from `viewer_accounts`. The future viewer principal is `current_viewer()` and uses viewer-only session/database state. This prevents a viewer login from satisfying historical administrator access checks.
+The viewer domain is deliberately separate from `users`. `current_user()`
+remains the administrator principal and must never resolve a row from
+`viewer_accounts`. The future viewer principal is `current_viewer()` and uses
+viewer-only session/database state. This prevents a viewer login from satisfying
+historical administrator access checks.
 
-`viewer_accounts` contains only the minimum viewer identity/security data: email, deterministic `normalized_email`, native password hash, lifecycle status, security version, security timestamps, the server-owned `must_change_password` first-login flag, and creation/update timestamps. Its lifecycle states are `pending_verification`, `active`, `suspended`, and `disabled`. The binary unique index on `normalized_email` makes the application's chosen email comparison deterministic. `must_change_password=0` is the compatibility default; `1` marks an administrator-provisioned temporary credential that may prove the first login but cannot establish a normal viewer principal or remember-me authority until replaced.
+`viewer_accounts` contains only the minimum viewer identity/security data:
+email, deterministic `normalized_email`, native password hash, lifecycle status,
+security version, security timestamps, the server-owned `must_change_password`
+first-login flag, and creation/update timestamps. Its lifecycle states are
+`pending_verification`, `active`, `suspended`, and `disabled`. The binary unique
+index on `normalized_email` makes the application's chosen email comparison
+deterministic. `must_change_password=0` is the compatibility default; `1` marks
+an administrator-provisioned temporary credential that may prove the first login
+but cannot establish a normal viewer principal or remember-me authority until
+replaced.
 
-Phase 0.6 activates a durable row only after verified staging has been bound to short-lived server-side activation authority. The activation transaction re-locks staging/invitation state, enforces the binary unique email constraint, locks `viewer_account_state`, recounts authoritative durable rows, enforces `max_viewer_accounts`, inserts one `active` row with `security_version=1` and verified/password timestamps, deletes the staging row, and updates both capacity counters before commit. `viewer_account_state.account_count` counts every durable viewer-account row regardless of lifecycle status, so suspended/disabled accounts still consume the installation cap.
+Phase 0.6 activates a durable row only after verified staging has been bound to
+short-lived server-side activation authority. The activation transaction
+re-locks staging/invitation state, enforces the binary unique email constraint,
+locks `viewer_account_state`, recounts authoritative durable rows, enforces
+`max_viewer_accounts`, inserts one `active` row with `security_version=1` and
+verified/password timestamps, deletes the staging row, and updates both capacity
+counters before commit. `viewer_account_state.account_count` counts every
+durable viewer-account row regardless of lifecycle status, so suspended/disabled
+accounts still consume the installation cap.
 
-Administrator direct provisioning uses the same durable account namespace and the same locked `viewer_account_state` installation-cap discipline instead of introducing a second account type. The Admin-authorized email is stored as verified immediately, the temporary password is stored only through `password_hash`, and the row is created `active` with `security_version=1`, `must_change_password=1`, and no completed `password_changed_at`. A successful first-login replacement atomically writes the new hash, clears `must_change_password`, records `password_changed_at`, increments `security_version`, and invalidates older viewer authentication/recovery authority before a normal viewer session is established. Password reset also clears the flag. The plaintext temporary password is not a database field.
+Administrator direct provisioning uses the same durable account namespace and
+the same locked `viewer_account_state` installation-cap discipline instead of
+introducing a second account type. The Admin-authorized email is stored as
+verified immediately, the temporary password is stored only through
+`password_hash`, and the row is created `active` with `security_version=1`,
+`must_change_password=1`, and no completed `password_changed_at`. A successful
+first-login replacement atomically writes the new hash, clears
+`must_change_password`, records `password_changed_at`, increments
+`security_version`, and invalidates older viewer authentication/recovery
+authority before a normal viewer session is established. Password reset also
+clears the flag. The plaintext temporary password is not a database field.
 
-`viewer_account_state` is deliberately tiny: `state_key` primary key, `account_count`, and `updated_at`. Services lazily ensure the singleton row, lock it with `SELECT ... FOR UPDATE`, and can reconcile the count from `viewer_accounts`. This avoids a racy `COUNT(*)`-then-INSERT cap check. Phase 0.7 account deletion locks the same state row, deletes the durable account inside the transaction, recounts authoritative rows, and writes the post-delete count before commit, so rollback cannot persist a capacity decrement without the corresponding deletion.
+`viewer_account_state` is deliberately tiny: `state_key` primary key,
+`account_count`, and `updated_at`. Services lazily ensure the singleton row,
+lock it with `SELECT ... FOR UPDATE`, and can reconcile the count from
+`viewer_accounts`. This avoids a racy `COUNT(*)`-then-INSERT cap check. Phase
+0.7 account deletion locks the same state row, deletes the durable account
+inside the transaction, recounts authoritative rows, and writes the post-delete
+count before commit, so rollback cannot persist a capacity decrement without the
+corresponding deletion.
 
-`viewer_email_change_requests` is the only Phase 0.7 storage addition. Each row belongs to one durable viewer account and stores the candidate email, deterministic normalized candidate, random selector, only the SHA-256 verification-token hash, the account `security_version` captured at request creation, expiry, and consumed/cancelled state. Account-row locking serializes pending-request replacement so only a small bounded active set is possible. Inspection is read-only. Final confirmation re-locks account and request, re-checks expiry/state/security version, and relies on the existing binary unique `viewer_accounts.normalized_email` constraint as the structural last line of defense against a conflicting target-email race. Deleting the account cascades its staged email-change rows.
+`viewer_email_change_requests` is the only Phase 0.7 storage addition. Each row
+belongs to one durable viewer account and stores the candidate email,
+deterministic normalized candidate, random selector, only the SHA-256
+verification-token hash, the account `security_version` captured at request
+creation, expiry, and consumed/cancelled state. Account-row locking serializes
+pending-request replacement so only a small bounded active set is possible.
+Inspection is read-only. Final confirmation re-locks account and request,
+re-checks expiry/state/security version, and relies on the existing binary
+unique `viewer_accounts.normalized_email` constraint as the structural last line
+of defense against a conflicting target-email race. Deleting the account
+cascades its staged email-change rows.
 
-Authority-bearing viewer credentials are stored in separate tables. Verification and reset tables store only `token_hash` plus expiry/consumption/invalidation state. Remember credentials use a public random selector plus hashed verifier. Viewer sessions store only a hash of an independent viewer session token plus account security version. `security_version` allows a password reset/change, recovery, suspension, or logout-all operation to invalidate older authentication state.
+Authority-bearing viewer credentials are stored in separate tables. Verification
+and reset tables store only `token_hash` plus expiry/consumption/invalidation
+state. Remember credentials use a public random selector plus hashed verifier.
+Viewer sessions store only a hash of an independent viewer session token plus
+account security version. `security_version` allows a password reset/change,
+recovery, suspension, or logout-all operation to invalidate older authentication
+state.
 
-Phase 0.6 enforces default per-account active limits of 10 viewer sessions and 10 remember credentials. Expired/revoked rows do not count. Account-row locks serialize admission, and the oldest active `(created_at, id)` rows are revoked deterministically when a replacement slot is needed. Remember restoration replaces selector/verifier authority atomically; the old verifier cannot match after commit. Final password reset is security-version-bound and revokes all viewer sessions/remember credentials while invalidating sibling reset tokens.
+Phase 0.6 enforces default per-account active limits of 10 viewer sessions and
+10 remember credentials. Expired/revoked rows do not count. Account-row locks
+serialize admission, and the oldest active `(created_at, id)` rows are revoked
+deterministically when a replacement slot is needed. Remember restoration
+replaces selector/verifier authority atomically; the old verifier cannot match
+after commit. Final password reset is security-version-bound and revokes all
+viewer sessions/remember credentials while invalidating sibling reset tokens.
 
-`viewer_rate_limit_buckets` and `viewer_rate_limits` are designed for bounded abuse-control storage. The fixed bucket row records the current admitted subject count; the composite `(bucket, subject_hash)` key prevents duplicates. Future throttling normalizes subjects, stores keyed fingerprints instead of raw IP/email values, serializes new-subject admission, and refuses unbounded growth after a configured per-bucket cap.
+`viewer_rate_limit_buckets` and `viewer_rate_limits` are designed for bounded
+abuse-control storage. The fixed bucket row records the current admitted subject
+count; the composite `(bucket, subject_hash)` key prevents duplicates. Future
+throttling normalizes subjects, stores keyed fingerprints instead of raw
+IP/email values, serializes new-subject admission, and refuses unbounded growth
+after a configured per-bucket cap.
 
-`viewer_security_events` contains privacy-bounded diagnostics with optional account relation, keyed IP/user-agent fingerprints, low-risk structured context, and an indexed retention deadline. Secrets and raw viewer email addresses do not have dedicated event columns.
+`viewer_security_events` contains privacy-bounded diagnostics with optional
+account relation, keyed IP/user-agent fingerprints, low-risk structured context,
+and an indexed retention deadline. Secrets and raw viewer email addresses do not
+have dedicated event columns.
 
-`viewer_favourites` and `viewer_collection_items` reference canonical `images.id`. The favourite composite key `(viewer_account_id, image_id)` prevents duplicate favourites. The collection-item composite key `(viewer_collection_id, image_id)` prevents duplicate image membership and `position` supports deterministic ordering. Both image foreign keys use `ON DELETE CASCADE` so deleting canonical media removes stale viewer references. No viewer foreign key ever cascades into `images` or `galleries`.
+`viewer_favourites` and `viewer_collection_items` reference canonical
+`images.id`. The favourite composite key `(viewer_account_id, image_id)`
+prevents duplicate favourites. The collection-item composite key
+`(viewer_collection_id, image_id)` prevents duplicate image membership and
+`position` supports deterministic ordering. Both image foreign keys use
+`ON DELETE CASCADE` so deleting canonical media removes stale viewer references.
+No viewer foreign key ever cascades into `images` or `galleries`.
 
-`viewer_collections` contains bounded plain-text title/description fields and an explicit owner. `viewer_collection_share_tokens` stores only a unique hash of future collection-container share authority plus lifecycle timestamps. Neither table stores media/gallery permission state. **A collection reference is not an authorization grant.** A future collection/share read must re-check canonical gallery/media authorization for every image at request time.
+`viewer_collections` contains bounded plain-text title/description fields and an
+explicit owner. `viewer_collection_share_tokens` stores only a unique hash of
+future collection-container share authority plus lifecycle timestamps. Neither
+table stores media/gallery permission state. **A collection reference is not an
+authorization grant.** A future collection/share read must re-check canonical
+gallery/media authorization for every image at request time.
 
-`viewer_passkeys` stores only public WebAuthn credential material and metadata. The large raw credential id is accompanied by a fixed-size unique SHA-256 identity hash to avoid relying on an oversized variable index on older MySQL/MariaDB/InnoDB configurations. No private passkey key is ever stored.
+`viewer_passkeys` stores only public WebAuthn credential material and metadata.
+The large raw credential id is accompanied by a fixed-size unique SHA-256
+identity hash to avoid relying on an oversized variable index on older
+MySQL/MariaDB/InnoDB configurations. No private passkey key is ever stored.
 
-Deletion policy is deliberately one-directional. Physical account deletion cascades to account-owned viewer credentials/preferences/collections/passkeys and Phase 0.7 email-change requests; collection deletion cascades to its items/share capabilities; image deletion cascades only to viewer references; security events detach with `ON DELETE SET NULL`. Before deleting an account, the lifecycle transaction also revokes still-active collection-share capabilities created by that viewer for collections the viewer does not own, preventing a creator relation from disappearing while leaving a capability alive. Gallery/media content is never deleted by viewer-account cleanup.
+Deletion policy is deliberately one-directional. Physical account deletion
+cascades to account-owned viewer credentials/preferences/collections/passkeys
+and Phase 0.7 email-change requests; collection deletion cascades to its
+items/share capabilities; image deletion cascades only to viewer references;
+security events detach with `ON DELETE SET NULL`. Before deleting an account,
+the lifecycle transaction also revokes still-active collection-share
+capabilities created by that viewer for collections the viewer does not own,
+preventing a creator relation from disappearing while leaving a capability
+alive. Gallery/media content is never deleted by viewer-account cleanup.
 
-Phase 0.5 adds three registration-staging tables without changing the durable account table. `viewer_registration_requests` stores one expiring request per binary-unique `normalized_email`, a hashed verification capability, optional invitation relation, HMAC request metadata, verification-send counters, and indexed expiry/verification state. It stores no password. Verification changes only the staging row to `email_verified`; it does not insert into `viewer_accounts`.
+Phase 0.5 adds three registration-staging tables without changing the durable
+account table. `viewer_registration_requests` stores one expiring request per
+binary-unique `normalized_email`, a hashed verification capability, optional
+invitation relation, HMAC request metadata, verification-send counters, and
+indexed expiry/verification state. It stores no password. Verification changes
+only the staging row to `email_verified`; it does not insert into
+`viewer_accounts`.
 
-`viewer_invitations` stores a unique hash of the invitation capability, optional administrator-visible intended email plus its HMAC target-email authorization binding, optional administrator creator foreign key, expiry, claim, and revocation timestamps. A unique `viewer_registration_requests.viewer_invitation_id` ensures one invitation cannot stage multiple identities. `viewer_registration_state` contains the singleton locked counter used to serialize admission of new pending rows and enforce `max_pending_registration_requests` even under concurrent anonymous requests. Scheduled cleanup deletes expired staging rows in bounded batches and repairs the counter from authoritative table state.
+`viewer_invitations` stores a unique hash of the invitation capability, optional
+administrator-visible intended email plus its HMAC target-email authorization
+binding, optional administrator creator foreign key, expiry, claim, and
+revocation timestamps. A unique
+`viewer_registration_requests.viewer_invitation_id` ensures one invitation
+cannot stage multiple identities. `viewer_registration_state` contains the
+singleton locked counter used to serialize admission of new pending rows and
+enforce `max_pending_registration_requests` even under concurrent anonymous
+requests. Scheduled cleanup deletes expired staging rows in bounded batches and
+repairs the counter from authoritative table state.
 
 
-Phase 4.2 migration `202608200001_viewer_registration_verification_tokens.php` adds `viewer_registration_verification_tokens` without altering or migrating away the existing primary verification columns on `viewer_registration_requests`. The child table contains `id`, `viewer_registration_request_id`, unique `token_hash`, `expires_at`, `created_at`, and nullable `sent_at`. The request foreign key uses `ON DELETE CASCADE`; token lookup is structurally unique; request ownership and expiry have dedicated indexes. Plaintext verification capabilities are never persisted. Existing Phase 4.1 mail continues to validate against the primary request-row hash, while successfully handed-off resend capabilities validate against child hashes.
+Phase 4.2 migration `202608200001_viewer_registration_verification_tokens.php`
+adds `viewer_registration_verification_tokens` without altering or migrating
+away the existing primary verification columns on
+`viewer_registration_requests`. The child table contains `id`,
+`viewer_registration_request_id`, unique `token_hash`, `expires_at`,
+`created_at`, and nullable `sent_at`. The request foreign key uses
+`ON DELETE CASCADE`; token lookup is structurally unique; request ownership and
+expiry have dedicated indexes. Plaintext verification capabilities are never
+persisted. Existing Phase 4.1 mail continues to validate against the primary
+request-row hash, while successfully handed-off resend capabilities validate
+against child hashes.
 
-Phase 4.3 adds no persistent schema and no migration. Its signed form/challenge state is browser-carried, one-time replay authority is bounded to the current PHP session using installation-HMAC nonce fingerprints, and repeated-request signals reuse the existing `viewer_rate_limit_buckets` / `viewer_rate_limits` tables through `viewer_rate_limit_consume()`. Only two new fixed bucket names, `viewer_automation_ip` and `viewer_automation_subnet`, are introduced in policy code; existing subject normalization, HMAC hashing, per-bucket storage caps, cleanup, and fail-closed semantics apply unchanged. No plaintext challenge secret, proof candidate, raw email, or raw IP is added to persistent storage by Phase 4.3.
+Phase 4.3 adds no persistent schema and no migration. Its signed form/challenge
+state is browser-carried, one-time replay authority is bounded to the current
+PHP session using installation-HMAC nonce fingerprints, and repeated-request
+signals reuse the existing `viewer_rate_limit_buckets` / `viewer_rate_limits`
+tables through `viewer_rate_limit_consume()`. Only two new fixed bucket names,
+`viewer_automation_ip` and `viewer_automation_subnet`, are introduced in policy
+code; existing subject normalization, HMAC hashing, per-bucket storage caps,
+cleanup, and fail-closed semantics apply unchanged. No plaintext challenge
+secret, proof candidate, raw email, or raw IP is added to persistent storage by
+Phase 4.3.
 
-Phase 4.4 adds no persistent schema and no migration. `app/services/viewer_security_operations.php` performs read-only, bounded aggregate queries against the already-authoritative `viewer_security_events`, `viewer_rate_limit_buckets`, `viewer_rate_limits`, `viewer_accounts`, `viewer_account_state`, `viewer_registration_requests`, and `viewer_registration_state` storage. It creates no metrics/statistics/analytics table and copies no Viewer account or security data into generic telemetry tables. Fixed event-key/time predicates use the existing `(event_key, created_at)` event index; fixed limiter-bucket reads use the existing bucket primary/indexed time state and policy windows. The operations page does not consume/reset limiter rows, reconcile capacity counters, run maintenance, or mutate registration/verification authority. Stale limiter rows outside their configured window are ignored unless `locked_until` remains in the future.
+Phase 4.4 adds no persistent schema and no migration.
+`app/services/viewer_security_operations.php` performs read-only, bounded
+aggregate queries against the already-authoritative `viewer_security_events`,
+`viewer_rate_limit_buckets`, `viewer_rate_limits`, `viewer_accounts`,
+`viewer_account_state`, `viewer_registration_requests`, and
+`viewer_registration_state` storage. It creates no metrics/statistics/analytics
+table and copies no Viewer account or security data into generic telemetry
+tables. Fixed event-key/time predicates use the existing
+`(event_key, created_at)` event index; fixed limiter-bucket reads use the
+existing bucket primary/indexed time state and policy windows. The operations
+page does not consume/reset limiter rows, reconcile capacity counters, run
+maintenance, or mutate registration/verification authority. Stale limiter rows
+outside their configured window are ignored unless `locked_until` remains in the
+future.
 
-A prepared child token is deliberately unusable until `sent_at` records successful transport handoff. Resend never changes the request row's existing primary token hash or primary token expiry. Active child creation is bounded by an application-level per-request cap and request lifetime; bounded maintenance deletes expired child authorities. Successful verification through either the primary authority or any sent child transitions the same registration request and removes all child siblings. Expired/cancelled request deletion also removes children by cascade, so no child authority can outlive its staged registration owner.
+A prepared child token is deliberately unusable until `sent_at` records
+successful transport handoff. Resend never changes the request row's existing
+primary token hash or primary token expiry. Active child creation is bounded by
+an application-level per-request cap and request lifetime; bounded maintenance
+deletes expired child authorities. Successful verification through either the
+primary authority or any sent child transitions the same registration request
+and removes all child siblings. Expired/cancelled request deletion also removes
+children by cascade, so no child authority can outlive its staged registration
+owner.
 
-See `docs/VIEWER_SECURITY_FOUNDATIONS.md` for the complete token, session, abuse-control, proxy, privacy, pending-registration, mail-budget, cleanup, and threat-model contract.
+See `docs/VIEWER_SECURITY_FOUNDATIONS.md` for the complete token, session,
+abuse-control, proxy, privacy, pending-registration, mail-budget, cleanup, and
+threat-model contract.
 
 ### `galleries`
 
-Primary gallery metadata table. A gallery corresponds to a folder on disk and can have a parent gallery.
+Primary gallery metadata table. A gallery corresponds to a folder on disk and
+can have a parent gallery.
 
 Important columns:
 
@@ -409,7 +665,9 @@ Important columns:
 
 ### `gallery_image_move_journal`
 
-Durable recovery evidence for image moves between physical galleries. One row is created before target files change and is retained independently of the gallery rows so unrelated deletion cannot erase an unresolved move.
+Durable recovery evidence for image moves between physical galleries. One row is
+created before target files change and is retained independently of the gallery
+rows so unrelated deletion cannot erase an unresolved move.
 
 Important columns:
 
@@ -423,11 +681,19 @@ Important columns:
 | `last_error_code` | Nullable allow-listed recovery category rather than a raw exception or filesystem path. |
 | `created_at`, `updated_at` | Lifecycle timestamps used by bounded pending-state inspection. |
 
-The `gallery_image_move_journal_pending` index supports state/age inspection. Source and destination indexes support gallery-scoped ownership checks. Confirmed missing or unknown journal schema blocks a new image move before file mutation; it does not fall back to an unjournaled move. Recovery is explicit through `scripts/reconcile_image_moves.php` and retains unverifiable files.
+The `gallery_image_move_journal_pending` index supports state/age inspection.
+Source and destination indexes support gallery-scoped ownership checks.
+Confirmed missing or unknown journal schema blocks a new image move before file
+mutation; it does not fall back to an unjournaled move. Recovery is explicit
+through `scripts/reconcile_image_moves.php` and retains unverifiable files.
 
 ### `admin_operation_keys`
 
-Durable replay protection for administrator gallery creation, classic upload, and combined create/upload. A row binds one administrator, one random operation key, one operation kind, and one semantic payload. It is not a title/filename uniqueness table and does not prevent intentional duplicates started with a fresh key.
+Durable replay protection for administrator gallery creation, classic upload,
+and combined create/upload. A row binds one administrator, one random operation
+key, one operation kind, and one semantic payload. It is not a title/filename
+uniqueness table and does not prevent intentional duplicates started with a
+fresh key.
 
 Important columns:
 
@@ -441,11 +707,18 @@ Important columns:
 | `response_json` | Nullable bounded canonical mutation response returned unchanged after current authorization and result-ownership checks. |
 | `created_at`, `updated_at` | Claim and lifecycle timestamps. |
 
-The exact primary-key order and uniqueness are inspected before claims are accepted. Confirmed missing or unknown storage refuses the operation before target work; requests never create or repair the ledger themselves. Uncertain rows are retained for explicit `scripts/reconcile_admin_operations.php` investigation instead of being expired, stolen, or rerun automatically.
+The exact primary-key order and uniqueness are inspected before claims are
+accepted. Confirmed missing or unknown storage refuses the operation before
+target work; requests never create or repair the ledger themselves. Uncertain
+rows are retained for explicit `scripts/reconcile_admin_operations.php`
+investigation instead of being expired, stolen, or rerun automatically.
 
 ### `user_gallery_creation_preferences`
 
-One optional row per administrator supplies pre-filled values when that administrator edits or creates a later gallery. It is not a site-wide setting and does not copy secrets, access rights, or a particular gallery's metadata into new galleries.
+One optional row per administrator supplies pre-filled values when that
+administrator edits or creates a later gallery. It is not a site-wide setting
+and does not copy secrets, access rights, or a particular gallery's metadata
+into new galleries.
 
 | Column | Type and meaning |
 | --- | --- |
@@ -455,43 +728,72 @@ One optional row per administrator supplies pre-filled values when that administ
 | `content_language` | `VARCHAR(16) NOT NULL DEFAULT ''`; selected source-content language, accepted only from supported language codes. |
 | `created_at`, `updated_at` | Non-null SQL datetimes for row creation and the latest preference update. |
 
-The model uses an insert-or-update on `user_id` and preserves values whose Remember checkboxes were not selected. Choosing the single visible SimBrief identifier for a new default updates its matching slot and clears the alternate slot so later prefill is unambiguous. Reads return empty defaults when storage is confirmed missing or inspection is unknown; they do not treat an unknown state as permission to write. Explicit Remember requests are validated and require confirmed available storage before any new-gallery mutation or editor save. If persistence fails after a successful gallery save or creation, the gallery remains saved and the administrator receives a warning about the defaults. Applying the migration does not rewrite existing gallery descriptions, OFP files, translations, or user preferences in other tables.
+The model uses an insert-or-update on `user_id` and preserves values whose
+Remember checkboxes were not selected. Choosing the single visible SimBrief
+identifier for a new default updates its matching slot and clears the alternate
+slot so later prefill is unambiguous. Reads return empty defaults when storage
+is confirmed missing or inspection is unknown; they do not treat an unknown
+state as permission to write. Explicit Remember requests are validated and
+require confirmed available storage before any new-gallery mutation or editor
+save. If persistence fails after a successful gallery save or creation, the
+gallery remains saved and the administrator receives a warning about the
+defaults. Applying the migration does not rewrite existing gallery descriptions,
+OFP files, translations, or user preferences in other tables.
 
 ### `gallery_trash_entries`
 
-Durable state-machine record for recoverable administrator deletion of gallery subtrees. One row
-represents one selected root and survives deletion of the corresponding live `galleries` rows. It
+Durable state-machine record for recoverable administrator deletion of gallery
+subtrees. One row
+represents one selected root and survives deletion of the corresponding live
+`galleries` rows. It
 has no foreign key to `galleries` by design.
 
 Important columns:
 
-- `trash_token`: random 32-character hexadecimal identity and storage-directory key.
-- `status`: lifecycle state (`preparing`, `trashed`, `restoring`, `purging`, `restored`, `purged`, or
+- `trash_token`: random 32-character hexadecimal identity and storage-directory
+  key.
+- `status`: lifecycle state (`preparing`, `trashed`, `restoring`, `purging`,
+  `restored`, `purged`, or
   `broken`).
-- `original_folder_path` / `original_parent_folder_path`: stable restore location metadata.
-- `subtree_gallery_count`, `image_count`, `byte_size`: bounded Admin display and audit counters.
-- `snapshot_version`, `snapshot_json`: versioned durable restore metadata. The JSON is `LONGTEXT`
-  because large gallery subtrees can contain many image metadata records; finalized restore/purge
+- `original_folder_path` / `original_parent_folder_path`: stable restore
+  location metadata.
+- `subtree_gallery_count`, `image_count`, `byte_size`: bounded Admin display and
+  audit counters.
+- `snapshot_version`, `snapshot_json`: versioned durable restore metadata. The
+  JSON is `LONGTEXT`
+  because large gallery subtrees can contain many image metadata records;
+  finalized restore/purge
   paths may clear it after it is no longer needed.
-- `trash_relative_path`: project-relative persistent storage identity. Current entries use
-  `data/gallery-trash/<trash_token>`; early development entries under `cache/gallery-trash` are
+- `trash_relative_path`: project-relative persistent storage identity. Current
+  entries use
+  `data/gallery-trash/<trash_token>`; early development entries under
+  `cache/gallery-trash` are
   resolved only for backward-compatible recovery.
-- `deleted_by_user_id`: nullable audit attribution with `ON DELETE SET NULL` to `users`.
-- `deleted_at`, `purge_after`: local application timestamps matching `now_sql()`. `purge_after` is
+- `deleted_by_user_id`: nullable audit attribution with `ON DELETE SET NULL` to
+  `users`.
+- `deleted_at`, `purge_after`: local application timestamps matching
+  `now_sql()`. `purge_after` is
   inert while automatic purge is disabled.
-- `operation_started_at`, `last_error_code`: crash-reconciliation metadata for transitional/problem
+- `operation_started_at`, `last_error_code`: crash-reconciliation metadata for
+  transitional/problem
   states.
 - `restored_at`, `purged_at`: terminal lifecycle timestamps.
 
-The Trash feature itself defaults on. Retention-based automatic purge is an independent app setting
-and defaults off. Manual restore and permanent deletion do not depend on automatic purge being
-enabled. Existing rows and payloads remain available if the Trash feature is disabled.
+The Trash feature itself defaults on. Retention-based automatic purge is an
+independent app setting
+and defaults off. Manual restore and permanent deletion do not depend on
+automatic purge being
+enabled. Existing rows and payloads remain available if the Trash feature is
+disabled.
 
 ### EXIF/GPS Display Defaults
 
-The global default is stored in `app_settings.exif_gps_maps_default_enabled`. Missing values are treated as enabled (`1`), so scanned EXIF/GPS data is visible unless a gallery branch explicitly opts out.
+The global default is stored in `app_settings.exif_gps_maps_default_enabled`.
+Missing values are treated as enabled (`1`), so scanned EXIF/GPS data is visible
+unless a gallery branch explicitly opts out.
 
-The per-gallery value is stored in `galleries.gps_map_enabled` after migration `202606060001_exif_gps_default_display.php`:
+The per-gallery value is stored in `galleries.gps_map_enabled` after migration
+`202606060001_exif_gps_default_display.php`:
 
 | Value | Meaning |
 | --- | --- |
@@ -499,13 +801,22 @@ The per-gallery value is stored in `galleries.gps_map_enabled` after migration `
 | `1` | Force EXIF/GPS map and coordinate display on for this gallery branch. |
 | `0` | Force EXIF/GPS map and coordinate display off for this gallery branch. |
 
-Admin dashboard settings use `cms_admin_exif_gps_settings()` to change the global default and optionally reset all gallery overrides to `NULL`. Gallery editing uses the same storage normalization through `gallery_gps_map_storage_value()`, so full-page editing and side-panel editing resolve the same effective state through `gallery_effective_gps_map_enabled()`.
+Admin dashboard settings use `cms_admin_exif_gps_settings()` to change the
+global default and optionally reset all gallery overrides to `NULL`. Gallery
+editing uses the same storage normalization through
+`gallery_gps_map_storage_value()`, so full-page editing and side-panel editing
+resolve the same effective state through `gallery_effective_gps_map_enabled()`.
 
 ### Lightbox Browsing Mode Settings
 
-The Theme default is stored in `app_settings` under `theme_lightbox_browsing_mode`. Accepted values are `single`, `picture_strip`, and `3d_carousel`; invalid stored values are normalized back to `single` by `app/services/gallery_lightbox_mode.php`. The older `strip` value is accepted as a legacy alias and normalized to `picture_strip`.
+The Theme default is stored in `app_settings` under
+`theme_lightbox_browsing_mode`. Accepted values are `single`, `picture_strip`,
+and `3d_carousel`; invalid stored values are normalized back to `single` by
+`app/services/gallery_lightbox_mode.php`. The older `strip` value is accepted as
+a legacy alias and normalized to `picture_strip`.
 
-The per-gallery override is stored in `galleries.lightbox_browsing_mode`. `NULL` means inherit the Theme default. Non-null values currently support:
+The per-gallery override is stored in `galleries.lightbox_browsing_mode`. `NULL`
+means inherit the Theme default. Non-null values currently support:
 
 | Value | Meaning |
 | --- | --- |
@@ -513,7 +824,8 @@ The per-gallery override is stored in `galleries.lightbox_browsing_mode`. `NULL`
 | `picture_strip` | Use the picture-strip lightbox for this gallery. |
 | `3d_carousel` | Use the layered 3D carousel lightbox for this gallery. |
 
-`gallery.json` sidecars may also contain `lightbox_browsing_mode`. The import path stores only valid explicit values; inheritance remains `NULL`.
+`gallery.json` sidecars may also contain `lightbox_browsing_mode`. The import
+path stores only valid explicit values; inheritance remains `NULL`.
 
 Important indexes and constraints:
 
@@ -559,12 +871,18 @@ Important columns:
 | `thumbnail_source_identity_version` | Derivative naming: existing photographs retain `0` (verified unique legacy stem); new inserts default to `1` (complete relative-path digest). |
 | `created_at`, `updated_at` | Audit timestamps. |
 
-Migration `202609300001_thumbnail_source_identity.php` adds the naming marker with
-default `0` for existing rows, then changes the insertion default to `1`. It does
-not read, regenerate, rename or delete image files, and preserves thumbnail metadata
-generations. New ingestion requires verified marker storage; legacy derivative reads
-also verify ownership across all images in the gallery, including protected images.
-The additive `idx_images_gallery_filename` index supports bounded collision candidate
+Migration `202609300001_thumbnail_source_identity.php` adds the naming marker
+with
+default `0` for existing rows, then changes the insertion default to `1`. It
+does
+not read, regenerate, rename or delete image files, and preserves thumbnail
+metadata
+generations. New ingestion requires verified marker storage; legacy derivative
+reads
+also verify ownership across all images in the gallery, including protected
+images.
+The additive `idx_images_gallery_filename` index supports bounded collision
+candidate
 lookups. Creating this database index may take time on large installations; the
 migration performs no image processing.
 
@@ -641,13 +959,16 @@ Authentication tables contain credentials or credential-derived state. Schema
 health output and logs may expose only validated table/column identifiers,
 normalized capability names, bounded status/error categories, and request
 correlation IDs. They must never include password hashes, reset/share token
-values, remember-login cookies, OAuth client secrets, CSRF values, DSNs, raw SQL,
+values, remember-login cookies, OAuth client secrets, CSRF values, DSNs, raw
+SQL,
 or raw database exception messages.
 
 ### Phase 10 destructive/ingestion schema capabilities
 
-Destructive and ingestion operations use `app/services/mutation_schema_policy.php`
-on top of the shared three-state inspector. These checks are mutation guards, not
+Destructive and ingestion operations use
+`app/services/mutation_schema_policy.php`
+on top of the shared three-state inspector. These checks are mutation guards,
+not
 new migrations. Their purpose is to prove that the database shape needed by an
 existing write/delete workflow is known before persistent state changes.
 
@@ -673,12 +994,16 @@ failure is `unknown` and stops the import instead of producing a partially
 registered image.
 
 Thumbnail writes have a second compatibility preflight because old installations
-may not have `image_thumbnail_variants` at all. If the table is confirmed absent,
+may not have `image_thumbnail_variants` at all. If the table is confirmed
+absent,
 the established derivative-file-only mode may continue. If the table exists,
-`thumbnail_metadata_preflight_write_schema()` also checks optional variant columns
-`derivative_version`, `gallery_id`, and `thumbnail_rel_path`, plus optional source
+`thumbnail_metadata_preflight_write_schema()` also checks optional variant
+columns
+`derivative_version`, `gallery_id`, and `thumbnail_rel_path`, plus optional
+source
 geometry/status columns `images.display_width`, `display_height`,
-`exif_orientation`, and `thumbnail_metadata_refreshed_at`. Missing optional fields
+`exif_orientation`, and `thumbnail_metadata_refreshed_at`. Missing optional
+fields
 are omitted from writes; unknown fields block the derivative mutation before a
 thumbnail is generated, replaced, or deleted.
 
@@ -691,7 +1016,8 @@ Upload-token revocation uses narrower capabilities than token issuance:
   sufficient for the existing credential-delete operation.
 
 This is a security-tightening exception, not a general partial-schema fallback.
-If the columns required for revocation cannot themselves be inspected, revocation
+If the columns required for revocation cannot themselves be inspected,
+revocation
 is refused rather than guessed.
 
 The legacy `db_table_exists()` and `db_column_exists()` helpers remain for
@@ -704,7 +1030,8 @@ database-maintenance, and updater code instead uses explicit `missing` versus
 Mutation-schema refusal diagnostics use the event
 `database.mutation_schema_refused`. Its context is intentionally limited to a
 bounded capability identifier, normalized state, stable operation identifier,
-and validated affected table/column names. It must not contain SQL, PDO exception
+and validated affected table/column names. It must not contain SQL, PDO
+exception
 messages, DSNs, database credentials, API/WebDAV secrets, upload filenames or
 paths, migration source paths, or updater staging paths.
 
@@ -713,30 +1040,40 @@ paths, migration source paths, or updater staging paths.
 Phase 11 completes the schema-reliability conversion for optional presentation,
 reporting, map, AI, navigation, and telemetry features. It adds no database
 migration by itself. `app/services/presentation_schema_policy.php` describes the
-shape that existing migrations are expected to provide and applies read/write policy
+shape that existing migrations are expected to provide and applies read/write
+policy
 to the structured inspector results.
 
 The database-state interpretation is intentionally different from destructive
 Phase 10 mutation policy:
 
 - `available`: use the optional database-backed feature normally;
-- confirmed `missing`: omit the optional read surface or show migration guidance. A
+- confirmed `missing`: omit the optional read surface or show migration
+  guidance. A
   write is allowed to skip persistence only where the exact legacy behavior has
   been audited;
 - `unknown`: a safe base page may omit the optional surface, but the failure is
   logged and visible in System Health. A write must not interpret `unknown` as
   evidence that a table or column is absent;
 - `disabled`: an administrator-disabled optional feature is reported without
-  resolving its schema capability, so System Health does not spend metadata queries
+  resolving its schema capability, so System Health does not spend metadata
+  queries
   on an inactive feature.
 
-The final capability set is shown below. Metadata-organizer capture-date grouping
-also uses a narrow internal structured check for `images.exif_taken_at`; it is not a
-separate System Health card because it is a derivative consumer of the EXIF metadata
-surface rather than an independently configured feature. Gallery-description favicon
-storage similarly uses the internal `presentation.link_favicon_cache` capability:
-confirmed missing storage omits the icon cache, while unknown inspection state omits
-and diagnoses the cosmetic operation without treating the failure as proof of absence.
+The final capability set is shown below. Metadata-organizer capture-date
+grouping
+also uses a narrow internal structured check for `images.exif_taken_at`; it is
+not a
+separate System Health card because it is a derivative consumer of the EXIF
+metadata
+surface rather than an independently configured feature. Gallery-description
+favicon
+storage similarly uses the internal `presentation.link_favicon_cache`
+capability:
+confirmed missing storage omits the icon cache, while unknown inspection state
+omits
+and diagnoses the cosmetic operation without treating the failure as proof of
+absence.
 
 The final capability set is:
 
@@ -760,39 +1097,55 @@ The final capability set is:
 
 `schema_inspection_column_nullable()` is part of the final observation API. It
 queries `information_schema.COLUMNS.IS_NULLABLE` through the same validated,
-request-cached executor boundary as table/column/index/definition inspection. The
-GPS override capability uses this to distinguish the intended nullable per-gallery
+request-cached executor boundary as table/column/index/definition inspection.
+The
+GPS override capability uses this to distinguish the intended nullable
+per-gallery
 override shape from a schema that cannot safely represent inheritance.
 
 The presentation health registry is lazy. Calling
-`presentation_schema_health_definitions()` builds resolver metadata only and performs
-zero database metadata queries. `admin_presentation_schema_health_statuses()` checks
-feature flags first, resolves enabled capabilities only, and reuses the request-local
-cache. The voting aggregate has ten first-use metadata requirements and performs no
+`presentation_schema_health_definitions()` builds resolver metadata only and
+performs
+zero database metadata queries. `admin_presentation_schema_health_statuses()`
+checks
+feature flags first, resolves enabled capabilities only, and reuses the
+request-local
+cache. The voting aggregate has ten first-use metadata requirements and performs
+no
 additional metadata queries when re-evaluated within the same PHP request.
 
 #### Intentional dynamic Admin-report inventory query
 
 `admin_gallery_report_exact_database_table_counts()` still queries
-`information_schema.TABLES` directly for the active database. This is intentional
+`information_schema.TABLES` directly for the active database. This is
+intentional
 and is not an existence-policy bypass. The Complete Admin Gallery Report must
-enumerate every base table present at runtime, including future/plugin tables whose
+enumerate every base table present at runtime, including future/plugin tables
+whose
 names are not known in advance. Named-object helpers cannot express that dynamic
-inventory. Failure produces generic report-unavailable text and never includes raw
+inventory. Failure produces generic report-unavailable text and never includes
+raw
 SQL or the database exception message in the exported report. All known optional
 report section dependencies use structured schema inspection.
 
 #### No Phase 11 migration
 
-No new schema objects are introduced by the policy conversion. Existing migrations
-remain the source of truth for the optional tables and columns above. A `missing`
-result therefore means either an older installation or pending migration, while an
-`unknown` result is an operational metadata-inspection problem and must not be fixed
+No new schema objects are introduced by the policy conversion. Existing
+migrations
+remain the source of truth for the optional tables and columns above. A
+`missing`
+result therefore means either an older installation or pending migration, while
+an
+`unknown` result is an operational metadata-inspection problem and must not be
+fixed
 by guessing or applying migrations blindly.
 
 ### `duplicate_photo_ledger_pairs`
 
-Stores administrator-confirmed/reviewed image relationships that should not be offered again by the Duplicate Photo Detector. The pair is canonicalized so the smaller image id is always stored in `image_id_low` and the larger in `image_id_high`.
+Stores administrator-confirmed/reviewed image relationships that should not be
+offered again by the Duplicate Photo Detector. The pair is canonicalized so the
+smaller image id is always stored in `image_id_low` and the larger in
+`image_id_high`.
 
 | Column | Meaning |
 | --- | --- |
@@ -801,11 +1154,22 @@ Stores administrator-confirmed/reviewed image relationships that should not be o
 | `image_id_high` | Larger image id in the canonical ignored pair. |
 | `created_at` | When the pair was added to the ledger. |
 
-Primary key `(user_id, image_id_low, image_id_high)` prevents duplicate decisions for the same administrator. Indexes `duplicate_photo_ledger_pairs_low_index` and `duplicate_photo_ledger_pairs_high_index` support cleanup and lookup by either referenced image. Both image foreign keys and the user foreign key use `ON DELETE CASCADE`, so ledger rows disappear automatically when their owning account or either referenced image is deleted. Ledger rows filter future result pairs; image deletion is a separate explicit detector action delegated to the normal gallery image-deletion service.
+Primary key `(user_id, image_id_low, image_id_high)` prevents duplicate
+decisions for the same administrator. Indexes
+`duplicate_photo_ledger_pairs_low_index` and
+`duplicate_photo_ledger_pairs_high_index` support cleanup and lookup by either
+referenced image. Both image foreign keys and the user foreign key use
+`ON DELETE CASCADE`, so ledger rows disappear automatically when their owning
+account or either referenced image is deleted. Ledger rows filter future result
+pairs; image deletion is a separate explicit detector action delegated to the
+normal gallery image-deletion service.
 
 ### `duplicate_photo_ledger_galleries`
 
-Stores exact-gallery suppression rules for the Duplicate Photo Detector. A rule applies only to the stored `gallery_id`; it deliberately does not imply descendants. This keeps a parent gallery and any nested child gallery independently reviewable from the left/right comparison controls.
+Stores exact-gallery suppression rules for the Duplicate Photo Detector. A rule
+applies only to the stored `gallery_id`; it deliberately does not imply
+descendants. This keeps a parent gallery and any nested child gallery
+independently reviewable from the left/right comparison controls.
 
 | Column | Meaning |
 | --- | --- |
@@ -813,9 +1177,16 @@ Stores exact-gallery suppression rules for the Duplicate Photo Detector. A rule 
 | `gallery_id` | Exact gallery whose photos should be omitted from duplicate pairs for this administrator. |
 | `created_at` | When the gallery rule was added. |
 
-Primary key `(user_id, gallery_id)` keeps each exact-gallery rule unique per administrator. Index `duplicate_photo_ledger_galleries_gallery_index` supports lookup and cascade cleanup by gallery. User and gallery foreign keys use `ON DELETE CASCADE`. **Clear ledger** deletes rows from both ledger tables only for the authenticated administrator.
+Primary key `(user_id, gallery_id)` keeps each exact-gallery rule unique per
+administrator. Index `duplicate_photo_ledger_galleries_gallery_index` supports
+lookup and cascade cleanup by gallery. User and gallery foreign keys use
+`ON DELETE CASCADE`. **Clear ledger** deletes rows from both ledger tables only
+for the authenticated administrator.
 
-These tables are created by `database/migrations/202608080001_duplicate_photo_ledger.php`. No changes are made to the `images` matching metadata columns. Existing checksum and EXIF data remains the detector evidence source.
+These tables are created by
+`database/migrations/202608080001_duplicate_photo_ledger.php`. No changes are
+made to the `images` matching metadata columns. Existing checksum and EXIF data
+remains the detector evidence source.
 
 ### `tags`
 
@@ -855,7 +1226,11 @@ Primary key is `(image_id, tag_id)`.
 
 Key-value storage for mutable runtime settings.
 
-Public tag-page presentation uses scalar settings in this existing table: tag_page_gallery_grid_columns, tag_page_gallery_grid_rows, and tag_page_gallery_description_layout. Missing values inherit the global pagination dimensions and Theme gallery-card layout, so no schema migration is required.
+Public tag-page presentation uses scalar settings in this existing table:
+tag_page_gallery_grid_columns, tag_page_gallery_grid_rows, and
+tag_page_gallery_description_layout. Missing values inherit the global
+pagination dimensions and Theme gallery-card layout, so no schema migration is
+required.
 
 | Column | Meaning |
 | --- | --- |
@@ -865,27 +1240,100 @@ Public tag-page presentation uses scalar settings in this existing table: tag_pa
 
 Use `app/services/app_settings.php` to access this table.
 
-The canonical optional-capability policy reuses this table and introduces no schema migration. Capabilities using the default storage adapter persist explicit administrator choices as `feature_flag.<capability>.enabled`; missing keys fall back to the registry default. Existing domain-owned masters are not copied into that namespace: Gallery Trash continues to use `gallery_trash_enabled` plus its independent purge/retention settings, public thumbnail self-healing continues to use `thumbnail_background_warmup_enabled`, and Development Diagnostics continues to use `dev_mode_enabled`. Remote Favicon Discovery uses the explicit scalar key `remote_favicon_discovery_enabled`. The one-time fresh-install seeder records `feature_capability.fresh_defaults_seeded` after initializing declared fresh defaults; it never overwrites an explicit pre-existing value.
+The canonical optional-capability policy reuses this table and introduces no
+schema migration. Capabilities using the default storage adapter persist
+explicit administrator choices as `feature_flag.<capability>.enabled`; missing
+keys fall back to the registry default. Existing domain-owned masters are not
+copied into that namespace: Gallery Trash continues to use
+`gallery_trash_enabled` plus its independent purge/retention settings, public
+thumbnail self-healing continues to use `thumbnail_background_warmup_enabled`,
+and Development Diagnostics continues to use `dev_mode_enabled`. Remote Favicon
+Discovery uses the explicit scalar key `remote_favicon_discovery_enabled`. The
+one-time fresh-install seeder records `feature_capability.fresh_defaults_seeded`
+after initializing declared fresh defaults; it never overwrites an explicit
+pre-existing value.
 
-Capability OFF does not delete related rows or files. Smart Gallery definitions/attachments, Trash entries and purge preferences, authored translations, duplicate-review ledger data, tags, Viewer Account data, and other persisted optional subsystem state remain in their existing tables/storage so OFF -> ON is reversible. Route/UI gating is application policy, not a schema mutation.
+Capability OFF does not delete related rows or files. Smart Gallery
+definitions/attachments, Trash entries and purge preferences, authored
+translations, duplicate-review ledger data, tags, Viewer Account data, and other
+persisted optional subsystem state remain in their existing tables/storage so
+OFF -> ON is reversible. Route/UI gating is application policy, not a schema
+mutation.
 
-Public language configuration uses four independent keys in this table. `public_language` stores the site-wide public interface default. `public_language_selector_enabled` controls whether visitors may override that default and is treated as enabled (`1`) when missing. `public_language_selector_languages` stores the site-wide ordered availability list containing a non-empty subset of the maintained `en`, `cs`, `de`, and `sv` codes; missing, malformed, or empty values fall back to all four. `public_language_selector_design` stores normalized JSON containing the selected five-preset design, browser-visible elements, layout choices, and safe per-preset visual overrides; colors accept validated hex values or the literal `transparent`, and missing or malformed content falls back to Classic with flags and codes enabled. Basic Settings writes merge preset/flag changes into this document so detailed Theme overrides are retained. These keys configure whether, what, and how viewers may choose, but never store an individual viewer's choice. That personal preference is persisted only in the viewer's browser cookie and mirrored in the request session. The viewer settings require no migration and do not change which catalogs administrators may select or edit.
+Public language configuration uses four independent keys in this table.
+`public_language` stores the site-wide public interface default.
+`public_language_selector_enabled` controls whether visitors may override that
+default and is treated as enabled (`1`) when missing.
+`public_language_selector_languages` stores the site-wide ordered availability
+list containing a non-empty subset of the maintained `en`, `cs`, `de`, and `sv`
+codes; missing, malformed, or empty values fall back to all four.
+`public_language_selector_design` stores normalized JSON containing the selected
+five-preset design, browser-visible elements, layout choices, and safe
+per-preset visual overrides; colors accept validated hex values or the literal
+`transparent`, and missing or malformed content falls back to Classic with flags
+and codes enabled. Basic Settings writes merge preset/flag changes into this
+document so detailed Theme overrides are retained. These keys configure whether,
+what, and how viewers may choose, but never store an individual viewer's choice.
+That personal preference is persisted only in the viewer's browser cookie and
+mirrored in the request session. The viewer settings require no migration and do
+not change which catalogs administrators may select or edit.
 
-`public_thumbnail_rendering_mode` stores the site-level selected-gallery photo-card renderer. `app/services/public_thumbnail_rendering.php` accepts only `responsive` and `progressive`; missing or invalid values normalize to `responsive`. It is a scalar runtime setting and requires no dedicated schema migration.
+`public_thumbnail_rendering_mode` stores the site-level selected-gallery
+photo-card renderer. `app/services/public_thumbnail_rendering.php` accepts only
+`responsive` and `progressive`; missing or invalid values normalize to
+`responsive`. It is a scalar runtime setting and requires no dedicated schema
+migration.
 
-Browser-side uploads store their mutable admin configuration in `app_settings` through `app/services/browser_uploads.php`. Current keys are `browser_upload_enabled`, `browser_upload_default_worker_count`, `browser_upload_max_worker_count`, `browser_upload_hard_worker_cap`, `browser_upload_batch_size_policy`, `browser_upload_zip_size_threshold_ratio`, `browser_upload_max_items_per_batch`, `browser_upload_max_zip_batch_bytes` and `browser_thumbnail_rebuild_source_chunk_bytes`. Values are normalized defensively at read time, with worker counts clamped to 1 through 32, the ZIP threshold ratio clamped to 0.10 through 0.95, ZIP item count clamped to 1 through 64, the absolute ZIP upload batch cap clamped to 1 MB through 128 MB, and the browser-assisted thumbnail rebuild source-download chunk clamped to 16 MB through 3 GB. The browser uses the smallest effective upload limit from PHP upload settings, the configured ratio, and the absolute ZIP cap so shared hosting does not need to parse very large browser-prepared upload packages in one request. The source-download chunk setting is larger by design because it streams originals from the server to the browser and does not pass through PHP multipart upload limits.
+Browser-side uploads store their mutable admin configuration in `app_settings`
+through `app/services/browser_uploads.php`. Current keys are
+`browser_upload_enabled`, `browser_upload_default_worker_count`,
+`browser_upload_max_worker_count`, `browser_upload_hard_worker_cap`,
+`browser_upload_batch_size_policy`, `browser_upload_zip_size_threshold_ratio`,
+`browser_upload_max_items_per_batch`, `browser_upload_max_zip_batch_bytes` and
+`browser_thumbnail_rebuild_source_chunk_bytes`. Values are normalized
+defensively at read time, with worker counts clamped to 1 through 32, the ZIP
+threshold ratio clamped to 0.10 through 0.95, ZIP item count clamped to 1
+through 64, the absolute ZIP upload batch cap clamped to 1 MB through 128 MB,
+and the browser-assisted thumbnail rebuild source-download chunk clamped to 16
+MB through 3 GB. The browser uses the smallest effective upload limit from PHP
+upload settings, the configured ratio, and the absolute ZIP cap so shared
+hosting does not need to parse very large browser-prepared upload packages in
+one request. The source-download chunk setting is larger by design because it
+streams originals from the server to the browser and does not pass through PHP
+multipart upload limits.
 
-`theme_favorite_gallery_ids` stores the optional top-navigation shortcuts as a JSON array of up to three entries. Numeric entries are gallery IDs, and the `home` token represents the main gallery page. The value is resolved by `app/services/favorite_galleries.php`; duplicate entries, missing galleries and unavailable public rows are ignored defensively.
+`theme_favorite_gallery_ids` stores the optional top-navigation shortcuts as a
+JSON array of up to three entries. Numeric entries are gallery IDs, and the
+`home` token represents the main gallery page. The value is resolved by
+`app/services/favorite_galleries.php`; duplicate entries, missing galleries and
+unavailable public rows are ignored defensively.
 
 ### Centralized Settings and schema behavior
 
-The Admin Settings hub does not introduce a table, column or migration. Scalar global settings continue to use their existing storage, primarily `app_settings`, while telemetry continues to use `telemetry_settings` and user/account integrations keep their existing account-specific tables. `app/services/admin_settings_registry.php` is application metadata, not persistent configuration.
+The Admin Settings hub does not introduce a table, column or migration. Scalar
+global settings continue to use their existing storage, primarily
+`app_settings`, while telemetry continues to use `telemetry_settings` and
+user/account integrations keep their existing account-specific tables.
+`app/services/admin_settings_registry.php` is application metadata, not
+persistent configuration.
 
-The hub does not rename keys or copy values. Missing and invalid values are still resolved by the owning service. In particular, tag landing-page grid keys inherit global pagination values, tag landing-page card layout inherits the global Theme card layout, the public thumbnail renderer falls back to `progressive`, and the lightbox default falls back to `single`. Per-gallery overrides remain in the `galleries` schema and are not flattened into global settings.
+The hub does not rename keys or copy values. Missing and invalid values are
+still resolved by the owning service. In particular, tag landing-page grid keys
+inherit global pagination values, tag landing-page card layout inherits the
+global Theme card layout, the public thumbnail renderer falls back to
+`progressive`, and the lightbox default falls back to `single`. Per-gallery
+overrides remain in the `galleries` schema and are not flattened into global
+settings.
 
-Sensitive values such as `password_reset_smtp_password`, site-maintenance cron tokens, OpenAI keys and upload API keys are never copied into a second table or rendered as raw central summaries. The central page stores no secret shadow values. Existing optional migrations still gate the specialized subsystem that owns them. For example, the central EXIF/GPS checkbox is editable only when the existing per-gallery EXIF/GPS override schema is ready.
+Sensitive values such as `password_reset_smtp_password`, site-maintenance cron
+tokens, OpenAI keys and upload API keys are never copied into a second table or
+rendered as raw central summaries. The central page stores no secret shadow
+values. Existing optional migrations still gate the specialized subsystem that
+owns them. For example, the central EXIF/GPS checkbox is editable only when the
+existing per-gallery EXIF/GPS override schema is ready.
 
-See `docs/ADMIN_SETTINGS_INVENTORY.md` for the key-by-key storage and migration classification.
+See `docs/ADMIN_SETTINGS_INVENTORY.md` for the key-by-key storage and migration
+classification.
 
 ## Voting and Game Tables
 
@@ -961,7 +1409,14 @@ Important columns:
 | `resolved_at`, `resolution_note` | Resolution workflow fields. |
 | `created_at` | Log timestamp. |
 
-Admin logs remain the live operational history and are not removed by generic database cleanup. Version 0.87 adds indexed age and grouping access paths so Admin browsing, grouped summaries, and bounded retention work do not require an avoidable full-table scan. The explicit Admin log archive workflow moves complete older calendar days into protected filesystem archives before removing their live rows. Archive manifests identify the application version, date, row count, and export format; the archive service verifies the expected row count before deletion and keeps recoverable state when work is interrupted.
+Admin logs remain the live operational history and are not removed by generic
+database cleanup. Version 0.87 adds indexed age and grouping access paths so
+Admin browsing, grouped summaries, and bounded retention work do not require an
+avoidable full-table scan. The explicit Admin log archive workflow moves
+complete older calendar days into protected filesystem archives before removing
+their live rows. Archive manifests identify the application version, date, row
+count, and export format; the archive service verifies the expected row count
+before deletion and keeps recoverable state when work is interrupted.
 
 ## Authentication and Account Security
 
@@ -992,7 +1447,8 @@ Expected use:
 | subject/action identifiers | Hashes of visitor or normalized login subject. |
 | counters/timestamps | Attempt count, window and lockout state. |
 
-Use `app/services/auth_throttle.php`; do not query this table directly from controllers.
+Use `app/services/auth_throttle.php`; do not query this table directly from
+controllers.
 
 ### `admin_remember_tokens`
 
@@ -1053,15 +1509,20 @@ Stores hashed gallery-scoped API upload tokens.
 
 Stores one bounded favicon-discovery result per normalized hostname. `status` is
 `ok`, `missing`, `failed`, or `blocked`; `icon_file`, `mime_type`, `source_url`,
-`content_sha256`, and `fetched_at` describe only a validated successful local cache
-entry. `last_attempt_at`, `retry_after`, and `updated_at` bound refresh frequency.
-The database never stores downloaded response bodies, request headers, credentials,
-or cookies. Cached image bytes live under the internal gallery favicon directory and
+`content_sha256`, and `fetched_at` describe only a validated successful local
+cache
+entry. `last_attempt_at`, `retry_after`, and `updated_at` bound refresh
+frequency.
+The database never stores downloaded response bodies, request headers,
+credentials,
+or cookies. Cached image bytes live under the internal gallery favicon directory
+and
 are served only through validated generated filenames.
 
 ## Telemetry Tables
 
-Telemetry is intentionally anonymous/bucketed. Use telemetry services instead of direct writes.
+Telemetry is intentionally anonymous/bucketed. Use telemetry services instead of
+direct writes.
 
 ### `telemetry_settings`
 
@@ -1072,7 +1533,8 @@ Stores telemetry preferences and limits.
 Stores anonymous session hashes and coarse session metadata. It is the canonical
 source for unique-session counts. `page_view_count` is retained as session-local
 state and historical rows may contain legacy semantics from before telemetry
-semantics version 2; report-wide canonical page-view totals come from the explicit
+semantics version 2; report-wide canonical page-view totals come from the
+explicit
 `public.page_views` aggregate metric instead.
 
 ### `telemetry_events`
@@ -1091,26 +1553,38 @@ Common concepts:
 
 ### `telemetry_hourly_metrics`
 
-Aggregated hourly metrics. The table has one intentionally wide shared key, but new
-writes apply metric-specific dimension normalization before the upsert. Irrelevant
+Aggregated hourly metrics. The table has one intentionally wide shared key, but
+new
+writes apply metric-specific dimension normalization before the upsert.
+Irrelevant
 dimensions are stored at neutral values rather than multiplying rows for report
-dimensions that are never queried. `device_type` remains available where required
-for all/non-bot-classified/bot-classified report segmentation. Unknown future metric
-families retain their supplied dimensions until an explicit normalization contract
+dimensions that are never queried. `device_type` remains available where
+required
+for all/non-bot-classified/bot-classified report segmentation. Unknown future
+metric
+families retain their supplied dimensions until an explicit normalization
+contract
 is defined.
 
 ### `telemetry_daily_metrics`
 
-Aggregated daily metrics produced from hourly rows. Daily storage is the long-window
-retention layer; short report windows may continue to read hourly data while they are
-fully covered by hourly retention. Do not switch a report to daily data unless the
-rollup semantics have been validated against the corrected hourly metric contract.
+Aggregated daily metrics produced from hourly rows. Daily storage is the
+long-window
+retention layer; short report windows may continue to read hourly data while
+they are
+fully covered by hourly retention. Do not switch a report to daily data unless
+the
+rollup semantics have been validated against the corrected hourly metric
+contract.
 
 ### `telemetry_db_query_metrics`
 
-Aggregated database query timing and fingerprint metrics. The central PDO observer
-stores only bounded operation/table/route/timing/row-count/fingerprint dimensions,
-buffers equivalent executions per request, and suppresses observer recursion. Raw
+Aggregated database query timing and fingerprint metrics. The central PDO
+observer
+stores only bounded operation/table/route/timing/row-count/fingerprint
+dimensions,
+buffers equivalent executions per request, and suppresses observer recursion.
+Raw
 SQL, bound values, DSNs, credentials, and database exception messages are not
 telemetry fields.
 
@@ -1125,37 +1599,47 @@ when complete. A normal slice admits ten seconds of work, with up to eight
 5000-row DELETEs per table (40000 rows). Independent targets alternate one batch
 at a time and persist the next first target across slices; expiry of the shared
 deadline can reduce actual progress. Hourly deletion still requires its archival
-checkpoint. Maintenance Center retains its four-second UI budget. Successful public HTML visits start a private token-authenticated telemetry-only
-worker through the existing maintenance endpoint. The visitor-side attempt marker
+checkpoint. Maintenance Center retains its four-second UI budget. Successful
+public HTML visits start a private token-authenticated telemetry-only
+worker through the existing maintenance endpoint. The visitor-side attempt
+marker
 and worker-side database throttle/lock keep execution bounded without requiring
 external cron. Preview/media/error responses cannot start it. The worker yields
 to known or unknown central maintenance ownership and respects telemetry OFF.
 No visits means no wake-up; optional cron can supply independent opportunities.
 
 
-SQL query fingerprints have independent retention (`telemetry_database_retention_days`):
+SQL query fingerprints have independent retention
+(`telemetry_database_retention_days`):
 seven days by default, configurable from one to 90 days. Upgrades seed this new
-setting without overwriting an explicit value. Missing pre-migration settings use
+setting without overwriting an explicit value. Missing pre-migration settings
+use
 the same default; unavailable or invalid settings stop destructive maintenance.
-Hourly (90-day default), daily (730-day default), raw-event and session retention
-remain independent. Database diagnostic reports cover only their retained window.
+Hourly (90-day default), daily (730-day default), raw-event and session
+retention
+remain independent. Database diagnostic reports cover only their retained
+window.
 
-Telemetry hourly, daily and SQL aggregates use an unsigned BIGINT physical primary
+Telemetry hourly, daily and SQL aggregates use an unsigned BIGINT physical
+primary
 key and retain their original composite identity as a UNIQUE key. Secondary
 indexes therefore reference the short physical identity. The migration rebuilds
 these three tables and preserves measurements; allow temporary disk space and a
 DDL maintenance window on large installations. Interrupted multi-table upgrades
 replay through the existing duplicate-DDL migration handler.
 
-Daily archival neutralizes browser, OS, viewport, country and referrer dimensions
+Daily archival neutralizes browser, OS, viewport, country and referrer
+dimensions
 for known metric families; current reports obtain browser mixes from sessions.
 It preserves photo/gallery identities, routes, media/cache breakdowns, traffic
-segments, counts, sums and extrema. Unknown metric families retain all dimensions.
+segments, counts, sums and extrema. Unknown metric families retain all
+dimensions.
 A durable `telemetry_daily_compact_after` cursor compacts historical daily data
 one date per transaction, including dates whose hourly source has expired.
 Existing maintenance day/time budgets bound admission; one SQL statement may
 outlast the PHP admission deadline. A failed date never advances its cursor.
-Archival replaces complete daily windows transactionally, preventing stale legacy
+Archival replaces complete daily windows transactionally, preventing stale
+legacy
 keys from duplicating totals on refresh. Compaction uses connection-private
 InnoDB temporary storage and does not change the hourly archival checkpoint.
 
@@ -1168,18 +1652,29 @@ lock duration must be measured after deployment; no fixed saving is guaranteed.
 
 The authenticated telemetry export may query `information_schema.tables` for the
 six telemetry data tables and combine those sizes with exact row counts,
-oldest/newest timestamps, approximate seven-day row growth, configured retention,
-and bounded hourly metric dimension cardinality. The export also records request-local
-SQL execution timings for fixed report query families and may run sanitized `EXPLAIN`
-probes for a fixed source-owned subset of representative report queries. Timing and
-optimizer-plan evidence is never persisted to telemetry storage and never includes
-SQL text, bound values, result payloads, or raw database errors. The runtime snapshot
-is captured before EXPLAIN probes so diagnostic overhead does not contaminate the
-reported query timings. A completed-day rollup consistency probe separately compares
-`sample_count`, `event_count`, and `value_sum` per metric between hourly and daily
-storage while excluding the current partial day. Missing or mismatched daily data is
+oldest/newest timestamps, approximate seven-day row growth, configured
+retention,
+and bounded hourly metric dimension cardinality. The export also records
+request-local
+SQL execution timings for fixed report query families and may run sanitized
+`EXPLAIN`
+probes for a fixed source-owned subset of representative report queries. Timing
+and
+optimizer-plan evidence is never persisted to telemetry storage and never
+includes
+SQL text, bound values, result payloads, or raw database errors. The runtime
+snapshot
+is captured before EXPLAIN probes so diagnostic overhead does not contaminate
+the
+reported query timings. A completed-day rollup consistency probe separately
+compares
+`sample_count`, `event_count`, and `value_sum` per metric between hourly and
+daily
+storage while excluding the current partial day. Missing or mismatched daily
+data is
 reported explicitly and blocks any future long-window source switch. This is
-read-only operator evidence for index/retention decisions. It is not a migration and
+read-only operator evidence for index/retention decisions. It is not a migration
+and
 must not automatically change table structure or retention policy.
 
 ## Maps, SimBrief and Navigation Data
@@ -1199,7 +1694,12 @@ Stores resolved route data for a gallery flight map.
 | `resolved_at` | Last route resolution time. |
 | `created_at`, `updated_at` | Audit timestamps. |
 
-Background editor navigation-data checks can complete unresolved saved manual routes using the existing columns. The model updates only when the captured source type, route text, resolved/unresolved point JSON, and `updated_at` still match, so a newer edit or deletion survives. Completion preserves captured coordinates and SimBrief OFP geometry; writes require verified flight-map schema. This workflow adds no schema migration or storage field.
+Background editor navigation-data checks can complete unresolved saved manual
+routes using the existing columns. The model updates only when the captured
+source type, route text, resolved/unresolved point JSON, and `updated_at` still
+match, so a newer edit or deletion survives. Completion preserves captured
+coordinates and SimBrief OFP geometry; writes require verified flight-map
+schema. This workflow adds no schema migration or storage field.
 
 ### `flight_map_nav_points`
 
@@ -1310,9 +1810,20 @@ Stores per-user OpenAI API configuration.
 
 ## Administrator Database Audit and Cleanup Policy
 
-The Admin database-maintenance inspection dynamically audits every table in the active schema. The following registry covers all current application tables and both current and legacy migration audit tables. Additional tables discovered at runtime are classified as `unknown/unclassified` and protected until an explicit ownership and deletion policy is implemented. A high row count, old timestamp, NULL value, or large allocation is never sufficient evidence for deletion.
+The Admin database-maintenance inspection dynamically audits every table in the
+active schema. The following registry covers all current application tables and
+both current and legacy migration audit tables. Additional tables discovered at
+runtime are classified as `unknown/unclassified` and protected until an explicit
+ownership and deletion policy is implemented. A high row count, old timestamp,
+NULL value, or large allocation is never sufficient evidence for deletion.
 
-The structured audit is cached at `cache/admin-database-maintenance-report.json`. It includes table and column metadata, keys, foreign keys, migration history references, broad code references, separately scoped production/test SQL references, cleanup candidates, reasons, confidence, and table-specific policies. Obsolete-column confidence is based on same-statement production SQL evidence, not a repository-wide word match.
+The structured audit is cached at
+`cache/admin-database-maintenance-report.json`. It includes table and column
+metadata, keys, foreign keys, migration history references, broad code
+references, separately scoped production/test SQL references, cleanup
+candidates, reasons, confidence, and table-specific policies. Obsolete-column
+confidence is based on same-statement production SQL evidence, not a
+repository-wide word match.
 
 | Table | Category | Owner | Safe orphan rule | Retention rule | Duplicate rule | Protection and operation mode |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1356,87 +1867,186 @@ The structured audit is cached at `cache/admin-database-maintenance-report.json`
 
 ### Cleanup confidence and execution
 
-Only `high` confidence rules enter the generic cleanup runner. Current categories are proven parent orphans, deterministic logical duplicates with the lowest numeric ID retained, and temporary/authentication state whose real expiry columns or application retention logic declare it expired. Every action supports dry-run, explicit Admin confirmation, bounded batches, persisted resumable state, idempotent retry, before/after accounting, and a visible failure state.
+Only `high` confidence rules enter the generic cleanup runner. Current
+categories are proven parent orphans, deterministic logical duplicates with the
+lowest numeric ID retained, and temporary/authentication state whose real expiry
+columns or application retention logic declare it expired. Every action supports
+dry-run, explicit Admin confirmation, bounded batches, persisted resumable
+state, idempotent retry, before/after accounting, and a visible failure state.
 
-Each live batch first selects a deterministic primary-key identity set, then deletes exactly that bounded set inside a transaction. Before commit, the same transaction writes the operation ID, rule, table, reason, identifier columns, every removed row identity, and deleted count to `database_maintenance_audit_log`. An audit insertion failure or identifier-count mismatch rolls back the deletion. The general `admin_logs` entry is secondary and is not relied upon for audit integrity.
+Each live batch first selects a deterministic primary-key identity set, then
+deletes exactly that bounded set inside a transaction. Before commit, the same
+transaction writes the operation ID, rule, table, reason, identifier columns,
+every removed row identity, and deleted count to
+`database_maintenance_audit_log`. An audit insertion failure or identifier-count
+mismatch rolls back the deletion. The general `admin_logs` entry is secondary
+and is not relied upon for audit integrity.
 
-The workflow does not delete filesystem media, thumbnails, ZIP files, galleries, images, accounts, audit history, telemetry, migration history, imported navigation datasets, or unknown tables. Audit-log and telemetry retention remain separate policies and controls.
+The workflow does not delete filesystem media, thumbnails, ZIP files, galleries,
+images, accounts, audit history, telemetry, migration history, imported
+navigation datasets, or unknown tables. Audit-log and telemetry retention remain
+separate policies and controls.
 
 ### Thumbnail metadata special handling
 
-`image_thumbnail_variants` stores metadata only. It does not store thumbnail image bytes. Inspection groups rows by `size_px`, `format`, and `status`, compares sizes with `thumbnail_sizes()`, accepts the production formats `jpg` and `webp`, reports unsupported combinations, and never deletes unsupported variants automatically. Generic cleanup may remove only rows with a proven missing `images` parent and deterministic duplicate logical rows keyed by `(image_id, size_px, format)`. Physical table optimization is separate from logical row cleanup.
+`image_thumbnail_variants` stores metadata only. It does not store thumbnail
+image bytes. Inspection groups rows by `size_px`, `format`, and `status`,
+compares sizes with `thumbnail_sizes()`, accepts the production formats `jpg`
+and `webp`, reports unsupported combinations, and never deletes unsupported
+variants automatically. Generic cleanup may remove only rows with a proven
+missing `images` parent and deterministic duplicate logical rows keyed by
+`(image_id, size_px, format)`. Physical table optimization is separate from
+logical row cleanup.
 
-The only repository-proven obsolete schema objects are the legacy pre-compaction columns `gallery_id`, `thumbnail_rel_path`, `source_width`, `source_height`, `source_mime_type`, `source_file_size`, `source_modified_at`, `source_checksum_sha256`, `source_exif_orientation`, and `source_exif_json`, plus `image_thumbnail_variants_gallery_index` and `image_thumbnail_variants_gallery_id_foreign`. The 2026-07-25 repair migration copies source geometry and orientation to `images` first, checks every object, drops only objects still present, validates the compact result, and creates the transactional cleanup audit table when absent. Historical migrations are unchanged.
+The only repository-proven obsolete schema objects are the legacy pre-compaction
+columns `gallery_id`, `thumbnail_rel_path`, `source_width`, `source_height`,
+`source_mime_type`, `source_file_size`, `source_modified_at`,
+`source_checksum_sha256`, `source_exif_orientation`, and `source_exif_json`,
+plus `image_thumbnail_variants_gallery_index` and
+`image_thumbnail_variants_gallery_id_foreign`. The 2026-07-25 repair migration
+copies source geometry and orientation to `images` first, checks every object,
+drops only objects still present, validates the compact result, and creates the
+transactional cleanup audit table when absent. Historical migrations are
+unchanged.
 
 ### Statistics and physical storage
 
-`ANALYZE TABLE` is a selected-table action that refreshes optimizer statistics. It does not reclaim table files. `OPTIMIZE TABLE` is a different selected-table action with a separate `OPTIMIZE` confirmation. Before that confirmation, the Admin workflow can generate a selected-table dry-run plan showing operation type, allocated bytes, reclaimable-byte estimate, engine, and warnings without executing any table statement. It may lock or rebuild tables and may be expensive on shared hosting. `information_schema.DATA_FREE` is an engine estimate, not a guaranteed number of bytes that the hosting filesystem will return. Inspection and logical cleanup never invoke `OPTIMIZE TABLE`. Schema repair also has a fresh, non-mutating dry-run that reports the pending migration and exact legacy objects before any DDL is applied.
+`ANALYZE TABLE` is a selected-table action that refreshes optimizer statistics.
+It does not reclaim table files. `OPTIMIZE TABLE` is a different selected-table
+action with a separate `OPTIMIZE` confirmation. Before that confirmation, the
+Admin workflow can generate a selected-table dry-run plan showing operation
+type, allocated bytes, reclaimable-byte estimate, engine, and warnings without
+executing any table statement. It may lock or rebuild tables and may be
+expensive on shared hosting. `information_schema.DATA_FREE` is an engine
+estimate, not a guaranteed number of bytes that the hosting filesystem will
+return. Inspection and logical cleanup never invoke `OPTIMIZE TABLE`. Schema
+repair also has a fresh, non-mutating dry-run that reports the pending migration
+and exact legacy objects before any DDL is applied.
 
 ## Maintenance Center Job State
 
 ### `maintenance_jobs`
 
-Maintenance Center analysis checks the migration ledger without creating it. `pending_migrations_exist()` treats a missing `schema_migrations` table or inspection failure as pending work; only `run_migrations()` / `run_migrations_bounded()` create migration storage. This release adds no schema migration.
+Maintenance Center analysis checks the migration ledger without creating it.
+`pending_migrations_exist()` treats a missing `schema_migrations` table or
+inspection failure as pending work; only `run_migrations()` /
+`run_migrations_bounded()` create migration storage. This release adds no schema
+migration.
 
-`maintenance_jobs` stores the bounded durable state for the browser-driven Admin Maintenance Center. It intentionally uses one job row with bounded plan/state JSON instead of a high-cardinality per-step ledger.
+`maintenance_jobs` stores the bounded durable state for the browser-driven Admin
+Maintenance Center. It intentionally uses one job row with bounded plan/state
+JSON instead of a high-cardinality per-step ledger.
 
 Important columns:
 
 - `actor_id`: administrator that owns the review/execution surface.
-- `status`: explicit state-machine value such as `analyzing`, `ready`, `running`, `paused`, `completed`, `failed`, or `cancelled`.
+- `status`: explicit state-machine value such as `analyzing`, `ready`,
+  `running`, `paused`, `completed`, `failed`, or `cancelled`.
 - `phase`: current analysis/execution task identifier.
 - `plan_json`, `plan_hash`: immutable reviewed plan and its SHA-256 binding.
-- `state_json`: bounded task checkpoints, activity, warnings, execution metrics, and final verification report.
-- `app_version`, `schema_revision`, `registry_revision`: stale-plan protection inputs.
-- `progress_done`, `progress_total`, `progress_percent`: server-authoritative weighted progress.
-- `cancel_requested`: cooperative cancellation flag checked before the next bounded operation.
-- `lock_key`: nullable durable central mutation claim. The unique index permits many historical rows with `NULL` while allowing at most one active `central` owner.
-- `error_category`, `error_message`: bounded operator-safe failure evidence without raw SQL, credentials, paths, or traces.
+- `state_json`: bounded task checkpoints, activity, warnings, execution metrics,
+  and final verification report.
+- `app_version`, `schema_revision`, `registry_revision`: stale-plan protection
+  inputs.
+- `progress_done`, `progress_total`, `progress_percent`: server-authoritative
+  weighted progress.
+- `cancel_requested`: cooperative cancellation flag checked before the next
+  bounded operation.
+- `lock_key`: nullable durable central mutation claim. The unique index permits
+  many historical rows with `NULL` while allowing at most one active `central`
+  owner.
+- `error_category`, `error_message`: bounded operator-safe failure evidence
+  without raw SQL, credentials, paths, or traces.
 
-The application acquires a short-lived MySQL advisory lock only while advancing one specific job request. That lock is not the durable ownership mechanism. Running and paused jobs retain the unique `central` claim across browser reloads and disconnected requests. Automatic site maintenance checks that claim before mutation and yields when it is present.
+The application acquires a short-lived MySQL advisory lock only while advancing
+one specific job request. That lock is not the durable ownership mechanism.
+Running and paused jobs retain the unique `central` claim across browser reloads
+and disconnected requests. Automatic site maintenance checks that claim before
+mutation and yields when it is present.
 
-Normal Maintenance Center retention removes old terminal rows in bounded batches. The table is registered as known Maintenance/system state in database-maintenance policy: generic logical cleanup does not infer ownership, while manual/central physical maintenance still passes through the ordinary protected-table eligibility checks.
+Normal Maintenance Center retention removes old terminal rows in bounded
+batches. The table is registered as known Maintenance/system state in
+database-maintenance policy: generic logical cleanup does not infer ownership,
+while manual/central physical maintenance still passes through the ordinary
+protected-table eligibility checks.
 
 ## Data Integrity Rules
 
 1. `galleries.folder_path_hash` identifies a folder uniquely.
-2. `images.gallery_id + images.relative_path_hash` identifies an image uniquely inside a gallery.
-3. Deleting a gallery cascades images, gallery tags, ZIP archive rows, upload tokens, flight maps and AI jobs.
-4. Deleting an image cascades image tags, votes, picture-game references and AI metadata/jobs.
-5. Deleting a user sets some historical references to null but cascades private account token/config rows.
+2. `images.gallery_id + images.relative_path_hash` identifies an image uniquely
+   inside a gallery.
+3. Deleting a gallery cascades images, gallery tags, ZIP archive rows, upload
+   tokens, flight maps and AI jobs.
+4. Deleting an image cascades image tags, votes, picture-game references and AI
+   metadata/jobs.
+5. Deleting a user sets some historical references to null but cascades private
+   account token/config rows.
 6. Mutable runtime options belong in `app_settings`, not in `config.php`.
 7. New schema changes should be added through new migrations only.
-8. Legacy compatibility code may still contain `db_table_exists()` or `db_column_exists()` guards where a boolean fallback is explicitly harmless. These helpers return `false` after inspection errors and therefore must never authorize security, authentication, destructive/ingestion, or optional-feature writes. Security/authentication callers use explicit three-state access policy, destructive/ingestion callers use `app/services/mutation_schema_policy.php`, and converted optional presentation/reporting callers use `app/services/presentation_schema_policy.php`. New schema-sensitive code must choose the appropriate structured policy instead of adding another ambiguous existence guard.
+8. Legacy compatibility code may still contain `db_table_exists()` or
+   `db_column_exists()` guards where a boolean fallback is explicitly harmless.
+   These helpers return `false` after inspection errors and therefore must never
+   authorize security, authentication, destructive/ingestion, or
+   optional-feature writes. Security/authentication callers use explicit
+   three-state access policy, destructive/ingestion callers use
+   `app/services/mutation_schema_policy.php`, and converted optional
+   presentation/reporting callers use
+   `app/services/presentation_schema_policy.php`. New schema-sensitive code must
+   choose the appropriate structured policy instead of adding another ambiguous
+   existence guard.
 
 ## Common Query Patterns
 
 ### Public gallery listing
 
-Uses `galleries` filtered by parent, visibility, access listing and sort order. Related services include `gallery_lookup.php`, `gallery_display.php` and `pagination.php`.
+Uses `galleries` filtered by parent, visibility, access listing and sort order.
+Related services include `gallery_lookup.php`, `gallery_display.php` and
+`pagination.php`.
 
 ### Gallery detail page
 
-Loads one gallery by clean path or slug, then loads child galleries, image rows, tags, thumbnail metadata, vote state, manual date range and optional map/lightbox data.
+Loads one gallery by clean path or slug, then loads child galleries, image rows,
+tags, thumbnail metadata, vote state, manual date range and optional
+map/lightbox data.
 
 ### Public search
 
-Searches gallery titles/descriptions/tags and image titles/descriptions/filenames/tags/searchable AI metadata depending on context and settings.
+Searches gallery titles/descriptions/tags and image
+titles/descriptions/filenames/tags/searchable AI metadata depending on context
+and settings.
 
 ### Sitemap
 
-Uses public gallery and image rows plus derived filesystem timestamps. Current sitemap freshness logic is in `app/services/public_paths.php`.
+Uses public gallery and image rows plus derived filesystem timestamps. Current
+sitemap freshness logic is in `app/services/public_paths.php`.
 
 ### Thumbnail maintenance
 
-Uses `images` and filesystem-derived thumbnail inventory. Thumbnail files are derived artifacts and should be regenerated rather than treated as source truth.
+Uses `images` and filesystem-derived thumbnail inventory. Thumbnail files are
+derived artifacts and should be regenerated rather than treated as source truth.
 
 ## Smart Galleries and editorial ratings
 
-Migration `202608140001_smart_galleries.php` adds `smart_galleries` and nullable `images.editorial_rating`. Definitions contain title, unique slug, description, versioned `rules_json`, rule version, enabled/public state, allowlisted sorting, and timestamps. No image membership is duplicated. The public index covers `(enabled, visibility, title)`; the rating lookup index covers `(editorial_rating, gallery_id, visibility)`.
+Migration `202608140001_smart_galleries.php` adds `smart_galleries` and nullable
+`images.editorial_rating`. Definitions contain title, unique slug, description,
+versioned `rules_json`, rule version, enabled/public state, allowlisted sorting,
+and timestamps. No image membership is duplicated. The public index covers
+`(enabled, visibility, title)`; the rating lookup index covers
+`(editorial_rating, gallery_id, visibility)`.
 
-Rule version 1 contains `version` and `root`. Nodes are boolean groups (`AND`, `OR`, or single-child `NOT`) or conditions containing an allowlisted field/operator/value. The maximum depth is five and maximum condition count is 50. Missing stable references and malformed/unknown versions fail safely.
+Rule version 1 contains `version` and `root`. Nodes are boolean groups (`AND`,
+`OR`, or single-child `NOT`) or conditions containing an allowlisted
+field/operator/value. The maximum depth is five and maximum condition count
+is 50. Missing stable references and malformed/unknown versions fail safely.
 
-Migration `202608140002_smart_gallery_placement.php` introduces the `unlisted`, `root`, and `gallery` listing modes. Migration `202608140003_smart_gallery_multiple_placements.php` adds the `smart_gallery_placements` junction table and migrates existing single-parent assignments. Each `(smart_gallery_id, gallery_id)` pair is unique; deleting either record removes its junction rows through foreign-key cascades. A gallery-mode Smart Gallery may be attached beneath any number of physical galleries.
+Migration `202608140002_smart_gallery_placement.php` introduces the `unlisted`,
+`root`, and `gallery` listing modes. Migration
+`202608140003_smart_gallery_multiple_placements.php` adds the
+`smart_gallery_placements` junction table and migrates existing single-parent
+assignments. Each `(smart_gallery_id, gallery_id)` pair is unique; deleting
+either record removes its junction rows through foreign-key cascades. A
+gallery-mode Smart Gallery may be attached beneath any number of physical
+galleries.
 
 Migration `202608170001_smart_gallery_presentation.php` adds nullable
 `smart_galleries.presentation_json MEDIUMTEXT`. The JSON document is versioned
@@ -1459,13 +2069,35 @@ The public source union is derived from canonical grouped photo membership and
 visitor access, not persisted into Smart rows.
 
 
-Migration `202608170002_smart_gallery_attachment_ordering.php` extends the canonical `smart_gallery_placements` junction rather than adding a parallel relationship table. `placement ENUM('top','bottom') NOT NULL DEFAULT 'bottom'` preserves the previous below-content behavior for every existing row. `placement_order INT NOT NULL DEFAULT 0` stores per-parent order, and the `(gallery_id, placement, placement_order, smart_gallery_id)` index supports deterministic grouped reads. The existing composite primary key `(smart_gallery_id, gallery_id)` continues to prevent duplicate attachment instances under one physical parent while allowing the same Smart Gallery under multiple parents.
+Migration `202608170002_smart_gallery_attachment_ordering.php` extends the
+canonical `smart_gallery_placements` junction rather than adding a parallel
+relationship table. `placement ENUM('top','bottom') NOT NULL DEFAULT 'bottom'`
+preserves the previous below-content behavior for every existing row.
+`placement_order INT NOT NULL DEFAULT 0` stores per-parent order, and the
+`(gallery_id, placement, placement_order, smart_gallery_id)` index supports
+deterministic grouped reads. The existing composite primary key
+`(smart_gallery_id, gallery_id)` continues to prevent duplicate attachment
+instances under one physical parent while allowing the same Smart Gallery under
+multiple parents.
 
-The new placement/order columns are a mutation boundary. Read paths can safely treat a pre-migration junction row as `bottom`/`0`, but Admin attachment replacement or placement/order updates require the structured mutation-schema capability to be conclusively available before deleting or inserting any relationship row. Unknown or missing schema therefore cannot cause a partial attachment rewrite.
+The new placement/order columns are a mutation boundary. Read paths can safely
+treat a pre-migration junction row as `bottom`/`0`, but Admin attachment
+replacement or placement/order updates require the structured mutation-schema
+capability to be conclusively available before deleting or inserting any
+relationship row. Unknown or missing schema therefore cannot cause a partial
+attachment rewrite.
 
-`presentation_json` is intentionally nullable and is not included in the base Smart Gallery schema-readiness requirement. This preserves read/write compatibility while the additive migration is pending during an update. Once the column exists, saves and duplicates persist it. Public behavior remains safe before the column exists because effective presentation falls back to Theme/site defaults.
+`presentation_json` is intentionally nullable and is not included in the base
+Smart Gallery schema-readiness requirement. This preserves read/write
+compatibility while the additive migration is pending during an update. Once the
+column exists, saves and duplicates persist it. Public behavior remains safe
+before the column exists because effective presentation falls back to Theme/site
+defaults.
 
-Smart Gallery result membership remains derived at query time. No new membership, lightbox-manifest, or download-manifest table is introduced. Counts, paged rows, lazy lightbox windows, and downloads use the same compiled rule/access query and stable image-id tie breaker.
+Smart Gallery result membership remains derived at query time. No new
+membership, lightbox-manifest, or download-manifest table is introduced. Counts,
+paged rows, lazy lightbox windows, and downloads use the same compiled
+rule/access query and stable image-id tie breaker.
 
 ## Migration Authoring Guidelines
 
@@ -1488,61 +2120,190 @@ Rules:
 2. Do not edit old migrations unless fixing a syntax error before release.
 3. Keep statements independent when possible.
 4. Include indexes in the same migration when the new query pattern needs them.
-5. Manual gallery date ranges use `gallery_date` plus nullable `gallery_date_end`; do not replace the start column because older installs and sidecars depend on it. EXIF suggestions only read `images.exif_taken_at` and then persist approved values back to these gallery date columns through the shared `gallery_date_save_range()` writer. Date-range labels must use an en dash (`–`) when rendered for visitors, editor suggestions or admin review.
+5. Manual gallery date ranges use `gallery_date` plus nullable
+   `gallery_date_end`; do not replace the start column because older installs
+   and sidecars depend on it. EXIF suggestions only read `images.exif_taken_at`
+   and then persist approved values back to these gallery date columns through
+   the shared `gallery_date_save_range()` writer. Date-range labels must use an
+   en dash (`–`) when rendered for visitors, editor suggestions or admin review.
 6. Do not insert environment-specific data.
 7. For sensitive values, store hashes or encrypted ciphers, never raw tokens.
 
 ## Phase 1.0 Viewer Account HTTP Use
 
-Phase 1.0 adds no database migration and no parallel viewer schema. The reachable HTTP controllers use the Phase 0 through 0.7 tables and transactional service contracts already documented above: `viewer_invitations`, `viewer_registration_requests`, `viewer_registration_state`, `viewer_accounts`, `viewer_email_verification_tokens`, `viewer_sessions`, `viewer_remember_tokens`, `viewer_password_reset_tokens`, `viewer_rate_limit_buckets`, `viewer_rate_limits`, and `viewer_security_events`.
+Phase 1.0 adds no database migration and no parallel viewer schema. The
+reachable HTTP controllers use the Phase 0 through 0.7 tables and transactional
+service contracts already documented above: `viewer_invitations`,
+`viewer_registration_requests`, `viewer_registration_state`, `viewer_accounts`,
+`viewer_email_verification_tokens`, `viewer_sessions`, `viewer_remember_tokens`,
+`viewer_password_reset_tokens`, `viewer_rate_limit_buckets`,
+`viewer_rate_limits`, and `viewer_security_events`.
 
-Administrator invitation listing reads only operational invitation metadata and staged registration status. Invitation token hashes are never returned to the Admin UI. Invitation creation also performs a conservative durable-capacity preflight, while final activation still relies on the existing transactional account-cap singleton lock and recount/reconciliation path. The preflight is not an authorization substitute and cannot consume capacity.
+Administrator invitation listing reads only operational invitation metadata and
+staged registration status. Invitation token hashes are never returned to the
+Admin UI. Invitation creation also performs a conservative durable-capacity
+preflight, while final activation still relies on the existing transactional
+account-cap singleton lock and recount/reconciliation path. The preflight is not
+an authorization substitute and cannot consume capacity.
 
-No password is stored in pending registration rows. The invitation recipient first verifies email through the scanner-safe token exchange, then supplies the password only while holding short-lived server-side activation authority. Final durable viewer creation remains the existing atomic `viewer_registration_activate_verified()` transaction.
+No password is stored in pending registration rows. The invitation recipient
+first verifies email through the scanner-safe token exchange, then supplies the
+password only while holding short-lived server-side activation authority. Final
+durable viewer creation remains the existing atomic
+`viewer_registration_activate_verified()` transaction.
 
-Phase 1.0 introduces no mail queue or transport tables. Viewer verification and password-reset messages use the existing configured PHP-mail/SMTP transport after the viewer mail-abuse budget service has authorized the send. Remember-me continues to store only selector plus verifier hash in `viewer_remember_tokens`; the plaintext verifier exists only in the dedicated browser cookie.
+Phase 1.0 introduces no mail queue or transport tables. Viewer verification and
+password-reset messages use the existing configured PHP-mail/SMTP transport
+after the viewer mail-abuse budget service has authorized the send. Remember-me
+continues to store only selector plus verifier hash in `viewer_remember_tokens`;
+the plaintext verifier exists only in the dedicated browser cookie.
 
 ## Phase 1.1 Viewer Favourites Use
 
-Phase 1.1 adds no database migration. It activates the existing `viewer_favourites` table created by `202608180001_viewer_security_foundations.php`. The composite primary key `(viewer_account_id, image_id)` remains the duplicate/race backstop; account and image foreign keys continue to cascade only stale reference rows and never grant or mutate gallery/media access.
+Phase 1.1 adds no database migration. It activates the existing
+`viewer_favourites` table created by
+`202608180001_viewer_security_foundations.php`. The composite primary key
+`(viewer_account_id, image_id)` remains the duplicate/race backstop; account and
+image foreign keys continue to cascade only stale reference rows and never grant
+or mutate gallery/media access.
 
-Favourite addition locks the owning `viewer_accounts` row with `SELECT ... FOR UPDATE`, verifies the active account/security version, counts current favourites while that owner lock is held, and applies the centralized `max_viewer_favourites_per_account` limit before inserting. Removal deletes only the current viewer's matching reference. No permission snapshot, gallery password, share token, visibility state, or media URL is stored in `viewer_favourites`.
+Favourite addition locks the owning `viewer_accounts` row with
+`SELECT ... FOR UPDATE`, verifies the active account/security version, counts
+current favourites while that owner lock is held, and applies the centralized
+`max_viewer_favourites_per_account` limit before inserting. Removal deletes only
+the current viewer's matching reference. No permission snapshot, gallery
+password, share token, visibility state, or media URL is stored in
+`viewer_favourites`.
 
-Read paths first load owned image ids, then re-evaluate the current canonical source-image authorization before rendering metadata. If an image/gallery becomes inaccessible, the saved reference may remain in storage but produces no image/gallery disclosure and grants no access. Image/account deletion continues to remove stale favourite rows through the established foreign-key cascades.
+Read paths first load owned image ids, then re-evaluate the current canonical
+source-image authorization before rendering metadata. If an image/gallery
+becomes inaccessible, the saved reference may remain in storage but produces no
+image/gallery disclosure and grants no access. Image/account deletion continues
+to remove stale favourite rows through the established foreign-key cascades.
 
 ## Phase 1.2 Viewer Account Lifecycle HTTP Use
 
-Phase 1.2 adds no database migration. It reuses the existing Phase 0.7 lifecycle schema from `202608180004_viewer_account_lifecycle_foundations.php` together with the previously established `viewer_accounts`, `viewer_sessions`, `viewer_remember_tokens`, `viewer_password_reset_tokens`, `viewer_email_change_requests`, `viewer_security_events`, favourites, dormant collection tables, and account-capacity state.
+Phase 1.2 adds no database migration. It reuses the existing Phase 0.7 lifecycle
+schema from `202608180004_viewer_account_lifecycle_foundations.php` together
+with the previously established `viewer_accounts`, `viewer_sessions`,
+`viewer_remember_tokens`, `viewer_password_reset_tokens`,
+`viewer_email_change_requests`, `viewer_security_events`, favourites, dormant
+collection tables, and account-capacity state.
 
-Password change remains one atomic service transaction against the current viewer account/security version. On success the service updates the password hash and `password_changed_at`, increments `security_version`, revokes prior viewer session/remember/reset/email-change authority according to the Phase 0.7 contract, and clears only viewer authentication state. No administrator table, Admin remember token, or Admin session key participates.
+Password change remains one atomic service transaction against the current
+viewer account/security version. On success the service updates the password
+hash and `password_changed_at`, increments `security_version`, revokes prior
+viewer session/remember/reset/email-change authority according to the Phase 0.7
+contract, and clears only viewer authentication state. No administrator table,
+Admin remember token, or Admin session key participates.
 
-Email change never writes `viewer_accounts.email` at request time. A candidate address lives in `viewer_email_change_requests` with a high-entropy verification token stored only as a hash, expiry, current viewer account id, and current security version. Verification-link GET is non-consuming. Final confirmation locks both the account and request, rechecks expiry/cancellation/security version/uniqueness, updates the durable email and normalized email, increments the viewer security version, consumes exactly one request, and cancels competing pending requests. Replay, stale confirmation state, and concurrent losing transitions therefore fail without a second email switch.
+Email change never writes `viewer_accounts.email` at request time. A candidate
+address lives in `viewer_email_change_requests` with a high-entropy verification
+token stored only as a hash, expiry, current viewer account id, and current
+security version. Verification-link GET is non-consuming. Final confirmation
+locks both the account and request, rechecks expiry/cancellation/security
+version/uniqueness, updates the durable email and normalized email, increments
+the viewer security version, consumes exactly one request, and cancels competing
+pending requests. Replay, stale confirmation state, and concurrent losing
+transitions therefore fail without a second email switch.
 
-Self-deletion remains the existing `viewer_account_delete()` transaction. It invalidates the account security version, revokes viewer-created collection share authority as defined by the foundation, writes the bounded deletion security event, deletes the viewer account, and relies on existing foreign-key cascades for viewer-owned sessions, remember/reset/verification/email-change records, favourites, collections/items/shares, and other viewer-owned authority. Gallery/image rows, Smart Galleries, and gallery share-link tables are not account-owned cascades and are not deleted by this lifecycle path.
+Self-deletion remains the existing `viewer_account_delete()` transaction. It
+invalidates the account security version, revokes viewer-created collection
+share authority as defined by the foundation, writes the bounded deletion
+security event, deletes the viewer account, and relies on existing foreign-key
+cascades for viewer-owned sessions, remember/reset/verification/email-change
+records, favourites, collections/items/shares, and other viewer-owned authority.
+Gallery/image rows, Smart Galleries, and gallery share-link tables are not
+account-owned cascades and are not deleted by this lifecycle path.
 
 ## Phase 2.0 Private Viewer Collections Use
 
-Phase 2.0 adds no database migration. It activates the existing `viewer_collections` and `viewer_collection_items` tables created by `202608180001_viewer_security_foundations.php`. The existing `description` column and `viewer_collection_share_tokens` table remain dormant and are not exposed by the Phase 2.0 service/controller.
+Phase 2.0 adds no database migration. It activates the existing
+`viewer_collections` and `viewer_collection_items` tables created by
+`202608180001_viewer_security_foundations.php`. The existing `description`
+column and `viewer_collection_share_tokens` table remain dormant and are not
+exposed by the Phase 2.0 service/controller.
 
-`viewer_collections.viewer_account_id` is the authoritative owner foreign key. Every object lookup/mutation includes the current viewer id in the predicate. Collection creation locks the `viewer_accounts` row before counting against `max_viewer_collections_per_account`, while item mutation/reorder locks the owned `viewer_collections` row before checking `max_viewer_items_per_collection`. The composite primary key `(viewer_collection_id, image_id)` is the duplicate/race backstop. New items receive bounded integer `position` values and reorder normalizes positions transactionally.
+`viewer_collections.viewer_account_id` is the authoritative owner foreign key.
+Every object lookup/mutation includes the current viewer id in the predicate.
+Collection creation locks the `viewer_accounts` row before counting against
+`max_viewer_collections_per_account`, while item mutation/reorder locks the
+owned `viewer_collections` row before checking
+`max_viewer_items_per_collection`. The composite primary key
+`(viewer_collection_id, image_id)` is the duplicate/race backstop. New items
+receive bounded integer `position` values and reorder normalizes positions
+transactionally.
 
-`viewer_collection_items` stores no path, thumbnail URL, password, gallery share token, cached permission, or copied authorization decision. Rendering first reads owner-scoped image ids/order and then resolves current authoritative image/gallery rows through the no-admin-bypass viewer source policy. A row may survive a temporary access loss; inaccessible items disclose no protected source metadata. Image deletion and collection/account deletion continue to use the existing foreign-key cascades, but collection deletion never cascades into `images`, `galleries`, `viewer_favourites`, Smart Galleries, or gallery share-link tables.
+`viewer_collection_items` stores no path, thumbnail URL, password, gallery share
+token, cached permission, or copied authorization decision. Rendering first
+reads owner-scoped image ids/order and then resolves current authoritative
+image/gallery rows through the no-admin-bypass viewer source policy. A row may
+survive a temporary access loss; inaccessible items disclose no protected source
+metadata. Image deletion and collection/account deletion continue to use the
+existing foreign-key cascades, but collection deletion never cascades into
+`images`, `galleries`, `viewer_favourites`, Smart Galleries, or gallery
+share-link tables.
 
 ## Phase 2.5 Admin Viewer Security Controls
 
-Phase 2.5 adds no migration. Suspend and Restore reuse the existing `viewer_accounts.status`, `security_version`, `suspended_at`, and the already-prepared viewer authentication/lifecycle token tables. The existing account-state transition runs under a viewer-row lock and increments `security_version`; it revokes active `viewer_sessions` and `viewer_remember_tokens`, invalidates outstanding `viewer_password_reset_tokens` and durable `viewer_email_verification_tokens`, cancels pending `viewer_email_change_requests`, and revokes `viewer_collection_share_tokens` created by the affected viewer. Restore performs the same authority rotation while returning the durable account status to `active`, so rows revoked before suspension are never made valid again.
+Phase 2.5 adds no migration. Suspend and Restore reuse the existing
+`viewer_accounts.status`, `security_version`, `suspended_at`, and the
+already-prepared viewer authentication/lifecycle token tables. The existing
+account-state transition runs under a viewer-row lock and increments
+`security_version`; it revokes active `viewer_sessions` and
+`viewer_remember_tokens`, invalidates outstanding `viewer_password_reset_tokens`
+and durable `viewer_email_verification_tokens`, cancels pending
+`viewer_email_change_requests`, and revokes `viewer_collection_share_tokens`
+created by the affected viewer. Restore performs the same authority rotation
+while returning the durable account status to `active`, so rows revoked before
+suspension are never made valid again.
 
-Admin Sign out everywhere also adds no storage. It reuses central viewer authentication invalidation to increment `security_version`, revoke all current viewer session and remember rows, and invalidate outstanding reset authority while leaving `viewer_accounts.status`, password hash, `must_change_password`, favourites, collections, collection items, and dormant collection-share capabilities unchanged. An account suspended/restored through Phase 2.5 retains `must_change_password=1` when it was administrator-provisioned with a temporary password.
+Admin Sign out everywhere also adds no storage. It reuses central viewer
+authentication invalidation to increment `security_version`, revoke all current
+viewer session and remember rows, and invalidate outstanding reset authority
+while leaving `viewer_accounts.status`, password hash, `must_change_password`,
+favourites, collections, collection items, and dormant collection-share
+capabilities unchanged. An account suspended/restored through Phase 2.5 retains
+`must_change_password=1` when it was administrator-provisioned with a temporary
+password.
 
-These operations never delete or update canonical `images`, `galleries`, Smart Gallery definitions, gallery share-link rows, or the administrator `users`/persistent-auth domain. The viewer frontend feature switch is not a storage prerequisite for Admin security operations; schema uncertainty still fails the relevant mutation closed.
+These operations never delete or update canonical `images`, `galleries`, Smart
+Gallery definitions, gallery share-link rows, or the administrator
+`users`/persistent-auth domain. The viewer frontend feature switch is not a
+storage prerequisite for Admin security operations; schema uncertainty still
+fails the relevant mutation closed.
 
 ## Phase 3.0 Collection Share Storage Use
 
-Phase 3.0 adds no migration. It activates the existing `viewer_collection_share_tokens` table from `202608180001_viewer_security_foundations.php`: `id`, `viewer_collection_id`, nullable `created_by_viewer_account_id`, unique `token_hash`, `created_at`, optional `last_used_at`, `expires_at`, and `revoked_at`, with the existing collection/state, creator/state, and expiry indexes. The database never stores a plaintext share token, complete share URL, reversible display copy, copied collection title, or source-gallery permission snapshot.
+Phase 3.0 adds no migration. It activates the existing
+`viewer_collection_share_tokens` table from
+`202608180001_viewer_security_foundations.php`: `id`, `viewer_collection_id`,
+nullable `created_by_viewer_account_id`, unique `token_hash`, `created_at`,
+optional `last_used_at`, `expires_at`, and `revoked_at`, with the existing
+collection/state, creator/state, and expiry indexes. The database never stores a
+plaintext share token, complete share URL, reversible display copy, copied
+collection title, or source-gallery permission snapshot.
 
-One active share per collection is an application-level Phase 3 product invariant serialized by the authoritative `viewer_collections` row lock. Create/replace locks the viewer account, owned collection, and unrevoked share rows in one transaction, revokes every previous unrevoked row, then inserts one SHA-256 authority hash with a 30-day expiry. Historic revoked/expired rows may remain. Revoke marks unrevoked rows with `revoked_at` and does not delete the collection, items, favourites, images, galleries, or gallery shares. `last_used_at` is best-effort exchange telemetry only and is not human-open proof or authorization state.
+One active share per collection is an application-level Phase 3 product
+invariant serialized by the authoritative `viewer_collections` row lock.
+Create/replace locks the viewer account, owned collection, and unrevoked share
+rows in one transaction, revokes every previous unrevoked row, then inserts one
+SHA-256 authority hash with a 30-day expiry. Historic revoked/expired rows may
+remain. Revoke marks unrevoked rows with `revoked_at` and does not delete the
+collection, items, favourites, images, galleries, or gallery shares.
+`last_used_at` is best-effort exchange telemetry only and is not human-open
+proof or authorization state.
 
-The existing foreign key from `viewer_collection_share_tokens.viewer_collection_id` to `viewer_collections.id` keeps collection deletion authoritative and never points toward `images`. Owner account deletion continues to remove/cascade viewer-owned collections and shares without touching source media. Account suspension explicitly revokes created shares through the established lifecycle transition; restoration never clears `revoked_at`. Sign out everywhere does not mutate share rows. Share schema inspection is intentionally separate from `viewer_collections_schema_status()`, so missing/unknown share storage fails sharing closed without disabling private collections.
+The existing foreign key from
+`viewer_collection_share_tokens.viewer_collection_id` to `viewer_collections.id`
+keeps collection deletion authoritative and never points toward `images`. Owner
+account deletion continues to remove/cascade viewer-owned collections and shares
+without touching source media. Account suspension explicitly revokes created
+shares through the established lifecycle transition; restoration never clears
+`revoked_at`. Sign out everywhere does not mutate share rows. Share schema
+inspection is intentionally separate from `viewer_collections_schema_status()`,
+so missing/unknown share storage fails sharing closed without disabling private
+collections.
 
 ## Cooperative galleries foundations
 
@@ -1551,19 +2312,29 @@ Migration `202609270001_cooperative_galleries_foundations.php` adds
 (opaque identities referencing local galleries), `cooperative_peers` (separate
 hashed inbound/encrypted outbound credentials and pairing state), and
 `cooperative_groups` (bounded JSON aggregate plus optimistic storage revision).
-These tables are separate from ordinary API keys. Album mappings cascade on gallery
+These tables are separate from ordinary API keys. Album mappings cascade on
+gallery
 deletion; an ID reused by a new gallery receives a different public identity.
 Missing/unknown schema refuses authority operations; revocation has a narrower
-verified dependency set. See [integration details](docs/COOPERATIVE_GALLERIES.md).
+verified dependency set. See
+[integration details](docs/COOPERATIVE_GALLERIES.md).
 
-Migration `202609270002_cooperative_pairing.php` adds `cooperative_pairings`, with a
-stable numeric ID, unique public invitation ID, unique peer ID, role/state/revision,
-Unix-second expiry, hashed bootstrap authority, context-bound encrypted recovery payload,
-attempt/backoff/error metadata and UTC update timestamp. No plaintext key is stored.
-Local transactions lock pairing before peer; delivery runs after commit. Fresh pairing
-replaces a revoked lifecycle with a new invitation while retaining its numeric ID and
-increasing revisions. Minimal local revocation depends only on verified invitation mapping
-and peer identity/state/revision/inbound hash, not recovery ciphertext availability.
+Migration `202609270002_cooperative_pairing.php` adds `cooperative_pairings`,
+with a
+stable numeric ID, unique public invitation ID, unique peer ID,
+role/state/revision,
+Unix-second expiry, hashed bootstrap authority, context-bound encrypted recovery
+payload,
+attempt/backoff/error metadata and UTC update timestamp. No plaintext key is
+stored.
+Local transactions lock pairing before peer; delivery runs after commit. Fresh
+pairing
+replaces a revoked lifecycle with a new invitation while retaining its numeric
+ID and
+increasing revisions. Minimal local revocation depends only on verified
+invitation mapping
+and peer identity/state/revision/inbound hash, not recovery ciphertext
+availability.
 
 
 ## Gallery title-picture selection storage
@@ -1586,18 +2357,36 @@ public access filtering and mode behavior.
 
 ## Gallery-card orientation compatibility
 
-The semantics migration delegates persistence to `app/models/gallery_description_layout_migration.php` and orchestration to `app/services/gallery_description_layout_compatibility.php`. Required `app_settings`, `galleries` (including revisions), Smart Gallery JSON and Trash snapshots are read before filesystem mutation; stored documents and sidecars are preflighted before replacement. Required storage failure refuses conversion rather than being treated as optional absence.
+The semantics migration delegates persistence to
+`app/models/gallery_description_layout_migration.php` and orchestration to
+`app/services/gallery_description_layout_compatibility.php`. Required
+`app_settings`, `galleries` (including revisions), Smart Gallery JSON and Trash
+snapshots are read before filesystem mutation; stored documents and sidecars are
+preflighted before replacement. Required storage failure refuses conversion
+rather than being treated as optional absence.
 
-Established installations swap explicit historical orientations and retain the old effective global default if none was saved. Nullable overrides remain inherited; fresh installs keep the corrected vertical default. The transactional `gallery_description_layout_semantics_version=2` checkpoint and independent document `description_layout_semantics_version` markers prevent double conversion on retry. Converted gallery values advance edit revisions and public content revision.
+Established installations swap explicit historical orientations and retain the
+old effective global default if none was saved. Nullable overrides remain
+inherited; fresh installs keep the corrected vertical default. The transactional
+`gallery_description_layout_semantics_version=2` checkpoint and independent
+document `description_layout_semantics_version` markers prevent double
+conversion on retry. Converted gallery values advance edit revisions and public
+content revision.
 
-Feature plans reuse existing feature/revision columns and locked snapshots; no plan table is created. Password quick access changes only existing password hash/access mode after verified schema/revision checks. `admin_legacy_upload_navigation_enabled` uses `app_settings`, default `0`. Uploads and mobile connections retain their original storage and distinct issuance/revocation policy.
+Feature plans reuse existing feature/revision columns and locked snapshots; no
+plan table is created. Password quick access changes only existing password
+hash/access mode after verified schema/revision checks.
+`admin_legacy_upload_navigation_enabled` uses `app_settings`, default `0`.
+Uploads and mobile connections retain their original storage and distinct
+issuance/revocation policy.
 
 ## Automatic cache preference lifecycle
 
 Migration `202610140001_automatic_cache_cleanup.php` inserts
 `feature_flag.automatic_cache_cleanup.enabled=1` into existing `app_settings`
 only when absent. It runs through ordinary installation/update migrations and
-leaves explicit ON/OFF unchanged on replay. No new table, duplicate domain switch
+leaves explicit ON/OFF unchanged on replay. No new table, duplicate domain
+switch
 or cron registration is introduced. The canonical capability declares fresh ON;
 the existing fresh-default seeder preserves explicit preferences. The installer
 fixture checks installation ON, missing-preference upgrade ON and replay after

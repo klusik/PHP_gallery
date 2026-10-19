@@ -26,7 +26,8 @@
 
 # HTTP entrypoints and internal paths
 
-This inventory describes the supported browser entrypoints and the repository paths
+This inventory describes the supported browser entrypoints and the repository
+paths
 that must remain private when the checkout is served from Apache. It complements
 the route and security tables in `app/bootstrap/dispatch.php` and
 `app/bootstrap/routing.php`.
@@ -43,15 +44,19 @@ the route and security tables in `app/bootstrap/dispatch.php` and
 
 Application feature routes are not separate PHP entrypoints. The public front
 controller resolves them through the route registry and dispatcher, which own
-route normalization, authorization, capability and schema preflight, and controller
+route normalization, authorization, capability and schema preflight, and
+controller
 selection. Direct media access is subject to the same access policy as the route
-that serves it; stored gallery media is not intended to be served as an unchecked
+that serves it; stored gallery media is not intended to be served as an
+unchecked
 static tree.
 
 ## Internal repository trees
 
-The following top-level trees are implementation, maintenance, generated data, or
-development material. Apache denies requests within each tree with a directory-local
+The following top-level trees are implementation, maintenance, generated data,
+or
+development material. Apache denies requests within each tree with a
+directory-local
 `.htaccess` authorization rule. The denial does not rely on `mod_rewrite`, so it
 continues to apply when clean URL routing is disabled.
 
@@ -69,23 +74,30 @@ continues to apply when clean URL routing is disabled.
 | `.github/`, `.agents/` | Repository workflow, community, and agent metadata. | Denied. |
 | `winapp/` | Windows uploader, installer, and build source. | Denied. |
 
-When the repository root is the document root, the project root also denies direct requests for `config.php` and
+When the repository root is the document root, the project root also denies
+direct requests for `config.php` and
 `config.example.php`, source-control metadata, hidden files other than the
 explicit `.well-known/` exception, and common backup, archive, environment, and
-configuration-file extensions. Root and public rewrite rules retain their existing
+configuration-file extensions. Root and public rewrite rules retain their
+existing
 path-denial rules as additional defense in depth.
 
 ## Public static content and URL behavior
 
-`public/assets/` contains browser scripts, stylesheets, icons, and images that are
-intentionally served directly. `galleries/` stores uploaded originals and generated
-derivatives, but its policy denies direct media-file reads so visibility, password,
-share-link, and NSFW checks remain centralized in application routes. `custom_css/`
+`public/assets/` contains browser scripts, stylesheets, icons, and images that
+are
+intentionally served directly. `galleries/` stores uploaded originals and
+generated
+derivatives, but its policy denies direct media-file reads so visibility,
+password,
+share-link, and NSFW checks remain centralized in application routes.
+`custom_css/`
 is a public presentation asset location when configured by the application.
 
 The rewrite-independent directory rules are anchored to the protected top-level
 trees. A later public route component with one of those words, such as
-`/gallery/travel/tests/`, remains eligible for normal route dispatch. Disabling URL
+`/gallery/travel/tests/`, remains eligible for normal route dispatch. Disabling
+URL
 rewrites continues to support direct query-string requests through `index.php`.
 
 The updater's standalone CLI entrypoint may be scheduled by an external
@@ -93,19 +105,22 @@ hosting cron at five-minute intervals. It honors the interval persisted in
 Admin > Updates (300 seconds by default; choices: 300/900/1800/3600), skips
 disabled or beta automatic discovery, and continues bounded background work
 without treating every invocation as a new GitHub API check. A sample crontab
-entry is `*/5 * * * * /path/to/php /path/to/gallery/scripts/application_update.php --time-budget=8`.
+entry is
+`*/5 * * * * /path/to/php /path/to/gallery/scripts/application_update.php --time-budget=8`.
 The hosting provider must supply the real PHP path and support cron; the CLI
 script is not a public HTTP endpoint.
 
 The production/operator CLI commands include `scripts/application_update.php`,
 `scripts/create_admin.php`, `scripts/generate_manifest.php`,
 `scripts/migrate.php`, `scripts/site_maintenance.php`, and
-`scripts/telemetry_maintenance.php`. Developer audit, release, and reconciliation
+`scripts/telemetry_maintenance.php`. Developer audit, release, and
+reconciliation
 commands are also CLI-only. Shared PHP support modules under `scripts/` may be
 included by other commands; a module with an optional direct-command mode gates
 that mode only when the canonical `realpath()` of `SCRIPT_FILENAME` identifies
 the module itself. For example, `scripts/runtime_dependencies.php` and
-`scripts/release_qualification/cli.php` can be included by their owning tools and
+`scripts/release_qualification/cli.php` can be included by their owning tools
+and
 also expose a guarded direct CLI mode. The shared CLI guard does not reject an
 ordinary include.
 
@@ -127,7 +142,8 @@ browser endpoint.
 Root `config.example.php` is include data, not a command. `winapp/` has no PHP
 entrypoints. Local `cache/generate_wizard_registry_translations.php` and
 `cache/admin-updates-preview-router.php` are development artifacts outside the
-production file set; the latter is an intentional disposable web preview adapter.
+production file set; the latter is an intentional disposable web preview
+adapter.
 Shell/PowerShell deploy launchers run through their shell interpreters and are
 also denied as HTTP files.
 
@@ -138,7 +154,8 @@ modules are available and the Apache 2.2 `Order allow,deny` / `Deny from all`
 fallback otherwise. This is designed for Apache and compatible LiteSpeed hosting
 that honors `.htaccess` authorization directives. The site owner must configure
 `AllowOverride` to permit authorization directives; a server that ignores
-`.htaccess` needs equivalent server-level access rules. PHP's built-in development
+`.htaccess` needs equivalent server-level access rules. PHP's built-in
+development
 server and non-Apache servers do not read `.htaccess`; their local tests do not
 establish Apache authorization behavior.
 

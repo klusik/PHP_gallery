@@ -28,6 +28,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 require_once __DIR__ . '/support/module_source.php';
 
 /** Fail this standalone test with one concise contract message. */
@@ -119,13 +121,13 @@ smart_gallery_medium_hardening_assert(
 smart_gallery_medium_hardening_assert(
     str_contains($downloads, "cms_runtime_limit('download.smart_gallery_zip_max_images')")
     && str_contains($downloads, 'function smart_gallery_zip_max_source_bytes()')
-    && str_contains($downloads, "cms_runtime_limit('download.smart_gallery_zip_max_source_bytes')")
+    && php_source_contains($downloads, "cms_runtime_limit('download.smart_gallery_zip_max_source_bytes')")
     && str_contains($config, "'download.smart_gallery_zip_max_images' => 5000")
     && str_contains($config, "'download.smart_gallery_zip_max_source_bytes' => 2 * 1024 * 1024 * 1024"),
     'Smart Gallery ZIP generation has separate file-count and configurable aggregate source-byte ceilings with a safe default for existing installs.'
 );
 smart_gallery_medium_hardening_assert(
-    str_contains($downloads, 'if ($fileSize > $maxSourceBytes - $sourceBytes)')
+    php_source_contains($downloads, 'if ($fileSize > ($maxSourceBytes - $sourceBytes))')
     && str_contains($downloads, "'source_bytes_limit'")
     && str_contains($downloads, '$sourceBytes += $fileSize;'),
     'Aggregate source bytes are checked incrementally before accepting each original into the archive.'

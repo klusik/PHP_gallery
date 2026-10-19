@@ -9,7 +9,9 @@ navigation continue without either control.
 
 The controls share `back-to-top-button` styling. The container occupies the
 existing zero-width grid column beside a public listing and uses sticky
-placement on desktop, aligned inward from the listing edge so visible controls cannot create horizontal page overflow. On viewports up to 980 CSS pixels it becomes a fixed,
+placement on desktop, aligned inward from the listing edge so visible controls
+cannot create horizontal page overflow. On viewports up to 980 CSS pixels it
+becomes a fixed,
 safe-area-aware stack near the bottom-right corner. The two reserved grid rows
 keep the controls in a stable order and position when either one is hidden.
 The visual theme, CSS variables, labels, icons and focus/hover treatments apply
@@ -66,7 +68,8 @@ the real browser module in a deterministic DOM seam and verifies top/middle/
 bottom visibility, scroll targets, tolerance at the page edge, resize/content
 growth, lightbox/fullscreen suppression, reduced motion, focus transfers and
 observer/listener cleanup. It is loaded once by the already-registered
-`frontend_operational_policy_test.mjs` Node audit owner; its scenario filename keeps it outside the standalone test registry. The central hosted
+`frontend_operational_policy_test.mjs` Node audit owner; its scenario filename
+keeps it outside the standalone test registry. The central hosted
 candidate qualification remains authoritative; real mobile/desktop appearance
 and third-party Theme overrides still require visual acceptance.
 

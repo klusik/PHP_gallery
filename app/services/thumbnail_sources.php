@@ -51,11 +51,13 @@ use function Gallery\Models\image_model_thumbnail_identity_candidates;
  * Consumers: thumbnail_source_identity_preload. Rationale: bound indexed query parameter counts.
  */
 const THUMBNAIL_IDENTITY_BATCH_IMAGES = 128;
+
 /** Limit candidate observations before an overloaded ownership batch is refused.
  * Type: int. Units: rows. Scope: one candidate query including overflow sentinel.
  * Consumers: thumbnail_source_identity_preload. Rationale: refuse dense collision sets without a gallery scan.
  */
 const THUMBNAIL_IDENTITY_CANDIDATE_LIMIT = 4097;
+
 /** Bound competing identities observed for an isolated thumbnail request.
  * Type: int. Units: rows. Scope: one isolated media ownership query.
  * Consumers: thumbnail_source_identity_preload. Rationale: cap single-photo competitor observations.
@@ -75,31 +77,63 @@ function thumbnail_sizes(): array
 }
 
 /**
- * Handles thumbnail srcset logic for the gallery application.
+ * Build a responsive thumbnail srcset using the preferred browser image format.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $sizes Input used by this operation.
- * @return mixed Result produced by this operation.
- * @param mixed 600 Input used by this operation.
- * @param mixed 800] Input used by this operation.
+ * @param array{
+ *     id:int|string,
+ *     gallery_id:int|string,
+ *     filename?:string,
+ *     relative_path?:string,
+ *     thumbnail_source_identity_version?:int|string|null,
+ *     url_slug?:string|null,
+ *     checksum_sha256?:string|null,
+ *     modified_at?:string|null,
+ *     file_size?:int|string|null,
+ *     relative_path_hash?:string|null,
+ *     thumbnail_derivative_version?:int|string|null,
+ *     ...
+ * } $image Source row with id and gallery id, plus either a relative path or
+ *     filename. Optional fields provide naming and public cache identity.
+ * @param list<int> $sizes Candidate thumbnail widths in pixels.
+ * @return string Responsive source-set value, or empty when no authorized
+ *     variants exist.
  */
 function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
-    $format = function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
+    $format = function_exists(
+        'Gallery\\Services\\thumbnail_preferred_browser_format',
+    )
+        ? thumbnail_preferred_browser_format()
+        : 'jpg';
     return thumbnail_srcset_for_format($image, $sizes, $format);
 }
 
 /**
- * Handles thumbnail webp srcset logic for the gallery application.
+ * Build a responsive WebP thumbnail srcset for one image.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $sizes Input used by this operation.
- * @return mixed Result produced by this operation.
- * @param mixed 600 Input used by this operation.
- * @param mixed 800] Input used by this operation.
+ * @param array{
+ *     id:int|string,
+ *     gallery_id:int|string,
+ *     filename?:string,
+ *     relative_path?:string,
+ *     thumbnail_source_identity_version?:int|string|null,
+ *     url_slug?:string|null,
+ *     checksum_sha256?:string|null,
+ *     modified_at?:string|null,
+ *     file_size?:int|string|null,
+ *     relative_path_hash?:string|null,
+ *     thumbnail_derivative_version?:int|string|null,
+ *     ...
+ * } $image Source row with id and gallery id, plus either a relative path or
+ *     filename. Optional fields provide naming and public cache identity.
+ * @param list<int> $sizes Candidate thumbnail widths in pixels.
+ * @return string WebP source-set value, or empty when no authorized variants
+ *     exist.
  */
-function thumbnail_webp_srcset(array $image, array $sizes = [300, 600, 800]): string
-{
+function thumbnail_webp_srcset(
+    array $image,
+    array $sizes = [300, 600, 800],
+): string {
     return thumbnail_srcset_for_format($image, $sizes, 'webp');
 }
 
@@ -111,8 +145,11 @@ function thumbnail_webp_srcset(array $image, array $sizes = [300, 600, 800]): st
  * @param string $format format input for this operation.
  * @return string Result produced by this operation.
  */
-function thumbnail_srcset_for_format(array $image, array $sizes, string $format): string
-{
+function thumbnail_srcset_for_format(
+    array $image,
+    array $sizes,
+    string $format,
+): string {
     if (!thumbnail_legacy_identity_owned($image)) {
         return '';
     }
@@ -120,20 +157,35 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
     $entries = [];
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) $image['gallery_id']);
-    if (!$gallery || !in_array($format, ['jpg', 'webp'], true)
-        || (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format))) {
+    if (
+        !$gallery
+        || !in_array($format, ['jpg', 'webp'], true)
+        || (
+            function_exists(
+                'Gallery\\Services\\thumbnail_policy_format_allowed',
+            )
+            && !thumbnail_policy_format_allowed($format)
+        )
+    ) {
         return '';
     }
     if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
         $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
     }
-    if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+    if (
+        function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready')
+        && thumbnail_metadata_schema_ready()
+    ) {
         // $metadataRows stores renderable variants known from DB without touching thumbnail files.
         $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
         foreach ($sizes as $size) {
             $size = (int) $size;
             if (isset($metadataRows[$format][$size])) {
-                $entries[] = thumbnail_serving_url($image, $gallery, $size, $format) . ' ' . $size . 'w';
+                $entries[] =
+                    thumbnail_serving_url($image, $gallery, $size, $format)
+                    . ' '
+                    . $size
+                    . 'w';
             }
         }
         return implode(', ', $entries);
@@ -141,12 +193,17 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
 
     // $sourceGeometry stores source dimensions used to reject wrong-ratio legacy candidates.
     $sourceGeometry = null;
-    if (function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')) {
+    if (function_exists(
+        'Gallery\\Services\\thumbnail_source_geometry_dimensions',
+    )) {
         try {
             // $sourcePath stores the original file path used only for geometry validation.
             $sourcePath = image_abs_path($image, $gallery);
             if (is_file($sourcePath)) {
-                $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image);
+                $sourceGeometry = thumbnail_source_geometry_dimensions(
+                    $sourcePath,
+                    $image,
+                );
             }
         } catch (Throwable) {
             $sourceGeometry = null;
@@ -165,9 +222,19 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
             if (!is_file($targetPath)) {
                 continue;
             }
-            if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
+            if (
+                is_array($sourceGeometry)
+                && function_exists(
+                    'Gallery\\Services\\thumbnail_file_geometry_status',
+                )
+            ) {
                 // $geometryStatus stores whether this candidate preserves the source aspect ratio.
-                $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], $size);
+                $geometryStatus = thumbnail_file_geometry_status(
+                    $targetPath,
+                    (int) $sourceGeometry['width'],
+                    (int) $sourceGeometry['height'],
+                    $size,
+                );
                 if (empty($geometryStatus['valid'])) {
                     continue;
                 }
@@ -175,7 +242,11 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
         } catch (RuntimeException) {
             continue;
         }
-        $entries[] = thumbnail_serving_url($image, $gallery, $size, $format) . ' ' . $size . 'w';
+        $entries[] =
+            thumbnail_serving_url($image, $gallery, $size, $format)
+            . ' '
+            . $size
+            . 'w';
     }
     return implode(', ', $entries);
 }
@@ -222,8 +293,10 @@ function gallery_thumbs_dir(array $gallery, bool $create = false): string
  * @param string $thumbnailPath Thumbnail path filesystem path.
  * @return bool True when the condition matches.
  */
-function thumbnail_path_inside_existing_gallery(string $galleryRoot, string $thumbnailPath): bool
-{
+function thumbnail_path_inside_existing_gallery(
+    string $galleryRoot,
+    string $thumbnailPath,
+): bool {
     // $galleryRootReal is the trusted existing directory boundary.
     $galleryRootReal = realpath($galleryRoot);
     if ($galleryRootReal === false || !is_dir($galleryRootReal)) {
@@ -233,8 +306,13 @@ function thumbnail_path_inside_existing_gallery(string $galleryRoot, string $thu
     // First enforce lexical ownership, including for destinations not yet created.
     $candidatePath = normalize_filesystem_path($thumbnailPath);
     $lexicalRoot = normalize_filesystem_path($galleryRoot);
-    if ($candidatePath !== $lexicalRoot
-        && !str_starts_with($candidatePath, rtrim($lexicalRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) {
+    if (
+        $candidatePath !== $lexicalRoot
+        && !str_starts_with(
+            $candidatePath,
+            rtrim($lexicalRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR,
+        )
+    ) {
         return false;
     }
 
@@ -250,13 +328,22 @@ function thumbnail_path_inside_existing_gallery(string $galleryRoot, string $thu
         $existing = $parent;
     }
     $resolved = realpath($existing);
-    if ($resolved === false || ($existing !== $thumbnailPath && !is_dir($resolved))) {
+    if (
+        $resolved === false
+        || (
+            $existing !== $thumbnailPath
+            && !is_dir($resolved)
+        )
+    ) {
         return false;
     }
     $canonicalPath = normalize_filesystem_path($resolved);
     $canonicalRoot = normalize_filesystem_path($galleryRootReal);
     return $canonicalPath === $canonicalRoot
-        || str_starts_with($canonicalPath, rtrim($canonicalRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR);
+        || str_starts_with(
+            $canonicalPath,
+            rtrim($canonicalRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR,
+        );
 }
 
 /**
@@ -275,7 +362,9 @@ function normalize_filesystem_path(string $path): string
     // $path uses the current platform separator so later comparisons are consistent.
     $path = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
     // $isAbsolute records whether the normalized result must keep an absolute root prefix.
-    $isAbsolute = str_starts_with($path, DIRECTORY_SEPARATOR) || preg_match('~^[A-Za-z]:\\\\~', $path) === 1;
+    $isAbsolute =
+        str_starts_with($path, DIRECTORY_SEPARATOR)
+        || preg_match('~^[A-Za-z]:\\\\~', $path) === 1;
     // $prefix stores the leading root portion for Unix paths or Windows drive paths.
     $prefix = '';
 
@@ -318,8 +407,11 @@ function normalize_filesystem_path(string $path): string
  * @param string $format format input for this operation.
  * @return string Result produced by this operation.
  */
-function thumbnail_filename(array $image, int $size, string $format = 'jpg'): string
-{
+function thumbnail_filename(
+    array $image,
+    int $size,
+    string $format = 'jpg',
+): string {
     if (!in_array($format, ['jpg', 'webp'], true)) {
         throw new RuntimeException(t('thumbnails.error_unsupported_format'));
     }
@@ -343,7 +435,9 @@ function thumbnail_filename_stem(array $image): string
         return pathinfo((string) $image['filename'], PATHINFO_FILENAME);
     }
     if ($version !== 1) {
-        throw new RuntimeException('Thumbnail source identity could not be verified.');
+        throw new RuntimeException(
+            'Thumbnail source identity could not be verified.',
+        );
     }
     return thumbnail_canonical_filename_stem($image);
 }
@@ -354,13 +448,22 @@ function thumbnail_filename_stem(array $image): string
  */
 function thumbnail_canonical_filename_stem(array $image): string
 {
-    $relativePath = normalize_relative_path((string) ($image['relative_path'] ?? $image['filename'] ?? ''));
+    $relativePath = normalize_relative_path(
+        (string) ($image['relative_path'] ?? $image['filename'] ?? ''),
+    );
     if ($relativePath === '') {
         throw new RuntimeException('Missing thumbnail source identity.');
     }
     $readableStem = pathinfo(basename($relativePath), PATHINFO_FILENAME);
-    $readableStem = trim((string) preg_replace('/[^A-Za-z0-9_-]+/', '_', $readableStem), '_-');
-    $readableStem = substr($readableStem !== '' ? $readableStem : 'image', 0, 48);
+    $readableStem = trim(
+        (string) preg_replace('/[^A-Za-z0-9_-]+/', '_', $readableStem),
+        '_-',
+    );
+    $readableStem = substr(
+        $readableStem !== '' ? $readableStem : 'image',
+        0,
+        48,
+    );
     return $readableStem . '_' . hash('sha256', $relativePath);
 }
 
@@ -388,7 +491,9 @@ function thumbnail_source_identity_version(array $image): ?int
     }
     $cache = &thumbnail_legacy_identity_request_cache();
     $row = $cache['ids:' . $galleryId][(int) ($image['id'] ?? 0)] ?? null;
-    $version = is_array($row) ? (int) $row['thumbnail_source_identity_version'] : -1;
+    $version = is_array($row)
+        ? (int) $row['thumbnail_source_identity_version']
+        : -1;
     return in_array($version, [0, 1], true) ? $version : null;
 }
 
@@ -416,8 +521,13 @@ function thumbnail_legacy_identity_cache_clear(): void
 function thumbnail_identity_marker_available(): ?bool
 {
     try {
-        $status = schema_inspection_column('images', 'thumbnail_source_identity_version');
-        return schema_inspection_is_unknown($status) ? null : schema_inspection_is_available($status);
+        $status = schema_inspection_column(
+            'images',
+            'thumbnail_source_identity_version',
+        );
+        return schema_inspection_is_unknown($status)
+            ? null
+            : schema_inspection_is_available($status);
     } catch (Throwable) {
         return null;
     }
@@ -430,8 +540,12 @@ function thumbnail_identity_marker_available(): ?bool
  * @param int $limit Maximum observed candidates including the overflow sentinel.
  * @return array<int,array<string,mixed>>|null Candidate rows, or null on failed observation.
  */
-function thumbnail_identity_candidates(int $galleryId, array $imageIds, array $stems, int $limit): ?array
-{
+function thumbnail_identity_candidates(
+    int $galleryId,
+    array $imageIds,
+    array $stems,
+    int $limit,
+): ?array {
     $available = thumbnail_identity_marker_available();
     if ($available === null) {
         return null;
@@ -443,7 +557,14 @@ function thumbnail_identity_candidates(int $galleryId, array $imageIds, array $s
         }
     }
     try {
-        $rows = image_model_thumbnail_identity_candidates($galleryId, $imageIds, $stems, array_values(array_unique($hashes)), $available, $limit);
+        $rows = image_model_thumbnail_identity_candidates(
+            $galleryId,
+            $imageIds,
+            $stems,
+            array_values(array_unique($hashes)),
+            $available,
+            $limit,
+        );
         if (count($rows) >= $limit) {
             return null;
         }
@@ -463,9 +584,18 @@ function thumbnail_identity_candidates(int $galleryId, array $imageIds, array $s
  */
 function thumbnail_identity_ownership_key(array $image): string
 {
-    return (int) ($image['gallery_id'] ?? 0) . ':' . (int) ($image['id'] ?? 0) . ':'
-        . (string) ($image['thumbnail_source_identity_version'] ?? 'unresolved') . ':'
-        . hash('sha256', (string) ($image['relative_path'] ?? $image['filename'] ?? '') . '|' . (string) ($image['filename'] ?? ''));
+    return (int) ($image['gallery_id'] ?? 0)
+        . ':'
+        . (int) ($image['id'] ?? 0)
+        . ':'
+        . (string) ($image['thumbnail_source_identity_version'] ?? 'unresolved')
+        . ':'
+        . hash(
+            'sha256',
+            (string) ($image['relative_path'] ?? $image['filename'] ?? '')
+                . '|'
+                . (string) ($image['filename'] ?? ''),
+        );
 }
 
 /** Preload exclusive derivative ownership in bounded batches rather than scanning galleries.
@@ -489,15 +619,32 @@ function thumbnail_source_identity_preload(array $images): void
         }
     }
     foreach ($groups as $galleryId => $group) {
-        foreach (array_chunk($group, THUMBNAIL_IDENTITY_BATCH_IMAGES, true) as $batch) {
+        foreach (array_chunk(
+            $group,
+            THUMBNAIL_IDENTITY_BATCH_IMAGES,
+            true,
+        ) as $batch) {
             $missingIds = [];
             foreach ($batch as $imageId => $image) {
-                if (!array_key_exists('thumbnail_source_identity_version', $image)
-                    && !isset($cache['ids:' . $galleryId][$imageId])) {
+                if (
+                    !array_key_exists(
+                        'thumbnail_source_identity_version',
+                        $image,
+                    )
+                    && !isset($cache['ids:' . $galleryId][$imageId])
+                ) {
                     $missingIds[] = $imageId;
                 }
             }
-            if ($missingIds !== [] && thumbnail_identity_candidates($galleryId, $missingIds, [], count($missingIds) + 1) === null) {
+            if (
+                $missingIds !== []
+                && thumbnail_identity_candidates(
+                    $galleryId,
+                    $missingIds,
+                    [],
+                    count($missingIds) + 1,
+                ) === null
+            ) {
                 continue;
             }
             $stems = [];
@@ -505,47 +652,101 @@ function thumbnail_source_identity_preload(array $images): void
             foreach ($batch as $imageId => $image) {
                 $ownershipKey = thumbnail_identity_ownership_key($image);
                 $version = thumbnail_source_identity_version($image);
-                if ($version === null) { continue; }
+                if ($version === null) {
+                    continue;
+                }
                 $image['thumbnail_source_identity_version'] = $version;
                 try {
                     $stem = thumbnail_filename_stem($image);
                 } catch (RuntimeException) {
                     continue;
                 }
-                if ($stem === '' || basename($stem) !== $stem || str_contains($stem, '\\') || thumbnail_identity_case_key($stem) === null) {
+                if (
+                    $stem === ''
+                    || basename($stem) !== $stem
+                    || str_contains($stem, '\\')
+                    || thumbnail_identity_case_key($stem) === null
+                ) {
                     continue;
                 }
                 $stems[] = $stem;
-                $prepared[$imageId] = ['image' => $image, 'stem' => $stem, 'key' => $ownershipKey];
+                $prepared[$imageId] = [
+                    'image' => $image,
+                    'stem' => $stem,
+                    'key' => $ownershipKey,
+                ];
             }
-            if ($prepared === []) { continue; }
-            $limit = min(THUMBNAIL_IDENTITY_CANDIDATE_LIMIT, max(THUMBNAIL_IDENTITY_SINGLE_LIMIT, count($prepared) * 16 + 1));
-            $rows = thumbnail_identity_candidates($galleryId, array_keys($prepared), array_values(array_unique($stems)), $limit);
-            if ($rows === null) { continue; }
+            if ($prepared === []) {
+                continue;
+            }
+            $limit = min(THUMBNAIL_IDENTITY_CANDIDATE_LIMIT, max(
+                THUMBNAIL_IDENTITY_SINGLE_LIMIT,
+                (count($prepared) * 16) + 1,
+            ));
+            $rows = thumbnail_identity_candidates(
+                $galleryId,
+                array_keys($prepared),
+                array_values(array_unique($stems)),
+                $limit,
+            );
+            if ($rows === null) {
+                continue;
+            }
             foreach ($prepared as $imageId => $entry) {
                 $matches = [];
                 $complete = true;
                 foreach ($rows as $row) {
-                    $version = (int) ($row['thumbnail_source_identity_version'] ?? -1);
-                    if (!in_array($version, [0, 1], true)) { $complete = false; break; }
-                    $rowStem = $version === 1 ? thumbnail_canonical_filename_stem($row) : pathinfo((string) $row['filename'], PATHINFO_FILENAME);
-                    $match = preg_match('/^' . preg_quote($rowStem, '/') . '$/iuD', $entry['stem']);
-                    if ($match === false) { $complete = false; break; }
-                    if ($match === 1) { $matches[] = $row; }
+                    $version = (int) (
+                        $row['thumbnail_source_identity_version'] ?? -1
+                    );
+                    if (!in_array($version, [0, 1], true)) {
+                        $complete = false;
+                        break;
+                    }
+                    $rowStem = $version === 1
+                        ? thumbnail_canonical_filename_stem($row)
+                        : pathinfo(
+                            (string) $row['filename'],
+                            PATHINFO_FILENAME,
+                        );
+                    $match = preg_match(
+                        '/^' . preg_quote($rowStem, '/') . '$/iuD',
+                        $entry['stem'],
+                    );
+                    if ($match === false) {
+                        $complete = false;
+                        break;
+                    }
+                    if ($match === 1) {
+                        $matches[] = $row;
+                    }
                 }
                 $memberVerified = false;
                 foreach ($matches as $match) {
-                    if ((int) $match['id'] === $imageId
-                        && (int) $match['thumbnail_source_identity_version'] === $entry['image']['thumbnail_source_identity_version']
-                        && (string) $match['filename'] === (string) ($entry['image']['filename'] ?? '')
-                        && normalize_relative_path((string) $match['relative_path']) === normalize_relative_path((string) ($entry['image']['relative_path'] ?? $entry['image']['filename'] ?? ''))) {
+                    if (
+                        (int) $match['id'] === $imageId
+                        && (int) $match['thumbnail_source_identity_version']
+                            === $entry['image']['thumbnail_source_identity_version']
+                        && (string) $match['filename']
+                            === (string) ($entry['image']['filename'] ?? '')
+                        && normalize_relative_path(
+                            (string) $match['relative_path'],
+                        ) === normalize_relative_path(
+                            (string) (
+                                $entry['image']['relative_path']
+                                ?? $entry['image']['filename']
+                                ?? ''
+                            ),
+                        )
+                    ) {
                         $memberVerified = true;
                     }
                 }
                 if ($complete && $memberVerified) {
                     $cache['invalidate'][$entry['key']] = $entry['stem'];
                 }
-                $cache['owned'][$entry['key']] = $complete && $memberVerified && count($matches) === 1;
+                $cache['owned'][$entry['key']] =
+                    $complete && $memberVerified && count($matches) === 1;
             }
         }
     }
@@ -573,9 +774,12 @@ function thumbnail_source_identity_invalidation_stem(array $image): string
 {
     thumbnail_source_identity_preload([$image]);
     $cache = &thumbnail_legacy_identity_request_cache();
-    $stem = $cache['invalidate'][thumbnail_identity_ownership_key($image)] ?? null;
+    $stem =
+        $cache['invalidate'][thumbnail_identity_ownership_key($image)] ?? null;
     if (!is_string($stem)) {
-        throw new RuntimeException('Thumbnail invalidation membership could not be verified.');
+        throw new RuntimeException(
+            'Thumbnail invalidation membership could not be verified.',
+        );
     }
     return $stem;
 }
@@ -602,7 +806,9 @@ function thumbnail_identity_case_key(string $stem): ?string
 function thumbnail_assert_source_identity_owned(array $image): void
 {
     if (!thumbnail_legacy_identity_owned($image)) {
-        throw new RuntimeException('Thumbnail source ownership could not be verified.');
+        throw new RuntimeException(
+            'Thumbnail source ownership could not be verified.',
+        );
     }
 }
 
@@ -617,15 +823,30 @@ function thumbnail_assert_source_identity_owned(array $image): void
  * @param string $format Supported output image format.
  * @return string Existing safe thumbnail file or a safe future destination path.
  */
-function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
-{
+function thumbnail_abs_path(
+    array $image,
+    array $gallery,
+    int $size,
+    string $format = 'jpg',
+): string {
     if (!in_array($size, thumbnail_sizes(), true)) {
         throw new RuntimeException(t('thumbnails.error_unsupported_size'));
     }
     $thumbsDir = gallery_thumbs_dir($gallery, false);
-    $path = $thumbsDir . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size, $format);
-    if ((file_exists($path) || is_link($path))
-        && !thumbnail_path_inside_existing_gallery(gallery_abs_path((string) $gallery['folder_path']), $path)) {
+    $path =
+        $thumbsDir
+        . DIRECTORY_SEPARATOR
+        . thumbnail_filename($image, $size, $format);
+    if (
+        (
+            file_exists($path)
+            || is_link($path)
+        )
+        && !thumbnail_path_inside_existing_gallery(
+            gallery_abs_path((string) $gallery['folder_path']),
+            $path,
+        )
+    ) {
         throw new RuntimeException(t('thumbnails.error_path_outside_gallery'));
     }
     return $path;
@@ -644,20 +865,27 @@ function thumbnail_can_use_static_public_url(array $image, array $gallery): bool
 }
 
 /**
- * Handles gallery static file url logic for the gallery application.
+ * Build the public URL for a file below a gallery's static directory.
  *
- * @param mixed $gallery Input used by this operation.
- * @param mixed $relativeFilePath Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array{folder_path:string,...} $gallery Gallery row whose folder path
+ *     anchors the static file.
+ * @param string $relativeFilePath File path relative to the gallery folder;
+ *     segments are normalized before URL encoding.
+ * @return string Base URL with each relative path segment URL-encoded.
  */
-function gallery_static_file_url(array $gallery, string $relativeFilePath): string
-{
+function gallery_static_file_url(
+    array $gallery,
+    string $relativeFilePath,
+): string {
     // $galleryPath stores an intermediate value used by the surrounding gallery workflow.
     $galleryPath = normalize_relative_path((string) $gallery['folder_path']);
     // $filePath stores an intermediate value used by the surrounding gallery workflow.
     $filePath = normalize_relative_path($relativeFilePath);
     // $segments stores an intermediate value used by the surrounding gallery workflow.
-    $segments = array_filter(explode('/', trim($galleryPath . '/' . $filePath, '/')), static fn (string $segment): bool => $segment !== '');
+    $segments = array_filter(
+        explode('/', trim($galleryPath . '/' . $filePath, '/')),
+        static fn(string $segment): bool => $segment !== '',
+    );
     // $encoded stores an intermediate value used by the surrounding gallery workflow.
     $encoded = array_map('rawurlencode', $segments);
     return base_url('galleries/' . implode('/', $encoded));
@@ -675,118 +903,288 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
 {
     static $cache = [];
     // $cacheKey stores repeated thumbnail URL lookups inside one request.
-    $format = $format !== '' ? $format : (function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
+    $format = $format !== ''
+        ? $format
+        : (
+            function_exists(
+                'Gallery\\Services\\thumbnail_preferred_browser_format',
+            )
+                    ? thumbnail_preferred_browser_format()
+                    : 'jpg'
+        );
     $normalizedFormat = $format === 'webp' ? 'webp' : 'jpg';
     $format = $normalizedFormat;
-    if (function_exists('Gallery\\Services\\thumbnail_policy_format_allowed') && !thumbnail_policy_format_allowed($format)) {
-        $format = function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'webp';
+    if (
+        function_exists('Gallery\\Services\\thumbnail_policy_format_allowed')
+        && !thumbnail_policy_format_allowed($format)
+    ) {
+        $format = function_exists(
+            'Gallery\\Services\\thumbnail_preferred_browser_format',
+        )
+            ? thumbnail_preferred_browser_format()
+            : 'webp';
         $normalizedFormat = $format === 'jpg' ? 'jpg' : 'webp';
     }
-    $purpose = function_exists('Gallery\\Services\\public_render_profile_thumbnail_purpose') ? public_render_profile_thumbnail_purpose() : 'unprofiled';
-    $cacheKey = (int) ($image['id'] ?? 0) . ':' . (int) $size . ':' . $normalizedFormat;
+    $purpose = function_exists(
+        'Gallery\\Services\\public_render_profile_thumbnail_purpose',
+    )
+        ? public_render_profile_thumbnail_purpose()
+        : 'unprofiled';
+    $cacheKey =
+        (int) ($image['id'] ?? 0) . ':' . (int) $size . ':' . $normalizedFormat;
     if (array_key_exists($cacheKey, $cache)) {
         public_render_profile_count('thumbnail_lookup_cache_hits');
-        public_render_profile_record_thumbnail_purpose($purpose, $size, $normalizedFormat, 'cache_hit');
+        public_render_profile_record_thumbnail_purpose(
+            $purpose,
+            $size,
+            $normalizedFormat,
+            'cache_hit',
+        );
         return $cache[$cacheKey];
     }
     public_render_profile_count('thumbnail_lookups');
     $startedAt = microtime(true);
     try {
-        return $cache[$cacheKey] = public_render_profile_span('thumbnail_lookup', /** Return the selected authorized thumbnail URL. @return string */ static function () use ($image, $size, $format): string {
-    // Variable $gallery stores this steps working value.
-    $gallery = find_gallery((int) $image['gallery_id']);
-    if ($gallery) {
-        if (!thumbnail_legacy_identity_owned($image)) {
-            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
-        }
-        if (function_exists('Gallery\\Services\\thumbnail_bound_fallback_size')) {
-            $size = thumbnail_bound_fallback_size($image, $size, $gallery);
-        }
-        if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
-            // $selected stores the best DB-known thumbnail variant without probing thumbnail files.
-            $selected = thumbnail_metadata_select_renderable_variant($image, thumbnail_sizes(), $size, $format, true);
-            if ($selected !== null) {
-                if (!empty($selected['is_exact'])) {
-                    public_render_profile_count('thumbnail_direct_hits');
-                } else {
-                    public_render_profile_count('thumbnail_db_fallback_hits');
-                }
-                return thumbnail_serving_url($image, $gallery, (int) $selected['size'], (string) $selected['format']);
-            }
-            public_render_profile_count('thumbnail_media_fallbacks');
-            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
-        }
-        // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
-        $sourceGeometry = null;
-        if (function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')) {
-            try {
-                // $sourcePath stores the original file path used only for geometry validation.
-                $sourcePath = image_abs_path($image, $gallery);
-                if (is_file($sourcePath)) {
-                    $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image);
-                }
-            } catch (Throwable) {
-                $sourceGeometry = null;
-            }
-        }
-        try {
-            // $path stores an intermediate value used by the surrounding gallery workflow.
-            $path = thumbnail_abs_path($image, $gallery, $size, $format);
-            if (public_render_profile_is_file($path)) {
-                if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
-                    // $geometryStatus stores whether this cache file still matches the source aspect ratio.
-                    $geometryStatus = thumbnail_file_geometry_status($path, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], $size);
-                    if (empty($geometryStatus['valid'])) {
-                        public_render_profile_count('thumbnail_invalid_geometry_provisional_hits');
-                    } else {
-                        public_render_profile_count('thumbnail_direct_hits');
-                        return thumbnail_serving_url($image, $gallery, $size, $format);
+        return $cache[$cacheKey] = public_render_profile_span(
+            'thumbnail_lookup',
+            /** Return the selected authorized thumbnail URL. @return string */ static function () use (
+                $image,
+                $size,
+                $format,
+            ): string {
+                // Variable $gallery stores this steps working value.
+                $gallery = find_gallery((int) $image['gallery_id']);
+                if ($gallery) {
+                    if (!thumbnail_legacy_identity_owned($image)) {
+                        return (
+                            public_path_schema_ready()
+                                ? image_public_media_url($image, $gallery)
+                                : image_public_asset_url_with_version(
+                                    url_for('media', ['id' => $image['id']]),
+                                    $image,
+                                )
+                        );
                     }
-                } else {
-                    public_render_profile_count('thumbnail_direct_hits');
-                    return thumbnail_serving_url($image, $gallery, $size, $format);
+                    if (function_exists(
+                        'Gallery\\Services\\thumbnail_bound_fallback_size',
+                    )) {
+                        $size = thumbnail_bound_fallback_size(
+                            $image,
+                            $size,
+                            $gallery,
+                        );
+                    }
+                    if (
+                        function_exists(
+                            'Gallery\\Services\\thumbnail_metadata_schema_ready',
+                        )
+                        && thumbnail_metadata_schema_ready()
+                    ) {
+                        // $selected stores the best DB-known thumbnail variant without probing thumbnail files.
+                        $selected = thumbnail_metadata_select_renderable_variant(
+                            $image,
+                            thumbnail_sizes(),
+                            $size,
+                            $format,
+                            true,
+                        );
+                        if ($selected !== null) {
+                            if (!empty($selected['is_exact'])) {
+                                public_render_profile_count(
+                                    'thumbnail_direct_hits',
+                                );
+                            } else {
+                                public_render_profile_count(
+                                    'thumbnail_db_fallback_hits',
+                                );
+                            }
+                            return thumbnail_serving_url(
+                                $image,
+                                $gallery,
+                                (int) $selected['size'],
+                                (string) $selected['format'],
+                            );
+                        }
+                        public_render_profile_count(
+                            'thumbnail_media_fallbacks',
+                        );
+                        return (
+                            public_path_schema_ready()
+                                ? image_public_media_url($image, $gallery)
+                                : image_public_asset_url_with_version(
+                                    url_for('media', ['id' => $image['id']]),
+                                    $image,
+                                )
+                        );
+                    }
+                    // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
+                    $sourceGeometry = null;
+                    if (function_exists(
+                        'Gallery\\Services\\thumbnail_source_geometry_dimensions',
+                    )) {
+                        try {
+                            // $sourcePath stores the original file path used only for geometry validation.
+                            $sourcePath = image_abs_path($image, $gallery);
+                            if (is_file($sourcePath)) {
+                                $sourceGeometry = thumbnail_source_geometry_dimensions(
+                                    $sourcePath,
+                                    $image,
+                                );
+                            }
+                        } catch (Throwable) {
+                            $sourceGeometry = null;
+                        }
+                    }
+                    try {
+                        // $path stores an intermediate value used by the surrounding gallery workflow.
+                        $path = thumbnail_abs_path(
+                            $image,
+                            $gallery,
+                            $size,
+                            $format,
+                        );
+                        if (public_render_profile_is_file($path)) {
+                            if (
+                                is_array($sourceGeometry)
+                                && function_exists(
+                                    'Gallery\\Services\\thumbnail_file_geometry_status',
+                                )
+                            ) {
+                                // $geometryStatus stores whether this cache file still matches the source aspect ratio.
+                                $geometryStatus = thumbnail_file_geometry_status(
+                                    $path,
+                                    (int) $sourceGeometry['width'],
+                                    (int) $sourceGeometry['height'],
+                                    $size,
+                                );
+                                if (empty($geometryStatus['valid'])) {
+                                    public_render_profile_count(
+                                        'thumbnail_invalid_geometry_provisional_hits',
+                                    );
+                                } else {
+                                    public_render_profile_count(
+                                        'thumbnail_direct_hits',
+                                    );
+                                    return thumbnail_serving_url(
+                                        $image,
+                                        $gallery,
+                                        $size,
+                                        $format,
+                                    );
+                                }
+                            } else {
+                                public_render_profile_count(
+                                    'thumbnail_direct_hits',
+                                );
+                                return thumbnail_serving_url(
+                                    $image,
+                                    $gallery,
+                                    $size,
+                                    $format,
+                                );
+                            }
+                        }
+                        // $fallback stores an intermediate value used by the surrounding gallery workflow.
+                        $fallback = thumbnail_existing_fallback(
+                            $image,
+                            $gallery,
+                            $size,
+                            $format,
+                        );
+                        if ($fallback !== null) {
+                            return thumbnail_serving_url(
+                                $image,
+                                $gallery,
+                                $fallback['size'],
+                                $fallback['format'],
+                            );
+                        }
+                    } catch (RuntimeException) {
+                        return (
+                            public_path_schema_ready()
+                                ? image_public_media_url($image, $gallery)
+                                : image_public_asset_url_with_version(
+                                    url_for('media', ['id' => $image['id']]),
+                                    $image,
+                                )
+                        );
+                    }
+                    public_render_profile_count('thumbnail_media_fallbacks');
+                    return (
+                        public_path_schema_ready()
+                            ? image_public_media_url($image, $gallery)
+                            : image_public_asset_url_with_version(
+                                url_for('media', ['id' => $image['id']]),
+                                $image,
+                            )
+                    );
                 }
-            }
-            // $fallback stores an intermediate value used by the surrounding gallery workflow.
-            $fallback = thumbnail_existing_fallback($image, $gallery, $size, $format);
-            if ($fallback !== null) {
-                return thumbnail_serving_url($image, $gallery, $fallback['size'], $fallback['format']);
-            }
-        } catch (RuntimeException) {
-            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
-        }
-        public_render_profile_count('thumbnail_media_fallbacks');
-        return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
-    }
-    public_render_profile_count('thumbnail_media_fallbacks');
-    return image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
-        });
+                public_render_profile_count('thumbnail_media_fallbacks');
+                return image_public_asset_url_with_version(url_for('media', [
+                    'id' => $image['id'],
+                ]), $image);
+            },
+        );
     } finally {
-        public_render_profile_record_thumbnail_purpose($purpose, $size, $normalizedFormat, 'lookup', (microtime(true) - $startedAt) * 1000);
+        public_render_profile_record_thumbnail_purpose(
+            $purpose,
+            $size,
+            $normalizedFormat,
+            'lookup',
+            (microtime(true) - $startedAt) * 1000,
+        );
     }
 }
 
 /**
- * Handles thumbnail serving url logic for the gallery application.
+ * Resolve the public URL used to serve one thumbnail in the current schema state.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $gallery Input used by this operation.
- * @param mixed $size Input used by this operation.
- * @param mixed $format Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array{
+ *     id:int|string,
+ *     filename?:string,
+ *     url_slug?:string|null,
+ *     checksum_sha256?:string|null,
+ *     modified_at?:string|null,
+ *     file_size?:int|string|null,
+ *     relative_path_hash?:string|null,
+ *     thumbnail_derivative_version?:int|string|null,
+ *     ...
+ * } $image Source row with id and filename or public slug; optional fields
+ *     provide the cache-version identity.
+ * @param array{
+ *     folder_path:string,
+ *     url_path?:string|null,
+ *     slug?:string|null,
+ *     title?:string|null,
+ *     ...
+ * } $gallery Gallery folder and optional public-route fields.
+ * @param int $size Requested thumbnail width in pixels.
+ * @param string $format Thumbnail format, defaulting to JPEG.
+ * @return string Versioned URL from the current public-path or legacy route.
  */
-function thumbnail_serving_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
-{
+function thumbnail_serving_url(
+    array $image,
+    array $gallery,
+    int $size,
+    string $format = 'jpg',
+): string {
     if (public_path_schema_ready()) {
         return image_public_thumbnail_url($image, $gallery, $size, $format);
     }
     if (thumbnail_can_use_static_public_url($image, $gallery)) {
         return image_public_asset_url_with_version(
-            gallery_static_file_url($gallery, 'thumbs/' . thumbnail_filename($image, $size, $format)),
-            $image
+            gallery_static_file_url(
+                $gallery,
+                'thumbs/' . thumbnail_filename($image, $size, $format),
+            ),
+            $image,
         );
     }
-    return image_public_asset_url_with_version(url_for('thumb', ['id' => $image['id'], 'size' => $size, 'format' => $format]), $image);
+    return image_public_asset_url_with_version(url_for('thumb', [
+        'id' => $image['id'],
+        'size' => $size,
+        'format' => $format,
+    ]), $image);
 }
 
 /**
@@ -798,8 +1196,12 @@ function thumbnail_serving_url(array $image, array $gallery, int $size, string $
  * @param string $preferredFormat preferredFormat input for this operation.
  * @return array<int,array<string,mixed>>|null Result produced by this operation.
  */
-function thumbnail_existing_fallback(array $image, array $gallery, int $preferredSize, string $preferredFormat = 'jpg'): ?array
-{
+function thumbnail_existing_fallback(
+    array $image,
+    array $gallery,
+    int $preferredSize,
+    string $preferredFormat = 'jpg',
+): ?array {
     if (!thumbnail_legacy_identity_owned($image)) {
         return null;
     }
@@ -809,34 +1211,66 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
         $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
     }
 
-    if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+    if (
+        function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready')
+        && thumbnail_metadata_schema_ready()
+    ) {
         // $selected stores the closest renderable fallback known from DB metadata only.
-        $selected = thumbnail_metadata_select_renderable_variant($image, $sizes, $preferredSize, $preferredFormat, true);
+        $selected = thumbnail_metadata_select_renderable_variant(
+            $image,
+            $sizes,
+            $preferredSize,
+            $preferredFormat,
+            true,
+        );
         if ($selected !== null) {
             public_render_profile_count('thumbnail_db_fallback_hits');
-            return ['size' => (int) $selected['size'], 'format' => (string) $selected['format']];
+            return [
+                'size' => (int) $selected['size'],
+                'format' => (string) $selected['format'],
+            ];
         }
         return null;
     }
 
     public_render_profile_count('thumbnail_fallback_searches');
-    return public_render_profile_span('thumbnail_fallback_search', static function () use ($image, $gallery, $preferredSize, $preferredFormat, $sizes): ?array {
-        usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
+    return public_render_profile_span('thumbnail_fallback_search', static function () use (
+        $image,
+        $gallery,
+        $preferredSize,
+        $preferredFormat,
+        $sizes,
+    ): ?array {
+        usort($sizes, static function (int $left, int $right) use (
+            $preferredSize,
+        ): int {
             return abs($left - $preferredSize) <=> abs($right - $preferredSize);
         });
         // Variable $formats stores this steps working value.
-        $allowedFormats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
-        $formats = array_values(array_unique(array_merge([$preferredFormat], $allowedFormats)));
+        $allowedFormats = function_exists(
+            'Gallery\\Services\\thumbnail_policy_requested_formats',
+        )
+            ? thumbnail_policy_requested_formats()
+            : ['webp'];
+        $formats = array_values(array_unique(array_merge(
+            [$preferredFormat],
+            $allowedFormats,
+        )));
         $formats = array_values(array_intersect($formats, $allowedFormats));
 
         // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
         $sourceGeometry = null;
-        if (function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')) {
+        if (function_exists(
+            'Gallery\\Services\\thumbnail_source_geometry_dimensions',
+        )) {
             try {
                 // $sourcePath stores the original file path used only for geometry validation.
                 $sourcePath = image_abs_path($image, $gallery);
                 if (is_file($sourcePath)) {
-                    $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image);
+                    $sourceGeometry = thumbnail_source_geometry_dimensions(
+                        $sourcePath,
+                        $image,
+                    );
                 }
             } catch (Throwable) {
                 $sourceGeometry = null;
@@ -851,16 +1285,33 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
                 public_render_profile_count('thumbnail_fallback_checks');
                 try {
                     // $targetPath stores one existing generated thumbnail candidate.
-                    $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+                    $targetPath = thumbnail_abs_path(
+                        $image,
+                        $gallery,
+                        (int) $size,
+                        $format,
+                    );
                 } catch (RuntimeException) {
                     continue;
                 }
                 if (public_render_profile_is_file($targetPath)) {
-                    if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
+                    if (
+                        is_array($sourceGeometry)
+                        && function_exists(
+                            'Gallery\\Services\\thumbnail_file_geometry_status',
+                        )
+                    ) {
                         // $geometryStatus stores whether this fallback candidate keeps the source aspect ratio.
-                        $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
+                        $geometryStatus = thumbnail_file_geometry_status(
+                            $targetPath,
+                            (int) $sourceGeometry['width'],
+                            (int) $sourceGeometry['height'],
+                            (int) $size,
+                        );
                         if (empty($geometryStatus['valid'])) {
-                            public_render_profile_count('thumbnail_fallback_invalid_geometry_provisional_hits');
+                            public_render_profile_count(
+                                'thumbnail_fallback_invalid_geometry_provisional_hits',
+                            );
                             continue;
                         }
                     }
@@ -882,8 +1333,10 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
 function thumbnail_editor_preload_url(array $image): string
 {
     return image_public_asset_url_with_version(url_for('thumb', [
-        'id' => (int) $image['id'], 'size' => 300,
-        'format' => thumbnail_preferred_browser_format(), 'existing_only' => 1,
+        'id' => (int) $image['id'],
+        'size' => 300,
+        'format' => thumbnail_preferred_browser_format(),
+        'existing_only' => 1,
     ]), $image);
 }
 
@@ -901,6 +1354,16 @@ function thumbnail_editor_preview_url(array $image, array $gallery): string
     if ($sizes === []) {
         return '';
     }
-    usort($sizes, static fn (int $left, int $right): int => abs($left - 900) <=> abs($right - 900));
-    return thumbnail_serving_url($image, $gallery, $sizes[0], thumbnail_preferred_browser_format());
+    usort(
+        $sizes,
+        static fn(int $left, int $right): int => (
+            abs($left - 900) <=> abs($right - 900)
+        ),
+    );
+    return thumbnail_serving_url(
+        $image,
+        $gallery,
+        $sizes[0],
+        thumbnail_preferred_browser_format(),
+    );
 }

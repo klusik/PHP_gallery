@@ -35,4 +35,5 @@ To report a conduct concern, contact the maintainer privately through the
 private or sensitive details. Reports will be reviewed as promptly as practical
 and handled with discretion.
 
-This code is inspired by the [Contributor Covenant](https://www.contributor-covenant.org/).
+This code is inspired by the
+[Contributor Covenant](https://www.contributor-covenant.org/).

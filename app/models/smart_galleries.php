@@ -51,7 +51,10 @@ use function Gallery\Core\db;
  */
 function smart_gallery_model_graph_gallery_rows(int $maxRows): array
 {
-    return smart_gallery_model_bounded_rows('SELECT id, parent_id FROM galleries ORDER BY id', $maxRows);
+    return smart_gallery_model_bounded_rows(
+        'SELECT id, parent_id FROM galleries ORDER BY id',
+        $maxRows,
+    );
 }
 
 /**
@@ -62,7 +65,10 @@ function smart_gallery_model_graph_gallery_rows(int $maxRows): array
  */
 function smart_gallery_model_graph_definition_rows(int $maxRows): array
 {
-    return smart_gallery_model_bounded_rows('SELECT id, rules_json FROM smart_galleries ORDER BY id', $maxRows);
+    return smart_gallery_model_bounded_rows(
+        'SELECT id, rules_json FROM smart_galleries ORDER BY id',
+        $maxRows,
+    );
 }
 
 /**
@@ -72,14 +78,18 @@ function smart_gallery_model_graph_definition_rows(int $maxRows): array
  * @param bool $metadataReady Whether placement/order columns are available.
  * @return array<int,array<string,mixed>> Placement rows.
  */
-function smart_gallery_model_graph_placement_rows(int $maxRows, bool $metadataReady): array
-{
+function smart_gallery_model_graph_placement_rows(
+    int $maxRows,
+    bool $metadataReady,
+): array {
     $columns = $metadataReady
         ? 'smart_gallery_id, gallery_id, placement, placement_order'
         : "smart_gallery_id, gallery_id, 'bottom' AS placement, 0 AS placement_order";
     return smart_gallery_model_bounded_rows(
-        'SELECT ' . $columns . ' FROM smart_gallery_placements ORDER BY gallery_id, smart_gallery_id',
-        $maxRows
+        'SELECT '
+            . $columns
+            . ' FROM smart_gallery_placements ORDER BY gallery_id, smart_gallery_id',
+        $maxRows,
     );
 }
 
@@ -105,11 +115,17 @@ function smart_gallery_model_bounded_rows(string $sql, int $maxRows): array
 function smart_gallery_model_existing_ids(array $ids): array
 {
     $ids = smart_gallery_model_normalize_ids($ids);
-    if ($ids === []) return [];
+    if ($ids === [])
+        return [];
     $marks = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT id FROM smart_galleries WHERE id IN (' . $marks . ')');
+    $stmt = db()->prepare(
+        'SELECT id FROM smart_galleries WHERE id IN (' . $marks . ')',
+    );
     $stmt->execute($ids);
-    return array_values(array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN)));
+    return array_values(array_map(
+        'intval',
+        $stmt->fetchAll(\PDO::FETCH_COLUMN),
+    ));
 }
 
 /**
@@ -118,26 +134,43 @@ function smart_gallery_model_existing_ids(array $ids): array
  */
 function smart_gallery_model_has_any(): bool
 {
-    return db()->query('SELECT 1 FROM smart_galleries LIMIT 1')->fetchColumn() !== false;
+    return (
+        db()->query('SELECT 1 FROM smart_galleries LIMIT 1')->fetchColumn()
+            !== false
+    );
 }
 
 /** Return all Smart Gallery definitions for the Admin list. */
 function smart_gallery_model_all(): array
 {
-    return db()->query('SELECT * FROM smart_galleries ORDER BY title ASC, id ASC')->fetchAll();
+    return db()
+        ->query('SELECT * FROM smart_galleries ORDER BY title ASC, id ASC')
+        ->fetchAll();
 }
 
 /**
  * Return all placement rows used to attach placement metadata to Admin definitions.
  *
  * @param bool $metadataReady Whether placement/order columns are available.
+ * @return list<array{
+ *     smart_gallery_id:int|string,
+ *     gallery_id:int|string,
+ *     placement:string,
+ *     placement_order:int|string
+ * }> Placement rows; legacy fallbacks use bottom placement and order zero.
  */
 function smart_gallery_model_all_placements(bool $metadataReady): array
 {
     $columns = $metadataReady
         ? 'smart_gallery_id, gallery_id, placement, placement_order'
         : "smart_gallery_id, gallery_id, 'bottom' AS placement, 0 AS placement_order";
-    return db()->query('SELECT ' . $columns . ' FROM smart_gallery_placements ORDER BY gallery_id, smart_gallery_id')->fetchAll();
+    return db()
+        ->query(
+            'SELECT '
+                . $columns
+                . ' FROM smart_gallery_placements ORDER BY gallery_id, smart_gallery_id',
+        )
+        ->fetchAll();
 }
 
 /** Find one Smart Gallery definition by id. */
@@ -149,19 +182,61 @@ function smart_gallery_model_find(int $id): ?array
     return is_array($row) ? $row : null;
 }
 
-/** Find one enabled public Smart Gallery definition by slug. */
+/** Find one enabled public Smart Gallery definition by slug.
+ * @param string $slug Public Smart Gallery slug to find.
+ * @return array{
+ *     id:int|string,
+ *     title:string,
+ *     slug:string,
+ *     description:string|null,
+ *     rules_json:string,
+ *     rule_version:int|string,
+ *     enabled:int|string,
+ *     visibility:string,
+ *     sort_mode:string,
+ *     sort_direction:string,
+ *     created_at:string,
+ *     updated_at:string,
+ *     placement_mode?:string,
+ *     parent_gallery_id?:int|string|null,
+ *     presentation_json?:string|null
+ * }|null Enabled public definition, or null when no row matches.
+ */
 function smart_gallery_model_find_public_by_slug(string $slug): ?array
 {
-    $stmt = db()->prepare("SELECT * FROM smart_galleries WHERE slug = ? AND enabled = 1 AND visibility = 'public' LIMIT 1");
+    $stmt = db()->prepare(
+        "SELECT * FROM smart_galleries WHERE slug = ? AND enabled = 1 AND visibility = 'public' LIMIT 1",
+    );
     $stmt->execute([$slug]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
 }
 
-/** Find one enabled public Smart Gallery definition by id. */
+/** Find one enabled public Smart Gallery definition by id.
+ * @param int $id Public Smart Gallery identifier to find.
+ * @return array{
+ *     id:int|string,
+ *     title:string,
+ *     slug:string,
+ *     description:string|null,
+ *     rules_json:string,
+ *     rule_version:int|string,
+ *     enabled:int|string,
+ *     visibility:string,
+ *     sort_mode:string,
+ *     sort_direction:string,
+ *     created_at:string,
+ *     updated_at:string,
+ *     placement_mode?:string,
+ *     parent_gallery_id?:int|string|null,
+ *     presentation_json?:string|null
+ * }|null Enabled public definition, or null when no row matches.
+ */
 function smart_gallery_model_find_public_by_id(int $id): ?array
 {
-    $stmt = db()->prepare("SELECT * FROM smart_galleries WHERE id = ? AND enabled = 1 AND visibility = 'public' LIMIT 1");
+    $stmt = db()->prepare(
+        "SELECT * FROM smart_galleries WHERE id = ? AND enabled = 1 AND visibility = 'public' LIMIT 1",
+    );
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -191,20 +266,36 @@ function smart_gallery_model_save(array $definition, int $id): int
         (string) $definition['presentation_json'],
     ];
     if ($id > 0) {
-        $stmt = db()->prepare('UPDATE smart_galleries SET title=?, slug=?, description=?, rules_json=?, rule_version=?, enabled=?, visibility=?, placement_mode=?, parent_gallery_id=?, sort_mode=?, sort_direction=?, presentation_json=?, updated_at=? WHERE id=?');
-        $stmt->execute(array_merge($values, [(string) $definition['updated_at'], $id]));
+        $stmt = db()->prepare(
+            'UPDATE smart_galleries SET title=?, slug=?, description=?, rules_json=?, rule_version=?, enabled=?, visibility=?, placement_mode=?, parent_gallery_id=?, sort_mode=?, sort_direction=?, presentation_json=?, updated_at=? WHERE id=?',
+        );
+        $stmt->execute(array_merge($values, [
+            (string) $definition['updated_at'],
+            $id,
+        ]));
         return $id;
     }
 
-    $stmt = db()->prepare('INSERT INTO smart_galleries (title,slug,description,rules_json,rule_version,enabled,visibility,placement_mode,parent_gallery_id,sort_mode,sort_direction,presentation_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->execute(array_merge($values, [(string) $definition['created_at'], (string) $definition['updated_at']]));
+    $stmt = db()->prepare(
+        'INSERT INTO smart_galleries (title,slug,description,rules_json,rule_version,enabled,visibility,placement_mode,parent_gallery_id,sort_mode,sort_direction,presentation_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    );
+    $stmt->execute(array_merge($values, [
+        (string) $definition['created_at'],
+        (string) $definition['updated_at'],
+    ]));
     return (int) db()->lastInsertId();
 }
 
-/** Return whether a slug is already owned by another definition. */
+/** Return whether a slug is already owned by another definition.
+ * @param string $slug Candidate slug to check.
+ * @param int $excludeId Definition excluded during edits; zero for a new definition.
+ * @return bool True when another stored definition owns the slug.
+ */
 function smart_gallery_model_slug_exists(string $slug, int $excludeId): bool
 {
-    $stmt = db()->prepare('SELECT id FROM smart_galleries WHERE slug = ? AND id <> ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT id FROM smart_galleries WHERE slug = ? AND id <> ? LIMIT 1',
+    );
     $stmt->execute([$slug, $excludeId]);
     return (bool) $stmt->fetchColumn();
 }
@@ -221,12 +312,42 @@ function smart_gallery_model_delete(int $id): void
  *
  * @param int $galleryId Physical gallery identifier.
  * @param bool $metadataReady Whether placement/order metadata is available.
+ * @return list<array{
+ *     id:int|string,
+ *     title:string,
+ *     slug:string,
+ *     description:string|null,
+ *     rules_json:string,
+ *     rule_version:int|string,
+ *     enabled:int|string,
+ *     visibility:string,
+ *     sort_mode:string,
+ *     sort_direction:string,
+ *     created_at:string,
+ *     updated_at:string,
+ *     placement:string,
+ *     placement_order:int|string,
+ *     placement_mode?:string,
+ *     parent_gallery_id?:int|string|null,
+ *     presentation_json?:string|null
+ * }> Definitions joined to one physical gallery placement.
  */
-function smart_gallery_model_attachment_rows_for_gallery(int $galleryId, bool $metadataReady): array
-{
-    $placementSelect = $metadataReady ? 'sgp.placement, sgp.placement_order' : "'bottom' AS placement, 0 AS placement_order";
-    $order = $metadataReady ? "CASE sgp.placement WHEN 'top' THEN 0 ELSE 1 END, sgp.placement_order, sg.id" : 'sg.id';
-    $stmt = db()->prepare('SELECT sg.*, ' . $placementSelect . ' FROM smart_gallery_placements sgp INNER JOIN smart_galleries sg ON sg.id = sgp.smart_gallery_id WHERE sgp.gallery_id = ? ORDER BY ' . $order);
+function smart_gallery_model_attachment_rows_for_gallery(
+    int $galleryId,
+    bool $metadataReady,
+): array {
+    $placementSelect = $metadataReady
+        ? 'sgp.placement, sgp.placement_order'
+        : "'bottom' AS placement, 0 AS placement_order";
+    $order = $metadataReady
+        ? "CASE sgp.placement WHEN 'top' THEN 0 ELSE 1 END, sgp.placement_order, sg.id"
+        : 'sg.id';
+    $stmt = db()->prepare(
+        'SELECT sg.*, '
+            . $placementSelect
+            . ' FROM smart_gallery_placements sgp INNER JOIN smart_galleries sg ON sg.id = sgp.smart_gallery_id WHERE sgp.gallery_id = ? ORDER BY '
+            . $order,
+    );
     $stmt->execute([$galleryId]);
     return $stmt->fetchAll();
 }
@@ -236,15 +357,46 @@ function smart_gallery_model_attachment_rows_for_gallery(int $galleryId, bool $m
  *
  * @param ?int $parentGalleryId Null for root listings.
  * @param bool $metadataReady Whether placement/order metadata is available.
+ * @return list<array{
+ *     id:int|string,
+ *     title:string,
+ *     slug:string,
+ *     description:string|null,
+ *     rules_json:string,
+ *     rule_version:int|string,
+ *     enabled:int|string,
+ *     visibility:string,
+ *     sort_mode:string,
+ *     sort_direction:string,
+ *     created_at:string,
+ *     updated_at:string,
+ *     placement_mode:string,
+ *     parent_gallery_id?:int|string|null,
+ *     presentation_json?:string|null,
+ *     placement?:string,
+ *     placement_order?:int|string
+ * }> Enabled public definitions for root or requested gallery placement.
  */
-function smart_gallery_model_for_placement(?int $parentGalleryId, bool $metadataReady): array
-{
+function smart_gallery_model_for_placement(
+    ?int $parentGalleryId,
+    bool $metadataReady,
+): array {
     if ($parentGalleryId === null) {
-        return db()->query("SELECT sg.* FROM smart_galleries sg WHERE sg.placement_mode = 'root' AND sg.enabled = 1 AND sg.visibility = 'public' ORDER BY sg.title, sg.id")->fetchAll();
+        return db()
+            ->query(
+                "SELECT sg.* FROM smart_galleries sg WHERE sg.placement_mode = 'root' AND sg.enabled = 1 AND sg.visibility = 'public' ORDER BY sg.title, sg.id",
+            )
+            ->fetchAll();
     }
-    $select = $metadataReady ? ', sgp.placement, sgp.placement_order' : ", 'bottom' AS placement, 0 AS placement_order";
-    $order = $metadataReady ? "CASE sgp.placement WHEN 'top' THEN 0 ELSE 1 END, sgp.placement_order, sg.id" : 'sg.id';
-    $stmt = db()->prepare("SELECT sg.*{$select} FROM smart_galleries sg INNER JOIN smart_gallery_placements sgp ON sgp.smart_gallery_id = sg.id WHERE sg.placement_mode = 'gallery' AND sgp.gallery_id = ? AND sg.enabled = 1 AND sg.visibility = 'public' ORDER BY {$order}");
+    $select = $metadataReady
+        ? ', sgp.placement, sgp.placement_order'
+        : ", 'bottom' AS placement, 0 AS placement_order";
+    $order = $metadataReady
+        ? "CASE sgp.placement WHEN 'top' THEN 0 ELSE 1 END, sgp.placement_order, sg.id"
+        : 'sg.id';
+    $stmt = db()->prepare(
+        "SELECT sg.*{$select} FROM smart_galleries sg INNER JOIN smart_gallery_placements sgp ON sgp.smart_gallery_id = sg.id WHERE sg.placement_mode = 'gallery' AND sgp.gallery_id = ? AND sg.enabled = 1 AND sg.visibility = 'public' ORDER BY {$order}",
+    );
     $stmt->execute([$parentGalleryId]);
     return $stmt->fetchAll();
 }
@@ -255,34 +407,54 @@ function smart_gallery_model_for_placement(?int $parentGalleryId, bool $metadata
  * @param int $galleryId Physical gallery identifier.
  * @param array<int,array{smart_gallery_id:int,placement:string,placement_order:int}> $attachments Normalized attachments.
  * @param string $now Shared SQL timestamp.
+ * @return void Replaces all attachment rows in the caller-owned or locally opened transaction.
  */
-function smart_gallery_model_replace_gallery_attachments(int $galleryId, array $attachments, string $now): void
-{
+function smart_gallery_model_replace_gallery_attachments(
+    int $galleryId,
+    array $attachments,
+    string $now,
+): void {
     $pdo = db();
     $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) $pdo->beginTransaction();
+    if ($ownsTransaction)
+        $pdo->beginTransaction();
     try {
-        $clear = $pdo->prepare('DELETE FROM smart_gallery_placements WHERE gallery_id = ?');
+        $clear = $pdo->prepare(
+            'DELETE FROM smart_gallery_placements WHERE gallery_id = ?',
+        );
         $clear->execute([$galleryId]);
         if ($attachments !== []) {
-            $place = $pdo->prepare('INSERT INTO smart_gallery_placements (smart_gallery_id, gallery_id, placement, placement_order, created_at) VALUES (?, ?, ?, ?, ?)');
+            $place = $pdo->prepare(
+                'INSERT INTO smart_gallery_placements (smart_gallery_id, gallery_id, placement, placement_order, created_at) VALUES (?, ?, ?, ?, ?)',
+            );
             $ids = [];
             foreach ($attachments as $attachment) {
                 $smartId = (int) ($attachment['smart_gallery_id'] ?? 0);
-                if ($smartId <= 0) continue;
-                $place->execute([$smartId, $galleryId, (string) ($attachment['placement'] ?? 'bottom'), (int) ($attachment['placement_order'] ?? 0), $now]);
+                if ($smartId <= 0)
+                    continue;
+                $place->execute([
+                    $smartId,
+                    $galleryId,
+                    (string) ($attachment['placement'] ?? 'bottom'),
+                    (int) ($attachment['placement_order'] ?? 0),
+                    $now,
+                ]);
                 $ids[$smartId] = $smartId;
             }
             if ($ids !== []) {
                 $idList = array_values($ids);
                 $marks = implode(',', array_fill(0, count($idList), '?'));
-                $markAsChildren = $pdo->prepare("UPDATE smart_galleries SET placement_mode='gallery', parent_gallery_id=NULL, updated_at=? WHERE id IN ($marks)");
+                $markAsChildren = $pdo->prepare(
+                    "UPDATE smart_galleries SET placement_mode='gallery', parent_gallery_id=NULL, updated_at=? WHERE id IN ($marks)",
+                );
                 $markAsChildren->execute(array_merge([$now], $idList));
             }
         }
-        if ($ownsTransaction) $pdo->commit();
+        if ($ownsTransaction)
+            $pdo->commit();
     } catch (Throwable $exception) {
-        if ($ownsTransaction && $pdo->inTransaction()) $pdo->rollBack();
+        if ($ownsTransaction && $pdo->inTransaction())
+            $pdo->rollBack();
         throw $exception;
     }
 }
@@ -292,30 +464,71 @@ function smart_gallery_model_replace_gallery_attachments(int $galleryId, array $
  *
  * @param int $smartGalleryId Smart Gallery identifier.
  * @param bool $metadataReady Whether placement/order metadata is available.
+ * @return list<array{
+ *     id:int|string,
+ *     title:string,
+ *     folder_path:string,
+ *     visibility:string,
+ *     access_mode:string,
+ *     placement:string,
+ *     placement_order:int|string
+ * }> Physical galleries attached to the Smart Gallery, including legacy
+ *     defaults.
  */
-function smart_gallery_model_placement_galleries(int $smartGalleryId, bool $metadataReady): array
-{
-    $select = $metadataReady ? 'sgp.placement, sgp.placement_order' : "'bottom' AS placement, 0 AS placement_order";
-    $stmt = db()->prepare('SELECT g.id, g.title, g.folder_path, g.visibility, g.access_mode, ' . $select . ' FROM smart_gallery_placements sgp INNER JOIN galleries g ON g.id = sgp.gallery_id WHERE sgp.smart_gallery_id = ? ORDER BY g.folder_path, g.title, g.id');
+function smart_gallery_model_placement_galleries(
+    int $smartGalleryId,
+    bool $metadataReady,
+): array {
+    $select = $metadataReady
+        ? 'sgp.placement, sgp.placement_order'
+        : "'bottom' AS placement, 0 AS placement_order";
+    $stmt = db()->prepare(
+        'SELECT g.id, g.title, g.folder_path, g.visibility, g.access_mode, '
+            . $select
+            . ' FROM smart_gallery_placements sgp INNER JOIN galleries g ON g.id = sgp.gallery_id WHERE sgp.smart_gallery_id = ? ORDER BY g.folder_path, g.title, g.id',
+    );
     $stmt->execute([$smartGalleryId]);
     return $stmt->fetchAll();
 }
 
-/** Update one existing attachment placement/order. */
-function smart_gallery_model_update_placement(int $smartGalleryId, int $galleryId, string $placement, int $placementOrder): bool
-{
-    $stmt = db()->prepare('UPDATE smart_gallery_placements SET placement = ?, placement_order = ? WHERE smart_gallery_id = ? AND gallery_id = ?');
+/** Update one existing attachment placement/order.
+ * @param int $smartGalleryId Smart Gallery whose attachment is updated.
+ * @param int $galleryId Physical gallery owning the attachment.
+ * @param string $placement Normalized top or bottom placement value.
+ * @param int $placementOrder Normalized order within the placement.
+ * @return bool True when the attachment exists after the call, including if values were already equal.
+ */
+function smart_gallery_model_update_placement(
+    int $smartGalleryId,
+    int $galleryId,
+    string $placement,
+    int $placementOrder,
+): bool {
+    $stmt = db()->prepare(
+        'UPDATE smart_gallery_placements SET placement = ?, placement_order = ? WHERE smart_gallery_id = ? AND gallery_id = ?',
+    );
     $stmt->execute([$placement, $placementOrder, $smartGalleryId, $galleryId]);
-    if ($stmt->rowCount() > 0) return true;
-    $exists = db()->prepare('SELECT 1 FROM smart_gallery_placements WHERE smart_gallery_id = ? AND gallery_id = ? LIMIT 1');
+    if ($stmt->rowCount() > 0)
+        return true;
+    $exists = db()->prepare(
+        'SELECT 1 FROM smart_gallery_placements WHERE smart_gallery_id = ? AND gallery_id = ? LIMIT 1',
+    );
     $exists->execute([$smartGalleryId, $galleryId]);
     return (bool) $exists->fetchColumn();
 }
 
-/** Remove one physical placement. */
-function smart_gallery_model_remove_placement(int $smartGalleryId, int $galleryId): bool
-{
-    $stmt = db()->prepare('DELETE FROM smart_gallery_placements WHERE smart_gallery_id = ? AND gallery_id = ?');
+/** Remove one physical placement.
+ * @param int $smartGalleryId Smart Gallery whose attachment is removed.
+ * @param int $galleryId Physical gallery owning the attachment.
+ * @return bool True when one placement row was deleted.
+ */
+function smart_gallery_model_remove_placement(
+    int $smartGalleryId,
+    int $galleryId,
+): bool {
+    $stmt = db()->prepare(
+        'DELETE FROM smart_gallery_placements WHERE smart_gallery_id = ? AND gallery_id = ?',
+    );
     $stmt->execute([$smartGalleryId, $galleryId]);
     return $stmt->rowCount() > 0;
 }
@@ -329,15 +542,51 @@ function smart_gallery_model_all_source_galleries(): array
 /**
  * Count images matching one normalized semantic Smart Gallery query.
  *
- * @param array<string,mixed> $rules Validated rule document.
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules. Group children recurse through the same
+ *     group and condition forms; value is omitted for value-free operators.
  * @param array<int,int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
+ * @return int Number of images matching canonical rule, gallery-access, visibility, and NSFW scope.
  */
-function smart_gallery_model_count_images(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw): int
-{
-    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, 'capture_date', 'desc');
-    $stmt = db()->prepare('SELECT COUNT(*) FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE ' . $query['where']);
+function smart_gallery_model_count_images(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+): int {
+    $query = smart_gallery_model_result_query(
+        $rules,
+        $accessibleGalleryIds,
+        $publicOnly,
+        $allowNsfw,
+        'capture_date',
+        'desc',
+    );
+    $stmt = db()->prepare(
+        'SELECT COUNT(*) FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+            . $query['where'],
+    );
     $stmt->execute($query['params']);
     return (int) $stmt->fetchColumn();
 }
@@ -345,7 +594,28 @@ function smart_gallery_model_count_images(array $rules, array $accessibleGallery
 /**
  * Query one bounded page of matching Smart Gallery images.
  *
- * @param array<string,mixed> $rules Validated rule document.
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules. Group children recurse through the same
+ *     group and condition forms; value is omitted for value-free operators.
  * @param array<int,int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
@@ -353,27 +623,133 @@ function smart_gallery_model_count_images(array $rules, array $accessibleGallery
  * @param string $sortDirection asc or desc.
  * @param int $limit Bounded row limit.
  * @param int $offset Non-negative offset.
+ * @return list<array{
+ *     id:int|string,
+ *     gallery_id:int|string,
+ *     relative_path:string,
+ *     relative_path_hash:string,
+ *     filename:string,
+ *     title:string|null,
+ *     description:string|null,
+ *     url_slug?:string|null,
+ *     content_language?:string|null,
+ *     width:int|string|null,
+ *     height:int|string|null,
+ *     display_width?:int|string|null,
+ *     display_height?:int|string|null,
+ *     exif_orientation?:int|string|null,
+ *     thumbnail_derivative_version?:int|string,
+ *     thumbnail_metadata_refreshed_at?:string|null,
+ *     mime_type:string|null,
+ *     file_size:int|string|null,
+ *     modified_at:string|null,
+ *     checksum_sha256:string|null,
+ *     sort_order:int|string,
+ *     visibility:string,
+ *     editorial_rating?:int|string|null,
+ *     nsfw_enabled?:int|string,
+ *     thumbnail_min_size?:int|string|null,
+ *     thumbnail_max_size?:int|string|null,
+ *     exif_taken_at?:string|null,
+ *     exif_camera_make?:string|null,
+ *     exif_camera_model?:string|null,
+ *     exif_lens_model?:string|null,
+ *     exif_focal_length?:string|null,
+ *     exif_aperture?:string|null,
+ *     exif_exposure_time?:string|null,
+ *     exif_iso?:int|string|null,
+ *     gps_lat?:float|string|null,
+ *     gps_lng?:float|string|null,
+ *     gps_altitude?:float|string|null,
+ *     gps_extracted_at?:string|null,
+ *     source_gallery_title:string,
+ *     source_gallery_slug:string,
+ *     source_gallery_folder_path:string,
+ *     source_gallery_visibility:string,
+ *     source_gallery_access_mode:string
+ * }> One bounded image page with source-gallery context.
  */
-function smart_gallery_model_query_images(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw, string $sortMode, string $sortDirection, int $limit, int $offset): array
-{
-    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, $sortMode, $sortDirection);
+function smart_gallery_model_query_images(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+    string $sortMode,
+    string $sortDirection,
+    int $limit,
+    int $offset,
+): array {
+    $query = smart_gallery_model_result_query(
+        $rules,
+        $accessibleGalleryIds,
+        $publicOnly,
+        $allowNsfw,
+        $sortMode,
+        $sortDirection,
+    );
     $limit = max(1, $limit);
     $offset = max(0, $offset);
-    $sql = 'SELECT i.*, g.title AS source_gallery_title, g.slug AS source_gallery_slug, g.folder_path AS source_gallery_folder_path, g.visibility AS source_gallery_visibility, g.access_mode AS source_gallery_access_mode FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE ' . $query['where'] . ' ORDER BY ' . $query['order'] . ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+    $sql =
+        'SELECT i.*, g.title AS source_gallery_title, g.slug AS source_gallery_slug, g.folder_path AS source_gallery_folder_path, g.visibility AS source_gallery_visibility, g.access_mode AS source_gallery_access_mode FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+        . $query['where']
+        . ' ORDER BY '
+        . $query['order']
+        . ' LIMIT '
+        . $limit
+        . ' OFFSET '
+        . $offset;
     $stmt = db()->prepare($sql);
     $stmt->execute($query['params']);
     return $stmt->fetchAll();
 }
 
-
-/** Count GPS-capable rows in one canonical Smart Gallery result scope. */
-function smart_gallery_model_count_map_images(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw): int
-{
-    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, 'capture_date', 'desc');
+/** Count GPS-capable rows in one canonical Smart Gallery result scope.
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules for the canonical result scope. Groups
+ *     recursively contain group or condition nodes; value is omitted for
+ *     value-free operators.
+ * @param list<int> $accessibleGalleryIds Allowed physical gallery identifiers.
+ * @param bool $publicOnly Whether public image visibility is required.
+ * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
+ * @return int Number of GPS-capable images in the canonical result scope.
+ */
+function smart_gallery_model_count_map_images(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+): int {
+    $query = smart_gallery_model_result_query(
+        $rules,
+        $accessibleGalleryIds,
+        $publicOnly,
+        $allowNsfw,
+        'capture_date',
+        'desc',
+    );
     $stmt = db()->prepare(
         'SELECT COUNT(*) FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
-        . $query['where']
-        . ' AND i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL'
+            . $query['where']
+            . ' AND i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL',
     );
     $stmt->execute($query['params']);
     return (int) $stmt->fetchColumn();
@@ -385,16 +761,74 @@ function smart_gallery_model_count_map_images(array $rules, array $accessibleGal
  * The projection deliberately avoids SELECT * because aggregate maps need only
  * route/title/GPS fields. Canonical result ordering is preserved for deterministic
  * payloads and future Smart Gallery-context marker navigation.
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules for the canonical result scope. Groups
+ *     recursively contain group or condition nodes; value is omitted for
+ *     value-free operators.
+ * @param list<int> $accessibleGalleryIds Allowed physical gallery identifiers.
+ * @param bool $publicOnly Whether public image visibility is required.
+ * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
+ * @param string $sortMode Allowlisted service-owned sort mode.
+ * @param string $sortDirection Ascending or descending order.
+ * @param int $limit Maximum number of GPS image rows returned.
+ * @return list<array{
+ *     id:int|string,
+ *     gallery_id:int|string,
+ *     filename:string,
+ *     url_slug:string|null,
+ *     title:string|null,
+ *     description:string|null,
+ *     content_language:string|null,
+ *     gps_lat:float|string|null,
+ *     gps_lng:float|string|null
+ * }> Bounded GPS projection in canonical result order.
  */
-function smart_gallery_model_query_map_images(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw, string $sortMode, string $sortDirection, int $limit): array
-{
-    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, $sortMode, $sortDirection);
+function smart_gallery_model_query_map_images(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+    string $sortMode,
+    string $sortDirection,
+    int $limit,
+): array {
+    $query = smart_gallery_model_result_query(
+        $rules,
+        $accessibleGalleryIds,
+        $publicOnly,
+        $allowNsfw,
+        $sortMode,
+        $sortDirection,
+    );
     $limit = max(1, $limit);
-    $sql = 'SELECT i.id, i.gallery_id, i.filename, i.url_slug, i.title, i.description, i.content_language, i.gps_lat, i.gps_lng '
+    $sql =
+        'SELECT i.id, i.gallery_id, i.filename, i.url_slug, i.title, i.description, i.content_language, i.gps_lat, i.gps_lng '
         . 'FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
         . $query['where']
         . ' AND i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL '
-        . 'ORDER BY ' . $query['order'] . ' LIMIT ' . $limit;
+        . 'ORDER BY '
+        . $query['order']
+        . ' LIMIT '
+        . $limit;
     $stmt = db()->prepare($sql);
     $stmt->execute($query['params']);
     return $stmt->fetchAll();
@@ -407,16 +841,52 @@ function smart_gallery_model_query_map_images(array $rules, array $accessibleGal
  * merely to discover provenance counts. The canonical result predicate supplies rules,
  * gallery authorization, public visibility, and NSFW policy exactly as for the grid.
  *
- * @return array<int,array{gallery_id:int,image_count:int}>
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules; group children recursively contain
+ *     groups or conditions.
+ * @param list<int> $accessibleGalleryIds Allowed physical gallery identifiers.
+ * @param bool $publicOnly Whether public image visibility is required.
+ * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
+ * @return list<array{gallery_id:int|string,image_count:int|string}> Counts of matching images grouped by source gallery.
  */
-function smart_gallery_model_source_summary_rows(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw): array
-{
-    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, 'capture_date', 'desc');
+function smart_gallery_model_source_summary_rows(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+): array {
+    $query = smart_gallery_model_result_query(
+        $rules,
+        $accessibleGalleryIds,
+        $publicOnly,
+        $allowNsfw,
+        'capture_date',
+        'desc',
+    );
     $stmt = db()->prepare(
         'SELECT i.gallery_id, COUNT(*) AS image_count '
-        . 'FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
-        . $query['where']
-        . ' GROUP BY i.gallery_id ORDER BY image_count DESC, i.gallery_id ASC'
+            . 'FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+            . $query['where']
+            . ' GROUP BY i.gallery_id ORDER BY image_count DESC, i.gallery_id ASC',
     );
     $stmt->execute($query['params']);
     return $stmt->fetchAll();
@@ -425,19 +895,58 @@ function smart_gallery_model_source_summary_rows(array $rules, array $accessible
 /**
  * Return whether one image remains a member of one normalized Smart Gallery result set.
  *
- * @param array<string,mixed> $rules Validated rule document.
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules. Group children recurse through the same
+ *     group and condition forms; value is omitted for value-free operators.
  * @param array<int,int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
  * @param int $imageId Image identifier to re-authorize.
+ * @return bool True when the image belongs to the authorized canonical result set.
  */
-function smart_gallery_model_contains_image(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw, int $imageId): bool
-{
-    if ($imageId <= 0) return false;
-    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, 'capture_date', 'desc');
+function smart_gallery_model_contains_image(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+    int $imageId,
+): bool {
+    if ($imageId <= 0)
+        return false;
+    $query = smart_gallery_model_result_query(
+        $rules,
+        $accessibleGalleryIds,
+        $publicOnly,
+        $allowNsfw,
+        'capture_date',
+        'desc',
+    );
     $params = $query['params'];
     $params[] = $imageId;
-    $stmt = db()->prepare('SELECT 1 FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE ' . $query['where'] . ' AND i.id = ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT 1 FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+            . $query['where']
+            . ' AND i.id = ? LIMIT 1',
+    );
     $stmt->execute($params);
     return (bool) $stmt->fetchColumn();
 }
@@ -445,75 +954,197 @@ function smart_gallery_model_contains_image(array $rules, array $accessibleGalle
 /**
  * Return count/cover rows for a bounded Smart Gallery card chunk.
  *
- * @param array<int,array{id:int,rules:array<string,mixed>,sort_mode:string,sort_direction:string}> $definitions Semantic definitions keyed arbitrarily.
+ * @param array<int,array{
+ *     id:int,
+ *     rules:array{
+ *         version:int,
+ *         root:array{
+ *             type:string,
+ *             operator?:string,
+ *             children?:list<array{
+ *                 type:string,
+ *                 operator?:string,
+ *                 field?:string,
+ *                 value?:int|float|string|list<int>|array{
+ *                     0:int|float|string,
+ *                     1:int|float|string
+ *                 }|null
+ *             }>,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }
+ *     },
+ *     sort_mode:string,
+ *     sort_direction:string
+ * }> $definitions Normalized definitions keyed by their input index; group
+ *     children recursively contain group or condition nodes.
  * @param array<int,int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
  * @return array<int,array{smart_gallery_id:int,image_count:int,cover_image_id:int}> Rows keyed sequentially.
  */
-function smart_gallery_model_card_summary_rows(array $definitions, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw): array
-{
+function smart_gallery_model_card_summary_rows(
+    array $definitions,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+): array {
     $selects = [];
     $params = [];
     foreach ($definitions as $definition) {
         $smartId = (int) ($definition['id'] ?? 0);
-        if ($smartId <= 0) continue;
+        if ($smartId <= 0)
+            continue;
         $query = smart_gallery_model_result_query(
             (array) ($definition['rules'] ?? []),
             $accessibleGalleryIds,
             $publicOnly,
             $allowNsfw,
             (string) ($definition['sort_mode'] ?? ''),
-            (string) ($definition['sort_direction'] ?? 'desc')
+            (string) ($definition['sort_direction'] ?? 'desc'),
         );
-        $base = ' FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE ' . $query['where'];
-        $selects[] = 'SELECT ' . $smartId . ' AS smart_gallery_id, '
-            . '(SELECT COUNT(*)' . $base . ') AS image_count, '
-            . '(SELECT i.id' . $base . ' ORDER BY ' . $query['order'] . ' LIMIT 1) AS cover_image_id';
+        $base =
+            ' FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+            . $query['where'];
+        $selects[] =
+            'SELECT '
+            . $smartId
+            . ' AS smart_gallery_id, '
+            . '(SELECT COUNT(*)'
+            . $base
+            . ') AS image_count, '
+            . '(SELECT i.id'
+            . $base
+            . ' ORDER BY '
+            . $query['order']
+            . ' LIMIT 1) AS cover_image_id';
         $params = array_merge($params, $query['params'], $query['params']);
     }
-    if ($selects === []) return [];
+    if ($selects === [])
+        return [];
     $stmt = db()->prepare(implode(' UNION ALL ', $selects));
     $stmt->execute($params);
-    return array_values(array_map(static fn (array $row): array => [
+    return array_values(array_map(static fn(array $row): array => [
         'smart_gallery_id' => (int) ($row['smart_gallery_id'] ?? 0),
         'image_count' => max(0, (int) ($row['image_count'] ?? 0)),
         'cover_image_id' => max(0, (int) ($row['cover_image_id'] ?? 0)),
     ], $stmt->fetchAll()));
 }
 
-/** Load source image rows with source-gallery metadata, keyed by image id. */
+/** Load source image rows with source-gallery metadata, keyed by image id.
+ * @param list<int> $imageIds Candidate identifiers normalized to unique positive integers.
+ * @return array<int,array{
+ *     id:int|string,
+ *     gallery_id:int|string,
+ *     relative_path:string,
+ *     relative_path_hash:string,
+ *     filename:string,
+ *     title:string|null,
+ *     description:string|null,
+ *     url_slug?:string|null,
+ *     content_language?:string|null,
+ *     width:int|string|null,
+ *     height:int|string|null,
+ *     display_width?:int|string|null,
+ *     display_height?:int|string|null,
+ *     exif_orientation?:int|string|null,
+ *     thumbnail_derivative_version?:int|string,
+ *     thumbnail_metadata_refreshed_at?:string|null,
+ *     mime_type:string|null,
+ *     file_size:int|string|null,
+ *     modified_at:string|null,
+ *     checksum_sha256:string|null,
+ *     sort_order:int|string,
+ *     visibility:string,
+ *     editorial_rating?:int|string|null,
+ *     nsfw_enabled?:int|string,
+ *     thumbnail_min_size?:int|string|null,
+ *     thumbnail_max_size?:int|string|null,
+ *     exif_taken_at?:string|null,
+ *     exif_camera_make?:string|null,
+ *     exif_camera_model?:string|null,
+ *     exif_lens_model?:string|null,
+ *     exif_focal_length?:string|null,
+ *     exif_aperture?:string|null,
+ *     exif_exposure_time?:string|null,
+ *     exif_iso?:int|string|null,
+ *     gps_lat?:float|string|null,
+ *     gps_lng?:float|string|null,
+ *     gps_altitude?:float|string|null,
+ *     gps_extracted_at?:string|null,
+ *     source_gallery_title:string,
+ *     source_gallery_slug:string,
+ *     source_gallery_folder_path:string,
+ *     source_gallery_visibility:string,
+ *     source_gallery_access_mode:string
+ * }> Image rows keyed by identifier with source-gallery metadata.
+ */
 function smart_gallery_model_images_by_ids(array $imageIds): array
 {
     $imageIds = smart_gallery_model_normalize_ids($imageIds);
-    if ($imageIds === []) return [];
+    if ($imageIds === [])
+        return [];
     $stmt = db()->prepare(
         'SELECT i.*, g.title AS source_gallery_title, g.slug AS source_gallery_slug, '
-        . 'g.folder_path AS source_gallery_folder_path, g.visibility AS source_gallery_visibility, '
-        . 'g.access_mode AS source_gallery_access_mode '
-        . 'FROM images i INNER JOIN galleries g ON g.id=i.gallery_id '
-        . 'WHERE i.id IN (' . implode(',', array_fill(0, count($imageIds), '?')) . ')'
+            . 'g.folder_path AS source_gallery_folder_path, g.visibility AS source_gallery_visibility, '
+            . 'g.access_mode AS source_gallery_access_mode '
+            . 'FROM images i INNER JOIN galleries g ON g.id=i.gallery_id '
+            . 'WHERE i.id IN ('
+            . implode(',', array_fill(0, count($imageIds), '?'))
+            . ')',
     );
     $stmt->execute($imageIds);
     $rows = [];
     foreach ($stmt->fetchAll() as $row) {
         $id = (int) ($row['id'] ?? 0);
-        if ($id > 0) $rows[$id] = $row;
+        if ($id > 0)
+            $rows[$id] = $row;
     }
     return $rows;
 }
 
-/** Load physical source galleries keyed by gallery id. */
+/** Load physical source galleries keyed by gallery id.
+ * @param list<int> $galleryIds Candidate physical gallery identifiers normalized to unique positive integers.
+ * @return array<int,array{
+ *     id:int|string,
+ *     title:string,
+ *     slug:string,
+ *     folder_path:string,
+ *     visibility:string,
+ *     access_mode:string,
+ *     parent_id:int|string|null,
+ *     description:string|null,
+ *     content_language?:string|null,
+ *     nsfw_enabled?:int|string,
+ *     latitude?:float|string|null,
+ *     longitude?:float|string|null,
+ *     cover_image_id?:int|string|null,
+ *     thumbnail_min_size?:int|string|null,
+ *     thumbnail_max_size?:int|string|null,
+ *     gps_map_enabled?:int|string,
+ *     created_at:string,
+ *     updated_at:string
+ * }> Physical gallery rows keyed by identifier.
+ */
 function smart_gallery_model_galleries_by_ids(array $galleryIds): array
 {
     $galleryIds = smart_gallery_model_normalize_ids($galleryIds);
-    if ($galleryIds === []) return [];
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')');
+    if ($galleryIds === [])
+        return [];
+    $stmt = db()->prepare(
+        'SELECT * FROM galleries WHERE id IN ('
+            . implode(',', array_fill(0, count($galleryIds), '?'))
+            . ')',
+    );
     $stmt->execute($galleryIds);
     $rows = [];
     foreach ($stmt->fetchAll() as $row) {
         $id = (int) ($row['id'] ?? 0);
-        if ($id > 0) $rows[$id] = $row;
+        if ($id > 0)
+            $rows[$id] = $row;
     }
     return $rows;
 }
@@ -536,60 +1167,146 @@ function smart_gallery_model_gallery_title(int $galleryId): ?string
     return $value === false ? null : (string) $value;
 }
 
-/** Persist a private editorial image rating, where null clears the rating. */
-function smart_gallery_model_set_image_rating(int $imageId, ?int $rating, string $updatedAt): void
-{
-    $stmt = db()->prepare('UPDATE images SET editorial_rating = ?, updated_at = ? WHERE id = ?');
+/** Persist a private editorial image rating, where null clears the rating.
+ * @param int $imageId Image whose private editorial rating is changed.
+ * @param int|null $rating Rating value, or null to clear it.
+ * @param string $updatedAt Shared SQL update timestamp.
+ * @return void Stores the rating and supplied update timestamp.
+ */
+function smart_gallery_model_set_image_rating(
+    int $imageId,
+    ?int $rating,
+    string $updatedAt,
+): void {
+    $stmt = db()->prepare(
+        'UPDATE images SET editorial_rating = ?, updated_at = ? WHERE id = ?',
+    );
     $stmt->execute([$rating, $updatedAt, $imageId]);
 }
 
 /**
  * Compile a validated rule document into SQL and bound parameters.
  *
- * @param array<string,mixed> $rules Validated semantic rule document.
- * @return array{sql:string,params:array<int,mixed>}
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules. Group children recurse through the same
+ *     group and condition forms; value is omitted for value-free operators.
+ * @return array{sql:string,params:list<int|float|string|null>} Parameterized predicate and ordered values for the normalized rule document.
  */
 function smart_gallery_model_compile_rules(array $rules): array
 {
     $params = [];
-    $sql = smart_gallery_model_compile_node((array) ($rules['root'] ?? []), $params);
+    $sql = smart_gallery_model_compile_node(
+        (array) ($rules['root'] ?? []),
+        $params,
+    );
     return ['sql' => $sql, 'params' => $params];
 }
 
-/** Compile one trusted, validated rule node. */
+/** Compile one trusted, validated rule node.
+ * @param array{
+ *     type:string,
+ *     operator?:string,
+ *     children?:list<array{
+ *         type:string,
+ *         operator?:string,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }>,
+ *     field?:string,
+ *     value?:int|float|string|list<int>|array{0:int|float|string,1:int|float|string}|null
+ * } $node Validated group or condition node; child groups recurse in this
+ *     structure.
+ * @param list<int|float|string|null> $params Ordered database values appended while compiling.
+ * @return string Parenthesized SQL predicate containing placeholders for values.
+ */
 function smart_gallery_model_compile_node(array $node, array &$params): string
 {
     if (($node['type'] ?? '') === 'group') {
         $parts = [];
         foreach ((array) ($node['children'] ?? []) as $child) {
-            $parts[] = smart_gallery_model_compile_node((array) $child, $params);
+            $parts[] = smart_gallery_model_compile_node(
+                (array) $child,
+                $params,
+            );
         }
-        if ($parts === []) return '1=1';
+        if ($parts === [])
+            return '1=1';
         $operator = (string) ($node['operator'] ?? 'AND');
-        if ($operator === 'NOT') return '(NOT (' . $parts[0] . '))';
-        if (!in_array($operator, ['AND', 'OR'], true)) throw new InvalidArgumentException('Unsupported Smart Gallery rule group.');
+        if ($operator === 'NOT')
+            return '(NOT (' . $parts[0] . '))';
+        if (!in_array($operator, ['AND', 'OR'], true))
+            throw new InvalidArgumentException(
+                'Unsupported Smart Gallery rule group.',
+            );
         return '(' . implode(' ' . $operator . ' ', $parts) . ')';
     }
     return smart_gallery_model_compile_condition($node, $params);
 }
 
-/** Compile one allowlisted condition into a parameterized SQL predicate. */
-function smart_gallery_model_compile_condition(array $condition, array &$params): string
-{
+/** Compile one allowlisted condition into a parameterized SQL predicate.
+ * @param array{
+ *     field:string,
+ *     operator:string,
+ *     value?:int|float|string|list<int>|array{0:int|float|string,1:int|float|string}|null
+ * } $condition Validated allowlisted field condition.
+ * @param list<int|float|string|null> $params Ordered database values appended while compiling.
+ * @return string SQL predicate for the allowlisted field and operator.
+ */
+function smart_gallery_model_compile_condition(
+    array $condition,
+    array &$params,
+): string {
     $field = (string) ($condition['field'] ?? '');
     $operator = (string) ($condition['operator'] ?? '');
     $value = $condition['value'] ?? null;
     $columns = [
-        'capture_date' => 'i.exif_taken_at', 'camera_make' => 'i.exif_camera_make', 'camera_model' => 'i.exif_camera_model',
-        'lens' => 'i.exif_lens_model', 'iso' => 'i.exif_iso', 'aperture' => 'i.exif_aperture', 'focal_length' => 'i.exif_focal_length',
-        'exposure_time' => 'i.exif_exposure_time', 'exif_orientation' => 'i.exif_orientation', 'filename' => 'i.filename',
-        'title' => 'i.title', 'description' => 'i.description', 'gallery_title' => 'g.title', 'rating' => 'i.editorial_rating',
-        'extension' => "LOWER(SUBSTRING_INDEX(i.filename, '.', -1))", 'width' => 'i.width', 'height' => 'i.height', 'file_size' => 'i.file_size',
+        'capture_date' => 'i.exif_taken_at',
+        'camera_make' => 'i.exif_camera_make',
+        'camera_model' => 'i.exif_camera_model',
+        'lens' => 'i.exif_lens_model',
+        'iso' => 'i.exif_iso',
+        'aperture' => 'i.exif_aperture',
+        'focal_length' => 'i.exif_focal_length',
+        'exposure_time' => 'i.exif_exposure_time',
+        'exif_orientation' => 'i.exif_orientation',
+        'filename' => 'i.filename',
+        'title' => 'i.title',
+        'description' => 'i.description',
+        'gallery_title' => 'g.title',
+        'rating' => 'i.editorial_rating',
+        'extension' => "LOWER(SUBSTRING_INDEX(i.filename, '.', -1))",
+        'width' => 'i.width',
+        'height' => 'i.height',
+        'file_size' => 'i.file_size',
     ];
     if ($field === 'gallery') {
         if (in_array($operator, ['equals', 'not_equals'], true)) {
             $params[] = (int) $value;
-            return 'i.gallery_id ' . ($operator === 'equals' ? '=' : '<>') . ' ?';
+            return (
+                'i.gallery_id ' . ($operator === 'equals' ? '=' : '<>') . ' ?'
+            );
         }
         $params[] = (int) $value;
         $params[] = (int) $value;
@@ -600,7 +1317,9 @@ function smart_gallery_model_compile_condition(array $condition, array &$params)
         if ($operator === 'untagged') {
             return "NOT EXISTS (SELECT 1 FROM image_tags sg_it WHERE sg_it.image_id = i.id) AND NOT EXISTS (SELECT 1 FROM gallery_tags sg_gt JOIN galleries sg_tag_gallery ON sg_tag_gallery.id = sg_gt.gallery_id WHERE g.folder_path = sg_tag_gallery.folder_path OR g.folder_path LIKE CONCAT(sg_tag_gallery.folder_path, '/%'))";
         }
-        $ids = is_array($value) ? array_values(array_map('intval', $value)) : [(int) $value];
+        $ids = is_array($value)
+            ? array_values(array_map('intval', $value))
+            : [(int) $value];
         if ($operator === 'has_all_tags') {
             $predicates = [];
             foreach ($ids as $tagId) {
@@ -621,47 +1340,131 @@ function smart_gallery_model_compile_condition(array $condition, array &$params)
     }
     if ($field === 'ai_text' || $field === 'ai_metadata') {
         $base = 'EXISTS (SELECT 1 FROM image_ai_metadata sg_ai WHERE sg_ai.image_id = i.id';
-        if ($field === 'ai_metadata') return $operator === 'exists' ? $base . ')' : 'NOT ' . $base . ')';
+        if ($field === 'ai_metadata')
+            return $operator === 'exists' ? $base . ')' : 'NOT ' . $base . ')';
         $expression = 'sg_ai.searchable_text';
         $innerParams = [];
-        $predicate = smart_gallery_model_compile_scalar($expression, $operator, $value, $innerParams);
+        $predicate = smart_gallery_model_compile_scalar(
+            $expression,
+            $operator,
+            $value,
+            $innerParams,
+        );
         array_push($params, ...$innerParams);
         return $operator === 'missing' || $operator === 'is_empty'
-            ? 'NOT EXISTS (SELECT 1 FROM image_ai_metadata sg_ai WHERE sg_ai.image_id = i.id AND ' . smart_gallery_model_nonempty_sql($expression) . ')'
+            ? 'NOT EXISTS (SELECT 1 FROM image_ai_metadata sg_ai WHERE sg_ai.image_id = i.id AND '
+            . smart_gallery_model_nonempty_sql($expression)
+            . ')'
             : $base . ' AND ' . $predicate . ')';
     }
     if ($field === 'duplicate_status') {
         $pair = "EXISTS (SELECT 1 FROM images sg_dupe WHERE sg_dupe.id <> i.id AND i.checksum IS NOT NULL AND i.checksum <> '' AND sg_dupe.checksum = i.checksum)";
         $unresolved = "EXISTS (SELECT 1 FROM images sg_dupe WHERE sg_dupe.id <> i.id AND i.checksum IS NOT NULL AND i.checksum <> '' AND sg_dupe.checksum = i.checksum AND NOT EXISTS (SELECT 1 FROM duplicate_photo_ledger_pairs sg_dl WHERE sg_dl.image_id_low = LEAST(i.id, sg_dupe.id) AND sg_dl.image_id_high = GREATEST(i.id, sg_dupe.id)))";
-        return match ($operator) { 'unresolved' => $unresolved, 'resolved' => '(' . $pair . ' AND NOT ' . $unresolved . ')', 'exists' => $pair, default => '(NOT ' . $pair . ')' };
+        return match ($operator) {
+            'unresolved' => $unresolved,
+            'resolved' => '(' . $pair . ' AND NOT ' . $unresolved . ')',
+            'exists' => $pair,
+            default => '(NOT ' . $pair . ')',
+        };
     }
     if ($field === 'media_orientation') {
-        return match ($operator) { 'landscape' => 'i.width > i.height', 'portrait' => 'i.height > i.width', default => 'i.width = i.height' };
+        return match ($operator) {
+            'landscape' => 'i.width > i.height',
+            'portrait' => 'i.height > i.width',
+            default => 'i.width = i.height',
+        };
     }
-    if ($operator === 'unrated') return 'i.editorial_rating IS NULL';
-    if (!isset($columns[$field])) throw new InvalidArgumentException('Unsupported Smart Gallery rule field.');
-    return smart_gallery_model_compile_scalar($columns[$field], $operator, $value, $params);
+    if ($operator === 'unrated')
+        return 'i.editorial_rating IS NULL';
+    if (!isset($columns[$field]))
+        throw new InvalidArgumentException(
+            'Unsupported Smart Gallery rule field.',
+        );
+    return smart_gallery_model_compile_scalar(
+        $columns[$field],
+        $operator,
+        $value,
+        $params,
+    );
 }
 
-/** Compile a scalar comparison using only a trusted column expression. */
-function smart_gallery_model_compile_scalar(string $column, string $operator, mixed $value, array &$params): string
-{
-    if ($operator === 'exists') return smart_gallery_model_nonempty_sql($column);
-    if ($operator === 'missing') return '(' . $column . ' IS NULL OR ' . $column . " = '')";
-    if ($operator === 'is_empty') return '(' . $column . ' IS NULL OR TRIM(' . $column . ") = '')";
-    if ($operator === 'not_empty') return smart_gallery_model_nonempty_sql($column);
-    if ($operator === 'between') { $params[] = $value[0]; $params[] = $value[1]; return "$column BETWEEN ? AND ?"; }
-    if ($operator === 'year') { $params[] = (int) $value; return "YEAR($column) = ?"; }
-    if ($operator === 'month') { $params[] = (int) $value; return "MONTH($column) = ?"; }
-    $sqlOperators = ['equals' => '=', 'not_equals' => '<>', 'gt' => '>', 'gte' => '>=', 'lt' => '<', 'lte' => '<=', 'before' => '<', 'after' => '>', 'exact' => '='];
-    if (isset($sqlOperators[$operator])) { $params[] = $value; return "$column {$sqlOperators[$operator]} ?"; }
-    if (!in_array($operator, ['contains', 'not_contains', 'starts_with', 'ends_with'], true)) {
-        throw new InvalidArgumentException('Unsupported Smart Gallery scalar operator.');
+/** Compile a scalar comparison using only a trusted column expression.
+ * @param string $column Trusted SQL column expression selected by the field allowlist.
+ * @param string $operator Validated scalar comparison operator.
+ * @param int|float|string|list<int>|array{
+ *     0:int|float|string,
+ *     1:int|float|string
+ * }|null $value Comparison value, tag-id list, or two-value range.
+ * @param list<int|float|string|null> $params Ordered database values appended while compiling.
+ * @return string SQL predicate with placeholders for comparison values.
+ */
+function smart_gallery_model_compile_scalar(
+    string $column,
+    string $operator,
+    mixed $value,
+    array &$params,
+): string {
+    if ($operator === 'exists')
+        return smart_gallery_model_nonempty_sql($column);
+    if ($operator === 'missing')
+        return '(' . $column . ' IS NULL OR ' . $column . " = '')";
+    if ($operator === 'is_empty')
+        return '(' . $column . ' IS NULL OR TRIM(' . $column . ") = '')";
+    if ($operator === 'not_empty')
+        return smart_gallery_model_nonempty_sql($column);
+    if ($operator === 'between') {
+        $params[] = $value[0];
+        $params[] = $value[1];
+        return "$column BETWEEN ? AND ?";
     }
-    $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], (string) $value);
-    $pattern = match ($operator) { 'starts_with' => $escaped . '%', 'ends_with' => '%' . $escaped, default => '%' . $escaped . '%' };
+    if ($operator === 'year') {
+        $params[] = (int) $value;
+        return "YEAR($column) = ?";
+    }
+    if ($operator === 'month') {
+        $params[] = (int) $value;
+        return "MONTH($column) = ?";
+    }
+    $sqlOperators = [
+        'equals' => '=',
+        'not_equals' => '<>',
+        'gt' => '>',
+        'gte' => '>=',
+        'lt' => '<',
+        'lte' => '<=',
+        'before' => '<',
+        'after' => '>',
+        'exact' => '=',
+    ];
+    if (isset($sqlOperators[$operator])) {
+        $params[] = $value;
+        return "$column {$sqlOperators[$operator]} ?";
+    }
+    if (!in_array(
+        $operator,
+        ['contains', 'not_contains', 'starts_with', 'ends_with'],
+        true,
+    )) {
+        throw new InvalidArgumentException(
+            'Unsupported Smart Gallery scalar operator.',
+        );
+    }
+    $escaped = str_replace(
+        ['\\', '%', '_'],
+        ['\\\\', '\\%', '\\_'],
+        (string) $value,
+    );
+    $pattern = match ($operator) {
+        'starts_with' => $escaped . '%',
+        'ends_with' => '%' . $escaped,
+        default => '%' . $escaped . '%',
+    };
     $params[] = $pattern;
-    return $column . ($operator === 'not_contains' ? ' NOT LIKE ?' : ' LIKE ?') . " ESCAPE '\\\\'";
+    return (
+        $column
+            . ($operator === 'not_contains' ? ' NOT LIKE ?' : ' LIKE ?')
+            . " ESCAPE '\\\\'"
+    );
 }
 
 /** Return a reusable SQL non-empty test for a trusted column expression. */
@@ -673,26 +1476,56 @@ function smart_gallery_model_nonempty_sql(string $column): string
 /**
  * Build the internal rule/access/order query definition.
  *
- * @param array<string,mixed> $rules Validated rule document.
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules; group children recursively contain
+ *     group or condition nodes, and conditions omit value for value-free operators.
  * @param array<int,int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
  * @param string $sortMode Allowlisted service-owned sort mode.
  * @param string $sortDirection asc or desc.
- * @return array{where:string,params:array<int,mixed>,order:string}
+ * @return array{where:string,params:list<int|float|string|null>,order:string}
+ *     Membership predicate, ordered bound values, and deterministic SQL order.
  */
-function smart_gallery_model_result_query(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw, string $sortMode, string $sortDirection): array
-{
+function smart_gallery_model_result_query(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+    string $sortMode,
+    string $sortDirection,
+): array {
     $compiled = smart_gallery_model_compile_rules($rules);
     $ids = smart_gallery_model_normalize_ids($accessibleGalleryIds);
     $order = smart_gallery_model_order_sql($sortMode, $sortDirection);
-    if ($ids === []) return ['where' => '1=0', 'params' => [], 'order' => $order];
+    if ($ids === [])
+        return ['where' => '1=0', 'params' => [], 'order' => $order];
     $marks = implode(',', array_fill(0, count($ids), '?'));
     $where = $compiled['sql'] . ' AND i.gallery_id IN (' . $marks . ')';
     $params = array_merge($compiled['params'], $ids);
     if ($publicOnly) {
         $where .= " AND i.visibility = 'public'";
-        if (!$allowNsfw) $where .= ' AND COALESCE(i.nsfw_enabled, 0) = 0 AND COALESCE(g.nsfw_enabled, 0) = 0';
+        if (!$allowNsfw)
+            $where .= ' AND COALESCE(i.nsfw_enabled, 0) = 0 AND COALESCE(g.nsfw_enabled, 0) = 0';
     }
     return ['where' => $where, 'params' => $params, 'order' => $order];
 }
@@ -724,22 +1557,70 @@ function smart_gallery_model_order_sql(string $mode, string $direction): string
  * The query mirrors MySQL/MariaDB NULL ordering without window functions so the
  * project remains compatible with MySQL 5.7 and MariaDB 10.2. The stable image-id
  * tie breaker is identical to smart_gallery_model_order_sql().
+ * @param array{
+ *     version:int,
+ *     root:array{
+ *         type:string,
+ *         operator?:string,
+ *         children?:list<array{
+ *             type:string,
+ *             operator?:string,
+ *             field?:string,
+ *             value?:int|float|string|list<int>|array{
+ *                 0:int|float|string,
+ *                 1:int|float|string
+ *             }|null
+ *         }>,
+ *         field?:string,
+ *         value?:int|float|string|list<int>|array{
+ *             0:int|float|string,
+ *             1:int|float|string
+ *         }|null
+ *     }
+ * } $rules Validated versioned rules defining membership and ordering; groups
+ *     recursively contain groups or conditions.
+ * @param list<int> $accessibleGalleryIds Allowed physical gallery identifiers.
+ * @param bool $publicOnly Whether public image visibility is required.
+ * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
+ * @param string $sortMode Allowlisted service-owned sort mode.
+ * @param string $sortDirection Ascending or descending order.
+ * @param int $imageId Image identifier whose canonical position is requested.
+ * @return int Zero-based position, or -1 when invalid or outside the result set.
  */
-function smart_gallery_model_image_position(array $rules, array $accessibleGalleryIds, bool $publicOnly, bool $allowNsfw, string $sortMode, string $sortDirection, int $imageId): int
-{
-    if ($imageId <= 0) return -1;
-    $query = smart_gallery_model_result_query($rules, $accessibleGalleryIds, $publicOnly, $allowNsfw, $sortMode, $sortDirection);
+function smart_gallery_model_image_position(
+    array $rules,
+    array $accessibleGalleryIds,
+    bool $publicOnly,
+    bool $allowNsfw,
+    string $sortMode,
+    string $sortDirection,
+    int $imageId,
+): int {
+    if ($imageId <= 0)
+        return -1;
+    $query = smart_gallery_model_result_query(
+        $rules,
+        $accessibleGalleryIds,
+        $publicOnly,
+        $allowNsfw,
+        $sortMode,
+        $sortDirection,
+    );
     $sortExpression = smart_gallery_model_order_column_sql($sortMode);
 
     $targetParams = $query['params'];
     $targetParams[] = $imageId;
     $targetStmt = db()->prepare(
-        'SELECT ' . $sortExpression . ' AS smart_gallery_sort_value FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
-        . $query['where'] . ' AND i.id = ? LIMIT 1'
+        'SELECT '
+            . $sortExpression
+            . ' AS smart_gallery_sort_value FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+            . $query['where']
+            . ' AND i.id = ? LIMIT 1',
     );
     $targetStmt->execute($targetParams);
     $target = $targetStmt->fetch(\PDO::FETCH_ASSOC);
-    if (!is_array($target)) return -1;
+    if (!is_array($target))
+        return -1;
 
     $targetValue = $target['smart_gallery_sort_value'] ?? null;
     $directionAsc = $sortDirection === 'asc';
@@ -747,14 +1628,36 @@ function smart_gallery_model_image_position(array $rules, array $accessibleGalle
     if ($targetValue === null) {
         $beforeSql = $directionAsc
             ? '(' . $sortExpression . ' IS NULL AND i.id < ?)'
-            : '((' . $sortExpression . ' IS NOT NULL) OR (' . $sortExpression . ' IS NULL AND i.id > ?))';
+            : '(('
+            . $sortExpression
+            . ' IS NOT NULL) OR ('
+            . $sortExpression
+            . ' IS NULL AND i.id > ?))';
         $beforeParams[] = $imageId;
     } else {
         $comparison = $directionAsc ? '<' : '>';
         $tieComparison = $directionAsc ? '<' : '>';
         $beforeSql = $directionAsc
-            ? '((' . $sortExpression . ' IS NULL) OR (' . $sortExpression . ' ' . $comparison . ' ?) OR ((' . $sortExpression . ' <=> ?) AND i.id ' . $tieComparison . ' ?))'
-            : '((' . $sortExpression . ' ' . $comparison . ' ?) OR ((' . $sortExpression . ' <=> ?) AND i.id ' . $tieComparison . ' ?))';
+            ? '(('
+            . $sortExpression
+            . ' IS NULL) OR ('
+            . $sortExpression
+            . ' '
+            . $comparison
+            . ' ?) OR (('
+            . $sortExpression
+            . ' <=> ?) AND i.id '
+            . $tieComparison
+            . ' ?))'
+            : '(('
+            . $sortExpression
+            . ' '
+            . $comparison
+            . ' ?) OR (('
+            . $sortExpression
+            . ' <=> ?) AND i.id '
+            . $tieComparison
+            . ' ?))';
         $beforeParams[] = $targetValue;
         $beforeParams[] = $targetValue;
         $beforeParams[] = $imageId;
@@ -762,14 +1665,22 @@ function smart_gallery_model_image_position(array $rules, array $accessibleGalle
 
     $stmt = db()->prepare(
         'SELECT COUNT(*) FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
-        . $query['where'] . ' AND ' . $beforeSql
+            . $query['where']
+            . ' AND '
+            . $beforeSql,
     );
     $stmt->execute($beforeParams);
     return (int) $stmt->fetchColumn();
 }
 
-/** Normalize a list of positive integer identifiers. */
+/** Normalize a list of positive integer identifiers.
+ * @param list<int|string> $ids Candidate values converted to unique positive integer identifiers.
+ * @return list<int> Unique positive integer identifiers in first-seen order.
+ */
 function smart_gallery_model_normalize_ids(array $ids): array
 {
-    return array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    return array_values(array_unique(array_filter(
+        array_map('intval', $ids),
+        static fn(int $id): bool => $id > 0,
+    )));
 }

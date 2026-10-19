@@ -32,6 +32,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    require_once __DIR__ . '/support/php_source.php';
+
     /** Minimal translation stub for registry construction. */
     function t(string $key, string|array|null $fallback = null, array $parameters = []): string
     {
@@ -451,8 +453,8 @@ namespace Gallery\Core {
     ]);
     feature_policy_inventory_assert(
         substr_count($reportNavigationSources, "'feature' => 'complete_gallery_report'") >= 1
-            && str_contains($reportNavigationSources, "view_admin_dashboard_feature_enabled(\$model, 'complete_gallery_report')")
-            && str_contains($reportNavigationSources, 'view_render_admin_gallery_report_maintenance_card($model')
+            && php_source_contains($reportNavigationSources, "view_admin_dashboard_feature_enabled(\$model, 'complete_gallery_report')")
+            && php_source_contains($reportNavigationSources, 'view_render_admin_gallery_report_maintenance_card($model')
             && substr_count($reportNavigationSources, "'complete_gallery_report'") >= 3,
         'Complete Gallery Report navigation and dashboard entry points must honor only the report capability.'
     );

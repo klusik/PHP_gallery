@@ -16,6 +16,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    require_once __DIR__ . '/support/php_source.php';
+
     /**
      * Use the selected real catalog or mark fallback labels for deterministic view tests.
      *
@@ -261,7 +263,7 @@ namespace {
     }
     runtime_surface_assert(str_contains(runtime_surface_source('app/views/admin_dashboard.php'), "!empty(\$runtimeSupport['policy']['action_required'])"),
         'Initial Maintenance badge must expose a runtime warning before deferred content opens.');
-    runtime_surface_assert(str_contains(runtime_surface_source('app/views/admin_dashboard_sections.php'), "\$migrationPending || !empty(\$runtimeSupport['policy']['action_required'])"),
+    runtime_surface_assert(php_source_contains(runtime_surface_source('app/views/admin_dashboard_sections.php'), "\$migrationPending || !empty(\$runtimeSupport['policy']['action_required'])"),
         'System Health subtab badge must include runtime action state.');
     $registry = require dirname(__DIR__) . '/scripts/audit_registry.php';
     runtime_surface_assert(($registry['php_test_requirements']['session_contention_test.php']['timeout'] ?? null) === 90,

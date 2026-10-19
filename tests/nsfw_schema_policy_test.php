@@ -39,6 +39,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 require_once __DIR__ . '/../app/services/schema_inspection.php';
 require_once __DIR__ . '/../app/services/gallery_access.php';
 require_once __DIR__ . '/../app/services/admin_dashboard.php';
@@ -228,7 +230,7 @@ nsfw_policy_assert_same(true, str_contains($dispatchSource, 'nsfw_guard_assert_p
 $bulkSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_images_bulk.php');
 nsfw_policy_assert_same(true, str_contains($bulkSource, "in_array(\$action, ['nsfw_on', 'nsfw_off'], true) && !nsfw_guard_schema_ready()"), 'bulk mutation refusal');
 $dashboardViewSource = (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard_sections.php');
-nsfw_policy_assert_same(true, str_contains($dashboardViewSource, "view_admin_dashboard_array(\$model, 'security_schema_statuses')"), 'System Health status ownership');
+nsfw_policy_assert_same(true, php_source_contains($dashboardViewSource, "view_admin_dashboard_array(\$model, 'security_schema_statuses')"), 'System Health status ownership');
 $diagnosticsSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_diagnostics.php');
 nsfw_policy_assert_same(true, str_contains($diagnosticsSource, 'admin_nsfw_schema_health_status()'), 'Runtime Diagnostics shared NSFW health model');
 

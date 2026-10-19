@@ -104,7 +104,6 @@ require_once dirname(__DIR__) . '/services/admin_operation_keys.php';
  * This module owns the admin upload endpoint and preserves the controller-namespace facade for the shared JSON mutation detector.
  */
 
-
 /**
  * Preserve the historical controller-namespace JSON detector while delegating to the canonical helper.
  *
@@ -156,28 +155,138 @@ function admin_upload_safe_refresh_url(mixed $value): string
     return $candidate;
 }
 
-
 /**
- * Emit a JSON upload response and stop this request path cleanly.
+ * Set the status and emit a JSON object for a browser upload response.
  *
- * @param array $payload Payload value.
- * @param int $statusCode Status code value.
+ * Callers provide the upload service response, its canonical mutation envelope,
+ * or an error envelope with the upload-specific fields described below. This
+ * helper leaves request control flow to its caller.
+ *
+ * @param array{
+ *     ok?:bool,
+ *     message?:string,
+ *     error?:string,
+ *     error_code?:string,
+ *     mutation?:array{
+ *         type:string,
+ *         entity:string,
+ *         action:string,
+ *         entity_ids:list<int>
+ *     }|null,
+ *     panel?:array{
+ *         workflow:string,
+ *         refresh_url:string,
+ *         keep_open:bool
+ *     }|null,
+ *     contexts?:list<array{
+ *         type:string,
+ *         gallery_id:int|null,
+ *         render_url:string,
+ *         render_mode:string,
+ *         postcondition:array{
+ *             type:string,
+ *             gallery_id?:int,
+ *             count?:int
+ *         }|null
+ *     }>,
+ *     fallback?:array{redirect_url?:string},
+ *     content_length?:int,
+ *     upload_limit_bytes?:int,
+ *     retryable?:bool,
+ *     error_context?:array{
+ *         error:string,
+ *         gallery_id:int,
+ *         batch_index:int,
+ *         upload_session_id:string,
+ *         total_batches:int,
+ *         zip_upload_error:int,
+ *         zip_upload_size:int,
+ *         zip_upload_name:string,
+ *         prepared_thumbnails_required:bool,
+ *         validation?:array{
+ *             validation_stage?:string,
+ *             manifest_index?:int,
+ *             source_index?:int,
+ *             missing_variants?:list<string>,
+ *             gallery_id?:int,
+ *             batch_index?:int,
+ *             state_key?:string,
+ *             original_name?:string,
+ *             prepared_name?:string,
+ *             original_path?:string,
+ *             manifest_original_mime?:string,
+ *             manifest_original_detected_format?:string,
+ *             manifest_original_size?:int,
+ *             manifest_original_width?:int,
+ *             manifest_original_height?:int,
+ *             filename?:string,
+ *             extension?:string,
+ *             payload_bytes?:int,
+ *             detected_format?:string,
+ *             signature_hex?:string,
+ *             corrected_filename_candidate?:string
+ *         }
+ *     },
+ *     gallery_id?:int,
+ *     gallery_ids?:list<int>,
+ *     gallery_title?:string,
+ *     gallery_url?:string,
+ *     edit_url?:string,
+ *     parent_gallery_id?:int,
+ *     parent_gallery_url?:string,
+ *     refresh_gallery_id?:int,
+ *     refresh_url?:string,
+ *     created_gallery?:bool,
+ *     image_ids?:list<int>,
+ *     filenames?:list<string>,
+ *     uploaded?:int,
+ *     scanned?:int,
+ *     thumbnails?:int,
+ *     thumbnail_skipped?:int,
+ *     thumbnail_failed?:int,
+ *     thumbnail_processing?:string,
+ *     thumbnail_errors?:list<string>,
+ *     scan_failed?:int,
+ *     scan_failed_filenames?:list<string>,
+ *     renamed?:int,
+ *     rename_warnings?:list<string>,
+ *     rename_failures?:list<string>,
+ *     upload_events?:list<string>,
+ *     redirect_url?:string,
+ *     manifest_sha256?:string,
+ *     pdf_page_numbers?:list<int>,
+ *     pdf_page_sha256?:array<string,string>,
+ *     cached?:bool
+ * } $payload Upload, mutation, or refusal response fields emitted as JSON.
+ * @param int $statusCode HTTP status code emitted with the response.
+ * @return void Set the JSON response header and status, then write the encoded payload.
  */
-function admin_upload_browser_json_response(array $payload, int $statusCode = 200): void
-{
+function admin_upload_browser_json_response(
+    array $payload,
+    int $statusCode = 200,
+): void {
     http_response_code($statusCode);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
 /**
- * Throw instead of exiting when the browser JSON endpoint receives a bad CSRF token.
+ * Verify the browser upload CSRF token and throw when it is invalid.
+ *
+ * @return void Return normally for a matching non-empty token.
+ * @throws RuntimeException If the submitted token is missing or does not match the session token.
  */
 function admin_upload_browser_verify_csrf(): void
 {
     $token = (string) ($_POST['csrf_token'] ?? '');
-    if ($token === '' || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
-        throw new RuntimeException(t('admin.upload.error_invalid_csrf', 'Invalid CSRF token. Reload the admin page and try again.'));
+    if (
+        $token === ''
+        || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)
+    ) {
+        throw new RuntimeException(t(
+            'admin.upload.error_invalid_csrf',
+            'Invalid CSRF token. Reload the admin page and try again.',
+        ));
     }
 }
 
@@ -192,26 +301,37 @@ function admin_upload_browser_reject_discarded_body(): bool
     if ($contentLength <= 0 || $_POST !== [] || $_FILES !== []) {
         return false;
     }
-    $uploadLimit = function_exists('Gallery\\Services\\browser_upload_server_upload_limit_bytes') ? browser_upload_server_upload_limit_bytes() : 0;
-    admin_log_event('warning', 'gallery.browser_upload_rejected', 'Browser upload request body was discarded before PHP could read files.', [
-        'content_length' => $contentLength,
-        'upload_limit_bytes' => $uploadLimit,
-    ]);
-    $message = t('browser_upload.error_php_discarded_body', 'The prepared ZIP batch was larger than this PHP request can accept. Lower the browser ZIP ratio, maximum ZIP batch size, or maximum images per batch in Admin upload settings.');
+    $uploadLimit = function_exists(
+        'Gallery\\Services\\browser_upload_server_upload_limit_bytes',
+    )
+        ? browser_upload_server_upload_limit_bytes()
+        : 0;
+    admin_log_event(
+        'warning',
+        'gallery.browser_upload_rejected',
+        'Browser upload request body was discarded before PHP could read files.',
+        [
+            'content_length' => $contentLength,
+            'upload_limit_bytes' => $uploadLimit,
+        ],
+    );
+    $message = t(
+        'browser_upload.error_php_discarded_body',
+        'The prepared ZIP batch was larger than this PHP request can accept. Lower the browser ZIP ratio, maximum ZIP batch size, or maximum images per batch in Admin upload settings.',
+    );
     admin_upload_browser_json_response(array_merge(
         admin_mutation_error_envelope(
             $message,
             'browser_upload_body_too_large',
-            admin_mutation_descriptor('image.upload', 'image', 'upload')
+            admin_mutation_descriptor('image.upload', 'image', 'upload'),
         ),
         [
             'content_length' => $contentLength,
             'upload_limit_bytes' => $uploadLimit,
-        ]
+        ],
     ), 413);
     return true;
 }
-
 
 /**
  * Normalize the dedicated upload settings tab used by the Admin settings page.
@@ -231,8 +351,10 @@ function admin_upload_settings_normalize_tab(string $tab): string
  * @param string $notice Notice value.
  * @return array{active_tab:string,notices:list<array{kind:string,message:string}>,support:array{heic:bool,raw:bool},client_format_mode:string,auto_rename_enabled:bool,pdf_render_dpi:int,browser_settings:array<string,int|float|bool|string>,central_settings_url:string} Resolved preferences and navigation for the dedicated upload settings page.
  */
-function admin_upload_settings_view_model(string $activeTab, string $notice = ''): array
-{
+function admin_upload_settings_view_model(
+    string $activeTab,
+    string $notice = '',
+): array {
     $notices = [];
     if ($notice !== '') {
         $notices[] = [
@@ -248,7 +370,11 @@ function admin_upload_settings_view_model(string $activeTab, string $notice = ''
         'client_format_mode' => admin_upload_client_format_mode(),
         'auto_rename_enabled' => admin_upload_auto_rename_enabled(),
         'pdf_render_dpi' => \Gallery\Services\gallery_pdf_render_dpi(),
-        'browser_settings' => function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : [],
+        'browser_settings' => function_exists(
+            'Gallery\\Services\\browser_upload_settings',
+        )
+            ? browser_upload_settings()
+            : [],
         'central_settings_url' => admin_settings_url('uploads'),
     ];
 }
@@ -274,56 +400,112 @@ function admin_upload_support_model(): array
  */
 function admin_upload_save_general_settings(array $input): void
 {
-    $dpi = \Gallery\Services\gallery_pdf_render_dpi_validate((string) ($input['gallery_pdf_render_dpi'] ?? \Gallery\Services\gallery_pdf_render_dpi()));
+    $dpi = \Gallery\Services\gallery_pdf_render_dpi_validate(
+        (string) (
+            $input['gallery_pdf_render_dpi'] ?? \Gallery\Services\gallery_pdf_render_dpi()
+        ),
+    );
     \Gallery\Services\set_app_setting('gallery_pdf_render_dpi', (string) $dpi);
     $clientFormatMode = save_admin_upload_client_format_mode(
-        admin_upload_client_format_mode_normalize($input['admin_upload_client_format_mode'] ?? 'server_supported')
+        admin_upload_client_format_mode_normalize(
+            $input['admin_upload_client_format_mode'] ?? 'server_supported',
+        ),
     );
-    save_admin_upload_auto_rename_setting(!empty($input['admin_upload_auto_rename_enabled']) ? '1' : '0');
-    admin_log_event('info', 'settings.upload_general_updated', 'Admin updated general upload settings.', [
-        'client_format_mode' => $clientFormatMode,
-        'auto_rename_enabled' => admin_upload_auto_rename_enabled(),
-    ]);
+    save_admin_upload_auto_rename_setting(
+        !empty($input['admin_upload_auto_rename_enabled']) ? '1' : '0',
+    );
+    admin_log_event(
+        'info',
+        'settings.upload_general_updated',
+        'Admin updated general upload settings.',
+        [
+            'client_format_mode' => $clientFormatMode,
+            'auto_rename_enabled' => admin_upload_auto_rename_enabled(),
+        ],
+    );
 }
 
 /**
- * Render and persist the dedicated Admin upload settings page.
+ * Authorize, persist submitted upload settings, or render the upload settings page.
+ *
+ * POST requests verify CSRF before changing settings and redirect after handling
+ * a submitted settings action.
+ *
+ * @return void Redirect after a settings update or render the settings page.
  */
 function cms_admin_upload_settings(): void
 {
     require_admin();
-    $activeTab = admin_upload_settings_normalize_tab((string) ($_GET['tab'] ?? 'general'));
+    $activeTab = admin_upload_settings_normalize_tab(
+        (string) ($_GET['tab'] ?? 'general'),
+    );
 
     if (request_method() === 'POST') {
         verify_csrf();
-        if (!empty($_POST['update_upload_general_settings']) || !empty($_POST['update_upload_preferences'])) {
+        if (
+            !empty($_POST['update_upload_general_settings'])
+            || !empty($_POST['update_upload_preferences'])
+        ) {
             admin_upload_save_general_settings($_POST);
-            flash_message('admin_notice', t('admin.upload_settings.notice_general_saved', 'General upload settings saved.'));
-            redirect_to(url_for('admin_upload_settings', ['tab' => 'general', 'saved' => 'general']));
+            flash_message('admin_notice', t(
+                'admin.upload_settings.notice_general_saved',
+                'General upload settings saved.',
+            ));
+            redirect_to(url_for('admin_upload_settings', [
+                'tab' => 'general',
+                'saved' => 'general',
+            ]));
         }
         if (!empty($_POST['update_browser_upload_settings'])) {
-            if (function_exists('Gallery\\Services\\set_browser_upload_settings')) {
+            if (function_exists(
+                'Gallery\\Services\\set_browser_upload_settings',
+            )) {
                 $settings = set_browser_upload_settings($_POST);
-                admin_log_event('info', 'settings.browser_upload_updated', 'Admin updated browser upload settings.', [
-                    'enabled' => !empty($settings['enabled']),
-                    'default_worker_count' => (int) ($settings['default_worker_count'] ?? 0),
-                    'max_worker_count' => (int) ($settings['max_worker_count'] ?? 0),
-                    'hard_worker_cap' => (int) ($settings['hard_worker_cap'] ?? 0),
-                    'zip_size_threshold_ratio' => (float) ($settings['zip_size_threshold_ratio'] ?? 0.0),
-                    'max_items_per_batch' => (int) ($settings['max_items_per_batch'] ?? 0),
-                    'max_zip_batch_bytes' => (int) ($settings['max_zip_batch_bytes'] ?? 0),
-                ]);
+                admin_log_event(
+                    'info',
+                    'settings.browser_upload_updated',
+                    'Admin updated browser upload settings.',
+                    [
+                        'enabled' => !empty($settings['enabled']),
+                        'default_worker_count' => (int) (
+                            $settings['default_worker_count'] ?? 0
+                        ),
+                        'max_worker_count' => (int) (
+                            $settings['max_worker_count'] ?? 0
+                        ),
+                        'hard_worker_cap' => (int) (
+                            $settings['hard_worker_cap'] ?? 0
+                        ),
+                        'zip_size_threshold_ratio' => (float) (
+                            $settings['zip_size_threshold_ratio'] ?? 0.0
+                        ),
+                        'max_items_per_batch' => (int) (
+                            $settings['max_items_per_batch'] ?? 0
+                        ),
+                        'max_zip_batch_bytes' => (int) (
+                            $settings['max_zip_batch_bytes'] ?? 0
+                        ),
+                    ],
+                );
             }
-            flash_message('admin_notice', t('admin.upload_settings.notice_browser_saved', 'Browser upload settings saved.'));
-            redirect_to(url_for('admin_upload_settings', ['tab' => 'browser', 'saved' => 'browser']));
+            flash_message('admin_notice', t(
+                'admin.upload_settings.notice_browser_saved',
+                'Browser upload settings saved.',
+            ));
+            redirect_to(url_for('admin_upload_settings', [
+                'tab' => 'browser',
+                'saved' => 'browser',
+            ]));
         }
         redirect_to(url_for('admin_upload_settings', ['tab' => $activeTab]));
     }
 
     $notice = (string) flash_message('admin_notice');
-    view_render_admin_upload_settings_page(admin_upload_settings_view_model($activeTab, $notice));
+    view_render_admin_upload_settings_page(admin_upload_settings_view_model(
+        $activeTab,
+        $notice,
+    ));
 }
-
 
 /**
  * Accept one browser-prepared upload batch.
@@ -334,17 +516,23 @@ function cms_admin_upload_browser_batch(): void
     $user = current_user();
     if (!$user || $user['role'] !== 'admin') {
         admin_upload_browser_json_response(admin_mutation_error_envelope(
-            t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.'),
+            t(
+                'admin.upload.error_session_expired',
+                'Your admin session expired. Please sign in again.',
+            ),
             'admin_session_expired',
-            admin_mutation_descriptor('image.upload', 'image', 'upload')
+            admin_mutation_descriptor('image.upload', 'image', 'upload'),
         ), 401);
         return;
     }
     if (request_method() !== 'POST') {
         admin_upload_browser_json_response(admin_mutation_error_envelope(
-            t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.'),
+            t(
+                'admin.upload.error_method_not_allowed',
+                'This upload endpoint accepts POST requests only.',
+            ),
             'method_not_allowed',
-            admin_mutation_descriptor('image.upload', 'image', 'upload')
+            admin_mutation_descriptor('image.upload', 'image', 'upload'),
         ), 405);
         return;
     }
@@ -354,51 +542,96 @@ function cms_admin_upload_browser_batch(): void
 
     try {
         admin_upload_browser_verify_csrf();
-        $settings = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : ['enabled' => false];
+        $settings = function_exists(
+            'Gallery\\Services\\browser_upload_settings',
+        )
+            ? browser_upload_settings()
+            : ['enabled' => false];
         if (empty($settings['enabled'])) {
-            throw new RuntimeException(t('browser_upload.error_disabled', 'Browser-side upload is disabled in Admin settings.'));
+            throw new RuntimeException(t(
+                'browser_upload.error_disabled',
+                'Browser-side upload is disabled in Admin settings.',
+            ));
         }
         $galleryId = (int) ($_POST['gallery_id'] ?? 0);
-        $sessionId = substr((string) ($_POST['upload_session_id'] ?? ''), 0, 120);
+        $sessionId = substr(
+            (string) ($_POST['upload_session_id'] ?? ''),
+            0,
+            120,
+        );
         if ($sessionId === '') {
             $sessionId = bin2hex(random_bytes(12));
         }
         $batchIndex = max(0, (int) ($_POST['batch_index'] ?? 0));
-        $preparedThumbnailsRequired = (string) ($_POST['prepared_thumbnails_required'] ?? '') === '1';
+        $preparedThumbnailsRequired =
+            (string) ($_POST['prepared_thumbnails_required'] ?? '') === '1';
         $pdfToken = (string) ($_POST['pdf_conversion_token'] ?? '');
-        if ($pdfToken !== ''
+        if (
+            $pdfToken !== ''
             && !\Gallery\Services\feature_capability_effective_enabled(
-                'gallery_pdf_documents'
-            )) {
+                'gallery_pdf_documents',
+            )
+        ) {
             \Gallery\Core\cms_apply_feature_disabled_route_response(
                 \Gallery\Services\feature_flag_disabled_route_decision(
-                    'gallery_ofp_pdf', true, true
-                )
+                    'gallery_ofp_pdf',
+                    true,
+                    true,
+                ),
             );
             return;
         }
         $pdfParent = null;
-        $pdfWriter = $pdfToken !== '' ? \Gallery\Services\gallery_edit_writer_begin() : null;
+        $pdfWriter = $pdfToken !== ''
+            ? \Gallery\Services\gallery_edit_writer_begin()
+            : null;
         try {
             if ($pdfToken !== '') {
-                require_once __DIR__ . '/../services/gallery_pdf_conversion.php';
-                $pdfParent = find_gallery((int) ($_POST['pdf_source_gallery_id'] ?? 0));
+                require_once
+                    __DIR__ . '/../services/gallery_pdf_conversion.php';
+                $pdfParent = find_gallery(
+                    (int) ($_POST['pdf_source_gallery_id'] ?? 0),
+                );
                 if (!is_array($pdfParent)) {
-                    throw new RuntimeException('The source PDF gallery is unavailable.');
+                    throw new RuntimeException(
+                        'The source PDF gallery is unavailable.',
+                    );
                 }
-                $pdfValidation = \Gallery\Services\gallery_pdf_conversion_validate_batch($pdfParent, $pdfToken, $galleryId,
-                    $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex);
+                $pdfValidation = \Gallery\Services\gallery_pdf_conversion_validate_batch(
+                    $pdfParent,
+                    $pdfToken,
+                    $galleryId,
+                    $_FILES['zip_batch'] ?? [],
+                    $sessionId,
+                    $batchIndex,
+                );
             }
-            $response = browser_upload_store_prepared_zip_batch($galleryId, $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex, $preparedThumbnailsRequired, $pdfParent !== null);
+            $response = browser_upload_store_prepared_zip_batch(
+                $galleryId,
+                $_FILES['zip_batch'] ?? [],
+                $sessionId,
+                $batchIndex,
+                $preparedThumbnailsRequired,
+                $pdfParent !== null,
+            );
             if ($pdfParent !== null) {
-                \Gallery\Services\gallery_pdf_conversion_acknowledge_batch($pdfParent, $pdfToken, $galleryId, $response, $batchIndex, $pdfValidation['page_numbers']);
+                \Gallery\Services\gallery_pdf_conversion_acknowledge_batch(
+                    $pdfParent,
+                    $pdfToken,
+                    $galleryId,
+                    $response,
+                    $batchIndex,
+                    $pdfValidation['page_numbers'],
+                );
             }
         } finally {
             if ($pdfWriter !== null) {
                 \Gallery\Services\gallery_edit_writer_end($pdfWriter);
             }
         }
-        $callerRefreshUrl = admin_upload_safe_refresh_url($_POST['source_url'] ?? '');
+        $callerRefreshUrl = admin_upload_safe_refresh_url(
+            $_POST['source_url'] ?? '',
+        );
         if ($callerRefreshUrl !== '') {
             $response['refresh_url'] = $callerRefreshUrl;
         }
@@ -406,15 +639,34 @@ function cms_admin_upload_browser_batch(): void
         $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
         if (is_array($gallery)) {
             // $imageIds stores stable identifiers returned by this batch before browser-side aggregation combines all batches.
-            $imageIds = array_values(array_filter(array_map('intval', (array) ($response['image_ids'] ?? [])), static fn (int $imageId): bool => $imageId > 0));
+            $imageIds = array_values(array_filter(
+                array_map('intval', (array) ($response['image_ids'] ?? [])),
+                static fn(int $imageId): bool => $imageId > 0,
+            ));
             // $editUrl keeps the editor on its images tab after the batch while the drawer remains mounted.
-            $editUrl = (string) ($response['edit_url'] ?? url_for('admin_edit_gallery', ['id' => $galleryId, 'tab' => 'admin-edit-images']) . '#admin-edit-images');
+            $editUrl = (string) (
+                $response['edit_url']
+                ?? url_for('admin_edit_gallery', [
+                    'id' => $galleryId,
+                    'tab' => 'admin-edit-images',
+                ]) . '#admin-edit-images'
+            );
             // $renderUrl is the authoritative gallery route. The browser coordinator preserves any visible pagination/query state for this stable gallery id.
             $renderUrl = gallery_public_url($gallery);
             // $mutationEnvelope keeps browser batching on the canonical completion contract instead of reconstructing mutation semantics from workflow counters.
             $mutationEnvelope = admin_mutation_success_envelope(
-                (string) ($response['message'] ?? t('admin.upload.complete', 'Upload complete.')),
-                admin_mutation_descriptor('image.upload', 'image', 'upload', $imageIds),
+                (string) (
+                    $response['message'] ?? t(
+                        'admin.upload.complete',
+                        'Upload complete.',
+                    )
+                ),
+                admin_mutation_descriptor(
+                    'image.upload',
+                    'image',
+                    'upload',
+                    $imageIds,
+                ),
                 admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
                 [
                     admin_mutation_public_gallery_context(
@@ -422,11 +674,19 @@ function cms_admin_upload_browser_batch(): void
                         $renderUrl,
                         admin_mutation_postcondition('gallery_image_count', [
                             'gallery_id' => $galleryId,
-                            'count' => gallery_lightbox_total_count($gallery, false, false),
-                        ])
+                            'count' => gallery_lightbox_total_count(
+                                $gallery,
+                                false,
+                                false,
+                            ),
+                        ]),
                     ),
                 ],
-                ['redirect_url' => (string) ($response['redirect_url'] ?? $editUrl)]
+                [
+                    'redirect_url' => (string) (
+                        $response['redirect_url'] ?? $editUrl
+                    ),
+                ],
             );
             $response = array_merge($mutationEnvelope, $response);
         }
@@ -436,26 +696,44 @@ function cms_admin_upload_browser_batch(): void
             'error' => $exception->getMessage(),
             'gallery_id' => (int) ($_POST['gallery_id'] ?? 0),
             'batch_index' => (int) ($_POST['batch_index'] ?? 0),
-            'upload_session_id' => substr((string) ($_POST['upload_session_id'] ?? ''), 0, 120),
+            'upload_session_id' => substr(
+                (string) ($_POST['upload_session_id'] ?? ''),
+                0,
+                120,
+            ),
             'total_batches' => (int) ($_POST['total_batches'] ?? 0),
-            'zip_upload_error' => (int) ($_FILES['zip_batch']['error'] ?? UPLOAD_ERR_NO_FILE),
+            'zip_upload_error' => (int) (
+                $_FILES['zip_batch']['error'] ?? UPLOAD_ERR_NO_FILE
+            ),
             'zip_upload_size' => (int) ($_FILES['zip_batch']['size'] ?? 0),
             'zip_upload_name' => (string) ($_FILES['zip_batch']['name'] ?? ''),
-            'prepared_thumbnails_required' => (string) ($_POST['prepared_thumbnails_required'] ?? '') === '1',
+            'prepared_thumbnails_required' =>
+                (string) ($_POST['prepared_thumbnails_required'] ?? '') === '1',
         ];
-        if ($exception instanceof \Gallery\Services\BrowserUploadValidationException) {
+        if (
+            $exception
+            instanceof \Gallery\Services\BrowserUploadValidationException
+        ) {
             $errorContext['validation'] = $exception->details();
         }
-        admin_log_event('error', 'gallery.browser_upload_failed', 'Browser-prepared upload batch failed.', $errorContext);
+        admin_log_event(
+            'error',
+            'gallery.browser_upload_failed',
+            'Browser-prepared upload batch failed.',
+            $errorContext,
+        );
         $response = array_merge(
             admin_mutation_error_envelope(
                 $exception->getMessage(),
                 'browser_upload_batch_failed',
-                admin_mutation_descriptor('image.upload', 'image', 'upload')
+                admin_mutation_descriptor('image.upload', 'image', 'upload'),
             ),
-            ['retryable' => false]
+            ['retryable' => false],
         );
-        if ($exception instanceof \Gallery\Services\BrowserUploadValidationException) {
+        if (
+            $exception
+            instanceof \Gallery\Services\BrowserUploadValidationException
+        ) {
             $response['error_context'] = $exception->details();
         }
         admin_upload_browser_json_response($response, 422);
@@ -479,13 +757,18 @@ function cms_admin_upload(): void
             http_response_code(401);
             header('Content-Type: application/json');
             echo json_encode(admin_mutation_error_envelope(
-                    t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.'),
-                    'admin_session_expired'
-                ));
+                t(
+                    'admin.upload.error_session_expired',
+                    'Your admin session expired. Please sign in again.',
+                ),
+                'admin_session_expired',
+            ));
             return;
         }
         // Preserve the upload URL for normal browser requests so login can resume from the same admin context.
-        redirect_to(url_for('admin_login', ['return' => current_login_return_target()]));
+        redirect_to(url_for('admin_login', [
+            'return' => current_login_return_target(),
+        ]));
     }
     if (request_method() === 'POST') {
         verify_csrf();
@@ -500,57 +783,109 @@ function cms_admin_upload(): void
         try {
             if (!empty($_POST['update_upload_preferences'])) {
                 admin_upload_save_general_settings($_POST);
-                if (!empty($_POST['update_browser_upload_settings']) && function_exists('Gallery\\Services\\set_browser_upload_settings')) {
+                if (
+                    !empty($_POST['update_browser_upload_settings'])
+                    && function_exists(
+                        'Gallery\\Services\\set_browser_upload_settings',
+                    )
+                ) {
                     set_browser_upload_settings($_POST);
                 }
-                flash_message('admin_notice', t('admin.upload_settings.notice_general_saved', 'General upload settings saved.'));
-                redirect_to(url_for('admin_upload_settings', ['tab' => 'general', 'saved' => 'general']));
+                flash_message('admin_notice', t(
+                    'admin.upload_settings.notice_general_saved',
+                    'General upload settings saved.',
+                ));
+                redirect_to(url_for('admin_upload_settings', [
+                    'tab' => 'general',
+                    'saved' => 'general',
+                ]));
             }
             $pdfAttachments = $_FILES['pdf_files'] ?? null;
-            foreach ((array) ($pdfAttachments['error'] ?? []) as $pdfUploadError) {
+            foreach ((array) (
+                $pdfAttachments['error'] ?? []
+            ) as $pdfUploadError) {
                 if ((int) $pdfUploadError !== UPLOAD_ERR_NO_FILE) {
-                    throw new RuntimeException(t('pdf.error.browser', 'PDF originals from Upload photos require the browser workflow. Reload the gallery and submit the PDF through its document controls.'));
+                    throw new RuntimeException(t(
+                        'pdf.error.browser',
+                        'PDF originals from Upload photos require the browser workflow. Reload the gallery and submit the PDF through its document controls.',
+                    ));
                 }
             }
             // $mode stores an intermediate value used by the surrounding gallery workflow.
             $mode = (string) ($_POST['upload_mode'] ?? 'existing');
-            $operationKey = admin_operation_require_key($_POST['operation_key'] ?? null);
+            $operationKey = admin_operation_require_key(
+                $_POST['operation_key'] ?? null,
+            );
             if (!in_array($mode, ['new', 'existing'], true)) {
-                throw new AdminOperationRefusal('operation_payload_invalid', 'The upload workflow is invalid.');
+                throw new AdminOperationRefusal(
+                    'operation_payload_invalid',
+                    'The upload workflow is invalid.',
+                );
             }
             // $entries stores an intermediate value used by the surrounding gallery workflow.
-            $entries = $mode === 'new' ? gallery_upload_entries_or_empty($_FILES['images'] ?? null) : gallery_upload_entries($_FILES['images'] ?? null);
+            $entries = $mode === 'new'
+                ? gallery_upload_entries_or_empty($_FILES['images'] ?? null)
+                : gallery_upload_entries($_FILES['images'] ?? null);
             require_once __DIR__ . '/../services/gallery_music.php';
             foreach ($entries as $entry) {
                 $extension = strtolower(pathinfo(
-                    (string) ($entry['name'] ?? ''), PATHINFO_EXTENSION
+                    (string) ($entry['name'] ?? ''),
+                    PATHINFO_EXTENSION,
                 ));
-                if (isset(\Gallery\Services\gallery_music_formats()[$extension])
+                if (
+                    isset(\Gallery\Services\gallery_music_formats()[$extension])
                     || str_starts_with(
-                        strtolower((string) ($entry['type'] ?? '')), 'audio/'
-                    )) {
+                        strtolower((string) ($entry['type'] ?? '')),
+                        'audio/',
+                    )
+                ) {
                     throw new RuntimeException(t('music.browser_required'));
                 }
-                if (strtolower(pathinfo((string) ($entry['name'] ?? ''), PATHINFO_EXTENSION)) === 'pdf'
-                    || strtolower((string) ($entry['type'] ?? '')) === 'application/pdf') {
-                    throw new RuntimeException(t('pdf.error.browser', 'PDF page conversion requires the browser-assisted upload workflow.'));
+                if (
+                    strtolower(pathinfo(
+                        (string) ($entry['name'] ?? ''),
+                        PATHINFO_EXTENSION,
+                    )) === 'pdf'
+                    || strtolower((string) ($entry['type'] ?? ''))
+                        === 'application/pdf'
+                ) {
+                    throw new RuntimeException(t(
+                        'pdf.error.browser',
+                        'PDF page conversion requires the browser-assisted upload workflow.',
+                    ));
                 }
             }
             if ($mode !== 'new') {
                 // $gallery stores an intermediate value used by the surrounding gallery workflow.
                 $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
                 if (!$gallery) {
-                    throw new RuntimeException(t('admin.upload.error_choose_existing_gallery', 'Choose an existing gallery.'));
+                    throw new RuntimeException(t(
+                        'admin.upload.error_choose_existing_gallery',
+                        'Choose an existing gallery.',
+                    ));
                 }
             }
 
-            $operation = $mode === 'new' ? 'gallery.create_upload' : 'image.classic_upload';
+            $operation = $mode === 'new'
+                ? 'gallery.create_upload'
+                : 'image.classic_upload';
             $operationInput = [
-                'gallery' => $mode === 'new' ? admin_new_gallery_input_from_array($_POST) : null,
+                'gallery' => $mode === 'new'
+                    ? admin_new_gallery_input_from_array($_POST)
+                    : null,
                 'gallery_id' => $mode === 'existing' ? (int) $gallery['id'] : 0,
                 'create_thumbnails' => !empty($_POST['create_thumbnails']),
             ];
-            $operationClaim = admin_operation_begin((int) $user['id'], $operationKey, $operation, admin_operation_fingerprint($operation, $operationInput, $entries));
+            $operationClaim = admin_operation_begin(
+                (int) $user['id'],
+                $operationKey,
+                $operation,
+                admin_operation_fingerprint(
+                    $operation,
+                    $operationInput,
+                    $entries,
+                ),
+            );
             if (!empty($operationClaim['replay'])) {
                 $response = $operationClaim['response'];
                 if ($wantsJson) {
@@ -570,9 +905,11 @@ function cms_admin_upload(): void
                     upload_ingestion_schema_status(),
                     'upload.operation_preflight',
                     'Image upload requires the current gallery/image database schema. Run pending migrations first.',
-                    'Image upload is temporarily unavailable because its required database schema could not be verified. No target file was changed.'
+                    'Image upload is temporarily unavailable because its required database schema could not be verified. No target file was changed.',
                 );
-                thumbnail_metadata_preflight_write_schema('upload.operation_thumbnail_preflight');
+                thumbnail_metadata_preflight_write_schema(
+                    'upload.operation_thumbnail_preflight',
+                );
             }
             // The create service takes a nested reentrant lease; this outer lease also
             // covers file ingestion, metadata/thumbnail writes, and durable completion.
@@ -583,23 +920,34 @@ function cms_admin_upload(): void
             } else {
                 // The pre-claim lookup normalized identity only. Its cached row
                 // cannot authorize paths or metadata after another writer finished.
-                $gallery = find_gallery((int) $operationInput['gallery_id'], true);
+                $gallery = find_gallery(
+                    (int) $operationInput['gallery_id'],
+                    true,
+                );
                 if (!$gallery) {
-                    throw new AdminOperationRefusal('operation_result_unavailable', 'The upload destination no longer exists. No replacement gallery was created.');
+                    throw new AdminOperationRefusal(
+                        'operation_result_unavailable',
+                        'The upload destination no longer exists. No replacement gallery was created.',
+                    );
                 }
             }
 
             // $stored stores an intermediate value used by the surrounding gallery workflow.
-            $stored = $entries ? store_uploaded_gallery_images((int) $gallery['id'], $entries) : [
-                'uploaded' => 0,
-                'scanned' => 0,
-                'image_ids' => [],
-                'filenames' => [],
-                'scan_failed_filenames' => [],
-                'upload_events' => [],
-            ];
+            $stored = $entries
+                ? store_uploaded_gallery_images((int) $gallery['id'], $entries)
+                : [
+                    'uploaded' => 0,
+                    'scanned' => 0,
+                    'image_ids' => [],
+                    'filenames' => [],
+                    'scan_failed_filenames' => [],
+                    'upload_events' => [],
+                ];
             // $scanFailedFilenames stores uploaded files that were written to disk but not imported into image rows.
-            $scanFailedFilenames = array_values(array_filter(array_map('strval', (array) ($stored['scan_failed_filenames'] ?? []))));
+            $scanFailedFilenames = array_values(array_filter(array_map(
+                'strval',
+                (array) ($stored['scan_failed_filenames'] ?? []),
+            )));
             // $thumbnails stores an intermediate value used by the surrounding gallery workflow.
             $thumbnails = 0;
             // $thumbnailFailed stores required thumbnail or DNG display derivatives that failed during non-JavaScript uploads.
@@ -615,86 +963,158 @@ function cms_admin_upload(): void
                         continue;
                     }
                     // $thumbnailResult stores created/skipped/failure counts for this source image.
-                    $thumbnailResult = create_image_thumbnails_result($image, $gallery);
+                    $thumbnailResult = create_image_thumbnails_result(
+                        $image,
+                        $gallery,
+                    );
                     $thumbnails += (int) ($thumbnailResult['created'] ?? 0);
                     $thumbnailFailed += (int) ($thumbnailResult['failed'] ?? 0);
                     if ((int) ($thumbnailResult['failed'] ?? 0) > 0) {
-                        $thumbnailFailedFilenames[] = (string) ($image['filename'] ?? $image['relative_path'] ?? '');
+                        $thumbnailFailedFilenames[] = (string) (
+                            $image['filename']
+                            ?? $image['relative_path']
+                            ?? ''
+                        );
                     }
-                    foreach ((array) ($thumbnailResult['errors'] ?? []) as $thumbnailError) {
+                    foreach ((array) (
+                        $thumbnailResult['errors'] ?? []
+                    ) as $thumbnailError) {
                         $thumbnailErrors[] = (string) $thumbnailError;
                     }
                 }
             }
-            admin_log_event('info', 'gallery.images_uploaded', 'Admin uploaded images into a gallery folder.', [
-                'gallery_id' => (int) $gallery['id'],
-                'folder_path' => (string) $gallery['folder_path'],
-                'uploaded' => (int) $stored['uploaded'],
-                'scanned' => (int) $stored['scanned'],
-                'thumbnails' => $thumbnails,
-                'thumbnail_failed' => $thumbnailFailed,
-                'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
-                'scan_failed_filenames' => $scanFailedFilenames,
-                'renamed' => (int) ($stored['renamed'] ?? 0),
-                'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
-            ]);
-            if ($scanFailedFilenames) {
-                admin_log_event('warning', 'gallery.upload_scan_incomplete', 'One or more uploaded files were stored on disk but not imported into image records.', [
+            admin_log_event(
+                'info',
+                'gallery.images_uploaded',
+                'Admin uploaded images into a gallery folder.',
+                [
                     'gallery_id' => (int) $gallery['id'],
                     'folder_path' => (string) $gallery['folder_path'],
-                    'filenames' => $scanFailedFilenames,
-                ]);
+                    'uploaded' => (int) $stored['uploaded'],
+                    'scanned' => (int) $stored['scanned'],
+                    'thumbnails' => $thumbnails,
+                    'thumbnail_failed' => $thumbnailFailed,
+                    'thumbnail_errors' => array_values(array_unique(array_filter(
+                        $thumbnailErrors,
+                    ))),
+                    'scan_failed_filenames' => $scanFailedFilenames,
+                    'renamed' => (int) ($stored['renamed'] ?? 0),
+                    'rename_failures' => array_values(
+                        (array) ($stored['rename_failures'] ?? []),
+                    ),
+                ],
+            );
+            if ($scanFailedFilenames) {
+                admin_log_event(
+                    'warning',
+                    'gallery.upload_scan_incomplete',
+                    'One or more uploaded files were stored on disk but not imported into image records.',
+                    [
+                        'gallery_id' => (int) $gallery['id'],
+                        'folder_path' => (string) $gallery['folder_path'],
+                        'filenames' => $scanFailedFilenames,
+                    ],
+                );
             }
             // $parentGalleryId stores the parent used by side-panel refreshes after create-and-upload.
             $parentGalleryId = (int) ($gallery['parent_id'] ?? 0);
             // $parentGallery stores the row that should refresh when a new child gallery appears.
-            $parentGallery = $parentGalleryId > 0 ? find_gallery($parentGalleryId, true) : null;
+            $parentGallery = $parentGalleryId > 0
+                ? find_gallery($parentGalleryId, true)
+                : null;
             // $parentGalleryUrl stores the public parent URL, or stays empty for root-level galleries.
-            $parentGalleryUrl = is_array($parentGallery) ? gallery_public_url($parentGallery) : '';
+            $parentGalleryUrl = is_array($parentGallery)
+                ? gallery_public_url($parentGallery)
+                : '';
             // $refreshGalleryId stores the public page that should redraw after the upload workflow.
-            $refreshGalleryId = $mode === 'new' ? $parentGalleryId : (int) $gallery['id'];
+            $refreshGalleryId = $mode === 'new'
+                ? $parentGalleryId
+                : (int) $gallery['id'];
             // $refreshUrl stores the source URL for current-context refreshes without guessing on the client.
-            $refreshUrl = $mode === 'new' ? ($parentGalleryUrl !== '' ? $parentGalleryUrl : url_for('home')) : gallery_public_url($gallery);
+            $refreshUrl = $mode === 'new'
+                ? (
+                    $parentGalleryUrl !== ''
+                        ? $parentGalleryUrl
+                        : url_for('home')
+                )
+                : gallery_public_url($gallery);
             // $callerRefreshUrl stores the public/admin page that opened the side-panel upload workflow.
-            $callerRefreshUrl = admin_upload_safe_refresh_url($_POST['source_url'] ?? '');
+            $callerRefreshUrl = admin_upload_safe_refresh_url(
+                $_POST['source_url'] ?? '',
+            );
             if ($mode !== 'new' && $callerRefreshUrl !== '') {
                 // Existing-gallery uploads should refresh the exact page the admin was viewing, including photo_page or clean pagination paths.
-                $refreshUrl = admin_operation_refresh_url($refreshUrl, $callerRefreshUrl);
+                $refreshUrl = admin_operation_refresh_url(
+                    $refreshUrl,
+                    $callerRefreshUrl,
+                );
             }
             // $editUrl stores the gallery editor target used after upload so the admin can continue managing photos immediately.
-            $editUrl = url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'tab' => 'admin-edit-images']) . '#admin-edit-images';
+            $editUrl =
+                url_for('admin_edit_gallery', [
+                    'id' => $gallery['id'],
+                    'uploaded' => (int) $stored['uploaded'],
+                    'scanned' => (int) $stored['scanned'],
+                    'tab' => 'admin-edit-images',
+                ]) . '#admin-edit-images';
             // $imageIds stores the stable uploaded image ids used by both the mutation descriptor and upload progress result.
             $imageIds = array_map('intval', $stored['image_ids'] ?? []);
             // $redirectUrl stores only the classic/direct-page fallback destination.
-            $redirectUrl = url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images';
+            $redirectUrl =
+                url_for('admin_edit_gallery', [
+                    'id' => $gallery['id'],
+                    'uploaded' => (int) $stored['uploaded'],
+                    'scanned' => (int) $stored['scanned'],
+                    'thumbnails' => $thumbnails,
+                    'thumbnail_failed' => $thumbnailFailed,
+                    'scan_failed' => count($scanFailedFilenames),
+                    'tab' => 'admin-edit-images',
+                ]) . '#admin-edit-images';
             // $mutationContext stores the public context that may be stale after this upload.
             $mutationContext = $mode === 'new'
                 ? admin_mutation_public_gallery_context(
                     $parentGalleryId,
                     $refreshUrl,
                     admin_mutation_gallery_membership_postcondition(
-                    (int) $gallery['id'],
-                    $parentGalleryId,
-                    admin_mutation_gallery_is_rendered_in_context($gallery, $parentGalleryId)
-                )
+                        (int) $gallery['id'],
+                        $parentGalleryId,
+                        admin_mutation_gallery_is_rendered_in_context(
+                            $gallery,
+                            $parentGalleryId,
+                        ),
+                    ),
                 )
                 : admin_mutation_public_gallery_context(
                     (int) $gallery['id'],
                     $refreshUrl,
                     admin_mutation_postcondition('gallery_image_count', [
                         'gallery_id' => (int) $gallery['id'],
-                        'count' => gallery_lightbox_total_count($gallery, false, false),
-                    ])
+                        'count' => gallery_lightbox_total_count(
+                            $gallery,
+                            false,
+                            false,
+                        ),
+                    ]),
                 );
             // $mutationEnvelope stores the Stage 1 canonical completion contract.
             $mutationEnvelope = admin_mutation_success_envelope(
                 t('admin.operations.upload_complete', 'Upload complete.'),
                 $mode === 'new'
-                    ? admin_mutation_descriptor('gallery.create_with_upload', 'gallery', 'create', [(int) $gallery['id']])
-                    : admin_mutation_descriptor('image.upload', 'image', 'upload', $imageIds),
+                    ? admin_mutation_descriptor(
+                        'gallery.create_with_upload',
+                        'gallery',
+                        'create',
+                        [(int) $gallery['id']],
+                    )
+                    : admin_mutation_descriptor(
+                        'image.upload',
+                        'image',
+                        'upload',
+                        $imageIds,
+                    ),
                 admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
                 [$mutationContext],
-                ['redirect_url' => $redirectUrl]
+                ['redirect_url' => $redirectUrl],
             );
             // $response stores the canonical completion envelope plus workflow-specific upload result fields.
             $response = array_merge($mutationEnvelope, [
@@ -714,14 +1134,22 @@ function cms_admin_upload(): void
                 'scanned' => (int) $stored['scanned'],
                 'thumbnails' => $thumbnails,
                 'thumbnail_failed' => $thumbnailFailed,
-                'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
+                'thumbnail_errors' => array_values(array_unique(array_filter(
+                    $thumbnailErrors,
+                ))),
                 'scan_failed' => count($scanFailedFilenames),
                 'thumbnail_failed_filenames' => $thumbnailFailedFilenames,
                 'scan_failed_filenames' => $scanFailedFilenames,
                 'renamed' => (int) ($stored['renamed'] ?? 0),
-                'rename_warnings' => array_values((array) ($stored['rename_warnings'] ?? [])),
-                'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
-                'upload_events' => array_values((array) ($stored['upload_events'] ?? [])),
+                'rename_warnings' => array_values(
+                    (array) ($stored['rename_warnings'] ?? []),
+                ),
+                'rename_failures' => array_values(
+                    (array) ($stored['rename_failures'] ?? []),
+                ),
+                'upload_events' => array_values(
+                    (array) ($stored['upload_events'] ?? []),
+                ),
                 'redirect_url' => $redirectUrl,
             ]);
             $response = admin_operation_complete($operationClaim, $response);
@@ -746,13 +1174,36 @@ function cms_admin_upload(): void
                 }
                 $writerLock = null;
             }
-            if ($operationClaim && empty($operationClaim['replay']) && !$exception instanceof AdminOperationRefusal && !$exception instanceof \Gallery\Services\GalleryCatalogConflict) {
-                $exception = new AdminOperationRefusal('operation_outcome_unknown', 'The upload may have stored files. Retain its key and reconcile the original attempt before starting another upload.');
+            if (
+                $operationClaim
+                && empty($operationClaim['replay'])
+                && !$exception instanceof AdminOperationRefusal
+                && !
+                    $exception
+                    instanceof \Gallery\Services\GalleryCatalogConflict
+
+            ) {
+                $exception = new AdminOperationRefusal(
+                    'operation_outcome_unknown',
+                    'The upload may have stored files. Retain its key and reconcile the original attempt before starting another upload.',
+                );
             }
-            admin_log_event('error', 'gallery.upload_failed', 'Admin image upload failed.', ['error' => $exception->getMessage()]);
+            admin_log_event(
+                'error',
+                'gallery.upload_failed',
+                'Admin image upload failed.',
+                ['error' => $exception->getMessage()],
+            );
             $operationRefusal = $exception instanceof AdminOperationRefusal;
-            $catalogConflict = $exception instanceof \Gallery\Services\GalleryCatalogConflict;
-            $status = $operationRefusal ? admin_operation_refusal_status($exception) : ($catalogConflict ? \Gallery\Core\HTTP_STATUS_CONFLICT : \Gallery\Core\HTTP_STATUS_UNPROCESSABLE_ENTITY);
+            $catalogConflict =
+                $exception instanceof \Gallery\Services\GalleryCatalogConflict;
+            $status = $operationRefusal
+                ? admin_operation_refusal_status($exception)
+                : (
+                    $catalogConflict
+                        ? \Gallery\Core\HTTP_STATUS_CONFLICT
+                        : \Gallery\Core\HTTP_STATUS_UNPROCESSABLE_ENTITY
+                );
             http_response_code($status);
             if ($wantsJson) {
                 if (ob_get_level() > 0) {
@@ -761,60 +1212,121 @@ function cms_admin_upload(): void
                 header('Content-Type: application/json');
                 echo json_encode(admin_mutation_error_envelope(
                     $exception->getMessage(),
-                    $operationRefusal ? $exception->reason : ($catalogConflict ? 'gallery_catalog_conflict' : 'gallery_upload_failed'),
-                    admin_mutation_descriptor('image.upload', 'image', 'upload')
+                    $operationRefusal
+                        ? $exception->reason
+                        : (
+                            $catalogConflict
+                                ? 'gallery_catalog_conflict'
+                                : 'gallery_upload_failed'
+                        ),
+                    admin_mutation_descriptor(
+                        'image.upload',
+                        'image',
+                        'upload',
+                    ),
                 ));
                 return;
             }
             $_SESSION['admin_upload_error'] = $exception->getMessage();
+
             // Render the failed form with its original key; a redirect would mint a new intent.
         }
     }
 
     // $prefillGalleryId stores the gallery that should be pre-selected when upload is opened from a public gallery page.
-    $prefillGalleryId = request_method() === 'POST' ? max(0, (int) ($_POST['gallery_id'] ?? 0)) : selected_gallery_id_from_query('gallery_id');
+    $prefillGalleryId = request_method() === 'POST'
+        ? max(0, (int) ($_POST['gallery_id'] ?? 0))
+        : selected_gallery_id_from_query('gallery_id');
     // $prefillParentId stores the parent gallery for the create-and-upload workflow.
-    $prefillParentId = request_method() === 'POST' ? max(0, (int) ($_POST['parent_id'] ?? 0)) : selected_gallery_id_from_query('parent_id');
+    $prefillParentId = request_method() === 'POST'
+        ? max(0, (int) ($_POST['parent_id'] ?? 0))
+        : selected_gallery_id_from_query('parent_id');
     // $prefillGallery stores the validated gallery record used for contextual helper text.
-    $prefillGallery = $prefillGalleryId > 0 ? find_gallery($prefillGalleryId) : null;
+    $prefillGallery = $prefillGalleryId > 0
+        ? find_gallery($prefillGalleryId)
+        : null;
     // $prefillParentGallery stores the validated parent row for create-and-upload helper text.
-    $prefillParentGallery = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
+    $prefillParentGallery = $prefillParentId > 0
+        ? find_gallery($prefillParentId)
+        : null;
     // $requestedUploadMode stores whether this screen should show existing-upload or create-and-upload UI.
-    $requestedUploadMode = (string) (request_method() === 'POST' ? ($_POST['upload_mode'] ?? 'existing') : ($_GET['upload_mode'] ?? 'existing'));
+    $requestedUploadMode = (string) (
+        request_method() === 'POST'
+            ? $_POST['upload_mode'] ?? 'existing'
+            : $_GET['upload_mode'] ?? 'existing'
+    );
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = (string) ($_SESSION['admin_upload_error'] ?? '');
     unset($_SESSION['admin_upload_error']);
     // $panelMode stores whether the upload screen is being rendered inside the reusable admin side panel.
     $panelMode = !empty($_GET['panel']);
     if ($panelMode) {
-        render_admin_upload_side_panel($prefillGalleryId, $prefillGallery, $error, $requestedUploadMode, $prefillParentId, $prefillParentGallery);
+        render_admin_upload_side_panel(
+            $prefillGalleryId,
+            $prefillGallery,
+            $error,
+            $requestedUploadMode,
+            $prefillParentId,
+            $prefillParentGallery,
+        );
         return;
     }
     $formFragments = [];
     if ($requestedUploadMode === 'new' || $prefillParentId > 0) {
-        $formFragments[] = admin_upload_capture_html(static function () use ($prefillParentId): void {
+        $formFragments[] = admin_upload_capture_html(static function () use (
+            $prefillParentId,
+        ): void {
             render_admin_upload_new_gallery_form($prefillParentId);
         });
     } else {
-        $formFragments[] = admin_upload_capture_html(static function () use ($prefillGalleryId): void {
+        $formFragments[] = admin_upload_capture_html(static function () use (
+            $prefillGalleryId,
+        ): void {
             render_admin_upload_existing_gallery_form($prefillGalleryId);
         });
-        $formFragments[] = admin_upload_capture_html(static function () use ($prefillGalleryId): void {
+        $formFragments[] = admin_upload_capture_html(static function () use (
+            $prefillGalleryId,
+        ): void {
             render_admin_upload_new_gallery_form($prefillGalleryId);
         });
     }
     \Gallery\Views\view_render_admin_upload_page([
         'title' => t('admin.upload.title', 'Upload photos'),
         'dashboard_url' => url_for('admin'),
-        'dashboard_label' => t('admin.common.back_to_dashboard', 'Back to dashboard'),
+        'dashboard_label' => t(
+            'admin.common.back_to_dashboard',
+            'Back to dashboard',
+        ),
         'new_gallery_url' => url_for('admin_new_gallery'),
-        'new_gallery_label' => t('admin.upload.create_empty_gallery', 'Create empty gallery'),
-        'notices' => array_values(array_filter([
-            $prefillGallery ? t('admin.upload.target_preselected', 'Upload target pre-selected: {title}.', ['title' => (string) $prefillGallery['title']]) : '',
-            $prefillParentGallery ? t('admin.upload.new_gallery_parent_notice', 'New gallery will be created inside: {title}.', ['title' => (string) $prefillParentGallery['title']]) : '',
-            $error !== '' ? t('admin.upload.failed_value', 'Upload failed: {error}', ['error' => $error]) : '',
-        ], static fn (string $notice): bool => $notice !== '')),
-        'support_html' => admin_upload_capture_html(static function (): void { render_admin_upload_support_panel(); }),
+        'new_gallery_label' => t(
+            'admin.upload.create_empty_gallery',
+            'Create empty gallery',
+        ),
+        'notices' => array_values(array_filter(
+            [
+                $prefillGallery
+                    ? t(
+                        'admin.upload.target_preselected',
+                        'Upload target pre-selected: {title}.',
+                        ['title' => (string) $prefillGallery['title']],
+                    ) : '',
+                $prefillParentGallery
+                    ? t(
+                        'admin.upload.new_gallery_parent_notice',
+                        'New gallery will be created inside: {title}.',
+                        ['title' => (string) $prefillParentGallery['title']],
+                    ) : '',
+                $error !== ''
+                    ? t('admin.upload.failed_value', 'Upload failed: {error}', [
+                        'error' => $error,
+                    ])
+                    : '',
+            ],
+            static fn(string $notice): bool => $notice !== '',
+        )),
+        'support_html' => admin_upload_capture_html(static function (): void {
+            render_admin_upload_support_panel();
+        }),
         'form_fragments' => $formFragments,
     ]);
 }
@@ -822,34 +1334,73 @@ function cms_admin_upload(): void
 /**
  * Render the focused upload workflow inside the reusable admin side panel.
  *
- * @param int $prefillGalleryId Prefill gallery id identifier.
- * @param ?array $prefillGallery Prefill gallery value.
- * @param string $error Error value.
- * @param string $requestedUploadMode Requested upload mode value.
- * @param int $prefillParentId Prefill parent id identifier.
- * @param ?array $prefillParentGallery Prefill parent gallery value.
+ * @param int $prefillGalleryId Existing upload target gallery id, or zero when none was selected.
+ * @param array{title?:string|null}|null $prefillGallery Existing upload target used for its title notice, or null when no target was selected.
+ * @param string $error Localized upload error message, or an empty string when there is no error.
+ * @param string $requestedUploadMode Requested mode; `new` selects create-and-upload and other values use an existing gallery.
+ * @param int $prefillParentId Parent gallery id for create-and-upload, or zero when there is no parent.
+ * @param array{title?:string|null}|null $prefillParentGallery Parent gallery used for its title notice, or null when no parent was selected.
+ * @return void Render the prepared side-panel form, notices, and support content.
  */
-function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGallery, string $error, string $requestedUploadMode = 'existing', int $prefillParentId = 0, ?array $prefillParentGallery = null): void
-{
-    $createAndUploadMode = $requestedUploadMode === 'new' || $prefillParentId > 0;
+function render_admin_upload_side_panel(
+    int $prefillGalleryId,
+    ?array $prefillGallery,
+    string $error,
+    string $requestedUploadMode = 'existing',
+    int $prefillParentId = 0,
+    ?array $prefillParentGallery = null,
+): void {
+    $createAndUploadMode =
+        $requestedUploadMode === 'new' || $prefillParentId > 0;
     if ($createAndUploadMode) {
-        $formHtml = admin_upload_capture_html(static function () use ($prefillParentId): void {
+        $formHtml = admin_upload_capture_html(static function () use (
+            $prefillParentId,
+        ): void {
             render_admin_upload_new_gallery_panel_form($prefillParentId);
         });
-        $notices = array_values(array_filter([
-            $prefillParentGallery ? t('admin.upload.new_gallery_parent_notice', 'New gallery will be created inside: {title}.', ['title' => (string) $prefillParentGallery['title']]) : '',
-            $error !== '' ? t('admin.upload.create_or_upload_failed_value', 'Create or upload failed: {error}', ['error' => $error]) : '',
-        ], static fn (string $notice): bool => $notice !== ''));
+        $notices = array_values(array_filter(
+            [
+                $prefillParentGallery
+                    ? t(
+                        'admin.upload.new_gallery_parent_notice',
+                        'New gallery will be created inside: {title}.',
+                        ['title' => (string) $prefillParentGallery['title']],
+                    ) : '',
+                $error !== ''
+                    ? t(
+                        'admin.upload.create_or_upload_failed_value',
+                        'Create or upload failed: {error}',
+                        ['error' => $error],
+                    ) : '',
+            ],
+            static fn(string $notice): bool => $notice !== '',
+        ));
         $supportHtml = '';
     } else {
-        $formHtml = admin_upload_capture_html(static function () use ($prefillGalleryId): void {
+        $formHtml = admin_upload_capture_html(static function () use (
+            $prefillGalleryId,
+        ): void {
             render_admin_upload_existing_gallery_form($prefillGalleryId, true);
         });
-        $notices = array_values(array_filter([
-            $prefillGallery ? t('admin.upload.target_preselected', 'Upload target pre-selected: {title}.', ['title' => (string) $prefillGallery['title']]) : '',
-            $error !== '' ? t('admin.upload.failed_value', 'Upload failed: {error}', ['error' => $error]) : '',
-        ], static fn (string $notice): bool => $notice !== ''));
-        $supportHtml = admin_upload_capture_html(static function (): void { render_admin_upload_support_panel(); });
+        $notices = array_values(array_filter(
+            [
+                $prefillGallery
+                    ? t(
+                        'admin.upload.target_preselected',
+                        'Upload target pre-selected: {title}.',
+                        ['title' => (string) $prefillGallery['title']],
+                    ) : '',
+                $error !== ''
+                    ? t('admin.upload.failed_value', 'Upload failed: {error}', [
+                        'error' => $error,
+                    ])
+                    : '',
+            ],
+            static fn(string $notice): bool => $notice !== '',
+        ));
+        $supportHtml = admin_upload_capture_html(static function (): void {
+            render_admin_upload_support_panel();
+        });
     }
 
     \Gallery\Views\view_render_admin_upload_side_panel([
@@ -859,7 +1410,6 @@ function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGa
         'form_html' => $formHtml,
     ]);
 }
-
 
 /** Capture trusted HTML produced by an existing upload presentation renderer. */
 function admin_upload_capture_html(callable $renderer): string
@@ -876,7 +1426,11 @@ function admin_upload_capture_html(callable $renderer): string
  */
 function admin_upload_accept_value(): string
 {
-    return admin_upload_accept_value_for_mode(admin_upload_client_format_mode(), heic_conversion_supported(), raw_conversion_supported());
+    return admin_upload_accept_value_for_mode(
+        admin_upload_client_format_mode(),
+        heic_conversion_supported(),
+        raw_conversion_supported(),
+    );
 }
 
 /**
@@ -887,33 +1441,49 @@ function render_admin_upload_support_panel(): void
     view_render_admin_upload_support_panel(admin_upload_support_model());
 }
 
-
-
 /**
  * Render the browser-side upload checkbox.
  *
- * @param bool $panelMode Panel mode value.
+ * @param bool $panelMode Whether to use the side-panel checkbox presentation.
+ * @return void Render the browser-assisted upload checkbox with its prepared configuration.
  */
 function render_admin_upload_browser_checkbox(bool $panelMode = false): void
 {
-    $config = function_exists('Gallery\Services\browser_upload_browser_config') ? browser_upload_browser_config() : ['enabled' => false];
-    $encodedConfig = json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $config = function_exists('Gallery\Services\browser_upload_browser_config')
+        ? browser_upload_browser_config()
+        : ['enabled' => false];
+    $encodedConfig = json_encode(
+        $config,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($encodedConfig)) {
         $encodedConfig = '{}';
     }
     \Gallery\Views\view_render_admin_upload_browser_checkbox([
         'disabled' => empty($config['enabled']),
-        'class_name' => $panelMode ? 'admin-side-panel-browser-upload-toggle' : 'browser-upload-toggle',
+        'class_name' => $panelMode
+            ? 'admin-side-panel-browser-upload-toggle'
+            : 'browser-upload-toggle',
         'encoded_config' => $encodedConfig,
     ]);
 }
 
-/** Return image accept hints plus ZIP only when browser-assisted upload is enabled. */
+/**
+ * Return image accept hints plus ZIP only when browser-assisted upload is enabled.
+ *
+ * @return string HTML accept-attribute value for the enabled upload modes.
+ */
 function admin_browser_upload_accept_value(): string
 {
     $accept = admin_upload_accept_value();
-    $config = function_exists('Gallery\\Services\\browser_upload_browser_config') ? browser_upload_browser_config() : ['enabled' => false];
-    return !empty($config['enabled']) ? $accept . ',.zip,application/zip,application/x-zip-compressed' : $accept;
+    $config = function_exists(
+        'Gallery\\Services\\browser_upload_browser_config',
+    )
+        ? browser_upload_browser_config()
+        : ['enabled' => false];
+    return !empty($config['enabled'])
+        ? $accept . ',.zip,application/zip,application/x-zip-compressed'
+        : $accept;
 }
 
 /**
@@ -923,15 +1493,19 @@ function admin_browser_upload_accept_value(): string
  * @param bool $panelMode Panel mode value.
  * @return void Emit prepared upload markup with the target context and operation key.
  */
-function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $panelMode = false): void
-{
+function render_admin_upload_existing_gallery_form(
+    int $prefillGalleryId,
+    bool $panelMode = false,
+): void {
     require_once __DIR__ . '/../services/gallery_music.php';
-    $targetGallery = $panelMode && $prefillGalleryId > 0 ? find_gallery($prefillGalleryId, true) : null;
+    $targetGallery = $panelMode && $prefillGalleryId > 0
+        ? find_gallery($prefillGalleryId, true)
+        : null;
     $pdfEnabled = \Gallery\Services\feature_capability_effective_enabled(
-        'gallery_pdf_documents'
+        'gallery_pdf_documents',
     );
     $musicEnabled = \Gallery\Services\feature_capability_effective_enabled(
-        'gallery_music'
+        'gallery_music',
     );
     \Gallery\Views\view_render_admin_upload_existing_gallery_form([
         'panel_mode' => $panelMode,
@@ -939,22 +1513,34 @@ function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $
         'pdf_enabled' => $pdfEnabled,
         'music_enabled' => $musicEnabled,
         'pdf_attachment_url' => $pdfEnabled
-            ? url_for('admin_edit_gallery') : '',
+            ? url_for('admin_edit_gallery')
+            : '',
         'music_attachment_url' => $musicEnabled
-            ? url_for('admin_edit_gallery') : '',
+            ? url_for('admin_edit_gallery')
+            : '',
         'music_playlist_url' => $musicEnabled ? url_for('gallery_music') : '',
-        'music_accept_value' => $musicEnabled ? implode(',', array_map(
-            static fn(string $extension): string => '.' . $extension,
-            array_keys(\Gallery\Services\gallery_music_formats())
-        )) : '',
+        'music_accept_value' => $musicEnabled
+            ? implode(',', array_map(
+                static fn(string $extension): string => '.' . $extension,
+                array_keys(\Gallery\Services\gallery_music_formats()),
+            ))
+            : '',
         'csrf_html' => csrf_field(),
-        'operation_key' => admin_operation_form_key($_POST['operation_key'] ?? null),
+        'operation_key' => admin_operation_form_key(
+            $_POST['operation_key'] ?? null,
+        ),
         'gallery_id' => $panelMode ? $prefillGalleryId : 0,
-        'target_title' => is_array($targetGallery) ? (string) ($targetGallery['title'] ?? ('#' . $prefillGalleryId)) : '',
-        'gallery_options_html' => $panelMode && $prefillGalleryId > 0 ? '' : gallery_options_for_select($prefillGalleryId),
+        'target_title' => is_array($targetGallery)
+            ? (string) ($targetGallery['title'] ?? '#' . $prefillGalleryId)
+            : '',
+        'gallery_options_html' => $panelMode && $prefillGalleryId > 0
+            ? ''
+            : gallery_options_for_select($prefillGalleryId),
         'accept_value' => admin_browser_upload_accept_value(),
         'pdf_render_dpi' => \Gallery\Services\gallery_pdf_render_dpi(),
-        'browser_checkbox_html' => admin_upload_capture_html(static function () use ($panelMode): void {
+        'browser_checkbox_html' => admin_upload_capture_html(static function () use (
+            $panelMode,
+        ): void {
             render_admin_upload_browser_checkbox($panelMode);
         }),
     ]);
@@ -983,22 +1569,33 @@ function render_admin_upload_new_gallery_panel_form(int $prefillParentId): void
 /**
  * Render the shared create-and-upload form while preserving the existing upload route.
  *
- * @param int $prefillParentId Prefill parent id identifier.
- * @param bool $panelMode Panel mode value.
+ * @param int $prefillParentId Parent gallery id for the new gallery, or zero for a root gallery.
+ * @param bool $panelMode Whether to render this form inside the Admin side panel.
+ * @return void Render the new-gallery form with its parent context and upload controls.
  */
-function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $panelMode): void
-{
+function render_admin_upload_new_gallery_form_shell(
+    int $prefillParentId,
+    bool $panelMode,
+): void {
     \Gallery\Views\view_render_admin_upload_new_gallery_form([
         'panel_mode' => $panelMode,
         'action_url' => url_for('admin_upload'),
         'csrf_html' => csrf_field(),
-        'gallery_fields_html' => admin_upload_capture_html(static function () use ($prefillParentId, $panelMode): void {
-            render_admin_new_gallery_fields($prefillParentId, $panelMode, 'upload');
+        'gallery_fields_html' => admin_upload_capture_html(static function () use (
+            $prefillParentId,
+            $panelMode,
+        ): void {
+            render_admin_new_gallery_fields(
+                $prefillParentId,
+                $panelMode,
+                'upload',
+            );
         }),
         'accept_value' => admin_browser_upload_accept_value(),
-        'browser_checkbox_html' => admin_upload_capture_html(static function () use ($panelMode): void {
+        'browser_checkbox_html' => admin_upload_capture_html(static function () use (
+            $panelMode,
+        ): void {
             render_admin_upload_browser_checkbox($panelMode);
         }),
     ]);
 }
-

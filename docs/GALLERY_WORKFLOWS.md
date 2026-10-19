@@ -1,26 +1,33 @@
 # Disposable gallery workflow tests
 
-The Priority 2 baseline exercises a real migrated database and the actual PHP HTTP
-routes in a temporary application copy. It never loads the checkout's config.php,
-copies its gallery/data/cache directories, or connects to its configured database.
+The Priority 2 baseline exercises a real migrated database and the actual PHP
+HTTP
+routes in a temporary application copy. It never loads the checkout's
+config.php,
+copies its gallery/data/cache directories, or connects to its configured
+database.
 All sample photographs and credentials are generated for the run.
 
 The issue #127 visual-preview workflow keeps the public document and asset
-boundaries distinct. The real HTTP fixture verifies that a valid but inaccessible
+boundaries distinct. The real HTTP fixture verifies that a valid but
+inaccessible
 gallery in the authenticated Anonymous visual preview redirects to the nearest
 visitor-accessible ancestor or Home with the preview/audience markers and one
 fixed generic notice token, then follows that same-origin canonical destination
-and confirms the accessible public document renders with private no-store headers.
+and confirms the accessible public document renders with private no-store
+headers.
 Home SEO canonicalization preserves that exact notice only with the matching
 preview and anonymous-audience markers. The denied gallery document itself is
 never rendered. An otherwise listed,
 password-gated child may still appear in its accessible parent’s ordinary public
-listing as a locked card without cover imagery; a private child is omitted by the
+listing as a locked card without cover imagery; a private child is omitted by
+the
 existing public-listing policy. Gallery destinations are matched against the
 stored canonical `url_path`, not inferred from the gallery’s filesystem folder
 name. The fixture accepts the supported
 front-controller and clean Home/Gallery route forms while rejecting unrelated
-paths, query keys, and cross-origin redirects. Ordinary visitors retain the existing
+paths, query keys, and cross-origin redirects. Ordinary visitors retain the
+existing
 password gate. Protected original-media and thumbnail requests remain denied,
 while public assets inherit preview context only under the same-origin,
 in-mount request policy. The workflow also verifies installed and saved
@@ -38,11 +45,14 @@ device testing.
 
 The central audit remains the test orchestrator. The full and release profiles,
 and the explicit `php-regression` suite, discover
-tests/gallery_workflow_safety_test.php, tests/gallery_workflow_integration_test.php,
+tests/gallery_workflow_safety_test.php,
+tests/gallery_workflow_integration_test.php,
 tests/gallery_workflow_browser_test.php and
-tests/public_widget_persistence_browser_test.php through PHP regression discovery.
+tests/public_widget_persistence_browser_test.php through PHP regression
+discovery.
 Both browser tests use the shared owned HTTP/database fixture and run serially
-against its live Chromium and widget state; the persistence test owns and removes
+against its live Chromium and widget state; the persistence test owns and
+removes
 its unique widget row and verifies the table digest returns to baseline.
 The quick profile uses its curated PHP subset and does not run these disposable
 database workflow fixtures. The historical `--quick` convenience flag on either
@@ -53,26 +63,32 @@ The distinct `--audit-quick` mode provisions the same owned database/application
 fixture around one central quick audit and requires all nine actual route
 lifecycle measurements. It retains the quick profile's curated PHP subset and
 does not claim full HTTP/concurrency/browser workflow qualification.
-The browser PHP entry point launches tests/gallery_workflow_browser.mjs using the
+The browser PHP entry point launches tests/gallery_workflow_browser.mjs using
+the
 same standalone headless Chromium approach as the existing map fixture. It needs
-no browser tool runtime, npm install, Playwright, Selenium, or Composer dependency.
+no browser tool runtime, npm install, Playwright, Selenium, or Composer
+dependency.
 The disposable PHP router forwards application requests to the copied
 `public/index.php` and normalizes `SCRIPT_NAME` to that front controller while
-preserving `REQUEST_URI`. This keeps the app's mount-path derivation based on the
+preserving `REQUEST_URI`. This keeps the app's mount-path derivation based on
+the
 front-controller script, as it is for a rewritten Apache request, rather than on
 the clean asset URL that selected the fixture router.
 
 Ordinary audits without a disposable fixture run the safety test and explicitly
 SKIP the HTTP and browser integration tests. A skip is not full-stack evidence.
-GALLERY_WORKFLOW_REQUIRED=1 makes missing integration prerequisites BLOCKED with a
-nonzero exit code. Explicit GALLERY_WORKFLOW_BROWSER=disabled records only browser
+GALLERY_WORKFLOW_REQUIRED=1 makes missing integration prerequisites BLOCKED with
+a
+nonzero exit code. Explicit GALLERY_WORKFLOW_BROWSER=disabled records only
+browser
 coverage as SKIP, including when workflows are required. Integration PHP tests
 have a 180-second child limit. The full Gallery browser test has a 300-second
 child limit for its 240-second result window plus browser startup, shutdown and
 fixture cleanup; the separate public-widget browser test has a 225-second limit
 for its 165-second result window and the same lifecycle overhead.
 
-Prerequisites: PHP 8.1+ with pdo_mysql, curl, gd, zip, dom and mbstring; Node.js;
+Prerequisites: PHP 8.1+ with pdo_mysql, curl, gd, zip, dom and mbstring;
+Node.js;
 an installed Chrome/Chromium/Edge; and either MySQL 8 locally or a disposable
 MySQL/MariaDB service. Browser execution preserves Chromium's sandbox. Running
 Chromium as root without a working sandbox is unsupported.
@@ -97,10 +113,12 @@ php scripts/gallery_workflow_mysql.php --development
 ~~~
 
 The paths above are workstation examples. Agents may reuse the verified paths
-in ignored .agent-local/gallery-workflow-tools.json. No credentials belong there.
+in ignored .agent-local/gallery-workflow-tools.json. No credentials belong
+there.
 The launcher uses --no-defaults for initialization and serving, a fresh random
 system temporary directory, a random loopback port, and disables MySQL X and
-binary logging. It verifies the connected server's data directory before changing
+binary logging. It verifies the connected server's data directory before
+changing
 credentials or issuing SHUTDOWN. It generates a dedicated account whose grants
 cover only the escaped gallery_workflow_ database-name prefix.
 
@@ -111,7 +129,8 @@ are being developed. For normal integrated verification use:
 php scripts/gallery_workflow_mysql.php --audit
 ~~~
 
-That mode delegates to php scripts/audit.php --profile=full once and supplies the
+That mode delegates to php scripts/audit.php --profile=full once and supplies
+the
 seeded fixture to both the new tests and the existing
 viewer_phase07_mysql_concurrency_test.php. It is not a replacement audit runner.
 The central audit's compact reports remain in cache/test-audit. No release
@@ -127,12 +146,15 @@ php scripts/gallery_workflow_mysql.php --release
 
 This provisions the owned fixture around exactly one
 `php scripts/audit.php --profile=release` invocation; it does not run `full`
-beforehand. Both central modes require the same database/HTTP and concurrency PASS
-records, plus browser PASS when not explicitly disabled, and preserve the central
+beforehand. Both central modes require the same database/HTTP and concurrency
+PASS
+records, plus browser PASS when not explicitly disabled, and preserve the
+central
 reports. An independently provisioned disposable
 service can likewise use `scripts/gallery_workflow_run.php --release`.
 
-The local daemon launcher uses MySQL 8 initialization flags. A MariaDB executable
+The local daemon launcher uses MySQL 8 initialization flags. A MariaDB
+executable
 is not interchangeable with it; MariaDB coverage uses the CI service below.
 
 ## Already disposable database services and CI
@@ -153,47 +175,65 @@ There is no accepted input database name or arbitrary DSN. The runner chooses
 gallery_workflow_ followed by 24 random hex characters, uses CREATE DATABASE
 without IF NOT EXISTS, and drops only a database it successfully created.
 The account needs only schema-local `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
-`CREATE`, `ALTER`, `DROP`, `INDEX`, and `REFERENCES` permissions for that prefix.
+`CREATE`, `ALTER`, `DROP`, `INDEX`, and `REFERENCES` permissions for that
+prefix.
 The engine contract also needs schema-local `CREATE TEMPORARY TABLES` for its
-connection-owned JSON table; this is a test prerequisite, not a production grant.
-It does not need `TRIGGER`, `SUPER`, an `ALL PRIVILEGES` grant, or authority over
+connection-owned JSON table; this is a test prerequisite, not a production
+grant.
+It does not need `TRIGGER`, `SUPER`, an `ALL PRIVILEGES` grant, or authority
+over
 server-global settings. Never repurpose an administrator or production account.
 
 .github/workflows/gallery-workflows.yml creates independent MySQL 8.4, MariaDB
-10.11 and MariaDB 11.4 service containers on port 13316, without host data volumes.
+10.11 and MariaDB 11.4 service containers on port 13316, without host data
+volumes.
 It is also a reusable workflow. Direct PR/push/manual CI keeps the safe `full`
 profile behavior. `.github/workflows/release-qualification.yml` can call it with
 `audit_profile=release`; that preserves the normal matrix and adds one isolated
-`Authoritative release audit` job running the central `release` profile. The release caller owns deterministic preparation of the trusted
+`Authoritative release audit` job running the central `release` profile. The
+release caller owns deterministic preparation of the trusted
 `release/v_X.Y.Z` branch. If the target patch-note section is incomplete, it
-builds complete previous-tag-to-HEAD text diff evidence for GitHub Copilot CLI through
+builds complete previous-tag-to-HEAD text diff evidence for GitHub Copilot CLI
+through
 `.github/scripts/patch_notes_ai.php`. The personal-repository workflow expects
 a fine-grained PAT in the `COPILOT_GITHUB_TOKEN` repository secret, selects
-`gpt-6-luna` with an explicit model-unavailable fallback to `auto`, disables project prompt-mode extensions and grants no Copilot
+`gpt-6-luna` with an explicit model-unavailable fallback to `auto`, disables
+project prompt-mode extensions and grants no Copilot
 tools. The model output is validated as data before only the incomplete target
 release section may be replaced; completed maintainer-authored notes skip AI.
 The text diff has no byte truncation. Separate temporary stdout/diagnostic files
 avoid pipe deadlocks; each Git child has a 30-second deadline and the evidence
 step has a two-minute workflow limit. Metadata/diagnostic bounds fail explicitly
-instead of accepting partial evidence. Missing authentication, AI failure or invalid output blocks
+instead of accepting partial evidence. Missing authentication, AI failure or
+invalid output blocks
 qualification. Once release notes are valid, GitHub builds all four PDFs,
 refreshes production inventory and the integrity manifest, passes
 `check_release.php`, commits only reviewed release-preparation paths and calls
-the reusable matrix with the exact prepared candidate SHA and previous-tag source
+the reusable matrix with the exact prepared candidate SHA and previous-tag
+source
 base. The final `Release qualification gate` succeeds only when preparation and
 the complete reusable matrix succeed. This stage still does not merge, tag or
 publish.
-During ordinary development, edit the Markdown/LaTeX sources without compiling PDFs
-after each change. All four manual source editions stay aligned, while tracked PDFs
-may lag until the final hosted release preparation builds them together before the manifest.
+During ordinary development, edit the Markdown/LaTeX sources without compiling
+PDFs
+after each change. All four manual source editions stay aligned, while tracked
+PDFs
+may lag until the final hosted release preparation builds them together before
+the manifest.
 
-Before AI/TeX, the caller invokes the centrally owned `release-preflight` static profile;
-the final exact-SHA matrix remains complete. TinyTeX provisioning uses the checksum-locked
+Before AI/TeX, the caller invokes the centrally owned `release-preflight` static
+profile;
+the final exact-SHA matrix remains complete. TinyTeX provisioning uses the
+checksum-locked
 2026.02 / TeX Live 2025 final toolchain, never a rolling package repository.
-The exact cache key covers lock, package inventory and helper; a hit verifies the local
-installation without networking, and save requires all four successful PDF builds.
-See [the release toolchain and branch lifecycle](../RELEASE.md) for timeout, invalidation,
-reproducible PDF and rerun rules. Release fixes remain on the release branch until
+The exact cache key covers lock, package inventory and helper; a hit verifies
+the local
+installation without networking, and save requires all four successful PDF
+builds.
+See [the release toolchain and branch lifecycle](../RELEASE.md) for timeout,
+invalidation,
+reproducible PDF and rerun rules. Release fixes remain on the release branch
+until
 future `release -> main -> develop` reconciliation.
 
 The exact PHP representatives and qualification categories are defined in
@@ -203,14 +243,20 @@ installation credential. scripts/gallery_workflow_ci.php additionally requires
 GitHub Actions and verifies the service hostname before creating its restricted,
 random-password runner account. The root credential is removed from child
 environments. Database/runtime matrix jobs set PHP_GALLERY_BROWSER=disabled and
-GALLERY_WORKFLOW_BROWSER=disabled at job scope, so they do not duplicate Chromium
-work. A separate `browser-tests` job on PHP 8.3 and Node 22 discovers and versions
+GALLERY_WORKFLOW_BROWSER=disabled at job scope, so they do not duplicate
+Chromium
+work. A separate `browser-tests` job on PHP 8.3 and Node 22 discovers and
+versions
 Chrome/Chromium, sets PHP_GALLERY_BROWSER_REQUIRED=1, and runs
-`php scripts/audit.php --suite=browser-map`. Required mode fails when the browser
-is missing or cannot start, when browser fixtures are skipped, or when no browser
+`php scripts/audit.php --suite=browser-map`. Required mode fails when the
+browser
+is missing or cannot start, when browser fixtures are skipped, or when no
+browser
 fixture runs. The full central audit remains in place, and the database/HTTP
-workflows, engine contracts, image-move crash recovery, and MySQL/MariaDB races still require PASS records
-from the central regression log. An absent, skipped or unregistered database/HTTP
+workflows, engine contracts, image-move crash recovery, and MySQL/MariaDB races
+still require PASS records
+from the central regression log. An absent, skipped or unregistered
+database/HTTP
 or concurrency test cannot qualify. Local browser discovery and explicit
 executable overrides retain their existing behavior unless the operator
 deliberately sets the same disabled value.
@@ -232,7 +278,8 @@ private MySQL runs do not establish that either CI container image has executed
 successfully.
 
 `tests/gallery_workflow_ci_trigger_policy_test.php` exercises the actual
-bootstrap statements with inert PDO/environment adapters. The historical filename
+bootstrap statements with inert PDO/environment adapters. The historical
+filename
 now guards removal of trigger-era authority: it covers ownership refusal before
 account changes, the exact schema-local grant, absence of server-global SQL, and
 root credential removal. It opens no database connection and does not invoke CI
@@ -240,29 +287,36 @@ or the central audit.
 
 ## Assertions and present limits
 
-The HTTP journey performs real administrator login; rejects anonymous and invalid
-CSRF create/upload/edit/delete/restore attempts; creates a nested gallery; uploads
-a generated JPEG with multipart transport; edits metadata and visibility; moves a
+The HTTP journey performs real administrator login; rejects anonymous and
+invalid
+CSRF create/upload/edit/delete/restore attempts; creates a nested gallery;
+uploads
+a generated JPEG with multipart transport; edits metadata and visibility; moves
+a
 subtree to Trash and restores it; and rejects mutation after logout. It verifies
 database rows, sidecars, parent relationships, original hashes, media responses,
 and absence of extra rows/files after retry.
 
 Prepared ZIP upload retry discards the first successful HTTP result and resends
 the same session/batch. The test requires identical durable image identity and
-file counts. This models lost-response retry; it does not inject a TCP disconnect
+file counts. This models lost-response retry; it does not inject a TCP
+disconnect
 during response streaming. Repeated restore must not duplicate the subtree.
 
 The CMS intentionally allows direct URLs for unpublished galleries, while hiding
 them from ordinary listings. Private visibility and password protection are the
 media authorization denial cases. The test preserves that distinction.
 
-The full-stack Chromium journey covers dynamically opened creation, two immediate
+The full-stack Chromium journey covers dynamically opened creation, two
+immediate
 button clicks with a delayed response, consecutive edits after real editor
 replacement, multipart upload with a generated browser File, private/public
-visibility changes and anonymous media checks, recoverable card deletion, restore
+visibility changes and anonymous media checks, recoverable card deletion,
+restore
 inside a dynamically opened Trash fragment, and submission after logout while an
 editor remains open. It checks unchanged document/URL, an open panel, replaced
-fragments, SQL/sidecar state, Trash ledger state, and the restored original's hash.
+fragments, SQL/sidecar state, Trash ledger state, and the restored original's
+hash.
 One real PHP editor response is held while a later save and refresh complete;
 releasing that old response must leave the newer editor intact.
 
@@ -282,16 +336,21 @@ this standalone fixture.
 
 ## Cleanup and failures
 
-Fixture ownership uses a random token and a marker in a direct child of the system
-temporary directory. Broad paths, wrong markers, arbitrary database names, remote
+Fixture ownership uses a random token and a marker in a direct child of the
+system
+temporary directory. Broad paths, wrong markers, arbitrary database names,
+remote
 hosts, and default ports are refused. Cleanup does not follow symbolic links.
 The application server is stopped before its database and files are removed;
-the local daemon is shut down only after its data-directory identity is verified.
+the local daemon is shut down only after its data-directory identity is
+verified.
 
 Errors report bounded assertion stages. HTTP bodies, database exceptions,
 cookies, CSRF values and credentials are not copied to console or CI artifacts.
 Transient diagnostic logs are private fixture files removed on normal cleanup.
-A killed parent process or machine crash can leave a temporary directory or child
-process; cleanup failures are nonzero and require checking exact ownership before
+A killed parent process or machine crash can leave a temporary directory or
+child
+process; cleanup failures are nonzero and require checking exact ownership
+before
 manual removal. No broad process-name kill or recursive deletion of a shared
 temporary/workspace root is appropriate.

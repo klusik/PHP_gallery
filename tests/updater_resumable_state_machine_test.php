@@ -30,6 +30,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 require_once __DIR__ . '/support/module_source.php';
 
 require_once __DIR__ . '/../app/services/updates.php';
@@ -421,7 +423,7 @@ assert_updater_resumable(substr_count($viewSource, 'view_render_update_job_card(
 assert_updater_resumable(str_contains($controllerSource, "feature_capability_effective_enabled('built_in_update_installer')") && str_contains($jobsSource, "feature_capability_effective_enabled('built_in_update_installer')"), 'Built-in Update Installer policy no longer guards both Admin actions and durable update-job service boundaries.');
 $resetStart = strpos($adminAuthSource, 'function cms_admin_reset(): void');
 $resetSource = substr($adminAuthSource, (int) $resetStart);
-assert_updater_resumable(str_contains($resetSource, "application_update_start_job('stable_restore', [], 'admin')"), 'Authenticated reset page bypasses the resumable stable-restore job.');
+assert_updater_resumable(php_source_contains($resetSource, "application_update_start_job('stable_restore', [], 'admin')"), 'Authenticated reset page bypasses the resumable stable-restore job.');
 assert_updater_resumable(str_contains($resetSource, 'application_update_safe_error($exception)') && !str_contains($resetSource, '$exception->getMessage()'), 'Authenticated reset page exposes raw updater exception text.');
 assert_updater_resumable(str_contains($browserSource, "document.addEventListener('submit'") && str_contains($browserSource, '[data-update-job-form], [data-update-job-control]'), 'Dynamic Admin update controls are no longer intercepted through event delegation.');
 assert_updater_resumable(str_contains($browserSource, 'scheduleContinuation') && str_contains($browserSource, 'data-update-job-status="running"'), 'Browser closure/reopen continuation hook is missing.');
