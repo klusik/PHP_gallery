@@ -1,7 +1,7 @@
 # PHP Gallery Database Documentation
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.139. Version 0.97 adds the recoverable gallery-trash
+application version 0.139.1. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -129,6 +129,20 @@ remain unchanged. Its persisted cursor makes work resumable; per-gallery
 failures remain dirty and their public badges stay omitted for later retry.
 Analysis is read-only. This projection is separate from `gallery_attachment_storage`,
 which remains the source for physical storage totals.
+
+The first successful public HTML GET for home, gallery, or Smart Gallery checks
+the durable `app_setting` key `gallery_attachment_usage.background_state`. If
+there is no successful-completion receipt, it queues a media-only initial pass
+after the response through the authenticated configured-origin
+`site_maintenance_cron` transport. The setting stores resumable cursor and
+receipt state; each private worker request runs one existing batch of at most
+25 galleries and queues another while work remains. A later public request can
+recover interrupted or busy work after its bounded lease or retry delay. Only a
+complete pass with no failed galleries records completion. This one-time pass
+does not run general maintenance or move originals. The separate manual task
+remains available for explicit reconciliation; normal application mutations
+maintain projections, while later manual filesystem changes require explicit
+Maintenance Center reconciliation.
 
 Database maintenance registers both usage tables as derived gallery-card cache
 owned by the gallery attachment-usage projection. Generic logical cleanup is

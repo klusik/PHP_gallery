@@ -108,6 +108,10 @@ return [
             'Gallery\\Services\\site_maintenance_register_request_trigger',
         ],
         'site-maintenance-work' => [
+            // Reuse the established private-worker closure for durable media
+            // admission; ordinary attachment/public rendering stays unchanged.
+            'Gallery\\Services\\gallery_attachment_usage_background_start',
+            'Gallery\\Services\\gallery_attachment_usage_background_run',
             'Gallery\\Services\\cache_lifecycle_chain_runtime_available',
             'Gallery\\Services\\cache_lifecycle_chain_start',
             'Gallery\\Services\\cache_lifecycle_chain_run',
@@ -247,6 +251,16 @@ return [
         'Gallery\\Services\\maintenance_center_execute_attachment_usage' => [
             'Gallery\\Services\\gallery_attachment_usage_reconcile_batch',
         ],
+        // Public registration reads only the durable setting. Its successful
+        // response callback loads the existing private-worker owner for kickoff.
+        'Gallery\\Services\\site_maintenance_register_attachment_usage_trigger' => [
+            'Gallery\\Services\\gallery_attachment_usage_background_start',
+        ],
+        'Gallery\\Services\\gallery_attachment_usage_background_run' => [
+            // The strict controller loads the attachment owner before this
+            // bounded source reader; admission alone never loads its closure.
+            'Gallery\\Services\\gallery_attachment_usage_reconcile_batch',
+        ],
         'Gallery\\Services\\simbrief_description_save_ofp_for_gallery' => [
             // The injected request bridge obtains the kernel before loading the
             // attachment owner for this save path.
@@ -266,6 +280,9 @@ return [
         ],
         'Gallery\\Controllers\\cms_site_maintenance_cron' => [
             'Gallery\\Services\\application_update_background_chain_run',
+            // The exclusive token-authenticated media branch loads this owner;
+            // it does not enter the scheduled site/cache maintenance worker.
+            'Gallery\\Services\\gallery_attachment_usage_background_run',
         ],
         // Explicit storage jobs load the existing attachment owner. Cached
         // Admin reads and ordinary public routes do not acquire its closure.

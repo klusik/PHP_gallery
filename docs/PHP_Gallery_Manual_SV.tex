@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.139}
+\newcommand{\version}{0.139.1}
 \newcommand{\manualdate}{20~oktober~2026}
 
 \hypersetup{
@@ -756,6 +756,14 @@ gemensamma låset och sparar digesten atomärt i manifestet; PDF- och ljudbytes
 förblir oförändrade. Musikavstämningen kan skapa den privata låskatalogen
 \filepath{.gallery-music/}. Ett nytt galleri utan källmetadata kan börja med
 kända nollvärden.
+
+Om det beständiga kvittot för den första genomgången saknas köar den första
+lyckade offentliga HTML-begäran för startsidan, ett galleri eller Smart Gallery
+medieräkningen efter svaret. Varje steg behandlar högst 25 gallerier och
+fortsätter medan arbete återstår; en senare offentlig begäran kan återuppta
+avbrutet eller blockerat arbete efter den begränsade väntetiden. Genomgången
+sker en gång, inte regelbundet. Den separata uppgiften i Underhållscenter finns
+kvar för uttrycklig avstämning efter senare manuella filsystemändringar.
 
 \subsection{Redigera identitet och sammanhang}
 \index{g00102@gallerimetadata}
@@ -1530,7 +1538,11 @@ skrivning; utgivningen fortsätter att lita på kvalificerad develop.
 
 Efter inloggning ser administratören privata kontroller för översikten, gallerier, fotografier, tema, taggar, underhåll, uppdateringar, loggar och kontoinställningar. Många redigeringar öppnas i panelen till höger, så att galleriet förblir synligt medan ett objekt ändras och sparas.\footnote{En fullständig administrationssida finns kvar för arbetsflöden som behöver mer utrymme eller när webbläsarens utökade funktioner inte är tillgängliga.}
 
-På offentliga sidor visas Admin-, Testkörning-, Uppdateringar- och Logga ut-åtgärder som kompakta genomskinliga kontroller med kontur, ikon och lokaliserad text. Språkvalen styrs fortfarande under Tema.
+På offentliga sidor visas Admin-, Testkörning-, Uppdateringar- och Logga
+ut-åtgärder som kompakta, 32 pixlar höga genomskinliga kontroller med kontur,
+16-pixlarsikoner och lokaliserad text. Admin-inloggningen för anonyma besökare,
+även i anonyma förhandsvisningar, använder samma utformning och justering.
+Språkvalen styrs fortfarande under Tema.
 
 Det offentliga galleriet visar också sammanhangsberoende administrationskontroller när en vanlig administratörssession är aktiv. Pennkontroller för gallerier och fotografier öppnar samma fullständiga redigerare i sidopanelen. Kompakt galleriborttagning använder det återställningsbara papperskorgsflödet när Papperskorg är~aktiverad; om Papperskorg stängs av använder framtida galleriborttagningar åter den äldre tjänsten för permanent radering av underträd. Kompakt bildborttagning har avsiktligt etiketten \ui{Ta bort fotografi ... från CMS}: denna snabba åtgärd på den offentliga sidan tar bort bildraden i katalogen och kör inte hela tjänsten för radering av originalfiler. Använd det vanliga flödet för bild- eller massradering när även originalfilen och genererade derivat ska raderas. Anonymt förhandsvisningsläge döljer dessa sammanhangsberoende administrationskontroller.
 
@@ -2288,6 +2300,10 @@ Underfliken \ui{Animationer} ställer in öppnings- och stängningstiden för de
 Temaredigeraren använder ingen separat växel för ljust eller mörkt läge. I stället definierar sparade färgkontroller och ett valfritt utseende med Egen CSS direkt den offentliga färgpaletten. Den ställer också in layouter för gallerikort och undergallerier, standardstilen för brödsmulor och upp till tre genvägar i sidhuvudet. Varje genväg kan peka på startsidan, ett galleri eller förbli tom. Anonyma besökare ser bara konfigurerade gallerigenvägar som fortfarande är offentliga och listade; dubbla eller raderade gallerival tas bort när inställningarna sparas. Om alla tre platserna är tomma döljs dessa favoritgalleriknappar. Gallerikort kan också visa ett konfigurerbart märke för antalet ingående bilder. När märket gäller för ett galleri förblir samma grenantal synligt i huvudpanelen när galleriet öppnas, och räknar bilder i aktuellt galleri och dess åtkomliga undergallerier enligt samma offentlighets- och åtkomstregler som kortet. Presentation per galleri kan ärva webbplatsens standardvärden eller åsidosätta de val som galleriredigeraren erbjuder. Den inbyggda standardstilen är \codeword{chevron}, och ogiltiga globala värden faller säkert tillbaka på den.
 
 Offentliga kort visar kompakta, högerjusterade antal för PDF- och musikfiler i en tät stapel under fotoantalsmärket när antalet är större än noll. När bildantalsmärket är aktiverat visar det öppnade galleriets åtgärdsrad samma antal direkt till vänster om bildantalsmärket. Varje antal omfattar unika filer i galleriet och dess undergallerier; samma registrerade SHA-256 räknas bara en gång. Reglerna för offentlig synlighet, dold status, åtkomst och behörighet gäller. Saknade, okända eller inaktuella projektioner döljer märket; ett känt nollvärde visas inte.
+
+Om det beständiga kvittot för den första genomgången saknas köar den första
+lyckade offentliga HTML-begäran för startsidan, ett galleri eller Smart Gallery
+medieräkningen efter svaret. Sidrenderingen genomsöker inte originalfiler.
 
 \subsection{Referens för Temas kontroller}
 \index{t00244@tema!k00137@kontroller}

@@ -56,10 +56,19 @@ Supported application mutations mark the affected projection dirty before a
 source change and publish a replacement snapshot after successful changes.
 Unknown schema blocks the write; confirmed-missing optional schema may omit the
 projection. Manual filesystem edits bypass those hooks and require
-reconciliation before counts can be trusted. Maintenance Center provides a
-default-selected optional legacy reconciliation with a persisted cursor, at
-most 25 galleries per step, at most one legacy OFP candidate hash per step and
-a 25 MiB hash cap. When an OFP manifest has no valid digest, the worker stores
+reconciliation before counts can be trusted. If the durable completion receipt
+is absent, the first successful public HTML GET for home, gallery, or Smart
+Gallery queues a media-only initial pass after the response through the
+authenticated configured-origin `site_maintenance_cron` transport. The
+`app_setting` key `gallery_attachment_usage.background_state` stores its cursor
+and receipt. Each worker request runs one existing batch of at most 25 galleries
+and queues continuation while work remains; later public requests can recover
+interrupted or busy work after the bounded lease or retry delay. Only a full
+pass without failed galleries records completion. This is one-time bootstrap,
+not periodic or broad maintenance. Maintenance Center also provides a
+default-selected optional manual legacy reconciliation with a persisted cursor,
+at most 25 galleries per step, at most one legacy OFP candidate hash per step
+and a 25 MiB hash cap. When an OFP manifest has no valid digest, the worker stores
 `ofp_pdf_sha256` through atomic manifest replacement under the shared persistent
 root lock. It also serializes music reads with the private `.gallery-music/.lock`;
 busy locks defer a gallery. Newly created galleries with no source metadata may

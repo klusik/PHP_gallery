@@ -5,8 +5,10 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: app/services/gallery_attachment_usage.php
  * Module Type: Service Module
- * Purpose: Reconcile derived digest snapshots for public gallery-card usage.
- * Responsibilities: Read bounded authoritative sidecars and publish fail-closed projections.
+ * Purpose: Reconcile public attachment counts manually and in background.
+ * Responsibilities:
+ *   - Read bounded authoritative sidecars and publish fail-closed projections
+ *   - Persist one-time automatic progress, private ticket leases and completion
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -15,7 +17,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 /**
- * Bound gallery snapshots inspected by one Maintenance Center worker step.
+ * Bound gallery snapshots inspected by one manual or automatic worker step.
  * Type: int. Units: galleries. Scope: one resumable worker call.
  * Consumers: gallery_attachment_usage_reconcile_batch.
  * Rationale: Keeps filesystem reads and SQL replacement bounded per step.
@@ -39,10 +41,10 @@ const GALLERY_ATTACHMENT_USAGE_MANIFEST_BYTES = 32768;
  */
 const GALLERY_ATTACHMENT_USAGE_STAGE_NONCE_BYTES = 12;
 
-/** Restrict the permissions of a staged legacy OFP metadata file.
- * Type: int. Units: POSIX permission bits. Scope: one private temporary manifest.
- * Consumers: gallery_attachment_usage_store_ofp_digest.
- * Rationale: The manifest may contain private flight metadata and must remain owner-only.
+/** Restrict private attachment metadata and automatic-worker coordination.
+ * Type: int. Units: POSIX permission bits. Scope: private manifests and worker lock.
+ * Consumers: gallery_attachment_usage_store_ofp_digest, gallery_attachment_usage_background_lock.
+ * Rationale: Flight metadata and worker coordination remain owner-only.
  * Value: 0600 file permissions.
  */
 const GALLERY_ATTACHMENT_USAGE_PRIVATE_FILE_MODE = 0600;
@@ -55,9 +57,42 @@ const GALLERY_ATTACHMENT_USAGE_PRIVATE_FILE_MODE = 0600;
  */
 const GALLERY_ATTACHMENT_USAGE_MIN_PDF_BYTES = 8;
 
+/** Name the durable receipt for the one-time traffic-driven count scan.
+ * Type: string. Units: app_settings key. Scope: one installation.
+ * Consumers: automatic kickoff, continuation admission and durable progress.
+ * Rationale: completion must survive cache cleanup and application restarts.
+ * Value: gallery_attachment_usage.background_state.
+ */
+const GALLERY_ATTACHMENT_USAGE_BACKGROUND_STATE_SETTING =
+    'gallery_attachment_usage.background_state';
+
+/** Bound the admission lease for a private media-count worker request.
+ * Type: int. Units: seconds. Scope: one installation-wide ticket.
+ * Consumers: automatic start, worker ticket validation and retry admission.
+ * Rationale: tolerate delayed loopback requests while recovering lost handoffs.
+ * Value: 120 seconds.
+ */
+const GALLERY_ATTACHMENT_USAGE_BACKGROUND_LEASE_SECONDS = 120;
+
+/** Space automatic retries after storage, transport or source failures.
+ * Type: int. Units: seconds. Scope: the next automatic media-count attempt.
+ * Consumers: background start and private worker failure handling.
+ * Rationale: avoid adding work to every public request during an outage.
+ * Value: 300 seconds.
+ */
+const GALLERY_ATTACHMENT_USAGE_BACKGROUND_RETRY_SECONDS = 300;
+
+/** Limit ticket entropy for persisted autonomous count work.
+ * Type: int. Units: random bytes. Scope: one media-count worker admission.
+ * Consumers: durable queued-state ticket generation.
+ * Rationale: a 256-bit opaque ticket is unguessable and compact to validate.
+ * Value: 32 random bytes.
+ */
+const GALLERY_ATTACHMENT_USAGE_BACKGROUND_TICKET_BYTES = 32;
+
 /**
  * Rebuild ready/dirty digest snapshots for a bounded page of physical galleries.
- * @param array{cursor_gallery_id?:int,scanned?:int,ready?:int,failed?:int} $state Persisted Maintenance Center cursor and cumulative counters.
+ * @param array{cursor_gallery_id?:int,scanned?:int,ready?:int,failed?:int} $state Persisted manual or automatic cursor and cumulative counters.
  * @return array{done:bool,cursor_gallery_id:int,scanned:int,ready:int,failed:int} Resumable progress; ready counts include empty snapshots, failures stay omitted from public badges.
  */
 function gallery_attachment_usage_reconcile_batch(array $state): array
@@ -430,4 +465,547 @@ function gallery_attachment_usage_store_ofp_digest(
             @unlink($stage);
         }
     }
+}
+
+/** Report whether the first automatic usage reconciliation may be admitted.
+ * @return bool True when durable state is absent, due, or has a stale lease; false on completion, a live lease, backoff, or unknown settings storage.
+ */
+function gallery_attachment_usage_background_due(): bool
+{
+    try {
+        $state = gallery_attachment_usage_background_read_state();
+        if ($state === null) {
+            return true;
+        }
+        $now = time();
+        if ($state['status'] === 'complete') {
+            return false;
+        }
+        if (
+            in_array($state['status'], ['queued', 'running'], true)
+            && $state['queued_until'] > $now
+        ) {
+            return false;
+        }
+        return $state['next_attempt_at'] <= $now;
+    } catch (\Throwable) {
+        return false;
+    }
+}
+
+/** Start or recover one durable automatic usage reconciliation chain.
+ * @param callable(string):bool $dispatch Sends one opaque ticket to the independent authenticated worker.
+ * @return array{ok:bool,queued:bool,done:bool,reason:string,scanned:int,ready:int,failed:int,completed:bool} Admission result; queued means the dispatcher accepted the handoff.
+ */
+function gallery_attachment_usage_background_start(
+    callable $dispatch,
+): array {
+    $lock = false;
+    $ticket = '';
+    $queuedState = null;
+    try {
+        $lock = gallery_attachment_usage_background_lock();
+        if ($lock === false) {
+            return gallery_attachment_usage_background_result(false, false, false, 'busy');
+        }
+        $state = gallery_attachment_usage_background_read_state();
+        $state ??= gallery_attachment_usage_background_empty_state();
+        $now = time();
+        if ($state['status'] === 'complete') {
+            return gallery_attachment_usage_background_result(
+                true,
+                false,
+                true,
+                'complete',
+                $state,
+            );
+        }
+        if (
+            in_array($state['status'], ['queued', 'running'], true)
+            && $state['queued_until'] > $now
+        ) {
+            return gallery_attachment_usage_background_result(
+                true,
+                false,
+                false,
+                'already_queued',
+                $state,
+            );
+        }
+        if ($state['next_attempt_at'] > $now) {
+            return gallery_attachment_usage_background_result(
+                true,
+                false,
+                false,
+                'retry_deferred',
+                $state,
+            );
+        }
+        $state['status'] = 'queued';
+        $state['ticket'] = bin2hex(
+            random_bytes(GALLERY_ATTACHMENT_USAGE_BACKGROUND_TICKET_BYTES),
+        );
+        $state['queued_until'] = $now
+            + GALLERY_ATTACHMENT_USAGE_BACKGROUND_LEASE_SECONDS;
+        $state['next_attempt_at'] = 0;
+        gallery_attachment_usage_background_write_state($state);
+        $ticket = $state['ticket'];
+        $queuedState = $state;
+    } catch (\Throwable) {
+        error_log('Gallery attachment usage worker admission failed safely.');
+        return gallery_attachment_usage_background_result(
+            false,
+            false,
+            false,
+            'state_unavailable',
+        );
+    } finally {
+        gallery_attachment_usage_background_unlock($lock);
+    }
+    if ($ticket === '' || !is_array($queuedState)) {
+        return gallery_attachment_usage_background_result(
+            false,
+            false,
+            false,
+            'state_unavailable',
+        );
+    }
+    $accepted = false;
+    try {
+        $accepted = $dispatch($ticket);
+    } catch (\Throwable) {
+        // A timed-out transport may still have delivered the private ticket.
+    }
+    if ($accepted) {
+        return gallery_attachment_usage_background_result(
+            true,
+            true,
+            false,
+            'queued',
+            $queuedState,
+        );
+    }
+    $state = gallery_attachment_usage_background_retire_ticket($ticket);
+    return gallery_attachment_usage_background_result(
+        false,
+        false,
+        false,
+        'dispatch_failed',
+        $state,
+    );
+}
+
+/** Process one authenticated, leased automatic usage reconciliation step.
+ * @param string $ticket Opaque 64-character lowercase hexadecimal ticket from the durable queue state.
+ * @param callable(string):bool $dispatch Sends exactly one continuation ticket to the configured-origin worker.
+ * @return array{ok:bool,queued:bool,done:bool,reason:string,scanned:int,ready:int,failed:int,completed:bool} Bounded worker progress and whether a continuation was accepted.
+ */
+function gallery_attachment_usage_background_run(
+    string $ticket,
+    callable $dispatch,
+): array {
+    if (preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1) {
+        return gallery_attachment_usage_background_result(
+            false,
+            false,
+            false,
+            'invalid_ticket',
+        );
+    }
+    $lock = false;
+    try {
+        $lock = gallery_attachment_usage_background_lock();
+        if ($lock === false) {
+            return gallery_attachment_usage_background_result(
+                false,
+                false,
+                false,
+                'busy',
+            );
+        }
+        $state = gallery_attachment_usage_background_read_state();
+        $now = time();
+        if (
+            $state === null
+            || $state['status'] !== 'queued'
+            || $state['queued_until'] <= $now
+            || !hash_equals($state['ticket'], $ticket)
+        ) {
+            return gallery_attachment_usage_background_result(
+                false,
+                false,
+                false,
+                'stale_ticket',
+                $state,
+            );
+        }
+        $state['status'] = 'running';
+        $state['queued_until'] = $now
+            + GALLERY_ATTACHMENT_USAGE_BACKGROUND_LEASE_SECONDS;
+        gallery_attachment_usage_background_write_state($state);
+
+        if (gallery_attachment_usage_background_owner_busy()) {
+            $state = gallery_attachment_usage_background_retry_state($state, $now);
+            gallery_attachment_usage_background_write_state($state);
+            return gallery_attachment_usage_background_result(
+                true,
+                false,
+                false,
+                'maintenance_busy',
+                $state,
+            );
+        }
+        $progress = gallery_attachment_usage_reconcile_batch($state);
+        // A busy source lock can defer the very first gallery. Do not create
+        // a tight chain of empty requests while another writer holds it.
+        $stalled = !$progress['done']
+            && $progress['scanned'] === $state['scanned']
+            && $progress['cursor_gallery_id'] === $state['cursor_gallery_id'];
+        $state['cursor_gallery_id'] = $progress['cursor_gallery_id'];
+        $state['scanned'] = $progress['scanned'];
+        $state['ready'] = $progress['ready'];
+        $state['failed'] = $progress['failed'];
+        if ($stalled) {
+            $state = gallery_attachment_usage_background_retry_state($state, $now);
+            gallery_attachment_usage_background_write_state($state);
+            return gallery_attachment_usage_background_result(
+                true,
+                false,
+                false,
+                'source_busy',
+                $state,
+            );
+        }
+        if ($progress['done'] && $progress['failed'] === 0) {
+            $state['status'] = 'complete';
+            $state['ticket'] = '';
+            $state['queued_until'] = 0;
+            $state['next_attempt_at'] = 0;
+            $state['completed_at'] = $now;
+            gallery_attachment_usage_background_write_state($state);
+            return gallery_attachment_usage_background_result(
+                true,
+                false,
+                true,
+                'complete',
+                $state,
+            );
+        }
+        if ($progress['done']) {
+            $state = gallery_attachment_usage_background_retry_state(
+                $state,
+                $now,
+                true,
+            );
+            gallery_attachment_usage_background_write_state($state);
+            return gallery_attachment_usage_background_result(
+                true,
+                false,
+                false,
+                'retry_scheduled',
+                $state,
+            );
+        }
+        $state['status'] = 'queued';
+        $state['ticket'] = bin2hex(
+            random_bytes(GALLERY_ATTACHMENT_USAGE_BACKGROUND_TICKET_BYTES),
+        );
+        $state['queued_until'] = $now
+            + GALLERY_ATTACHMENT_USAGE_BACKGROUND_LEASE_SECONDS;
+        gallery_attachment_usage_background_write_state($state);
+        $nextTicket = $state['ticket'];
+        gallery_attachment_usage_background_unlock($lock);
+        $lock = false;
+        $accepted = false;
+        try {
+            $accepted = $dispatch($nextTicket);
+        } catch (\Throwable) {
+            // The queued lease safely recovers an uncertain loopback result.
+        }
+        if ($accepted) {
+            return gallery_attachment_usage_background_result(
+                true,
+                true,
+                false,
+                'continued',
+                $state,
+            );
+        }
+        $state = gallery_attachment_usage_background_retire_ticket($nextTicket);
+        return gallery_attachment_usage_background_result(
+            false,
+            false,
+            false,
+            'continuation_failed',
+            $state,
+        );
+    } catch (\Throwable) {
+        error_log('Gallery attachment usage worker step failed safely.');
+        return gallery_attachment_usage_background_result(
+            false,
+            false,
+            false,
+            'worker_unavailable',
+        );
+    } finally {
+        gallery_attachment_usage_background_unlock($lock);
+    }
+}
+
+/** Read raw durable state without trusting a request-local app-setting cache.
+ * @return array{version:int,status:string,cursor_gallery_id:int,scanned:int,ready:int,failed:int,attempt:int,ticket:string,queued_until:int,next_attempt_at:int,completed_at:int}|null Valid state or null when the receipt has never been written.
+ * @throws \RuntimeException When state storage is unavailable or corrupt.
+ */
+function gallery_attachment_usage_background_read_state(): ?array
+{
+    if (!function_exists('Gallery\\Models\\app_settings_model_get')) {
+        throw new \RuntimeException('Background state model is unavailable.');
+    }
+    $raw = \Gallery\Models\app_settings_model_get(
+        GALLERY_ATTACHMENT_USAGE_BACKGROUND_STATE_SETTING,
+    );
+    if ($raw === false || trim($raw) === '') {
+        return null;
+    }
+    $state = json_decode($raw, true);
+    if (
+        !is_array($state)
+        || ($state['version'] ?? null) !== 1
+        || !in_array(
+            $state['status'] ?? null,
+            ['pending', 'queued', 'running', 'retry', 'complete'],
+            true,
+        )
+    ) {
+        throw new \RuntimeException('Background state receipt is invalid.');
+    }
+    $normalized = gallery_attachment_usage_background_empty_state();
+    foreach ([
+        'cursor_gallery_id',
+        'scanned',
+        'ready',
+        'failed',
+        'attempt',
+        'queued_until',
+        'next_attempt_at',
+        'completed_at',
+    ] as $field) {
+        if (!is_numeric($state[$field] ?? null)) {
+            throw new \RuntimeException('Background state receipt is invalid.');
+        }
+        $normalized[$field] = max(0, (int) $state[$field]);
+    }
+    $ticket = $state['ticket'] ?? '';
+    if (
+        !is_string($ticket)
+        || $ticket !== '' && preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
+    ) {
+        throw new \RuntimeException('Background state receipt is invalid.');
+    }
+    $normalized['status'] = $state['status'];
+    $normalized['ticket'] = $ticket;
+    return $normalized;
+}
+
+/** Return fresh state with zero progress and no active lease.
+ * @return array{version:int,status:string,cursor_gallery_id:int,scanned:int,ready:int,failed:int,attempt:int,ticket:string,queued_until:int,next_attempt_at:int,completed_at:int} Initial state for the first automatic scan.
+ */
+function gallery_attachment_usage_background_empty_state(): array
+{
+    return [
+        'version' => 1,
+        'status' => 'pending',
+        'cursor_gallery_id' => 0,
+        'scanned' => 0,
+        'ready' => 0,
+        'failed' => 0,
+        'attempt' => 0,
+        'ticket' => '',
+        'queued_until' => 0,
+        'next_attempt_at' => 0,
+        'completed_at' => 0,
+    ];
+}
+
+/** Persist validated state through the settings service.
+ * @param array{version:int,status:string,cursor_gallery_id:int,scanned:int,ready:int,failed:int,attempt:int,ticket:string,queued_until:int,next_attempt_at:int,completed_at:int} $state Complete background state.
+ * @return void Stores durable progress before dispatch.
+ * @throws \RuntimeException When JSON encoding fails.
+ */
+function gallery_attachment_usage_background_write_state(array $state): void
+{
+    $json = json_encode($state, JSON_UNESCAPED_SLASHES);
+    if (!is_string($json)) {
+        throw new \RuntimeException('Background state could not be encoded.');
+    }
+    set_app_setting(
+        GALLERY_ATTACHMENT_USAGE_BACKGROUND_STATE_SETTING,
+        $json,
+    );
+}
+
+/** Schedule a retry while retaining progress, or restart after a failed full pass.
+ * @param array{version:int,status:string,cursor_gallery_id:int,scanned:int,ready:int,failed:int,attempt:int,ticket:string,queued_until:int,next_attempt_at:int,completed_at:int} $state Current state being retired.
+ * @param int $now Current Unix time.
+ * @param bool $restart Whether a completed-but-failed pass restarts from gallery zero.
+ * @return array{version:int,status:string,cursor_gallery_id:int,scanned:int,ready:int,failed:int,attempt:int,ticket:string,queued_until:int,next_attempt_at:int,completed_at:int} Retry state with no active ticket and explicit backoff.
+ */
+function gallery_attachment_usage_background_retry_state(
+    array $state,
+    int $now,
+    bool $restart = false,
+): array {
+    $state['status'] = 'retry';
+    $state['ticket'] = '';
+    $state['queued_until'] = 0;
+    $state['next_attempt_at'] = $now
+        + GALLERY_ATTACHMENT_USAGE_BACKGROUND_RETRY_SECONDS;
+    $state['attempt']++;
+    if ($restart) {
+        $state['cursor_gallery_id'] = 0;
+        $state['scanned'] = 0;
+        $state['ready'] = 0;
+        $state['failed'] = 0;
+    }
+    return $state;
+}
+
+/** Refuse automatic snapshots while a central mutation or updater owns the site.
+ * @return bool True when an active owner must finish first.
+ * @throws \RuntimeException When ownership cannot be established safely.
+ */
+function gallery_attachment_usage_background_owner_busy(): bool
+{
+    if (
+        !function_exists('Gallery\\Models\\maintenance_center_model_mutation_owner')
+        || !function_exists('Gallery\\Services\\application_update_active_job')
+    ) {
+        throw new \RuntimeException('Automatic mutation ownership is unavailable.');
+    }
+    $owner = \Gallery\Models\maintenance_center_model_mutation_owner(true);
+    if (
+        $owner !== null
+        && !in_array(
+            $owner['status'] ?? '',
+            ['completed', 'failed', 'cancelled'],
+            true,
+        )
+    ) {
+        return true;
+    }
+    return application_update_active_job() !== null;
+}
+
+/** Retire a failed handoff only when its ticket still owns the queued state.
+ * @param string $ticket Opaque ticket whose dispatcher reported failure.
+ * @return array{version:int,status:string,cursor_gallery_id:int,scanned:int,ready:int,failed:int,attempt:int,ticket:string,queued_until:int,next_attempt_at:int,completed_at:int}|null Updated state, null when another worker already replaced the ticket.
+ */
+function gallery_attachment_usage_background_retire_ticket(
+    string $ticket,
+): ?array {
+    $lock = false;
+    try {
+        $lock = gallery_attachment_usage_background_lock();
+        if ($lock === false) {
+            return null;
+        }
+        $state = gallery_attachment_usage_background_read_state();
+        if (
+            $state === null
+            || $state['status'] !== 'queued'
+            || !hash_equals($state['ticket'], $ticket)
+        ) {
+            return $state;
+        }
+        $state = gallery_attachment_usage_background_retry_state(
+            $state,
+            time(),
+        );
+        gallery_attachment_usage_background_write_state($state);
+        return $state;
+    } catch (\Throwable) {
+        error_log('Gallery attachment usage retry state failed safely.');
+        return null;
+    } finally {
+        gallery_attachment_usage_background_unlock($lock);
+    }
+}
+
+/** Acquire the persistent single-chain lock without waiting.
+ * @return resource|false Open private lock handle, or false while another worker is active.
+ * @throws \RuntimeException When the lock path is unsafe or storage is unavailable.
+ */
+function gallery_attachment_usage_background_lock(): mixed
+{
+    $root = defined('CACHE_LIFECYCLE_TEST_ROOT')
+        ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT')
+        : dirname(__DIR__, 2);
+    $relativePath = 'cache/site-maintenance/gallery-attachment-usage.lock';
+    if (!function_exists(__NAMESPACE__ . '\\application_update_assert_safe_target')) {
+        require_once __DIR__ . '/updates_path_safety.php';
+    }
+    application_update_assert_safe_target($root, $relativePath, true);
+    if (!function_exists(__NAMESPACE__ . '\\site_maintenance_cache_dir')) {
+        throw new \RuntimeException('Maintenance control storage is unavailable.');
+    }
+    $directory = site_maintenance_cache_dir();
+    application_update_assert_safe_target($root, $relativePath, true);
+    $path = $directory . DIRECTORY_SEPARATOR . 'gallery-attachment-usage.lock';
+    if (is_link($path)) {
+        throw new \RuntimeException('Background lock path is unsafe.');
+    }
+    $handle = @fopen($path, 'c');
+    if (!is_resource($handle)) {
+        throw new \RuntimeException('Background lock is unavailable.');
+    }
+    @chmod($path, GALLERY_ATTACHMENT_USAGE_PRIVATE_FILE_MODE);
+    $wouldBlock = 0;
+    if (!flock($handle, LOCK_EX | LOCK_NB, $wouldBlock)) {
+        fclose($handle);
+        if ($wouldBlock !== 0) {
+            return false;
+        }
+        throw new \RuntimeException('Background lock is unavailable.');
+    }
+    application_update_assert_safe_target($root, $relativePath);
+    return $handle;
+}
+
+/** Release a background worker lock after state publication.
+ * @param resource|false $lock Resource handle, or false before successful admission.
+ * @return void Releases and closes a held handle.
+ */
+function gallery_attachment_usage_background_unlock(mixed $lock): void
+{
+    if (is_resource($lock)) {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
+/** Build the bounded HTTP-safe progress result.
+ * @param bool $ok Whether the request was admitted and state handling succeeded.
+ * @param bool $queued Whether a private worker handoff was accepted.
+ * @param bool $done Whether the scan is durably complete.
+ * @param string $reason Stable low-detail outcome identifier.
+ * @param array{version:int,status:string,cursor_gallery_id:int,scanned:int,ready:int,failed:int,attempt:int,ticket:string,queued_until:int,next_attempt_at:int,completed_at:int}|null $state Current progress when readable.
+ * @return array{ok:bool,queued:bool,done:bool,reason:string,scanned:int,ready:int,failed:int,completed:bool} Safe response without paths or exception details.
+ */
+function gallery_attachment_usage_background_result(
+    bool $ok,
+    bool $queued,
+    bool $done,
+    string $reason,
+    ?array $state = null,
+): array {
+    return [
+        'ok' => $ok,
+        'queued' => $queued,
+        'done' => $done,
+        'reason' => $reason,
+        'scanned' => (int) ($state['scanned'] ?? 0),
+        'ready' => (int) ($state['ready'] ?? 0),
+        'failed' => (int) ($state['failed'] ?? 0),
+        'completed' => $done,
+    ];
 }

@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.139}
+\newcommand{\version}{0.139.1}
 \newcommand{\manualdate}{20 October 2026}
 
 \hypersetup{
@@ -754,6 +754,14 @@ shared persistent source lock and atomically saves the~digest in~its manifest;
 the~PDF and~audio bytes remain unchanged. Music reconciliation may~create the
 private ilepath{.gallery-music/} lock directory. A~new gallery with no~source
 metadata can~start with ready-zero counts.
+
+If~the~durable initial-pass receipt is~missing, the~first successful public
+HTML request for~the~home, a~gallery, or~a~Smart Gallery queues the~media-count
+pass after the~response. It~processes at~most 25 galleries per background step
+and~continues while work remains; a~later public request can~recover interrupted
+or~busy work after its~bounded retry delay. This is~a~one-time pass, not~periodic
+scanning. The~separate Maintenance Center task remains available for~explicit
+reconciliation after later manual filesystem edits.
 
 \subsection{Edit identity and~context}
 \index{gallery metadata}
@@ -1532,7 +1540,11 @@ publication; release continues to~trust qualified develop.
 
 After signing in, an~administrator sees private controls for~the~dashboard, galleries, photographs, theme, tags, maintenance, updates, logs, and~account settings. Many edits open in~the~right-side panel, leaving the~gallery visible while one item is~changed and~saved.\footnote{A~full Admin page remains available for~workflows that need more space or~when browser enhancement is~unavailable.}
 
-On~public pages, the~Admin, Test run, Updates, and~Logout actions use compact, transparent outlined controls with an~icon and~localized label. Language choices remain governed by~Theme settings.
+On~public pages, the~Admin, Test run, Updates, and~Logout actions use compact,
+32-pixel-high transparent outlined controls with 16-pixel icons and~localized
+labels. The~Admin login action shown to~anonymous visitors, including in~anonymous
+previews, uses the~same treatment and~alignment. Language choices remain governed
+by~Theme settings.
 
 The~public gallery itself also exposes contextual Admin controls while a~normal administrator session is~active. Gallery and~photo pencil controls open the~same full editors in~the~side panel. Compact gallery removal uses the~recoverable trash workflow when Trash is~enabled; disabling Trash returns future gallery removals to~the~legacy permanent subtree-deletion service. Compact photo removal is~deliberately labeled \ui{Remove photo ... from CMS}: that quick public-page action removes the~catalog image row and~does not~run the~full source-file deletion service. Use the~normal photo/bulk deletion workflow when the~original file and~generated derivatives should also be~deleted. Anonymous-preview mode hides these contextual Admin controls.
 
@@ -2295,6 +2307,10 @@ Under \ui{Theme > Layout > Cards \& badges}, choose the~global default breadcrum
 The~Theme editor does not use a~separate light/dark-mode switch. Instead, the~saved color controls and~an~optional Custom CSS skin define the~public visual palette directly. It~also sets gallery-card and~subgallery layouts, the~default breadcrumb style, and~up~to~three header shortcuts. Each shortcut can~target the~main page, one gallery, or~remain empty. Anonymous visitors see only configured gallery shortcuts that are~still public and~listed; duplicate or~deleted gallery selections are~discarded when the~settings are~saved. Leaving all three slots empty hides those favorite-gallery buttons. Gallery cards may~also show a~configurable contained-picture count badge. When that badge is~effective for~a~gallery, opening the~gallery keeps the~same branch count visible in~the~hero panel, counting images in~the~current gallery and~its accessible subgalleries under the~same public/access rules as~the~card. Public cards stack nonzero PDF and~music counts compactly below the~photo icon with tighter gaps between badges. When the~photo-count badge is~enabled, the~opened gallery's action bar shows those media counts inline immediately to~its left. Each count covers unique files in~the~gallery and~its subgalleries, counting a~recorded SHA-256 once and~following public visibility, hidden-state, access and~capability rules. Missing, unknown or~dirty derived snapshots omit that badge; a~ready zero count remains hidden. Per-gallery presentation can~inherit the~site defaults or~override the~choices offered by~the~gallery editor. Breadcrumbs wrap onto additional lines on~narrow screens; every ancestor remains an~accessible link, including without JavaScript.
 
 The~\ui{Animations} subsection sets the~opening and~closing duration for~the~public information panel on~gallery cards and~the~Admin side panel. Each value ranges from~0~to~800~ms; 0 disables that motion. The~defaults are~320~ms and~260~ms respectively. The~public panel contains the~gallery title, description, date, and~complete tag list. Its native disclosure works without JavaScript; with~JavaScript, the~panel stays within the~viewport and~can~be~dismissed by~clicking elsewhere or~pressing Escape. The~interaction honors the~browser's reduced-motion preference.
+
+If~the~durable initial-pass receipt is~missing, the~first successful public
+HTML request for~the~home, a~gallery, or~a~Smart Gallery queues the~media-count
+pass after the~response. Page rendering does~not~scan original files.
 
 \subsection{Theme control reference}
 \index{theme!controls}

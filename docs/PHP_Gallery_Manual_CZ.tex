@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.139}
+\newcommand{\version}{0.139.1}
 \newcommand{\manualdate}{20.~října~2026}
 
 \hypersetup{
@@ -749,6 +749,14 @@ Ruční změny souborů vyžadují opětovnou kontrolu. Pokud starší OFP nemá
 manifestu; bajty PDF ani zvuku nezmění. Kontrola hudby může vytvořit soukromou
 zamykací složku \filepath{.gallery-music/}. Nová galerie bez metadat zdrojů může
 začít se známými nulovými počty.
+
+Chybí-li trvalý záznam o~dokončení úvodní kontroly, první úspěšný veřejný HTML
+požadavek na~hlavní stránku, galerii nebo Chytrou galerii zařadí po~odeslání
+odpovědi ke zpracování kontrolu počtů médií. Každý krok zpracuje nejvýše
+25~galerií a~pokračuje, dokud zbývá práce; pozdější veřejný požadavek může po
+omezené prodlevě obnovit přerušenou nebo zablokovanou práci. Jde o~jednorázovou
+kontrolu, nikoli pravidelné skenování. Samostatná úloha v~Centru údržby zůstává
+k~dispozici pro výslovnou kontrolu po~pozdějších ručních změnách souborů.
 
 \subsection{Úprava identity a~souvislostí}
 \index{m00084@metadata galerie}
@@ -1519,7 +1527,11 @@ ověřenému develop.
 
 Po přihlášení správce vidí neveřejné ovládací prvky pro přehled, galerie, fotografie, vzhled, štítky, údržbu, aktualizace, protokoly a~nastavení účtu. Mnohé úpravy se otevírají v~pravém postranním panelu, takže při změně a~uložení jedné položky zůstává galerie viditelná.\footnote{Úplná stránka administrace zůstává dostupná pro postupy vyžadující více prostoru nebo pro případy, kdy není dostupné rozšířené ovládání v~prohlížeči.}
 
-Na veřejných stránkách používají akce Správce, Zkušební běh, Aktualizace a~Odhlásit se kompaktní průhledné obrysové ovládací prvky s~ikonou a~lokalizovaným popiskem. Volbu jazyků nadále řídí nastavení Vzhled.
+Na veřejných stránkách používají akce Správce, Zkušební běh, Aktualizace
+a~Odhlásit se kompaktní průhledné obrysové ovládací prvky vysoké 32~px
+s~ikonami 16~px a~lokalizovanými popisky. Přihlášení správce zobrazené
+anonymním návštěvníkům, včetně anonymních náhledů, používá stejné provedení
+i~zarovnání. Volbu jazyků nadále řídí nastavení Vzhled.
 
 Samotná veřejná galerie také zpřístupňuje kontextové ovládací prvky administrace, je-li aktivní běžná relace správce. Ikony tužky u~galerií a~fotografií otevírají stejné úplné editory v~postranním panelu. Kompaktní odstranění galerie používá obnovitelný postup přes Koš, je-li povolen; vypnutí Koše vrací budoucí odstranění galerií ke starší službě trvalého odstranění podstromu. Kompaktní odstranění fotografie je záměrně označeno \ui{Odstranit fotografii ... z~CMS}: tato rychlá akce na veřejné stránce odstraní řádek obrázku z~katalogu a~nespouští úplnou službu odstranění zdrojového souboru. Chcete-li odstranit také originál a~vygenerované odvozeniny, použijte běžný postup odstranění fotografie nebo hromadného odstranění. Režim anonymního náhledu tyto kontextové ovládací prvky administrace skrývá.
 
@@ -2276,6 +2288,11 @@ Globální styl drobečkové navigace nastavte ve \ui{Vzhled > Rozvržení > Kar
 Každá zkratka může cílit na hlavní stránku, jednu galerii nebo zůstat prázdná. Anonymní návštěvníci vidí pouze nastavené zkratky galerií, které jsou stále veřejné a~uvedené v~seznamech; duplicitní nebo odstraněné galerie se při uložení nastavení vyřadí. Ponechání všech tří pozic prázdných skryje tlačítka oblíbených galerií. Karty galerií mohou zobrazovat také nastavitelný odznak počtu obsažených fotografií. Je-li odznak pro galerii účinný, otevření galerie zachovává stejný počet větve viditelný v~úvodním panelu: počítá obrázky v~aktuální galerii a~jejích přístupných podgaleriích podle stejných pravidel veřejnosti a~přístupu jako karta. Veřejné karty skládají nenulové počty souborů PDF a~hudby kompaktně pod ikonu fotografie s~menšími mezerami mezi odznaky. Je-li odznak počtu fotografií zapnutý, otevřená galerie zobrazuje stejné počty médií v~liště akcí bezprostředně vlevo od něj. Počet zahrnuje jedinečné soubory v~galerii a~jejích podgaleriích; stejný zaznamenaný SHA-256 se~počítá jen jednou. Platí pravidla veřejnosti, skrytí, přístupu a~oprávnění. Chybějící, neznámá nebo neověřená projekce odznak skryje; známá nula se nezobrazuje. Prezentace jednotlivé galerie může dědit výchozí hodnoty webu nebo přepsat volby nabízené editorem galerie.
 
 Podčást \ui{Animace} nastavuje dobu otevírání a~zavírání veřejného informačního panelu na kartách galerií a~pravého panelu administrace. Každá hodnota je v~rozsahu 0--800~ms; hodnota 0 příslušný pohyb vypne. Výchozí hodnoty jsou 320~ms a~260~ms. Veřejný panel obsahuje název, popis, datum a~úplný seznam štítků galerie. Nativní rozbalovací ovládání funguje i~bez JavaScriptu; s~JavaScriptem zůstává panel v~oblasti okna a~lze jej zavřít kliknutím mimo něj nebo klávesou Escape. Interakce respektuje nastavení omezení pohybu v~prohlížeči.
+
+Chybí-li trvalý záznam o~dokončení úvodní kontroly, první úspěšný veřejný HTML
+požadavek na~hlavní stránku, galerii nebo Chytrou galerii zařadí po~odeslání
+odpovědi kontrolu počtů médií na~pozadí. Vykreslení stránky neprochází originální
+soubory.
 
 \subsection{Přehled ovládacích prvků Vzhledu}
 \index{v00268@vzhled!o00131@ovládací prvky}

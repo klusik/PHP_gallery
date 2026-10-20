@@ -163,6 +163,10 @@ remain the authoritative evidence for retention and archival behavior. Real
 hosting
 loopback/TLS availability and production traffic cadence require deployment
 observation.
+The media-count extension covers eligible public GET kickoff, receipt-based
+repeat suppression, excluded requests, media-only isolation, and the strict
+authenticated ticket branch through media-service adapters; it does not use a
+real database worker.
 
 
 Telemetry recovery coverage also asserts round-robin visitation, per-table caps,
@@ -784,7 +788,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.139. Release verification uses the
+This guide applies to PHP Gallery Version 0.139.1. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -874,6 +878,10 @@ checks its private no-store document response.
 readiness hooks. These source tests do not substitute for the required
 hosted candidate matrix or any separately requested manual browser
 qualification.
+`tests/theme_public_css_cascade_test.php` also covers the compact Admin login
+action in anonymous public and anonymous-preview headers, including its
+localized label/icon and exact return target, while preserving the plain Admin
+page fallback.
 
 ## Database support evidence
 
@@ -6309,6 +6317,16 @@ schema inspection and policy for confirmed-missing optional projection schema,
 and verifies unknown schema refuses writes before installation. The existing
 `tests/simbrief_ofp_document_test.php` uses the same real schema inspection and
 policy with confirmed-missing schema.
+The PDF service fixture also exercises the real automatic attachment-usage
+owner and 25-gallery batch through isolated settings, schema, and model
+adapters. It covers durable ticketing before dispatch, live-lease suppression,
+bounded continuation and resume, stale-ticket rejection, completion without a
+repeat scan, busy-source backoff, failed terminal scans without a completion
+receipt, and retirement after failed initial dispatch. This is adapter-backed
+service coverage, not a real database or HTTP worker test.
+The real gallery workflow retires its owned audio seeds while preserving a
+persistent source-lock inode created by automatic reconciliation; any other
+remaining sidecar entry still fails the fixture.
 `tests/gallery_pdf_conversion_lifecycle_test.php` and
 `tests/admin_pdf_conversion_stream_scenarios.mjs` cover conversion marker
 ownership,

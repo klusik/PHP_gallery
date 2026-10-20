@@ -1,5 +1,108 @@
 # Patch notes
 
+## Version 0.139.1
+
+Fixed missing PDF and music counts after an upgrade by initializing media
+counts automatically from the first successful public page visit. The initial
+pass ran independently in bounded background steps and retained its progress
+and completion without starting general maintenance. Also aligned anonymous
+Admin login with the compact public-header controls.
+
+### Highlights
+
+#### Automatic media-count initialization
+
+- Added a one-time background pass for existing galleries when no durable
+  completion receipt had been recorded.
+- Started that pass from a successful public home, gallery, or Smart Gallery
+  GET after the response, without requiring an administrator, cron, or browser
+  polling.
+- Continued unfinished work through private worker requests and recovered
+  interrupted handoffs on later eligible visits.
+- Stopped automatic initialization after a complete, failure-free pass;
+  ordinary media changes retained their existing count updates.
+
+#### Consistent public-header login
+
+- Updated anonymous Admin login, including anonymous preview, to use the same
+  compact transparent outlined action and decorative icon as signed-in header
+  actions, preserving its localized label and return destination.
+
+### Technical Details
+
+#### Backend
+
+- Extended `app/services/gallery_attachment_usage.php` with durable ticket,
+  checkpoint, retry, and completion handling around the existing reconciler.
+- Limited each worker request to the existing batch of at most 25 galleries.
+  Used a two-minute handoff lease; failed handoffs, source-lock stalls, and
+  completed scans with gallery failures retried after five minutes. Unexpected
+  worker or schema failures remained recoverable after the lease expired.
+- Added an exclusive `media_ticket` POST mode to the existing token-protected
+  `site_maintenance_cron` route. Rejected unauthenticated, malformed, GET, and
+  mixed-mode requests before they reached a media worker.
+- Reused the configured installation origin and existing private transport;
+  the media mode invoked only attachment-count reconciliation and yielded to
+  active central maintenance or an updater.
+- Registered the loader and transport callbacks under existing runtime owners
+  without adding a logical module or changing runtime limits.
+
+#### Database and compatibility
+
+- Stored the automatic cursor and successful-completion receipt in the
+  existing `app_settings` key `gallery_attachment_usage.background_state`,
+  preserving completion across cache cleanup and application restarts.
+- Reused the existing attachment-usage tables without a new schema migration.
+  Required available projection schema before writes; missing or unknown
+  schema left initialization incomplete for later recovery.
+- Preserved authoritative media originals, existing distinct-file count rules,
+  and public visibility and capability gates. The pass did not relocate audio
+  or run unrelated maintenance.
+
+#### Frontend
+
+- Reused the existing `public-header-action` markup and shared icon helper in
+  `app/views/layout.php` for anonymous public Admin login, retaining the same
+  32-pixel height, transparent surface, spacing, and alignment as signed-in
+  actions without changing language controls.
+
+#### Tests and documentation
+
+- Extended `tests/gallery_pdf_documents_service_test.php` with the real worker
+  and 25-gallery reconciler through isolated storage and model adapters,
+  covering continuation, live leases, stale tickets, completion, no repeat,
+  contention backoff, failed terminal scans, and failed dispatch.
+- Extended `tests/telemetry_visitor_http_test.php` and its router with a real
+  public-request socket handoff, strict media-ticket authentication and payload
+  checks, excluded requests, and media-only isolation.
+- Updated `tests/gallery_workflow_integration_test.php` to retire seeded audio
+  while preserving the automatic worker's persistent source-lock inode.
+- Extended `tests/theme_public_css_cascade_test.php` with anonymous and
+  anonymous-preview login markup, preserved return targets, and the existing
+  Admin-page fallback.
+- Updated architecture, storage, compatibility, media, testing, Admin design,
+  and all four manual source editions with the initialization, recovery, and
+  public-header rules.
+
+### User Impact
+
+#### For visitors
+
+- Made existing galleries' PDF and music badges available on subsequent page
+  renders after the automatic initial pass finished, subject to their normal
+  capability, schema, and visibility rules.
+- Kept file scanning out of public page rendering and prevented completed
+  initialization from restarting on every visit.
+
+#### For administrators
+
+- Matched the public Admin login entry point to the same compact header
+  controls used after signing in.
+- Removed the need to start general maintenance solely to populate initial
+  media counts after updating.
+- Retained explicit Maintenance Center reconciliation for later manual
+  filesystem changes, without adding a periodic scan or a configurable setting.
+
 ## Version 0.139
 
 Improved the existing Music Manager with working public gallery links, clearer

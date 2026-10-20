@@ -464,12 +464,26 @@ function view_render_header(
         $adminLoginParams = $returnTarget !== ''
             ? ['return' => $returnTarget]
             : [];
-        echo
-            '<a href="'
-                . e(url_for('admin_login', $adminLoginParams))
-                . '">'
-                . e(t('nav.admin_login', 'Admin login'))
-                . '</a>';
+        $adminLoginLabel = t('nav.admin_login', 'Admin login');
+        if ($bodyClass === 'public-page') {
+            echo
+                '<a class="public-header-action" title="'
+                    . e($adminLoginLabel)
+                    . '" href="'
+                    . e(url_for('admin_login', $adminLoginParams))
+                    . '"><span class="public-header-action-icon">'
+                    . view_admin_menu_icon('overview')
+                    . '</span><span class="public-header-action-label">'
+                    . e($adminLoginLabel)
+                    . '</span></a>';
+        } else {
+            echo
+                '<a href="'
+                    . e(url_for('admin_login', $adminLoginParams))
+                    . '">'
+                    . e($adminLoginLabel)
+                    . '</a>';
+        }
     }
     echo '</nav></header>';
     if ($headerBranding['separator_url'] !== '') {

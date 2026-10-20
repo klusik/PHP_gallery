@@ -65,7 +65,7 @@ use function Gallery\Services\cache_cleanup_diagnostic_event;
 use function Gallery\Services\cache_cleanup_diagnostic_buffer;
 
 /**
- * Process token-protected site, telemetry, cache or updater maintenance requests.
+ * Process token-protected site, telemetry, cache, updater or media-count requests.
  * @return void Writes the safe cron JSON result or a forbidden response.
  */
 function cms_site_maintenance_cron(): void
@@ -97,6 +97,50 @@ function cms_site_maintenance_cron(): void
     ignore_user_abort(true);
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_write_close();
+    }
+
+    if (isset($_POST['media_ticket']) || isset($_GET['media_ticket'])) {
+        $ticket = $_POST['media_ticket'] ?? null;
+        if (
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST'
+            || !is_string($ticket)
+            || preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
+            || isset($_GET['media_ticket'])
+            || array_diff(array_keys($_POST), ['media_ticket']) !== []
+            || array_diff(array_keys($_GET), ['page']) !== []
+        ) {
+            http_response_code(400);
+            echo json_encode([
+                'ok' => false,
+                'reason' => 'media_counts_transport_refused',
+            ]);
+            return;
+        }
+        try {
+            cms_runtime_kernel()->load('site-maintenance-work');
+            cms_runtime_kernel()->load('gallery-pdf-documents');
+            $result = \Gallery\Services\gallery_attachment_usage_background_run(
+                $ticket,
+                static fn(string $nextTicket): bool =>
+                    \Gallery\Services\site_maintenance_fire_background_worker(
+                        false,
+                        '',
+                        '',
+                        $nextTicket,
+                    ),
+            );
+        } catch (\Throwable) {
+            $result = [
+                'ok' => false,
+                'queued' => false,
+                'reason' => 'media_counts_unavailable',
+            ];
+        }
+        if (empty($result['ok'])) {
+            http_response_code(500);
+        }
+        echo json_encode($result, JSON_UNESCAPED_SLASHES);
+        return;
     }
 
     if (isset($_POST['update_ticket']) || isset($_GET['update_ticket'])) {

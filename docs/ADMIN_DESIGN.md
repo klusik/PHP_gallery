@@ -24,9 +24,11 @@ pages as part of a focused change.
 - Keep the toolbar on one level. Its control target is 28 px with a 16 px glyph;
   preserve comfortable, accessible tap interaction on mobile.
 - Public-page Admin, Test run, Updates and Logout actions use compact,
-  transparent outlined controls with a 16 px icon and localized label, matching
-  the Show gallery map control. Keep this treatment unfilled; language choices
-  remain governed by Theme settings.
+  32 px-high transparent outlined controls with a 16 px icon and localized
+  label. The Admin login action shown to anonymous visitors, including in
+  anonymous previews, uses the same treatment and alignment as signed-in
+  actions. Match the Show gallery map control, keep the treatment unfilled, and
+  leave language choices governed by Theme settings.
 - Do not underline Admin UI text, labels, links, or controls. Use color,
   spacing, icons, and borders to communicate hierarchy and interaction.
 
