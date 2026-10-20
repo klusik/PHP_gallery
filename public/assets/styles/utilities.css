@@ -616,6 +616,56 @@ body.public-reorder-active {
     }
 }
 
+/* Public-header Admin actions match the map control while retaining labels. */
+.public-page .site-header .nav .public-header-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    box-sizing: border-box;
+    width: auto;
+    height: 2rem;
+    min-height: 2rem;
+    padding: 0 0.5rem;
+    border: 1px solid var(--accent-dark);
+    border-radius: var(--radius, 16px);
+    background: transparent;
+    color: var(--accent-dark);
+    box-shadow: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.public-page .site-header .nav .public-header-action:not(.is-update-pending):hover {
+    border-color: var(--accent-dark);
+    background: color-mix(in srgb, var(--accent-dark) 7%, transparent);
+}
+
+.public-page .site-header .nav .public-header-action:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent-dark) 48%, transparent);
+    outline-offset: 2px;
+}
+
+.public-page .site-header .nav .public-header-action-icon {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.public-page .site-header .nav .public-header-action-icon > .admin-menu-icon {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    vertical-align: middle;
+}
+
+.public-page .site-header .nav .public-header-action.is-disabled {
+    cursor: default;
+}
+
 /* Gallery-card description layouts for public pages. */
 .public-page .gallery-description-rich {
     color: color-mix(in srgb, var(--ink) 88%, var(--muted));

@@ -11,6 +11,14 @@
  */
 declare(strict_types=1);
 namespace Gallery\Core {
+    /** Provide one fixed CSRF value for the rendered public header form.
+     * @return string Disposable token used by the Test run regression.
+     */
+    function csrf_token(): string
+    {
+        return 'cascade-fixture-token';
+    }
+
     /**
      * Supply a deterministic Theme version without configuration or database access.
      * @param array<string,string|int|bool> $theme Prepared scalar Theme preferences.
@@ -79,6 +87,77 @@ namespace {
             throw new RuntimeException($message);
     }
 
+    /** Render the real shared header for one isolated visitor state.
+     * @param string $bodyClass Public or Admin document context.
+     * @param array{id:int,username:string}|null $user Disposable authenticated identity or anonymous visitor.
+     * @param bool $testRunsEnabled Whether the public Test run action is enabled.
+     * @param bool $testRunActive Whether the running-state control replaces its form.
+     * @param bool $updatePending Whether Updates carries its pending marker.
+     * @param string $overrideUrl Prepared public stylesheet URL, or empty when absent.
+     * @param bool $anonymousPreview Whether the public renderer uses anonymous preview assets.
+     * @param string $headExtras Prepared trusted head markup used by the cascade fixture.
+     * @return string Captured HTML emitted by the production header view.
+     */
+    function cascade_header_html(
+        string $bodyClass,
+        ?array $user,
+        bool $testRunsEnabled = false,
+        bool $testRunActive = false,
+        bool $updatePending = false,
+        string $overrideUrl = '',
+        bool $anonymousPreview = false,
+        string $headExtras = '',
+    ): string {
+        $stylesheetUrls = \Gallery\Controllers\shared_layout_stylesheet_urls(
+            $bodyClass,
+            $user,
+            $anonymousPreview,
+            false,
+            [],
+            '/public/assets/custom.css',
+            17,
+        );
+        $languageSelector = $bodyClass === 'public-page'
+            ? [
+                'enabled' => true,
+                'show_codes' => true,
+                'items' => [[
+                    'code' => 'en',
+                    'name' => 'English',
+                    'url' => '/language/en',
+                    'active' => true,
+                ]],
+            ]
+            : [];
+        ob_start();
+        try {
+            \Gallery\Views\view_render_header(
+                'Header fixture',
+                [
+                    'body_class' => $bodyClass,
+                    'user' => $user,
+                    'anonymous_preview' => $anonymousPreview,
+                    'admin_test_runs_enabled' => $testRunsEnabled,
+                    'admin_test_run_active' => $testRunActive,
+                    'update_pending' => $updatePending,
+                    'update_label' => 'Updates',
+                    'language_selector' => $languageSelector,
+                    'custom_css_url' => '/public/assets/custom.css',
+                    'custom_css_version' => 17,
+                    'custom_css_overrides_url' => $overrideUrl,
+                    'stylesheet_urls' => $stylesheetUrls,
+                    'head_extras' => $headExtras,
+                    'admin_chrome' => [],
+                ],
+                '/gallery/photos?sort=latest&lang=en',
+                $bodyClass === 'admin-page' ? 'admin' : 'gallery',
+            );
+            return (string) ob_get_contents();
+        } finally {
+            ob_end_clean();
+        }
+    }
+
     /**
      * Capture actual shared header styles for one disposable visitor context.
      * @param string $bodyClass Canonical public or Admin presentation context.
@@ -93,31 +172,13 @@ namespace {
         bool $anonymousPreview,
         string $overrideUrl,
     ): array {
-        $stylesheetUrls = \Gallery\Controllers\shared_layout_stylesheet_urls(
+        $html = cascade_header_html(
             $bodyClass,
             $user,
-            $anonymousPreview,
-            false,
-            [],
-            '/public/assets/custom.css',
-            17,
+            overrideUrl: $overrideUrl,
+            anonymousPreview: $anonymousPreview,
+            headExtras: '<link rel="stylesheet" href="/fixture-extra.css">',
         );
-        ob_start();
-        try {
-            \Gallery\Views\view_render_header('CSS isolation', [
-                'body_class' => $bodyClass,
-                'user' => $user,
-                'anonymous_preview' => $anonymousPreview,
-                'custom_css_url' => '/public/assets/custom.css',
-                'custom_css_version' => 17,
-                'custom_css_overrides_url' => $overrideUrl,
-                'stylesheet_urls' => $stylesheetUrls,
-                'head_extras' => '<link rel="stylesheet" href="/fixture-extra.css">',
-            ]);
-            $html = (string) ob_get_contents();
-        } finally {
-            ob_end_clean();
-        }
         $document = new DOMDocument();
         @$document->loadHTML($html);
         $urls = [];
@@ -127,6 +188,114 @@ namespace {
             $urls[] = $link->getAttribute('href');
         return $urls;
     }
+
+    $authenticatedUser = ['id' => 1, 'username' => 'fixture'];
+    $publicHeaderHtml = cascade_header_html(
+        'public-page',
+        $authenticatedUser,
+        testRunsEnabled: true,
+        updatePending: true,
+    );
+    $publicHeader = new DOMDocument();
+    @$publicHeader->loadHTML($publicHeaderHtml);
+    $publicHeaderXPath = new DOMXPath($publicHeader);
+    $actionLabels = [];
+    foreach ($publicHeaderXPath->query(
+        '//*[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
+            . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-label ")]'
+    ) as $label) {
+        $actionLabels[] = trim($label->textContent);
+    }
+    cascade_require(
+        $actionLabels === ['Admin', 'Test run', 'Updates', 'Logout'],
+        'the authenticated public header must render all four compact action labels in order',
+    );
+    cascade_require(
+        $publicHeaderXPath->query(
+            '//*[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
+                . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-icon ")]/svg[@class="admin-menu-icon"]',
+        )->length === count($actionLabels),
+        'each public header action must use the existing decorative Admin SVG helper',
+    );
+    $updatesAction = $publicHeaderXPath->query(
+        '//a[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")'
+            . ' and contains(concat(" ", normalize-space(@class), " "), " is-update-pending ")'
+            . ' and @href="/index.php?page=admin_update"]',
+    );
+    cascade_require(
+        $updatesAction->length === 1
+            && $updatesAction->item(0)?->getAttribute('title') === 'Updates',
+        'Updates keeps its pending class, title and existing route',
+    );
+    $testRunForm = $publicHeaderXPath->query(
+        '//form[@method="post" and @action="/index.php?page=admin_test_run_start"]',
+    );
+    cascade_require(
+        $testRunForm->length === 1
+            && $publicHeaderXPath->query(
+                '//form[@action="/index.php?page=admin_test_run_start"]'
+                    . '/input[@name="csrf_token" and @value="cascade-fixture-token"]',
+            )->length === 1
+            && $publicHeaderXPath->query(
+                '//form[@action="/index.php?page=admin_test_run_start"]'
+                    . '/input[@name="target" and @value="/gallery/photos?sort=latest&lang=en"]',
+            )->length === 1
+            && $publicHeaderXPath->query(
+                '//form[@action="/index.php?page=admin_test_run_start"]'
+                    . '/input[@name="target_page" and @value="gallery"]',
+            )->length === 1,
+        'Test run keeps its POST route, CSRF token, return URI and target page fields',
+    );
+    $languageControl = $publicHeaderXPath->query(
+        '//div[@class="public-language-switcher"]'
+            . '/a[@class="public-language-button is-active" and @href="/language/en"'
+            . ' and @hreflang="en" and @lang="en" and @aria-current="true"]'
+            . '/span[@class="public-language-code" and text()="EN"]',
+    );
+    cascade_require(
+        $languageControl->length === 1,
+        'adding header actions preserves the existing language selector markup and destination',
+    );
+    $runningHeader = new DOMDocument();
+    @$runningHeader->loadHTML(cascade_header_html(
+        'public-page',
+        $authenticatedUser,
+        testRunsEnabled: true,
+        testRunActive: true,
+    ));
+    $runningXPath = new DOMXPath($runningHeader);
+    cascade_require(
+        $runningXPath->query(
+            '//span[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")'
+                . ' and contains(concat(" ", normalize-space(@class), " "), " is-disabled ")'
+                . ' and @aria-disabled="true" and @title="Test run running"]'
+                . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-label ")'
+                . ' and text()="Test run running"]',
+        )->length === 1
+            && $runningXPath->query(
+                '//span[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
+                    . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-icon ")]'
+                    . '/svg[@class="admin-menu-icon"]',
+            )->length === 1
+            && $runningXPath->query('//form[@action="/index.php?page=admin_test_run_start"]')->length === 0,
+        'an active Test run uses the disabled icon-and-label action and removes its form',
+    );
+    $adminHeader = new DOMDocument();
+    @$adminHeader->loadHTML(cascade_header_html(
+        'admin-page',
+        $authenticatedUser,
+    ));
+    $adminXPath = new DOMXPath($adminHeader);
+    cascade_require(
+        $adminXPath->query(
+            '//header//nav/a[@href="/index.php?page=admin_logout" and text()="Logout"'
+                . ' and not(@class) and not(.//svg)]',
+        )->length === 1
+            && $adminXPath->query(
+                '//header//nav//*[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]',
+            )->length === 0,
+        'Admin page Logout keeps its existing plain markup outside the public action styling',
+    );
 
     $overrideUrl =
         '/public/assets/custom-overrides.css?v='

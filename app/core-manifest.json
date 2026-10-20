@@ -1,6 +1,6 @@
 {
     "version": "0.138",
-    "generated_at": "2026-10-20T18:18:12+00:00",
+    "generated_at": "2026-10-20T18:31:10+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -602,7 +602,7 @@
         "app/views/gallery_music.php": "sha256:2e99003cf7e3b3f0698ef1e121be398a04dd5a4ac4ede0c3a9da26dc40da0b09",
         "app/views/gallery_pdf_documents.php": "sha256:edd85a29c152a1e44fc18695a7168a577ddc074f3f67e23ed37029579a3322fc",
         "app/views/http.php": "sha256:73b6e43b66f98a5dbf4f9f4e968f3f6745b00f8aaf76d3e3b549c41bcc2deba9",
-        "app/views/layout.php": "sha256:a793232a89d6eeb0dd42b3c8b7ce77c4436f83bd920b116ddc94b794670b94d5",
+        "app/views/layout.php": "sha256:f7bbed40e075a2119a80dd3aa51b3c2a6a9b0fda5b4aba828ac587dabba10251",
         "app/views/mobile_webdav.php": "sha256:e5c9b421bbc79926a00a197aa83c59113a783a2c381a4d95cb92ea3cab9d842b",
         "app/views/navigation_data.php": "sha256:26e86eb905ae45b20b67b5028b25f0344147d75e19952c4bf4c41ffb6b829b58",
         "app/views/pagination.php": "sha256:cb8fc05e4ee1e116f6b430fe3a0ec8dc4c2ae58c15783395cba8fbefe6ecbaee",
@@ -894,7 +894,7 @@
         "public/assets/styles/public-shared.css": "sha256:bbe60db0ab7335a7c617b909b358ec604380d47a5ad7594e5c27a4f0cbbcc2f4",
         "public/assets/styles/public.css": "sha256:330ebe7856038faf4f7a88cb036a20da52259f8b1a83da738c88c008b1f21230",
         "public/assets/styles/side-panel.css": "sha256:46a0dd95903df913368a7c89a77607b32122db1c9598db28dab14ba69e3c329d",
-        "public/assets/styles/utilities.css": "sha256:9fa0fec73f690a2074b3a421793010a9fb27b362fdf215f2e0f491ba1556e9de",
+        "public/assets/styles/utilities.css": "sha256:c9f66407d4cdf88eddf508d47a0bcd528f82478837654ea868e71c34c29f90dd",
         "public/assets/telemetry.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",
         "public/assets/usage.js": "sha256:d5c3db848b24f83ae8e40e8a119b4880be35fec73f53e448e715b0b49064f483",
         "public/assets/vendor/pdfjs/pdf.min.js": "sha256:7662af706ecbf4ae9ba0f4f4ea50636617646c31d6c67aeca2338b1805a11c07",

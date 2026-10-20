@@ -366,26 +366,37 @@ function view_render_header(
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
             $updatePending = !empty($model['update_pending']);
-            $updateClass = $updatePending ? ' class="is-update-pending"' : '';
             $updateLabel = trim((string) ($model['update_label'] ?? '')) ?: t(
                 'admin.menu.updates',
                 'Updates',
             );
             echo
-                '<a href="'
-                    . e(url_for('admin'))
-                    . '">'
+                '<a class="public-header-action" title="'
                     . e(t('nav.admin', 'Admin'))
+                    . '" href="'
+                    . e(url_for('admin'))
+                    . '"><span class="public-header-action-icon">'
+                    . view_admin_menu_icon('overview')
+                    . '</span><span class="public-header-action-label">'
+                    . e(t('nav.admin', 'Admin'))
+                    . '</span>'
                     . '</a>';
             if (!empty($model['admin_test_runs_enabled'])) {
                 if (!empty($model['admin_test_run_active'])) {
                     echo
-                        '<span class="button secondary is-disabled" aria-disabled="true">'
+                        '<span class="button secondary is-disabled public-header-action" title="'
                             . e(t(
                                 'admin.test_run.running_button',
                                 'Test run running',
                             ))
-                            . '</span>';
+                            . '" aria-disabled="true"><span class="public-header-action-icon">'
+                            . view_admin_menu_icon('telemetry')
+                            . '</span><span class="public-header-action-label">'
+                            . e(t(
+                                'admin.test_run.running_button',
+                                'Test run running',
+                            ))
+                            . '</span></span>';
                 } else {
                     echo
                         '<form method="post" action="'
@@ -404,27 +415,50 @@ function view_render_header(
                             . e($page)
                             . '">';
                     echo
-                        '<button type="submit" class="button secondary">'
+                        '<button type="submit" class="button secondary public-header-action" title="'
                             . e(t('admin.test_run.button', 'Test run'))
-                            . '</button>';
+                            . '"><span class="public-header-action-icon">'
+                            . view_admin_menu_icon('telemetry')
+                            . '</span><span class="public-header-action-label">'
+                            . e(t('admin.test_run.button', 'Test run'))
+                            . '</span></button>';
                     echo '</form>';
                 }
             }
             echo
-                '<a'
-                    . $updateClass
-                    . ' href="'
-                    . e(url_for('admin_update'))
-                    . '">'
+                '<a class="public-header-action'
+                    . ($updatePending ? ' is-update-pending' : '')
+                    . '" title="'
                     . e($updateLabel)
+                    . '" href="'
+                    . e(url_for('admin_update'))
+                    . '"><span class="public-header-action-icon">'
+                    . view_admin_menu_icon('update')
+                    . '</span><span class="public-header-action-label">'
+                    . e($updateLabel)
+                    . '</span>'
                     . '</a>';
         }
-        echo
-            '<a href="'
-                . e(url_for('admin_logout'))
-                . '">'
-                . e(t('nav.logout', 'Logout'))
-                . '</a>';
+        if ($bodyClass === 'public-page') {
+            $logoutLabel = t('nav.logout', 'Logout');
+            echo
+                '<a class="public-header-action" title="'
+                    . e($logoutLabel)
+                    . '" href="'
+                    . e(url_for('admin_logout'))
+                    . '"><span class="public-header-action-icon">'
+                    . view_admin_menu_icon('logout')
+                    . '</span><span class="public-header-action-label">'
+                    . e($logoutLabel)
+                    . '</span></a>';
+        } else {
+            echo
+                '<a href="'
+                    . e(url_for('admin_logout'))
+                    . '">'
+                    . e(t('nav.logout', 'Logout'))
+                    . '</a>';
+        }
     } else {
         $returnTarget = trim((string) ($model['admin_login_return'] ?? ''));
         $adminLoginParams = $returnTarget !== ''
