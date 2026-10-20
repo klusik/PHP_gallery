@@ -56,6 +56,8 @@ namespace Gallery\Services {
 }
 
 namespace {
+    require_once __DIR__
+        . '/support/gallery_attachment_usage_legacy_schema_fixture.php';
     require_once dirname(__DIR__) . '/app/services/gallery_pdf_documents.php';
 
     /**
@@ -94,6 +96,11 @@ namespace {
     $gallery = ['id' => 7, 'folder_path' => 'gallery'];
 
     try {
+        gallery_pdf_documents_test_assert(
+            \Gallery\Services\presentation_gallery_attachment_usage_schema_status()['state']
+                === 'missing',
+            'The explicit legacy fixture adapter must confirm optional usage schema absence.',
+        );
         $first = \Gallery\Services\gallery_pdf_documents_attach(
             $gallery,
             $source,
@@ -343,6 +350,36 @@ namespace {
                     'ofp',
                 ),
             'Deleting a manual PDF must remove it while preserving the OFP visibility flag.',
+        );
+
+        \Gallery\Services\schema_inspection_set_query_executor_for_tests(
+            static function (
+                string $objectType,
+                string $table,
+                string $object,
+            ): bool {
+                throw new PDOException(
+                    'Fixture metadata inspection is unavailable.',
+                );
+            },
+        );
+        $unknownSchemaRejected = false;
+        try {
+            \Gallery\Services\gallery_pdf_documents_attach(
+                $gallery,
+                $source,
+                'unknown-schema.pdf',
+                'Unknown schema case',
+                'manually_supplied',
+            );
+        } catch (\Gallery\Services\PresentationSchemaUnavailableException $exception) {
+            $unknownSchemaRejected = $exception->state() === 'unknown';
+        }
+        gallery_pdf_documents_test_assert(
+            $unknownSchemaRejected
+                && \Gallery\Services\gallery_pdf_documents_list($gallery) === []
+                && file_get_contents($source) === $firstBytes,
+            'Unknown schema must refuse before installing a PDF or altering the uploaded source.',
         );
     } finally {
         $iterator = new RecursiveIteratorIterator(

@@ -37,6 +37,38 @@ language when normalizing it. Existing bookmark usage is unknown; removing the
 alias is not authorized. Artwork and presentation controls retain native form
 association with the guarded settings form after moving into Media.
 
+## Optional public attachment usage projection
+
+Owners: presentation schema policy, gallery attachment-usage reader and worker,
+and the existing Maintenance Center attachment owner. Migration
+`202610200004_gallery_attachment_usage.php` adds optional derived snapshots for
+public PDF/music card counts. A ready empty snapshot means known zero; absent,
+unknown or dirty state is not zero and omits that media-kind badge. Public
+rendering reads the projection only, applies current visitor access, visibility,
+hidden-item and capability rules, and never opens or hashes original files.
+Cards place nonzero PDF/music badges in a compact, right-aligned stack below the
+photo-count badge; when that badge is enabled, the opened gallery's action bar
+places the same counts inline immediately to its left.
+Digests are unique per media kind. Existing originals and sidecar indexes remain
+authoritative. No usage or deployed-data coverage baseline is assumed.
+
+Supported application mutations mark the affected projection dirty before a
+source change and publish a replacement snapshot after successful changes.
+Unknown schema blocks the write; confirmed-missing optional schema may omit the
+projection. Manual filesystem edits bypass those hooks and require
+reconciliation before counts can be trusted. Maintenance Center provides a
+default-selected optional legacy reconciliation with a persisted cursor, at
+most 25 galleries per step, at most one legacy OFP candidate hash per step and
+a 25 MiB hash cap. When an OFP manifest has no valid digest, the worker stores
+`ofp_pdf_sha256` through atomic manifest replacement under the shared persistent
+root lock. It also serializes music reads with the private `.gallery-music/.lock`;
+busy locks defer a gallery. Newly created galleries with no source metadata may
+receive insert-only ready-empty rows. Analysis does not inspect originals or
+write projections. Failed galleries remain dirty and omitted for a later retry;
+original PDF/audio bytes are unchanged. Retain this optional projection only as
+a cache of authoritative source data; no deployment-wide completion or
+performance claim is established.
+
 ## Logical music catalog and media-typed tags
 
 Owners: existing physical playlist model/service, logical catalog model/service
@@ -916,6 +948,16 @@ verified actual UTF-8 files containing six group events and eleven selected
 events in Windows Downloads. Ordinary clipboard and HTTP download support
 remains
 permanent until supported-browser acceptance proves an equivalent replacement.
+
+## Admin bulk-list Shift selection
+
+Admin bulk lists with item checkboxes support Shift-click ranges within the same
+list. Clicking one row and then Shift-clicking another applies the second
+checkbox's resulting state to enabled visible rows between them on the current
+results page. The range anchor resets when live filtering, paging, or another
+row replacement changes the results. Severity filters still determine visible
+log rows, and the Selected, This page, and All filtered log export scopes retain
+their meanings.
 
 ## Independent updater cache reclamation
 

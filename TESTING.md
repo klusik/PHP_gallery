@@ -7,8 +7,12 @@ filesystem identities to cover new central uploads, unchanged v1 playback,
 two-source migration within one gallery, verified-copy refusal and interrupted
 cleanup replay. It exercises live album membership/order against unchanged
 gallery selection JSON, direct assignment independence, optimistic conflicts,
-gallery deletion retention and per-gallery permissions. Cleanup must remove only
-fixture-owned asset identities; it never sweeps the shared `data/music/` folder.
+gallery deletion retention and per-gallery permissions. Its real attachment
+usage tables verify digest-unique PDF/music branch counts, hidden descendants,
+known-zero versus unknown/dirty snapshots, stale compare-and-swap refusal,
+insert-only empty-seed races, and safe omission for missing/unknown schemas.
+Cleanup must remove only fixture-owned asset identities; it never sweeps the
+shared `data/music/` folder.
 
 `admin_gallery_music_browser_test.mjs` renders the real Media/music view and
 uses production styles and mutation handlers on desktop and narrow screens.
@@ -54,11 +58,28 @@ disclosures, visible tag actions, focus, composite split identities, album
 controls and pointer drag reorder through the existing mutation coordinator,
 including busy, stale, click, no-op, and native-fallback duplicate-write guards;
 the merge overlay's top-layer behavior and last-row visibility; and the shared
-mutation completion protocol.
+mutation completion protocol. Gallery usage links must resolve through the
+canonical public URL with the current locale and configured rewrite style, and
+an absent gallery must remain unlinked. Floating row disclosures must close on
+outside click, repeated activation of the same trigger, Escape, and opening a
+different row disclosure; interactions within the open disclosure must leave
+it open.
+The survivor chooser contains only checked songs, preserves a chosen survivor
+only while it remains selected, and disables merging with fewer than two
+selected songs or a busy/stale editor.
 Refused writes preserve input; an unconfirmed fragment refresh locks further
 writes. These fixtures do not qualify a deployed database migration, real
 library reconciliation throughput, or live backup/Trash recovery. Review those
 against representative hosting data separately.
+
+`admin_music_gallery_url_test.php` exercises the canonical public URL owner in
+clean and query modes together with the Music Manager language decoration.
+`admin_dashboard_workspace_browser_test.mjs` exercises shared bulk-list Shift
+selection through the production module: exact form/list ownership, forward and
+reverse ranges using the clicked checkbox state, visible/enabled row exclusions,
+filter controls and detached-anchor reset after result replacement. The range is
+limited to the current rendered results page; paging or live filtering starts a
+new range context.
 
 `database_maintenance_test.php` checks indexed identifier membership against the
 legacy case-insensitive PCRE word-boundary contract, including underscores,
@@ -87,6 +108,16 @@ subset. The CI selector fixture retains exact required lists for both browser
 modes. Runtime route probes guard against loading refresh diagnostics merely to
 render a cached Admin dashboard. The existing storage Model owns ledger SQL too,
 so durable attachment accounting introduces no separate model include.
+
+`gallery_count_badge_modes_test.php` exercises actual Admin/public controller
+batching for PDF/music gallery-card counts. It covers known zeros and verifies
+that hidden galleries, disabled `includeCounts` requests and password-protected
+galleries do not trigger count reads.
+The same fixture renders the opened-gallery hero and checks independent
+nonzero PDF/music counts before the photo badge, disabled-count suppression,
+and the unchanged photo badge when media counts are unavailable. The existing
+gallery-tag browser fixture checks compact card spacing and horizontal hero
+placement with production styles on a narrow viewport.
 
 `admin_storage_refresh_test.php` additionally captures lifecycle diagnostics to
 verify stable non-authorizing run correlation, resume counts, per-phase request
@@ -532,7 +563,9 @@ checks the gallery cap independently of image batch size, progress across
 phases,
 an installation with no photos, hidden/locked originals, manual/OFP separation,
 exact known byte totals, no passive scan, stale revisions, optional invalidation
-write failure, corrupt-index preservation and missing/symlink originals. It also
+write failure, corrupt-index preservation and missing/symlink originals. The
+usage projection path uses the real schema policy with its existing-state
+adapter. It also
 calls actual SimBrief persistence with PDF OFF to retain JSON import and an old
 PDF manifest reference without permitting a direct PDF fetch/write. These tests
 do not establish full-disk allocated blocks, arbitrary external-file discovery
@@ -751,7 +784,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.138. Release verification uses the
+This guide applies to PHP Gallery Version 0.139. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1952,6 +1985,11 @@ across English, Czech, German, and Swedish. The compact review keeps required
 preflight and final verification automatic, shares switches across optional
 tasks, routes deep media verification through the thumbnail administration
 owner, and defaults the optional music-repository relocation to selected.
+The optional attachment-usage task is also selected by default, remains behind
+preflight, and reuses the existing attachment owner. The fixture executes its
+read-only schema analyzer and adapter-backed worker executor across resumable
+slices, checking cumulative cursor/counters, per-slice metrics and terminal
+warnings for failed snapshots.
 
 A real MySQL/MariaDB physical rebuild is environment-dependent and is not proven
 by the source-level fixture. On a disposable migrated installation, manually
@@ -6266,7 +6304,11 @@ gallery date or describing a regenerated OFP as an original archive.
 
 `tests/gallery_pdf_documents_service_test.php` covers exact-byte storage,
 stable-ID replacement, metadata digest updates, explicit replacement/deletion
-confirmation, and reads/listing after deletion.
+confirmation, and reads/listing after deletion. Its support adapter runs real
+schema inspection and policy for confirmed-missing optional projection schema,
+and verifies unknown schema refuses writes before installation. The existing
+`tests/simbrief_ofp_document_test.php` uses the same real schema inspection and
+policy with confirmed-missing schema.
 `tests/gallery_pdf_conversion_lifecycle_test.php` and
 `tests/admin_pdf_conversion_stream_scenarios.mjs` cover conversion marker
 ownership,

@@ -52,6 +52,24 @@ function galleryMarkup() {
         <span data-gallery-filter-summary></span><input type="checkbox" data-select-all="gallery_ids[]">
         <section data-feature-plan-url="/fixture-plan" data-feature-apply-url="/fixture-apply"><table data-admin-gallery-order-table><tbody>${['public','unpublished','private'].map(/** Render one synthetic gallery row. @param {string} visibility State. @param {number} i Row index. @return {string} Row markup. */ (visibility, i) => `<tr data-gallery-row data-gallery-id="${i+1}" data-parent-id="0" data-depth="0" data-gallery-visibility="${visibility}"><td><input type="checkbox" name="gallery_ids[]" value="${i+1}"></td><td>Gallery ${i+1}<button type="button" data-gallery-feature-key="voting" data-gallery-feature-root-id="${i+1}" data-gallery-feature-state="off" data-gallery-feature-own-state="off" data-on-count="0" data-total-count="1">Voting</button></td></tr>`).join('')}</tbody></table><div data-gallery-feature-pending hidden><span data-gallery-feature-pending-status></span><button type="button" data-gallery-feature-review>Review</button><button type="button" data-gallery-feature-discard>Discard</button></div><dialog data-gallery-feature-dialog></dialog></section></form>`;
 }
+/** Build an external-form log selection list with non-item controls nearby. @return {string} Fixture markup. */
+function logSelectionMarkup() {
+    return `<form id="fixture-log-form"></form><table data-fixture-log-list><tbody>
+        <tr><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="1"></td></tr>
+        <tr><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="2"></td></tr>
+        <tr hidden><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="3"></td></tr>
+        <tr><td><fieldset disabled><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="4"></fieldset></td></tr>
+        <tr style="visibility:hidden"><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="5"></td></tr>
+        <tr><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="6"></td></tr>
+        <tr><td><input type="checkbox" name="severities[]" form="fixture-log-form" value="error" data-admin-log-severity-filter></td></tr>
+        <tr><td><input type="checkbox" data-admin-log-select-page></td></tr>
+    </tbody></table><nav data-admin-log-pagination><a href="?log_page=2" data-admin-log-page-link>Next</a></nav>`;
+}
+/** Click one checkbox into a known state with an optional Shift modifier. @param {HTMLInputElement} input Target item. @param {boolean} checked Desired state. @param {boolean} shiftKey Whether to extend the prior range. @return {void} Dispatches a browser activation click. */
+function clickSelection(input, checked, shiftKey = false) {
+    input.checked = !checked;
+    input.dispatchEvent(new MouseEvent('click', {bubbles:true, shiftKey}));
+}
 window.fetch = /** Confine production reads to owned fixture data. @param {string|URL} url Request URL. @param {RequestInit} options Options. @return {Promise<Response>} Held response or safe first-party asset. */ async (url, options = {}) => {
     const path = new URL(url, location.href).pathname;
     if (path.startsWith('/public/assets/')) return originalFetch(url, options);
@@ -117,6 +135,51 @@ try {
     await until(/** Observe authoritative row replacement. @return {boolean} Whether the table changed. */ () => document.querySelector('[data-admin-gallery-order-table]') !== oldTable);
     check(document.querySelector('[data-gallery-visibility-filter]').value === 'private' && document.querySelector('[data-gallery-id="3"] input').checked, 'Owned metadata refresh preserves the filter and eligible bulk selection');
     check(document.querySelector('[data-gallery-feature-root-id="3"]').hasAttribute('data-feature-prepared'), 'Local prepared feature intentions survive quick-action fragment replacement');
+    document.body.insertAdjacentHTML('beforeend', logSelectionMarkup());
+    const logChoices = Array.from(document.querySelectorAll('input[name="log_ids[]"]'));
+    const logRangeChanges = [];
+    document.querySelector('[data-fixture-log-list]').addEventListener('change', event => logRangeChanges.push(event.target.value));
+    document.querySelector('[data-admin-log-page-link]').addEventListener('click', event => event.preventDefault());
+    clickSelection(logChoices[0], true);
+    clickSelection(logChoices[5], true, true);
+    check(logChoices[0].checked && logChoices[1].checked && logChoices[5].checked && logChoices[2].checked === false && logChoices[3].checked === false && logChoices[4].checked === false, 'External-form log ranges skip hidden and disabled rows between visible endpoints');
+    check(logRangeChanges.includes('1'), 'Range changes use ordinary change events so selection consumers can refresh');
+    clickSelection(logChoices[5], true);
+    clickSelection(logChoices[0], false, true);
+    check(!logChoices[0].checked && !logChoices[1].checked && !logChoices[5].checked, 'Reverse Shift ranges apply the clicked deselection state across the visible span');
+    document.querySelector('[data-admin-log-select-page]').click();
+    clickSelection(logChoices[0], true);
+    document.querySelector('[data-admin-log-page-link]').click();
+    clickSelection(logChoices[5], false, true);
+    check(logChoices[0].checked && !logChoices[5].checked, 'Page and select-page controls never become range anchors');
+    clickSelection(logChoices[0], true);
+    clickSelection(document.querySelector('[data-admin-log-severity-filter]'), true);
+    clickSelection(logChoices[5], false, true);
+    check(logChoices[0].checked && !logChoices[5].checked, 'Severity filters never become range anchors');
+    const detachedLogAnchor = logChoices[0];
+    clickSelection(detachedLogAnchor, true);
+    document.querySelector('[data-fixture-log-list]').replaceWith(document.createElement('table'));
+    const replacementLogList = document.createElement('table'); replacementLogList.innerHTML = '<tbody><tr><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="7"></td></tr><tr><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="8"></td></tr><tr><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="9"></td></tr></tbody>';
+    document.body.append(replacementLogList);
+    const replacementLogChoices = replacementLogList.querySelectorAll('input[name="log_ids[]"]');
+    clickSelection(replacementLogChoices[2], true, true);
+    check(!replacementLogChoices[0].checked && !replacementLogChoices[1].checked && replacementLogChoices[2].checked, 'A detached anchor from replaced AJAX rows cannot bleed into new markup');
+    clickSelection(replacementLogChoices[0], true);
+    const otherLogList = document.createElement('table'); otherLogList.innerHTML = '<tbody><tr><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="10"></td></tr><tr><td><input type="checkbox" name="log_ids[]" form="fixture-log-form" value="11"></td></tr></tbody>'; document.body.append(otherLogList);
+    const otherLogChoices = otherLogList.querySelectorAll('input[name="log_ids[]"]');
+    clickSelection(otherLogChoices[1], true, true);
+    check(!otherLogChoices[0].checked && otherLogChoices[1].checked, 'Equal names and form ownership cannot bridge separate visible lists');
+    const musicTrackForm = document.createElement('form'); musicTrackForm.innerHTML = '<input type="checkbox" name="track_ids[]"><input type="checkbox" name="track_ids[]">'; document.body.append(musicTrackForm);
+    const musicTrackChoices = musicTrackForm.querySelectorAll('input[name="track_ids[]"]');
+    clickSelection(musicTrackChoices[0], true);
+    clickSelection(musicTrackChoices[1], true, true);
+    check(musicTrackChoices[0].checked && musicTrackChoices[1].checked, 'Music Manager split choices share their form fallback range');
+    const musicSongForm = document.createElement('form'); musicSongForm.id = 'fixture-music-merge'; document.body.append(musicSongForm);
+    const musicSongTable = document.createElement('table'); musicSongTable.innerHTML = '<tbody><tr><td><input type="checkbox" name="song_ids[]" form="fixture-music-merge"></td></tr><tr><td><input type="checkbox" name="song_ids[]" form="fixture-music-merge"></td></tr></tbody>'; document.body.append(musicSongTable);
+    const musicSongChoices = musicSongTable.querySelectorAll('input[name="song_ids[]"]');
+    clickSelection(musicSongChoices[0], true);
+    clickSelection(musicSongChoices[1], true, true);
+    check(musicSongChoices[0].checked && musicSongChoices[1].checked, 'Music Manager merge choices support table-scoped ranges across an external form');
     const refreshedTable = document.querySelector('[data-admin-gallery-order-table]');
     document.dispatchEvent(new CustomEvent('adminGalleryWorkspaceMutation', {detail:{ok:true}}));
     await until(/** Observe a failed refresh retry beside retained rows. @return {boolean} Whether retry exists. */ () => Boolean(document.querySelector('[data-dashboard-read-error] button')));

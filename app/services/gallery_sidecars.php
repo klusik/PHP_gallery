@@ -53,6 +53,7 @@ use function Gallery\Models\gallery_model_folder_paths;
 use function Gallery\Models\gallery_model_insert;
 use function Gallery\Models\gallery_model_prepend_sort_order;
 use function Gallery\Models\gallery_model_unique_slug;
+use function Gallery\Models\gallery_model_attachment_usage_seed_empty;
 
 require_once __DIR__ . '/gallery_creation_safety.php';
 require_once __DIR__ . '/gallery_edit_concurrency.php';
@@ -975,7 +976,11 @@ function create_empty_gallery(array $input): array
 }
 
 /**
- * Perform create empty gallery while the caller owns the gallery writer lease.
+ * Create an empty gallery while the caller owns the gallery writer lease.
+ * When its authoritative attachment sidecars are absent, best-effort INSERT
+ * IGNORE snapshots let public branch counts include this known-empty gallery;
+ * unknown schemas and seed failures leave optional counts absent without
+ * affecting gallery creation.
  *
  * @param array<string,mixed> $input Normalized creation fields.
  * @return array<string,mixed> Created row with id, title and relative folder_path plus supported schema fields.
@@ -1177,5 +1182,49 @@ function create_empty_gallery_owned(array $input): array
         sync_entity_tags('gallery', (int) $gallery['id'], $tags);
     }
     write_gallery_sidecar($gallery);
+    gallery_attachment_usage_seed_known_empty($gallery);
     return $gallery;
+}
+
+/** Seed known-zero public attachment snapshots for an application-created empty gallery.
+ * @param array{id:int|string,folder_path:string} $gallery Newly created physical gallery.
+ * @return void Best-effort INSERT IGNORE never supersedes a concurrent dirty or ready source generation.
+ */
+function gallery_attachment_usage_seed_known_empty(array $gallery): void
+{
+    try {
+        if (
+            !function_exists('Gallery\\Services\\presentation_gallery_attachment_usage_schema_status')
+            || !function_exists('Gallery\\Services\\presentation_schema_render_available')
+        ) {
+            return;
+        }
+        $folder = normalize_relative_path((string) $gallery['folder_path']);
+        $root = gallery_abs_path($folder);
+        $knownSourcePaths = [
+            $root . '/.gallery-pdf-documents/index.json',
+            $root . '/.gallery-music/index.json',
+            $root . '/simbrief-ofp-manifest.json',
+            $root . '/simbrief-ofp.pdf',
+        ];
+        foreach ($knownSourcePaths as $sourcePath) {
+            if (file_exists($sourcePath) || is_link($sourcePath)) {
+                return;
+            }
+        }
+        if (!presentation_schema_render_available(
+            presentation_gallery_attachment_usage_schema_status(),
+            'gallery.create_empty_attachment_usage',
+        )) {
+            return;
+        }
+        foreach (['pdf', 'music'] as $kind) {
+            gallery_model_attachment_usage_seed_empty(
+                (int) $gallery['id'],
+                $kind,
+            );
+        }
+    } catch (Throwable) {
+        // Optional counts remain absent; gallery creation itself is independent.
+    }
 }

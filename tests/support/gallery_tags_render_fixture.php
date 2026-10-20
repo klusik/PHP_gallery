@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/public_card_layout_fixture.php';
 require_once dirname(__DIR__, 2) . '/app/views/public_tags.php';
+require_once dirname(__DIR__, 2) . '/app/views/public_gallery_pages.php';
 
 /** Build a deterministic tag set that wraps at a narrow card width. @param int $count Number of tags to render. @return array<int,array{name:string,href:string}> Ordered tag-link view models. */
 function gallery_tags_fixture_items(int $count): array
@@ -77,6 +78,11 @@ function gallery_tags_fixture_card(
         'description_layout' => 'vertical',
         'description' => 'A public description for ' . $case . '.',
         'cover_picture_html' => public_layout_picture($renderer),
+        'show_count_badge' => $case === 'rows-one',
+        'branch_image_count' => 12,
+        'media_counts' => $case === 'rows-one'
+            ? ['music' => 2, 'pdf' => 3]
+            : ['music' => 0, 'pdf' => 0],
         'tag_list_view_model' => $tagModel,
     ]);
     $cardHtml = (string) ob_get_clean();
@@ -113,6 +119,43 @@ function gallery_tags_fixture_document(): void
                 . '">';
     }
     echo '</head><body class="public-page"><main class="gallery-grid">';
+    $heroAdminActionsHtml =
+        '<form class="public-admin-delete-form public-admin-delete-form-hero">'
+            . '<button type="button" '
+            . 'class="public-admin-card-action-button public-admin-delete-button">'
+            . 'Trash</button></form>'
+            . '<a class="public-admin-edit-button '
+            . 'public-admin-edit-button-hero">Edit</a>'
+            . '<a class="public-admin-add-gallery-button '
+            . 'public-admin-add-gallery-button-hero hero-icon-button">'
+            . 'Add</a>';
+    ob_start();
+    \Gallery\Views\view_render_public_gallery_hero([
+        'gallery_id' => 1299,
+        'title' => 'Media count hero',
+        'visibility' => 'public',
+        'branding_header_html' => '<h1>Media count hero</h1>',
+        'show_count_badge' => true,
+        'branch_image_count' => 12,
+        'count_badge' => ['admin' => false],
+        'media_counts' => ['music' => 2, 'pdf' => 3],
+        'admin_actions_html' => $heroAdminActionsHtml,
+        'download_enabled' => true,
+        'download_url' => '/download',
+        'download_start_url' => '/download/start',
+        'download_capability' => 'fixture',
+        'map_available' => true,
+        'map_url' => '/map',
+        'tag_groups' => [],
+        'tag_count' => 0,
+    ]);
+    $mediaHero = (string) ob_get_clean();
+    $mediaHero = str_replace(
+        'class="hero"',
+        'class="hero" data-fixture-case="hero-media-counts"',
+        $mediaHero,
+    );
+    echo $mediaHero;
     gallery_tags_fixture_card('rows-one', 4, 1, false, 12, 'progressive');
     gallery_tags_fixture_card(
         'rows-one-responsive',

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-09-14
+ *   2026-10-20
  */
 
 declare(strict_types=1);
@@ -78,6 +78,7 @@ use function Gallery\Services\gallery_allows_gps_maps;
 use function Gallery\Services\gallery_background_asset_url;
 use function Gallery\Services\gallery_branch_image_count;
 use function Gallery\Services\gallery_branch_image_counts;
+use function Gallery\Services\gallery_branch_attachment_usage_counts;
 use function Gallery\Services\gallery_branding_asset_url;
 use function Gallery\Services\gallery_branding_schema_ready;
 use function Gallery\Services\gallery_breadcrumb_ancestors;
@@ -198,10 +199,21 @@ function public_thumbnail_loading_attributes(int $index): string
  * only coordinates service-layer lookups so visible cards can share batched
  * child-gallery, branch-count, cover, collage, and thumbnail-bundle work.
  *
- * @param array<int,array<string,mixed>> $galleries Gallery rows to render.
- * @param bool $publicOnly Public only value.
- * @param bool $includeCounts Include branch image counts in the context.
- * @return array<int,array<string,mixed>> Context values keyed by gallery id.
+ * @param array<int,array{id:int|string,title?:string,folder_path?:string,
+ *     parent_id?:int|string|null,access_mode?:string,visibility?:string,
+ *     count_badge_visibility?:string|null,cover_image_id?:int|string|null,
+ *     cover_image_ids?:string|null,cover_image_path?:string|null}>
+ *     $galleries Stored gallery identity, access, count and cover fields.
+ * @param bool $publicOnly Apply public restrictions to cover selection.
+ * @param bool $includeCounts Include image and unique attachment branch counts.
+ * @return array<int,array{branch_image_count:int,total_image_count:?int,
+ *     media_counts:array{music:int,pdf:int},cover_asset:string,
+ *     cover:array{id:int|string,gallery_id:int|string,relative_path:string,
+ *         filename?:string,visibility?:string}|null,
+ *     collage:list<array{id:int|string,gallery_id:int|string,
+ *         relative_path:string,filename?:string,visibility?:string}>}>
+ *     Contexts keyed by gallery ID; unavailable or disallowed media counts are
+ *     zero so their optional badges remain omitted without a per-card retry.
  */
 function public_gallery_card_rendering_contexts(
     array $galleries,
@@ -240,6 +252,26 @@ function public_gallery_card_rendering_contexts(
     $branchCounts = $countIds !== []
         ? gallery_branch_image_counts($countIds, true, true)
         : [];
+    // Optional attachment badges follow the same public card policy as the
+    // photo badge, even in an Admin session or a protected-card listing.
+    $attachmentCountable = $includeCounts
+        ? array_values(array_filter(
+            $galleries,
+            static fn(array $gallery): bool =>
+                gallery_effective_count_badge_enabled($gallery)
+                && gallery_access_requirement($gallery) === null,
+        ))
+        : [];
+    $attachmentCountIds = array_values(array_unique(array_map(
+        static fn(array $gallery): int => (int) $gallery['id'],
+        $attachmentCountable,
+    )));
+    $pdfAttachmentCounts = $attachmentCountIds !== []
+        ? gallery_branch_attachment_usage_counts($attachmentCountIds, 'pdf', true)
+        : [];
+    $musicAttachmentCounts = $attachmentCountIds !== []
+        ? gallery_branch_attachment_usage_counts($attachmentCountIds, 'music', true)
+        : [];
     $totalIds = $isCountAdmin
         ? array_values(array_unique(array_map(
             static fn(array $g): int => (int) $g['id'],
@@ -276,6 +308,10 @@ function public_gallery_card_rendering_contexts(
             'cover_asset' => '',
             'cover' => null,
             'collage' => [],
+            'media_counts' => [
+                'pdf' => (int) ($pdfAttachmentCounts[$galleryId] ?? 0),
+                'music' => (int) ($musicAttachmentCounts[$galleryId] ?? 0),
+            ],
         ];
 
         if (!$isProtectedPublicCard) {
@@ -314,12 +350,27 @@ function public_gallery_card_rendering_contexts(
 /**
  * Emit one gallery card with its authorized cover, tags and optional controls.
  *
- * @param array{id:int|string,title?:string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,folder_path?:string,visibility?:string,description_layout?:string|null,updated_at?:string|null} $gallery Gallery card identity, cover choice and presentation settings.
+ * @param array{id:int|string,title?:string,description?:string|null,
+ *     folder_path?:string,parent_id?:int|string|null,access_mode?:string,
+ *     access_listing?:string,nsfw_enabled?:int|string,
+ *     count_badge_visibility?:string|null,cover_image_id?:int|string|null,
+ *     cover_image_ids?:string|null,cover_image_path?:string|null,
+ *     visibility?:string,description_layout?:string|null,
+ *     updated_at?:string|null} $gallery Gallery identity, content, access,
+ *     cover choice and presentation settings.
  * @param bool $publicOnly Apply public access restrictions to cover and metadata selection.
  * @param bool $showPublicReorderHandle Show public reorder handle value.
  * @param bool $showSubgalleryBadge Show subgallery badge value.
  * @param int $cardIndex Zero-based card position used to prioritize thumbnail loading.
- * @param array{cover_asset?:string,cover?:array{id:int|string,gallery_id:int|string,relative_path:string,filename?:string,visibility?:string}|null,collage?:list<array{id:int|string,gallery_id:int|string,relative_path:string,filename?:string,visibility?:string}>,description_layout?:string|null,branch_image_count?:int,total_image_count?:int} $cardContext Preloaded cover asset/image, collage, layout and branch-count values.
+ * @param array{cover_asset?:string,cover?:array{id:int|string,
+ *     gallery_id:int|string,relative_path:string,filename?:string,
+ *     visibility?:string}|null,collage?:list<array{id:int|string,
+ *     gallery_id:int|string,relative_path:string,filename?:string,
+ *     visibility?:string}>,description_layout?:string|null,
+ *     branch_image_count?:int,total_image_count?:int|null,
+ *     media_counts?:array{music:int,pdf:int}} $cardContext Preloaded covers,
+ *     layout and visitor-safe branch counts; a present media_counts key also
+ *     prevents retrying unavailable optional counts during rendering.
  * @param bool $pictureManagerEnabled Whether this physical gallery card participates in Picture manager selection.
  * @return void Emits the prepared gallery card.
  */
@@ -391,6 +442,30 @@ function render_gallery_card(
                 ))
         )
         : 0;
+    $mediaCounts = ['music' => 0, 'pdf' => 0];
+    if ($showCountBadge && gallery_access_requirement($gallery) === null) {
+        if (array_key_exists('media_counts', $cardContext)) {
+            $mediaCounts = $cardContext['media_counts'];
+        } else {
+            // Standalone cards share the same visitor-only reader as batched
+            // listings. This path never rebuilds an unavailable projection.
+            $galleryId = (int) $gallery['id'];
+            $musicCounts = gallery_branch_attachment_usage_counts(
+                [$galleryId],
+                'music',
+                true,
+            );
+            $pdfCounts = gallery_branch_attachment_usage_counts(
+                [$galleryId],
+                'pdf',
+                true,
+            );
+            $mediaCounts = [
+                'music' => (int) ($musicCounts[$galleryId] ?? 0),
+                'pdf' => (int) ($pdfCounts[$galleryId] ?? 0),
+            ];
+        }
+    }
     $totalImageCount = null;
     if (
         $showCountBadge
@@ -527,6 +602,7 @@ function render_gallery_card(
         'show_unpublished_marker' => $showAdminUnpublishedMarker,
         'show_count_badge' => $showCountBadge,
         'branch_image_count' => $branchImageCount,
+        'media_counts' => $mediaCounts,
         'count_badge' => $countBadgePresentation,
         'cover_asset' => $coverAsset,
         'cover_loading_attributes' => $coverLoadingAttributes,

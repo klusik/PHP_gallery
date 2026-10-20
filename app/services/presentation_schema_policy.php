@@ -324,6 +324,53 @@ function presentation_gps_exif_schema_status(): array
     ]);
 }
 
+/** Return three-state readiness for optional public attachment-count snapshots.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Both snapshot tables and every column used by the reader/writer.
+ */
+function presentation_gallery_attachment_usage_schema_status(): array
+{
+    return presentation_schema_tables_status(
+        'presentation.gallery_attachment_usage',
+        [
+            'gallery_attachment_usage_state' => [
+                'gallery_id',
+                'kind',
+                'state',
+                'revision',
+                'updated_at',
+            ],
+            'gallery_attachment_usage_items' => [
+                'gallery_id',
+                'kind',
+                'source_id',
+                'sha256',
+                'asset_id',
+                'album_id',
+                'hidden',
+            ],
+        ],
+    );
+}
+
+/** Return schema readiness for live music digest expansion during card reads.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Required current album membership and canonical asset columns.
+ */
+function presentation_gallery_attachment_usage_music_schema_status(): array
+{
+    return presentation_schema_tables_status(
+        'presentation.gallery_attachment_usage_music',
+        [
+            'music_album_songs' => ['album_id', 'song_id'],
+            'music_repository_assets' => [
+                'id',
+                'song_id',
+                'sha256',
+                'created_at',
+            ],
+        ],
+    );
+}
+
 /** @return array{state:string,feature:string,requirements:array} */
 function presentation_metadata_organizer_schema_status(): array
 {
@@ -753,6 +800,16 @@ function presentation_schema_health_definitions(): array
             'resolver' =>
                 static fn(): array => presentation_admin_gallery_report_schema_status(),
             'flag' => '',
+        ],
+        'presentation_gallery_attachment_usage' => [
+            'resolver' => static fn(): array =>
+                presentation_gallery_attachment_usage_schema_status(),
+            'flag' => '',
+        ],
+        'presentation_gallery_attachment_usage_music' => [
+            'resolver' => static fn(): array =>
+                presentation_gallery_attachment_usage_music_schema_status(),
+            'flag' => 'gallery_music',
         ],
     ];
 }

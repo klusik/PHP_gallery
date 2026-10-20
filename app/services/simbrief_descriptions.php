@@ -799,145 +799,249 @@ function simbrief_description_save_ofp_for_gallery(
         ];
     }
 
-    $ofpPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.json';
-    $manifestPath =
-        $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
-    $pdfPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
-    $pdfEnabled = feature_capability_effective_enabled('gallery_pdf_documents');
-    $pdfUrl = $pdfEnabled ? simbrief_description_pdf_url($payload) : '';
-    $pdfResult = $pdfUrl !== ''
-        ? simbrief_description_save_pdf_for_gallery($pdfUrl, $pdfPath)
-        : [
-            'saved' => false,
-            'path' => '',
-            'filename' => 'simbrief-ofp.pdf',
-            'url' => '',
-            'error' => '',
-        ];
-    // A network/download failure must not replace the last successfully saved
-    // OFP snapshot, nor remove its existing local PDF attachment and link.
-    if (
-        $pdfUrl !== ''
-        && empty($pdfResult['saved'])
-        && is_file($pdfPath)
-        && is_file($manifestPath)
-    ) {
-        return [
-            'saved' => false,
-            'path' => is_file($ofpPath) ? $ofpPath : '',
-            'manifest_path' => $manifestPath,
-            'filename' => 'simbrief-ofp.json',
-            'pdf_saved' => true,
-            'pdf_path' => $pdfPath,
-            'pdf_filename' => 'simbrief-ofp.pdf',
-            'pdf_url' => '',
-            'pdf_error' => (string) ($pdfResult['error'] ?? ''),
-            'error' => 'New SimBrief OFP PDF could not be downloaded. The previously imported OFP remains intact.',
-        ];
-    }
-    $jsonFlags =
-        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT;
-    $ofpJson = json_encode($payload, $jsonFlags);
-    if (!is_string($ofpJson)) {
-        return [
-            'saved' => false,
-            'path' => '',
-            'manifest_path' => '',
-            'filename' => 'simbrief-ofp.json',
-            'error' => 'SimBrief payload could not be encoded.',
-        ];
+    $usageLock = null;
+    $usageRevision = null;
+    if ((int) ($gallery['id'] ?? 0) > 0) {
+        try {
+            if (!function_exists(
+                'Gallery\\Services\\gallery_pdf_documents_usage_source_lock',
+            )) {
+                if (!function_exists('Gallery\\Core\\cms_runtime_kernel')) {
+                    throw new RuntimeException(
+                        'PDF attachment usage storage is unavailable.',
+                    );
+                }
+                \Gallery\Core\cms_runtime_kernel()->load(
+                    'gallery-pdf-documents',
+                );
+            }
+            if (!function_exists(
+                'Gallery\\Services\\gallery_pdf_documents_usage_source_lock',
+            )) {
+                throw new RuntimeException(
+                    'PDF attachment usage storage is unavailable.',
+                );
+            }
+            $usageLock = gallery_pdf_documents_usage_source_lock($gallery);
+        } catch (Throwable) {
+            return [
+                'saved' => false,
+                'path' => '',
+                'manifest_path' => '',
+                'filename' => 'simbrief-ofp.json',
+                'error' => 'PDF attachment storage is unavailable or busy.',
+            ];
+        }
     }
 
-    $now = function_exists('Gallery\\Core\\now_sql')
-        ? now_sql()
-        : gmdate('Y-m-d H:i:s');
-    $manifest = [
-        'format' => 'php_gallery_simbrief_ofp_manifest_v1',
-        'saved_at' => $now,
-        'identifier_type' => (string) ($identifier['label'] ?? ''),
-        'identifier_kind' => (string) ($identifier['kind'] ?? ''),
-        'origin' => (string) ($details['origin_code'] ?? ''),
-        'destination' => (string) ($details['destination_code'] ?? ''),
-        'flight' => (string) ($details['flight_label'] ?? ''),
-        'aircraft' => (string) ($details['aircraft'] ?? ''),
-        'airac' => (string) ($details['airac'] ?? ''),
-        'route_text' => (string) ($routeResult['route_text'] ?? ''),
-        'route_point_count' => (int) ($routeResult['point_count'] ?? 0),
-        'route_unresolved_count' => (int) (
-            $routeResult['unresolved_count'] ?? 0
-        ),
-        'ofp_file' => 'simbrief-ofp.json',
-        // PDF OFF preserves an old original for re-enable. Description and
-        // route JSON can still be refreshed without fetching any PDF bytes.
-        'ofp_pdf_file' => !empty($pdfResult['saved'])
-        || (!$pdfEnabled && is_file($pdfPath))
-            ? 'simbrief-ofp.pdf'
-            : '',
-        'ofp_pdf_url' => (string) ($pdfResult['url'] ?? ''),
-    ];
-    $manifestJson = json_encode($manifest, $jsonFlags);
-    if (!is_string($manifestJson)) {
-        return [
-            'saved' => false,
-            'path' => '',
-            'manifest_path' => '',
-            'filename' => 'simbrief-ofp.json',
-            'error' => 'SimBrief manifest could not be encoded.',
-        ];
-    }
+    try {
+        if ($usageLock !== null) {
+            try {
+                $usageRevision = gallery_pdf_documents_usage_begin(
+                    $gallery,
+                    'simbrief_description_save_ofp',
+                );
+            } catch (Throwable) {
+                return [
+                    'saved' => false,
+                    'path' => '',
+                    'manifest_path' => '',
+                    'filename' => 'simbrief-ofp.json',
+                    'error' => 'PDF attachment usage schema could not be verified.',
+                ];
+            }
+        }
 
-    if (file_put_contents($ofpPath, $ofpJson . "\n", LOCK_EX) === false) {
-        return [
-            'saved' => false,
-            'path' => '',
-            'manifest_path' => '',
-            'filename' => 'simbrief-ofp.json',
-            'error' => 'Could not write simbrief-ofp.json.',
+        $ofpPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.json';
+        $manifestPath =
+            $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
+        $pdfPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
+        $pdfEnabled = feature_capability_effective_enabled('gallery_pdf_documents');
+        $pdfUrl = $pdfEnabled ? simbrief_description_pdf_url($payload) : '';
+        $pdfResult = $pdfUrl !== ''
+            ? simbrief_description_save_pdf_for_gallery($pdfUrl, $pdfPath)
+            : [
+                'saved' => false,
+                'path' => '',
+                'filename' => 'simbrief-ofp.pdf',
+                'url' => '',
+                'error' => '',
+            ];
+        // A network/download failure must not replace the last successfully saved
+        // OFP snapshot, nor remove its existing local PDF attachment and link.
+        if (
+            $pdfUrl !== ''
+            && empty($pdfResult['saved'])
+            && is_file($pdfPath)
+            && is_file($manifestPath)
+        ) {
+            if ($usageLock !== null) {
+                try {
+                    $existingIndexState = gallery_pdf_documents_read_index_state(
+                        $galleryRoot,
+                    );
+                    gallery_pdf_documents_usage_publish(
+                        $gallery,
+                        $usageRevision,
+                        $existingIndexState['documents'],
+                        $existingIndexState['ofp_hidden'],
+                        simbrief_ofp_gallery_manifest($gallery),
+                    );
+                } catch (Throwable) {
+                    error_log(
+                        'OFP source unchanged; attachment usage remains dirty.',
+                    );
+                }
+            }
+            return [
+                'saved' => false,
+                'path' => is_file($ofpPath) ? $ofpPath : '',
+                'manifest_path' => $manifestPath,
+                'filename' => 'simbrief-ofp.json',
+                'pdf_saved' => true,
+                'pdf_path' => $pdfPath,
+                'pdf_filename' => 'simbrief-ofp.pdf',
+                'pdf_url' => '',
+                'pdf_error' => (string) ($pdfResult['error'] ?? ''),
+                'error' => 'New SimBrief OFP PDF could not be downloaded. The previously imported OFP remains intact.',
+            ];
+        }
+        $jsonFlags =
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT;
+        $ofpJson = json_encode($payload, $jsonFlags);
+        if (!is_string($ofpJson)) {
+            return [
+                'saved' => false,
+                'path' => '',
+                'manifest_path' => '',
+                'filename' => 'simbrief-ofp.json',
+                'error' => 'SimBrief payload could not be encoded.',
+            ];
+        }
+    
+        $now = function_exists('Gallery\\Core\\now_sql')
+            ? now_sql()
+            : gmdate('Y-m-d H:i:s');
+        $previousManifest = simbrief_ofp_gallery_manifest($gallery);
+        $manifest = [
+            'format' => 'php_gallery_simbrief_ofp_manifest_v1',
+            'saved_at' => $now,
+            'identifier_type' => (string) ($identifier['label'] ?? ''),
+            'identifier_kind' => (string) ($identifier['kind'] ?? ''),
+            'origin' => (string) ($details['origin_code'] ?? ''),
+            'destination' => (string) ($details['destination_code'] ?? ''),
+            'flight' => (string) ($details['flight_label'] ?? ''),
+            'aircraft' => (string) ($details['aircraft'] ?? ''),
+            'airac' => (string) ($details['airac'] ?? ''),
+            'route_text' => (string) ($routeResult['route_text'] ?? ''),
+            'route_point_count' => (int) ($routeResult['point_count'] ?? 0),
+            'route_unresolved_count' => (int) (
+                $routeResult['unresolved_count'] ?? 0
+            ),
+            'ofp_file' => 'simbrief-ofp.json',
+            // PDF OFF preserves an old original for re-enable. Description and
+            // route JSON can still be refreshed without fetching any PDF bytes.
+            'ofp_pdf_file' => !empty($pdfResult['saved'])
+            || (!$pdfEnabled && is_file($pdfPath))
+                ? 'simbrief-ofp.pdf'
+                : '',
+            'ofp_pdf_sha256' => !empty($pdfResult['saved'])
+                ? (string) ($pdfResult['sha256'] ?? '')
+                : (!$pdfEnabled
+                    ? (string) ($previousManifest['ofp_pdf_sha256'] ?? '')
+                    : ''),
+            'ofp_pdf_url' => (string) ($pdfResult['url'] ?? ''),
         ];
-    }
-    if (
-        file_put_contents($manifestPath, $manifestJson . "\n", LOCK_EX)
-        === false
-    ) {
+        if ($manifest['ofp_pdf_sha256'] === '') {
+            unset($manifest['ofp_pdf_sha256']);
+        }
+        $manifestJson = json_encode($manifest, $jsonFlags);
+        if (!is_string($manifestJson)) {
+            return [
+                'saved' => false,
+                'path' => '',
+                'manifest_path' => '',
+                'filename' => 'simbrief-ofp.json',
+                'error' => 'SimBrief manifest could not be encoded.',
+            ];
+        }
+    
+        if (file_put_contents($ofpPath, $ofpJson . "\n", LOCK_EX) === false) {
+            return [
+                'saved' => false,
+                'path' => '',
+                'manifest_path' => '',
+                'filename' => 'simbrief-ofp.json',
+                'error' => 'Could not write simbrief-ofp.json.',
+            ];
+        }
+        if (
+            file_put_contents($manifestPath, $manifestJson . "\n", LOCK_EX)
+            === false
+        ) {
+            return [
+                'saved' => true,
+                'path' => $ofpPath,
+                'manifest_path' => '',
+                'filename' => 'simbrief-ofp.json',
+                'pdf_saved' => !empty($pdfResult['saved']),
+                'pdf_path' => (string) ($pdfResult['path'] ?? ''),
+                'pdf_filename' => 'simbrief-ofp.pdf',
+                'pdf_url' => (string) ($pdfResult['url'] ?? ''),
+                'pdf_error' => (string) ($pdfResult['error'] ?? ''),
+                'error' => 'Could not write simbrief-ofp-manifest.json.',
+            ];
+        }
+    
+        if ((int) ($gallery['id'] ?? 0) > 0) {
+            require_once __DIR__ . '/gallery_pdf_settings.php';
+            // A disabled PDF feature retains the existing original and its bytes.
+            $pdfSize = $manifest['ofp_pdf_file'] === 'simbrief-ofp.pdf'
+            && !is_link($pdfPath)
+                ? @filesize($pdfPath)
+                : false;
+            gallery_attachment_storage_record(
+                (int) $gallery['id'],
+                'ofp',
+                $pdfSize === false ? [] : [['size' => $pdfSize]],
+            );
+            if ($usageLock !== null) {
+                try {
+                    $indexState = gallery_pdf_documents_read_index_state(
+                        $galleryRoot,
+                    );
+                    gallery_pdf_documents_usage_publish(
+                        $gallery,
+                        $usageRevision,
+                        $indexState['documents'],
+                        $indexState['ofp_hidden'],
+                        $manifest,
+                    );
+                } catch (Throwable) {
+                    error_log(
+                        'OFP source committed; attachment usage remains dirty.',
+                    );
+                }
+            }
+        }
         return [
             'saved' => true,
             'path' => $ofpPath,
-            'manifest_path' => '',
+            'manifest_path' => $manifestPath,
             'filename' => 'simbrief-ofp.json',
             'pdf_saved' => !empty($pdfResult['saved']),
             'pdf_path' => (string) ($pdfResult['path'] ?? ''),
             'pdf_filename' => 'simbrief-ofp.pdf',
             'pdf_url' => (string) ($pdfResult['url'] ?? ''),
             'pdf_error' => (string) ($pdfResult['error'] ?? ''),
-            'error' => 'Could not write simbrief-ofp-manifest.json.',
+            'error' => '',
         ];
+    } finally {
+        if (is_resource($usageLock)) {
+            flock($usageLock, LOCK_UN);
+            fclose($usageLock);
+        }
     }
-
-    if ((int) ($gallery['id'] ?? 0) > 0) {
-        require_once __DIR__ . '/gallery_pdf_settings.php';
-        // A disabled PDF feature retains the existing original and its bytes.
-        $pdfSize = $manifest['ofp_pdf_file'] === 'simbrief-ofp.pdf'
-        && !is_link($pdfPath)
-            ? @filesize($pdfPath)
-            : false;
-        gallery_attachment_storage_record(
-            (int) $gallery['id'],
-            'ofp',
-            $pdfSize === false ? [] : [['size' => $pdfSize]],
-        );
-    }
-    return [
-        'saved' => true,
-        'path' => $ofpPath,
-        'manifest_path' => $manifestPath,
-        'filename' => 'simbrief-ofp.json',
-        'pdf_saved' => !empty($pdfResult['saved']),
-        'pdf_path' => (string) ($pdfResult['path'] ?? ''),
-        'pdf_filename' => 'simbrief-ofp.pdf',
-        'pdf_url' => (string) ($pdfResult['url'] ?? ''),
-        'pdf_error' => (string) ($pdfResult['error'] ?? ''),
-        'error' => '',
-    ];
 }
 
 /**
@@ -1099,7 +1203,7 @@ function simbrief_description_normalize_pdf_url(
  *
  * @param string $pdfUrl Trusted-provider PDF URL selected from an OFP payload.
  * @param string $targetPath Confined gallery attachment destination.
- * @return array{saved:bool,path:string,filename:string,url:string,error:string} Downloaded PDF attachment metadata or an actionable error.
+ * @return array{saved:bool,path:string,filename:string,url:string,error:string,sha256?:string} Downloaded PDF attachment metadata or an actionable error.
  */
 function simbrief_description_save_pdf_for_gallery(
     string $pdfUrl,
@@ -1194,6 +1298,7 @@ function simbrief_description_save_pdf_for_gallery(
         'filename' => 'simbrief-ofp.pdf',
         'url' => $safeUrl,
         'error' => '',
+        'sha256' => hash('sha256', $body),
     ];
 }
 

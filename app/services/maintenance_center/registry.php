@@ -211,6 +211,24 @@ function maintenance_center_task_registry(): array
             'executor' => __NAMESPACE__
                 . '\\maintenance_center_execute_music_repository',
         ],
+        'media.attachment_usage' => [
+            'group' => 'media',
+            'label_key' => 'admin.maintenance_center.task.attachment_usage',
+            'label' => 'Reconcile gallery media counts',
+            'risk' => 'low',
+            'mutates' => true,
+            'resumable' => true,
+            'progress_unit' => 'galleries',
+            'dependencies' => ['preflight'],
+            'feature_requirement' => null,
+            'default_selected' => true,
+            'required' => false,
+            'weight_floor' => MAINTENANCE_CENTER_ATTACHMENT_USAGE_WEIGHT,
+            'analyzer' => __NAMESPACE__
+                . '\\maintenance_center_analyze_attachment_usage',
+            'executor' => __NAMESPACE__
+                . '\\maintenance_center_execute_attachment_usage',
+        ],
         'media.deep_verify' => [
             'group' => 'media',
             'label_key' => 'admin.maintenance_center.task.media_deep',

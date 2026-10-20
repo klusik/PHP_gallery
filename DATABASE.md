@@ -1,7 +1,7 @@
 # PHP Gallery Database Documentation
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.138. Version 0.97 adds the recoverable gallery-trash
+application version 0.139. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -97,6 +97,44 @@ Out-of-band filesystem edits require invalidating the affected accounting rows
 before Update all; repeat refreshes deliberately trust the database. See
 [attachment reconciliation](docs/GALLERY_PDF.md#admin-storage-accounting).
 Original storage remains under its existing owners.
+
+Optional public PDF/music card badges use the derived
+`gallery_attachment_usage_state` and `gallery_attachment_usage_items` tables
+from migration `202610200004_gallery_attachment_usage.php`. A ready snapshot
+with no items is known zero; absent or dirty state is unknown and never means
+zero. Public rendering omits the affected media-kind badge when any
+access-eligible gallery in the subtree lacks a ready snapshot or that kind's
+schema is unavailable. The projection stores unique recorded digests
+or live music album references and excludes hidden items; current access,
+visibility and capability rules still govern the count. Digests are unique
+within each media kind; one identical PDF and music file may count once in each
+kind. Originals and their existing indexes remain authoritative, and public
+card reads do not inspect or
+hash original files. Supported source mutations mark affected projections dirty
+before changing the source and publish replacement snapshots when possible.
+Manual filesystem edits require reconciliation.
+
+When a new gallery has no PDF, music or OFP source metadata, its creator may
+insert ready-empty rows for both kinds. This insert-only seed never replaces a
+concurrent dirty or ready state. The reconciler and source writers share a
+persistent `.simbrief-ofp-upload.lock`; music reconciliation also uses the
+private `.gallery-music/.lock`. Busy locks defer work until a later step.
+
+Maintenance Center offers a default-selected, optional reconciliation task
+for legacy data. It processes at most 25 galleries per step and hashes at most
+one legacy OFP candidate per step, capped at 25 MiB. If the existing OFP
+manifest lacks a valid digest, the task writes `ofp_pdf_sha256` by atomic
+manifest replacement while holding the shared lock; PDF/audio original bytes
+remain unchanged. Its persisted cursor makes work resumable; per-gallery
+failures remain dirty and their public badges stay omitted for later retry.
+Analysis is read-only. This projection is separate from `gallery_attachment_storage`,
+which remains the source for physical storage totals.
+
+Database maintenance registers both usage tables as derived gallery-card cache
+owned by the gallery attachment-usage projection. Generic logical cleanup is
+disabled and physical optimization is manual; deleting a gallery cascades to
+its usage rows through the declared foreign keys. These policies apply only to
+the two usage tables and do not change cleanup ownership of other music tables.
 
 Gallery music selections remain outside SQL. Each physical gallery's denied
 `.gallery-music/index.json` stores its ordered direct references and metadata,

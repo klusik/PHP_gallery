@@ -47,10 +47,20 @@ function gallery_music_publish_migration_state(array $gallery, array $state): vo
     $galleryId = (int) $gallery['id'];
     \Gallery\Models\music_catalog_model_mark_gallery_dirty($galleryId);
     $catalogRevision = music_catalog_revision();
+    $usageRevision = gallery_music_attachment_usage_begin($galleryId);
     \Gallery\Models\gallery_music_model_write(
         gallery_music_directory($gallery),
         $state,
     );
+    try {
+        gallery_music_attachment_usage_publish(
+            $galleryId,
+            $state,
+            $usageRevision,
+        );
+    } catch (\Throwable) {
+        // A committed playlist remains usable; the dirty projection is retried by maintenance.
+    }
     music_catalog_sync_gallery_snapshot(
         $galleryId,
         $state['tracks'],

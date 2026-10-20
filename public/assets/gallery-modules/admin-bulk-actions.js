@@ -63,12 +63,114 @@ function i18n(key, fallback, parameters = {}) {
     return text;
 }
 
+/** Remember the most recent checkbox anchor for a compatible bulk list.
+ * @type {{checkbox:HTMLInputElement,form:HTMLFormElement|null,name:string,container:Element|Document}|null}
+ */
+let adminBulkSelectionRangeAnchor = null;
+
+/** Clear a range anchor after the owning list or its filters change.
+ * @returns {void} Removes the previous form, field name, and list identity.
+ */
+function resetAdminBulkSelectionRangeAnchor() {
+    adminBulkSelectionRangeAnchor = null;
+}
+
+/** Find the nearest bounded list or table for one submitted checkbox.
+ * @param {HTMLInputElement} checkbox Candidate bulk item checkbox.
+ * @returns {Element|Document} Nearest item container, or its form/document fallback.
+ */
+function adminBulkSelectionList(checkbox) {
+    return checkbox.closest(
+        'table, [role="list"], ul, ol, #media-renamer-gallery-list, '
+        + '.admin-database-table-selection',
+    ) || checkbox.form || document;
+}
+
+/** Check whether an input is an enabled, visible item checkbox in a bulk list.
+ * @param {Element} element Candidate control in the list.
+ * @param {HTMLFormElement|null} form Form owner shared by the range.
+ * @param {string} name Exact submitted checkbox name shared by the range.
+ * @param {Element|Document} container Visible list or table shared by the range.
+ * @returns {boolean} True only for a visible checkbox with matching ownership.
+ */
+function isAdminBulkSelectionChoice(element, form, name, container) {
+    const style = element instanceof HTMLInputElement
+        ? element.ownerDocument.defaultView.getComputedStyle(element)
+        : null;
+    return element instanceof HTMLInputElement
+        && element.type === 'checkbox'
+        && !element.matches(':disabled')
+        && element.name === name
+        && !element.matches(
+            '[data-select-all], [data-admin-log-select-page], '
+            + '[data-admin-log-export-filter], [data-admin-log-live-filter]',
+        )
+        && (element.form || element.closest('form') || null) === form
+        && adminBulkSelectionList(element) === container
+        && element.getClientRects().length > 0
+        && style?.visibility !== 'hidden'
+        && style?.visibility !== 'collapse';
+}
+
+/** Apply the clicked checkbox state across a compatible visible range.
+ * @param {HTMLInputElement} checkbox Clicked bulk item checkbox.
+ * @param {boolean} extendRange Whether Shift extends the saved range.
+ * @returns {void} Updates enabled choices and emits their ordinary change events.
+ */
+function applyAdminBulkSelectionRange(checkbox, extendRange) {
+    const name = checkbox.name;
+    const form = checkbox.form || checkbox.closest('form') || null;
+    const container = adminBulkSelectionList(checkbox);
+    const eligibleName = /(?:^|_)(?:ids|tables)\[\]$/i.test(name)
+        && !/^theme_/i.test(name);
+    if (!eligibleName
+        || !isAdminBulkSelectionChoice(checkbox, form, name, container)) {
+        resetAdminBulkSelectionRangeAnchor();
+        return;
+    }
+
+    const choices = Array.from(
+        container.querySelectorAll('input[type="checkbox"]'),
+    ).filter(element => isAdminBulkSelectionChoice(
+        element,
+        form,
+        name,
+        container,
+    ));
+    const anchor = adminBulkSelectionRangeAnchor;
+    if (extendRange
+        && anchor?.checkbox.isConnected
+        && anchor.form === form
+        && anchor.name === name
+        && anchor.container === container
+        && choices.includes(anchor.checkbox)) {
+        const start = Math.min(
+            choices.indexOf(anchor.checkbox),
+            choices.indexOf(checkbox),
+        );
+        const end = Math.max(
+            choices.indexOf(anchor.checkbox),
+            choices.indexOf(checkbox),
+        );
+        for (const choice of choices.slice(start, end + 1)) {
+            if (choice === checkbox || choice.checked === checkbox.checked) {
+                continue;
+            }
+            choice.checked = checkbox.checked;
+            choice.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        return;
+    }
+
+    adminBulkSelectionRangeAnchor = {checkbox, form, name, container};
+}
+
 /**
  * Handle setup admin bulk selection.
  *
  * Used by browser-side gallery behavior.
  *
- * @return {boolean} True when the condition matches.
+ * @return {void} Installs delegated selection listeners for current and refreshed lists.
  */
 export function setupAdminBulkSelection() {
     // Table-level select-all checkboxes are scoped by input name and form. When
@@ -77,6 +179,10 @@ export function setupAdminBulkSelection() {
     document.addEventListener('change', (event) => {
         // Variable `checkbox` stores this steps working value.
         const checkbox = event.target;
+        if (checkbox instanceof HTMLInputElement
+            && checkbox.matches('[data-select-all]')) {
+            resetAdminBulkSelectionRangeAnchor();
+        }
         if (!(checkbox instanceof HTMLInputElement) || !checkbox.matches('[data-select-all]')) {
             return;
         }
@@ -104,6 +210,42 @@ export function setupAdminBulkSelection() {
             item.dispatchEvent(new Event('change', {bubbles: true}));
         });
     });
+    document.addEventListener('click', event => {
+        const target = event.target;
+        const checkbox = target instanceof Element
+            ? target.closest('input[type="checkbox"]') : null;
+        if (!(checkbox instanceof HTMLInputElement)) return;
+        applyAdminBulkSelectionRange(checkbox, event.shiftKey === true);
+    });
+    document.addEventListener('input', event => {
+        const target = event.target;
+        if (!(target instanceof Element)
+            || target.closest('[data-admin-log-filter-form]')
+            || target.matches(
+                '[data-gallery-visibility-filter], [data-media-renamer-search], '
+                + '[data-admin-log-page-input], [data-admin-log-severity-filter] input',
+            )) {
+            resetAdminBulkSelectionRangeAnchor();
+        }
+    }, true);
+    document.addEventListener('change', event => {
+        const target = event.target;
+        if (!(target instanceof Element)
+            || target.closest('[data-admin-log-filter-form]')
+            || target.matches(
+                '[data-gallery-visibility-filter], [data-admin-log-page-input], '
+                + '[data-admin-log-severity-filter] input',
+            )) {
+            resetAdminBulkSelectionRangeAnchor();
+        }
+    }, true);
+    document.addEventListener('click', event => {
+        const target = event.target;
+        if (target instanceof Element
+            && target.closest('[data-admin-log-page-link]')) {
+            resetAdminBulkSelectionRangeAnchor();
+        }
+    }, true);
 }
 
 /**

@@ -210,7 +210,8 @@ async function serveFixture(request, response) {
     }
     if (pathname === '/__viewport' && fixtureName === 'gallery_tags.html') {
         const width = Number(new URL(request.url, 'http://localhost').searchParams.get('width'));
-        if (width !== 390) { response.writeHead(400).end(); return; }
+        // Narrow cards and the complete desktop hero use fixed layout vectors.
+        if (![390, 1280].includes(width)) { response.writeHead(400).end(); return; }
         try { await browserReady; await setFixtureWidth(width); response.end('ok'); }
         catch { response.writeHead(500).end('Viewport fixture unavailable'); }
         return;

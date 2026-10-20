@@ -33,7 +33,7 @@
  *     thumbnail selection, URL generation, and mutation configuration.
  *
  * Last Updated:
- *   2026-09-14
+ *   2026-10-20
  */
 
 declare(strict_types=1);
@@ -58,7 +58,37 @@ function view_public_gallery_description_layout_hook(string $layout): string
 /**
  * Render one physical public gallery card.
  *
- * @param array{gallery_id?:int,title?:string,url?:string,visibility?:string,description_layout?:string,is_protected?:bool,show_reorder_handle?:bool,show_unpublished_marker?:bool,show_count_badge?:bool,picture_manager_enabled?:bool,branch_image_count?:int,cover_asset?:string,cover_picture_html?:string,collage_picture_html?:list<string>,cover_loading_attributes?:string,cover_selection_revision?:string,updated_at?:string,description?:string,description_links?:array<string,array{icon_id:?string,cached_url:?string}>} $viewModel Controller-prepared card presentation and public cover-selection revision.
+ * @param array{
+ *     gallery_id?:int,
+ *     title?:string,
+ *     url?:string,
+ *     visibility?:string,
+ *     description_layout?:string,
+ *     is_protected?:bool,
+ *     show_reorder_handle?:bool,
+ *     show_unpublished_marker?:bool,
+ *     show_count_badge?:bool,
+ *     picture_manager_enabled?:bool,
+ *     branch_image_count?:int,
+ *     count_badge?:array{admin?:bool,mode?:string,public_count?:int,
+ *         all_count?:int,icons?:bool},
+ *     media_counts?:array{music:int,pdf:int},
+ *     cover_asset?:string,
+ *     cover_picture_html?:string,
+ *     collage_picture_html?:list<string>,
+ *     cover_loading_attributes?:string,
+ *     cover_selection_revision?:string,
+ *     updated_at?:string,
+ *     description?:string,
+ *     description_links?:array<string,array{icon_id:?string,cached_url:?string}>,
+ *     horizontal_meta_html?:string,
+ *     date_html?:string,
+ *     tag_list_view_model?:array{items:list<array{name:string,href:?string}>,
+ *         label:?string,visible_limit?:int,display_all?:bool,
+ *         scrollbar_enabled?:bool,scrollbar_rows?:int},
+ *     tag_list_html?:string,
+ *     admin_controls_html?:string
+ * } $viewModel Controller-prepared card state and policy-approved unique descendant media counts.
  * @return void Emits canonical card content using compatible historical CSS classes.
  */
 function view_render_public_gallery_card(array $viewModel): void
@@ -76,6 +106,14 @@ function view_render_public_gallery_card(array $viewModel): void
     $showCountBadge = !empty($viewModel['show_count_badge']);
     $pictureManagerEnabled = !empty($viewModel['picture_manager_enabled']);
     $branchImageCount = max(0, (int) ($viewModel['branch_image_count'] ?? 0));
+    $mediaCounts = is_array($viewModel['media_counts'] ?? null)
+        ? $viewModel['media_counts']
+        : [];
+    $musicFileCount = max(0, (int) ($mediaCounts['music'] ?? 0));
+    $pdfFileCount = max(0, (int) ($mediaCounts['pdf'] ?? 0));
+    $showMediaCountBadges = !$isProtected
+        && $showCountBadge
+        && ($musicFileCount > 0 || $pdfFileCount > 0);
     $coverAsset = (string) ($viewModel['cover_asset'] ?? '');
     $coverPictureHtml = (string) ($viewModel['cover_picture_html'] ?? '');
     $collagePictureHtml = array_values(array_filter(
@@ -170,28 +208,56 @@ function view_render_public_gallery_card(array $viewModel): void
                 'title' => $title,
             ]))
             . '">';
-    if ($showCountBadge) {
-        $badge = (array) ($viewModel['count_badge'] ?? []);
-        if (!empty($badge['admin'])) {
+    if ($showCountBadge || $showMediaCountBadges) {
+        echo '<span class="gallery-card-media-count-stack">';
+        if ($showCountBadge) {
+            $badge = (array) ($viewModel['count_badge'] ?? []);
+            if (!empty($badge['admin'])) {
+                echo
+                    '<span class="subgallery-stack-badge gallery-count-badge-admin" aria-label="'
+                        . e(view_gallery_count_admin_label($badge))
+                        . '">';
+                view_gallery_count_admin_values($badge);
+                echo '</span>';
+            } else {
+                // Preserve the existing single public photo-count badge.
+                echo
+                    '<span class="subgallery-stack-badge" aria-label="'
+                        . e(t(
+                            'gallery.card.subgallery_image_count',
+                            'Subgallery containing {count} images',
+                            ['count' => $branchImageCount],
+                        ))
+                        . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">'
+                        . $branchImageCount
+                        . '</span></span>';
+            }
+        }
+        if ($showMediaCountBadges && $pdfFileCount > 0) {
             echo
-                '<span class="subgallery-stack-badge gallery-count-badge-admin" aria-label="'
-                    . e(view_gallery_count_admin_label($badge))
-                    . '">';
-            view_gallery_count_admin_values($badge);
-            echo '</span>';
-        } else {
-            // Preserve the exact single public count badge for ordinary visitors.
-            echo
-                '<span class="subgallery-stack-badge" aria-label="'
+                '<span class="subgallery-stack-badge gallery-media-count-badge" role="img" aria-label="'
                     . e(t(
-                        'gallery.card.subgallery_image_count',
-                        'Subgallery containing {count} images',
-                        ['count' => $branchImageCount],
+                        'gallery.card.pdf_file_count',
+                        '{count} unique PDF files in this gallery and subgalleries',
+                        ['count' => $pdfFileCount],
                     ))
-                    . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">'
-                    . $branchImageCount
+                    . '"><svg class="gallery-media-count-icon gallery-media-count-icon-pdf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 2.75h8l4 4v14.5H6zM14 2.75v4h4M8.5 12h7M8.5 15h7M8.5 18h4"/></svg><span class="subgallery-stack-count">'
+                    . $pdfFileCount
                     . '</span></span>';
         }
+        if ($showMediaCountBadges && $musicFileCount > 0) {
+            echo
+                '<span class="subgallery-stack-badge gallery-media-count-badge" role="img" aria-label="'
+                    . e(t(
+                        'gallery.card.music_file_count',
+                        '{count} unique music files in this gallery and subgalleries',
+                        ['count' => $musicFileCount],
+                    ))
+                    . '"><svg class="gallery-media-count-icon gallery-media-count-icon-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></svg><span class="subgallery-stack-count">'
+                    . $musicFileCount
+                    . '</span></span>';
+        }
+        echo '</span>';
     }
     if ($isProtected) {
         echo

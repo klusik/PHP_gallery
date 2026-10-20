@@ -69,7 +69,7 @@ import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261017-media-summary-v1';
 import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
-import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261020-music-tabs-popover-drag-v6';
+import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261020-merge-selected-survivor-v2';
 import {
     setupGalleryMusicPlayback,
 } from './gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
@@ -78,7 +78,7 @@ import {
 } from './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1';
 import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261016-three-state-covers-v1';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
-import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261020-unified-media-forms-v1';
+import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261020-shift-range-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
@@ -104,7 +104,7 @@ import { setupPublicThumbnailRenderDiagnostics } from './gallery-modules/public-
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
 import { setupGalleryDownload } from './gallery-modules/gallery-download.js?v=20260903-download-capability-stage4-v1';
-import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261003-images-v4';
+import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20261020-shift-range-v1';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20261018-presentation-confirm-v1';
 import {
     setupAdminGalleryFilters,
@@ -125,7 +125,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261020-unified-media-forms-v1';
+} from './gallery-modules/admin-operations.js?v=20261020-shift-range-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

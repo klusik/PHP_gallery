@@ -21,7 +21,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.138';
+const CMS_VERSION = '0.139';
 ```
 
 Update-related code uses:
@@ -186,6 +186,27 @@ a persisted journal. Central originals survive gallery deletion and Trash.
 Storage reporting adds their SQL byte totals once and accounts remaining local
 copies separately; ordinary gallery links never duplicate physical totals.
 
+Public PDF/music card counts use a separate optional derived projection under
+the existing `gallery-pdf-documents` runtime owner. The ready snapshot covers
+unique source digests and live album references across accessible descendants;
+current access, visibility, hidden-state and capability rules still apply.
+Unknown or dirty rows omit the optional badge. Cards place nonzero PDF/music
+badges in a compact right-aligned stack below the photo-count badge; when that
+badge is enabled, the opened gallery's action bar places the same counts inline
+immediately to its left. Public rendering reads projection rows only and never
+reads or hashes original media; source originals and indexes remain authoritative.
+Supported mutations invalidate projection
+state before source changes, while manual filesystem edits require the explicit
+bounded Maintenance Center reconciliation. The default-selected task processes
+up to 25 galleries per step and hashes at most one legacy OFP candidate up to
+25 MiB per step. If required, it writes the resulting digest to the existing
+OFP manifest by atomic replacement under the persistent shared source lock;
+original PDF/audio bytes remain unchanged. Music reads also acquire a private
+`.gallery-music/.lock`, creating that sidecar directory when needed. A new empty
+gallery may receive insert-only ready-zero states only when no source metadata
+exists. Analysis remains read-only. This shares an existing logical module and
+does not add a root.
+
 Runtime source impact before this batch: 98 logical modules, 4,085 direct file
 entries, 441 unique PHP files and 3,644 duplicate entries in the tracked plan.
 The global module allowance (96 plus two) is consumed. This batch reuses the
@@ -229,10 +250,19 @@ fragment replacement.
 The compact `admin_music` controller delegates catalog operations to
 `app/services/music_catalog.php`; its model owns SQL and revision-locked
 transactions. The music capability gates the route and navigation together.
+The model batches existing gallery path fields for song usages and repository
+origins. The controller prepares canonical, localized public URLs for both
+rendered links and mutation contexts; a missing gallery contributes no URL.
 The manager shares the existing taxonomy administration runtime root so the
 consumed logical-module allowance does not grow. `tags.media_type` isolates
 image/gallery assignments from music assignments, with PDF reserved. Existing
 image slugs retain their globally unique namespace.
+
+`admin-bulk-actions.js` owns Shift-click selection ranges for Admin item lists.
+Ranges share the exact checkbox name, native form owner and visible list,
+exclude hidden or disabled items, and emit ordinary change events. Detached
+anchors cannot extend into replacement fragments. The Images module retains
+selection presentation while using this shared range owner.
 
 ## Runtime slideshow timing controls
 

@@ -88,6 +88,87 @@ const GALLERY_MUSIC_ALBUM_MEMBER_LIMIT = 2000;
  */
 const GALLERY_MUSIC_ALBUM_MEMBER_BATCH = 100;
 
+/** Begin an optional music usage snapshot generation before a playlist write.
+ * @param int $galleryId Persisted physical gallery identifier.
+ * @return string|null Fresh CAS token when schema is available; null for a confirmed legacy schema without the optional tables.
+ * @throws \RuntimeException When schema readiness is unknown or dirty marking fails.
+ */
+function gallery_music_attachment_usage_begin(int $galleryId): ?string
+{
+    if (
+        !function_exists(__NAMESPACE__ . '\\presentation_gallery_attachment_usage_schema_status')
+        || !function_exists(__NAMESPACE__ . '\\presentation_schema_assert_known')
+        || !function_exists(__NAMESPACE__ . '\\schema_inspection_is_available')
+    ) {
+        throw new \RuntimeException(
+            'Attachment usage schema could not be verified.',
+        );
+    }
+    $status = presentation_gallery_attachment_usage_schema_status();
+    presentation_schema_assert_known(
+        $status,
+        'gallery.music_usage_snapshot',
+    );
+    if (!schema_inspection_is_available($status)) {
+        return null;
+    }
+    return \Gallery\Models\gallery_model_attachment_usage_mark_dirty(
+        $galleryId,
+        'music',
+    );
+}
+
+/** Convert the complete authoritative music state to usage projection rows.
+ * @param array{tracks:list<array{id:string,sha256:string,hidden:bool,asset_id?:string}>,albums?:list<array{id:string,album_id:int,hidden:bool}>} $state Raw validated playlist state.
+ * @return list<array{source_id:string,sha256:?string,asset_id:?string,album_id:?int,hidden:bool}> Direct digests, canonical assets, and live album assignments.
+ */
+function gallery_music_attachment_usage_items(array $state): array
+{
+    $items = [];
+    foreach ($state['tracks'] as $track) {
+        $assetId = $track['asset_id'] ?? null;
+        $items[] = [
+            'source_id' => 'track:' . $track['id'],
+            'sha256' => is_string($assetId) ? null : $track['sha256'],
+            'asset_id' => is_string($assetId) ? $assetId : null,
+            'album_id' => null,
+            'hidden' => $track['hidden'],
+        ];
+    }
+    foreach ($state['albums'] ?? [] as $album) {
+        $items[] = [
+            'source_id' => 'album:' . $album['id'],
+            'sha256' => null,
+            'asset_id' => null,
+            'album_id' => $album['album_id'],
+            'hidden' => $album['hidden'],
+        ];
+    }
+    return $items;
+}
+
+/** Publish a playlist snapshot only while its source generation is current.
+ * @param int $galleryId Persisted physical gallery identifier.
+ * @param array{tracks:list<array{id:string,sha256:string,hidden:bool,asset_id?:string}>,albums?:list<array{id:string,album_id:int,hidden:bool}>} $state Complete authoritative raw playlist state.
+ * @param string|null $revision CAS token from gallery_music_attachment_usage_begin, null for confirmed missing legacy schema.
+ * @return bool True when the current generation was published or optional schema is confirmed missing.
+ */
+function gallery_music_attachment_usage_publish(
+    int $galleryId,
+    array $state,
+    ?string $revision,
+): bool {
+    if ($revision === null) {
+        return true;
+    }
+    return \Gallery\Models\gallery_model_attachment_usage_replace(
+        $galleryId,
+        'music',
+        gallery_music_attachment_usage_items($state),
+        $revision,
+    );
+}
+
 /** Bound galleries inspected to find one migration source per request.
  * Type: int. Units: galleries. Scope: one explicit repository migration call.
  * Consumers: gallery_music_migrate_repository.
@@ -245,7 +326,7 @@ function gallery_music_validate_source(string $source, string $filename): array
  * PHP has no native resource type; the documented stream handle is the contract.
  * @param array{id:int,folder_path:string} $gallery Physical gallery identity/path.
  * @param bool $nonBlocking Return immediately when another writer owns the lock.
- * @return resource Open exclusive lock handle; caller must release it.
+ * @return resource|false Open lock handle; false only when nonblocking and busy.
  * @throws \RuntimeException When the gallery lock is unsafe or unavailable.
  */
 function gallery_music_acquire_lock(array $gallery, bool $nonBlocking = false): mixed
@@ -264,7 +345,12 @@ function gallery_music_acquire_lock(array $gallery, bool $nonBlocking = false): 
     }
     try {
         $mode = LOCK_EX | ($nonBlocking ? LOCK_NB : 0);
-        if (!flock($lock, $mode)) {
+        $wouldBlock = 0;
+        if (!flock($lock, $mode, $wouldBlock)) {
+            if ($nonBlocking && $wouldBlock !== 0) {
+                fclose($lock);
+                return false;
+            }
             throw new \RuntimeException(t('music.failed'));
         }
         return $lock;
@@ -522,7 +608,7 @@ function gallery_music_track(array $gallery, string $id): ?array
  * @param int $selectionId Catalog song or album identity for add_song/add_album.
  * @param int|null $position Optional zero-based source position for reorder_source.
  * @param string $catalogRevision Catalog revision displayed with assignment choices.
- * @return array{revision:string, track_id:?string,catalog_sync_pending:bool} Exact committed revision
+ * @return array{revision:string,track_id:?string,catalog_sync_pending:bool,usage_sync_pending:bool} Exact committed revision
  *     and new upload identity, or null identity for non-upload actions;
  *     refusals preserve the prior playlist; pending flags a durable snapshot
  *     marker awaiting reconciliation after the physical operation succeeded.
@@ -819,6 +905,7 @@ function gallery_music_mutate(
             );
         }
         $catalogReady = $catalogMode === 'available';
+        $usageRevision = null;
         if ($catalogReady) {
             try {
                 \Gallery\Models\music_catalog_model_mark_gallery_dirty(
@@ -830,8 +917,26 @@ function gallery_music_mutate(
                 throw new \RuntimeException(t('music.failed'), 0, $error);
             }
         }
+        try {
+            $usageRevision = gallery_music_attachment_usage_begin(
+                (int) $gallery['id'],
+            );
+        } catch (\Throwable $error) {
+            error_log('Music attachment usage dirty marker failed before playlist write.');
+            throw new \RuntimeException(t('music.failed'), 0, $error);
+        }
         \Gallery\Models\gallery_music_model_write($directory, $state);
         $committed = true;
+        $usageSyncPending = false;
+        try {
+            $usageSyncPending = !gallery_music_attachment_usage_publish(
+                (int) $gallery['id'],
+                $state,
+                $usageRevision,
+            );
+        } catch (\Throwable) {
+            $usageSyncPending = $usageRevision !== null;
+        }
         gallery_attachment_storage_record(
             (int) $gallery['id'],
             'music',
@@ -873,6 +978,7 @@ function gallery_music_mutate(
                 ? $id
                 : null,
             'catalog_sync_pending' => $catalogSyncPending,
+            'usage_sync_pending' => $usageSyncPending,
         ];
     } finally {
         if (!$committed && $newPath !== '' && is_file($newPath))

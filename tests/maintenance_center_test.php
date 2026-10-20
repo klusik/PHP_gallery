@@ -43,6 +43,38 @@ namespace Gallery\Services {
         $GLOBALS['maintenance_music_calls'][] = $cursor;
         return $GLOBALS['maintenance_music_result'];
     }
+
+    /** Return a controlled schema capability to the actual usage analyzer.
+     * @return array{state:string,feature:string,requirements:list<array{state:string,
+     *     object_type:string,table:string,object:string,error_code:string,
+     *     diagnostic:string}>} Fixture-owned schema status without database access.
+     */
+    function presentation_gallery_attachment_usage_schema_status(): array
+    {
+        $GLOBALS['maintenance_attachment_usage_schema_calls'] =
+            ($GLOBALS['maintenance_attachment_usage_schema_calls'] ?? 0) + 1;
+        return $GLOBALS['maintenance_attachment_usage_schema'];
+    }
+
+    /** Supply one controlled worker slice to the actual task executor.
+     * @param array{cursor_gallery_id:int,scanned:int,ready:int,failed:int} $state
+     *     Last cumulative worker checkpoint.
+     * @return array{done:bool,cursor_gallery_id:int,scanned:int,ready:int,failed:int}
+     *     Fixture-owned result for exactly one worker slice.
+     */
+    function gallery_attachment_usage_reconcile_batch(array $state): array
+    {
+        $GLOBALS['maintenance_attachment_usage_calls'][] = $state;
+        $result = array_shift(
+            $GLOBALS['maintenance_attachment_usage_results'],
+        );
+        if (!is_array($result)) {
+            throw new \RuntimeException(
+                'Attachment usage fixture has no remaining worker result.',
+            );
+        }
+        return $result;
+    }
 }
 
 namespace {
@@ -109,6 +141,7 @@ namespace {
         'downloads.cache',
         'thumbnail.metadata',
         'music.repository',
+        'media.attachment_usage',
         'media.deep_verify',
         'database.logical',
         'maintenance.history',
@@ -167,6 +200,18 @@ namespace {
                 === 'gallery_music',
         'Music migration must default on while remaining optional and protected by preflight.',
     );
+    maintenance_center_test_assert(
+        $registry['media.attachment_usage']['default_selected'] === true
+            && $registry['media.attachment_usage']['required'] === false
+            && $registry['media.attachment_usage']['mutates'] === true
+            && $registry['media.attachment_usage']['resumable'] === true
+            && $registry['media.attachment_usage']['dependencies']
+                === ['preflight']
+            && $registry['media.attachment_usage']['group'] === 'media'
+            && $registry['media.attachment_usage']['progress_unit']
+                === 'galleries',
+        'Media-count reconciliation must be optional, default-selected, resumable, and protected by preflight.',
+    );
     foreach (['analysis', 'execution'] as $phase) {
         maintenance_center_test_assert(
             maintenance_center_task_runtime_modules('music.repository', $phase)
@@ -174,11 +219,116 @@ namespace {
             'Music migration must reuse the complete deferred attachment owner.',
         );
         maintenance_center_test_assert(
+            maintenance_center_task_runtime_modules(
+                'media.attachment_usage',
+                $phase,
+            ) === ['gallery-pdf-documents'],
+            'Media-count reconciliation must reuse the existing attachment owner.',
+        );
+        maintenance_center_test_assert(
             maintenance_center_task_runtime_modules('media.deep_verify', $phase)
                 === ['domain-admin-thumbnails'],
             'Deep verification must load its thumbnail service in each request phase.',
         );
     }
+    $GLOBALS['maintenance_attachment_usage_schema_calls'] = 0;
+    $GLOBALS['maintenance_attachment_usage_schema'] = [
+        'state' => 'available',
+        'feature' => 'gallery.card_attachment_usage',
+        'requirements' => [],
+    ];
+    $usageAnalysis = \Gallery\Services\maintenance_center_analyze_attachment_usage(
+        [],
+    );
+    maintenance_center_test_assert(
+        $usageAnalysis['available'] === true
+            && $usageAnalysis['has_work'] === true
+            && $usageAnalysis['candidate_count_known'] === false
+            && $usageAnalysis['work_units']
+                === \Gallery\Services\MAINTENANCE_CENTER_ATTACHMENT_USAGE_WEIGHT
+            && $GLOBALS['maintenance_attachment_usage_schema_calls'] === 1,
+        'Attachment usage analysis must inspect schema only and advertise bounded unknown-count work.',
+    );
+    $GLOBALS['maintenance_attachment_usage_schema'] = [
+        'state' => 'unknown',
+        'feature' => 'gallery.card_attachment_usage',
+        'requirements' => [],
+    ];
+    $unknownUsageAnalysis =
+        \Gallery\Services\maintenance_center_analyze_attachment_usage([]);
+    maintenance_center_test_assert(
+        $unknownUsageAnalysis['available'] === false
+            && $unknownUsageAnalysis['has_work'] === true
+            && $GLOBALS['maintenance_attachment_usage_schema_calls'] === 2,
+        'Unknown usage schema must block availability without scanning or mutating data.',
+    );
+    $usageCheckpoint = [
+        'cursor_gallery_id' => 20,
+        'scanned' => 10,
+        'ready' => 9,
+        'failed' => 1,
+    ];
+    $GLOBALS['maintenance_attachment_usage_calls'] = [];
+    $GLOBALS['maintenance_attachment_usage_results'] = [
+        [
+            'done' => false,
+            'cursor_gallery_id' => 24,
+            'scanned' => 14,
+            'ready' => 12,
+            'failed' => 2,
+        ],
+        [
+            'done' => true,
+            'cursor_gallery_id' => 28,
+            'scanned' => 18,
+            'ready' => 15,
+            'failed' => 3,
+        ],
+    ];
+    $usageSlice =
+        \Gallery\Services\maintenance_center_execute_attachment_usage([
+            'task_state' => $usageCheckpoint,
+        ]);
+    maintenance_center_test_assert(
+        $GLOBALS['maintenance_attachment_usage_calls'] === [$usageCheckpoint]
+            && $usageSlice['done'] === false
+            && $usageSlice['task_state'] === [
+                'cursor_gallery_id' => 24,
+                'scanned' => 14,
+                'ready' => 12,
+                'failed' => 2,
+            ]
+            && $usageSlice['metrics'] === [
+                'galleries_scanned' => 4,
+                'galleries_ready' => 3,
+                'galleries_failed' => 1,
+            ],
+        'Attachment usage execution must resume cumulatively and report this-slice metrics.',
+    );
+    $usageTerminal =
+        \Gallery\Services\maintenance_center_execute_attachment_usage([
+            'task_state' => $usageSlice['task_state'],
+        ]);
+    maintenance_center_test_assert(
+        $GLOBALS['maintenance_attachment_usage_calls'] === [
+            $usageCheckpoint,
+            $usageSlice['task_state'],
+        ]
+            && $usageTerminal['done'] === true
+            && $usageTerminal['task_state'] === [
+                'cursor_gallery_id' => 28,
+                'scanned' => 18,
+                'ready' => 15,
+                'failed' => 3,
+            ]
+            && $usageTerminal['metrics'] === [
+                'galleries_scanned' => 4,
+                'galleries_ready' => 3,
+                'galleries_failed' => 1,
+            ]
+            && isset($usageTerminal['warning']),
+        'Terminal failures must retain cumulative state, report slice metrics, and warn for omitted badges.',
+    );
     // Distinct fixture byte values prove per-slice metrics versus lifetime totals.
     $checkpoint = [
         'cursor' => ['gallery_id' => 7, 'track_id' => str_repeat('a', 32)],
@@ -339,6 +489,14 @@ namespace {
     maintenance_center_test_assert(
         !in_array('music.repository', $verifyOnly, true),
         'Deselecting the default music move must prevent implicit migration.',
+    );
+    maintenance_center_test_assert(
+        !in_array('media.attachment_usage', $verifyOnly, true)
+            && maintenance_center_expand_selection(
+                ['media.attachment_usage'],
+                $planTasks,
+            ) === ['preflight', 'media.attachment_usage', 'verify'],
+        'Attachment usage stays optional and runs only after explicit selection with preflight.',
     );
     maintenance_center_test_assert(
         maintenance_center_expand_selection(['music.repository'], $planTasks)

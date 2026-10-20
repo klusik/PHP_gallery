@@ -1012,10 +1012,10 @@ function music_catalog_model_split(int $songId, array $tracks, bool $repositoryR
     return $newId;
 }
 
-/** Read track and distinct usage projections for one bounded batch.
+/** Read track, gallery and distinct usage projections for one bounded batch.
  * @param list<int> $songIds Positive normalized identities.
  * @param bool $repositoryReady Whether live gallery album links are available.
- * @return array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:string|null}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null}>,direct_galleries:list<array{song_id:int,gallery_id:int,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}> Details keyed by song ID, including repository-only assets when available.
+ * @return array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:string|null}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null}>,direct_galleries:list<array{song_id:int,gallery_id:int,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>,galleries:array<int,array{id:int|string,url_path:string|null,slug:string|null,folder_path:string|null,title:string|null}>}> Details keyed by song ID, including existing gallery rows for every physical or repository origin reference.
  */
 function music_catalog_model_song_details(array $songIds, bool $repositoryReady = false): array
 {
@@ -1031,6 +1031,7 @@ function music_catalog_model_song_details(array $songIds, bool $repositoryReady 
             'direct_galleries' => [],
             'albums' => [],
             'live_albums' => [],
+            'galleries' => [],
         ];
     }
     $assetColumn = $repositoryReady ? 'asset_id' : 'NULL AS asset_id';
@@ -1078,6 +1079,52 @@ function music_catalog_model_song_details(array $songIds, bool $repositoryReady 
         foreach ($live->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $details[(int) $row['song_id']]['live_albums'][] = $row;
         }
+    }
+    $galleryIds = [];
+    $galleryIdsBySong = [];
+    foreach ($details as $songId => $songDetail) {
+        $songGalleryIds = [];
+        foreach ($songDetail['tracks'] as $track) {
+            $galleryId = (int) $track['gallery_id'];
+            $galleryIds[$galleryId] = $galleryId;
+            $songGalleryIds[$galleryId] = $galleryId;
+        }
+        foreach ($songDetail['direct_galleries'] as $gallery) {
+            $galleryId = (int) $gallery['gallery_id'];
+            $galleryIds[$galleryId] = $galleryId;
+            $songGalleryIds[$galleryId] = $galleryId;
+        }
+        foreach ($songDetail['live_albums'] as $placement) {
+            $galleryId = (int) $placement['gallery_id'];
+            $galleryIds[$galleryId] = $galleryId;
+            $songGalleryIds[$galleryId] = $galleryId;
+        }
+        foreach ($songDetail['repository_assets'] as $asset) {
+            $originId = (int) ($asset['origin_gallery_id'] ?? 0);
+            if ($originId > 0) {
+                $galleryIds[$originId] = $originId;
+                $songGalleryIds[$originId] = $originId;
+            }
+        }
+        $galleryIdsBySong[(int) $songId] = $songGalleryIds;
+    }
+    if ($galleryIds !== []) {
+        $galleryMarks = implode(',', array_fill(0, count($galleryIds), '?'));
+        $galleryRows = db()->prepare(
+            "SELECT id, url_path, slug, folder_path, title FROM galleries WHERE id IN ($galleryMarks)",
+        );
+        $galleryRows->execute(array_values($galleryIds));
+        $galleriesById = [];
+        foreach ($galleryRows->fetchAll(PDO::FETCH_ASSOC) as $galleryRow) {
+            $galleriesById[(int) $galleryRow['id']] = $galleryRow;
+        }
+        foreach ($details as $songId => &$songDetail) {
+            $songDetail['galleries'] = array_intersect_key(
+                $galleriesById,
+                $galleryIdsBySong[(int) $songId],
+            );
+        }
+        unset($songDetail);
     }
     return $details;
 }

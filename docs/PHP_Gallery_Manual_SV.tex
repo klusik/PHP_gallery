@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.138}
+\newcommand{\version}{0.139}
 \newcommand{\manualdate}{20~oktober~2026}
 
 \hypersetup{
@@ -606,8 +606,10 @@ och~ordning bevaras. Sökningen efter titel, filnamn och~musiktaggar uppdateras
 medan du~skriver; endast den~senaste begäran ändrar resultaten. Tabellen skiljer
 mellan Titel, Filer, Platser, Taggar och~Åtgärder. Klicka på~en~låttitel för~att
 öppna den~befintliga titelredigeringen; kryssrutan väljer låten separat
-för~sammanslagning. Popupen innehåller titelredigering, tillägg i~album och~knappar
-för~taggar, filer och~platser. Fliken \ui{Låtar} visar katalogen över hela bredden.
+för~sammanslagning. Endast markerade låtar visas som möjliga överlevare, och~en~vald
+överlevare finns kvar i~listan bara så länge den~fortfarande är~markerad. Popupen
+innehåller titelredigering, tillägg i~album och~knappar för~taggar, filer och~platser.
+Fliken \ui{Låtar} visar katalogen över hela bredden.
 \ui{Album och~spellistor} visar trädet och~skapandet till~vänster samt valt album
 med låtar till~höger; på~smala skärmar placeras panelerna under varandra. Utan val
 visas en~uppmaning att välja eller~skapa ett album. Äldre albumlänkar öppnar fliken.
@@ -621,7 +623,9 @@ Filutfällningen listar fysiska varianter. Platser visar
 direkta gallerier och~musikalbum: två varianter i~samma galleri räknas
 som~en~plats, och~härledd Smart-tillhörighet räknas inte. Gallerilänkar i~båda utfällningarna
 öppnar det~offentliga galleriet; varje musiktagg visas som~en~egen kompakt
-bricka. Rubriklänkar sorterar Titel, Filer, Platser eller~Taggar i~båda
+bricka. Länkarna använder galleriets kanoniska offentliga URL, aktuellt språk
+och~webbplatsens inställning för~URL-omskrivning; ett~galleri som saknas visas
+utan länk. Rubriklänkar sorterar Titel, Filer, Platser eller~Taggar i~båda
 riktningarna över hela resultatet före sidindelningen; lika värden sorteras
 stabilt efter ID. Taggar sorteras alfabetiskt efter låtens första musiktagg.
 Den~smala åtgärdskolumnen visas bara när en~synlig låt har varianter att dela.
@@ -630,6 +634,9 @@ genomskinliga ytor och~mjukt rundade kanter. Filantalet visas bredvid
 låttiteln med~en~staplad ikon och~siffra. Utfällningarna för~varianter och
 platser följer den~globala animationstiden för~Admin-sidopanelen; 0 gör dem
 omedelbara.
+Flytande radutfällningar stängs vid klick utanför, ett nytt klick på~samma
+utlösare, Escape eller~när en~annan radutfällning öppnas. Interaktioner i~en~öppen
+utfällning stänger den~inte; den~kompakta radlayouten bevaras.
 
 Kugghjulet i~katalogrubriken innehåller den~globala inställningen för~filändelser.
 Det~intilliggande kugghjulet för~nya album döljer val av~överordnat album och~beskrivning
@@ -646,7 +653,9 @@ endast visuell och byter aldrig namn på originalfilen. Det~globala valet
 \ui{Visa filändelser i låttitlar} är~avstängt även efter uppgradering
 och~påverkar endast filbaserade namn; egna titlar behåller sin text.
 Markera låtar, förhandsgranska kopplingen och~välj vilka metadata som~behålls.
-En~variant kan~frikopplas igen. Åtkomst och~hämtningsrättigheter tillhör
+Väljaren erbjuder endast markerade låtar som~överlevande; den~valda låten bevaras
+bara så länge den~fortfarande ingår i~urvalet. En~variant kan~frikopplas igen.
+Åtkomst och~hämtningsrättigheter tillhör
 fortfarande varje källa.
 
 Det kompakta albumträdet använder inbyggda utfällningar; när ett album väljs
@@ -736,6 +745,17 @@ och~dolda äldre index tillsammans. Varje centralt musikoriginal räknas en~gån
 oavsett gallerianknytningar; omigrerade lokala original räknas separat. När ett
 galleri tas bort försvinner dess referenser, inte det~delade originalet. Foto-ZIP
 och~galleriöverföringar innehåller inte musik. Se~\filepath{docs/GALLERY_MUSIC.md}.
+
+Samma Underhållscenter erbjuder en förvald, valfri avstämning av äldre PDF-
+och musikräkningar på offentliga kort. Den går vidare i steg med högst 25 gallerier
+och hashberäknar högst en äldre OFP-kandidat på upp till 25~MiB per steg.
+Saknade eller inaktuella värden förblir dolda. Analysen läser inte original;
+uppgiften ändrar dem inte. Manuella filsystemändringar kräver en ny avstämning.
+Om en äldre OFP saknar digest hashberäknar uppgiften den under det beständiga
+gemensamma låset och sparar digesten atomärt i manifestet; PDF- och ljudbytes
+förblir oförändrade. Musikavstämningen kan skapa den privata låskatalogen
+\filepath{.gallery-music/}. Ett nytt galleri utan källmetadata kan börja med
+kända nollvärden.
 
 \subsection{Redigera identitet och sammanhang}
 \index{g00102@gallerimetadata}
@@ -1510,6 +1530,8 @@ skrivning; utgivningen fortsätter att lita på kvalificerad develop.
 
 Efter inloggning ser administratören privata kontroller för översikten, gallerier, fotografier, tema, taggar, underhåll, uppdateringar, loggar och kontoinställningar. Många redigeringar öppnas i panelen till höger, så att galleriet förblir synligt medan ett objekt ändras och sparas.\footnote{En fullständig administrationssida finns kvar för arbetsflöden som behöver mer utrymme eller när webbläsarens utökade funktioner inte är tillgängliga.}
 
+På offentliga sidor visas Admin-, Testkörning-, Uppdateringar- och Logga ut-åtgärder som kompakta genomskinliga kontroller med kontur, ikon och lokaliserad text. Språkvalen styrs fortfarande under Tema.
+
 Det offentliga galleriet visar också sammanhangsberoende administrationskontroller när en vanlig administratörssession är aktiv. Pennkontroller för gallerier och fotografier öppnar samma fullständiga redigerare i sidopanelen. Kompakt galleriborttagning använder det återställningsbara papperskorgsflödet när Papperskorg är~aktiverad; om Papperskorg stängs av använder framtida galleriborttagningar åter den äldre tjänsten för permanent radering av underträd. Kompakt bildborttagning har avsiktligt etiketten \ui{Ta bort fotografi ... från CMS}: denna snabba åtgärd på den offentliga sidan tar bort bildraden i katalogen och kör inte hela tjänsten för radering av originalfiler. Använd det vanliga flödet för bild- eller massradering när även originalfilen och genererade derivat ska raderas. Anonymt förhandsvisningsläge döljer dessa sammanhangsberoende administrationskontroller.
 
 Administrationens galleritabell kan filtrera rader efter synlighet: alla, opublicerade, offentliga eller privata. Filtreringen är ett visningshjälpmedel i webbläsaren, inte en ändring av åtkomstpolicyn. En rad som filtret döljer avmarkeras också, och huvudmarkeringen töms, så att en dold gammal kryssruta inte oavsiktligt ingår i nästa massåtgärd. Sammanfattningen anger antalet visade och möjliga gallerier.
@@ -2265,6 +2287,8 @@ Underfliken \ui{Animationer} ställer in öppnings- och stängningstiden för de
 
 Temaredigeraren använder ingen separat växel för ljust eller mörkt läge. I stället definierar sparade färgkontroller och ett valfritt utseende med Egen CSS direkt den offentliga färgpaletten. Den ställer också in layouter för gallerikort och undergallerier, standardstilen för brödsmulor och upp till tre genvägar i sidhuvudet. Varje genväg kan peka på startsidan, ett galleri eller förbli tom. Anonyma besökare ser bara konfigurerade gallerigenvägar som fortfarande är offentliga och listade; dubbla eller raderade gallerival tas bort när inställningarna sparas. Om alla tre platserna är tomma döljs dessa favoritgalleriknappar. Gallerikort kan också visa ett konfigurerbart märke för antalet ingående bilder. När märket gäller för ett galleri förblir samma grenantal synligt i huvudpanelen när galleriet öppnas, och räknar bilder i aktuellt galleri och dess åtkomliga undergallerier enligt samma offentlighets- och åtkomstregler som kortet. Presentation per galleri kan ärva webbplatsens standardvärden eller åsidosätta de val som galleriredigeraren erbjuder. Den inbyggda standardstilen är \codeword{chevron}, och ogiltiga globala värden faller säkert tillbaka på den.
 
+Offentliga kort visar kompakta, högerjusterade antal för PDF- och musikfiler i en tät stapel under fotoantalsmärket när antalet är större än noll. När bildantalsmärket är aktiverat visar det öppnade galleriets åtgärdsrad samma antal direkt till vänster om bildantalsmärket. Varje antal omfattar unika filer i galleriet och dess undergallerier; samma registrerade SHA-256 räknas bara en gång. Reglerna för offentlig synlighet, dold status, åtkomst och behörighet gäller. Saknade, okända eller inaktuella projektioner döljer märket; ett känt nollvärde visas inte.
+
 \subsection{Referens för Temas kontroller}
 \index{t00244@tema!k00137@kontroller}
 \index{p00182@paginering!t00245@temainställningar}
@@ -2769,7 +2793,7 @@ Den kompakta tabellen visar händelsenamn, meddelanden, allvarlighetsgrad, tidss
 
 Sökning omfattar händelsenamn, meddelanden, JSON-kontext och~begärans-/ruttmetadata. En~rad med~\ui{Träff i~detaljerna} matchar i~den infällda kontexten. Livefiltrering godtar endast den senaste begäran; rader, antal och~URL hör till samma resultat även vid snabb inmatning. Vid automatiska cachefel registrerar \codeword{cache.automatic\_failed} ingång, fas, undantagsklass, källfilens namn/rad och~tillgängliga validerade SQLSTATE-/drivrutinskoder. Råa meddelanden, SQL, privata sökvägar och~inloggningsuppgifter utelämnas. Upprepade fel samlas i~fem minuter; ändrad diagnostik behåller minst trettio sekunders mellanrum. Loggningsfel bevarar kontrollpunkten och~säker vägran. Slutför nödvändiga migreringar normalt; observera automatiskt arbete efter vanliga besök genom passiv status utan manuell skanning.
 
-Kryssrutorna, inklusive rutan i tabellhuvudet, markerar poster på aktuell sida. Verktygsfältet erbjuder \ui{Markerade}, \ui{Denna sida} och \ui{Alla filtrerade} för både kopiering och sparande av en UTF-8-TXT-fil. En markerad grupp omfattar alla förekomster, även de som ännu inte laddats; överlappande enskilda markeringar förekommer bara en gång. \ui{Alla filtrerade} exporterar matchande råhändelser från alla sidor i vald tidsordning. Markeringar rensas när filtrering eller sidbyte ersätter raderna. PHP läser stora exporter i omgångar; kopiering behöver hela den valda texten i webbläsarminnet, så välj sparande för stora historiker. Om urklipp inte är tillgängligt markerar en dialog hela texten för manuell kopiering. TXT-nedladdning fungerar även utan JavaScript; den befintliga fullständiga CSV/JSON-ZIP-exporten finns kvar.
+Kryssrutorna, inklusive rutan i tabellhuvudet, markerar poster på aktuell sida. I Admins masslistor med urvalskryssrutor klickar du på en rad och skiftklickar sedan på en annan i samma lista: synliga rader med aktiverade kryssrutor däremellan på den aktuella resultatsidan får den andra rutans resulterande läge. Områdesankaret återställs när livefiltrering, sidbyte eller en annan radersättning ändrar resultaten. Allvarlighetsfilter styr fortfarande vilka loggrader som visas; exportomfången \ui{Markerade}, \ui{Denna sida} och \ui{Alla filtrerade} behåller sin betydelse. Verktygsfältet erbjuder dessa omfång för både kopiering och sparande av en UTF-8-TXT-fil. En markerad grupp omfattar alla förekomster, även de som ännu inte laddats; överlappande enskilda markeringar förekommer bara en gång. \ui{Alla filtrerade} exporterar matchande råhändelser från alla sidor i vald tidsordning. Markeringar rensas när filtrering eller sidbyte ersätter raderna. PHP läser stora exporter i omgångar; kopiering behöver hela den valda texten i webbläsarminnet, så välj sparande för stora historiker. Om urklipp inte är tillgängligt markerar en dialog hela texten för manuell kopiering. TXT-nedladdning fungerar även utan JavaScript; den befintliga fullständiga CSV/JSON-ZIP-exporten finns kvar.
 
 Dagligt administrationsarbete skapar användbar historik: uppladdningar, galleriändringar, säkerhetsbeslut, underhållsresultat, varningar och andra drifthändelser kan registreras i administrationsloggen. Historiken är värdefull när du vill förstå vad som hände, när det hände och vilket konto eller vilken begäran som var inblandad. Det är också normalt att tabellen blir stor i en aktiv installation. Version~\version{} behandlar därför loggskötsel som en egen uttrycklig underhållsuppgift i stället för att låta generell databasrensning oväntat ta bort granskningshistorik.
 

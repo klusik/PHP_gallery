@@ -85,6 +85,7 @@ namespace {
     $songs = [
         ['id' => 101, 'title' => 'Midnight Drive', 'track_count' => 2, 'album_count' => 1, 'direct_gallery_count' => 1],
         ['id' => 102, 'title' => 'Quiet Morning', 'track_count' => 1, 'album_count' => 1, 'direct_gallery_count' => 0],
+        ['id' => 103, 'title' => 'Third Unselected Song', 'track_count' => 1, 'album_count' => 0, 'direct_gallery_count' => 1],
     ];
     $songs = array_values(array_filter(
         $songs,
@@ -109,6 +110,8 @@ namespace {
         ],
         'offset' => (int) ($searchParameters['offset'] ?? 0),
         'limit' => 20,
+        // Two selected identities are the production merge admission boundary.
+        'merge_minimum' => 2,
         'sort' => $sort,
         'direction' => $direction,
         'sort_urls' => [
@@ -129,7 +132,7 @@ namespace {
                 'sort' => 'tags', 'direction' => 'asc', 'tab' => $tab,
             ]),
         ],
-        'catalog' => ['revision' => 'fixture-rev', 'songs' => $songs, 'total' => 2],
+        'catalog' => ['revision' => 'fixture-rev', 'songs' => $songs, 'total' => count($songs)],
         'song_details' => [
             101 => [
                 'tracks' => [
@@ -164,11 +167,65 @@ namespace {
                     'album_title' => 'Festival Set',
                     'track_count' => 1,
                 ]],
+                'galleries' => [
+                    41 => [
+                        'id' => 41,
+                        'url_path' => 'highway-set',
+                        'slug' => 'highway-set',
+                        'folder_path' => 'Highway Set',
+                        'title' => 'Highway Set',
+                    ],
+                    42 => [
+                        'id' => 42,
+                        'url_path' => 'studio-set',
+                        'slug' => 'studio-set',
+                        'folder_path' => 'Studio Set',
+                        'title' => 'Studio Set',
+                    ],
+                    44 => [
+                        'id' => 44,
+                        'url_path' => 'road-mix-live',
+                        'slug' => 'road-mix-live',
+                        'folder_path' => 'Road Mix Live',
+                        'title' => 'Road Mix Live',
+                    ],
+                ],
             ],
             102 => [
                 'tracks' => [['gallery_id' => 43, 'track_id' => 'b1', 'filename' => 'quiet-morning.mp3']],
                 'direct_galleries' => [],
                 'albums' => [['album_id' => 8, 'title' => 'Night Drives', 'track_count' => 1]],
+                'galleries' => [
+                    43 => [
+                        'id' => 43,
+                        'url_path' => 'quiet-morning',
+                        'slug' => 'quiet-morning',
+                        'folder_path' => 'Quiet Morning',
+                        'title' => 'Quiet Morning',
+                    ],
+                ],
+            ],
+            103 => [
+                'tracks' => [[
+                    'gallery_id' => 43,
+                    'track_id' => 'c1',
+                    'filename' => 'third-unselected.mp3',
+                ]],
+                'direct_galleries' => [[
+                    'gallery_id' => 43,
+                    'title' => 'Quiet Morning',
+                    'track_count' => 1,
+                ]],
+                'albums' => [],
+                'galleries' => [
+                    43 => [
+                        'id' => 43,
+                        'url_path' => 'quiet-morning',
+                        'slug' => 'quiet-morning',
+                        'folder_path' => 'Quiet Morning',
+                        'title' => 'Quiet Morning',
+                    ],
+                ],
             ],
         ],
         'song_tag_labels' => [101 => ['ambient', 'road']],

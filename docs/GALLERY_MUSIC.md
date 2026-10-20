@@ -10,6 +10,25 @@ songs remain independent items. Gallery controls move or remove source groups
 and set their download permission; album members keep the album's global order.
 Removing a source changes this gallery only. It never deletes a shared original.
 
+Public gallery cards may show unique PDF and music file counts beneath the
+photo-count icon in a compact, tightly spaced stack. When the photo-count badge
+is enabled, the opened gallery's action bar shows the same nonzero media counts
+inline immediately to its left. The counts cover the whole accessible gallery
+subtree, count each recorded SHA-256 once, and follow public visibility,
+hidden-state and capability rules. Digests are counted uniquely per media kind.
+They are optional derived snapshots: missing, unknown or dirty data omits a
+badge, while a ready empty snapshot means zero. Public rendering does not read
+or hash original files. Maintenance Center provides a
+default-selected, optional legacy reconciliation, bounded to 25 galleries per
+step and at most one legacy OFP candidate hash up to 25 MiB per step. When
+needed, it atomically stores the computed `ofp_pdf_sha256` in the existing OFP
+manifest under the persistent shared `.simbrief-ofp-upload.lock`; original bytes
+remain unchanged. Music reconciliation uses the private `.gallery-music/.lock`.
+Supported mutations use these source locks and invalidate snapshots before
+source changes; out-of-band filesystem edits require reconciliation. New empty
+galleries may be seeded with ready-zero rows only when source metadata is absent.
+Original files and indexes remain authoritative.
+
 New audio uploads use the same validated upload flow but store immutable bytes
 in the protected `data/music/` repository. SQL metadata records the original
 filename, MIME, size, digest and logical song identity. Each gallery retains its
@@ -67,7 +86,9 @@ Page navigation bounds the displayed rows. The table separates **Title**,
 **Files**, **Locations**, **Tags** and **Actions**. Click a song title to open
 its popup with the rename editor, add-to-album control, and shortcuts to its
 tag, file, and location details; its checkbox remains an independent merge
-selection. **Songs** is a full-width catalog tab. **Albums & playlists** has the
+selection. The shared Shift-click range selection for Admin bulk lists also
+applies to song checkboxes. **Songs** is a full-width catalog tab.
+**Albums & playlists** has the
 tree and album creation on the left, with selected album details and songs on
 the right; the columns stack on narrow screens. Selecting or creating an album
 is prompted when none is selected. Legacy album links open that tab.
@@ -82,9 +103,11 @@ The narrow action column appears only when a visible song has variants to split.
 The Files disclosure lists physical variants. Locations expands to
 the direct gallery and music-album placements; two variants in one gallery
 count as one location, and derived Smart inclusion adds nothing. Gallery links
-in both disclosures open the public gallery. Each music tag appears as its own
-compact chip. Header links sort Title, Files, Locations or Tags in either
-direction across the complete result set before pagination, with stable ID
+in both disclosures use the canonical public gallery URL, including the
+current language and the site's configured rewrite style. If a referenced
+gallery no longer exists, the location is shown without a link. Each music tag
+appears as its own compact chip. Header links sort Title, Files, Locations or
+Tags in either direction across the complete result set before pagination, with stable ID
 tie-breaking. Tags sort alphabetically by the song's first music tag.
 The manager shares the site's typography and accent colors, with compact
 translucent surfaces and softly rounded borders. Each song title sits beside
@@ -98,6 +121,11 @@ native disclosures keep collapsed song and album rows compact. The pending
 reconciliation count appears only when nonzero. Import keeps its text label for
 an empty catalog and becomes icon-only after entries exist. Icon-only actions
 retain accessible names and visible keyboard focus.
+
+Floating Files and Locations row disclosures close when the user clicks
+outside, activates the same trigger again, presses Escape, or opens another
+row disclosure. Interactions inside an open disclosure do not close it. The
+disclosures retain their compact row layout.
 
 Reconcile existing playlists in bounded batches to discover previous uploads.
 The cursor permits continuation; originals and their JSON indexes are not
@@ -117,8 +145,11 @@ titles retain their text even when they deliberately include an extension.
 Downloads and file details always retain the original filename.
 
 Select songs and open the relationship preview to mark different files as the
-same song. Review filenames/locations and explicitly choose the surviving
-metadata. Filename, duration and hash never automatically create this relation.
+same song. Only checked songs appear in the merge survivor chooser; unchecked
+songs are excluded, and a chosen survivor remains available only while it is
+still included in the selection. Review
+filenames/locations and explicitly choose the surviving metadata. Filename,
+duration and hash never automatically create this relation.
 Splitting an instance restores an independent logical identity with deterministic
 metadata inheritance; neither operation rewrites audio or saved physical order.
 Visibility, passwords, shares, NSFW policy and download restrictions stay with

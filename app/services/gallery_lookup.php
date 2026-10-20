@@ -39,6 +39,7 @@ namespace Gallery\Services;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Models\gallery_model_public_root_rows;
 use function Gallery\Models\gallery_model_branch_descendant_rows;
+use function Gallery\Models\gallery_model_attachment_usage_rows;
 use function Gallery\Models\gallery_model_child_rows_for_parents;
 use function Gallery\Models\gallery_model_descendant_rows_for_roots;
 use function Gallery\Models\gallery_model_find_by_folder_path_hash;
@@ -462,6 +463,144 @@ function gallery_branch_image_counts(
     }
 
     return $counts;
+}
+
+/** Count public PDF or music files once per distinct content digest per branch.
+ * @param list<int> $galleryIds Root gallery identifiers.
+ * @param string $kind Attachment kind: `pdf` or `music`.
+ * @param bool $withoutAdminBypass Apply ordinary visitor access even for Admin sessions.
+ * @return array<int,int> Counts keyed only for roots whose complete visible branch snapshot is ready; absent roots are unknown and must omit the badge.
+ */
+function gallery_branch_attachment_usage_counts(
+    array $galleryIds,
+    string $kind,
+    bool $withoutAdminBypass = true,
+): array {
+    if (!in_array($kind, ['pdf', 'music'], true)) {
+        return [];
+    }
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $galleryId): bool => $galleryId > 0,
+    )));
+    if ($galleryIds === []) {
+        return [];
+    }
+    $capability = $kind === 'pdf'
+        ? 'gallery_pdf_documents'
+        : 'gallery_music';
+    if (
+        !function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
+        || !feature_capability_effective_enabled($capability)
+    ) {
+        return [];
+    }
+    if (
+        !function_exists(
+            __NAMESPACE__ . '\\presentation_gallery_attachment_usage_schema_status',
+        )
+        || !function_exists(
+            __NAMESPACE__ . '\\presentation_schema_render_available',
+        )
+        || !presentation_schema_render_available(
+            presentation_gallery_attachment_usage_schema_status(),
+            'gallery.card_attachment_usage',
+        )
+    ) {
+        return [];
+    }
+    if ($kind === 'music') {
+        if (
+            !function_exists(
+                __NAMESPACE__ . '\\presentation_gallery_attachment_usage_music_schema_status',
+            )
+            || !presentation_schema_render_available(
+                presentation_gallery_attachment_usage_music_schema_status(),
+                'gallery.card_attachment_usage.music',
+            )
+        ) {
+            return [];
+        }
+    }
+    static $availabilityLogged = false;
+    try {
+        $descendants = gallery_model_branch_descendant_rows(
+            $galleryIds,
+            true,
+            gallery_lookup_require_listed_access(true),
+        );
+        $memberships = [];
+        $rootsByDescendant = [];
+        $descendantIds = [];
+        foreach ($descendants as $row) {
+            if (
+                $withoutAdminBypass
+                    ? !visitor_can_access_gallery_without_admin_bypass($row)
+                    : !visitor_can_access_gallery($row)
+            ) {
+                continue;
+            }
+            $rootId = (int) ($row['root_id'] ?? 0);
+            $descendantId = (int) ($row['id'] ?? 0);
+            if ($rootId <= 0 || $descendantId <= 0) {
+                continue;
+            }
+            $memberships[$rootId][$descendantId] = true;
+            $rootsByDescendant[$descendantId][$rootId] = true;
+            $descendantIds[$descendantId] = $descendantId;
+        }
+        if ($descendantIds === []) {
+            return [];
+        }
+        $projection = gallery_model_attachment_usage_rows(
+            array_values($descendantIds),
+            $kind,
+        );
+        $counts = [];
+        foreach ($memberships as $rootId => $branchIds) {
+            $ready = true;
+            foreach (array_keys($branchIds) as $branchId) {
+                if (($projection['states'][$branchId] ?? '') !== 'ready') {
+                    $ready = false;
+                    break;
+                }
+            }
+            if ($ready) {
+                $counts[(int) $rootId] = 0;
+            }
+        }
+        if ($counts === []) {
+            return [];
+        }
+        $digests = [];
+        foreach ($projection['items'] as $item) {
+            if ($item['hidden']) {
+                continue;
+            }
+            $digest = $item['sha256'];
+            if (!is_string($digest) || preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1) {
+                continue;
+            }
+            foreach ($rootsByDescendant[(int) $item['gallery_id']] ?? [] as $rootId => $_) {
+                if (array_key_exists($rootId, $counts)) {
+                    $digests[$rootId][$digest] = true;
+                }
+            }
+        }
+        foreach ($counts as $rootId => $_) {
+            $counts[$rootId] = count($digests[$rootId] ?? []);
+        }
+        return $counts;
+    } catch (\Throwable $error) {
+        if (!$availabilityLogged) {
+            error_log(
+                'Gallery attachment usage projection is unavailable; '
+                . 'optional card counts were omitted.',
+            );
+            $availabilityLogged = true;
+        }
+        return [];
+    }
 }
 
 /**

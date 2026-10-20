@@ -33,6 +33,7 @@ Author: Rudolf Klusal
 <pre id="results">BROWSER PENDING</pre>
 <script type="module">
 import {setupAdminGallerySidePanel} from '/public/assets/gallery-modules/admin-side-panel.js';
+import {setupAdminBulkSelection} from '/public/assets/gallery-modules/admin-bulk-actions.js?v=20261020-shift-range-v1';
 import {setupAdminGalleryTitleCompletion} from '/public/assets/gallery-modules/admin-gallery-title-completion.js';
 import {setupAdminGalleryCompactEditor} from '/public/assets/gallery-modules/admin-gallery-compact-editor.js';
 import {setupSimbriefDescriptionGenerator} from '/public/assets/gallery-modules/admin-simbrief-description.js';
@@ -477,6 +478,7 @@ try {
     Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: writeFixtureClipboard}});
     setupAdminGalleryCompactEditor(); setupAdminGalleryCompactEditor();
     setupSimbriefDescriptionGenerator(); setupSimbriefDescriptionGenerator();
+    setupAdminBulkSelection();
     setupAdminGallerySidePanel(); setupAdminGallerySidePanel();
     setupAdminGalleryTitleCompletion();
     setupAdminMetadataOrganizer();
