@@ -17,8 +17,12 @@ namespace Gallery\Services;
 
 require_once __DIR__ . '/../models/gallery_music.php';
 require_once __DIR__ . '/../models/music_catalog.php';
+require_once __DIR__ . '/../models/galleries.php';
 require_once __DIR__ . '/gallery_pdf_settings.php';
 require_once __DIR__ . '/music_catalog.php';
+require_once __DIR__ . '/music_repository.php';
+require_once __DIR__ . '/gallery_music/projection.php';
+require_once __DIR__ . '/gallery_music/repository.php';
 
 /**
  * Bound one original audio upload without transcoding or decoding on the
@@ -27,6 +31,7 @@ require_once __DIR__ . '/music_catalog.php';
  * Consumers: gallery_music_validate_source.
  * Rationale: 64 MiB accommodates ordinary music while bounding shared-host
  *     work.
+ * Value: 64 MiB per original.
  */
 const GALLERY_MUSIC_MAX_BYTES = 64 * 1024 * 1024;
 
@@ -36,6 +41,7 @@ const GALLERY_MUSIC_MAX_BYTES = 64 * 1024 * 1024;
  * Type: int. Units: tracks. Scope: one physical gallery.
  * Consumers: gallery_music_mutate.
  * Rationale: 100 tracks support a soundtrack without an unbounded public list.
+ * Value: 100 projected tracks per physical gallery.
  */
 const GALLERY_MUSIC_MAX_TRACKS = 100;
 
@@ -44,6 +50,7 @@ const GALLERY_MUSIC_MAX_TRACKS = 100;
  * Type: int. Units: bytes. Scope: one physical gallery playlist.
  * Consumers: gallery_music_mutate.
  * Rationale: 512 MiB limits shared-host storage even for many large originals.
+ * Value: 512 MiB of local-playlist originals per gallery.
  */
 const GALLERY_MUSIC_TOTAL_BYTES = 512 * 1024 * 1024;
 
@@ -52,6 +59,7 @@ const GALLERY_MUSIC_TOTAL_BYTES = 512 * 1024 * 1024;
  * Type: int. Units: UTF-8 bytes. Scope: one filename or title.
  * Consumers: gallery_music_validate_source.
  * Rationale: 240 bytes fit compact tables and bounded playlist JSON records.
+ * Value: 240 UTF-8 bytes per filename or title.
  */
 const GALLERY_MUSIC_LABEL_BYTES = 240;
 
@@ -60,14 +68,40 @@ const GALLERY_MUSIC_LABEL_BYTES = 240;
  * Type: int. Units: tracks. Scope: one SQL catalog-title lookup batch.
  * Consumers: gallery_music_merge_playlists.
  * Rationale: 100 references keep the query bounded while covering one playlist.
+ * Value: 100 references per SQL query.
  */
 const GALLERY_MUSIC_CATALOG_BATCH = 100;
+
+/** Bound live album members read while preparing one gallery projection.
+ * Type: int. Units: songs. Scope: one live gallery album assignment.
+ * Consumers: gallery_music_playlist, gallery_music_mutate.
+ * Rationale: 2,000 matches the catalog node ceiling and bounds joined reads.
+ * Value: 2,000 songs per assignment.
+ */
+const GALLERY_MUSIC_ALBUM_MEMBER_LIMIT = 2000;
+
+/** Bound album membership page size for live gallery projection.
+ * Type: int. Units: songs. Scope: one catalog query page.
+ * Consumers: gallery_music_playlist, gallery_music_mutate.
+ * Rationale: 100 rows keep each joined query within the existing catalog page.
+ * Value: 100 songs per query.
+ */
+const GALLERY_MUSIC_ALBUM_MEMBER_BATCH = 100;
+
+/** Bound galleries inspected to find one migration source per request.
+ * Type: int. Units: galleries. Scope: one explicit repository migration call.
+ * Consumers: gallery_music_migrate_repository.
+ * Rationale: 20 limits keyset database reads when galleries have no legacy audio.
+ * Value: 20 galleries per call.
+ */
+const GALLERY_MUSIC_MIGRATION_GALLERY_SCAN = 20;
 
 /**
  * Keep gallery audio sidecars private to the hosting account.
  * Type: int. Units: POSIX permission bits. Scope: one gallery music directory.
  * Consumers: gallery_music_mutate sidecar creation.
  * Rationale: Mode 0700 prevents other host accounts traversing retained audio.
+ * Value: POSIX mode 0700.
  */
 const GALLERY_MUSIC_DIRECTORY_MODE = 0700;
 
@@ -207,28 +241,14 @@ function gallery_music_validate_source(string $source, string $filename): array
     ];
 }
 
-/**
- * Read the persisted ordered playlist without silently repairing damaged state.
- * @param array{id:int, folder_path:string} $gallery Physical gallery
- *     identity/path.
- * @return array{revision:string, enabled:bool, tracks:list<array{id:string,
- *     filename:string, title:string, mime:string, size:int, sha256:string,
- *     hidden:bool, downloadable:bool}>} Complete playlist and slideshow default.
- */
-function gallery_music_playlist(array $gallery): array
-{
-    return \Gallery\Models\gallery_music_model_read(gallery_music_directory(
-        $gallery,
-    ));
-}
-
 /** Acquire the per-gallery playlist lock for a stable external snapshot.
  * PHP has no native resource type; the documented stream handle is the contract.
  * @param array{id:int,folder_path:string} $gallery Physical gallery identity/path.
+ * @param bool $nonBlocking Return immediately when another writer owns the lock.
  * @return resource Open exclusive lock handle; caller must release it.
  * @throws \RuntimeException When the gallery lock is unsafe or unavailable.
  */
-function gallery_music_acquire_lock(array $gallery): mixed
+function gallery_music_acquire_lock(array $gallery, bool $nonBlocking = false): mixed
 {
     $directory = gallery_music_directory($gallery);
     if (!is_dir($directory) && !@mkdir($directory, GALLERY_MUSIC_DIRECTORY_MODE)
@@ -243,7 +263,8 @@ function gallery_music_acquire_lock(array $gallery): mixed
         throw new \RuntimeException(t('music.failed'));
     }
     try {
-        if (!flock($lock, LOCK_EX)) {
+        $mode = LOCK_EX | ($nonBlocking ? LOCK_NB : 0);
+        if (!flock($lock, $mode)) {
             throw new \RuntimeException(t('music.failed'));
         }
         return $lock;
@@ -432,10 +453,11 @@ function gallery_music_merge_playlists(array $sources): array
  * Resolve one indexed original without accepting caller-supplied paths or MIME.
  * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
  * @param string $id Opaque gallery-scoped track identity.
- * @return array{path:string, track:array{id:string, filename:string,
- *     title:string, mime:string, size:int, sha256:string,
- *     hidden:bool, downloadable:bool}}|null Verified source and metadata, or null when
- *     absent/unsafe.
+ * @return array{path:string,track:array{id:string,filename:string,title:string,
+ *     mime:string,size:int,sha256:string,hidden:bool,downloadable:bool,
+ *     asset_id?:string,source_id?:string,source_type?:string,
+ *     source_title?:string,source_track_id?:string}}|null Verified local or
+ *     central original and its authorized gallery-scoped delivery metadata.
  */
 function gallery_music_track(array $gallery, string $id): ?array
 {
@@ -445,6 +467,19 @@ function gallery_music_track(array $gallery, string $id): ?array
     foreach (gallery_music_playlist($gallery)['tracks'] as $track) {
         if ($track['id'] !== $id)
             continue;
+        if (isset($track['asset_id'])) {
+            $asset = \Gallery\Models\music_repository_model_asset(
+                $track['asset_id'],
+            );
+            if ($asset === null) {
+                return null;
+            }
+            $path = music_repository_asset_path($asset);
+            if ($path === null) {
+                return null;
+            }
+            return ['path' => $path, 'track' => $track];
+        }
         $path = $directory . '/' . $id . '.bin';
         $extension = strtolower(pathinfo(
             $track['filename'],
@@ -475,8 +510,8 @@ function gallery_music_track(array $gallery, string $id): ?array
  * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
  * @param string $revision Last observed playlist revision; stale writes are
  *     refused.
- * @param string $action Upload, delete, previous, next, settings, download
- *     or download_all.
+ * @param string $action Upload, assignment, ordering, settings or permission
+ *     operation for one source group.
  * @param string $trackId Selected identity, unused for
  *     upload/settings/download_all.
  * @param string $source Uploaded temporary source, required only for upload.
@@ -484,6 +519,9 @@ function gallery_music_track(array $gallery, string $id): ?array
  * @param bool $enabled Explicit gallery slideshow preference for settings.
  * @param bool $downloadable Explicit download permission for
  *     download/download_all.
+ * @param int $selectionId Catalog song or album identity for add_song/add_album.
+ * @param int|null $position Optional zero-based source position for reorder_source.
+ * @param string $catalogRevision Catalog revision displayed with assignment choices.
  * @return array{revision:string, track_id:?string,catalog_sync_pending:bool} Exact committed revision
  *     and new upload identity, or null identity for non-upload actions;
  *     refusals preserve the prior playlist; pending flags a durable snapshot
@@ -499,11 +537,17 @@ function gallery_music_mutate(
     string $filename = '',
     bool $enabled = false,
     bool $downloadable = false,
+    int $selectionId = 0,
+    ?int $position = null,
+    string $catalogRevision = '',
 ): array {
     if (!in_array(
         $action,
         [
             'upload',
+            'add_song',
+            'add_album',
+            'reorder_source',
             'delete',
             'previous',
             'next',
@@ -516,9 +560,103 @@ function gallery_music_mutate(
         throw new \RuntimeException(t('music.failed'));
     }
     $catalogMode = music_catalog_physical_write_mode();
-    $validated = $action === 'upload'
-        ? gallery_music_validate_source($source, $filename)
-        : null;
+    $preparedAsset = null;
+    $preparedAlbumAssets = [];
+    $preparedAlbumBytes = 0;
+    $preparedAlbumIds = [];
+    $validatedUpload = null;
+    if (in_array($action, ['upload', 'add_song', 'add_album'], true)) {
+        music_repository_assert_schema_ready('gallery_music.mutate');
+    }
+    if ($action === 'upload') {
+        $validatedUpload = gallery_music_validate_source($source, $filename);
+    }
+    if (in_array($action, ['add_song', 'add_album'], true)) {
+        if (
+            $selectionId < 1
+            || $catalogRevision === ''
+            || !hash_equals(music_catalog_revision(), $catalogRevision)
+        ) {
+            throw new \RuntimeException(t('music.conflict'));
+        }
+        $preflightState = gallery_music_state($gallery);
+        if (!hash_equals($preflightState['write_revision'], $revision)) {
+            throw new \RuntimeException(t('music.conflict'));
+        }
+        if ($action === 'add_song') {
+            $preparedAsset = music_repository_prepare_song($selectionId);
+        } else {
+            $currentProjection = gallery_music_playlist($gallery);
+            $albumMetadata = music_catalog_album_paths([$selectionId])[$selectionId] ?? null;
+            if (
+                !is_array($albumMetadata)
+                || !$albumMetadata['available']
+                || !empty($currentProjection['partial'])
+                || !empty($currentProjection['over_limit'])
+                || (int) ($currentProjection['unavailable'] ?? 0) > 0
+                || count($currentProjection['tracks']) + (int) $albumMetadata['song_count']
+                    > GALLERY_MUSIC_MAX_TRACKS
+                || array_sum(array_column($currentProjection['tracks'], 'size'))
+                    >= GALLERY_MUSIC_TOTAL_BYTES
+            ) {
+                throw new \RuntimeException(t('music.quota'));
+            }
+            $remainingBytes = GALLERY_MUSIC_TOTAL_BYTES
+                - array_sum(array_column($currentProjection['tracks'], 'size'));
+            if ((int) $albumMetadata['song_count'] > GALLERY_MUSIC_ALBUM_MEMBER_LIMIT) {
+                throw new \RuntimeException(t('music.quota'));
+            }
+            for ($offset = 0; $offset <= GALLERY_MUSIC_ALBUM_MEMBER_LIMIT;
+                $offset += GALLERY_MUSIC_ALBUM_MEMBER_BATCH) {
+                $page = music_catalog_album_members(
+                    $selectionId,
+                    GALLERY_MUSIC_ALBUM_MEMBER_BATCH,
+                    $offset,
+                );
+                foreach ($page as $member) {
+                    $songId = (int) $member['id'];
+                    $preparedAlbumIds[] = $songId;
+                    $preparedAlbumAssets[$songId] = music_repository_prepare_song(
+                        $songId,
+                    );
+                    $preparedAlbumBytes += (int) $preparedAlbumAssets[$songId]['byte_size'];
+                    if ($preparedAlbumBytes > $remainingBytes) {
+                        throw new \RuntimeException(t('music.quota'));
+                    }
+                }
+                if (count($page) < GALLERY_MUSIC_ALBUM_MEMBER_BATCH) {
+                    break;
+                }
+            }
+            if (count($preparedAlbumIds) > GALLERY_MUSIC_ALBUM_MEMBER_LIMIT) {
+                throw new \RuntimeException(t('music.quota'));
+            }
+            $currentMembers = [];
+            for ($offset = 0; $offset < count($preparedAlbumIds);
+                $offset += GALLERY_MUSIC_ALBUM_MEMBER_BATCH) {
+                $currentMembers = array_merge(
+                    $currentMembers,
+                    music_catalog_album_members(
+                        $selectionId,
+                        min(
+                            GALLERY_MUSIC_ALBUM_MEMBER_BATCH,
+                            count($preparedAlbumIds) - $offset,
+                        ),
+                        $offset,
+                    ),
+                );
+            }
+            if (array_map(
+                static fn(array $member): int => (int) $member['id'],
+                $currentMembers,
+            ) !== $preparedAlbumIds) {
+                throw new \RuntimeException(t('music.conflict'));
+            }
+        }
+        if (!hash_equals(music_catalog_revision(), $catalogRevision)) {
+            throw new \RuntimeException(t('music.conflict'));
+        }
+    }
     $directory = gallery_music_directory($gallery);
     if (
         (!is_dir($directory) && !@mkdir($directory, GALLERY_MUSIC_DIRECTORY_MODE)
@@ -537,58 +675,83 @@ function gallery_music_mutate(
     try {
         if (!flock($lock, LOCK_EX))
             throw new \RuntimeException(t('music.failed'));
-        $state = gallery_music_playlist($gallery);
-        if (!hash_equals($state['revision'], $revision)) {
+        $state = gallery_music_state($gallery);
+        if (!hash_equals($state['write_revision'], $revision)) {
             throw new \RuntimeException(t('music.conflict'));
         }
-        if ($validated !== null) {
-            $total = array_sum(array_column($state['tracks'], 'size'));
+        if (in_array($action, ['add_song', 'add_album'], true)
+            && !hash_equals(
+                music_catalog_revision(),
+                $catalogRevision,
+            )) {
+            throw new \RuntimeException(t('music.conflict'));
+        }
+        if ($action === 'upload' || $action === 'add_song') {
+            $projected = gallery_music_playlist($gallery);
+            $asset = $action === 'add_song'
+                ? $preparedAsset
+                : null;
+            $incomingBytes = $action === 'add_song'
+                ? (int) ($asset['byte_size'] ?? 0)
+                : (int) ($validatedUpload['size'] ?? 0);
             if (
-                count($state['tracks']) >= GALLERY_MUSIC_MAX_TRACKS
-                || ($total + $validated['size']) > GALLERY_MUSIC_TOTAL_BYTES
+                !empty($projected['partial'])
+                || !empty($projected['over_limit'])
+                || (int) ($projected['unavailable'] ?? 0) > 0
+                || count($projected['tracks']) >= GALLERY_MUSIC_MAX_TRACKS
+                || array_sum(array_column($projected['tracks'], 'size'))
+                    + $incomingBytes > GALLERY_MUSIC_TOTAL_BYTES
             ) {
                 throw new \RuntimeException(t('music.quota'));
             }
-            // A random 128-bit id names this immutable original; filenames stay metadata.
+            if ($action === 'upload') {
+                $asset = music_repository_store_source($source, $filename, null);
+            }
+            if (!is_array($asset)) {
+                throw new \RuntimeException(t('music.failed'));
+            }
+            if (music_repository_asset_path($asset) === null) {
+                throw new \RuntimeException(t('music.failed'));
+            }
+            if (
+                array_sum(array_column($projected['tracks'], 'size'))
+                    + (int) $asset['byte_size'] > GALLERY_MUSIC_TOTAL_BYTES
+            ) {
+                throw new \RuntimeException(t('music.quota'));
+            }
             $id = bin2hex(random_bytes(16));
-            $newPath = $directory . '/' . $id . '.bin';
-            $output = @fopen($newPath, 'xb');
-            if ($output === false) {
-                $newPath = '';
-                throw new \RuntimeException(t('music.failed'));
-            }
-            $input = @fopen($source, 'rb');
-            try {
-                @chmod($newPath, \Gallery\Models\GALLERY_MUSIC_FILE_MODE);
-                if (
-                    $input === false
-                    || stream_copy_to_stream(
-                        $input,
-                        $output,
-                        GALLERY_MUSIC_MAX_BYTES + 1,
-                    ) !== $validated['size']
-                    || !fflush($output)
-                ) {
-                    throw new \RuntimeException(t('music.failed'));
-                }
-            } finally {
-                if (is_resource($input))
-                    fclose($input);
-                fclose($output);
-            }
-            if (!hash_equals(
-                $validated['sha256'],
-                (string) @hash_file('sha256', $newPath),
-            )) {
-                throw new \RuntimeException(t('music.failed'));
-            }
-            $state['tracks'][] =
-                [
+            $state['version'] = 2;
+            $state['tracks'][] = [
                     'id' => $id,
-                    'title' => $validated['filename'],
+                    'filename' => (string) $asset['filename'],
+                    'title' => (string) $asset['indexed_title'],
+                    'mime' => (string) $asset['mime'],
+                    'size' => (int) $asset['byte_size'],
+                    'sha256' => (string) $asset['sha256'],
                     'hidden' => false,
                     'downloadable' => false,
-                ] + $validated;
+                    'asset_id' => (string) $asset['id'],
+                ];
+            $state['order'][] = $id;
+        } elseif ($action === 'add_album') {
+            $projected = gallery_music_playlist($gallery);
+            if (
+                count($projected['tracks']) + count($preparedAlbumIds)
+                    > GALLERY_MUSIC_MAX_TRACKS
+                || array_sum(array_column($projected['tracks'], 'size'))
+                    + $preparedAlbumBytes > GALLERY_MUSIC_TOTAL_BYTES
+            ) {
+                throw new \RuntimeException(t('music.quota'));
+            }
+            $state['version'] = 2;
+            $id = bin2hex(random_bytes(16));
+            $state['albums'][] = [
+                'id' => $id,
+                'album_id' => $selectionId,
+                'hidden' => false,
+                'downloadable' => false,
+            ];
+            $state['order'][] = $id;
         } elseif ($action === 'settings') {
             $state['enabled'] = $enabled;
         } elseif ($action === 'download_all') {
@@ -596,29 +759,65 @@ function gallery_music_mutate(
                 $track['downloadable'] = $downloadable;
             }
             unset($track);
+            foreach ($state['albums'] as &$album) {
+                $album['downloadable'] = $downloadable;
+            }
+            unset($album);
         } else {
-            $position = array_search(
-                $trackId,
-                array_column($state['tracks'], 'id'),
-                true,
-            );
-            if ($position === false)
+            $sourceId = $trackId;
+            $sourcePosition = array_search($sourceId, $state['order'], true);
+            if ($sourcePosition === false)
                 throw new \RuntimeException(t('music.conflict'));
+            $directPosition = array_search($sourceId, array_column($state['tracks'], 'id'), true);
+            $albumPosition = array_search($sourceId, array_column($state['albums'], 'id'), true);
             if ($action === 'delete') {
-                array_splice($state['tracks'], $position, 1);
+                if ($directPosition !== false) {
+                    foreach ($state['legacy_cleanup'] as $entry) {
+                        if ($entry['track_id'] === $sourceId) {
+                            throw new \RuntimeException(t('music.conflict'));
+                        }
+                    }
+                    array_splice($state['tracks'], $directPosition, 1);
+                } elseif ($albumPosition !== false) {
+                    array_splice($state['albums'], $albumPosition, 1);
+                }
+                array_splice($state['order'], $sourcePosition, 1);
             } elseif ($action === 'download') {
-                $state['tracks'][$position]['downloadable'] = $downloadable;
+                if ($directPosition !== false) {
+                    $state['tracks'][$directPosition]['downloadable'] = $downloadable;
+                } elseif ($albumPosition !== false) {
+                    $state['albums'][$albumPosition]['downloadable'] = $downloadable;
+                }
+            } elseif ($action === 'reorder_source') {
+                if ($position === null || $position < 0 || $position >= count($state['order'])) {
+                    throw new \RuntimeException(t('music.conflict'));
+                }
+                array_splice($state['order'], $sourcePosition, 1);
+                array_splice($state['order'], $position, 0, [$sourceId]);
             } else {
-                $other = $position + ($action === 'previous' ? -1 : 1);
-                if (isset($state['tracks'][$other])) {
-                    [$state['tracks'][$position], $state['tracks'][$other]] = [
-                        $state['tracks'][$other],
-                        $state['tracks'][$position],
+                $other = $sourcePosition + ($action === 'previous' ? -1 : 1);
+                if (isset($state['order'][$other])) {
+                    [$state['order'][$sourcePosition], $state['order'][$other]] = [
+                        $state['order'][$other],
+                        $state['order'][$sourcePosition],
                     ];
                 }
             }
         }
         $state['revision'] = bin2hex(random_bytes(16));
+        if ($state['version'] === 1) {
+            // Legacy indexes store order in the track list itself. Keep both
+            // their wire format and their mutation revision contract until a
+            // central source or live album explicitly upgrades the index.
+            $tracksById = [];
+            foreach ($state['tracks'] as $track) {
+                $tracksById[$track['id']] = $track;
+            }
+            $state['tracks'] = array_map(
+                static fn(string $id): array => $tracksById[$id],
+                $state['order'],
+            );
+        }
         $catalogReady = $catalogMode === 'available';
         if ($catalogReady) {
             try {
@@ -636,7 +835,7 @@ function gallery_music_mutate(
         gallery_attachment_storage_record(
             (int) $gallery['id'],
             'music',
-            $state['tracks'],
+            gallery_music_accounting_entries($state),
         );
         $catalogSyncPending = false;
         if ($catalogReady) {
@@ -645,6 +844,15 @@ function gallery_music_mutate(
                     (int) $gallery['id'],
                     $state['tracks'],
                     $catalogRevision,
+                    array_map(
+                        static fn(array $album): array => [
+                            'id' => $album['id'],
+                            'album_id' => $album['album_id'],
+                            'hidden' => $album['hidden'],
+                            'downloadable' => $album['downloadable'],
+                        ],
+                        $state['albums'],
+                    ),
                 );
             } catch (\Throwable) {
                 // The durable dirty marker suppresses stale usage until a
@@ -661,7 +869,9 @@ function gallery_music_mutate(
         }
         return [
             'revision' => $state['revision'],
-            'track_id' => $action === 'upload' ? $id : null,
+            'track_id' => in_array($action, ['upload', 'add_song', 'add_album'], true)
+                ? $id
+                : null,
             'catalog_sync_pending' => $catalogSyncPending,
         ];
     } finally {

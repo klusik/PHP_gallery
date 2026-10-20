@@ -537,7 +537,7 @@ Anonyma besökare använder samma länk efter vanliga åtkomstkontroller.
 Kräver helskärm eller~ljud aktivering väntar den~svarta inledningen på
 \ui{Starta presentationen}. Efter bekräftelse fyller reservläget fönstret
 om~äkta helskärm saknar stöd; \ui{Spela} kan~försöka igen vid~senare ljudfel.
-I~\ui{Redigera galleri > PDF / Musik / Presentation} finns det~genomskinliga
+I~\ui{Redigera galleri > Media > Presentation} finns det~genomskinliga
 kortet \ui{Presentationsinställningar} för~offentliga knappar, musik och~båda
 hastigheterna. Sparaikonen använder det~skyddade galleriformuläret.
 Förhandsvisning och~delning använder aktuella, även osparade val. Nya länkar
@@ -582,6 +582,15 @@ på~sidan. Minskad rörelse stänger av~animation. Innehållsbyte behåller
 Filväljaren och släppkön i uppladdningspanelen för ett befintligt galleri accepterar också PDF. Som standard bifogas endast originaldokumentet; inga undergallerier eller PNG-sidor skapas. För konvertering vid uppladdningen öppnar du \ui{Avancerat} och markerar uttryckligen \ui{Konvertera även PDF-sidor till PNG}; välj sedan ett privat undergalleri eller att lägga till sidor sist, samt DPI. Att enbart öppna Avancerat aktiverar inte konvertering. Blandade val laddar upp foton först, bifogar sedan PDF och utför endast valda konverteringar. Panelen förblir öppen med förlopp och avbrytning. Nya försök behåller det ursprungliga konverteringsvalet; vid aktiverad konvertering återskapas ett saknat tomt undergalleri endast när ingen sida har bekräftats.
 
 \index{PDF!galleridokument}
+
+Galleriredigeraren har~en huvudflik \ui{Media} med undersektionerna
+\ui{Musik}, \ui{PDF}, \ui{Presentation} och~\ui{Grafik}. Musik och~PDF
+behåller sina separata formulär; grafikinställningarna är~fortsatt kopplade
+till det skyddade formuläret för galleriets inställningar. Presentationskortet
+finns under \ui{Media} > \ui{Presentation}, allmänna dokument och~den valfria
+OFP-panelen under \ui{Media} > \ui{PDF}. Omslagsbild, varumärke och~bakgrund
+finns under \ui{Media} > \ui{Grafik}. Under \ui{Bilder} accepterar
+\ui{Ladda upp} alla medietyper som är aktiverade för~galleriet.
 
 En administratör kan bifoga ett vanligt PDF-dokument till ett fysiskt galleri även utan SimBrief-data. Galleriet sparar originalfilen och ett litet index med stabilt dokument-ID, filnamn, titel, ursprung, exakt storlek och SHA-256-kontrollsumma. Den skyddade visnings- och nedladdningslänken från samma ursprung följer galleriets regler för synlighet, lösenord, delning och NSFW. SimBriefs befintliga OFP-manifest och länkar är separata.
 
@@ -651,8 +660,9 @@ slutförande.
 Borttagna relationer raderar inga original. Admin-samlingarna publicerar inget globalt
 musikbibliotek. Musiktaggar använder den~gemensamma taxonomin med~egen
 medietyp; bildtaggar och~bildsökning förblir separata. PDF är~reserverat.
-Befintliga sluggar är~fortsatt globalt unika. Säkerhetskopiera SQL och~dolda
-musikmappar; använd framåtriktad migrering och~begränsad avstämning efter
+Befintliga sluggar är~fortsatt globalt unika. Säkerhetskopiera SQL,
+\filepath{data/music/} och~dolda äldre index tillsammans; använd framåtriktad
+migrering och~begränsad avstämning efter
 återställning. Öppna aktuellt läge vid~revisionskonflikt. Avstängd musik
 bevarar metadata och~ljud.
 Lokal återställning ur~Papperskorgen återkopplar aktuella spår till befintliga
@@ -661,14 +671,16 @@ identiteter ger nya poster; överförda arkiv tillför inga betrodda logiska ID:
 
 \subsubsection{Musiklagring}
 
-Använd \ui{Ladda upp foton} för~att~välja eller~släppa foton, PDF och~musik
-tillsammans. Ljud förblir original och~omvandlas inte till foton. Enbart ljud
-fungerar även med~bildförberedelsen avstängd. Galleriredigerarens \ui{Dokument
-/ PDF} behåller tabellen \ui{Musik} för~uppladdning, ordning, borttagning
-och~bildspelets sparade standard. Åtgärder stannar i~panelen. MP3, M4A, AAC,
-Ogg/Opus, WAV, FLAC och~WebM accepteras; webbläsarens kodekar avgör
-uppspelning. Galleriets synlighet, lösenord, delning och~NSFW-regler gäller.
-
+Öppna \ui{Redigera galleri > Media > Musik} för~att~ladda upp ljud och~hantera
+galleriets spellista. Nya uppladdningar lagrar oföränderliga original i~det
+skyddade centrala arkivet \filepath{data/music/}; ljud omvandlas aldrig till foton.
+Direkta låttilldelningar är~fristående poster. Albumtilldelningar är~levande
+spellistor: senare ändringar av~albumets medlemskap och~ordning gäller i~alla
+anslutna gallerier. Galleriet lagrar ordnade referenser och~hämtningsrätt per~post,
+inte en~kopia av~det~delade originalet. Uppspelning och~hämtning kontrollerar
+målgalleriets aktuella åtkomst och~postens hämtningsrätt; källgalleriets sekretess
+ger inte åtkomst till orelaterade förfrågningar. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC
+och~WebM accepteras; webbläsarens kodekar avgör uppspelningen.
 Tabellen visar spårlängd och~en~Spela/Stoppa-ikon före titeln. Ikonen
 växlar med~uppspelningen; ingen paus eller~separat uppspelningskolumn finns.
 Långa titlar förkortas med~ellips och~fullständig verktygstips; endast
@@ -710,17 +722,18 @@ synlighetsobservation använder anslutna rader samma sekventiella läsare.
 Servern avkodar inget ljud. Uppladdningsförsök bevarar bekräftade foton, PDF
 och~musik; ett~okänt ljudsvar kräver kontroll av~galleriet före nästa försök.
 
-Original och~ordnat JSON-index ligger i~\filepath{.gallery-music/}. Indexet
-sparar namn, MIME-typer, storlekar, SHA-256, revision, bildspelsstandard
-och~spårens hämtningsrättigheter. Äldre poster utan rättighet förblir spärrade.
-Gränserna är~64~MiB per~fil, 100 spår och~512~MiB per~galleri; lägre
-PHP-gränser gäller. Säkerhetskopior måste inkludera dolda mappar. Foto-ZIP
-och~galleriöverföringar utelämnar musik. Se~\filepath{docs/GALLERY_MUSIC.md}.
-
-Använd den~värdbaserat förberedda kandidaten efter ruttändringar. PDF och~ljud
-delar den~befintliga körningsägaren för~bilagor; källor med~en~äldre genererad
-ruttplan kan~avvisa anrop tills den~förberedda planen har~lästs in. Lokal
-generering ersätter inte värdbaserad kvalificering.
+Galleriets ordnade spellisteindex finns kvar i~dess dolda katalog
+\filepath{.gallery-music/}; oföränderliga ljudoriginal lagras centralt i
+\filepath{data/music/}. En~valfri uppgift i~\ui{Underhåll > Underhållscenter}
+migrerar äldre lokala original ett~i~taget i~begränsade, återupptagbara steg.
+Den~verifierar den~centrala kopian innan referensen växlas atomärt och~bevarar
+spår-ID:n, logiska identiteter, ordning, synlighet, hämtningsrätt och
+bildspelsinställningar.
+Osäkra lokala filer raderas inte. Säkerhetskopiera SQL, \filepath{data/music/}
+och~dolda äldre index tillsammans. Varje centralt musikoriginal räknas en~gång
+oavsett gallerianknytningar; omigrerade lokala original räknas separat. När ett
+galleri tas bort försvinner dess referenser, inte det~delade originalet. Foto-ZIP
+och~galleriöverföringar innehåller inte musik. Se~\filepath{docs/GALLERY_MUSIC.md}.
 
 \subsection{Redigera identitet och sammanhang}
 \index{g00102@gallerimetadata}
@@ -1137,7 +1150,7 @@ råtelemetri.
 
 Webbläsaruppladdning passar vardagliga tillägg. Välj ett galleri, välj filer, granska omgången och följ förloppet medan servern validerar medier och förbereder poster och miniatyrbilder. Filsystemsupptäckt passar stora befintliga mappträd eller överföringar via FTP och webbhotellsverktyg. Automatisering och WebDAV passar återkommande eller mobila arbetsflöden när deras avgränsade inloggningsuppgifter har konfigurerats.
 
-I den högra administratörspanelen \ui{Ladda upp foton} kan du klistra in flera skärmbilder efter varandra med Ctrl+V i Windows/Linux eller Cmd+V i macOS, välja ytterligare filer och dra bilder till uppladdningsytan. Varje bild visas före sändning i en lokal kö med miniatyrbilder, filnamn och storlek. Använd pilknapparna för att ändra ordningen, ta bort en felaktig bild eller rensa hela urvalet. Den vanliga knappen \ui{Ladda upp bilder} skickar originalfilerna en gång genom den befintliga uppladdningen; miniatyrerna ersätter inte originalen. Kön är inget serverlagrat utkast: om du lämnar panelen måste du bekräfta att oskickade filer kastas, ett misslyckat försök behåller urvalet för återförsök och ett bekräftat lyckat svar tömmer kön. Format som inte kan förhandsvisas visas med en formatmarkering utan att serverns kontroll kringgås. Den fristående uppladdningssidan i administrationen och formuläret utan JavaScript fungerar som tidigare.
+I den högra administratörspanelen \ui{Ladda upp foton} kan du klistra in flera skärmbilder efter varandra med Ctrl+V i Windows/Linux eller Cmd+V i macOS, välja ytterligare filer och dra bilder till uppladdningsytan. Varje bild visas före sändning i en lokal kö med miniatyrbilder, filnamn och storlek. Använd pilknapparna för att ändra ordningen, ta bort en felaktig bild eller rensa hela urvalet. Den vanliga knappen \ui{Ladda upp} skickar originalfilerna en gång genom den befintliga uppladdningen; miniatyrerna ersätter inte originalen. Kön är inget serverlagrat utkast: om du lämnar panelen måste du bekräfta att oskickade filer kastas, ett misslyckat försök behåller urvalet för återförsök och ett bekräftat lyckat svar tömmer kön. Format som inte kan förhandsvisas visas med en formatmarkering utan att serverns kontroll kringgås. Den fristående uppladdningssidan i administrationen och formuläret utan JavaScript fungerar som tidigare.
 
 Ladda upp i meningsfulla grupper för ett stort evenemang. Mindre grupper gör fel lättare att hitta och låter dig granska titlar, ordning och synlighet stegvis.
 
@@ -2548,9 +2561,10 @@ Filvyn visar också antal och~byte för PDF- och~musikoriginal samt en
 samlad mediesumma. Efter fotobatcher läser Uppdatera allt PDF-, musik- och~OFP-summor
 från databasen. Första körningen importerar saknade poster från högst två fysiska
 gallerier per steg, även gallerier utan foton. Dolda, privata, avstängda
-filer och~spår utan nedladdning räknas också. Fysiska kopior räknas separat;
-smarta spellistor skapar ingen kopia. Konverterade PDF-sidor räknas redan
-som foton. Index, lås, konverteringstillstånd, oindexerade filer, Papperskorg
+filer och~spår utan nedladdning räknas också. Varje centralt musikoriginal räknas
+en gång, även utan gallerianknytning; omigrerade lokala original räknas separat.
+Smarta spellistor skapar ingen kopia. Konverterade PDF-sidor räknas redan som foton.
+Index, lås, konverteringstillstånd, oindexerade filer, Papperskorg
 och~andra cacher ingår inte. Oläsbara index eller osäkra/saknade filer ger
 synlig ofullständig mätning utan reparation. Vanliga sidor läser cache;
 bilageändringar markerar den som gammal när revisionsskrivningen lyckas.

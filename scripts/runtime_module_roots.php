@@ -231,6 +231,14 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // The Maintenance task loader selects the complete attachment owner
+        // before either callback. Passive maintenance pages do not load it.
+        'Gallery\\Services\\maintenance_center_analyze_music_repository' => [
+            'Gallery\\Services\\music_repository_schema_status',
+        ],
+        'Gallery\\Services\\maintenance_center_execute_music_repository' => [
+            'Gallery\\Services\\gallery_music_migrate_repository',
+        ],
         // The updater-only transport branch explicitly requires the lightweight
         // cache runtime policy before this shared single-worker admission check.
         'Gallery\\Services\\site_maintenance_fire_background_worker' => [
@@ -287,11 +295,11 @@ return [
             'Gallery\\Services\\music_catalog_physical_write_mode',
         ],
         'Gallery\\Services\\gallery_trash_capture_snapshot' => [
-            'Gallery\\Services\\gallery_music_playlist',
+            'Gallery\\Services\\gallery_music_state',
             'Gallery\\Models\\music_catalog_model_trash_track_refs',
         ],
         'Gallery\\Services\\restore_gallery_trash_entry_owned' => [
-            'Gallery\\Services\\gallery_music_playlist',
+            'Gallery\\Services\\gallery_music_state',
             'Gallery\\Services\\music_catalog_restore_trash_snapshot',
         ],
         'Gallery\\Controllers\\render_public_gallery_branding_header' => [

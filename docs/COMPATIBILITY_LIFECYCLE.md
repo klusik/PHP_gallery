@@ -1,12 +1,44 @@
 # Compatibility lifecycle and retirement register
 
+## Shared music originals and live gallery assignments
+
+Owners: gallery music model/service and its private projection/migration parts,
+the central repository service, catalog SQL model/service and Maintenance Center.
+V1 gallery indexes and local immutable originals remain permanently readable.
+Legacy permission, order and preference edits preserve v1 wire format and its
+revision semantics until a central source or live album upgrades the index.
+New uploads use `data/music/`; v2 sidecars preserve direct references, live album
+groups, ordered source identities and interrupted local cleanup. Public reads
+never migrate files or hash every original. Destination gallery authorization
+and saved download/visibility flags govern explicitly assigned shared music.
+No public repository asset endpoint or portable foreign logical ID is trusted.
+
+Schema migration is forward-only and does not relocate existing files. Only an
+explicitly selected maintenance task switches verified old originals to central
+references and removes positively matching local bytes. It processes one source
+per step, retains stable track/song identity, and stops on uncertainty with its
+last successful cursor intact. Assignment/removal/Trash do not delete central
+assets. SQL and both filesystem storage locations must be backed up together.
+There is no evidence that deployed legacy indexes have all been converted;
+retirement is not authorized. Production migration timing and device playback
+remain unknown until deployment acceptance. Hosted regression coverage must
+include legacy/v2 reads, live album changes, interrupted migration, access,
+shared-file retention, accounting and in-place editor actions.
+
+The former `admin-edit-documents` tab remains a permanent bookmark alias for
+Media/PDF. The gallery editor URL owner preserves the drawer request and active
+language when normalizing it. Existing bookmark usage is unknown; removing the
+alias is not authorized. Artwork and presentation controls retain native form
+association with the guarded settings form after moving into Media.
+
 ## Logical music catalog and media-typed tags
 
 Owners: existing physical playlist model/service, logical catalog model/service
 and shared tag model/service. Existing JSON indexes remain authoritative for
 bytes, visibility, download permission and playlist order. The SQL catalog is
-an additional metadata layer; no audio migration or filename-based identity
-inference is supported. The global extension preference defaults OFF when
+an additional metadata layer; filename-based identity inference remains
+unsupported. The explicit repository workflow above is the only audio relocation
+owner. The global extension preference defaults OFF when
 absent on both new and upgraded installations. Explicit custom titles retain
 their text. Older image tags retain IDs, globally unique slugs and assignments.
 Missing media schema preserves only the documented legacy image path; unknown

@@ -267,6 +267,38 @@ function admin_storage_statistics_empty_attachments(): array
 }
 
 /**
+ * Combine gallery-local originals with one count of shared music originals.
+ * @return StorageAttachmentSummary Complete known SQL totals; an unknown
+ *     repository schema or failed aggregate adds a partial-coverage warning.
+ */
+function admin_storage_statistics_attachment_totals(): array
+{
+    $summary = \Gallery\Models\gallery_attachment_storage_model_summary();
+    $status = schema_inspection_feature('reporting.music_repository', [
+        schema_inspection_table('music_repository_assets'),
+        schema_inspection_column('music_repository_assets', 'id'),
+        schema_inspection_column('music_repository_assets', 'byte_size'),
+    ]);
+    if ($status['state'] === 'available') {
+        try {
+            $repository = \Gallery\Models\gallery_attachment_storage_model_repository_summary();
+            $summary['music_count'] += $repository['music_count'];
+            $summary['music_bytes'] += $repository['music_bytes'];
+        } catch (\Throwable) {
+            $summary['errors']++;
+        }
+    } elseif (!(
+        $status['state'] === 'missing'
+        && ($status['requirements'][0]['state'] ?? 'unknown') === 'missing'
+    )) {
+        $summary['errors']++;
+    }
+    // Confirmed pre-repository schema has no shared originals. This read-only
+    // compatibility path never authorizes an upload or a filesystem move.
+    return $summary;
+}
+
+/**
  * Accumulate one bounded gallery batch after loading its attachment owner.
  * @param StorageAttachmentSummary $summary Mutable known byte/count totals.
  * @param int $lastGalleryId Last observed owner for public progress, initially zero;
@@ -284,7 +316,7 @@ function admin_storage_statistics_attachment_batch(
         max(1, min(ADMIN_STORAGE_STATISTICS_GALLERY_BATCH_SIZE, $limit)),
     );
     if ($rows === []) {
-        $summary = \Gallery\Models\gallery_attachment_storage_model_summary();
+        $summary = admin_storage_statistics_attachment_totals();
         return ['last_id' => $lastGalleryId, 'processed' => 0];
     }
     // Direct CLI consumers explicitly include the attachment entry points.
@@ -324,7 +356,7 @@ function admin_storage_statistics_attachment_batch(
         $lastGalleryId = $gallery['id'];
         \Gallery\Core\storage_observer_add('counts.imported_gallery_rows');
     }
-    $summary = \Gallery\Models\gallery_attachment_storage_model_summary();
+    $summary = admin_storage_statistics_attachment_totals();
     return ['last_id' => $lastGalleryId, 'processed' => count($rows)];
 }
 
@@ -428,7 +460,7 @@ function admin_storage_statistics_snapshot_from_summaries(
 function admin_storage_statistics_finish_job(array $job): array
 {
     $job['attachments'] =
-        \Gallery\Models\gallery_attachment_storage_model_summary();
+        admin_storage_statistics_attachment_totals();
     $job['status'] = 'complete';
     $job['processed'] = (int) ($job['total'] ?? $job['processed'] ?? 0);
     $job['updated_at'] = time();

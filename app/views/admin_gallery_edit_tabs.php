@@ -42,7 +42,7 @@ use function Gallery\Services\t;
 /**
  * Render the editable Media-tab field group.
  *
- * @param array{labels:array<string,string>,cover_options_html:string,cover_multi_count:int,cover_automatic_selected:bool,cover_legacy_selected:bool,cover_automatic_available:bool,branding_fields_html:string,cover_asset_schema_ready:bool,background_source_schema_ready:bool,background_source?:string|null} $viewModel Controller-prepared cover state, localized labels, and trusted option/branding fragments.
+ * @param array{labels:array<string,string>,cover_options_html:string,cover_multi_count:int,cover_automatic_selected:bool,cover_legacy_selected:bool,cover_automatic_available:bool,branding_fields_html:string,cover_asset_schema_ready:bool,background_source_schema_ready:bool,settings_form_id:string,background_source?:string|null} $viewModel Controller-prepared cover state, localized labels, form association, and trusted option/branding fragments.
  * @return void Emit Media controls and their compact help disclosures.
  */
 function view_render_admin_gallery_media_fields(array $viewModel): void
@@ -76,6 +76,7 @@ function view_render_admin_gallery_media_fields(array $viewModel): void
         $viewModel['background_source_schema_ready'] ?? false
     );
     $backgroundSource = $viewModel['background_source'] ?? null;
+    $formAttribute = ' form="' . e($viewModel['settings_form_id']) . '"';
 
     $mediaTitle = (string) (
         $labels['media_title'] ?? t(
@@ -108,7 +109,9 @@ function view_render_admin_gallery_media_fields(array $viewModel): void
             . e((string) ($labels['title_picture'] ?? 'Title picture'))
             . '"><div class="admin-gallery-media-field"><label>'
             . e((string) ($labels['title_picture'] ?? 'Title picture'))
-            . '<select name="cover_image_id"><option value="0"'
+            . '<select name="cover_image_id"'
+            . $formAttribute
+            . '><option value="0"'
             . $coverLegacySelected
             . '>'
             . e(
@@ -137,7 +140,9 @@ function view_render_admin_gallery_media_fields(array $viewModel): void
                         ?? 'Upload gallery thumbnail'
                     ),
                 )
-                . '<input type="file" name="cover_upload" accept="image/*"><span class="muted">'
+                . '<input type="file" name="cover_upload"'
+                . $formAttribute
+                . ' accept="image/*"><span class="muted">'
                 . e(
                     (string) (
                         $labels['gallery_thumbnail_upload_help']
@@ -177,7 +182,9 @@ function view_render_admin_gallery_media_fields(array $viewModel): void
                         $labels['background_source'] ?? 'Background source'
                     ),
                 )
-                . '<select name="background_source">';
+                . '<select name="background_source"'
+                . $formAttribute
+                . '>';
         echo
             '<option value=""'
                 . ($backgroundSource === null ? ' selected' : '')
@@ -1333,23 +1340,79 @@ function view_render_admin_gallery_editor_form_close(array $viewModel): void
 }
 
 /**
- * Render the media tab from already authorized independent form fragments.
- * @param array{active:bool,presentation_html:string,documents_html:string,
- *     music_html:string,simbrief_html:string} $model Trusted escaped fragments
- *     prepared by their controllers, retaining native form ownership.
- * @return void Emit the responsive card wrapper and the existing tab panel.
+ * Render one Media tab with only the available nested sections.
+ * @param array{active:bool,active_section:string,presentation_html:string,
+ *     documents_html:string,music_html:string,artwork_html:string,
+ *     settings_form_id:string}
+ *     $model Authorized fragments with independent or associated form owners.
+ * @return void Emit the scoped Media subtabs and their content panels.
  */
 function view_render_admin_gallery_media_tab(array $model): void
 {
-    $html =
-        '<div class="gallery-editor-media-grid">'
-        . $model['presentation_html']
-        . $model['documents_html']
-        . $model['music_html']
-        . $model['simbrief_html']
-        . '</div>';
+    $sections = [];
+    if ($model['music_html'] !== '') {
+        $sections['music'] = [
+            'label' => t('music.title', 'Music'),
+            'html' => $model['music_html'],
+        ];
+    }
+    if ($model['documents_html'] !== '') {
+        $sections['pdf'] = [
+            'label' => t('admin.gallery_editor.media_section_pdf', 'PDF'),
+            'html' => $model['documents_html'],
+        ];
+    }
+    if ($model['presentation_html'] !== '') {
+        $sections['presentation'] = [
+            'label' => t(
+                'admin.gallery_editor.media_section_presentation',
+                'Presentation',
+            ),
+            'html' => $model['presentation_html'],
+        ];
+    }
+    $sections['artwork'] = [
+        'label' => t(
+            'admin.gallery_editor.media_section_artwork',
+            'Artwork',
+        ),
+        'html' => $model['artwork_html'],
+    ];
+    $activeSection = isset($sections[$model['active_section']])
+        ? $model['active_section']
+        : (string) array_key_first($sections);
+    $html = '<div class="gallery-editor-media" data-admin-subtab-scope>';
+    $html .= '<input type="hidden" name="return_media_section" value="'
+        . e($activeSection) . '" form="'
+        . e($model['settings_form_id']) . '">';
+    $html .= '<div class="admin-subtabs gallery-editor-media-tabs"'
+        . ' data-admin-subtabs role="tablist" aria-label="'
+        . e(t('admin.gallery_editor.media_sections', 'Media sections'))
+        . '">';
+    foreach ($sections as $sectionKey => $section) {
+        $panelId = 'admin-gallery-media-' . $sectionKey;
+        $selected = $sectionKey === $activeSection;
+        $html .= '<button id="' . $panelId . '-tab" type="button"'
+            . ' role="tab" data-admin-subtab-target="' . $panelId
+            . '" aria-controls="' . $panelId . '" aria-selected="'
+            . ($selected ? 'true' : 'false') . '" tabindex="'
+            . ($selected ? '0' : '-1') . '" data-admin-media-section="'
+            . e($sectionKey) . '" class="'
+            . ($selected ? 'is-active' : '') . '">'
+            . e($section['label']) . '</button>';
+    }
+    $html .= '</div>';
+    foreach ($sections as $sectionKey => $section) {
+        $panelId = 'admin-gallery-media-' . $sectionKey;
+        $selected = $sectionKey === $activeSection;
+        $html .= '<section id="' . $panelId
+            . '" data-admin-subtab-panel aria-labelledby="' . $panelId
+            . '-tab"' . ($selected ? '' : ' hidden') . '>'
+            . $section['html'] . '</section>';
+    }
+    $html .= '</div>';
     view_render_admin_tab_panel(
-        'admin-edit-documents',
+        'admin-edit-media',
         $html,
         $model['active'],
     );
@@ -1426,9 +1489,14 @@ function view_render_admin_gallery_presentation(array $model): void
         }
     }
     echo
-        '<p class="muted">'
+        '<details class="admin-inline-help gallery-presentation-help">'
+            . '<summary aria-label="'
             . e(t('presentation.link_help'))
-            . '</p>'
+            . '" title="'
+            . e(t('presentation.link_help'))
+            . '">?</summary><div class="admin-inline-help-content"><p>'
+            . e(t('presentation.link_help'))
+            . '</p></div></details>'
             . '<div class="gallery-presentation-actions">';
     if ($model['ready']) {
         echo
@@ -1582,7 +1650,19 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
     ];
 
     echo
-        '<section class="admin-edit-card admin-simbrief-legacy-card" data-simbrief-legacy-panel aria-label="'
+        '<details class="admin-simbrief-legacy-disclosure">'
+            . '<summary><span>'
+            . e(t('admin.legacy_ofp.title', 'Legacy flight plan (OFP)'))
+            . '</span><span class="admin-simbrief-legacy-summary-status">'
+            . e($hasPdf
+                ? t('admin.legacy_ofp.pdf_present', 'PDF attached')
+                : (
+                    $occupied
+                        ? t('admin.legacy_ofp.pdf_invalid', 'PDF needs repair')
+                        : t('admin.legacy_ofp.upload_title', 'Upload OFP PDF')
+                ))
+            . '</span></summary>'
+            . '<section class="admin-edit-card admin-simbrief-legacy-card" data-simbrief-legacy-panel aria-label="'
             . e(t('admin.legacy_ofp.title', 'Legacy flight plan (OFP)'))
             . '">';
     echo
@@ -1919,7 +1999,7 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
             ))
             . '</button></footer>';
     echo '</form></dialog></template>';
-    echo '</section>';
+    echo '</section></details>';
 }
 
 /**

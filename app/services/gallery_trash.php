@@ -1017,10 +1017,20 @@ function gallery_trash_snapshot_image_record(
 /**
  * Build the restore snapshot for one gallery subtree.
  *
- * @param array<string,mixed> $rootGallery Root gallery row selected for deletion, including id and folder_path.
+ * @param array{id:int,folder_path:string} $rootGallery Root gallery row
+ *     selected for deletion; remaining metadata comes from the subtree owner.
  * @param bool $payloadPresent Whether the physical source folder exists and will travel with the entry.
- * @return array<string,mixed> Snapshot document stored with the trash entry;
- *     each gallery may contain music_catalog_refs, a list of local track/song IDs.
+ * @return array{version:int,description_layout_semantics_version:int,
+ *     root_folder_path:string,payload_present:bool,app_version:string,
+ *     captured_at:string,gallery_count:int,image_count:int,
+ *     galleries:list<array{folder_path:string,parent_folder_path:?string,
+ *     tags:string,cover_image_relative_path:?string,breadcrumb_style:?string,
+ *     music_catalog_refs?:list<array{track_id:string,song_id:int}>,
+ *     title?:string,description?:string}>,images:list<array{
+ *     gallery_folder_path:string,relative_path:string,tags:string,
+ *     title?:string,description?:string}>} Restore document with path-keyed
+ *     durable metadata. Music references describe raw direct assignments;
+ *     live album members remain views over their retained album identities.
  */
 function gallery_trash_capture_snapshot(
     array $rootGallery,
@@ -1041,12 +1051,13 @@ function gallery_trash_capture_snapshot(
         $folderPath = normalize_relative_path((string) $row['folder_path']);
         $galleryRecord = gallery_trash_snapshot_gallery_record($row);
         if ($musicMode === 'available') {
-            if (!function_exists('Gallery\\Services\\gallery_music_playlist')) {
+            if (!function_exists('Gallery\\Services\\gallery_music_state')) {
                 throw new RuntimeException(
                     'The current music playlist could not be verified for Trash.',
                 );
             }
-            $playlist = gallery_music_playlist([
+            // Live album members are views, never local physical references.
+            $playlist = gallery_music_state([
                 'id' => $galleryId,
                 'folder_path' => $folderPath,
             ]);
@@ -1866,7 +1877,8 @@ function restore_gallery_trash_entry(
  * reads, early returns and failure cleanup remain inside the same writer lease.
  *
  * @param string $trashToken Existing Trash entry identifier.
- * @param array<string,mixed> $options Reserved restore options; currently ignored.
+ * @param array<string,mixed> $options Opaque unused reserved restore options;
+ *     this compatibility argument is not inspected or forwarded.
  * @return array{gallery_count:int,image_count:int,root_gallery_id:int,folder_path:string,metadata_only:bool,ancestor_shells_created:int} Restored live identity and metadata/payload recovery counts.
  * @author Rudolf Klusal
  */
@@ -2109,7 +2121,7 @@ function restore_gallery_trash_entry_owned(
             }
             if (gallery_trash_music_catalog_write_mode() === 'available') {
                 foreach ($galleryIdsByPath as $recordPath => $galleryId) {
-                    if (!function_exists('Gallery\\Services\\gallery_music_playlist')) {
+                    if (!function_exists('Gallery\\Services\\gallery_music_state')) {
                         throw new RuntimeException(
                             'The restored music playlist could not be verified.',
                         );
@@ -2132,7 +2144,7 @@ function restore_gallery_trash_entry_owned(
                         : [];
                     music_catalog_restore_trash_snapshot(
                         $galleryId,
-                        gallery_music_playlist($restoredGallery),
+                        gallery_music_state($restoredGallery),
                         $savedRefs,
                     );
                 }

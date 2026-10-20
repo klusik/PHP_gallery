@@ -2,8 +2,11 @@
 
 **Admin → Galleries → Music Manager** provides global song identities, custom
 display titles, direct-usage details, nested logical albums and music tags.
-Existing audio stays in its source galleries; public access still follows each
-source's permissions. Filename-derived titles hide extensions by default.
+New audio uses a shared protected repository; galleries select songs or live
+albums under **Edit gallery → Media → Music**. Playlist edits propagate to all
+linked galleries. Existing gallery-local audio remains playable and can move
+through an optional resumable Maintenance Center task. Playback follows the
+assigned gallery's permissions. Filename-derived titles hide extensions by default.
 The shared tag taxonomy isolates image and music assignments and reserves PDF.
 Run normal schema migrations and bounded catalog reconciliation after upgrade.
 See [Music Manager and recovery](docs/GALLERY_MUSIC.md#global-music-manager).
@@ -395,7 +398,9 @@ close/reopen; reloading resets them.
 ### Gallery music and slideshow soundtrack
 
 Upload music through the ordinary Upload photos chooser/drop queue alongside
-photographs and PDFs, or through the gallery editor's separate Music table.
+photographs and PDFs, or through **Edit gallery → Media → Music**. New originals
+are stored once in `data/music/`. Select individual catalog songs or live albums;
+album membership/order changes appear in every gallery using that album.
 Arrange tracks, remove them and save whether slideshow starts music
 automatically
 (initially off). MP3, M4A, AAC, Ogg/Opus, WAV, FLAC and WebM are accepted,
@@ -424,8 +429,9 @@ Downloads start locked for every upload. Administrator row/header icons allow
 individual/all current tracks; visitors see download icons only when allowed.
 The endpoint enforces that permission and normal gallery access. Playable bytes
 can still be captured by a technically capable visitor. Backups must include
-hidden `.gallery-music/` directories; photo ZIPs and gallery transfer packages
-omit music. See [the music contract](docs/GALLERY_MUSIC.md).
+SQL, `data/music/` and hidden `.gallery-music/` directories together. Removing a
+gallery reference retains shared originals. Photo ZIPs and gallery transfer
+packages omit music. See [the music contract](docs/GALLERY_MUSIC.md).
 
 ### Lightbox Image Zoom
 

@@ -73,7 +73,7 @@ function admin_edit_gallery_render_images_tab(
         [
             'label' => t(
                 'admin.gallery_editor.upload_photos_here',
-                'Upload photos here',
+                'Upload',
             ),
             'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
             'class' => 'button',
@@ -86,7 +86,7 @@ function admin_edit_gallery_render_images_tab(
                 ),
                 'data-admin-side-panel-title' => t(
                     'admin.gallery_editor.upload_photos',
-                    'Upload photos',
+                    'Upload',
                 ),
                 'data-gallery-side-panel-url' => url_for('admin_upload', [
                     'gallery_id' => $gallery['id'],

@@ -1701,8 +1701,9 @@ body.has-admin-side-panel {
 }
 .admin-gallery-images .is-filenames-hidden [data-admin-image-name-cell] { display: none; }
 .admin-image-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.35rem; }
-.admin-image-row-actions .public-admin-edit-button,
-.admin-image-row-actions .public-admin-card-action-button {
+/* Keep row states stronger than the standalone Admin's generic primary button. */
+#admin-edit-images .admin-image-row-actions .public-admin-edit-button,
+#admin-edit-images .admin-image-row-actions .public-admin-card-action-button {
     position: static;
     width: 2rem;
     height: 2rem;
@@ -1716,26 +1717,26 @@ body.has-admin-side-panel {
     box-shadow: none;
     font-size: 0.9rem;
 }
-.admin-image-row-actions .public-admin-edit-button:hover,
-.admin-image-row-actions .public-admin-card-action-button:hover { background: #e2e8f0; color: #0f172a; }
-.admin-image-row-actions .public-admin-delete-button { color: #b42318; }
-.admin-image-row-actions .admin-image-cover-button.is-cover { color: #926000; background: #fff4c2; border-color: #ead28a; }
+#admin-edit-images .admin-image-row-actions .public-admin-edit-button:hover,
+#admin-edit-images .admin-image-row-actions .public-admin-card-action-button:hover { background: #e2e8f0; color: #0f172a; }
+#admin-edit-images .admin-image-row-actions .public-admin-delete-button { color: #b42318; }
+#admin-edit-images .admin-image-row-actions .admin-image-cover-button.is-cover { color: #926000; background: #fff4c2; border-color: #ead28a; }
 /* Blue identifies accumulated cover photos; gold remains the exclusive choice. */
-.admin-image-row-actions .admin-image-cover-button.is-cover-multi {
+#admin-edit-images .admin-image-row-actions .admin-image-cover-button.is-cover-multi {
     color: #1d4ed8;
     background: #dbeafe;
     border-color: #60a5fa;
 }
-.admin-image-row-actions .admin-image-cover-button.is-cover-multi:focus-visible {
+#admin-edit-images .admin-image-row-actions .admin-image-cover-button.is-cover-multi:focus-visible {
     outline: 2px solid #1d4ed8;
     outline-offset: 2px;
 }
-.admin-image-row-actions .public-admin-visibility-menu { position: relative; }
-.admin-image-row-actions .public-admin-visibility-menu[open],
-.admin-image-row-actions .public-admin-visibility-menu:hover { z-index: 20; }
-.admin-image-row-actions .public-admin-visibility-options { left: auto; right: 0; }
-.admin-image-row-actions .public-admin-visibility-option { width: auto; gap: 0.3rem; padding: 0.3rem 0.5rem; font-size: 0.75rem; }
-.admin-image-row-actions .admin-gallery-visibility-option-label { white-space: nowrap; }
+#admin-edit-images .admin-image-row-actions .public-admin-visibility-menu { position: relative; }
+#admin-edit-images .admin-image-row-actions .public-admin-visibility-menu[open],
+#admin-edit-images .admin-image-row-actions .public-admin-visibility-menu:hover { z-index: 20; }
+#admin-edit-images .admin-image-row-actions .public-admin-visibility-options { left: auto; right: 0; }
+#admin-edit-images .admin-image-row-actions .public-admin-visibility-option { width: auto; gap: 0.3rem; padding: 0.3rem 0.5rem; font-size: 0.75rem; }
+#admin-edit-images .admin-image-row-actions .admin-gallery-visibility-option-label { white-space: nowrap; }
 
 /* One bounded thumbnail preview floats above the drawer without loading originals. */
 .admin-image-preview-overlay {
@@ -1759,8 +1760,8 @@ body.has-admin-side-panel {
     .admin-gallery-images .admin-image-thumbnail { width: 4.25rem; height: 3rem; }
     .admin-gallery-images .admin-image-actions-cell { width: 8.5rem; }
     .admin-image-row-actions { gap: 0.15rem; }
-    .admin-image-row-actions .public-admin-edit-button,
-    .admin-image-row-actions .public-admin-card-action-button { width: 1.85rem; min-width: 1.85rem; }
+    #admin-edit-images .admin-image-row-actions .public-admin-edit-button,
+    #admin-edit-images .admin-image-row-actions .public-admin-card-action-button { width: 1.85rem; min-width: 1.85rem; }
 }
 .admin-side-panel .admin-side-panel-edit-workspace > .panel {
     margin: 0;

@@ -155,13 +155,43 @@ Unreadable indexes/originals produce explicit partial-accounting warnings.
 Passive pages only read cached totals. See the accounting scope in
 [gallery PDF documents](docs/GALLERY_PDF.md#admin-storage-accounting).
 
-Gallery music originals and ordered preferences use a confined hidden sidecar.
-`app/services/gallery_music.php` owns content admission and revisioned
-filesystem
-workflows; `app/models/gallery_music.php` owns atomic index persistence. The
-separate SQL music catalog owns logical identities, stable gallery/track links,
-albums and song tags; it never owns audio bytes or source permissions. See
+Gallery music selections and ordered preferences use a confined hidden sidecar.
+`app/services/gallery_music.php` and its private projection/repository parts own
+source selection, revisioned updates and one-original migration checkpoints.
+`app/models/gallery_music.php` owns v1/v2 atomic index persistence. Immutable new
+audio originals use the protected `data/music/` repository through
+`app/services/music_repository.php`; existing gallery-local files remain valid.
+The separate SQL catalog owns logical identities, asset metadata, stable
+gallery/track links, albums and song tags. It stores no audio bytes. Direct song
+references and live album groups are expanded under the destination gallery's
+access/download policy. Public projection batches metadata for requested sources
+and never promotes or hashes the whole library. The protected gallery endpoint
+validates the selected original before streaming. See
 [music storage and limits](docs/GALLERY_MUSIC.md).
+
+The editor's Media panel uses scoped nested Music, PDF and Presentation tabs;
+the outer gallery tab and its independent form ownership remain unchanged.
+The local music manager chooses standalone songs or live album references.
+Global album edits update each referencing gallery's effective playlist and
+public revision. Source-group order and download flags remain gallery-local.
+Gallery assignment and future album additions preserve existing admission
+limits; unexpected oversized live state is reported with bounded projection.
+
+Maintenance Center registers `music.repository` as optional and initially
+unselected. Analysis observes readiness without moving files. Execution loads
+the complete existing attachment owner only for this task, verifies at most one
+original, switches its index reference and resumes verified local cleanup through
+a persisted journal. Central originals survive gallery deletion and Trash.
+Storage reporting adds their SQL byte totals once and accounts remaining local
+copies separately; ordinary gallery links never duplicate physical totals.
+
+Runtime source impact before this batch: 98 logical modules, 4,085 direct file
+entries, 441 unique PHP files and 3,644 duplicate entries in the tracked plan.
+The global module allowance (96 plus two) is consumed. This batch reuses the
+attachment owner and adds an estimated three PHP files: one central storage
+service and two private playlist parts. No new logical root or raised baseline
+is authorized. Hosted preparation and unchanged route/file/duplicate ratchets
+establish actual closure conformance; these counts are static source review.
 
 PDF and audio routes share the existing attachment runtime owner under its
 historical `gallery-pdf-documents` machine name. Public presentation loads it

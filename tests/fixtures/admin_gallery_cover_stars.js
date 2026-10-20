@@ -10,7 +10,7 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {setupAdminGalleryImages} from '/assets/gallery-modules/admin-gallery-images.js?v=20261016-three-state-covers-v1';
+import {setupAdminGalleryImages} from '/assets/gallery-modules/admin-gallery-images.js?v=20261020-unified-media-forms-v1';
 import {setupAdminGallerySidePanel} from '/assets/gallery-modules/admin-side-panel.js?v=20261018-presentation-confirm-v1';
 import {beginAdminPanelOpen} from '/assets/gallery-modules/admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 
@@ -112,7 +112,7 @@ const bulkForm = document.querySelector('[data-admin-image-bulk-form]');
 const editForm = document.querySelector('.admin-edit-gallery-form');
 const title = editForm.querySelector('[name="title"]');
 const description = editForm.querySelector('[name="description"]');
-const mediaCover = editForm.querySelector('select[name="cover_image_id"]');
+const mediaCover = document.querySelector('select[name="cover_image_id"]');
 const tab = document.querySelector('[data-admin-tab="images"]');
 beginAdminPanelOpen(panel, tab);
 scrollBox.scrollTop = 280;
@@ -124,6 +124,22 @@ scrollBox.scrollTop = 280;
 // Rationale: verify the requested offset produced scrolling even when the browser clamps it.
 const initialScrollTop = scrollBox.scrollTop;
 const originalUrl = location.href;
+
+/** Capture the visual state owned by the canonical cover-star button.
+ * @param {HTMLButtonElement|null} star Current mounted cover-star control.
+ * @returns {{state:string,background:string,color:string,border:string}|null} Computed star appearance or null when the selector is absent.
+ */
+function coverStarVisual(star) {
+    if (!(star instanceof HTMLButtonElement)) return null;
+    const style = getComputedStyle(star);
+    return {
+        state: star.dataset.coverState || '',
+        background: style.backgroundColor,
+        color: style.color,
+        border: style.borderTopColor,
+    };
+}
+
 
 /**
  * Wait for an acknowledged star action and preserve its exact pre-click editor position.
@@ -182,15 +198,43 @@ const assert = {
     /** Compare JSON-safe fixture values structurally. @param {unknown} actual Observed browser value. @param {unknown} expected Required browser structure. @param {string} message Scenario description. @return {void} Throws on structural mismatch. */
     deepEqual(actual, expected, message) { if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(message + ': expected ' + JSON.stringify(expected) + ', received ' + JSON.stringify(actual)); },
 };
+assert.equal(mediaCover.form, editForm,
+    'The Artwork selector must remain associated with the settings form despite living outside it.');
+assert.equal(editForm.contains(mediaCover), false,
+    'The Artwork selector must exercise native external-form ownership.');
 
 (async () => {
     assert.ok(initialScrollTop > 0, 'Fixture content must produce a meaningful nonzero panel scroll position');
+    const initialOffVisual = coverStarVisual(bulkForm.querySelector(
+        '[data-admin-image-cover-star][data-image-id="1"]',
+    ));
+    const initialSingleVisual = coverStarVisual(bulkForm.querySelector(
+        '[data-admin-image-cover-star][data-image-id="2"]',
+    ));
+    assert.equal(initialOffVisual?.state, 'off', 'The neutral star starts off');
+    assert.equal(initialOffVisual?.background, 'rgb(248, 250, 252)',
+        'The off star uses the neutral Admin action surface under the real Admin button cascade');
+    assert.equal(initialSingleVisual?.state, 'single', 'The prepared cover starts as one selected star');
+    assert.equal(initialSingleVisual?.background, 'rgb(255, 244, 194)',
+        'The exclusive cover has its distinct gold surface under the real Admin button cascade');
+    assert.equal(initialSingleVisual?.color, 'rgb(146, 96, 0)',
+        'The exclusive cover keeps its gold foreground instead of inheriting the generic button color');
     mediaCover.value = 'automatic';
     mediaCover.dispatchEvent(new Event('change', {bubbles: true}));
     assert.equal(bulkForm.dataset.coverSelectionMode, 'single', 'An unsaved Media draft does not change persisted star intent mode');
     await clickAndVerify(3, 'cover:3', 'single', [3]);
     await clickAndVerify(3, 'cover_arm:3', 'multi', [3]);
     await clickAndVerify(2, 'cover_add:2', 'multi', [3, 2]);
+    const multiVisuals = [2, 3].map(id => coverStarVisual(
+        bulkForm.querySelector(
+            '[data-admin-image-cover-star][data-image-id="' + id + '"]',
+        ),
+    ));
+    assert.ok(multiVisuals.every(star => star?.state === 'multi'
+        && star.background === 'rgb(219, 234, 254)'
+        && star.color === 'rgb(29, 78, 216)'),
+    'Accumulated cover stars use the pale-blue multi-selection treatment after canonical refresh: '
+        + JSON.stringify(multiVisuals));
     await clickAndVerify(2, 'cover_reset:2', 'single', [2]);
     await clickAndVerify(3, 'cover:3', 'single', [3]);
     await clickAndVerify(3, 'cover_arm:3', 'multi', [3]);

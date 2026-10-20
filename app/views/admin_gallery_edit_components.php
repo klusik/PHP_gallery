@@ -318,11 +318,15 @@ function view_render_admin_image_bulk_toolbar(array $viewModel): void
 /**
  * Render optional gallery branding uploads, current assets, and contextual help.
  *
- * @param array<string,mixed> $viewModel Controller-prepared gallery branding state.
+ * @param array{schema_ready:bool,assets:list<array{kind:string,label:string,description:string,url:string}>,form_id?:string} $viewModel Controller-prepared gallery branding state and optional native form owner.
  * @return void Emit the branding fieldset without discovering domain state.
  */
 function view_render_admin_gallery_branding_fields(array $viewModel): void
 {
+    $formId = trim((string) ($viewModel['form_id'] ?? ''));
+    $formAttribute = $formId !== ''
+        ? ' form="' . e($formId) . '"'
+        : '';
     if (empty($viewModel['schema_ready'])) {
         echo
             '<p class="muted">'
@@ -383,7 +387,9 @@ function view_render_admin_gallery_branding_fields(array $viewModel): void
                     . e($assetUrl)
                     . '" alt=""><label class="checkbox-label"><input type="checkbox" name="remove_branding_'
                     . e($kind)
-                    . '" value="1"> '
+                    . '" value="1"'
+                    . $formAttribute
+                    . '> '
                     . e(t(
                         'admin.gallery_editor.branding_remove_current',
                         'Remove current {asset}',
@@ -413,7 +419,9 @@ function view_render_admin_gallery_branding_fields(array $viewModel): void
                 ))
                 . '<input type="file" name="branding_'
                 . e($kind)
-                . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"></label><details class="admin-inline-help admin-gallery-branding-format-help"><summary aria-label="'
+                . '_upload"'
+                . $formAttribute
+                . ' accept="image/jpeg,image/png,image/gif,image/webp"></label><details class="admin-inline-help admin-gallery-branding-format-help"><summary aria-label="'
                 . e($formatHelp)
                 . '" title="'
                 . e($formatHelp)

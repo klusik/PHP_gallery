@@ -256,11 +256,19 @@ function render_admin_image_bulk_toolbar(array $gallery): void
  * Banner replaces the visible public title text, logo is supplementary, and the
  * separator acts as a visual divider below the public title area.
  *
- * @param array<string, mixed> $gallery Gallery row containing the fields
- *     consumed by gallery_branding_asset_url().
+ * @param array{id:int|string,folder_path:string,visibility?:string|null,
+ *     access_listing?:string|null,access_mode?:string|null,
+ *     parent_id?:int|string|null,nsfw_enabled?:int|string|null,
+ *     banner_image_path?:string|null,logo_image_path?:string|null,
+ *     separator_image_path?:string|null} $gallery Gallery identity, inherited
+ *     access policy and optional branding asset paths.
+ * @param string $formId Native form owner for controls rendered outside it.
  * @return void Render the branding asset controls and their schema state.
  */
-function render_admin_gallery_branding_fields(array $gallery): void
+function render_admin_gallery_branding_fields(
+    array $gallery,
+    string $formId = '',
+): void
 {
     $schemaReady = gallery_branding_schema_ready();
     $assets = [];
@@ -281,6 +289,7 @@ function render_admin_gallery_branding_fields(array $gallery): void
     \Gallery\Views\view_render_admin_gallery_branding_fields([
         'schema_ready' => $schemaReady,
         'assets' => $assets,
+        'form_id' => $formId,
     ]);
 }
 

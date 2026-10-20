@@ -253,24 +253,9 @@ namespace Gallery\Services {
         return count($filenames);
     }
 
-    /** Supply verified ingestion schema without a live database. @return array{state:string} Controlled readiness observation. */
-    function upload_ingestion_schema_status(): array
-    {
-        return ['state' => 'available'];
-    }
-
-    /** Preserve the schema preflight boundary in the isolated upload path. @param array{state:string} $status Readiness observation. @param string $operation Domain operation. @param string $missing Missing-schema message. @param string $unknown Unknown-schema message. @return void Verify the fixture has explicitly available storage. */
-    function mutation_schema_assert_available(
-        array $status,
-        string $operation,
-        string $missing,
-        string $unknown,
-    ): void {
-        \decode_upload_expect(
-            $status['state'] === 'available',
-            'Unexpected ingestion prerequisite.',
-        );
-    }
+    require_once __DIR__ . '/../app/models/schema_inspection.php';
+    require_once __DIR__ . '/../app/services/schema_inspection.php';
+    require_once __DIR__ . '/../app/services/mutation_schema_policy.php';
 
     /** Observe thumbnail write preflight without persistence. @param string $operation Operation being checked. @return void Record this executed schema boundary. */
     function thumbnail_metadata_preflight_write_schema(string $operation): void

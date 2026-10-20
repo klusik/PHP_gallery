@@ -536,7 +536,7 @@ Stejný odkaz funguje i~anonymně po~běžné kontrole přístupu.
 Pokud celá obrazovka či~zvuk vyžadují souhlas, černý úvod čeká na
 \ui{Spustit prezentaci}. Po~potvrzení zůstane při nepodporovaném fullscreen
 vyplněné okno; \ui{Přehrát} umožní opakovat pozdější selhání zvuku.
-V~\ui{Upravit galerii > PDF / Hudba / Prezentace} najdete průhlednou kartu
+V~\ui{Upravit galerii > Média > Prezentace} najdete průhlednou kartu
 \ui{Nastavení prezentace}: viditelnost tlačítek, hudbu a~obě rychlosti.
 Ikona uložení používá běžný chráněný formulář galerie. Náhled a~sdílení
 použijí aktuální volby i~před uložením. Nové odkazy obsahují hudbu i~rychlosti;
@@ -579,6 +579,15 @@ zachová otevřený seznam a~jeho posun.
 Výběr souborů i~přetažení v~panelu Nahrát fotografie do~existující galerie přijímá také PDF. Ve~výchozím stavu se~připojí pouze originální dokument; nevzniká podgalerie ani stránky PNG. Pro~převod při nahrání rozbalte \ui{Pokročilé} a~výslovně zaškrtněte \ui{Také převést stránky PDF na~PNG}, pak zvolte soukromou podgalerii nebo připojení stránek na~konec a~DPI. Samotné rozbalení převod nezapne. Smíšený výběr nahraje nejprve fotografie, potom připojí PDF a~provede pouze zvolené převody. Panel zůstává otevřený s~průběhem a~možností zrušení. Opakování zachová původní volbu převodu; při zapnutém převodu se~stejnými vstupy obnoví chybějící prázdnou podgalerii pouze tehdy, když nebyla potvrzena žádná stránka.
 
 \index{PDF!dokumenty galerie}
+
+Editor galerie má~jedinou hlavní kartu \ui{Média} se~vnořenými sekcemi
+\ui{Hudba}, \ui{PDF}, \ui{Prezentace} a~\ui{Vizuální prvky}. Hudba a~PDF
+zachovávají samostatné formuláře; vizuální prvky jsou~stále propojené s~hlídaným
+formulářem nastavení galerie. Karta Prezentace je~v~\ui{Média} >
+\ui{Prezentace}, obecné dokumenty a~volitelný panel OFP v~\ui{Média} >
+\ui{PDF}. Titulní obrázek, identita značky a~pozadí jsou~v~\ui{Média} >
+\ui{Vizuální prvky}. V~sekci \ui{Obrázky} přijímá tlačítko \ui{Nahrát}
+všechna média právě povolená pro~galerii.
 
 Správce může k~fyzické galerii připojit obecný dokument PDF i~bez údajů SimBrief. Galerie uchovává původní soubor a~malý index se stabilním ID dokumentu, názvem souboru, titulkem, původem, přesnou velikostí a~kontrolním součtem SHA-256. Chráněný odkaz pro zobrazení a~stažení na~stejné doméně respektuje viditelnost galerie, heslo, sdílecí odkaz a~pravidla NSFW. Stávající manifest a~odkazy SimBrief OFP zůstávají samostatné.
 
@@ -647,9 +656,10 @@ zdroj brání úplnému dokončení.
 Odebrání vazby nemaže originál. Alba slouží v~Administraci,
 nevzniká veřejná hudební knihovna. Hudební tagy používají společnou taxonomii
 s~vlastním typem média; tagy a~hledání obrázků zůstávají oddělené. Typ PDF
-je rezervován. Stávající slugy zůstávají globálně jedinečné. Zálohujte SQL
-i~skryté složky hudby; po obnově použijte běžné dopředné migrace a~dávkové
-sladění. Po konfliktu revize načtěte aktuální stav. Vypnutí funkce hudby
+je rezervován. Stávající slugy zůstávají globálně jedinečné. Zálohujte SQL,
+\filepath{data/music/} i~skryté starší indexy; po obnově použijte běžné
+dopředné migrace a~dávkové sladění. Po konfliktu revize načtěte aktuální stav.
+Vypnutí funkce hudby
 zachová metadata i~originály.
 Místní obnova z~Koše připojí skladby ke stávajícím identitám i~při změně ID
 galerie. Staré snímky či zaniklé identity vytvoří nové katalogové záznamy;
@@ -657,14 +667,16 @@ přenášené archivy nedodávají důvěryhodná logická ID.
 
 \subsubsection{Úložiště hudby}
 
-Přes \ui{Nahrát fotografie} lze společně vybrat nebo přetáhnout fotografie, PDF
-a~hudbu. Zvuk zůstává originálem a~nepřevádí se na fotografie. Samotnou hudbu
-lze nahrát i~při vypnutém zpracování obrázků. Záložka \ui{Dokumenty / PDF}
-v~editoru zachovává samostatnou tabulku \ui{Hudba} pro nahrávání, řazení,
-odstranění a~výchozí volbu slideshow. Akce zůstávají v~panelu. Přijímají se
-MP3, M4A, AAC, Ogg/Opus, WAV, FLAC a~WebM; přehratelnost závisí na kodecích
-prohlížeče. Platí viditelnost, heslo, sdílení a~NSFW pravidla galerie.
-
+Otevřete \ui{Upravit galerii > Média > Hudba} pro~nahrání zvuku a~správu
+playlistu galerie. Nové uploady ukládají neměnné originály do~chráněného
+centrálního úložiště \filepath{data/music/}; zvuk se~nikdy nepřevádí na fotografie.
+Samostatně přiřazené skladby zůstávají nezávislé položky. Přiřazení alba je~živý
+playlist: pozdější změny členství a~pořadí v~albu se~projeví ve~všech připojených
+galeriích. Galerie ukládá seřazené odkazy a~povolení stažení každé položky,
+nikoli kopii sdíleného originálu. Přehrávání a~stažení ověřuje aktuální přístup
+k~cílové galerii a~povolení položky; soukromí zdrojové galerie neautorizuje
+nesouvisející požadavky. Přijímají se MP3, M4A, AAC, Ogg/Opus, WAV, FLAC a~WebM;
+přehratelnost závisí na~kodecích prohlížeče.
 Tabulka ukazuje délku skladby a~jedinou ikonku Přehrát/Zastavit před
 názvem. Její podoba odpovídá přehrávání; není zde pauza ani samostatný
 sloupec přehrávání. Dlouhé názvy jsou zkrácené výpustkou s~plným textem
@@ -705,18 +717,18 @@ sledování viditelnosti stejná čtečka postupně obslouží připojené řád
 zvuk nedekóduje. Opakování uploadu zachovává potvrzené fotografie, PDF i~zvuk;
 neznámý výsledek nahrání hudby vyžaduje před dalším pokusem kontrolu galerie.
 
-Originály a~seřazený JSON index jsou ve skryté složce
-\filepath{.gallery-music/}. Index ukládá názvy, MIME, velikosti, SHA-256,
-revizi, výchozí volbu slideshow a~povolení stažení každé skladby. Starší
-záznamy bez povolení zůstávají zamčené. Limity jsou 64~MiB na soubor, 100
-skladeb a~512~MiB na galerii; platí i~nižší limity PHP. Zálohy musí obsahovat
-skryté složky. ZIP exporty fotek a~přenos galerie hudbu nezahrnují.
-Podrobnosti: \filepath{docs/GALLERY_MUSIC.md}.
-
-Ve vývojovém checkoutu po změně rout použijte kandidáta připraveného hosted
-workflow. PDF a~zvuk sdílí existujícího runtime vlastníka příloh; samotné
-zdroje se starším generovaným plánem mohou odmítat požadavky do načtení
-připraveného plánu. Lokální generování nenahrazuje hosted kvalifikaci.
+Seřazený playlist galerie zůstává v~jejím skrytém indexu
+\filepath{.gallery-music/}; samotné neměnné zvukové originály jsou v~centrálním
+\filepath{data/music/}. Volitelná úloha v~\ui{Údržba > Centrum údržby} přesouvá
+starší lokální originály po~jednom v~omezených, obnovitelných dávkách. Nejprve
+ověří centrální kopii a~potom atomicky přepne odkaz; zachová ID skladeb, logické
+identity, pořadí, viditelnost, povolení stažení i~nastavení slideshow.
+Nejistý lokální soubor nesmaže. Zálohujte společně SQL,
+\filepath{data/music/} i~skryté starší indexy.
+Centrální originál se~v~úložišti počítá pouze jednou bez ohledu na~počet galerií;
+nepřesunuté lokální kopie se~počítají zvlášť. Smazání galerie odstraní její
+vazby, nikoli sdílený originál. ZIP export fotografií a~přenos galerie hudbu
+nezahrnují. Podrobnosti: \filepath{docs/GALLERY_MUSIC.md}.
 
 \subsection{Úprava identity a~souvislostí}
 \index{m00084@metadata galerie}
@@ -1129,7 +1141,7 @@ telemetrii.
 
 Nahrávání v~prohlížeči se hodí pro každodenní přírůstky. Vyberte galerii, zvolte soubory, zkontrolujte dávku a~sledujte průběh, zatímco server ověřuje média a~připravuje záznamy a~náhledy. Vyhledání souborů v~souborovém systému se hodí pro velké existující stromy složek nebo přenosy pomocí FTP a~hostingových nástrojů. Automatizace a~WebDAV se hodí pro opakované či mobilní postupy po nastavení přihlašovacích údajů s~vymezeným rozsahem.
 
-V~pravém administračním panelu \ui{Nahrát fotografie} lze postupně vkládat snímky obrazovky pomocí Ctrl+V ve~Windows/Linuxu nebo Cmd+V v~macOS, přidávat další soubory výběrem a~přetahovat obrázky do~oblasti nahrávání. Každý obrázek se~před odesláním zobrazí v~místní frontě malých náhledů spolu s~názvem a~velikostí. Šipkami lze změnit pořadí, chybný snímek odebrat nebo celý výběr vymazat. Stávající tlačítko \ui{Nahrát obrázky} odešle původní soubory jediným běžným procesem; náhledy nejsou náhradními daty pro~upload. Fronta není uloženým konceptem na~serveru: před odchodem z~panelu se~potvrzuje zahození neodeslaných souborů, při chybě zůstává výběr připraven k~opakování a~teprve potvrzené úspěšné nahrání frontu vyprázdní. Nepodporovaný formát náhledu se~zobrazí jako značka formátu, nikoli jako důvod k~obejití serverové validace. Samostatná administrační stránka nahrávání a~formulář bez JavaScriptu se~nemění.
+V~pravém administračním panelu \ui{Nahrát fotografie} lze postupně vkládat snímky obrazovky pomocí Ctrl+V ve~Windows/Linuxu nebo Cmd+V v~macOS, přidávat další soubory výběrem a~přetahovat obrázky do~oblasti nahrávání. Každý obrázek se~před odesláním zobrazí v~místní frontě malých náhledů spolu s~názvem a~velikostí. Šipkami lze změnit pořadí, chybný snímek odebrat nebo celý výběr vymazat. Stávající tlačítko \ui{Nahrát} odešle původní soubory jediným běžným procesem; náhledy nejsou náhradními daty pro~upload. Fronta není uloženým konceptem na~serveru: před odchodem z~panelu se~potvrzuje zahození neodeslaných souborů, při chybě zůstává výběr připraven k~opakování a~teprve potvrzené úspěšné nahrání frontu vyprázdní. Nepodporovaný formát náhledu se~zobrazí jako značka formátu, nikoli jako důvod k~obejití serverové validace. Samostatná administrační stránka nahrávání a~formulář bez JavaScriptu se~nemění.
 
 U~velké akce nahrávejte po smysluplných skupinách. Menší skupiny usnadňují identifikaci chyb a~umožňují průběžnou kontrolu názvů, pořadí a~viditelnosti.
 
@@ -2539,9 +2551,11 @@ Pohled Soubory uvádí také počty a~velikosti originálů PDF a~hudby
 spolu s~celkovým součtem médií. Aktualizovat vše po dávkách fotografií
 načte součty PDF, hudby a~OFP z~databáze. První běh doplní chybějící evidenci
 nejvýše ze dvou fyzických galerií za krok, včetně galerií bez fotografií.
-Počítají se i~skryté, soukromé, vypnuté a~nestáhnutelné soubory. Fyzické
-kopie zabírají místo samostatně; playlist Smart galerie žádnou kopii
-nepřidává. Stránky převedené z~PDF už patří mezi fotografie. Indexy, zámky,
+Počítají se i~skryté, soukromé, vypnuté a~nestáhnutelné soubory. Každý
+centrální hudební originál se počítá jednou, včetně nepřiřazených;
+nepřesunuté lokální originály se počítají zvlášť. Playlist Smart galerie
+žádnou kopii nepřidává. Stránky převedené z~PDF už patří mezi fotografie.
+Indexy, zámky,
 stav převodů, neindexované soubory, Koš a~ostatní cache sem nepatří.
 Nečitelné indexy a~nebezpečné či~chybějící soubory vyvolají upozornění
 na neúplné měření bez oprav. Běžné stránky čtou uložené výsledky; změny

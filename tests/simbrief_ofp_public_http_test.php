@@ -5,9 +5,11 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/simbrief_ofp_public_http_test.php
  * Module Type: Standalone HTTP Regression Test
- * Purpose: Prove gallery-scoped PDF routes preserve gallery access and original bytes.
+ * Purpose: Prove gallery-scoped PDF and music HTTP routes preserve access
+ *     and original bytes.
  * Responsibilities:
  *   - Exercise GET, HEAD, attachment and legacy OFP routes through a real PHP HTTP server
+ *   - Verify administrator playlist reads separate write and effective music revisions
  *   - Check manual documents and OFPs across public, private, password, share and NSFW policy
  *   - Check hidden direct, download, HEAD, share and anonymous-preview denials
  *   - Test same-origin PDF links in root and non-root installations without URL rewriting
@@ -414,6 +416,40 @@ try {
     $musicId = str_repeat('b', 32);
     $downloadId = str_repeat('c', 32);
     $hiddenMusicId = str_repeat('d', 32);
+    $legacyMusicIndex = [
+        'format' => 'gallery_music_v1',
+        'revision' => str_repeat('a', 32),
+        'enabled' => true,
+        'tracks' => [
+            [
+                'id' => $musicId,
+                'filename' => 'sound.wav',
+                'title' => 'Sound',
+                'mime' => 'audio/wav',
+                'size' => strlen($musicBytes),
+                'sha256' => hash('sha256', $musicBytes),
+            ],
+            [
+                'id' => $downloadId,
+                'filename' => 'download.wav',
+                'title' => 'Download',
+                'mime' => 'audio/wav',
+                'size' => strlen($musicBytes),
+                'sha256' => hash('sha256', $musicBytes),
+                'downloadable' => true,
+            ],
+            [
+                'id' => $hiddenMusicId,
+                'filename' => 'hidden.wav',
+                'title' => 'Hidden',
+                'mime' => 'audio/wav',
+                'size' => strlen($musicBytes),
+                'sha256' => hash('sha256', $musicBytes),
+                'hidden' => true,
+                'downloadable' => true,
+            ],
+        ],
+    ];
     foreach ([
         'public',
         'unpublished',
@@ -433,40 +469,10 @@ try {
             $directory . '/' . $hiddenMusicId . '.bin',
             $musicBytes,
         );
-        file_put_contents($directory . '/index.json', json_encode([
-            'format' => 'gallery_music_v1',
-            'revision' => str_repeat('a', 32),
-            'enabled' => true,
-            'tracks' => [
-                [
-                    'id' => $musicId,
-                    'filename' => 'sound.wav',
-                    'title' => 'Sound',
-                    'mime' => 'audio/wav',
-                    'size' => strlen($musicBytes),
-                    'sha256' => hash('sha256', $musicBytes),
-                ],
-                [
-                    'id' => $downloadId,
-                    'filename' => 'download.wav',
-                    'title' => 'Download',
-                    'mime' => 'audio/wav',
-                    'size' => strlen($musicBytes),
-                    'sha256' => hash('sha256', $musicBytes),
-                    'downloadable' => true,
-                ],
-                [
-                    'id' => $hiddenMusicId,
-                    'filename' => 'hidden.wav',
-                    'title' => 'Hidden',
-                    'mime' => 'audio/wav',
-                    'size' => strlen($musicBytes),
-                    'sha256' => hash('sha256', $musicBytes),
-                    'hidden' => true,
-                    'downloadable' => true,
-                ],
-            ],
-        ], JSON_THROW_ON_ERROR));
+        file_put_contents(
+            $directory . '/index.json',
+            json_encode($legacyMusicIndex, JSON_THROW_ON_ERROR),
+        );
     }
     foreach (['', '/galerie'] as $base) {
         $musicUrl =
@@ -540,14 +546,67 @@ try {
             ofp_http_request($metadataUrl)['status'] === 404,
             'Playlist revision reads must require administrator authority.',
         );
+        // A v2 direct-only index needs no catalog database: the production
+        // projection retains the raw write CAS while deriving a player revision.
+        $writeRevision = str_repeat('e', 32);
+        $musicDirectory = $root . '/galleries/public/.gallery-music';
+        $v2Index = [
+            'format' => 'gallery_music_v2',
+            'revision' => $writeRevision,
+            'enabled' => true,
+            'tracks' => [[
+                'id' => $musicId,
+                'filename' => 'sound.wav',
+                'title' => 'Sound',
+                'mime' => 'audio/wav',
+                'size' => strlen($musicBytes),
+                'sha256' => hash('sha256', $musicBytes),
+                'hidden' => false,
+                'downloadable' => false,
+            ]],
+            'albums' => [],
+            'order' => [$musicId],
+            'legacy_cleanup' => [],
+        ];
+        ofp_http_assert(
+            file_put_contents(
+                $musicDirectory . '/index.json',
+                json_encode($v2Index, JSON_THROW_ON_ERROR),
+            ) !== false,
+            'Cannot publish direct-only v2 music fixture.',
+        );
+        $v2Unauthorized = ofp_http_request($metadataUrl);
+        ofp_http_assert(
+            $v2Unauthorized['status'] === 404
+                && $v2Unauthorized['body'] === 'Not found',
+            'V2 write revisions must remain hidden from unauthenticated visitors.',
+        );
         $metadata = ofp_http_request($metadataUrl, 'GET', 'ofp_test_admin=1');
+        $playlistState = json_decode(
+            $metadata['body'],
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
         ofp_http_assert(
             $metadata['status'] === 200
-                && json_decode(
-                    $metadata['body'],
-                    true,
-                )['revision'] === str_repeat('a', 32),
-            'The audio upload workflow must read the exact current revision.',
+                && ($playlistState['ok'] ?? false) === true
+                && ($playlistState['revision'] ?? null) === $writeRevision
+                && is_string($playlistState['effective_revision'] ?? null)
+                && $playlistState['effective_revision'] !== $writeRevision
+                && preg_match(
+                    '/^[a-f0-9]{32}$/D',
+                    $playlistState['effective_revision'],
+                ) === 1,
+            'Administrator playlist CAS must use the raw write revision and'
+                . ' expose a distinct effective player revision.',
+        );
+        ofp_http_assert(
+            file_put_contents(
+                $musicDirectory . '/index.json',
+                json_encode($legacyMusicIndex, JSON_THROW_ON_ERROR),
+            ) !== false,
+            'Cannot restore legacy music fixture after the v2 CAS assertion.',
         );
         ofp_http_assert(
             $music['status'] === 200

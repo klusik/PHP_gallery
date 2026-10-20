@@ -119,6 +119,13 @@ namespace {
      */
     const MUSIC_CATALOG_FIXTURE_DIRECTORY_MODE = 0700;
 
+    /** Keep the verified fixture audio payload small while exercising repository validation.
+     * Type: int. Units: PCM sample bytes. Scope: one WAV upload source.
+     * Consumers: repository-only list result and valid physical source files.
+     * Rationale: Eight deterministic samples produce a valid minimal audio original. Value: 8.
+     */
+    const MUSIC_CATALOG_FIXTURE_WAV_SAMPLE_BYTES = 8;
+
     /** Bound one public image-search probe used to detect cross-media tag leakage.
      * Type: int. Units: rows. Scope: each disposable public-search query.
      * Consumers: music_catalog_database_test.php typed-tag isolation assertions.
@@ -160,6 +167,8 @@ namespace {
     use function Gallery\Services\music_catalog_sync_gallery_snapshot;
     use function Gallery\Services\music_catalog_sync_song_tags;
     use function Gallery\Services\music_catalog_usage;
+    use function Gallery\Services\music_repository_directory;
+    use function Gallery\Services\music_repository_store_source;
     use function Gallery\Services\normalize_existing_tags;
     use function Gallery\Services\gallery_music_merge_playlists;
     use function Gallery\Services\sync_entity_tags;
@@ -206,6 +215,47 @@ namespace {
         check(false, $message);
     }
 
+    /** Build a distinct valid WAV original for one physical music fixture.
+     * @param string $seed Fixture-only value used to make stable sample bytes.
+     * @return string Complete mono 8-bit PCM WAV payload accepted by the real validator.
+     */
+    function music_catalog_fixture_wav(string $seed): string
+    {
+        $samples = substr(
+            hash('sha256', $seed, true),
+            0,
+            MUSIC_CATALOG_FIXTURE_WAV_SAMPLE_BYTES,
+        );
+        return 'RIFF'
+            . pack('V', 36 + strlen($samples))
+            . 'WAVEfmt '
+            . pack('VvvVVvv', 16, 1, 1, 8000, 8000, 1, 8)
+            . 'data'
+            . pack('V', strlen($samples))
+            . $samples;
+    }
+
+    /** Write one owned gallery-local original under its generated track ID.
+     * @param string $musicDirectory Existing sidecar directory owned by this fixture.
+     * @param string $trackId Generated 32-character hexadecimal gallery track identity.
+     * @param string $bytes Valid WAV data whose digest and size are recorded in the index.
+     * @return void Persist the exact original consumed by repository promotion.
+     * @throws \RuntimeException When the generated identity or bounded write is invalid.
+     */
+    function music_catalog_fixture_write_track(
+        string $musicDirectory,
+        string $trackId,
+        string $bytes,
+    ): void {
+        if (preg_match('/^[a-f0-9]{32}$/D', $trackId) !== 1) {
+            throw new \RuntimeException('Invalid owned catalog track identity.');
+        }
+        $path = $musicDirectory . DIRECTORY_SEPARATOR . $trackId . '.bin';
+        if (file_put_contents($path, $bytes) !== strlen($bytes)) {
+            throw new \RuntimeException('Owned catalog audio original could not be written.');
+        }
+    }
+
     if (!getenv('GALLERY_WORKFLOW_FIXTURE')) {
         $required = getenv('GALLERY_WORKFLOW_REQUIRED') === '1';
         echo ($required ? 'BLOCKED' : 'SKIP')
@@ -231,6 +281,10 @@ namespace {
     $trackOneId = null;
     $trackVariantId = null;
     $fixtureTrackIds = [];
+    $fixtureAssetIds = [];
+    $fixtureAssetPaths = [];
+    $fixtureSourcePaths = [];
+    $repositoryDirectoryCreated = false;
     try {
         $token = (string) getenv('GALLERY_WORKFLOW_TOKEN');
         $directory = validateFixture(
@@ -241,6 +295,10 @@ namespace {
         $GLOBALS['music_catalog_fixture_db'] = $pdo;
         $fixtureGalleryRoot = $directory . DIRECTORY_SEPARATOR . 'galleries';
         $GLOBALS['music_catalog_gallery_root'] = $fixtureGalleryRoot;
+        $repositoryDirectoryCreated = !is_dir(
+            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'data'
+                . DIRECTORY_SEPARATOR . 'music',
+        );
         $fixtureRevision = music_catalog_revision();
         $settingQuery = $pdo->prepare(
             'SELECT setting_key, setting_value, updated_at FROM app_settings '
@@ -395,7 +453,7 @@ namespace {
         $galleryB = $fixtureGalleryIds[1];
         $galleryC = $fixtureGalleryIds[2];
         $galleryD = $fixtureGalleryIds[3];
-        foreach ([$galleryA, $galleryB, $galleryC] as $galleryId) {
+        foreach ([$galleryA, $galleryB, $galleryC, $galleryD] as $galleryId) {
             $musicDirectory = $fixtureGalleryRoot . DIRECTORY_SEPARATOR
                 . $fixtureGalleryPaths[$galleryId] . DIRECTORY_SEPARATOR
                 . '.gallery-music';
@@ -410,6 +468,31 @@ namespace {
             }
             $playlistDirectories[$galleryId] = $musicDirectory;
         }
+        $bridgeBytesX = music_catalog_fixture_wav($token . ':bridge-x');
+        $bridgeBytesY = music_catalog_fixture_wav($token . ':bridge-y');
+        $variantBytes = music_catalog_fixture_wav($token . ':variant');
+        $bridgeHashX = hash('sha256', $bridgeBytesX);
+        $bridgeHashY = hash('sha256', $bridgeBytesY);
+        music_catalog_fixture_write_track(
+            $playlistDirectories[$galleryA],
+            $trackOneId,
+            $bridgeBytesX,
+        );
+        music_catalog_fixture_write_track(
+            $playlistDirectories[$galleryA],
+            $trackVariantId,
+            $variantBytes,
+        );
+        music_catalog_fixture_write_track(
+            $playlistDirectories[$galleryB],
+            $trackOneId,
+            $bridgeBytesX,
+        );
+        music_catalog_fixture_write_track(
+            $playlistDirectories[$galleryC],
+            $trackOneId,
+            $bridgeBytesY,
+        );
 
         $beforeTags = $pdo->query(
             'SELECT id, slug, media_type FROM tags ORDER BY id',
@@ -426,19 +509,19 @@ namespace {
             [[
                 'id' => $trackOneId,
                 'title' => 'Indexed Song',
-                'filename' => 'song-one.mp3',
-                'sha256' => str_repeat('a', 64),
-                'mime' => 'audio/mpeg',
-                'size' => 100,
+                'filename' => 'song-one.wav',
+                'sha256' => $bridgeHashX,
+                'mime' => 'audio/wav',
+                'size' => strlen($bridgeBytesX),
                 'hidden' => false,
                 'downloadable' => true,
             ], [
                 'id' => $trackVariantId,
                 'title' => 'Indexed Song',
-                'filename' => 'song-variant.mp3',
-                'sha256' => str_repeat('b', 64),
-                'mime' => 'audio/mpeg',
-                'size' => 120,
+                'filename' => 'song-variant.wav',
+                'sha256' => hash('sha256', $variantBytes),
+                'mime' => 'audio/wav',
+                'size' => strlen($variantBytes),
                 'hidden' => false,
                 'downloadable' => true,
             ]],
@@ -460,25 +543,36 @@ namespace {
         );
         $fixtureSongIds = [$songId, $variantId];
 
+        check(
+            preg_match(
+                '/^[0-9]+$/D',
+                (string) $pdo->query(
+                    "SELECT setting_value FROM app_settings "
+                    . "WHERE setting_key = 'theme_public_content_revision'",
+                )->fetchColumn(),
+            ) === 1,
+            'Catalog mutations must preserve the decimal public HTML revision contract.',
+        );
+
         // Replaying the same physical index refreshes identities in place.
         $revision = music_catalog_sync_gallery_snapshot(
             $galleryA,
             [[
                 'id' => $trackOneId,
                 'title' => 'Indexed Song',
-                'filename' => 'song-one.mp3',
-                'sha256' => str_repeat('a', 64),
-                'mime' => 'audio/mpeg',
-                'size' => 100,
+                'filename' => 'song-one.wav',
+                'sha256' => $bridgeHashX,
+                'mime' => 'audio/wav',
+                'size' => strlen($bridgeBytesX),
                 'hidden' => false,
                 'downloadable' => true,
             ], [
                 'id' => $trackVariantId,
                 'title' => 'Indexed Song',
-                'filename' => 'song-variant.mp3',
-                'sha256' => str_repeat('b', 64),
-                'mime' => 'audio/mpeg',
-                'size' => 120,
+                'filename' => 'song-variant.wav',
+                'sha256' => hash('sha256', $variantBytes),
+                'mime' => 'audio/wav',
+                'size' => strlen($variantBytes),
                 'hidden' => false,
                 'downloadable' => true,
             ]],
@@ -498,10 +592,10 @@ namespace {
             [[
                 'id' => $trackOneId,
                 'title' => 'Same Recording',
-                'filename' => 'shared.mp3',
-                'sha256' => str_repeat('c', 64),
-                'mime' => 'audio/mpeg',
-                'size' => 130,
+                'filename' => 'shared.wav',
+                'sha256' => $bridgeHashX,
+                'mime' => 'audio/wav',
+                'size' => strlen($bridgeBytesX),
                 'hidden' => false,
                 'downloadable' => true,
             ]],
@@ -512,10 +606,10 @@ namespace {
             [[
                 'id' => $trackOneId,
                 'title' => 'Album Recording',
-                'filename' => 'album.mp3',
-                'sha256' => str_repeat('d', 64),
-                'mime' => 'audio/mpeg',
-                'size' => 140,
+                'filename' => 'album.wav',
+                'sha256' => $bridgeHashY,
+                'mime' => 'audio/wav',
+                'size' => strlen($bridgeBytesY),
                 'hidden' => false,
                 'downloadable' => true,
             ]],
@@ -537,15 +631,15 @@ namespace {
         $pdo->prepare(
             'UPDATE music_track_instances SET song_id = ?, file_sha256 = ? '
             . 'WHERE gallery_id = ? AND track_id = ?',
-        )->execute([$songId, str_repeat('e', 64), $galleryA, $trackOneId]);
+        )->execute([$songId, $bridgeHashX, $galleryA, $trackOneId]);
         $pdo->prepare(
             'UPDATE music_track_instances SET file_sha256 = ? '
             . 'WHERE gallery_id = ? AND track_id = ?',
-        )->execute([str_repeat('e', 64), $galleryB, $trackOneId]);
+        )->execute([$bridgeHashX, $galleryB, $trackOneId]);
         $pdo->prepare(
             'UPDATE music_track_instances SET song_id = ?, file_sha256 = ? '
             . 'WHERE gallery_id = ? AND track_id = ?',
-        )->execute([$songId, str_repeat('f', 64), $galleryC, $trackOneId]);
+        )->execute([$songId, $bridgeHashY, $galleryC, $trackOneId]);
         $sourceRows = [
             ['id' => $galleryA, 'folder_path' => $fixtureGalleryPaths[$galleryA]],
             ['id' => $galleryB, 'folder_path' => $fixtureGalleryPaths[$galleryB]],
@@ -554,31 +648,61 @@ namespace {
         foreach ($sourceRows as $sourceIndex => $source) {
             $track = [
                 'id' => $trackOneId,
-                'filename' => 'bridge-' . $sourceIndex . '.mp3',
+                'filename' => ['song-one.wav', 'shared.wav', 'album.wav'][$sourceIndex],
                 'title' => 'Bridge recording',
-                'mime' => 'audio/mpeg',
-                'size' => 100,
-                'sha256' => $sourceIndex === 2
-                    ? str_repeat('f', 64)
-                    : str_repeat('e', 64),
+                'mime' => 'audio/wav',
+                'size' => strlen($sourceIndex === 2 ? $bridgeBytesY : $bridgeBytesX),
+                'sha256' => $sourceIndex === 2 ? $bridgeHashY : $bridgeHashX,
                 'hidden' => false,
                 'downloadable' => $sourceIndex === 1,
             ];
+            $tracks = [$track];
+            if ($sourceIndex === 0) {
+                $tracks[] = [
+                    'id' => $trackVariantId,
+                    'filename' => 'song-variant.wav',
+                    'title' => 'Bridge variant',
+                    'mime' => 'audio/wav',
+                    'size' => strlen($variantBytes),
+                    'sha256' => hash('sha256', $variantBytes),
+                    'hidden' => false,
+                    'downloadable' => false,
+                ];
+            }
+            foreach ($tracks as $sourceTrack) {
+                music_catalog_fixture_write_track(
+                    $playlistDirectories[$source['id']],
+                    $sourceTrack['id'],
+                    $sourceTrack['id'] === $trackVariantId
+                        ? $variantBytes
+                        : ($sourceIndex === 2 ? $bridgeBytesY : $bridgeBytesX),
+                );
+            }
             $indexPath = $playlistDirectories[$source['id']]
                 . DIRECTORY_SEPARATOR . 'index.json';
             file_put_contents($indexPath, json_encode([
                 'format' => 'gallery_music_v1',
                 'revision' => substr(hash('sha256', $token . ':' . $sourceIndex), 0, 32),
                 'enabled' => true,
-                'tracks' => [$track],
+                'tracks' => $tracks,
             ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
         }
         $projection = gallery_music_merge_playlists($sourceRows);
+        $bridgeRepresentatives = array_values(array_filter(
+            $projection['tracks'],
+            static fn(array $track): bool => $track['sha256'] === $bridgeHashX,
+        ));
         check(
-            count($projection['tracks']) === 1
-                && $projection['tracks'][0]['source_gallery_id'] === $galleryB
-                && $projection['tracks'][0]['downloadable'] === true,
-            'Song and digest bridge must deduplicate all three sources and retain the downloadable authorized copy.',
+            count($bridgeRepresentatives) === 1
+                && count($projection['tracks']) === 2
+                && $bridgeRepresentatives[0]['source_gallery_id'] === $galleryB
+                && $bridgeRepresentatives[0]['downloadable'] === true
+                && in_array(
+                    hash('sha256', $variantBytes),
+                    array_column($projection['tracks'], 'sha256'),
+                    true,
+                ),
+            'Song and digest bridge must collapse its three sources, retain the authorized downloadable copy, and preserve the unrelated variant.',
         );
         $projectionRevision = $projection['revision'];
         $revision = music_catalog_set_song_title(
@@ -1263,7 +1387,15 @@ namespace {
             foreach ($trackIds as $variant => $trackId) {
                 $filename = $sortQuery . '-' . $rank
                     . ($variant === 0 ? '' : '-variant-' . $variant)
-                    . '.mp3';
+                    . '.wav';
+                $audioBytes = music_catalog_fixture_wav(
+                    $token . ':sorting:' . $rank . ':' . $variant,
+                );
+                music_catalog_fixture_write_track(
+                    $playlistDirectories[$galleryD],
+                    $trackId,
+                    $audioBytes,
+                );
                 $indexedTitle = match ($definition['title_kind']) {
                     'filename' => $variant === 0
                         ? $filename
@@ -1275,9 +1407,9 @@ namespace {
                     'id' => $trackId,
                     'title' => $indexedTitle,
                     'filename' => $filename,
-                    'sha256' => hash('sha256', $token . ':sorting:' . $trackId),
-                    'mime' => 'audio/mpeg',
-                    'size' => 100 + $variant,
+                    'sha256' => hash('sha256', $audioBytes),
+                    'mime' => 'audio/wav',
+                    'size' => strlen($audioBytes),
                     'hidden' => false,
                     'downloadable' => true,
                 ];
@@ -1289,6 +1421,16 @@ namespace {
             $sortTracks,
             music_catalog_revision(),
         );
+        $sortIndexPath = $playlistDirectories[$galleryD]
+            . DIRECTORY_SEPARATOR . 'index.json';
+        if (file_put_contents($sortIndexPath, json_encode([
+            'format' => 'gallery_music_v1',
+            'revision' => substr(hash('sha256', $token . ':sorting-index'), 0, 32),
+            'enabled' => false,
+            'tracks' => $sortTracks,
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)) === false) {
+            throw new \RuntimeException('Owned sorting playlist index could not be written.');
+        }
         $sortSongIds = [];
         $sortSongLookup = $pdo->prepare(
             'SELECT song_id FROM music_track_instances '
@@ -1440,6 +1582,47 @@ namespace {
             ],
             'Title sorting must share extension-stripped filename, meaningful indexed and exact custom title fallbacks.',
         );
+        $repositoryOnlyTitle = 'Central upload '
+            . substr(hash('sha256', $token . ':repository-only'), 0, 12);
+        $repositoryOnlyFilename = $repositoryOnlyTitle . '.wav';
+        $repositoryOnlySource = $directory . DIRECTORY_SEPARATOR
+            . 'owned-repository-only.wav';
+        $fixtureSourcePaths[] = $repositoryOnlySource;
+        $repositoryOnlyBytes = music_catalog_fixture_wav(
+            $token . ':repository-only',
+        );
+        if (file_put_contents($repositoryOnlySource, $repositoryOnlyBytes)
+            !== strlen($repositoryOnlyBytes)) {
+            throw new \RuntimeException('Owned repository-only WAV could not be written.');
+        }
+        $repositoryOnlyAsset = music_repository_store_source(
+            $repositoryOnlySource,
+            $repositoryOnlyFilename,
+            null,
+            null,
+            $repositoryOnlyTitle,
+        );
+        $fixtureSongIds[] = (int) $repositoryOnlyAsset['song_id'];
+        $fixtureAssetIds[] = (string) $repositoryOnlyAsset['id'];
+        $fixtureAssetPaths[] = music_repository_directory()
+            . DIRECTORY_SEPARATOR . $repositoryOnlyAsset['id'] . '.bin';
+        $repositoryOnlyResult = music_catalog_list(
+            $repositoryOnlyTitle,
+            MUSIC_CATALOG_SORT_PAGE_SIZE,
+            0,
+            'title',
+            'asc',
+        );
+        check(
+            $repositoryOnlyResult['total'] === 1
+                && count($repositoryOnlyResult['songs']) === 1
+                && (int) $repositoryOnlyResult['songs'][0]['id']
+                    === (int) $repositoryOnlyAsset['song_id']
+                && $repositoryOnlyResult['songs'][0]['title']
+                    === $repositoryOnlyTitle
+                && (int) $repositoryOnlyResult['songs'][0]['track_count'] === 1,
+            'Repository-ready title search and ordering must include the matching asset-only song with its canonical title.',
+        );
         $revisionBeforeInvalidOrder = music_catalog_revision();
         foreach ([['unknown', 'asc'], ['title', 'sideways']] as $invalidOrder) {
             $refused = false;
@@ -1533,6 +1716,37 @@ namespace {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
+            if ($fixtureGalleryIds !== [] && $fixtureTrackIds !== []) {
+                $galleryMarks = implode(
+                    ',',
+                    array_fill(0, count($fixtureGalleryIds), '?'),
+                );
+                $trackMarks = implode(
+                    ',',
+                    array_fill(0, count($fixtureTrackIds), '?'),
+                );
+                $ownedAssets = $pdo->prepare(
+                    'SELECT DISTINCT a.id FROM music_repository_assets a '
+                    . 'JOIN music_track_instances i '
+                    . 'ON i.gallery_id = a.origin_gallery_id '
+                    . 'AND i.track_id = a.origin_track_id '
+                    . "WHERE i.gallery_id IN ($galleryMarks) "
+                    . "AND i.track_id IN ($trackMarks)",
+                );
+                $ownedAssets->execute(array_merge(
+                    $fixtureGalleryIds,
+                    $fixtureTrackIds,
+                ));
+                $fixtureAssetIds = array_merge(
+                    $fixtureAssetIds,
+                    array_map('strval', $ownedAssets->fetchAll(\PDO::FETCH_COLUMN)),
+                );
+                foreach (array_unique($fixtureAssetIds) as $assetId) {
+                    $fixtureAssetPaths[] = dirname(__DIR__)
+                        . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR
+                        . 'music' . DIRECTORY_SEPARATOR . $assetId . '.bin';
+                }
+            }
             if ($fixtureTrackIds !== []) {
                 $trackMarks = implode(
                     ',',
@@ -1558,11 +1772,29 @@ namespace {
                     "DELETE FROM music_albums WHERE id IN ($marks)",
                 )->execute($fixtureAlbumIds);
             }
+            if ($fixtureAssetIds !== []) {
+                $assetIds = array_values(array_unique($fixtureAssetIds));
+                $assetMarks = implode(',', array_fill(0, count($assetIds), '?'));
+                $pdo->prepare(
+                    "DELETE FROM music_repository_assets WHERE id IN ($assetMarks)",
+                )->execute($assetIds);
+            }
             foreach ($playlistDirectories as $musicDirectory) {
+                foreach (array_unique($fixtureTrackIds) as $trackId) {
+                    $trackPath = $musicDirectory . DIRECTORY_SEPARATOR
+                        . $trackId . '.bin';
+                    if (is_file($trackPath) && !is_link($trackPath)) {
+                        unlink($trackPath);
+                    }
+                }
                 $indexPath = $musicDirectory . DIRECTORY_SEPARATOR
                     . 'index.json';
                 if (is_file($indexPath) && !is_link($indexPath)) {
                     unlink($indexPath);
+                }
+                $lockPath = $musicDirectory . DIRECTORY_SEPARATOR . '.lock';
+                if (is_file($lockPath) && !is_link($lockPath)) {
+                    unlink($lockPath);
                 }
                 if (is_dir($musicDirectory) && !is_link($musicDirectory)) {
                     rmdir($musicDirectory);
@@ -1631,6 +1863,24 @@ namespace {
                 $pdo->prepare(
                     "DELETE FROM tags WHERE slug IN ($sortTagMarks)",
                 )->execute($sortingTagSlugs);
+            }
+        }
+        foreach (array_unique($fixtureAssetPaths) as $assetPath) {
+            if (is_file($assetPath) && !is_link($assetPath)) {
+                unlink($assetPath);
+            }
+        }
+        foreach (array_unique($fixtureSourcePaths) as $sourcePath) {
+            if (is_file($sourcePath) && !is_link($sourcePath)) {
+                unlink($sourcePath);
+            }
+        }
+        if ($repositoryDirectoryCreated) {
+            $repositoryDirectory = dirname(__DIR__) . DIRECTORY_SEPARATOR
+                . 'data' . DIRECTORY_SEPARATOR . 'music';
+            if (is_dir($repositoryDirectory) && !is_link($repositoryDirectory)
+                && count(scandir($repositoryDirectory) ?: []) === 2) {
+                @rmdir($repositoryDirectory);
             }
         }
     }

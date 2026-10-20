@@ -371,25 +371,40 @@ try {
         'details.admin-music-locations',
     );
     const usageSummary = usageDetails.querySelector(':scope > summary');
-    check(usageSummary.textContent.trim() === '2',
+    check(usageSummary.textContent.trim() === '3',
         'Collapsed usage summary must show only its numeric count.');
     const variants = rows[0].children[1].querySelector(
         'details.admin-music-variants',
     );
     const variantsSummary = variants.querySelector(':scope > summary');
-    check(variantsSummary.textContent.trim() === '2'
+    check(variantsSummary.textContent.trim() === '3'
         && variantsSummary.querySelector('.subgallery-stack-count')
-            ?.textContent.trim() === '2'
+            ?.textContent.trim() === '3'
         && variantsSummary.querySelector('.subgallery-stack-icon')
             ?.getAttribute('aria-hidden') === 'true'
         && variantsSummary.querySelector('.subgallery-stack-icon')
             ?.children.length === 3
-        && variantsSummary.getAttribute('aria-label') === 'Show physical variants',
-        'Variant disclosure must expose only its numeric badge and retain its accessible icon label.');
-    check(Array.from(variants.querySelectorAll('li a')).length === 2
+        && variantsSummary.getAttribute('aria-label') === 'Files',
+        'Variant disclosure must expose only its numeric badge and retain its production Files accessible label.');
+    check(Array.from(variants.querySelectorAll('li a')).length === 1
         && Array.from(variants.querySelectorAll('li a')).every(link =>
             new URL(link.href).pathname.startsWith('/gallery/')),
         'Physical variant locations must use prepared public gallery URLs.');
+    const variantRows = Array.from(variants.querySelectorAll(':scope > ul > li'));
+    const promotedFilenameRows = variantRows.filter(row =>
+        row.textContent.includes('midnight-live.mp3'));
+    const repositoryOnlyRow = variantRows.find(row =>
+        row.textContent.includes('repository-only.wav'));
+    const promotedRepositoryRow = variantRows.find(row =>
+        row.textContent.includes('Shared repository file')
+            && row.textContent.includes('midnight-live.mp3'));
+    check(variantRows.length === 3
+        && promotedFilenameRows.length === 1
+        && promotedRepositoryRow !== undefined
+        && repositoryOnlyRow !== undefined
+        && repositoryOnlyRow.textContent.includes('4096 bytes')
+        && repositoryOnlyRow.querySelector('a') === null,
+        'File details must include repository-only assets and byte size while deduplicating a promoted origin; rows=' + JSON.stringify(variantRows.map(row => row.textContent.trim())) + '.');
     const motionStyle = document.documentElement.style;
     const previousMotionDuration = motionStyle.getPropertyValue(
         '--admin-side-panel-motion-duration',
@@ -407,9 +422,28 @@ try {
             'Usage popup should inherit the shared Admin motion duration '
                 + THEME_SIDE_PANEL_MOTION_DEFAULT + '; computed '
                 + usageAnimation + '.');
+        const usageLinks = Array.from(
+            usageDetails.querySelectorAll(':scope > ul a'),
+        );
+        const directPublicLink = usageLinks.find(link =>
+            link.textContent.trim() === 'Highway Set');
+        const livePublicLink = usageLinks.find(link =>
+            link.textContent.trim() === 'Road Mix Live');
+        const albumUsageLink = usageLinks.find(link =>
+            link.textContent.includes('Night Drives'));
+        const albumUsageUrl = albumUsageLink
+            ? new URL(albumUsageLink.href) : null;
         check(rows[0].children[2].textContent.includes('Highway Set')
-            && rows[0].children[2].textContent.includes('Night Drives'),
-            'Expanded usage must show direct gallery and album locations.');
+            && rows[0].children[2].textContent.includes('Night Drives')
+            && rows[0].children[2].textContent.includes('Road Mix Live')
+            && directPublicLink !== undefined
+            && new URL(directPublicLink.href).pathname === '/gallery/highway-set'
+            && livePublicLink !== undefined
+            && new URL(livePublicLink.href).pathname === '/gallery/road-mix-live'
+            && albumUsageUrl?.searchParams.get('page') === 'admin_music'
+            && albumUsageUrl.searchParams.get('tab') === 'albums'
+            && albumUsageUrl.searchParams.get('album_id') === '8',
+            'Expanded usage must render direct and live source placements as public gallery links and retain album usage.');
 
         motionStyle.setProperty('--admin-side-panel-motion-duration', '0ms');
         variantsSummary.click();

@@ -1,5 +1,55 @@
 # Gallery music
 
+## Shared originals and live gallery playlists
+
+**Edit gallery → Media** combines presentation, PDF documents and a compact
+gallery music manager. Add individual catalog songs or a complete album from
+its searchable chooser. An album is a **live playlist**: later membership and
+ordering changes in Music Manager appear in every gallery using it. Direct
+songs remain independent items. Gallery controls move or remove source groups
+and set their download permission; album members keep the album's global order.
+Removing a source changes this gallery only. It never deletes a shared original.
+
+New audio uploads use the same validated upload flow but store immutable bytes
+in the protected `data/music/` repository. SQL metadata records the original
+filename, MIME, size, digest and logical song identity. Each gallery retains its
+own ordered references, slideshow preference and download controls. Uploads
+require the forward repository migration; unknown or partial schema refuses the
+write before a gallery playlist changes. Photos stay in their gallery folders.
+
+Legacy `.gallery-music/index.json` v1 files and their local `.bin` originals
+remain readable without a rewrite. A v2 index stores direct asset references,
+live album assignments, source order and any interrupted local cleanup journal.
+Playback expands only the selected albums; public reads never copy, migrate or
+hash the whole music library. The existing gallery-scoped audio endpoint checks
+current gallery access and the assigned item's visibility/download permission
+before resolving and verifying an immutable original. Explicit administrator
+assignment makes that gallery an access authority for the selected shared music;
+it does not expose a public repository endpoint or arbitrary asset-ID lookup.
+
+Select **Move gallery audio to the music repository** in **Maintenance Center**
+to relocate older originals. This optional task is not selected by ordinary
+maintenance. Each step admits at most one original, verifies the central copy,
+atomically changes the gallery reference and then removes the matching local
+copy. A persisted cleanup journal and stable cursor support interruption/retry.
+Track IDs, song identities, saved order, titles and permissions are retained.
+Uncertain or unreadable files stop that task rather than deleting source data.
+Adding a legacy song/album to another gallery may first preserve its original
+centrally; it does not remove the original source copy.
+
+Storage statistics add central originals once, including unassigned assets,
+and count remaining local copies separately. Multiple gallery links consume no
+additional audio bytes. Local Trash moves the gallery's references and retained
+legacy files; shared originals survive gallery deletion and restoration. Back
+up SQL, `data/music/` and all hidden gallery sidecars together. Cross-site
+gallery transfers and photo ZIPs still do not export this music repository.
+There is no automatic deletion of unreferenced central originals.
+
+Existing admission limits remain 64 MiB per original, 100 effective tracks and
+512 MiB per gallery. Assignment refuses an already oversized selection. If a
+live playlist later exceeds playback bounds, the editor reports partial/over-limit
+coverage; the persisted selection and originals are not silently rewritten.
+
 ## Global Music Manager
 
 **Admin → Galleries → Music Manager** adds a compact catalog above the existing
@@ -63,9 +113,9 @@ same song. Review filenames/locations and explicitly choose the surviving
 metadata. Filename, duration and hash never automatically create this relation.
 Splitting an instance restores an independent logical identity with deterministic
 metadata inheritance; neither operation rewrites audio or saved physical order.
-Source visibility, passwords, shares, NSFW policy and download restrictions stay
-with each physical instance. Public and Smart projections choose only among
-already authorized instances, never from the Admin-wide variant inventory.
+Visibility, passwords, shares, NSFW policy and download restrictions stay with
+each gallery assignment. Public and Smart projections choose only from the
+requested gallery's authorized selection, never from the Admin-wide inventory.
 
 Music albums are logical Admin collections with ordered songs and nested child
 albums. The compact album tree uses native disclosure controls to expand its
@@ -74,8 +124,8 @@ also support navigation. An album's context gear reveals its title, description,
 move and delete controls in a native disclosure; song membership and ordering
 remain visible. Moving a parent below a descendant is refused; nesting is limited
 to eight levels and the tree to 2,000 albums. A song can belong to several
-albums. Removal changes membership only; source deletion remains in the existing
-gallery editor.
+albums. Removal changes membership only; source removal stays in the gallery
+editor, and central originals are retained.
 Albums do not create a public global music library or physical gallery folders.
 
 Songs use the existing tag taxonomy with `media_type=music`. Existing tags and
@@ -90,7 +140,9 @@ Catalog mutations use Admin authentication, CSRF and a shared optimistic catalog
 revision. Reopen the current state after a stale-edit refusal. The canonical
 mutation completion path updates the manager in place. Catalog title/settings
 changes advance public content revision so existing assignments use current
-names after refresh; no reupload is needed.
+names after refresh; no reupload is needed. This shared revision retains the
+decimal timestamp format used by Theme changes and the public HTML response
+header; the catalog's separate optimistic token remains independent.
 
 Physical mutations mark their SQL snapshot dirty before changing the index when
 catalog schema is available, then synchronize that one committed playlist.
@@ -145,10 +197,11 @@ mutations
 update the music totals from committed metadata without rereading audio files;
 see [accounting scope](GALLERY_PDF.md#admin-storage-accounting).
 
-Music belongs to one physical gallery. `app/services/gallery_music.php` owns
-validation, confinement, upload quotas and serialized playlist changes;
-`app/models/gallery_music.php` owns the versioned JSON index. No database
-migration is required for that original index. Derived storage accounting uses
+`app/services/gallery_music.php` owns gallery selection, confinement, admission
+quotas and serialized playlist changes; `app/services/music_repository.php`
+owns shared immutable originals. `app/models/gallery_music.php` owns the
+versioned JSON index. Legacy local index reads require no new DDL. Shared
+storage uses `202610200003_music_repository.php`. Derived accounting uses
 `202610190001_gallery_attachment_storage.php`. This foundation is tracked in
 issue #247.
 
@@ -156,8 +209,11 @@ Administrators can use the ordinary Upload photos chooser/drop queue for a
 mixed selection of photographs, PDFs and music. Audio goes to protected original
 attachment storage and never enters image decoding, thumbnails or PDF
 conversion.
-Audio-only submissions work with image preparation disabled. The editor's
-Documents / PDFs tab also retains independent upload and playlist controls.
+Audio-only submissions work with image preparation disabled. The gallery
+editor has one **Media** main tab with nested **Music**, **PDF**,
+**Presentation**, and **Artwork** sections. Music/PDF controls keep their
+independent forms; Artwork remains associated with the guarded gallery settings
+form.
 
 The music launcher shows the authorized track count. Clicking it opens a small
 overlay with a bounded, scrollable list; closing it leaves playback running.
@@ -169,11 +225,11 @@ wrap according to the gallery's available width, including a resized window.
 Physical galleries with authorized photographs and enabled lightbox controls
 offer **Presentation** below the attachment cards, even without attachments.
 This explicit action opens photo one and applies its configured soundtrack and
-speed defaults. In **Edit gallery → PDF · Music · Presentation**, the
-translucent
+speed defaults. In **Edit gallery → Media → Presentation**, the translucent
 Presentation card configures public launcher visibility, autoplay, music and
-both
-speeds. Autoplay defaults ON for every gallery until explicitly changed.
+both speeds. **Media → PDF** contains general documents and the optional OFP
+panel; **Media → Artwork** contains the gallery cover, branding, and background
+controls. Autoplay defaults ON for every gallery until explicitly changed.
 Its Save icon uses the same protected gallery form and stale-edit checks as the
 other settings. Preview and Share use the current selections, including before
 saving. Hiding public buttons does not revoke authorized links or hide photos.
@@ -299,15 +355,17 @@ metadata work; they are not browser decoding guarantees.
 Every mutation takes an exclusive sidecar lock and requires the last observed
 revision. Stale edits refuse the complete operation. Originals are copied with
 a byte ceiling and verified digest before the atomic index replacement makes
-them visible. Removing a track publishes the new index before unlinking the
-original. A process crash or failed unlink can leave an inaccessible orphan;
+them visible. Removing a legacy local track publishes the new index before
+unlinking its original. Removing a central reference retains the shared
+original. A process crash or failed legacy unlink can leave an inaccessible orphan;
 it never authorizes an unindexed original. There is no automatic orphan cleanup.
 Concurrent gallery moves are governed by the existing gallery mutation owner.
 
 Whole-gallery filesystem moves and Trash restoration carry this sidecar.
-Filesystem backups must include hidden directories. Photo-only ZIP exports,
+Shared originals remain in the site repository. Filesystem backups must include
+`data/music/` and hidden gallery directories. Photo-only ZIP exports,
 gallery transfer packages and sidecar metadata imports do not transfer music;
-there is no separate music restore/import pipeline. The static server must
+cross-site song/asset IDs are never imported as local authority. The static server must
 retain the existing hidden-directory denial for galleries.
 
 Hosted tests own executable validation. The feature remains unqualified until
@@ -340,7 +398,7 @@ Hosted preparation/FULL must establish final counts and loaded-route behavior.
 `gallery-music-player.js` owns a single audible native Audio instance per page,
 shared across public/editor tables, the photo viewer and slideshow. Selecting
 another track or gallery releases the old source before playback. Physical
-galleries remain the storage owners. Smart Galleries use the read-only source
+galleries remain assignment/access owners. Smart Galleries use the read-only source
 union below; no transcoding or artwork is added.
 
 Gallery autoplay defaults off and changes only through the editor preference.

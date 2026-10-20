@@ -136,8 +136,34 @@ namespace {
                     ['gallery_id' => 41, 'track_id' => 'a1', 'filename' => 'midnight-live.mp3'],
                     ['gallery_id' => 42, 'track_id' => 'a2', 'filename' => 'midnight-studio.mp3'],
                 ],
+                'repository_assets' => [
+                    [
+                        'id' => 'asset-promoted-a1',
+                        'filename' => 'midnight-live.mp3',
+                        'byte_size' => 8192,
+                        'sha256' => str_repeat('a', 64),
+                        'origin_gallery_id' => 41,
+                        'origin_track_id' => 'a1',
+                    ],
+                    [
+                        'id' => 'asset-repository-only',
+                        'filename' => 'repository-only.wav',
+                        'byte_size' => 4096,
+                        'sha256' => str_repeat('b', 64),
+                        'origin_gallery_id' => null,
+                        'origin_track_id' => null,
+                    ],
+                ],
                 'direct_galleries' => [['gallery_id' => 41, 'title' => 'Highway Set', 'track_count' => 1]],
                 'albums' => [['album_id' => 8, 'title' => 'Night Drives', 'track_count' => 1]],
+                'live_albums' => [[
+                    'song_id' => 101,
+                    'gallery_id' => 44,
+                    'gallery_title' => 'Road Mix Live',
+                    'album_id' => 12,
+                    'album_title' => 'Festival Set',
+                    'track_count' => 1,
+                ]],
             ],
             102 => [
                 'tracks' => [['gallery_id' => 43, 'track_id' => 'b1', 'filename' => 'quiet-morning.mp3']],
@@ -150,6 +176,7 @@ namespace {
             41 => '/gallery/highway-set',
             42 => '/gallery/studio-set',
             43 => '/gallery/quiet-morning',
+            44 => '/gallery/road-mix-live',
         ],
         'albums' => $albums, 'album_id' => $albumId, 'album_offset' => 0,
         'album_members' => [

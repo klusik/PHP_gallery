@@ -56,6 +56,7 @@ use function Gallery\Views\view_render_admin_music;
  * Type: int. Units: rows. Scope: one Admin Music catalog query.
  * Consumers: cms_admin_music.
  * Rationale: a compact page limits detail lookup and response size.
+ * Value: 50 rows per page.
  */
 const ADMIN_MUSIC_PAGE_SIZE = 50;
 
@@ -64,6 +65,7 @@ const ADMIN_MUSIC_PAGE_SIZE = 50;
  * Type: int. Units: records. Scope: one explicit reconciliation request.
  * Consumers: admin_music_reconcile.
  * Rationale: bounded requests keep large-library import resumable.
+ * Value: 20 records per request.
  */
 const ADMIN_MUSIC_RECONCILE_BATCH_SIZE = 20;
 
@@ -246,6 +248,12 @@ function cms_admin_music(): void
                     $galleryIds[$galleryId] = $galleryId;
                 }
             }
+            foreach ($songDetail['live_albums'] ?? [] as $placement) {
+                $galleryId = (int) ($placement['gallery_id'] ?? 0);
+                if ($galleryId > 0) {
+                    $galleryIds[$galleryId] = $galleryId;
+                }
+            }
         }
         $galleryUrls = [];
         $activeLanguage = translation_active_language();
@@ -416,6 +424,12 @@ function admin_music_gallery_contexts(array $songIds): array
     foreach ($details as $songDetail) {
         foreach ($songDetail['direct_galleries'] ?? [] as $gallery) {
             $galleryId = (int) ($gallery['gallery_id'] ?? 0);
+            if ($galleryId > 0) {
+                $galleryIds[$galleryId] = $galleryId;
+            }
+        }
+        foreach ($songDetail['live_albums'] ?? [] as $placement) {
+            $galleryId = (int) ($placement['gallery_id'] ?? 0);
             if ($galleryId > 0) {
                 $galleryIds[$galleryId] = $galleryId;
             }
@@ -799,6 +813,11 @@ function admin_music_error(Throwable $exception): string
         'music.album_depth' => t('admin.music.error_depth', 'The maximum album nesting depth is reached.'),
         'music.album_missing' => t('admin.music.error_album_missing', 'The album no longer exists.'),
         'music.album_limit' => t('admin.music.error_album_limit', 'The album limit has been reached. Remove unused albums before adding more.'),
+        'music.linked_gallery_limit' => t(
+            'admin.music.error_linked_gallery_limit',
+            'A gallery using this playlist cannot accept another song. '
+                . 'Check its music availability and limits.',
+        ),
         default => t('admin.music.error_save', 'The music catalog could not be saved.'),
     };
 }

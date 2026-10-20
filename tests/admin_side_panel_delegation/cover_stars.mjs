@@ -15,6 +15,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
 const source = readFileSync(new URL('../../public/assets/gallery-modules/admin-gallery-images.js', import.meta.url), 'utf8');
+const cinematicStyles = readFileSync(new URL('../../public/assets/styles/admin-cinematic.css', import.meta.url), 'utf8');
+const sidePanelStyles = readFileSync(new URL('../../public/assets/styles/side-panel.css', import.meta.url), 'utf8');
 const {coverStarActionForState, coverSelectionPresentation} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 
 assert.equal(coverStarActionForState('single', 'off'), 'cover', 'Clicking G2 selects only G2');
@@ -33,8 +35,19 @@ assert.match(source, /data-admin-image-cover-star/);
 assert.match(source, /form\.dataset\.coverSelectionMode/);
 assert.match(source, /form\.dataset\.coverMultiSupported === '1'/);
 assert.match(source, /form\.dataset\.coverSelectionMode = mode/);
+assert.match(source, /settingsForm\?\.elements\.namedItem\('cover_image_id'\)/,
+    'The shared cover selector must be found through native form ownership when Artwork controls live outside the form element.');
 assert.match(source, /php-gallery:side-panel-success/);
 assert.match(source, /aria-pressed/);
+assert.match(cinematicStyles,
+    /\.admin-page button:not\(\.secondary\):not\(\.danger\)/,
+    'The visual fixture must retain the real generic Admin button rule that previously overrode cover-state colors.');
+assert.match(sidePanelStyles,
+    /#admin-edit-images \.admin-image-row-actions \.admin-image-cover-button\.is-cover\s*\{[^}]*background:\s*#fff4c2/s,
+    'The scoped Images owner must out-rank the generic Admin button rule for the exclusive gold state.');
+assert.match(sidePanelStyles,
+    /#admin-edit-images \.admin-image-row-actions \.admin-image-cover-button\.is-cover-multi\s*\{[^}]*background:\s*#dbeafe/s,
+    'The scoped Images owner must out-rank the generic Admin button rule for accumulated pale-blue state.');
 const panelSource = readFileSync(new URL('../../public/assets/gallery-modules/admin-side-panel.js', import.meta.url), 'utf8');
 const controllerSource = readFileSync(new URL('../../app/controllers/admin_galleries_edit_actions.php', import.meta.url), 'utf8');
 const bulkSource = readFileSync(new URL('../../app/controllers/admin_images_bulk.php', import.meta.url), 'utf8');

@@ -15,6 +15,14 @@
  * Author: Rudolf Klusal
  * Disposable live-HTTP persistence journey for public content widgets.
  */
+// Purpose: Bound safe predicate details passed to the fixture result endpoint.
+// Type: number.
+// Units: characters.
+// Scope: The anonymous Home-response assertion in this browser fixture.
+// Consumers: The router's existing validated `detail` field.
+// Rationale: The endpoint accepts at most 180 safe characters, enough to identify each predicate without response content.
+const publicWidgetHomeDiagnosticMaximumCharacters = 180;
+
 (
 /** Run the focused widget persistence journey in the owned HTTP fixture. @return {Promise<void>} Writes a bounded fixture result with sanitized resource status and image decode state on media-load failures. */
 async () => {
@@ -510,16 +518,61 @@ async () => {
         const homeWidgets = publicDocument.querySelectorAll('[data-public-widget-id="' + createdWidgetId + '"]');
         const publicWidget = homeWidgets[0];
         const publicZone = publicWidget?.closest('[data-public-widget-zone]');
-        expect(publicResponse.status === 200 && publicUrl.origin === location.origin
-            && publicUrl.searchParams.get('page') === 'home' && publicDocument.body?.classList.contains('public-page')
-            && homeWidgets.length === 1
-            && publicWidget?.querySelector('.public-content-widget-title')?.textContent === widgetTitle
-            && publicWidget?.querySelector('.public-content-widget-body strong')?.textContent === widgetBoldText
-            && publicWidget?.querySelector('.public-content-widget-body a')?.href
-                === 'https://example.test/widget-' + workflowToken
-            && publicWidget?.dataset.publicWidgetFloating === '1'
-            && publicZone?.dataset.publicWidgetZone === 'floating'
-            && !publicWidget.hasAttribute('data-widget-theme-draft'));
+        const publicTitleMatches = publicWidget?.querySelector(
+            '.public-content-widget-title',
+        )?.textContent === widgetTitle;
+        const publicLinkMatches = publicWidget?.querySelector(
+            '.public-content-widget-body strong',
+        )?.textContent === widgetBoldText
+            && publicWidget?.querySelector(
+                '.public-content-widget-body a',
+            )?.href === 'https://example.test/widget-' + workflowToken;
+        const publicResponseState = {
+            status: publicResponse.status,
+            sameOrigin: publicUrl.origin === location.origin,
+            page: publicUrl.searchParams.get('page') || 'missing',
+            publicBody: publicDocument.body?.classList.contains('public-page') === true,
+            widgetCount: homeWidgets.length,
+            titleMatches: publicTitleMatches,
+            linkMatches: publicLinkMatches,
+            floatingMetadata: publicWidget?.dataset.publicWidgetFloating || 'missing',
+            zone: publicZone?.dataset.publicWidgetZone || 'missing',
+            draftMarker: publicWidget?.hasAttribute('data-widget-theme-draft') === true,
+        };
+        const publicResponseMatches = publicResponseState.status === 200
+            && publicResponseState.sameOrigin
+            && publicResponseState.page === 'home'
+            && publicResponseState.publicBody
+            && publicResponseState.widgetCount === 1
+            && publicResponseState.titleMatches
+            && publicResponseState.linkMatches
+            && publicResponseState.floatingMetadata === '1'
+            && publicResponseState.zone === 'floating'
+            && !publicResponseState.draftMarker;
+        if (!publicResponseMatches) {
+            const pageState = ['home', 'missing'].includes(publicResponseState.page)
+                ? publicResponseState.page : 'other';
+            const floatingState = ['1', '0', 'missing'].includes(
+                publicResponseState.floatingMetadata,
+            ) ? publicResponseState.floatingMetadata : 'other';
+            const zoneState = ['floating', 'missing'].includes(
+                publicResponseState.zone,
+            ) ? publicResponseState.zone : 'other';
+            const diagnostic = 'home status-' + publicResponseState.status
+                + ' origin-' + (publicResponseState.sameOrigin ? 'same' : 'other')
+                + ' page-' + pageState
+                + ' body-' + (publicResponseState.publicBody ? 'public' : 'other')
+                + ' widgets-' + publicResponseState.widgetCount
+                + ' title-' + Number(publicResponseState.titleMatches)
+                + ' link-' + Number(publicResponseState.linkMatches)
+                + ' floating-' + floatingState
+                + ' zone-' + zoneState
+                + ' draft-' + (publicResponseState.draftMarker ? 'present' : 'absent');
+            throw new Error(diagnostic.slice(
+                0,
+                publicWidgetHomeDiagnosticMaximumCharacters,
+            ));
+        }
         assertAnonymousHtmlCacheHeaders(publicResponse);
         stage = 'load the anonymous Home response with scripts disabled and verify server-rendered flow output';
         anonymousNoScriptFrame = document.createElement('iframe');

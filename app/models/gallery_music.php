@@ -39,8 +39,11 @@ const GALLERY_MUSIC_FILE_MODE = 0600;
  * @param string $directory Confined music directory selected by the service.
  * @return array{revision:string, enabled:bool, tracks:list<array{id:string,
  *     filename:string, title:string, mime:string, size:int, sha256:string,
- *     hidden:bool, downloadable:bool}>} Stored playlist, or initial disabled
- *     state when no index exists.
+ *     hidden:bool, downloadable:bool, asset_id?:string}>,version?:int,
+ *     albums?:list<array{id:string,album_id:int,hidden:bool,downloadable:bool}>,
+ *     order?:list<string>,legacy_cleanup?:list<array{track_id:string,size:int,
+ *     sha256:string}>} Stored normalized playlist, or initial disabled state
+ *     when no index exists. Version 1 preserves the original returned shape.
  * @throws \RuntimeException When existing storage cannot be safely interpreted.
  */
 function gallery_music_model_read(string $directory): array
@@ -77,14 +80,22 @@ function gallery_music_model_read(string $directory): array
         throw new \RuntimeException('Unreadable music index.');
     }
     $state = json_decode($bytes, true);
+    $format = (string) ($state['format'] ?? '');
     if (
         !is_array($state)
-        || ($state['format'] ?? '') !== 'gallery_music_v1'
+        || !in_array($format, ['gallery_music_v1', 'gallery_music_v2'], true)
         || !is_string($state['revision'] ?? null)
         || preg_match('/^[a-f0-9]{32}$/D', $state['revision']) !== 1
         || !is_bool($state['enabled'] ?? null)
         || !is_array($state['tracks'] ?? null)
         || !array_is_list($state['tracks'])
+        || ($format === 'gallery_music_v2'
+            && (!is_array($state['albums'] ?? null)
+                || !array_is_list($state['albums'])
+                || !is_array($state['order'] ?? null)
+                || !array_is_list($state['order'])
+                || !is_array($state['legacy_cleanup'] ?? [])
+                || !array_is_list($state['legacy_cleanup'] ?? [])))
     ) {
         throw new \RuntimeException('Invalid music index.');
     }
@@ -110,6 +121,10 @@ function gallery_music_model_read(string $directory): array
             )
             || !is_string($track['sha256'] ?? null)
             || preg_match('/^[a-f0-9]{64}$/D', $track['sha256']) !== 1
+            || ($format === 'gallery_music_v2'
+                && isset($track['asset_id'])
+                && (!is_string($track['asset_id'])
+                    || preg_match('/^[a-f0-9]{32}$/D', $track['asset_id']) !== 1))
         ) {
             throw new \RuntimeException('Invalid music record.');
         }
@@ -119,10 +134,10 @@ function gallery_music_model_read(string $directory): array
     // Future hiding controls remain independent of download permission.
     // Records written before download controls existed grant no download
     // permission. This model owns that safe default.
-    // Map both vintages to the same closed field shape and key order so a
-    // legacy read and a newly written playlist have identical row semantics.
-    $state['tracks'] = array_map(static function (array $track): array {
-        return [
+    // Map legacy and repository rows to a closed ordered shape. The v1 shape
+    // remains byte-for-byte compatible at the returned-field level.
+    $state['tracks'] = array_map(static function (array $track) use ($format): array {
+        $normalized = [
             'id' => $track['id'],
             'filename' => $track['filename'],
             'title' => $track['title'],
@@ -132,28 +147,130 @@ function gallery_music_model_read(string $directory): array
             'hidden' => $track['hidden'] ?? false,
             'downloadable' => $track['downloadable'] ?? false,
         ];
+        if ($format === 'gallery_music_v2' && isset($track['asset_id'])) {
+            $normalized['asset_id'] = $track['asset_id'];
+        }
+        return $normalized;
     }, $state['tracks']);
-    return [
+    $result = [
         'revision' => $state['revision'],
         'enabled' => $state['enabled'],
         'tracks' => $state['tracks'],
     ];
+    if ($format === 'gallery_music_v2') {
+        $albumIds = [];
+        foreach ($state['albums'] as $album) {
+            if (
+                !is_array($album)
+                || !is_string($album['id'] ?? null)
+                || preg_match('/^[a-f0-9]{32}$/D', $album['id']) !== 1
+                || isset($albumIds[$album['id']])
+                || !is_int($album['album_id'] ?? null)
+                || $album['album_id'] < 1
+                || !is_bool($album['hidden'] ?? null)
+                || !is_bool($album['downloadable'] ?? null)
+            ) {
+                throw new \RuntimeException('Invalid music album assignment.');
+            }
+            $albumIds[$album['id']] = true;
+        }
+        $knownOrderIds = [];
+        foreach ($state['tracks'] as $track) {
+            if (isset($albumIds[$track['id']])) {
+                throw new \RuntimeException('Duplicate music source identity.');
+            }
+            $knownOrderIds[$track['id']] = true;
+        }
+        foreach ($state['albums'] as $album) {
+            $knownOrderIds[$album['id']] = true;
+        }
+        $ordered = [];
+        foreach ($state['order'] as $id) {
+            if (!is_string($id) || !isset($knownOrderIds[$id]) || isset($ordered[$id])) {
+                throw new \RuntimeException('Invalid music source order.');
+            }
+            $ordered[$id] = true;
+        }
+        if (count($ordered) !== count($knownOrderIds)) {
+            throw new \RuntimeException('Incomplete music source order.');
+        }
+        $result['version'] = 2;
+        $result['albums'] = $state['albums'];
+        $result['order'] = $state['order'];
+        $cleanup = [];
+        $cleanupIds = [];
+        $tracksById = [];
+        foreach ($result['tracks'] as $track) {
+            $tracksById[$track['id']] = $track;
+        }
+        foreach ($state['legacy_cleanup'] ?? [] as $entry) {
+            if (
+                !is_array($entry)
+                || !is_string($entry['track_id'] ?? null)
+                || preg_match('/^[a-f0-9]{32}$/D', $entry['track_id']) !== 1
+                || !is_int($entry['size'] ?? null)
+                || $entry['size'] < 1
+                || !is_string($entry['sha256'] ?? null)
+                || preg_match('/^[a-f0-9]{64}$/D', $entry['sha256']) !== 1
+                || isset($cleanupIds[$entry['track_id']])
+                || !isset($tracksById[$entry['track_id']]['asset_id'])
+                || $tracksById[$entry['track_id']]['size'] !== $entry['size']
+                || !hash_equals(
+                    $tracksById[$entry['track_id']]['sha256'],
+                    $entry['sha256'],
+                )
+            ) {
+                throw new \RuntimeException('Invalid legacy music cleanup marker.');
+            }
+            $cleanupIds[$entry['track_id']] = true;
+            $cleanup[] = [
+                'track_id' => $entry['track_id'],
+                'size' => $entry['size'],
+                'sha256' => $entry['sha256'],
+            ];
+        }
+        $result['legacy_cleanup'] = $cleanup;
+    }
+    return $result;
 }
 
 /**
  * Publish one playlist while the service holds its exclusive gallery lock.
  * @param string $directory Existing confined music directory.
  * @param array{revision:string, enabled:bool, tracks:list<array{id:string,
- *     filename:string, title:string, mime:string, size:int, sha256:string,
- *     hidden:bool, downloadable:bool}>} $state Complete next playlist.
+ *     filename:string,title:string,mime:string,size:int,sha256:string,
+ *     hidden:bool,downloadable:bool,asset_id?:string}>,albums?:list<array{id:string,
+ *     album_id:int,hidden:bool,downloadable:bool}>,order?:list<string>,
+ *     legacy_cleanup?:list<array{track_id:string,size:int,sha256:string}>,
+ *     version?:int} $state Complete v1 or v2 next playlist; an explicit version
+ *     preserves v1 normalized service state, while v2 order covers every source
+ *     ID once. Without version, album/order fields select v2.
  * @return void Replace the index atomically, preserving its previous bytes
  *     on failure.
  * @throws \RuntimeException When staging or publication fails.
  */
 function gallery_music_model_write(string $directory, array $state): void
 {
+    $version = $state['version']
+        ?? (isset($state['albums']) || isset($state['order']) ? 2 : 1);
+    // These are the two supported on-disk format versions, not a policy limit.
+    if (!in_array($version, [1, 2], true)) {
+        throw new \RuntimeException('Invalid music index version.');
+    }
+    $format = $version === 2 ? 'gallery_music_v2' : 'gallery_music_v1';
+    $persisted = [
+        'format' => $format,
+        'revision' => $state['revision'],
+        'enabled' => $state['enabled'],
+        'tracks' => $state['tracks'],
+    ];
+    if ($version === 2) {
+        $persisted['albums'] = $state['albums'] ?? [];
+        $persisted['order'] = $state['order'] ?? [];
+        $persisted['legacy_cleanup'] = $state['legacy_cleanup'] ?? [];
+    }
     $json = json_encode(
-        ['format' => 'gallery_music_v1'] + $state,
+        $persisted,
         JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
     );
     if (

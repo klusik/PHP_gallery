@@ -29,6 +29,22 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services {
+    /**
+     * Supply one controlled source outcome to the real maintenance executor.
+     * @param array{gallery_id:int,track_id:string}|null $cursor Last durable
+     *     source key, or null for the initial scan.
+     * @return array{cursor:?array{gallery_id:int,track_id:string},moved:int,
+     *     bytes:int,complete:bool,error:?array{gallery_id:int,track_id:string,
+     *     code:string}} Fixture-owned source result without filesystem writes.
+     */
+    function gallery_music_migrate_repository(?array $cursor = null): array
+    {
+        $GLOBALS['maintenance_music_calls'][] = $cursor;
+        return $GLOBALS['maintenance_music_result'];
+    }
+}
+
 namespace {
     require_once __DIR__ . '/support/php_source.php';
 
@@ -92,6 +108,7 @@ namespace {
         'security.cleanup',
         'downloads.cache',
         'thumbnail.metadata',
+        'music.repository',
         'media.deep_verify',
         'database.logical',
         'maintenance.history',
@@ -140,6 +157,67 @@ namespace {
     maintenance_center_test_assert(
         empty($registry['media.deep_verify']['default_selected']),
         'Deep media verification must remain opt-in by default.',
+    );
+    maintenance_center_test_assert(
+        $registry['music.repository']['default_selected'] === false
+            && $registry['music.repository']['required'] === false
+            && $registry['music.repository']['mutates'] === true
+            && $registry['music.repository']['dependencies'] === ['preflight']
+            && $registry['music.repository']['feature_requirement']
+                === 'gallery_music',
+        'Moving original music must require explicit selection and preflight.',
+    );
+    foreach (['analysis', 'execution'] as $phase) {
+        maintenance_center_test_assert(
+            maintenance_center_task_runtime_modules('music.repository', $phase)
+                === ['gallery-pdf-documents'],
+            'Music migration must reuse the complete deferred attachment owner.',
+        );
+    }
+    // Distinct fixture byte values prove per-slice metrics versus lifetime totals.
+    $checkpoint = [
+        'cursor' => ['gallery_id' => 7, 'track_id' => str_repeat('a', 32)],
+        'moved' => 1,
+        'bytes' => 17,
+    ];
+    $nextCursor = ['gallery_id' => 7, 'track_id' => str_repeat('b', 32)];
+    $GLOBALS['maintenance_music_calls'] = [];
+    $GLOBALS['maintenance_music_result'] = [
+        'cursor' => $nextCursor,
+        'moved' => 1,
+        'bytes' => 23,
+        'complete' => false,
+        'error' => null,
+    ];
+    $slice = \Gallery\Services\maintenance_center_execute_music_repository([
+        'task_state' => $checkpoint,
+    ]);
+    maintenance_center_test_assert(
+        $GLOBALS['maintenance_music_calls'] === [$checkpoint['cursor']]
+            && $slice['done'] === false
+            && $slice['task_state']['cursor'] === $nextCursor
+            && $slice['task_state']['moved'] === 2
+            && $slice['task_state']['bytes'] === 40
+            && $slice['metrics']['music_tracks_moved'] === 1
+            && $slice['metrics']['music_bytes_moved'] === 23,
+        'A maintenance step must call one source slice and retain its cursor.',
+    );
+    $GLOBALS['maintenance_music_result']['error'] = [
+        'gallery_id' => 7,
+        'track_id' => str_repeat('b', 32),
+        'code' => 'source_unverified',
+    ];
+    $failed = false;
+    try {
+        \Gallery\Services\maintenance_center_execute_music_repository([
+            'task_state' => $checkpoint,
+        ]);
+    } catch (RuntimeException) {
+        $failed = true;
+    }
+    maintenance_center_test_assert(
+        $failed && $checkpoint['cursor']['track_id'] === str_repeat('a', 32),
+        'A refused source must not publish a successful advanced checkpoint.',
     );
     maintenance_center_test_assert(
         !empty($registry['database.optimize']['atomic']),

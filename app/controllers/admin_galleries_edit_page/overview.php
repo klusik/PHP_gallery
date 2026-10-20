@@ -189,16 +189,6 @@ function admin_edit_gallery_render_overview(
             'disabled' => $deferredImages,
         ],
     ];
-    if (
-        feature_capability_effective_enabled('gallery_pdf_documents')
-        || feature_capability_effective_enabled('gallery_music')
-        || feature_capability_effective_enabled('lightbox_modes')
-    ) {
-        $adminTabs[] = [
-            'id' => 'admin-edit-documents',
-            'label' => t('presentation.media_tab'),
-        ];
-    }
     if (feature_capability_effective_enabled('metadata_organizer')) {
         $adminTabs[] = [
             'id' => 'admin-edit-organizer',
@@ -233,6 +223,7 @@ function admin_edit_gallery_render_overview(
                         ),
                         'data-admin-side-panel-title' => t(
                             'gallery.upload_photos',
+                            'Upload',
                         ),
                         'data-gallery-side-panel-url' => url_for(
                             'admin_upload',

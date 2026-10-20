@@ -98,13 +98,15 @@ before Update all; repeat refreshes deliberately trust the database. See
 [attachment reconciliation](docs/GALLERY_PDF.md#admin-storage-accounting).
 Original storage remains under its existing owners.
 
-Physical music playlists remain outside SQL. Each physical gallery's denied
-`.gallery-music/index.json` stores its ordered immutable-original metadata,
+Gallery music selections remain outside SQL. Each physical gallery's denied
+`.gallery-music/index.json` stores its ordered direct references and metadata,
 optimistic revision, explicit slideshow-music default and per-track download
 permission. Both preferences default false. Older v1 records without a download
 field remain locked without a storage rewrite. Atomic index writes
 belong to `app/models/gallery_music.php`; validation and file lifecycle belong
-to the music service. Backups must include the entire hidden sidecar. See
+to the music service. V1 local originals remain supported. V2 adds central
+asset references, live album assignments, source order and a local cleanup
+journal. Backups must include the entire hidden sidecar and `data/music/`. See
 [the music contract](docs/GALLERY_MUSIC.md).
 
 The global music layer adds `202610200001_tag_media_types.php` and
@@ -123,6 +125,25 @@ mutations through an optimistic revision. `music_catalog_dirty_galleries`
 records pending physical snapshot reconciliation; dirty snapshots are omitted
 from direct-usage counts. Inactive instance links retain identity for restored
 tracks. No table stores audio bytes.
+
+Migration `202610200003_music_repository.php` adds `music_repository_assets`
+with immutable 32-hex asset identity, logical song ID, original filename/title,
+MIME, `byte_size`, SHA-256 and optional stable legacy origin identity.
+`music_track_instances.asset_id` binds direct gallery references to one shared
+original. `music_gallery_album_links` is a derived gallery/assignment/album
+snapshot for catalog usage; the sidecar remains the gallery selection authority.
+Live membership comes from current `music_album_songs`, so it is never copied
+into a physical-instance snapshot. Merge/split preserve shared-asset identity.
+Removing a gallery or assignment does not delete central assets.
+
+Repository readiness is observed separately from the old catalog schema.
+Central writes require complete verified repository storage. Confirmed missing
+repository schema preserves legacy reads and documented old-index operations;
+unknown/partial schema never authorizes a copy, upload or link mutation.
+Forward DDL does not move deployed files. The optional Maintenance Center task
+moves one verified original per checkpoint and preserves a cleanup journal
+across the file/index boundary. Statistics count each registered central asset
+once plus remaining local physical copies, including pending cleanup bytes.
 
 Local Trash snapshots include optional per-gallery `music_catalog_refs` with
 track/song IDs. Since restore creates new gallery IDs, the local restore owner
@@ -359,6 +380,7 @@ Current migration sequence:
 | `202610020001_gallery_description_layout_semantics.php` | Replay-safe data/sidecar orientation conversion preserving legacy appearance, inheritance, Smart Gallery JSON and Trash snapshots; adds no table or column. |
 | `202610200001_tag_media_types.php` | Adds image/music/reserved-PDF media categories without changing existing tag IDs, slugs or assignments. |
 | `202610200002_music_catalog.php` | Adds logical songs, stable physical links, albums, song tags, revision state and pending snapshot reconciliation. |
+| `202610200003_music_repository.php` | Adds immutable shared audio assets, direct asset references and derived live gallery/album usage links. |
 
 ## Entity Relationship Overview
 

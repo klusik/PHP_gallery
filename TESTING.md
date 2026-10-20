@@ -1,5 +1,30 @@
 # Testing Guide
 
+## Central music and live gallery playlists
+
+`music_repository_database_test.php` uses owned disposable SQL rows and tracked
+filesystem identities to cover new central uploads, unchanged v1 playback,
+two-source migration within one gallery, verified-copy refusal and interrupted
+cleanup replay. It exercises live album membership/order against unchanged
+gallery selection JSON, direct assignment independence, optimistic conflicts,
+gallery deletion retention and per-gallery permissions. Cleanup must remove only
+fixture-owned asset identities; it never sweeps the shared `data/music/` folder.
+
+`admin_gallery_music_browser_test.mjs` renders the real Media/music view and
+uses production styles and mutation handlers on desktop and narrow screens.
+It covers scoped nested tabs, direct/live source groups, chooser replacement
+without rebasing unrelated revision tokens, canonical completion and retained
+panel/URL state. Controlled audio/transport adapters do not qualify real codecs.
+The global manager fixture also covers repository-only file details, promoted
+origin deduplication and direct/live gallery location links.
+
+The Maintenance Center contract keeps music relocation opt-in, delegates one
+source slice per step and preserves the last successful checkpoint on refusal.
+Attachment accounting proves that two references still count one central
+original. Hosted FULL owns all executions. Real hosting migration throughput,
+large-library timing, device codecs and installation-specific backup recovery
+remain manual acceptance; localhost debugging does not qualify deployment.
+
 ## Global Music Manager
 
 `music_catalog_database_test.php` uses the serial, owned disposable database

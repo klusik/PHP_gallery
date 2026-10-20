@@ -286,17 +286,13 @@ function cms_admin_scan_images(): void
  * Normalize an edit-gallery admin tab identifier.
  *
  * @param string $tab Requested query/hash tab identity.
- * @return string Registered available tab, or empty for an unknown identity
- *     or the media tab when both attachment capabilities are off.
+ * @return string Registered available tab, with the legacy documents alias
+ *     normalized to Media, or empty for an unknown identity.
  */
 function admin_edit_gallery_tab_id(string $tab): string
 {
-    if (
-        $tab === 'admin-edit-documents'
-        && !feature_capability_effective_enabled('gallery_pdf_documents')
-        && !feature_capability_effective_enabled('gallery_music')
-    ) {
-        return '';
+    if ($tab === 'admin-edit-documents') {
+        return 'admin-edit-media';
     }
     // $allowedTabs stores admin edit tab identifiers that may be returned after POST actions.
     $allowedTabs = [
@@ -306,7 +302,6 @@ function admin_edit_gallery_tab_id(string $tab): string
         'admin-edit-media',
         'admin-edit-api',
         'admin-edit-images',
-        'admin-edit-documents',
         'admin-edit-organizer',
         'admin-edit-renamer',
     ];
@@ -317,8 +312,8 @@ function admin_edit_gallery_tab_id(string $tab): string
  * Return an edit-gallery admin URL with an optional tab fragment.
  *
  * @param int $galleryId Gallery identifier.
- * @param string $tab Tab value.
- * @return string Text result for the caller.
+ * @param string $tab Requested registered tab or legacy documents alias.
+ * @return string Canonical edit URL with validated Media section when submitted.
  */
 function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
 {
@@ -328,6 +323,18 @@ function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
     $params = ['id' => $galleryId];
     if ($resolvedTab !== '') {
         $params['tab'] = $resolvedTab;
+    }
+    if ($tab === 'admin-edit-documents') {
+        $params['media_section'] = 'pdf';
+    } elseif ($resolvedTab === 'admin-edit-media') {
+        $section = (string) ($_POST['return_media_section'] ?? '');
+        if (in_array(
+            $section,
+            ['music', 'pdf', 'presentation', 'artwork'],
+            true,
+        )) {
+            $params['media_section'] = $section;
+        }
     }
     return (
         url_for('admin_edit_gallery', $params)

@@ -14,9 +14,11 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 require_once __DIR__ . '/../models/music_catalog.php';
+require_once __DIR__ . '/music_repository.php';
 require_once __DIR__ . '/app_settings.php';
 require_once __DIR__ . '/schema_inspection.php';
 require_once __DIR__ . '/presentation_schema_policy.php';
+require_once __DIR__ . '/mutation_schema_policy.php';
 
 /**
  * Bound catalog page size to keep administrator queries responsive.
@@ -25,6 +27,24 @@ require_once __DIR__ . '/presentation_schema_policy.php';
  * Rationale: 100 rows allow useful browsing without unbounded result sets.
  */
 const MUSIC_CATALOG_PAGE_SIZE = 100;
+
+/** Bound songs and albums returned by one live assignment chooser.
+ * Type: int. Units: results per type. Scope: one authenticated chooser query.
+ * Consumers: music_catalog_assignment_choices. Rationale: 25 rows are selectable without bloating the manager payload.
+ */
+const MUSIC_CATALOG_CHOOSER_LIMIT = 25;
+
+/** Bound direct tracks and live album groups in one physical playlist snapshot.
+ * Type: int. Units: sources. Scope: one gallery music index.
+ * Consumers: music_catalog_sync_gallery_snapshot. Rationale: the established 100-track playlist cap bounds links and writes.
+ */
+const MUSIC_CATALOG_GALLERY_SOURCE_LIMIT = 100;
+
+/** Bound metadata IDs for one effective public playlist projection.
+ * Type: int. Units: IDs per lookup category. Scope: one gallery request.
+ * Consumers: music_catalog_repository_projection_assets. Rationale: the existing 100-source playlist limit keeps query placeholders bounded.
+ */
+const MUSIC_CATALOG_REPOSITORY_BATCH_LIMIT = 100;
 
 /**
  * Bound galleries observed during one resumable filesystem reconciliation call.
@@ -158,6 +178,54 @@ function music_catalog_schema_status(): array
     ]);
 }
 
+/** Inspect central repository schema separately from legacy catalog readiness.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state repository schema report.
+ */
+function music_repository_schema_status(): array
+{
+    return presentation_schema_tables_status('presentation.music_repository', [
+        'music_repository_assets' => ['id', 'song_id', 'filename', 'indexed_title', 'mime', 'byte_size', 'sha256', 'origin_gallery_id', 'origin_track_id', 'created_at', 'updated_at'],
+        'music_track_instances' => ['gallery_id', 'track_id', 'asset_id'],
+        'music_gallery_album_links' => ['gallery_id', 'assignment_id', 'album_id', 'updated_at'],
+    ]);
+}
+
+/** Refuse repository writes unless every repository table is verified.
+ * @param string $operation Stable operation name for readiness diagnostics.
+ * @return void Continue only when repository schema is fully available.
+ * @throws \RuntimeException When schema is missing, partial or unknown.
+ */
+function music_repository_assert_schema_ready(string $operation): void
+{
+    $safeOperation = preg_match('/^[a-z][a-z0-9_.-]{0,79}$/D', $operation) === 1
+        ? $operation
+        : 'music_repository.mutation';
+    mutation_schema_assert_available(
+        music_repository_schema_status(),
+        $safeOperation,
+        t('music.failed'),
+        t('music.failed'),
+    );
+}
+
+/** Resolve repository readiness for catalog SQL that has a legacy branch.
+ * @param string $operation Stable operation name for diagnostics.
+ * @return bool True for the installed repository schema, false for proven absence.
+ * @throws \RuntimeException When inspection is partial or unavailable.
+ */
+function music_repository_is_ready_or_absent(string $operation): bool
+{
+    $status = music_repository_schema_status();
+    if ($status['state'] === 'available') {
+        return true;
+    }
+    if ($status['state'] === 'missing') {
+        return false;
+    }
+    music_repository_assert_schema_ready($operation);
+    return false;
+}
+
 /** Refuse catalog writes unless every required schema object is verified.
  * @param string $operation Stable operation name for readiness diagnostics.
  * @return void Continue only when schema inspection is complete and ready.
@@ -220,13 +288,25 @@ function music_catalog_physical_write_mode(): string
 
 /** Synchronize one committed physical playlist without scanning other galleries.
  * @param int $galleryId Physical gallery whose JSON index was committed.
- * @param list<array{id:string,title:string,filename:string,sha256:string,mime:string,size:int,hidden:bool,downloadable:bool}> $tracks Full current index track rows.
+ * @param list<array{id:string,title:string,filename:string,sha256:string,mime:string,size:int,hidden:bool,downloadable:bool,asset_id?:string}> $tracks Raw direct current index rows only.
  * @param string $revision Expected catalog revision for atomic snapshot update.
+ * @param list<array{id:string,album_id:int,hidden:bool,downloadable:bool}> $albumLinks Raw live album references from the same sidecar.
  * @return string New catalog revision after the snapshot is linked.
  * @throws \RuntimeException When persistence fails or the revision is stale.
  */
-function music_catalog_sync_gallery_snapshot(int $galleryId, array $tracks, string $revision): string
+function music_catalog_sync_gallery_snapshot(int $galleryId, array $tracks, string $revision, array $albumLinks = []): string
 {
+    if (count($tracks) + count($albumLinks) > MUSIC_CATALOG_GALLERY_SOURCE_LIMIT) {
+        throw new \InvalidArgumentException('music.playlist_limit');
+    }
+    $repositoryStatus = music_repository_schema_status();
+    $repositoryFields = $albumLinks !== [];
+    foreach ($tracks as $track) {
+        $repositoryFields = $repositoryFields || !empty($track['asset_id']);
+    }
+    if ($repositoryFields || !in_array($repositoryStatus['state'], ['available', 'missing'], true)) {
+        music_repository_assert_schema_ready('catalog.gallery_snapshot');
+    }
     $ids = [];
     $rows = [];
     foreach ($tracks as $track) {
@@ -237,14 +317,29 @@ function music_catalog_sync_gallery_snapshot(int $galleryId, array $tracks, stri
             'title' => (string) $track['title'],
             'filename' => (string) $track['filename'],
             'sha256' => (string) $track['sha256'],
+            'asset_id' => isset($track['asset_id']) ? (string) $track['asset_id'] : null,
         ];
     }
     $result = music_catalog_commit_mutation(
         $revision,
         'catalog.gallery_snapshot',
-        static function () use ($galleryId, $ids, $rows): void {
+        static function () use ($galleryId, $ids, $rows, $albumLinks, $repositoryStatus): void {
             foreach ($rows as $row) {
                 \Gallery\Models\music_catalog_model_attach_track($row);
+                if ($row['asset_id'] !== null) {
+                    music_repository_assert_schema_ready('catalog.gallery_asset_link');
+                    \Gallery\Models\music_repository_model_link_track(
+                        $galleryId,
+                        $row['track_id'],
+                        $row['asset_id'],
+                    );
+                }
+            }
+            if ($repositoryStatus['state'] === 'available') {
+                \Gallery\Models\music_repository_model_sync_album_links(
+                    $galleryId,
+                    $albumLinks,
+                );
             }
             \Gallery\Models\music_catalog_model_prune_gallery($galleryId, $ids);
             \Gallery\Models\music_catalog_model_clear_gallery_dirty($galleryId);
@@ -253,9 +348,50 @@ function music_catalog_sync_gallery_snapshot(int $galleryId, array $tracks, stri
     return $result['revision'];
 }
 
+/** Find a logical song by its stable physical gallery-track reference.
+ * @param int $galleryId Stable gallery identity.
+ * @param string $trackId Stable track identity within that gallery.
+ * @return int|null Logical song identity, or null when not indexed.
+ */
+function music_catalog_track_song_id(int $galleryId, string $trackId): ?int
+{
+    return \Gallery\Models\music_catalog_model_track_song_id($galleryId, $trackId);
+}
+
+/** Batch central metadata for direct and live-album sources in one query.
+ * @param list<string> $assetIds Direct central asset IDs from raw track entries.
+ * @param list<int> $songIds Logical songs expanded from assigned albums.
+ * @return array{assets_by_id:array<string,array{id:string,song_id:int,filename:string,indexed_title:string,mime:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null}>,assets_by_song:array<int,list<array{id:string,song_id:int,filename:string,indexed_title:string,mime:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null}>>} Existing metadata indexed by direct asset and song identity.
+ * @throws \InvalidArgumentException When IDs are malformed or exceed batch bounds.
+ * @throws \RuntimeException When repository schema is unavailable.
+ */
+function music_catalog_repository_projection_assets(array $assetIds, array $songIds): array
+{
+    if (count($assetIds) > MUSIC_CATALOG_REPOSITORY_BATCH_LIMIT || count($songIds) > MUSIC_CATALOG_REPOSITORY_BATCH_LIMIT) {
+        throw new \InvalidArgumentException('Music projection batch is too large.');
+    }
+    foreach ($assetIds as $assetId) {
+        if (!is_string($assetId) || preg_match('/^[a-f0-9]{32}$/D', $assetId) !== 1) {
+            throw new \InvalidArgumentException('Invalid repository asset identity.');
+        }
+    }
+    foreach ($songIds as $songId) {
+        if (!is_int($songId) || $songId < 1) {
+            throw new \InvalidArgumentException('Invalid music song identity.');
+        }
+    }
+    $assetIds = array_values(array_unique($assetIds));
+    $songIds = array_values(array_unique($songIds));
+    music_repository_assert_schema_ready('catalog.public_projection');
+    return \Gallery\Models\music_repository_model_projection_assets(
+        $assetIds,
+        $songIds,
+    );
+}
+
 /** Restore this local Trash snapshot's surviving song links after playlist indexing.
  * @param int $galleryId Newly recreated physical gallery identity.
- * @param array{revision:string,enabled:bool,tracks:list<array{id:string,filename:string,title:string,mime:string,size:int,sha256:string,hidden:bool,downloadable:bool}>} $playlist Authoritative current physical playlist.
+ * @param array{revision:string,enabled:bool,tracks:list<array{id:string,filename:string,title:string,mime:string,size:int,sha256:string,hidden:bool,downloadable:bool,asset_id?:string}>,albums?:list<array{id:string,album_id:int,hidden:bool,downloadable:bool}>} $playlist Authoritative raw v1/v2 physical playlist.
  * @param list<array{track_id:string,song_id:int}> $savedRefs Trusted same-site Trash references.
  * @return void Reuse existing song identities where still present; indexing keeps fresh identities otherwise.
  * @throws \RuntimeException When the catalog schema or revision is unavailable.
@@ -275,6 +411,7 @@ function music_catalog_restore_trash_snapshot(
             'title' => (string) $track['title'],
             'filename' => (string) $track['filename'],
             'sha256' => (string) $track['sha256'],
+            'asset_id' => isset($track['asset_id']) ? (string) $track['asset_id'] : null,
         ];
     }
     $refs = [];
@@ -294,12 +431,24 @@ function music_catalog_restore_trash_snapshot(
         }
     }
     $revision = music_catalog_revision();
+    $albumLinks = array_values($playlist['albums'] ?? []);
+    $repositoryStatus = music_repository_schema_status();
+    if ($albumLinks !== [] || array_filter($tracks, static fn(array $track): bool => $track['asset_id'] !== null) !== []) {
+        music_repository_assert_schema_ready('catalog.trash_restore');
+    }
     music_catalog_commit_mutation(
         $revision,
         'catalog.trash_restore',
-        static function () use ($galleryId, $tracks, $refs): void {
+        static function () use ($galleryId, $tracks, $refs, $albumLinks, $repositoryStatus): void {
             foreach ($tracks as $track) {
                 \Gallery\Models\music_catalog_model_attach_track($track);
+                if ($track['asset_id'] !== null) {
+                    \Gallery\Models\music_repository_model_link_track(
+                        $galleryId,
+                        $track['track_id'],
+                        $track['asset_id'],
+                    );
+                }
             }
             \Gallery\Models\music_catalog_model_restore_trash_track_refs(
                 $galleryId,
@@ -310,6 +459,12 @@ function music_catalog_restore_trash_snapshot(
                 array_column($tracks, 'track_id'),
             );
             \Gallery\Models\music_catalog_model_clear_gallery_dirty($galleryId);
+            if ($repositoryStatus['state'] === 'available') {
+                \Gallery\Models\music_repository_model_sync_album_links(
+                    $galleryId,
+                    $albumLinks,
+                );
+            }
         },
     );
 }
@@ -328,9 +483,11 @@ function music_catalog_commit_mutation(string $revision, string $operation, \Clo
         $revision,
         static function () use ($mutation): ?int {
             $value = $mutation();
+            // Public HTML exposes this shared setting as a decimal timestamp,
+            // consistently with Theme and thumbnail preference mutations.
             set_app_setting(
                 'theme_public_content_revision',
-                'music:' . music_catalog_revision(),
+                (string) time(),
             );
             return is_int($value) ? $value : null;
         },
@@ -384,6 +541,10 @@ function music_catalog_list(
     ) {
         throw new \InvalidArgumentException('Invalid music catalog ordering.');
     }
+    $repositoryStatus = music_repository_schema_status();
+    if (!in_array($repositoryStatus['state'], ['available', 'missing'], true)) {
+        music_repository_assert_schema_ready('catalog.list');
+    }
     $result = \Gallery\Models\music_catalog_model_list(
         $query,
         $limit,
@@ -393,6 +554,7 @@ function music_catalog_list(
         app_setting('music_show_file_extensions', '0') === '1',
         array_keys(gallery_music_formats()),
         t('admin.music.untitled_song', 'Song #{id}'),
+        $repositoryStatus['state'] === 'available',
     );
     foreach ($result['songs'] as &$song) {
         $song['title'] = music_catalog_display_title(
@@ -647,7 +809,7 @@ function music_catalog_present_tracks(array $tracks, int $defaultGalleryId): arr
 
 /** Return direct gallery and album usage for a song identity.
  * @param int $songId Stable normalized song identity.
- * @return array{direct_galleries:list<array{gallery_id:int,title:string,track_count:int|string}>,albums:list<array{album_id:int,title:string,track_count:int|string}>} Distinct usage rows.
+ * @return array{direct_galleries:list<array{gallery_id:int,title:string,track_count:int|string}>,albums:list<array{album_id:int,title:string,track_count:int|string}>,live_albums:list<array{gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>} Physical, global album and live gallery album usage.
  * @throws \InvalidArgumentException When the identity is invalid.
  */
 function music_catalog_usage(int $songId): array
@@ -655,12 +817,15 @@ function music_catalog_usage(int $songId): array
     if ($songId < 1) {
         throw new \InvalidArgumentException('Invalid song identity.');
     }
-    return \Gallery\Models\music_catalog_model_usage($songId);
+    return \Gallery\Models\music_catalog_model_usage(
+        $songId,
+        music_repository_is_ready_or_absent('catalog.usage'),
+    );
 }
 
 /** Batch song references and distinct usage data for an administrator page.
  * @param list<int> $songIds Positive song IDs, capped at the page-size policy.
- * @return array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{song_id:int,gallery_id:int,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int,title:string,track_count:int|string}>}> Details keyed by song ID.
+ * @return array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:string|null}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null}>,direct_galleries:list<array{song_id:int,gallery_id:int,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}> Details keyed by song ID.
  * @throws \InvalidArgumentException When more than one bounded page is requested.
  */
 function music_catalog_song_details(array $songIds): array
@@ -669,13 +834,16 @@ function music_catalog_song_details(array $songIds): array
     if (count($ids) > MUSIC_CATALOG_PAGE_SIZE) {
         throw new \InvalidArgumentException('Too many song identities.');
     }
-    return \Gallery\Models\music_catalog_model_song_details($ids);
+    return \Gallery\Models\music_catalog_model_song_details(
+        $ids,
+        music_repository_is_ready_or_absent('catalog.song_details'),
+    );
 }
 
 /** Return a merge preview without changing catalog identities.
  * @param list<int> $songIds Selected normalized song IDs.
  * @param int $survivorId Selected identity retaining its custom title.
- * @return array{survivor_id:int,songs:list<array{id:int,title:?string,indexed_title:?string,filename:?string,display_title:string,tags:string,track_count:int|string,album_count:int|string,tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{song_id:int,gallery_id:int,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int,title:string,track_count:int|string}>}>} Merge preview with tags, locations and active variants.
+ * @return array{survivor_id:int,songs:list<array{id:int,title:?string,indexed_title:?string,filename:?string,display_title:string,tags:string,track_count:int|string,album_count:int|string,tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:string|null}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:int|null,origin_track_id:string|null}>,direct_galleries:list<array{song_id:int,gallery_id:int,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>} Merge preview with tags, locations and distinct repository assets.
  * @throws \InvalidArgumentException When fewer than two IDs or invalid survivor.
  */
 function music_catalog_merge_preview(array $songIds, int $survivorId): array
@@ -688,7 +856,11 @@ function music_catalog_merge_preview(array $songIds, int $survivorId): array
     ) {
         throw new \InvalidArgumentException('Invalid merge selection.');
     }
-    $preview = \Gallery\Models\music_catalog_model_merge_preview($ids, $survivorId);
+    $preview = \Gallery\Models\music_catalog_model_merge_preview(
+        $ids,
+        $survivorId,
+        music_repository_is_ready_or_absent('catalog.merge_preview'),
+    );
     require_once __DIR__ . '/tag_metadata.php';
     $tagNames = tag_names_for_entities('music_song', $ids, 'music');
     $details = music_catalog_song_details($ids);
@@ -708,8 +880,10 @@ function music_catalog_merge_preview(array $songIds, int $survivorId): array
         }
         $song['tags'] = $tagNames[$songId] ?? '';
         $song['tracks'] = $details[$songId]['tracks'] ?? [];
+        $song['repository_assets'] = $details[$songId]['repository_assets'] ?? [];
         $song['direct_galleries'] = $details[$songId]['direct_galleries'] ?? [];
         $song['albums'] = $details[$songId]['albums'] ?? [];
+        $song['live_albums'] = $details[$songId]['live_albums'] ?? [];
     }
     unset($song);
     return $preview;
@@ -735,7 +909,12 @@ function music_catalog_merge(array $songIds, int $survivorId, string $revision, 
     }
     $ids = array_map('intval', array_column($preview['songs'], 'id'));
     $result = music_catalog_commit_mutation($revision, 'catalog.merge', static function () use ($ids, $survivorId, $tagPolicy): void {
-        \Gallery\Models\music_catalog_model_merge($ids, $survivorId, $tagPolicy);
+            \Gallery\Models\music_catalog_model_merge(
+                $ids,
+                $survivorId,
+                $tagPolicy,
+                music_repository_is_ready_or_absent('catalog.merge'),
+            );
     });
     return $result['revision'];
 }
@@ -798,11 +977,14 @@ function music_catalog_sync_song_tags(int $songId, string $tagText, string $revi
 
 /** Return physical track references attached to one normalized identity.
  * @param int $songId Stable normalized song identity.
- * @return list<array{gallery_id:int,track_id:string,filename:string,title:?string}> Active authorized-independent references.
+ * @return list<array{gallery_id:int,track_id:string,filename:string,asset_id:string|null,title:?string}> Active physical references and optional independent repository IDs.
  */
 function music_catalog_song_tracks(int $songId): array
 {
-    return \Gallery\Models\music_catalog_model_song_tracks($songId);
+    return \Gallery\Models\music_catalog_model_song_tracks(
+        $songId,
+        music_repository_is_ready_or_absent('catalog.song_tracks'),
+    );
 }
 
 /** Return the ordered flat album hierarchy with its song memberships.
@@ -837,6 +1019,70 @@ function music_catalog_album_tree(): array
     return array_values($albums);
 }
 
+/** Resolve paths for assigned albums without loading the full global tree.
+ * @param list<int> $albumIds Distinct assigned album IDs from one raw playlist.
+ * @return array<int,array{id:int,title:string,path:string,available:bool,song_count:int}> Paths and current member counts keyed by requested album ID; missing/cyclic nodes are unavailable.
+ * @throws \InvalidArgumentException When the ID list exceeds the bounded source policy or contains invalid values.
+ */
+function music_catalog_album_paths(array $albumIds): array
+{
+    foreach ($albumIds as $id) {
+        if (!is_int($id) || $id < 1) {
+            throw new \InvalidArgumentException('Invalid assigned album identity.');
+        }
+    }
+    $ids = array_values(array_unique($albumIds));
+    if (count($ids) > MUSIC_CATALOG_GALLERY_SOURCE_LIMIT) {
+        throw new \InvalidArgumentException('Too many assigned albums.');
+    }
+    $nodes = [];
+    $pending = $ids;
+    for ($level = 0; $level <= MUSIC_CATALOG_ALBUM_MAX_DEPTH && $pending !== []; $level++) {
+        $batch = array_values(array_diff($pending, array_keys($nodes)));
+        if ($batch === []) {
+            break;
+        }
+        foreach (\Gallery\Models\music_catalog_model_album_nodes($batch) as $node) {
+            $nodes[$node['id']] = $node;
+        }
+        $pending = [];
+        foreach ($nodes as $node) {
+            if ($node['parent_id'] !== null && !isset($nodes[$node['parent_id']])) {
+                $pending[] = $node['parent_id'];
+            }
+        }
+        $pending = array_values(array_unique($pending));
+    }
+    $paths = [];
+    foreach ($ids as $id) {
+        $cursor = $id;
+        $seen = [];
+        $parts = [];
+        $available = true;
+        while (true) {
+            if (!isset($nodes[$cursor]) || isset($seen[$cursor]) || count($parts) >= MUSIC_CATALOG_ALBUM_MAX_DEPTH) {
+                $available = false;
+                break;
+            }
+            $seen[$cursor] = true;
+            $node = $nodes[$cursor];
+            array_unshift($parts, $node['title']);
+            if ($node['parent_id'] === null) {
+                break;
+            }
+            $cursor = $node['parent_id'];
+        }
+        $paths[$id] = [
+            'id' => $id,
+            'title' => isset($nodes[$id]) ? $nodes[$id]['title'] : '',
+            'path' => $available ? implode(' / ', $parts) : '',
+            'available' => $available,
+            'song_count' => isset($nodes[$id]) ? (int) $nodes[$id]['song_count'] : 0,
+        ];
+    }
+    return $paths;
+}
+
 /** Return a paged album member list, including identities outside catalog pages.
  * @param int $albumId Stable album identity.
  * @param int $limit Maximum members, bounded to one catalog page.
@@ -853,6 +1099,7 @@ function music_catalog_album_members(int $albumId, int $limit = MUSIC_CATALOG_PA
         $albumId,
         $limit,
         $offset,
+        music_repository_is_ready_or_absent('catalog.album_members'),
     );
     foreach ($members as &$member) {
         $member['title'] = music_catalog_display_title(
@@ -870,6 +1117,62 @@ function music_catalog_album_members(int $albumId, int $limit = MUSIC_CATALOG_PA
     }
     unset($member);
     return $members;
+}
+
+/** Search bounded songs and live albums for an authenticated gallery chooser.
+ * @param string $query Search text for canonical song and full album titles.
+ * @param int $limit Maximum rows per result type, capped at the chooser policy.
+ * @return array{revision:string,songs:list<array{id:int,title:string,track_count:int}>,albums:list<array{id:int,title:string,song_count:int,path:string}>} Bounded choice lists with album breadcrumb paths.
+ * @throws \InvalidArgumentException When query or result limit exceeds policy.
+ * @throws \RuntimeException When repository schema is unavailable.
+ */
+function music_catalog_assignment_choices(string $query, int $limit = MUSIC_CATALOG_CHOOSER_LIMIT): array
+{
+    if (strlen($query) > MUSIC_CATALOG_QUERY_BYTES || $limit < 1 || $limit > MUSIC_CATALOG_CHOOSER_LIMIT) {
+        throw new \InvalidArgumentException('Invalid assignment chooser query.');
+    }
+    music_repository_assert_schema_ready('catalog.assignment_choices');
+    $catalog = music_catalog_list($query, $limit, 0, 'title', 'asc');
+    $songs = [];
+    foreach ($catalog['songs'] as $song) {
+        $songs[] = [
+            'id' => (int) $song['id'],
+            'title' => (string) $song['title'],
+            'track_count' => (int) $song['track_count'],
+        ];
+    }
+    $rows = music_catalog_album_tree();
+    $byId = [];
+    foreach ($rows as $album) {
+        $byId[(int) $album['id']] = $album;
+    }
+    $albums = [];
+    foreach ($rows as $album) {
+        $parts = [];
+        $cursor = $album;
+        while (true) {
+            array_unshift($parts, (string) $cursor['title']);
+            $parentId = $cursor['parent_id'];
+            if ($parentId === null || !isset($byId[(int) $parentId])) {
+                break;
+            }
+            $cursor = $byId[(int) $parentId];
+        }
+        $path = implode(' / ', $parts);
+        if ($query !== '' && stripos($path, $query) === false) {
+            continue;
+        }
+        $albums[] = [
+            'id' => (int) $album['id'],
+            'title' => (string) $album['title'],
+            'song_count' => (int) $album['song_count'],
+            'path' => $path,
+        ];
+        if (count($albums) >= $limit) {
+            break;
+        }
+    }
+    return ['revision' => music_catalog_revision(), 'songs' => $songs, 'albums' => $albums];
 }
 
 /** Create a nested album under a validated parent.
@@ -994,6 +1297,28 @@ function music_catalog_album_song_add(
     if ($albumId < 1 || $songId < 1 || ($position !== null && $position < 0)) {
         throw new \RuntimeException('music.conflict');
     }
+    music_catalog_assert_schema_ready('catalog.album_song_add');
+    music_repository_assert_schema_ready('catalog.album_song_add');
+    if (!hash_equals(music_catalog_revision(), $revision)) {
+        throw new \RuntimeException('music.conflict');
+    }
+    if (!\Gallery\Models\music_catalog_model_album_exists($albumId)) {
+        throw new \RuntimeException('music.album_missing');
+    }
+    $alreadyMember = \Gallery\Models\music_catalog_model_album_has_song(
+        $albumId,
+        $songId,
+    );
+    // Source promotion holds a gallery lock. Finish it before acquiring the
+    // global catalog revision lock to preserve the established lock order.
+    $asset = music_repository_prepare_song($songId);
+    if (!$alreadyMember) {
+        music_catalog_assert_album_growth_quota(
+            $albumId,
+            $songId,
+            (int) $asset['byte_size'],
+        );
+    }
     $result = music_catalog_commit_mutation(
         $revision,
         'catalog.album_song_add',
@@ -1030,6 +1355,58 @@ function music_catalog_album_song_remove(int $albumId, int $songId, string $revi
     return $result['revision'];
 }
 
+/** Refuse album growth that would overflow any currently linked gallery.
+ * @param int $albumId Stable globally shared album identity.
+ * @param int $songId Song proposed for membership.
+ * @param int $assetBytes Verified central original size in bytes.
+ * @return void Continue only when every live gallery remains within quota.
+ * @throws \RuntimeException When effective state is incomplete or any playlist would exceed quota.
+ */
+function music_catalog_assert_album_growth_quota(int $albumId, int $songId, int $assetBytes): void
+{
+    if ($assetBytes < 0) {
+        throw new \RuntimeException('music.linked_gallery_limit');
+    }
+    if (\Gallery\Models\music_catalog_model_album_has_song($albumId, $songId)) {
+        return;
+    }
+    music_repository_assert_schema_ready('catalog.album_growth_quota');
+    require_once __DIR__ . '/gallery_music.php';
+    $assignments = \Gallery\Models\music_catalog_model_album_assignment_galleries($albumId);
+    foreach ($assignments as $assignment) {
+        $gallery = [
+            'id' => $assignment['gallery_id'],
+            'folder_path' => $assignment['folder_path'],
+        ];
+        $lock = gallery_music_acquire_lock($gallery);
+        try {
+            $playlist = gallery_music_playlist($gallery);
+        } catch (\Throwable) {
+            throw new \RuntimeException('music.linked_gallery_limit');
+        } finally {
+            gallery_music_release_lock($lock);
+        }
+        if (
+            !empty($playlist['partial'])
+            || !empty($playlist['over_limit'])
+            || (int) ($playlist['unavailable'] ?? 0) > 0
+        ) {
+            throw new \RuntimeException('music.linked_gallery_limit');
+        }
+        $occurrences = (int) $assignment['occurrences'];
+        $currentCount = count($playlist['tracks']);
+        $currentBytes = array_sum(array_column($playlist['tracks'], 'size'));
+        if (
+            $occurrences < 1
+            || $occurrences > GALLERY_MUSIC_MAX_TRACKS - $currentCount
+            || $assetBytes > intdiv(PHP_INT_MAX, $occurrences)
+            || $assetBytes * $occurrences > GALLERY_MUSIC_TOTAL_BYTES - $currentBytes
+        ) {
+            throw new \RuntimeException('music.linked_gallery_limit');
+        }
+    }
+}
+
 /** Split selected gallery-scoped physical references into a new song identity.
  * @param int $songId Existing normalized identity to split from.
  * @param list<array{gallery_id:int,track_id:string}> $trackIds Exact selected references.
@@ -1063,6 +1440,7 @@ function music_catalog_split(int $songId, array $trackIds, string $revision): ar
         static fn(): int => \Gallery\Models\music_catalog_model_split(
             $songId,
             $selected,
+            music_repository_is_ready_or_absent('catalog.split'),
         ),
     );
     return ['revision' => $result['revision'], 'song_id' => $result['value']];

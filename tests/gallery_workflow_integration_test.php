@@ -746,7 +746,7 @@ try {
         'gallery_presentation_autoplay' => '1',
         'gallery_presentation_interval' => 'fast',
         'gallery_presentation_transition' => 'slow',
-        'return_tab' => 'admin-edit-documents',
+        'return_tab' => 'admin-edit-media',
     ];
     check(
         $anonymous->request($mediaEditRoute, $presentationEdit, true)['status']
@@ -903,13 +903,25 @@ try {
                 ),
             'Smart hero ignored independent media masters or lost presentation.',
         );
-        $mediaEditor = $admin->request($mediaEditRoute
-            . '&tab=admin-edit-documents&panel=1');
+        $legacyMediaEditor = $admin->request($mediaEditRoute
+            . '&tab=admin-edit-documents&panel=1&lang=en');
+        $canonicalMediaLocation = (string) (
+            $legacyMediaEditor['headers']['location'] ?? ''
+        );
+        check(
+            $legacyMediaEditor['status'] === 302
+                && str_contains($canonicalMediaLocation, 'tab=admin-edit-media')
+                && str_contains($canonicalMediaLocation, 'media_section=pdf')
+                && str_contains($canonicalMediaLocation, 'panel=1')
+                && str_contains($canonicalMediaLocation, 'lang=en'),
+            'The legacy Documents bookmark must preserve panel and language while redirecting to Media / PDF.',
+        );
+        $mediaEditor = $admin->request($canonicalMediaLocation);
         check(
             $mediaEditor['status'] === 200
                 && str_contains(
                     $mediaEditor['body'],
-                    'data-admin-tab-target="admin-edit-documents"',
+                    'data-admin-tab-target="admin-edit-media"',
                 )
                 && str_contains(
                     $mediaEditor['body'],

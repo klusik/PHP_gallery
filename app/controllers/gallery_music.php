@@ -23,12 +23,15 @@ require_once __DIR__ . '/../views/gallery_music.php';
  * @param array{id:int, folder_path:string} $gallery Already authorized
  *     physical gallery.
  * @param bool $editor Whether to include authenticated attachment management.
+ * @param string $query Bounded catalog query for the editor's no-JavaScript
+ *     chooser fallback.
  * @return array{
  *     gallery_id:int,
  *     editor:bool,
  *     action_url:string,
  *     csrf_html:string,
  *     revision:string,
+ *     write_revision:string,
  *     enabled:bool,
  *     error:string,
  *     tracks:list<array{
@@ -40,34 +43,89 @@ require_once __DIR__ . '/../views/gallery_music.php';
  *         sha256:string,
  *         hidden:bool, downloadable:bool,
  *         url:string,
- *         download_url:string
- *     }>
+ *         download_url:string,
+ *         source_id?:string,source_type?:string,source_title?:string,
+ *         source_track_id?:string
+ *     }>,
+ *     sources:list<array{id:string,type:string,song_id:?int,album_id:?int,
+ *         title:string,downloadable:bool,hidden:bool,track_count:int,
+ *         position:int,path?:string}>,
+ *     unavailable:int,omitted:int,partial:bool,over_limit:bool,
+ *     choices:array{revision:string,songs:list<array{id:int,title:string,
+ *         track_count:int}>,albums:list<array{id:int,title:string,
+ *         song_count:int,path:string}>},
+ *     query?:string,query_limit?:int,choices_error?:string
  * } Escaped-by-view presentation with no local paths.
  */
-function gallery_music_view_model(array $gallery, bool $editor = false): array
+function gallery_music_view_model(
+    array $gallery,
+    bool $editor = false,
+    string $query = '',
+): array
 {
-    $state = ['revision' => '', 'enabled' => false, 'tracks' => []];
+    $state = [
+        'revision' => '',
+        'write_revision' => '',
+        'enabled' => false,
+        'tracks' => [],
+        'sources' => [],
+    ];
     $error = '';
     try {
-        $state = \Gallery\Services\gallery_music_playlist($gallery);
+        $state = \Gallery\Services\gallery_music_playlist(
+            $gallery,
+            $editor,
+        );
     } catch (\Throwable) {
         $error = \Gallery\Services\t('music.failed');
     }
-    return gallery_music_present_playlist(
+    $model = gallery_music_present_playlist(
         (int) $gallery['id'],
         $editor,
         $state,
         $error,
     );
+    if ($editor && $error === '') {
+        $model['query'] = $query;
+        $model['query_limit'] = \Gallery\Services\MUSIC_CATALOG_QUERY_BYTES;
+        $model['sources'] = $state['sources'] ?? [];
+        $model['unavailable'] = (int) ($state['unavailable'] ?? 0);
+        $model['partial'] = (bool) ($state['partial'] ?? false);
+        $model['over_limit'] = (bool) ($state['over_limit'] ?? false);
+        $model['write_revision'] = (string) (
+            $state['write_revision'] ?? $state['revision']
+        );
+        try {
+            $model['choices'] =
+                \Gallery\Services\music_catalog_assignment_choices($query);
+            $model['choices_error'] = '';
+        } catch (\Throwable) {
+            $model['choices'] = [
+                'revision' => '',
+                'songs' => [],
+                'albums' => [],
+            ];
+            $model['choices_error'] = \Gallery\Services\t(
+                'admin.music.error_schema',
+            );
+        }
+    }
+    return $model;
 }
 
 /**
  * Prepare protected URLs and existing controls for a physical or merged playlist.
  * @param int $galleryId Physical ID or negative Smart Gallery presentation ID.
  * @param bool $editor Whether authenticated physical-gallery forms are available.
- * @param array{revision:string,enabled:bool,tracks:list<array{id:string,
+ * @param array{revision:string,write_revision?:string,enabled:bool,
+ *     tracks:list<array{id:string,
  *     source_gallery_id?:int,title:string,filename:string,mime:string,size:int,
- *     sha256:string,hidden:bool,downloadable:bool}>} $state Prepared snapshot;
+ *     sha256:string,hidden:bool,downloadable:bool,source_id?:string,
+ *     source_type?:string,source_title?:string,source_track_id?:string}>,
+ *     sources?:list<array{id:string,type:string,song_id:?int,album_id:?int,
+ *     title:string,downloadable:bool,hidden:bool,track_count:int,
+ *     position:int,path?:string}>,unavailable?:int,omitted?:int,
+ *     partial?:bool,over_limit?:bool} $state Prepared snapshot;
  *     merged records retain their physical source IDs for delivery.
  * @param string $error Localized optional-storage failure, otherwise empty.
  * @return array{
@@ -76,8 +134,16 @@ function gallery_music_view_model(array $gallery, bool $editor = false): array
  *     action_url:string,
  *     csrf_html:string,
  *     revision:string,
+ *     write_revision:string,
  *     enabled:bool,
  *     error:string,
+ *     sources:list<array{id:string,type:string,song_id:?int,album_id:?int,
+ *         title:string,downloadable:bool,hidden:bool,track_count:int,
+ *         position:int,path?:string}>,
+ *     unavailable:int,omitted:int,partial:bool,over_limit:bool,
+ *     choices:array{revision:string,songs:list<array{id:int,title:string,
+ *         track_count:int}>,albums:list<array{id:int,title:string,
+ *         song_count:int,path:string}>},
  *     tracks:list<array{
  *         id:string,
  *         title:string,
@@ -87,7 +153,8 @@ function gallery_music_view_model(array $gallery, bool $editor = false): array
  *         sha256:string,
  *         hidden:bool, downloadable:bool,
  *         url:string,
- *         download_url:string
+ *         download_url:string,source_id?:string,source_type?:string,
+ *         source_title?:string,source_track_id?:string
  *     }>
  * } Escaped-by-view presentation with no local paths.
  */
@@ -157,9 +224,16 @@ function gallery_music_present_playlist(
             : '',
         'csrf_html' => $editor ? \Gallery\Core\csrf_field() : '',
         'revision' => $state['revision'],
+        'write_revision' => (string) ($state['write_revision'] ?? $state['revision']),
         'enabled' => $state['enabled'],
         'error' => $error,
         'tracks' => $tracks,
+        'sources' => $state['sources'] ?? [],
+        'unavailable' => (int) ($state['unavailable'] ?? 0),
+        'omitted' => (int) ($state['omitted'] ?? 0),
+        'partial' => (bool) ($state['partial'] ?? false),
+        'over_limit' => (bool) ($state['over_limit'] ?? false),
+        'choices' => ['revision' => '', 'songs' => [], 'albums' => []],
     ];
 }
 
@@ -205,10 +279,11 @@ function gallery_music_smart_view_model(
 /**
  * Render the independently replaceable gallery music editor card.
  * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
+ * @param string $query Bounded initial catalog query for direct-page fallback.
  * @return string Music manager HTML with CSRF/revision controls, or empty
  *     when the global music capability is off.
  */
-function admin_gallery_music_html(array $gallery): string
+function admin_gallery_music_html(array $gallery, string $query = ''): string
 {
     if (!\Gallery\Services\feature_capability_effective_enabled(
         'gallery_music',
@@ -217,7 +292,7 @@ function admin_gallery_music_html(array $gallery): string
     }
     ob_start();
     \Gallery\Views\view_render_gallery_music(
-        gallery_music_view_model($gallery, true),
+        gallery_music_view_model($gallery, true, $query),
     );
     return (string) ob_get_clean();
 }
@@ -233,7 +308,8 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
     $action = (string) ($_POST['music_action'] ?? '');
     $editUrl = \Gallery\Core\url_for('admin_edit_gallery', [
         'id' => $id,
-        'tab' => 'admin-edit-documents',
+        'tab' => 'admin-edit-media',
+        'media_section' => 'music',
     ]);
     $descriptor = \Gallery\Core\admin_mutation_descriptor(
         'gallery.music.' . $action,
@@ -264,6 +340,50 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
             $source = $upload['tmp_name'];
             $filename = $upload['name'];
         }
+        if ($action === 'choices') {
+            $query = trim((string) ($_POST['music_query'] ?? ''));
+            $choiceModel = gallery_music_view_model(
+                $gallery,
+                true,
+                $query,
+            );
+            if (($choiceModel['choices_error'] ?? '') !== '') {
+                throw new \RuntimeException(
+                    (string) $choiceModel['choices_error'],
+                );
+            }
+            $choices = $choiceModel['choices'];
+            ob_start();
+            \Gallery\Views\view_render_gallery_music_choice_rows(
+                $choiceModel,
+                $choices,
+            );
+            $choicesHtml = (string) ob_get_clean();
+            if (!admin_wants_json()) {
+                \Gallery\Core\redirect_to(\Gallery\Core\url_for(
+                    'admin_edit_gallery',
+                    [
+                        'id' => $id,
+                        'tab' => 'admin-edit-media',
+                        'media_section' => 'music',
+                        'music_query' => trim(
+                            (string) ($_POST['music_query'] ?? ''),
+                        ),
+                    ],
+                ));
+            }
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: private, no-store');
+            echo json_encode([
+                'ok' => true,
+                'choices_html' => $choicesHtml,
+                'catalog_revision' => $choices['revision'],
+                'write_revision' => (string) (
+                    \Gallery\Services\gallery_music_state($gallery)['revision']
+                ),
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
         $outcome = \Gallery\Services\gallery_music_mutate(
             $gallery,
             (string) ($_POST['music_revision'] ?? ''),
@@ -273,6 +393,11 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
             $filename,
             (string) ($_POST['music_enabled'] ?? '') === '1',
             (string) ($_POST['music_download_enabled'] ?? '') === '1',
+            (int) ($_POST['selection_id'] ?? 0),
+            isset($_POST['music_position'])
+                ? (int) $_POST['music_position']
+                : null,
+            (string) ($_POST['catalog_revision'] ?? ''),
         );
         \Gallery\Services\gallery_attachment_storage_changed();
         $message = \Gallery\Services\t('music.saved');
@@ -295,7 +420,12 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
         $result['track_id'] = $outcome['track_id'];
         $result['catalog_sync_pending'] = $outcome['catalog_sync_pending'];
     } catch (\Throwable $error) {
-        $allowed = ['music.conflict', 'music.invalid_file', 'music.quota'];
+        $allowed = [
+            'music.conflict',
+            'music.invalid_file',
+            'music.quota',
+            'admin.music.error_schema',
+        ];
         $message = \Gallery\Services\t('music.failed');
         foreach ($allowed as $key) {
             if ($error->getMessage() === \Gallery\Services\t($key)) {
@@ -327,6 +457,9 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
 /**
  * Serve an original audio track after canonical inherited gallery
  *     authorization.
+ * The administrator playlist probe retains its historical raw write revision
+ * for sequential chooser uploads. Live album changes have a separate effective
+ * revision used by the player; they never replace the index CAS token.
  * @return void Emit protected audio/download bytes, admin revision JSON, or
  *     refusal.
  */
@@ -356,7 +489,8 @@ function cms_gallery_music(): void
             $state = \Gallery\Services\gallery_music_playlist($gallery);
             echo json_encode([
                 'ok' => true,
-                'revision' => $state['revision'],
+                'revision' => $state['write_revision'] ?? $state['revision'],
+                'effective_revision' => $state['revision'],
             ], JSON_THROW_ON_ERROR);
         } catch (\Throwable) {
             http_response_code(503);

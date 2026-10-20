@@ -543,7 +543,7 @@ Anonyme Besucher verwenden denselben Link nach normalen Zugriffskontrollen.
 Benötigen Vollbild oder~Ton Aktivierung, wartet der~schwarze Beginn auf
 \ui{Präsentation starten}. Danach füllt der~Ersatz bei~fehlender nativer
 Unterstützung das~Browserfenster; \ui{Abspielen} hilft bei~späteren Tonfehlern.
-Unter \ui{Galerie bearbeiten > PDF / Musik / Präsentation} bietet die~transparente
+Unter \ui{Galerie bearbeiten > Medien > Präsentation} bietet die~transparente
 Karte \ui{Präsentationseinstellungen} öffentliche Schalter, Musik und~beide
 Geschwindigkeiten. Das~Speichern-Symbol verwendet das~geschützte Galerieformular.
 Vorschau und~Teilen verwenden aktuelle, auch ungespeicherte Werte. Neue Links
@@ -591,6 +591,15 @@ Animation. Ein~Inhaltsaustausch behält offene Liste und~Scrollposition.
 Die Dateiauswahl und die Ablage im Upload-Panel einer bestehenden Galerie akzeptieren auch PDFs. Standardmäßig wird nur das Originaldokument angehängt; es entstehen weder Untergalerien noch PNG-Seiten. Öffnen Sie für eine Konvertierung beim Upload \ui{Erweitert} und aktivieren Sie ausdrücklich \ui{PDF-Seiten zusätzlich in PNG umwandeln}; wählen Sie danach eine private Untergalerie oder das Anhängen der Seiten sowie die DPI. Das Öffnen allein aktiviert keine Konvertierung. Gemischte Auswahlen laden zuerst Fotos hoch, hängen dann PDFs an und führen nur gewählte Konvertierungen aus. Das Panel bleibt mit Fortschritt und Abbruch geöffnet. Wiederholungen behalten die ursprüngliche Konvertierungswahl; bei aktivierter Konvertierung wird ein fehlendes leeres Untergalerieziel nur wiederhergestellt, wenn noch keine Seite bestätigt wurde.
 
 \index{PDF!Galeriedokumente}
+
+Der~Galerieeditor hat~ein Hauptregister \ui{Medien} mit~den Unterbereichen
+\ui{Musik}, \ui{PDF}, \ui{Präsentation} und~\ui{Gestaltung}. Musik und~PDF
+behalten ihre unabhängigen Formulare; Gestaltung bleibt mit~dem geschützten
+Galerieeinstellungsformular verknüpft. Die~Präsentationskarte liegt unter
+\ui{Medien} > \ui{Präsentation}, allgemeine Dokumente und~das optionale OFP-
+Panel unter \ui{Medien} > \ui{PDF}. Titelbild, Branding und~Hintergrund
+liegen unter \ui{Medien} > \ui{Gestaltung}. Unter \ui{Bilder} nimmt
+\ui{Hochladen} alle für~die~Galerie aktivierten Medientypen an.
 
 Administratoren können einer physischen Galerie auch ohne SimBrief-Daten ein allgemeines PDF hinzufügen. Die Galerie speichert das Original und einen kleinen Index mit stabiler Dokument-ID, Dateiname, Titel, Herkunft, exakter Größe und SHA-256-Prüfsumme. Der geschützte gleichursprüngliche Anzeige- und Downloadlink folgt den Sichtbarkeits-, Passwort-, Freigabe- und NSFW-Regeln der Galerie. Der vorhandene SimBrief-OFP-Manifest- und Linkpfad bleibt davon unabhängig.
 
@@ -670,8 +679,9 @@ Entfernte Beziehungen löschen keine Originale. Diese Admin-Sammlungen
 veröffentlichen keine globale Musikbibliothek. Musik-Tags verwenden
 die~gemeinsame Taxonomie mit~eigenem Medientyp; Bild-Tags und~Bildsuche
 bleiben getrennt. PDF ist~reserviert. Bestehende Slugs bleiben global
-eindeutig. Sichern Sie~SQL und~versteckte Musikordner; nach Wiederherstellung
-folgen Vorwärtsmigration und~begrenzter Abgleich. Bei~veralteter Revision
+eindeutig. Sichern Sie~SQL, \filepath{data/music/} und~versteckte Altindizes
+gemeinsam; nach Wiederherstellung folgen Vorwärtsmigration und~begrenzter
+Abgleich. Bei~veralteter Revision
 öffnen Sie~den~aktuellen Stand. Deaktivierte Musik behält Metadaten und~Audio.
 Lokale Papierkorb-Wiederherstellung verbindet aktuelle Titel nach geänderten
 Galerie-IDs mit~bestehenden Identitäten. Alte Snapshots oder~entfernte
@@ -679,15 +689,17 @@ Identitäten erzeugen neue Einträge; fremde Archive liefern keine vertrauten ID
 
 \subsubsection{Musikspeicher}
 
-Über \ui{Fotos hochladen} lassen sich Fotos, PDFs und~Musik gemeinsam auswählen
-oder~ablegen. Audio bleibt unverändert und~wird nicht in~Fotos umgewandelt.
-Reine Audio-Uploads funktionieren auch bei~ausgeschalteter Bildvorbereitung.
-Im~Galerieeditor bietet \ui{Dokumente / PDFs} weiterhin eine eigene Tabelle
-\ui{Musik} für~Upload, Reihenfolge, Entfernen und~Diashow-Voreinstellung.
-Aktionen bleiben im~Panel. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC und~WebM werden
-akzeptiert; Browser-Codecs bestimmen die~Wiedergabe. Sichtbarkeit, Passwort,
-Freigabe und~NSFW-Regeln gelten weiterhin.
-
+Öffnen Sie~\ui{Galerie bearbeiten > Medien > Musik}, um~Audio hochzuladen
+und~die~Playlist der~Galerie zu~verwalten. Neue Uploads speichern unveränderliche
+Originale im~geschützten zentralen Repository \filepath{data/music/}; Audio wird
+niemals in~Fotos umgewandelt. Einzelne Songzuordnungen bleiben unabhängige
+Einträge. Albumzuordnungen sind~Live-Playlists: spätere Änderungen an~Mitgliedern
+und~Reihenfolge eines Albums gelten in~allen verbundenen Galerien. Die~Galerie
+speichert geordnete Referenzen und~die~Downloadfreigabe je~Eintrag, keine Kopie
+des~gemeinsamen Originals. Wiedergabe und~Download prüfen den~aktuellen Zugriff
+auf die~Zielgalerie und~die~Freigabe des~Eintrags; die~Privatsphäre der~Quellgalerie
+autorisiert keine unabhängigen Anfragen. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC
+und~WebM werden akzeptiert; Browser-Codecs bestimmen die~Wiedergabe.
 Die~Tabelle zeigt Titeldauer und~ein~Abspielen/Stopp-Symbol vor~dem~Titel.
 Das~Symbol wechselt mit~der~Wiedergabe; es~gibt keine Pause oder~eigene
 Wiedergabespalte. Lange Titel erhalten Auslassung und~vollständigen Tooltip;
@@ -730,19 +742,20 @@ nacheinander. Der~Server dekodiert kein Audio. Upload-Wiederholungen bewahren
 bestätigte Fotos, PDFs und~Musik; bei~unbekannter Audioantwort muss die~Galerie
 vor~einem erneuten Versuch geprüft werden.
 
-Originale und~geordneter JSON-Index liegen in~\filepath{.gallery-music/}.
-Der~Index speichert Namen, MIME-Typen, Größen, SHA-256, Revision,
-Diashow-Standard und~einzelne Download-Rechte. Ältere Datensätze ohne Recht
-bleiben gesperrt. Es~gelten 64~MiB je~Datei, 100 Titel und~512~MiB je~Galerie
-sowie niedrigere PHP-Grenzen. Sicherungen müssen versteckte Ordner enthalten.
-Foto-ZIP-Exporte und~Galerieübertragungen enthalten keine Musik. Siehe
+Der~geordnete Playlistindex der~Galerie bleibt in~ihrem versteckten Ordner
+\filepath{.gallery-music/}; unveränderliche Audiodateien liegen zentral in
+\filepath{data/music/}. Eine optionale Aufgabe im~\ui{Wartung > Wartungszentrum}
+migriert ältere lokale Originale einzeln in~begrenzten, fortsetzbaren Schritten.
+Sie~prüft zuerst die~zentrale Kopie und~schaltet dann atomar die~Referenz um;
+Song-IDs, logische Identitäten, Reihenfolge, Sichtbarkeit, Downloadrechte
+und~Diashoweinstellungen bleiben erhalten. Unsichere lokale Dateien werden
+nicht gelöscht. Sichern Sie~SQL, \filepath{data/music/} und~versteckte
+Altindizes gemeinsam. Jedes zentrale
+Musikoriginal zählt unabhängig von~der~Zahl der~Galerielinks einmal; noch nicht
+migrierte lokale Kopien zählen separat. Beim Löschen einer Galerie verschwinden
+ihre~Referenzen, das~gemeinsam genutzte Original bleibt erhalten. Foto-ZIP-Exporte
+und~Galerieübertragungen enthalten keine Musik. Siehe
 \filepath{docs/GALLERY_MUSIC.md}.
-
-Verwenden Sie nach Routenänderungen den~gehostet vorbereiteten Kandidaten. PDF
-und~Audio teilen den~bestehenden Laufzeitbesitzer für~Anhänge; Quellen
-mit~älterem generiertem Routenplan können Anfragen bis~zum~Laden
-des~vorbereiteten Plans ablehnen. Lokale Generierung ersetzt keine gehostete
-Qualifikation.
 
 \subsection{Identität und Kontext bearbeiten}
 \index{g00129@Galeriemetadaten}
@@ -1178,7 +1191,7 @@ Statusabgleich machen Wiederholungen idempotent. Berichte sind getrennt vom OFP,
 
 Der Browserupload eignet sich für alltägliche Ergänzungen. Wählen Sie eine Galerie und Dateien aus, prüfen Sie die Charge und verfolgen Sie den Fortschritt, während der Server Medien validiert und Datensätze und Vorschaubilder vorbereitet. Die Dateisystemerkennung eignet sich für große vorhandene Ordnerbäume oder Übertragungen per FTP und Hostingwerkzeugen. Automatisierung und WebDAV eignen sich nach Einrichtung ihrer bereichsgebundenen Zugangsdaten für wiederholte oder mobile Abläufe.
 
-Im rechten Administrationsbereich \ui{Fotos hochladen} lassen sich nacheinander Bildschirmfotos mit Strg+V unter Windows/Linux oder Cmd+V unter macOS einfügen, weitere Dateien auswählen und Bilder in den Uploadbereich ziehen. Jedes Bild erscheint vor dem Absenden in einer lokalen Miniaturvorschau-Liste mit Dateiname und Größe. Über die Pfeiltasten der Liste lässt sich die Reihenfolge ändern; falsche Bilder können entfernt oder die gesamte Auswahl geleert werden. Die vorhandene Schaltfläche \ui{Bilder hochladen} übermittelt die Originaldateien einmal über den normalen Uploadablauf. Miniaturbilder ersetzen nicht die Originale. Die Liste ist kein auf dem Server gespeicherter Entwurf: Beim Verlassen des Bereichs muss das Verwerfen ungesendeter Dateien bestätigt werden; nach einem Fehler bleiben sie für einen erneuten Versuch erhalten, nach bestätigtem Erfolg wird die Liste geleert. Nicht darstellbare Formate behalten ihr Dateisymbol und durchlaufen weiterhin die serverseitige Validierung. Die eigenständige Admin-Uploadseite und das Formular ohne JavaScript bleiben unverändert.
+Im rechten Administrationsbereich \ui{Fotos hochladen} lassen sich nacheinander Bildschirmfotos mit Strg+V unter Windows/Linux oder Cmd+V unter macOS einfügen, weitere Dateien auswählen und Bilder in den Uploadbereich ziehen. Jedes Bild erscheint vor dem Absenden in einer lokalen Miniaturvorschau-Liste mit Dateiname und Größe. Über die Pfeiltasten der Liste lässt sich die Reihenfolge ändern; falsche Bilder können entfernt oder die gesamte Auswahl geleert werden. Die vorhandene Schaltfläche \ui{Hochladen} übermittelt die Originaldateien einmal über den normalen Uploadablauf. Miniaturbilder ersetzen nicht die Originale. Die Liste ist kein auf dem Server gespeicherter Entwurf: Beim Verlassen des Bereichs muss das Verwerfen ungesendeter Dateien bestätigt werden; nach einem Fehler bleiben sie für einen erneuten Versuch erhalten, nach bestätigtem Erfolg wird die Liste geleert. Nicht darstellbare Formate behalten ihr Dateisymbol und durchlaufen weiterhin die serverseitige Validierung. Die eigenständige Admin-Uploadseite und das Formular ohne JavaScript bleiben unverändert.
 
 Laden Sie bei einer großen Veranstaltung in sinnvollen Gruppen hoch. Kleinere Gruppen erleichtern das Erkennen von Fehlern und ermöglichen eine schrittweise Prüfung von Titeln, Reihenfolge und Sichtbarkeit.
 
@@ -2600,7 +2613,9 @@ sowie eine Gesamtmediensumme. Nach Fotobatches liest Alles aktualisieren
 PDF-, Musik- und~OFP-Summen aus der~Datenbank. Der~erste Lauf importiert fehlende
 Einträge aus höchstens zwei physischen Galerien je Schritt, auch ohne Fotos.
 Verborgene, private, deaktivierte und~nicht herunterladbare Dateien zählen
-weiter. Physische Kopien zählen einzeln; Smart-Listen erzeugen keine Kopie.
+weiter. Jedes zentrale Musikoriginal zählt einschließlich nicht zugeordneter
+Assets einmal; noch nicht migrierte lokale Originale zählen separat.
+Smart-Listen erzeugen keine Kopie.
 Konvertierte PDF-Seiten zählen bereits als Fotos. Indizes, Sperren,
 Konvertierungszustand, nicht indexierte Dateien, Papierkorb und~andere Caches
 sind ausgeschlossen. Unlesbare Indizes oder unsichere/fehlende Dateien

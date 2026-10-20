@@ -68,7 +68,7 @@ import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js
 import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261017-media-summary-v1';
-import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261017-music-v3';
+import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261020-unified-gallery-media-v3';
 import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261020-music-tabs-popover-drag-v6';
 import {
     setupGalleryMusicPlayback,
@@ -78,7 +78,7 @@ import {
 } from './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1';
 import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261016-three-state-covers-v1';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
-import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261016-three-state-covers-v1';
+import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261020-unified-media-forms-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
@@ -125,7 +125,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261018-presentation-confirm-v1';
+} from './gallery-modules/admin-operations.js?v=20261020-unified-media-forms-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

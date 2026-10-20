@@ -44,12 +44,21 @@ use Throwable;
 
 /** Registry revision bound into every analyzed plan. */
 /**
- * Invalidate approved plans that predate producer-specific cache lifecycle reclamation.
+ * Invalidate approved plans that predate the opt-in shared music move task.
  * Type: string. Units: registry revision identifier. Scope: Maintenance Center plans.
  * Consumers: plan freshness and execution admission.
- * Rationale: require fresh analysis before approving the expanded cache task.
+ * Rationale: require fresh analysis before selecting a new filesystem workflow.
  */
-const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-10-14.cache-lifecycle';
+const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-10-20.music-repository';
+
+/**
+ * Reserve a small progress weight for the explicitly selected music move.
+ * Type: int. Units: relative plan work units. Scope: one maintenance plan.
+ * Consumers: music.repository registry and read-only analyzer.
+ * Rationale: five units retain visible progress without claiming a file count
+ *     before the bounded source discovery has run. Value: 5 work units.
+ */
+const MAINTENANCE_CENTER_MUSIC_WEIGHT = 5;
 
 /** Terminal job history retained by normal maintenance. */
 const MAINTENANCE_CENTER_HISTORY_RETENTION_DAYS = 90;
@@ -310,6 +319,11 @@ function maintenance_center_task_runtime_modules(
 
     if ($taskKey === 'preflight') {
         return $phase === 'analysis' ? ['site-maintenance-work'] : [];
+    }
+    if ($taskKey === 'music.repository') {
+        // The complete existing attachment owner supplies both the passive
+        // readiness reader and the explicitly approved original move worker.
+        return ['gallery-pdf-documents'];
     }
     if (in_array(
         $taskKey,

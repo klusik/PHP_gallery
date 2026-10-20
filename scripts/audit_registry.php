@@ -502,6 +502,16 @@ $registry = [
             'php_argument' => true,
             'timeout' => 90,
         ],
+        // Bound the nested Media editor's real-view and canonical-write fixture.
+        // Type: int. Units: seconds. Scope: one hosted browser child.
+        // Consumers: central browser-map runner. Rationale: 90 seconds leaves
+        // startup/teardown headroom around the 60-second browser deadline and
+        // the bounded PHP renders performed before browser startup.
+        'admin_gallery_music_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 90,
+        ],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],
         'public_content_widget_floating_test.mjs' => [],

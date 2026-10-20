@@ -31,7 +31,7 @@ const ADMIN_MUSIC_ALBUM_RENDER_MAX_DEPTH = 8;
 /**
  * Render the compact catalog and album manager.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Controller-prepared page data.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Controller-prepared page data.
  * @return void Emits the page or fragment markup.
  */
 function view_render_admin_music(array $model): void
@@ -134,7 +134,7 @@ function view_render_admin_music(array $model): void
 /**
  * Render global title and extension preferences.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared preference values and form data.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared preference values and form data.
  * @return void Emits independent preference forms.
  */
 function view_admin_music_settings(array $model): void
@@ -159,7 +159,7 @@ function view_admin_music_settings(array $model): void
 /**
  * Render catalog search and a bounded reconciliation control.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared query, URL, and revision.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared query, URL, and revision.
  * @return void Emits search and reconciliation controls.
  */
 function view_admin_music_search(array $model): void
@@ -213,7 +213,7 @@ function view_admin_music_search(array $model): void
 /**
  * Render song rows, variant disclosures, usage counts, and relationship actions.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared page of catalog song rows.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared page of catalog song rows.
  * @return void Emits the compact responsive song table.
  */
 function view_admin_music_songs(array $model): void
@@ -222,7 +222,9 @@ function view_admin_music_songs(array $model): void
         ? $model['catalog']['songs'] : [];
     $showSplitColumn = false;
     foreach ($songs as $song) {
-        if ((int) ($song['track_count'] ?? 0) > 1) {
+        $songId = (int) ($song['id'] ?? 0);
+        $physicalTracks = $model['song_details'][$songId]['tracks'] ?? [];
+        if (count($physicalTracks) > 1) {
             $showSplitColumn = true;
             break;
         }
@@ -288,7 +290,7 @@ function view_admin_music_songs(array $model): void
 /**
  * Render one song row with accessible disclosures and separate mutation forms.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Page state including URL and revision.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Page state including URL and revision.
  * @param array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string} $song One normalized catalog song row.
  * @param bool $showSplitColumn Whether this page needs its compact split column.
  * @return void Emits one table row and expandable details.
@@ -304,7 +306,60 @@ function view_admin_music_song_row(
     $details = $model['song_details'][$id] ?? [];
     $tracks = is_array($details['tracks'] ?? null) ? $details['tracks'] : [];
     $usage = $details;
-    $usageCount = count($usage['direct_galleries'] ?? []) + count($usage['albums'] ?? []);
+    $galleryUsages = [];
+    foreach ($usage['direct_galleries'] ?? [] as $gallery) {
+        $galleryId = (int) ($gallery['gallery_id'] ?? 0);
+        if ($galleryId > 0) {
+            $galleryUsages[$galleryId] = true;
+        }
+    }
+    foreach ($usage['live_albums'] ?? [] as $placement) {
+        $galleryId = (int) ($placement['gallery_id'] ?? 0);
+        if ($galleryId > 0) {
+            $galleryUsages[$galleryId] = true;
+        }
+    }
+    $usageCount = count($galleryUsages)
+        + count($usage['albums'] ?? []);
+    $repositoryAssets = is_array($details['repository_assets'] ?? null)
+        ? $details['repository_assets'] : [];
+    $filesById = [];
+    $promotedOrigins = [];
+    foreach ($repositoryAssets as $asset) {
+        $assetId = (string) ($asset['id'] ?? '');
+        if ($assetId !== '') {
+            $filesById['asset:' . $assetId] = [
+                'filename' => (string) ($asset['filename'] ?? ''),
+                'byte_size' => (int) ($asset['byte_size'] ?? 0),
+                'origin_gallery_id' => $asset['origin_gallery_id'] ?? null,
+                'origin_track_id' => $asset['origin_track_id'] ?? null,
+                'kind' => 'asset',
+            ];
+        }
+        $originGalleryId = (int) ($asset['origin_gallery_id'] ?? 0);
+        $originTrackId = (string) ($asset['origin_track_id'] ?? '');
+        if ($originGalleryId > 0 && $originTrackId !== '') {
+            $promotedOrigins[$originGalleryId . ':' . $originTrackId] = true;
+        }
+    }
+    foreach ($tracks as $track) {
+        if (($track['asset_id'] ?? null) !== null) {
+            continue;
+        }
+        $physicalKey = (int) ($track['gallery_id'] ?? 0)
+            . ':' . (string) ($track['track_id'] ?? '');
+        if (isset($promotedOrigins[$physicalKey])) {
+            continue;
+        }
+        $filesById['legacy:' . $physicalKey] = [
+            'filename' => (string) ($track['filename'] ?? ''),
+            'byte_size' => 0,
+            'origin_gallery_id' => (int) ($track['gallery_id'] ?? 0),
+            'origin_track_id' => (string) ($track['track_id'] ?? ''),
+            'kind' => 'legacy',
+        ];
+    }
+    $files = array_values($filesById);
     $galleryTitles = [];
     foreach (($usage['direct_galleries'] ?? []) as $gallery) {
         $galleryTitles[(int) ($gallery['gallery_id'] ?? 0)] =
@@ -318,23 +373,33 @@ function view_admin_music_song_row(
         . $id . '" form="admin-music-merge" aria-label="' . e($title) . '">';
     view_admin_music_title_form($model, $id, $title);
     echo '</div></div></td><td><details class="admin-music-variants">'
-        . '<summary title="' . e(t('admin.music.variants', 'Show physical variants'))
-        . '" aria-label="' . e(t('admin.music.variants', 'Show physical variants'))
+        . '<summary title="' . e(t('admin.music.files', 'Files'))
+        . '" aria-label="' . e(t('admin.music.files', 'Files'))
         . '"><span class="subgallery-stack-icon" aria-hidden="true">'
         . '<span></span><span></span><span></span></span>'
         . '<span class="subgallery-stack-count">'
-        . (int) ($song['track_count'] ?? count($tracks)) . '</span></summary><ul>';
-    foreach ($tracks as $track) {
-        $trackGalleryId = (int) ($track['gallery_id'] ?? 0);
+        . count($files) . '</span></summary><ul>';
+    foreach ($files as $file) {
+        $trackGalleryId = (int) ($file['origin_gallery_id'] ?? 0);
         $galleryTitle = e($galleryTitles[$trackGalleryId] ?? ('#' . $trackGalleryId));
         $galleryUrl = (string) ($model['gallery_urls'][$trackGalleryId] ?? '');
         echo '<li>';
-        if ($galleryUrl !== '') {
+        if ($file['kind'] === 'asset') {
+            echo '<span>' . e(t(
+                'admin.music.shared_file',
+                'Shared repository file',
+            )) . '</span>';
+        } elseif ($galleryUrl !== '') {
             echo '<a href="' . e($galleryUrl) . '">' . $galleryTitle . '</a>';
         } else {
             echo $galleryTitle;
         }
-        echo ' · ' . e((string) ($track['filename'] ?? '')) . '</li>';
+        echo ' · ' . e((string) $file['filename']);
+        if ((int) $file['byte_size'] > 0) {
+            echo ' <small>' . (int) $file['byte_size'] . ' '
+                . e(t('admin.music.bytes', 'bytes')) . '</small>';
+        }
+        echo '</li>';
     }
     echo '</ul></details></td><td><details class="admin-music-locations"><summary>' . $usageCount . '</summary><ul>';
     foreach (($usage['direct_galleries'] ?? []) as $gallery) {
@@ -368,6 +433,18 @@ function view_admin_music_song_row(
             $model['albums'],
             $usageAlbumId,
         ) . '</a> · ' . e(t('admin.music.album', 'Album')) . '</li>';
+    }
+    foreach (($usage['live_albums'] ?? []) as $placement) {
+        $galleryId = (int) ($placement['gallery_id'] ?? 0);
+        $galleryTitle = e((string) ($placement['gallery_title'] ?? ''));
+        $galleryUrl = (string) ($model['gallery_urls'][$galleryId] ?? '');
+        echo '<li>';
+        if ($galleryUrl !== '') {
+            echo '<a href="' . e($galleryUrl) . '">' . $galleryTitle . '</a>';
+        } else {
+            echo $galleryTitle;
+        }
+        echo ' · ' . e((string) ($placement['album_title'] ?? '')) . '</li>';
     }
     echo '</ul></details></td><td>';
     $songTagText = (string) ($model['song_tags'][$id] ?? '');
@@ -422,7 +499,7 @@ function view_admin_music_album_path(array $albums, int $albumId): string
 /**
  * Render the exact custom-title editor for one logical song.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Page state.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Page state.
  * @param int $songId Logical song identifier.
  * @param string $title Current catalog title.
  * @return void Emits title, album-assignment and row-context controls.
@@ -502,7 +579,7 @@ function view_admin_music_title_form(array $model, int $songId, string $title): 
 /**
  * Render an editor for this song's music-only shared taxonomy assignments.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared page state.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared page state.
  * @param int $songId Logical song identifier.
  * @param string $tags Current comma-separated music tag names.
  * @return void Emits the tag editor disclosure.
@@ -528,7 +605,7 @@ function view_admin_music_tag_form(
 /**
  * Render a split control for a song with more than one physical variant.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Page state.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Page state.
  * @param int $songId Logical song identifier.
  * @param list<array{gallery_id:int,track_id:string,filename:string}> $tracks Physical variants.
  * @return void Emits variant checkboxes and a split action when applicable.
@@ -562,7 +639,7 @@ function view_admin_music_split_form(array $model, int $songId, array $tracks): 
 /**
  * Render the flat album data as a nested tree with breadcrumb context.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared albums and current selection.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared albums and current selection.
  * @return void Emits album navigation and relationship controls.
  */
 function view_admin_music_album_tree(array $model): void
@@ -609,7 +686,7 @@ function view_admin_music_album_tree(array $model): void
 /**
  * Render one album and all of its children recursively, opening the selected path.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared page state.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared page state.
  * @param array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string} $album Album row with direct membership count.
  * @param list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}> $albums Complete bounded album tree rows.
  * @param int $depth Current hierarchy depth for indentation.
@@ -687,7 +764,7 @@ function view_admin_music_album_contains(
 /**
  * Render selected album songs and progressively disclosed metadata controls.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared page state.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared page state.
  * @param int $albumId Selected album identifier.
  * @param list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}> $albums Album rows with membership counts.
  * @return void Emits selected album details.
@@ -904,7 +981,7 @@ function view_admin_music_album_breadcrumbs(array $albums, int $albumId): string
 /**
  * Render previous/next controls for a bounded catalog page.
  *
- * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string}>,direct_galleries:list<array{gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{album_id:int|string,title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared query, offset, total, and limit.
+ * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool} $model Prepared query, offset, total, and limit.
  * @return void Emits pagination links where another page exists.
  */
 function view_admin_music_pagination(array $model): void

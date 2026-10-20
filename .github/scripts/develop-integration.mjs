@@ -203,6 +203,11 @@ function requireFeatureDispatch(context,run,call) {
 /** GitHub API adapter supporting exact paths, methods and JSON payloads.
  * @typedef {function(string,string=,(Record<string,unknown>|null)=):Record<string,unknown>} GithubApi
  */
+/** Exact successful GitHub check run returned by the native checks endpoint.
+ * @typedef {{id:number,name:string,head_sha:string,external_id:string,
+ *     status:'completed',conclusion:'success',app:{id:number},
+ *     check_suite:{id:number},details_url:string|null}} VerifiedCheckRun
+ */
 /** Integration request bound to the user-selected feature source and observed develop lease.
  * @typedef {{branch:string,sourceSha:string,candidateSha:string,expectedDevelopSha:string,sourceBase:string,basicRunId:number|string,basicRunAttempt:number|string,integrationCheckId?:number,matrixCheckId?:number,basicArtifactId?:number,basicArtifactDigest?:string,qualifiedRun?:string}} IntegrationRequest
  */
@@ -459,26 +464,27 @@ export function requireAuthorityUpdateSourcePaths(source,base) {
  * @param {string} sha Exact commit whose checks are required.
  * @param {string} prefix Required current-workflow job prefix.
  * @param {string} externalId Exact check-run external ID.
- * @returns {Record<string,unknown>} Exact unique successful check run.
+ * @returns {VerifiedCheckRun} Exact unique successful check run.
  */
 function exactCheck(call,repository,sha,prefix,externalId) {
     const checks=completeRows(call,'repos/'+repository+'/commits/'+sha+'/check-runs?filter=all','check_runs');
     const matches=checks.filter(check=>check.name===prefix && check.external_id===externalId);
     if (matches.length!==1) throw new Error('BLOCKED exact required check is missing or duplicated.');
-    const check=matches[0];
-    if (check.head_sha!==sha || check.status!=='completed' || check.conclusion!=='success'
+    const check=/** @type {VerifiedCheckRun} */ (matches[0]);
+    if (!Number.isSafeInteger(check.id) || check.id<1 || check.head_sha!==sha
+        || check.status!=='completed' || check.conclusion!=='success'
         || check.app?.id!==15368) throw new Error('BLOCKED required check is not a successful GitHub Actions check on the exact SHA.');
     return check;
 }
 
-/** Validate the latest exact-S BASIC run, its native suite and the separately grouped custom check.
+/** Validate exact-S BASIC check identity and the suite owned by its native run.
  * @param {GithubApi} call Authenticated GitHub API adapter.
  * @param {string} repository Owner/repository.
  * @param {string} branch Exact selected source branch.
  * @param {string} sourceSha Exact source S.
  * @param {string|number} runId Selected candidate-preparation workflow run ID.
  * @param {string|number} attempt Selected latest workflow attempt.
- * @returns {Record<string,unknown>} Verified BASIC check run.
+ * @returns {VerifiedCheckRun} Verified exact successful BASIC check run.
  */
 function validateBasicEvidence(call,repository,branch,sourceSha,runId,attempt) {
     const run=call('repos/'+repository+'/actions/runs/'+String(runId));
@@ -491,16 +497,19 @@ function validateBasicEvidence(call,repository,branch,sourceSha,runId,attempt) {
         'basic:'+String(runId)+':'+String(attempt)+':'+sourceSha);
     const suite=call('repos/'+repository+'/check-suites/'+basic.check_suite?.id);
     if (!Number.isSafeInteger(run.check_suite_id) || run.check_suite_id<1
+        || !Number.isSafeInteger(basic.check_suite?.id) || basic.check_suite.id<1
         || suite?.id!==basic.check_suite?.id) {
         throw new Error('BLOCKED BASIC native or custom check suite identity is unavailable.');
     }
-    // GitHub may group REST-created checks into an earlier suite for the same commit/App.
-    // The actual run/attempt and native job remain the execution authority, independently of that grouping.
+    // GitHub can attach the REST-created check to an earlier suite for the same
+    // branch/SHA/App. Validate that suite's identity metadata, but its aggregate
+    // result belongs to unrelated jobs and is not BASIC execution evidence.
     const nativeSuite=run.check_suite_id===suite.id ? suite
         : call('repos/'+repository+'/check-suites/'+run.check_suite_id);
-    if (nativeSuite?.id!==run.check_suite_id || [suite,nativeSuite].some(item=>item?.head_branch!==branch
-        || item?.head_sha!==sourceSha || item?.status!=='completed'
-        || item?.conclusion!=='success' || item?.app?.id!==15368)) {
+    if (suite?.head_branch!==branch || suite?.head_sha!==sourceSha || suite?.app?.id!==15368
+        || nativeSuite?.id!==run.check_suite_id || nativeSuite?.head_branch!==branch
+        || nativeSuite?.head_sha!==sourceSha || nativeSuite?.status!=='completed'
+        || nativeSuite?.conclusion!=='success' || nativeSuite?.app?.id!==15368) {
         throw new Error('BLOCKED BASIC native or custom check suite differs from the selected branch and source SHA.');
     }
     const jobs=completeRows(call,'repos/'+repository+'/actions/runs/'+String(runId)
