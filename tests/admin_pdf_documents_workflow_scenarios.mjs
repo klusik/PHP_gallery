@@ -419,8 +419,8 @@ assert.equal(cancelRequest.body.get('csrf_token'), 'csrf-fresh');
 assert.equal(cancelRequest.url, cancelForm.action);
 assert.equal(cancelHarness.location.href, cancelHarness.initialUrl, 'Cancellation must preserve the form URL.');
 
-// Gallery-editor placement regression (#200): document actions are isolated
-// from API configuration and the shared gallery settings form.
+// Gallery-editor placement regression (#200): Media owns capability-scoped
+// subsections while document actions stay outside the shared settings form.
 const editorSourcePaths = [
     'app/controllers/admin_galleries_edit_page/overview.php',
     'app/controllers/admin_galleries_edit_page/controller.php',
@@ -436,31 +436,127 @@ const editorSources = await Promise.all(editorSourcePaths.map(path =>
 const [overviewSource, editorSource, documentsSource, apiSource, entrySource,
     editActionsSource, pdfPostSource, ofpPostSource] = editorSources;
 assert.match(overviewSource,
-    /'id' => 'admin-edit-documents',\s*'label' => t\('presentation\.media_tab'/,
-    'A dedicated localized PDF/Music/Presentation tab must exist.');
+    /'id' => 'admin-edit-media',\s*'label' => t\('admin\.gallery_editor\.tab_media'/,
+    'The gallery editor must expose the unified localized Media tab.');
+assert.doesNotMatch(overviewSource, /'id'\s*=>\s*'admin-edit-documents'/,
+    'Documents must not remain a second main gallery-editor tab.');
 assert.match(entrySource, /require_once __DIR__ \. '\/admin_galleries_edit_page\/tab_documents\.php'/,
-    'The gallery editor must load the Documents tab controller.');
-assert.match(editActionsSource, /'admin-edit-documents'/,
-    'The server must recognize Documents as a valid redirect/selected tab.');
-assert.match(documentsSource, /'documents_html'\s*=>\s*admin_gallery_pdf_documents_html\(\s*\$gallery\s*,?\s*\)/,
-    'The document manager must belong to the Documents tab.');
-assert.match(documentsSource, /'simbrief_html'\s*=>\s*admin_edit_gallery_simbrief_legacy_panel_html\(\s*\$gallery\s*,?\s*\)/,
-    'The historical SimBrief PDF attachment must also belong to Documents.');
+    'The gallery editor must load the controller that prepares Media subsections.');
+assert.match(editorSource,
+    /if \(\(string\) \(\$_GET\['tab'\]\s*\?\?\s*''\) === 'admin-edit-documents'\)\s*\{\s*\$redirectParams\s*=\s*\[\s*'id' => \(int\) \$gallery\['id'\],\s*'tab' => 'admin-edit-media',\s*'media_section' => 'pdf'/,
+    'A legacy Documents page request must redirect to Media with its PDF subsection selected.');
+assert.match(editActionsSource,
+    /if \(\$tab === 'admin-edit-documents'\)\s*\{\s*return 'admin-edit-media';/,
+    'The legacy Documents URL must normalize to the unified Media tab.');
+assert.match(editActionsSource,
+    /if \(\$tab === 'admin-edit-documents'\)\s*\{\s*\$params\['media_section'\]\s*=\s*'pdf';/,
+    'The Documents alias must retain the PDF subsection when it normalizes.');
+assert.match(documentsSource,
+    /\$documentsHtml\s*=\s*admin_gallery_pdf_documents_html\(\$gallery\)\s*\.\s*admin_edit_gallery_simbrief_legacy_panel_html\(\$gallery\)/,
+    'The historical SimBrief PDF attachment must remain within the PDF subsection.');
+assert.match(documentsSource, /'documents_html'\s*=>\s*\$documentsHtml/,
+    'The combined PDF fragment must feed the unified Media subsection model.');
 assert.match(documentsSource, /view_render_admin_gallery_media_tab\(/,
     'The prepared media fragments must use the presentation-owned tab wrapper.');
 const mediaView = await readFile(new URL(
     '../app/views/admin_gallery_edit_tabs.php', import.meta.url
 ), 'utf8');
-assert.match(mediaView, /view_render_admin_tab_panel\(\s*'admin-edit-documents'/,
-    'The media view must retain its existing native tab identity.');
+const layoutSource = await readFile(new URL(
+    '../app/controllers/shared_layout.php', import.meta.url
+), 'utf8');
+const publicMediaSource = await readFile(new URL(
+    '../app/views/public_gallery_lightbox.php', import.meta.url
+), 'utf8');
+const musicViewSource = await readFile(new URL(
+    '../app/views/gallery_music.php', import.meta.url
+), 'utf8');
+const pdfViewSource = await readFile(new URL(
+    '../app/views/gallery_pdf_documents.php', import.meta.url
+), 'utf8');
+const adminMediaStyles = await readFile(new URL(
+    '../public/assets/styles/admin-gallery-media.css', import.meta.url
+), 'utf8');
+const publicMediaStyles = await readFile(new URL(
+    '../public/assets/styles/lightbox.css', import.meta.url
+), 'utf8');
+const adminStyleOwnerStart = layoutSource.indexOf(
+    'function shared_layout_admin_stylesheet_files()',
+);
+const publicStyleOwnerStart = layoutSource.indexOf(
+    'function shared_layout_public_stylesheet_files()',
+);
+const adminStyleOwner = layoutSource.slice(
+    adminStyleOwnerStart,
+    publicStyleOwnerStart,
+);
+assert.ok(adminStyleOwnerStart >= 0 && publicStyleOwnerStart > adminStyleOwnerStart,
+    'The fixture must inspect the actual shared Admin and public stylesheet owners.');
+assert.ok(adminStyleOwner.indexOf("'assets/styles/lightbox.css'")
+    < adminStyleOwner.indexOf("'assets/styles/admin.css'")
+    && adminStyleOwner.indexOf("'assets/styles/admin-gallery-media.css'")
+        > adminStyleOwner.indexOf("'assets/styles/admin.css'"),
+'The real Admin cascade includes lightbox.css before Admin overrides and the scoped Media owner afterward.');
+assert.ok(layoutSource.includes("'assets/styles/public-shared.css'")
+    && layoutSource.includes("'assets/styles/public-content-widgets.css'"),
+    'The separate public drawer fixture must load its public shared widget cascade.');
+assert.match(publicMediaSource,
+    /function view_media_panel_start\([\s\S]*?bool \$inline = false,[\s\S]*?string \$toolbarHtml = ''\s*,?\s*\)/,
+    'The inline editor and public disclosure fixture must follow the production panel helper signature.');
+assert.match(publicMediaSource,
+    /if \(\$inline\)\s*\{[\s\S]*?gallery-media-inline[\s\S]*?return;[\s\S]*?<details class="gallery-media-widget"/,
+    'Inline authenticated media and native public disclosure must remain separate branches of one owner.');
+assert.match(musicViewSource,
+    /view_media_panel_start\([\s\S]*?view_music_control_icon\('music'\),\s*\$model\['editor'\],\s*\$model\['editor'\] && \$model\['tracks'\] !== \[\][\s\S]*?view_music_player_controls\(false\)/,
+    'Music must route editor mode and its inline toolbar through the shared panel helper.');
+assert.match(musicViewSource,
+    /view_media_panel_end\(\$model\['editor'\]\)/,
+    'Music must close the exact inline or public panel shape selected at its start.');
+assert.match(pdfViewSource,
+    /view_media_panel_start\([\s\S]*?view_music_control_icon\('document'\),\s*\$model\['editor'\],/,
+    'PDF editing must use the shared helper inline while public output keeps its disclosure default.');
+assert.match(pdfViewSource,
+    /view_media_panel_end\(\$model\['editor'\]\)/,
+    'PDF documents must close the exact panel shape selected by their editor mode.');
+assert.match(adminMediaStyles,
+    /#admin-edit-media \.gallery-pdf-icon\s*\{[\s\S]*?width:\s*28px;[\s\S]*?height:\s*28px;[\s\S]*?background:\s*transparent;/,
+    'Admin PDF icons must retain their compact transparent control treatment in the Admin cascade.');
+assert.match(publicMediaStyles,
+    /\.gallery-pdf-documents \.gallery-pdf-icon\s*\{[\s\S]*?width:\s*1\.65em;[\s\S]*?background:\s*transparent;/,
+    'Public PDF drawer icons must retain their own compact transparent presentation.');
+assert.match(mediaView, /view_render_admin_tab_panel\(\s*'admin-edit-media'/,
+    'The unified media view must own the single native main-tab identity.');
+assert.match(mediaView, /class="admin-subtabs gallery-editor-media-tabs"\s*'\s*\.\s*' data-admin-subtabs role="tablist"/,
+    'Documents must contain the existing shared nested-tab owner for local media sections.');
+for (const sectionKey of ['music', 'pdf', 'presentation', 'artwork']) {
+    assert.ok(mediaView.includes("$sections['" + sectionKey + "'] ="),
+        'The production media tab view must retain the ' + sectionKey + ' subsection.');
+}
+assert.match(mediaView,
+    /\$panelId\s*=\s*'admin-gallery-media-'\s*\.\s*\$sectionKey/,
+    'Nested panel IDs must be derived from their enabled Media subsection keys.');
+assert.match(mediaView, /data-admin-subtab-panel/,
+    'Nested Music, PDF, Presentation and Artwork sections must remain independently addressable panels.');
+assert.match(mediaView, /if \(\$model\['music_html'\] !== ''\)/,
+    'A disabled Music capability must omit its tab and panel.');
+assert.match(mediaView, /if \(\$model\['documents_html'\] !== ''\)/,
+    'A disabled PDF capability must omit its tab and panel.');
+assert.match(mediaView, /if \(\$model\['presentation_html'\] !== ''\)/,
+    'A disabled Presentation capability must omit its tab and panel.');
+assert.match(mediaView,
+    /\$formAttribute\s*=\s*' form="'\s*\.\s*e\(\$viewModel\['settings_form_id'\]\)/,
+    'Artwork controls must be natively associated with the shared settings form.');
+assert.match(mediaView,
+    /\$sections\['artwork'\]\s*=\s*\[/,
+    'The Artwork subsection must remain present in the unified Media renderer.');
 assert.doesNotMatch(apiSource, /admin_gallery_pdf_documents_html|admin_edit_gallery_simbrief_legacy_panel_html/,
     'The API tab must not render PDF or SimBrief document forms.');
 const closeSettingsFormAt = editorSource.search(/\bview_render_admin_gallery_editor_form_close\(\s*\[/);
 const renderDocumentsAt = editorSource.search(/\badmin_edit_gallery_render_documents_tab\(\s*\$gallery,\s*\$activeEditTab\s*,?\s*\);/);
 assert.ok(closeSettingsFormAt >= 0 && renderDocumentsAt > closeSettingsFormAt,
     'Independent PDF upload/conversion forms must render after the shared settings form closes.');
-assert.match(pdfPostSource, /'tab' => 'admin-edit-documents'/,
-    'PDF mutation redirect/panel metadata must return to the Documents tab.');
+assert.match(pdfPostSource,
+    /'tab' => 'admin-edit-media',\s*'media_section' => 'pdf'/,
+    'PDF mutation metadata must return to the PDF subsection of Media.');
 assert.match(ofpPostSource, /redirect_to\(\s*admin_edit_gallery_tab_url\(\s*\$galleryId,\s*'admin-edit-documents'\s*,?\s*\)\s*,?\s*\)/,
     'Legacy OFP non-JavaScript upload fallback must return to Documents.');
 

@@ -480,7 +480,7 @@ function view_render_lightbox(array $viewModel): void
 
 /**
  * Return one conventional compact player symbol from the fixed presentation set.
- * @param string $action Fixed playback, download or editor action symbol.
+ * @param string $action Fixed playback, download, search, add or editor action symbol.
  * @return string Decorative SVG markup; unknown actions return an empty string.
  */
 function view_music_control_icon(string $action): string
@@ -502,6 +502,9 @@ function view_music_control_icon(string $action): string
         'music' => '<path d="M9 18V5l11-2v13M9 9l11-2"/>'
             . '<ellipse cx="6" cy="18" rx="3" ry="2"/>'
             . '<ellipse cx="17" cy="16" rx="3" ry="2"/>',
+        'search' => '<circle cx="10.5" cy="10.5" r="6.5"/>'
+            . '<path d="m16 16 5 5"/>',
+        'add' => '<path d="M12 5v14m-7-7h14"/>',
         'locked' => '<rect x="5" y="10" width="14" height="11" rx="2"/>'
             . '<path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
         'up' => '<path d="M12 20V4m-6 6 6-6 6 6"/>',
@@ -691,14 +694,28 @@ function view_music_player_controls(bool $viewer): string
  * @param string $title Localized document or playlist label.
  * @param int $count Number of authorized entries supplied by the controller.
  * @param string $icon Trusted decorative SVG markup, or empty for no symbol.
- * @return void Emit the native disclosure, popup header and scroll container.
+ * @param bool $inline Whether an authenticated editor should render the
+ *     panel body directly in its current tab; public callers retain disclosure.
+ * @param string $toolbarHtml Trusted, accessible inline editor toolbar markup.
+ * @return void Emit the inline editor section or native public disclosure.
  */
 function view_media_panel_start(
     string $id,
     string $title,
     int $count,
     string $icon = '',
+    bool $inline = false,
+    string $toolbarHtml = '',
 ): void {
+    if ($inline) {
+        echo
+            '<div class="gallery-media-inline">'
+                . '<header><h3>' . e($title) . '</h3>'
+                . '<span class="gallery-media-count">' . $count
+                . '</span>' . $toolbarHtml
+                . '</header><div class="gallery-media-body">';
+        return;
+    }
     echo
         '<details class="gallery-media-widget" data-gallery-media-widget>'
             . '<summary aria-controls="'
@@ -736,11 +753,17 @@ function view_media_panel_start(
 
 /**
  * Close only the structural containers opened by the shared media renderer.
- * @return void Emit the scroll-body, panel and native disclosure closing tags.
+ * @param bool $inline Whether the matching panel was rendered inline.
+ * @return void Emit the matching panel's closing tags.
  */
-function view_media_panel_end(): void
+function view_media_panel_end(bool $inline = false): void
 {
-    echo '</div></div></details>';
+    echo '</div>';
+    if ($inline) {
+        echo '</div>';
+        return;
+    }
+    echo '</div></details>';
 }
 
 /**

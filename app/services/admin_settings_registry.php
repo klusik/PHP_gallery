@@ -1334,7 +1334,7 @@ function admin_settings_sensitive_status(string $key): string
  * stay specialized so the hub cannot become a competing source of truth.
  *
  * @param bool $includeSessionSettings Include the Settings-only Admin/browser language control.
- * @return array<string,array<string,mixed>> Setting entries keyed by stable identifier.
+ * @return array<string,array{id:string,group:string,label:string,label_key:string,description:string,description_key:string,key:string,input_type:string,default_resolver:callable,current_resolver:callable,default:scalar|null|array<array-key,scalar|array<array-key,scalar>>,current:scalar|null|array<array-key,scalar|array<array-key,scalar>>,explicit:bool,source:string,fallback_behavior:string,owner:string,central_editable:bool,sensitivity:string,validation:array<string,scalar|list<scalar>>,specialized_route:string,specialized_params:array<string,scalar|null>,specialized_fragment:string,specialized_url:string,migration_required:bool,normalization_callback:?string,save_callback:?string,content_revision:bool}> Setting entries keyed by stable identifier; resolver values follow their named setting's scalar or configuration-map contract.
  */
 function admin_settings_registry(bool $includeSessionSettings = false): array
 {
@@ -1820,6 +1820,17 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
             true,
             'normal',
             [],
+        ),
+        'music_show_file_extensions' => admin_settings_entry(
+            'music_show_file_extensions',
+            'media',
+            'Show file extensions in song titles',
+            'Keep the audio extension in filename-derived titles. Custom song titles remain unchanged.',
+            'music_show_file_extensions',
+            'checkbox',
+            '0',
+            app_setting('music_show_file_extensions', '0'),
+            'admin_music',
         ),
         'admin_upload_client_format_mode' => admin_settings_entry(
             'admin_upload_client_format_mode',
@@ -2393,6 +2404,9 @@ function admin_settings_registry(bool $includeSessionSettings = false): array
  */
 function admin_settings_owner_for_id(string $id): string
 {
+    if ($id === 'music_show_file_extensions') {
+        return 'music_catalog';
+    }
     if ($id === 'theme_breadcrumb_style') {
         return 'theme_layout_settings';
     }

@@ -50,6 +50,7 @@ use function Gallery\Core\slugify;
 use function Gallery\Core\url_for;
 use function Gallery\Models\tag_model_admin_gallery_usage_rows;
 use function Gallery\Models\tag_model_admin_image_usage_rows;
+use function Gallery\Models\tag_model_admin_song_usage_rows;
 use function Gallery\Models\tag_model_admin_rows;
 use function Gallery\Models\tag_model_all_names;
 use function Gallery\Models\tag_model_all_rows_by_id;
@@ -65,6 +66,7 @@ use function Gallery\Models\tag_model_find_by_slug;
 use function Gallery\Models\tag_model_gallery_context;
 use function Gallery\Models\tag_model_global_suggestion_rows;
 use function Gallery\Models\tag_model_id_by_slug;
+use function Gallery\Models\tag_model_matches_media_type;
 use function Gallery\Models\tag_model_merge_duplicate;
 use function Gallery\Models\tag_model_public_galleries;
 use function Gallery\Models\tag_model_slug_exists_except;
@@ -74,6 +76,22 @@ use function Gallery\Models\tag_model_tags_for_entity;
 use function Gallery\Models\tag_model_update_canonical;
 use function Gallery\Models\tag_model_update_metadata;
 use function Gallery\Models\tag_model_usage_count_rows;
+
+/**
+ * Preserve the existing globally unique ASCII slug column's storage bound.
+ * Type: int. Units: bytes. Scope: shared tag slug allocation.
+ * Consumers: find_or_create_tag and normalize_existing_tags.
+ * Rationale: 120 matches tags.slug while reserving space for a media suffix.
+ */
+const TAG_MEDIA_SLUG_MAX_BYTES = 120;
+
+/**
+ * Bound repeated slug collisions without turning user input into unlimited SQL.
+ * Type: int. Units: attempts. Scope: one shared tag allocation.
+ * Consumers: find_or_create_tag and normalize_existing_tags.
+ * Rationale: 128 permits practical name reuse and refuses pathological clashes.
+ */
+const TAG_MEDIA_SLUG_MAX_ATTEMPTS = 128;
 
 /**
  * Parse admin-entered comma/semicolon/newline tag text into unique names.
@@ -127,61 +145,179 @@ function tag_slug(string $name): string
  * Return an existing tag ID or create a new tag row.
  *
  * @param string $name Name value.
- * @return int Integer result for the caller.
+ * @param string $mediaType Requested category: image, music, or pdf; defaults to image.
+ * @return int Existing or new tag ID, or 0 when input/schema is invalid or the bounded slug allocation cannot find an available row.
  */
-function find_or_create_tag(string $name): int
+function find_or_create_tag(string $name, string $mediaType = 'image'): int
 {
+    if (!in_array($mediaType, ['image', 'music', 'pdf'], true)) {
+        return 0;
+    }
+    $schemaState = tag_media_type_schema_state();
+    if (
+        $schemaState === 'unknown'
+        || ($mediaType !== 'image' && $schemaState !== 'available')
+    ) {
+        return 0;
+    }
     // Variable $name stores this steps working value.
     $name = sanitize_tag_name($name);
     if ($name === '') {
         return 0;
     }
-    // Variable $slug stores this steps working value.
-    $slug = tag_slug($name);
-    $existing = tag_model_id_by_slug($slug);
-    if ($existing > 0) {
-        return $existing;
+    // Variable $slug keeps legacy image slugs while separating new categories.
+    $baseSlug = tag_slug($name);
+    $slug = $baseSlug;
+    if ($mediaType !== 'image') {
+        $slug = $mediaType . '-' . $baseSlug;
     }
-    return tag_model_create($name, $slug, now_sql());
+    $suffix = 1;
+    while (($existing = tag_model_id_by_slug($slug)) > 0) {
+        if (tag_model_matches_media_type(
+            $existing,
+            $mediaType,
+            tag_media_type_schema_ready(),
+        )) {
+            return $existing;
+        }
+        // Category suffixes resolve rare global-slug collisions without
+        // renaming any existing image tag or changing its public URL.
+        $suffix++;
+        if ($suffix > TAG_MEDIA_SLUG_MAX_ATTEMPTS) {
+            return 0;
+        }
+        $suffixText = '-' . $mediaType . '-' . $suffix;
+        $slug = substr(
+            $baseSlug,
+            0,
+            TAG_MEDIA_SLUG_MAX_BYTES - strlen($suffixText),
+        )
+            . $suffixText;
+    }
+    return tag_model_create(
+        $name,
+        $slug,
+        now_sql(),
+        $mediaType,
+        tag_media_type_schema_ready(),
+    );
+}
+
+/**
+ * Report whether the media category column is confirmed available.
+ *
+ * @return string One of available, missing, or unknown based on schema inspection.
+ */
+function tag_media_type_schema_state(): string
+{
+    // The inspection owner caches per request and clears its observations
+    // after migration DDL. A second static cache here would survive that reset.
+    $status = \Gallery\Services\schema_inspection_column('tags', 'media_type');
+    if (\Gallery\Services\schema_inspection_is_available($status)) {
+        return 'available';
+    }
+    return ($status['state'] ?? 'unknown') === 'missing'
+        ? 'missing'
+        : 'unknown';
+}
+
+/**
+ * Return whether typed-tag SQL can safely use tags.media_type.
+ *
+ * @return bool True only when inspection confirms the column exists.
+ */
+function tag_media_type_schema_ready(): bool
+{
+    return tag_media_type_schema_state() === 'available';
+}
+
+/**
+ * Return whether the shared music-song tag assignment schema is available.
+ *
+ * @return bool True only when inspection confirms music_song_tags exists.
+ */
+function tag_music_assignment_schema_ready(): bool
+{
+    $status = \Gallery\Services\schema_inspection_table('music_song_tags');
+    return \Gallery\Services\schema_inspection_is_available($status);
 }
 
 /**
  * Replace all tags for one gallery or image with the submitted tag list.
  *
- * @param string $type Type value.
- * @param int $id Identifier value.
- * @param string $tagText Tag text value.
+ * @param string $type Assignment owner: gallery, image, or music_song.
+ * @param int $id Positive gallery, image, or song identifier.
+ * @param string $tagText Submitted delimited tag names; an empty string clears assignments.
+ * @param string $mediaType Expected category: image for gallery/image, music for music_song; defaults to image.
+ * @return bool True after replacement succeeds; false when the category, tag input, or required schema is unavailable.
+ * @throws \InvalidArgumentException When an assignment type or resolved tag ID is invalid.
  */
-function sync_entity_tags(string $type, int $id, string $tagText): void
+function sync_entity_tags(
+    string $type,
+    int $id,
+    string $tagText,
+    string $mediaType = 'image',
+): bool
 {
-    tag_model_clear_entity_tags($type, $id);
+    $expectedType = $type === 'music_song' ? 'music' : 'image';
+    $schemaState = tag_media_type_schema_state();
+    if (
+        $mediaType !== $expectedType
+        || $schemaState === 'unknown'
+        || ($mediaType !== 'image' && $schemaState !== 'available')
+        || ($type === 'music_song' && !tag_music_assignment_schema_ready())
+    ) {
+        return false;
+    }
+    // Resolve every name before changing assignments. A rejected tag must not
+    // silently erase the previous valid selection, including inside a catalog
+    // transaction that will roll back the complete logical operation.
+    $tagIds = [];
     foreach (split_tag_names($tagText) as $name) {
         // Variable $tagId stores this steps working value.
-        $tagId = find_or_create_tag($name);
+        $tagId = find_or_create_tag($name, $mediaType);
         if ($tagId <= 0) {
-            continue;
+            return false;
         }
-        tag_model_attach_entity_tag($type, $id, $tagId);
+        $tagIds[] = $tagId;
     }
+    \Gallery\Models\tag_model_replace_entity_tags(
+        $type,
+        $id,
+        array_values(array_unique($tagIds)),
+        $schemaState === 'available',
+    );
+    return true;
 }
 
 /**
- * Function `tags_for_entity` handles this scoped operation.
+ * Return tags assigned to one gallery, image, or music song.
  *
- * @param string $type Type value.
- * @param int $id Identifier value.
- * @return array Structured result data for the caller.
+ * @param string $type Assignment owner: gallery, image, or music_song.
+ * @param int $id Entity identifier.
+ * @return list<array{entity_id:int|string,id:int|string,name:string,slug:string,description?:string|null,created_at?:string|null,updated_at?:string|null}> Tag rows, or an empty list when unavailable.
  */
 function tags_for_entity(string $type, int $id): array
 {
+    $schemaState = tag_media_type_schema_state();
+    if (
+        $schemaState === 'unknown'
+        || ($type === 'music_song' && $schemaState !== 'available')
+    ) {
+        return [];
+    }
     static $cache = [];
     // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
-    $cacheKey = $type . ':' . $id;
+    $cacheKey = $schemaState . ':' . $type . ':' . $id;
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
     }
     try {
-        return $cache[$cacheKey] = tag_model_tags_for_entity($type, $id);
+        return $cache[$cacheKey] = tag_model_tags_for_entity(
+            $type,
+            $id,
+            $schemaState === 'available',
+        );
     } catch (PDOException) {
         return $cache[$cacheKey] = [];
     }
@@ -200,6 +336,10 @@ function tags_for_entity(string $type, int $id): array
  */
 function tag_usage_counts(array $tagIds): array
 {
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return [];
+    }
     static $cache = [];
     // $ids stores normalized unique positive identifiers for a bounded persistence query.
     $ids = array_values(array_unique(array_filter(
@@ -211,14 +351,17 @@ function tag_usage_counts(array $tagIds): array
         return [];
     }
     // $cacheKey lets repeated hero groups in the same request reuse the aggregate.
-    $cacheKey = implode(',', $ids);
+    $cacheKey = $schemaState . ':' . implode(',', $ids);
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
     }
     try {
         // $counts is initialized with zeroes so tags without assignments remain sortable.
         $counts = array_fill_keys($ids, 0);
-        foreach (tag_model_usage_count_rows($ids) as $row) {
+        foreach (tag_model_usage_count_rows(
+            $ids,
+            $schemaState === 'available',
+        ) as $row) {
             $counts[(int) $row['tag_id']] = (int) $row['usage_count'];
         }
         return $cache[$cacheKey] = $counts;
@@ -292,6 +435,13 @@ function sort_public_hero_tag_groups(array $groups, string $sortMode): array
  */
 function tags_for_entities(string $type, array $ids): array
 {
+    $schemaState = tag_media_type_schema_state();
+    if (
+        $schemaState === 'unknown'
+        || ($type === 'music_song' && $schemaState !== 'available')
+    ) {
+        return [];
+    }
     static $cache = [];
     // $ids stores an intermediate value used by the surrounding gallery workflow.
     $ids = array_values(array_unique(array_filter(
@@ -302,14 +452,18 @@ function tags_for_entities(string $type, array $ids): array
         return [];
     }
     // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
-    $cacheKey = $type . ':' . implode(',', $ids);
+    $cacheKey = $schemaState . ':' . $type . ':' . implode(',', $ids);
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
     }
     try {
         // $grouped stores an intermediate value used by the surrounding gallery workflow.
         $grouped = [];
-        foreach (tag_model_tags_for_entities($type, $ids) as $row) {
+        foreach (tag_model_tags_for_entities(
+            $type,
+            $ids,
+            $schemaState === 'available',
+        ) as $row) {
             $grouped[(int) $row['entity_id']][] = $row;
         }
         return $cache[$cacheKey] = $grouped;
@@ -331,14 +485,46 @@ function tag_names_for_entity(string $type, int $id): string
 }
 
 /**
+ * Return comma-separated tag names for many entities using one batch query.
+ *
+ * @param string $type Assignment owner such as image or music_song.
+ * @param list<int> $ids Positive entity identifiers.
+ * @param string $mediaType Expected category: image or music.
+ * @return array<int,string> Tag-name strings keyed by entity identifier.
+ */
+function tag_names_for_entities(
+    string $type,
+    array $ids,
+    string $mediaType = 'image',
+): array {
+    $expectedType = $type === 'music_song' ? 'music' : 'image';
+    if ($mediaType !== $expectedType) {
+        return [];
+    }
+    $grouped = tags_for_entities($type, $ids);
+    $names = [];
+    foreach ($grouped as $entityId => $rows) {
+        $names[(int) $entityId] = implode(', ', array_map(
+            static fn(array $row): string => (string) ($row['name'] ?? ''),
+            $rows,
+        ));
+    }
+    return $names;
+}
+
+/**
  * Return all tag names for datalist suggestions in admin forms.
  *
- * @return array Structured result data for the caller.
+ * @return list<string> Unique normalized names in their first-seen order.
  */
 function all_tag_names(): array
 {
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return [];
+    }
     try {
-        return tag_model_all_names();
+        return tag_model_all_names($schemaState === 'available');
     } catch (PDOException) {
         return [];
     }
@@ -353,12 +539,19 @@ function all_tag_names(): array
  *
  * @param int $galleryId Gallery providing local suggestion context.
  * @param int $limit Maximum number of suggestions.
- * @return list<array{id:int,name:string,slug:string,score:float,sources:list<string>}> Ranked tag suggestions with contributing context labels.
+ * @return list<array{id:int,name:string,slug:string,score:float,sources:list<string>}> Ranked suggestions with source labels, or an empty list when unavailable.
  */
 function weighted_tag_suggestions_for_gallery(
     int $galleryId,
     int $limit = 80,
 ): array {
+    $mediaSchemaState = tag_media_type_schema_state();
+    if ($mediaSchemaState === 'unknown') {
+        return [];
+    }
+    if ($mediaSchemaState === 'missing') {
+        return weighted_global_tag_suggestions($limit);
+    }
     // Variable $gallery stores this steps working value.
     $gallery = $galleryId > 0 ? tag_model_gallery_context($galleryId) : null;
     if (!$gallery) {
@@ -508,17 +701,34 @@ function weighted_tag_suggestions_for_gallery(
  * Return weighted tag suggestions when no specific gallery context is available.
  *
  * @param int $limit Maximum number of suggestions.
+ * @param string $mediaType Category to suggest: image, music, or pdf; defaults to image.
  * @return list<array{id:int,name:string,slug:string,score:float,sources:list<string>}> Globally ranked suggestions, or an empty list when storage is unavailable.
  */
-function weighted_global_tag_suggestions(int $limit = 80): array
+function weighted_global_tag_suggestions(
+    int $limit = 80,
+    string $mediaType = 'image',
+): array
 {
+    if (!in_array($mediaType, ['image', 'music', 'pdf'], true)) {
+        return [];
+    }
+    $schemaState = tag_media_type_schema_state();
+    if (
+        $schemaState === 'unknown'
+        || ($mediaType !== 'image' && $schemaState !== 'available')
+    ) {
+        return [];
+    }
+    $musicAssignmentReady = $mediaType === 'music'
+        && tag_music_assignment_schema_ready();
     try {
         return array_map(
             static function (array $row): array {
                 // Variable $usage stores this steps working value.
                 $usage =
                     (int) ($row['gallery_count'] ?? 0)
-                    + (int) ($row['image_count'] ?? 0);
+                    + (int) ($row['image_count'] ?? 0)
+                    + (int) ($row['music_count'] ?? 0);
                 return [
                     'id' => (int) ($row['id'] ?? 0),
                     'name' => (string) ($row['name'] ?? ''),
@@ -527,7 +737,12 @@ function weighted_global_tag_suggestions(int $limit = 80): array
                     'sources' => ['global'],
                 ];
             },
-            tag_model_global_suggestion_rows(max(1, $limit)),
+            tag_model_global_suggestion_rows(
+                max(1, $limit),
+                $schemaState === 'available',
+                $mediaType,
+                $musicAssignmentReady,
+            ),
         );
     } catch (PDOException) {
         return [];
@@ -557,16 +772,32 @@ function tag_description_schema_ready(): bool
  *
  * @param string $sortField Sorting key, either name or usage.
  * @param string $sortDirection Sort direction, asc or desc.
- * @return list<array{id:int,name:string,slug:string,description:?string,created_at:string,updated_at:string,gallery_count:int,image_count:int,usage_count:int}> Editable tags with direct gallery and image usage counts.
+ * @param string $mediaType Requested category image, music, or all; defaults to image.
+ * @return list<array{id:int|string,name:string,slug:string,media_type:string,description:?string,created_at:string,updated_at:string,gallery_count:int|string,image_count:int|string,music_count:int|string,usage_count:int|string}> Editable tag rows with database-native scalar values, or an empty list when unavailable.
  */
 function admin_tag_rows(
     string $sortField = 'usage',
     string $sortDirection = 'desc',
+    string $mediaType = 'image',
 ): array {
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return [];
+    }
+    if (!in_array($mediaType, ['all', 'image', 'music'], true)) {
+        return [];
+    }
+    if ($mediaType !== 'image' && $mediaType !== 'all' && $schemaState !== 'available') {
+        return [];
+    }
     return tag_model_admin_rows(
         tag_description_schema_ready(),
         $sortField,
         $sortDirection,
+        $mediaType,
+        $schemaState === 'available',
+        ($mediaType === 'music' || $mediaType === 'all')
+            && tag_music_assignment_schema_ready(),
     );
 }
 
@@ -574,13 +805,27 @@ function admin_tag_rows(
  * Return the gallery and image records that use one tag.
  *
  * @param int $tagId Tag id identifier.
- * @return array{galleries:list<array{id:int,title:string,slug:string,url_path:string,folder_path:string,edit_url:string,public_url:string}>,images:list<array{id:int,relative_path:string,filename:string,gallery_id:int,gallery_title:string,gallery_slug:string,edit_url:string}>} Admin links for gallery and image records using this tag.
+ * @return array{galleries:list<array{id:int,title:string,slug:string,url_path:string,folder_path:string,edit_url:string,public_url:string}>,images:list<array{id:int,relative_path:string,filename:string,gallery_id:int,gallery_title:string,gallery_slug:string,edit_url:string}>,songs:list<array{id:int,title:string,edit_url:string}>} Admin links for the records using this tag.
+ * @throws \RuntimeException When the music title presentation owner cannot be loaded.
  */
 function admin_tag_usage_rows(int $tagId): array
 {
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return ['galleries' => [], 'images' => [], 'songs' => []];
+    }
+    $tag = find_tag_by_id($tagId);
+    if (!$tag) {
+        return ['galleries' => [], 'images' => [], 'songs' => []];
+    }
+    $mediaType = $schemaState === 'available'
+        ? (string) ($tag['media_type'] ?? '')
+        : 'image';
     // Variable $galleries stores this steps working value.
     $galleries = [];
-    foreach (tag_model_admin_gallery_usage_rows($tagId) as $row) {
+    foreach ($mediaType === 'image'
+        ? tag_model_admin_gallery_usage_rows($tagId)
+        : [] as $row) {
         $galleries[] = [
             'id' => (int) $row['id'],
             'title' => (string) ($row['title'] ?? ''),
@@ -596,7 +841,9 @@ function admin_tag_usage_rows(int $tagId): array
 
     // Variable $images stores this steps working value.
     $images = [];
-    foreach (tag_model_admin_image_usage_rows($tagId) as $row) {
+    foreach ($mediaType === 'image'
+        ? tag_model_admin_image_usage_rows($tagId)
+        : [] as $row) {
         $images[] = [
             'id' => (int) $row['id'],
             'relative_path' => (string) ($row['relative_path'] ?? ''),
@@ -610,7 +857,45 @@ function admin_tag_usage_rows(int $tagId): array
         ];
     }
 
-    return ['galleries' => $galleries, 'images' => $images];
+    $songs = [];
+    if ($mediaType === 'music' && tag_music_assignment_schema_ready()) {
+        if (!function_exists('Gallery\\Services\\music_catalog_display_title')) {
+            if (function_exists('Gallery\\Core\\cms_runtime_kernel')) {
+                \Gallery\Core\cms_runtime_kernel()->load(
+                    'gallery-pdf-documents',
+                );
+            }
+        }
+        if (!function_exists('Gallery\\Services\\music_catalog_display_title')) {
+            throw new \RuntimeException(
+                'Music title presentation is unavailable for tag usage.',
+            );
+        }
+        foreach (tag_model_admin_song_usage_rows($tagId) as $row) {
+            $songId = (int) ($row['id'] ?? 0);
+            $title = music_catalog_display_title(
+                (string) ($row['filename'] ?? ''),
+                (string) ($row['indexed_title'] ?? ''),
+                isset($row['title']) ? (string) $row['title'] : null,
+            );
+            $songs[] = [
+                'id' => $songId,
+                'title' => $title !== '' ? $title : t(
+                    'admin.music.untitled_song',
+                    'Song #{id}',
+                    ['id' => $songId],
+                ),
+                'edit_url' => url_for('admin_music', [
+                    'song_id' => $songId,
+                ]),
+            ];
+        }
+    }
+    return [
+        'galleries' => $galleries,
+        'images' => $images,
+        'songs' => $songs,
+    ];
 }
 
 /**
@@ -625,24 +910,36 @@ function find_tag_by_id(int $id): ?array
 }
 
 /**
- * Update one tag row while keeping names and slugs canonical and unique.
+ * Update one tag row while keeping names, category, and slug canonical.
  *
  * @param int $id Identifier value.
  * @param string $name Name value.
  * @param string $slug Slug value.
  * @param string $description Description value.
- * @return array{ok:false,error:'not_found'|'invalid_name'|'invalid_slug'|'slug_taken'}|array{ok:true,tag:array<string,mixed>|null} Update outcome and refreshed tag row when successful.
+ * @param string $mediaType Expected tag category: image, music, or pdf; defaults to image.
+ * @return array{ok:false,error:'not_found'|'invalid_name'|'invalid_slug'|'slug_taken'|'schema_unavailable'|'media_type_mismatch'}|array{ok:true,tag:array{id:int|string,name:string,slug:string,media_type?:string,description?:string|null,created_at?:string|null,updated_at?:string|null}|null} Update result and refreshed database row when successful.
  */
 function update_tag_metadata(
     int $id,
     string $name,
     string $slug,
     string $description,
+    string $mediaType = 'image',
 ): array {
     // Variable $tag stores this steps working value.
     $tag = find_tag_by_id($id);
     if (!$tag) {
         return ['ok' => false, 'error' => 'not_found'];
+    }
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return ['ok' => false, 'error' => 'schema_unavailable'];
+    }
+    $actualType = $schemaState === 'available'
+        ? (string) ($tag['media_type'] ?? '')
+        : 'image';
+    if ($actualType !== $mediaType) {
+        return ['ok' => false, 'error' => 'media_type_mismatch'];
     }
 
     // Variable $safeName stores this steps working value.
@@ -672,20 +969,38 @@ function update_tag_metadata(
 }
 
 /**
- * Delete one tag and detach it from galleries and images.
+ * Delete one image or music tag after checking the requested category.
  *
- * @param int $id Identifier value.
- * @return array Structured result data for the caller.
+ * @param int $id Tag identifier to delete.
+ * @param string $expectedMediaType Expected category image or music for this Admin operation; defaults to image.
+ * @return array{ok:false,error:'not_found'|'schema_unavailable'|'media_type_mismatch'|'delete_failed'}|array{ok:true,tag:array{id:int|string,name:string,slug:string,media_type?:string,description?:string|null,created_at?:string|null,updated_at?:string|null}} Deletion result and deleted tag snapshot.
  */
-function delete_tag_by_id(int $id): array
+function delete_tag_by_id(
+    int $id,
+    string $expectedMediaType = 'image',
+): array
 {
     // Variable $tag stores this steps working value.
     $tag = find_tag_by_id($id);
     if (!$tag) {
         return ['ok' => false, 'error' => 'not_found'];
     }
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return ['ok' => false, 'error' => 'schema_unavailable'];
+    }
+    $mediaType = $schemaState === 'available'
+        ? (string) ($tag['media_type'] ?? '')
+        : 'image';
+    if ($mediaType !== $expectedMediaType) {
+        return ['ok' => false, 'error' => 'media_type_mismatch'];
+    }
     try {
-        tag_model_delete_with_assignments($id);
+        tag_model_delete_with_assignments(
+            $id,
+            $mediaType,
+            $mediaType === 'music' && tag_music_assignment_schema_ready(),
+        );
     } catch (Throwable) {
         return ['ok' => false, 'error' => 'delete_failed'];
     }
@@ -695,16 +1010,26 @@ function delete_tag_by_id(int $id): array
 /**
  * Normalize existing tags to safe lowercase values and merge duplicates.
  *
- * @return int Integer result for the caller.
+ * @return int Number of tag rows normalized, merged, or removed; PDF rows remain unchanged.
  */
 function normalize_existing_tags(): int
 {
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return 0;
+    }
     // Variable $changed stores this steps working value.
     $changed = 0;
     // Variable $rows stores this steps working value.
     $rows = tag_model_all_rows_by_id();
-    // Variable $seen stores this steps working value.
+    // Variable $seen stores reserved slugs and same-type canonical rows.
     $seen = [];
+    // Untouched PDF rows still own globally unique slugs during normalization.
+    foreach ($rows as $row) {
+        if (($row['media_type'] ?? '') === 'pdf') {
+            $seen['slug:' . (string) ($row['slug'] ?? '')] = true;
+        }
+    }
     foreach ($rows as $row) {
         // Variable $id stores this steps working value.
         $id = (int) $row['id'];
@@ -712,6 +1037,12 @@ function normalize_existing_tags(): int
         $safeName = sanitize_tag_name((string) ($row['name'] ?? ''));
         // Variable $safeSlug stores this steps working value.
         $safeSlug = sanitize_tag_name((string) ($row['slug'] ?? $safeName));
+        $mediaType = $schemaState === 'available'
+            ? (string) ($row['media_type'] ?? '')
+            : 'image';
+        if ($mediaType === 'pdf') {
+            continue;
+        }
         if ($safeName === '' && $safeSlug === '') {
             tag_model_delete_row($id);
             $changed++;
@@ -725,14 +1056,55 @@ function normalize_existing_tags(): int
         }
         // Variable $key stores this steps working value.
         $key = $safeSlug;
-        if (isset($seen[$key])) {
+        $sameTypeKey = $mediaType . ':' . $key;
+        $canonicalSameTypeKey = $sameTypeKey;
+        if (isset($seen[$sameTypeKey])) {
             // Variable $targetId stores this steps working value.
-            $targetId = (int) $seen[$key];
-            tag_model_merge_duplicate($targetId, $id);
+            $targetId = (int) $seen[$sameTypeKey];
+            tag_model_merge_duplicate(
+                $targetId,
+                $id,
+                $schemaState === 'available',
+                tag_music_assignment_schema_ready(),
+            );
             $changed++;
             continue;
         }
-        $seen[$key] = $id;
+        $slugTaken = isset($seen['slug:' . $key])
+            || tag_model_slug_exists_except($key, $id);
+        if ($slugTaken) {
+            $safeSlug = '';
+            for (
+                $attempt = 1;
+                $attempt <= TAG_MEDIA_SLUG_MAX_ATTEMPTS;
+                $attempt++
+            ) {
+                $suffix = '-' . $mediaType . '-' . $id
+                    . ($attempt === 1 ? '' : '-' . $attempt);
+                $candidate = substr(
+                    $key,
+                    0,
+                    TAG_MEDIA_SLUG_MAX_BYTES - strlen($suffix),
+                ) . $suffix;
+                if (
+                    isset($seen['slug:' . $candidate])
+                    || tag_model_slug_exists_except($candidate, $id)
+                ) {
+                    continue;
+                }
+                $safeSlug = $candidate;
+                break;
+            }
+            if ($safeSlug === '') {
+                // Preserve the row when no bounded globally unique slug exists.
+                continue;
+            }
+            $key = $safeSlug;
+            $sameTypeKey = $mediaType . ':' . $key;
+        }
+        $seen['slug:' . $key] = true;
+        $seen[$canonicalSameTypeKey] = $id;
+        $seen[$sameTypeKey] = $id;
         if (
             (string) $row['name'] !== $safeName
             || (string) $row['slug'] !== $safeSlug
@@ -802,36 +1174,56 @@ function normalize_gallery_sidecar_tags_recursively(): int
 /**
  * Fetch one tag by slug for public tag-filter pages.
  *
- * @param string $slug Slug value.
- * @return ?array Structured result data for the caller.
+ * @param string $slug Canonical public tag slug.
+ * @return ?array{id:int|string,name:string,slug:string,media_type?:string,description?:string|null,created_at?:string|null,updated_at?:string|null} Matching image tag row, or null when unavailable or absent.
  */
 function find_tag_by_slug(string $slug): ?array
 {
-    return tag_model_find_by_slug($slug);
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return null;
+    }
+    return tag_model_find_by_slug(
+        $slug,
+        $schemaState === 'available',
+        'image',
+    );
 }
 
 /**
  * Return public galleries that directly or indirectly contain a tag.
  *
- * @param int $tagId Tag id identifier.
- * @return array Structured result data for the caller.
+ * @param int $tagId Image tag identifier.
+ * @return list<array{id:int,title:string,slug:string,url_path:string,folder_path:string}> Public galleries using the tag, or an empty list.
  */
 function public_galleries_for_tag(int $tagId): array
 {
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return [];
+    }
     gallery_visibility_assert_public_policy_available();
     gallery_access_assert_public_policy_available();
-    return tag_model_public_galleries($tagId, gallery_access_schema_ready());
+    return tag_model_public_galleries(
+        $tagId,
+        gallery_access_schema_ready(),
+        $schemaState === 'available',
+    );
 }
 
 /**
  * Aggregate tags from descendant galleries and descendant images.
  *
  * @param array{folder_path:string} $gallery Gallery row anchoring the descendant search.
- * @param bool $publicOnly Public only value.
+ * @param bool $publicOnly Whether to apply public visibility and access policy.
  * @return list<array{id:int|string,name:string,slug:string}> Unique tags on descendant galleries and images.
  */
 function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
 {
+    $schemaState = tag_media_type_schema_state();
+    if ($schemaState === 'unknown') {
+        return [];
+    }
     // Variable $folderPath stores this steps working value.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     if ($folderPath === '') {
@@ -845,5 +1237,6 @@ function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
         $folderPath,
         $publicOnly,
         $publicOnly && gallery_access_schema_ready(),
+        $schemaState === 'available',
     );
 }

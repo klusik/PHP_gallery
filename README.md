@@ -1,5 +1,17 @@
 # PHP Gallery CMS
 
+**Admin → Galleries → Music Manager** provides global song identities, custom
+display titles, direct-usage details, nested logical albums and music tags.
+New audio uses a shared protected repository; galleries select songs or live
+albums under **Edit gallery → Media → Music**. Playlist edits propagate to all
+linked galleries. Existing gallery-local audio remains playable and can move
+through an optional resumable Maintenance Center task, selected by default and
+available to turn off before execution. Playback follows the
+assigned gallery's permissions. Filename-derived titles hide extensions by default.
+The shared tag taxonomy isolates image and music assignments and reserves PDF.
+Run normal schema migrations and bounded catalog reconciliation after upgrade.
+See [Music Manager and recovery](docs/GALLERY_MUSIC.md#global-music-manager).
+
 Gallery PDF documents and music have separate switches in **Admin → Features**.
 Both default ON for fresh and updated installations without a saved preference;
 OFF hides the corresponding media UI and rejects uploads/delivery while keeping
@@ -46,7 +58,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 0.137.8
+**Current Version:** 0.138
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -387,10 +399,12 @@ close/reopen; reloading resets them.
 ### Gallery music and slideshow soundtrack
 
 Upload music through the ordinary Upload photos chooser/drop queue alongside
-photographs and PDFs, or through the gallery editor's separate Music table.
-Arrange tracks, remove them and save whether slideshow starts music
-automatically
-(initially off). MP3, M4A, AAC, Ogg/Opus, WAV, FLAC and WebM are accepted,
+photographs and PDFs, or through **Edit gallery → Media → Music**. New originals
+are stored once in `data/music/`. Select individual catalog songs or live albums;
+album membership/order changes appear in every gallery using that album.
+Arrange tracks, remove them and switch whether slideshow starts music
+automatically (initially off); the preference saves immediately while the
+editor stays open. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC and WebM are accepted,
 subject to browser codecs/PHP limits: 64 MiB each, 100 tracks, 512 MiB per
 gallery.
 
@@ -416,8 +430,9 @@ Downloads start locked for every upload. Administrator row/header icons allow
 individual/all current tracks; visitors see download icons only when allowed.
 The endpoint enforces that permission and normal gallery access. Playable bytes
 can still be captured by a technically capable visitor. Backups must include
-hidden `.gallery-music/` directories; photo ZIPs and gallery transfer packages
-omit music. See [the music contract](docs/GALLERY_MUSIC.md).
+SQL, `data/music/` and hidden `.gallery-music/` directories together. Removing a
+gallery reference retains shared originals. Photo ZIPs and gallery transfer
+packages omit music. See [the music contract](docs/GALLERY_MUSIC.md).
 
 ### Lightbox Image Zoom
 
@@ -531,6 +546,9 @@ installations require no configuration edit after update.
   favorite gallery/main-page shortcuts
 
 ### Updates & Maintenance
+- **Maintenance Center** - Review bounded maintenance in a compact plan with
+  shared switches for optional work; safety preflight and final verification
+  run automatically, with expandable technical activity for diagnosis
 - **One-click updates** - Check GitHub and install newer versions from admin
   dashboard
 - **Update channels** - Follow stable or beta release branches
@@ -1695,6 +1713,9 @@ future-language skeletons may be translated separately without becoming
 selectable.
 
 ## Extending & Contributing
+
+New and materially changed Admin interfaces follow the compact, media-player
+visual direction documented in [Admin UI design](docs/ADMIN_DESIGN.md).
 
 ### Adding Features
 

@@ -7,6 +7,10 @@ For schema-sensitive changes also read
 and the relevant DATABASE.md/TESTING.md sections. Authoring syntax belongs in
 [the checked examples](../docs/AGENT_AUTHORING.md).
 
+Before Admin presentation changes, read [the design contract](../docs/ADMIN_DESIGN.md).
+Use the compact media-player/WinApp visual language. Legacy large blue buttons
+with white text are not the design reference for new work.
+
 ## Coding Style & Naming Conventions
 Use `declare(strict_types=1);` in new PHP files and follow the existing 4-space
 indentation style. Keep functions small and explicit. New or materially

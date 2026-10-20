@@ -93,6 +93,7 @@ namespace {
 
     $routes = ['admin_upload', 'admin_upload_settings', 'admin_mobile_uploads'];
     $features = [
+        'gallery_music' => true,
         'mobile_webdav' => true,
         'smart_galleries' => true,
         'upload_api' => true,
@@ -114,6 +115,7 @@ namespace {
             'admin_settings',
             'admin_new_gallery',
             'admin_smart_galleries',
+            'admin_music',
             'admin_api_manager',
             'admin_tags',
         ] as $route) {
@@ -122,6 +124,13 @@ namespace {
                 'Unrelated sidebar route remains available: ' . $route,
             );
         }
+        legacy_navigation_expect(
+            preg_match(
+                '~<a class="admin-menu-link" href="/\?page=admin_music"><svg class="admin-menu-icon"[^>]*>.*?</svg>Music Manager</a>~s',
+                $html,
+            ) === 1,
+            'Music Manager uses its compact music icon in the capability-enabled sidebar.',
+        );
     }
 
     $enabled = [
@@ -159,6 +168,12 @@ namespace {
         str_contains($html, 'page=admin_upload"')
             && str_contains($html, 'page=admin_upload_settings"'),
         'Mobile OFF does not hide other opted-in legacy routes',
+    );
+    $enabled['feature_enabled']['gallery_music'] = false;
+    $html = legacy_navigation_sidebar($enabled);
+    legacy_navigation_expect(
+        !str_contains($html, 'page=admin_music"'),
+        'Gallery Music OFF hides the specialized Music Manager sidebar entry.',
     );
 
     ob_start();

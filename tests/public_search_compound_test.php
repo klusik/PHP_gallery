@@ -99,6 +99,7 @@ namespace {
             $context,
             $translated,
             'cs',
+            'missing',
             60,
         );
         return array_map('intval', array_column($rows, 'id'));
@@ -127,6 +128,7 @@ namespace {
             $translated,
             'cs',
             $aiReady,
+            'missing',
             60,
         );
         return array_map('intval', array_column($rows, 'id'));

@@ -26,7 +26,8 @@
  *
  * Notes:
  *   - Loaded by app/controllers/admin_galleries_edit_page.php; do not require this file directly.
- *   - Identity, Access, Display, and Media render inside one shared editor form.
+ *   - Identity, Access, and Display share the guarded settings form; Media is
+ *     rendered after it with explicit native form ownership where needed.
  *   - Keep comments and docstrings intact when modifying this file.
  *
  * Last Updated:
@@ -82,6 +83,25 @@ function cms_admin_edit_gallery(): void
 
     if (request_method() === 'POST') {
         admin_edit_gallery_handle_post($gallery, $capabilities);
+        return;
+    }
+    if ((string) ($_GET['tab'] ?? '') === 'admin-edit-documents') {
+        $redirectParams = [
+            'id' => (int) $gallery['id'],
+            'tab' => 'admin-edit-media',
+            'media_section' => 'pdf',
+        ];
+        if ((string) ($_GET['panel'] ?? '') === '1') {
+            $redirectParams['panel'] = '1';
+        }
+        $language = trim((string) ($_GET['lang'] ?? ''));
+        if ($language !== '') {
+            $redirectParams['lang'] = $language;
+        }
+        \Gallery\Core\redirect_to(url_for(
+            'admin_edit_gallery',
+            $redirectParams,
+        ));
         return;
     }
 
@@ -144,7 +164,7 @@ function cms_admin_edit_gallery(): void
         ]);
     }
 
-    // Identity, Access, Display, and Media share one form saved by the bottom save bar.
+    // Identity, Access, and Display share one guarded gallery-settings form.
     view_render_admin_gallery_editor_form_open([
         'csrf_html' => csrf_field(),
         'gallery_id' => (int) $gallery['id'],
@@ -165,7 +185,6 @@ function cms_admin_edit_gallery(): void
         $activeEditTab,
         $capabilities,
     );
-    admin_edit_gallery_render_media_tab($gallery, $activeEditTab);
     view_render_admin_gallery_editor_form_close([
         'save_label' => t('admin.gallery_editor.save_gallery', 'Save gallery'),
         'help' => t(
@@ -174,7 +193,8 @@ function cms_admin_edit_gallery(): void
         ),
     ]);
 
-    // The remaining tabs own their own forms and panels outside the editor form.
+    // Media owns independent forms; its Artwork inputs associate with settings
+    // using their native form attribute after the shared form closes.
     if ($deferredImages && $imageCount > 0) {
         view_render_admin_gallery_images_placeholder([
             'fallback_url' => url_for('admin_edit_gallery', [

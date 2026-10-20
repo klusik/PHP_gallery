@@ -67,7 +67,7 @@ import {
     createGalleryMusicPlayer, setupGalleryMusicPlayback,
     getGalleryMusicPlayer, formatMusicDuration,
 } from '/public/assets/gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
-import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js';
+import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 /**
  * Yield one browser task so native form/promise completion can settle.
@@ -273,6 +273,16 @@ try {
             + '</span></span></div></td><td class="gallery-music-duration"'
             + ' data-music-duration data-music-src="' + track.url
             + '"></td></tr>').join('');
+        const playlist = '<table class="gallery-music-table"><thead><tr>'
+            + '<th>Track</th><th class="gallery-music-duration">Duration</th>'
+            + '</tr></thead><tbody>' + rows + '</tbody></table>';
+        const controls = '<div data-gallery-music-controls class="music-player">'
+            + '<div class="music-player-actions">'
+            + ['previous', 'play', 'stop', 'next'].map(action =>
+                '<button class="music-icon" type="button" data-music-action="'
+                + action + '" aria-label="' + action + '">•</button>').join('')
+            + '</div><span data-music-current-title></span>'
+            + '<output data-music-playback-status></output></div>';
         return '<section class="gallery-music" data-gallery-music'
             + ' data-music-gallery="' + galleryId
             + '"><script type="application/json" data-gallery-music-playlist'
@@ -281,17 +291,13 @@ try {
             + (editor ? '' : '<dl class="gallery-media-summary">'
                 + '<dt>Total duration</dt><dd data-music-duration-total>…</dd>'
                 + '</dl>')
-            + mediaPanel('playlist-' + galleryId,
-                '<table class="gallery-music-table"><thead><tr>'
-                + '<th>Track</th><th class="gallery-music-duration">Duration</th>'
-                + '</tr></thead><tbody>' + rows + '</tbody></table>')
-            + '<div data-gallery-music-controls class="music-player">'
-            + '<div class="music-player-actions">'
-            + ['previous', 'play', 'stop', 'next'].map(action =>
-                '<button class="music-icon" type="button" data-music-action="'
-                + action + '" aria-label="' + action + '">•</button>').join('')
-            + '</div><span data-music-current-title></span>'
-            + '<output data-music-playback-status></output></div></section>';
+            + (editor
+                ? '<div class="gallery-media-inline"><header><h3>Music</h3>'
+                    + '<span class="gallery-media-count">2</span>' + controls
+                    + '</header><div class="gallery-media-body">' + playlist
+                    + '</div></div>'
+                : mediaPanel('playlist-' + galleryId, playlist) + controls)
+            + '</section>';
     };
     publicMount.innerHTML = musicCard(42) + musicCard(43, true);
     await import('/public/assets/public-gallery.js');
@@ -317,6 +323,12 @@ try {
     }
     const publicCard = publicMount.firstElementChild;
     const editorCard = publicMount.lastElementChild;
+    check(publicCard.querySelector(':scope > details.gallery-media-widget')
+        instanceof HTMLDetailsElement
+        && editorCard.querySelector(':scope > .gallery-media-inline')
+            instanceof HTMLElement
+        && editorCard.querySelector(':scope > details.gallery-media-widget') === null,
+    'Public Music must retain its disclosure while an editor card renders its controls inline.');
     const clickRow = (card, id) => card.querySelector(
         '[data-music-action="toggle"][data-music-track-id="' + id + '"]'
     ).click();
@@ -507,16 +519,18 @@ try {
 
     const mount = document.querySelector('[data-music-mount]');
     const card = revision => musicCard(44, true).replace(
-        '</div></div></details>',
+        '</div></div></section>',
         '<form data-gallery-music-form method="post"'
         + ' action="/index.php?page=admin_edit_gallery&amp;id=44">'
         + '<input name="id" value="44"><input name="csrf_token" value="fixture-csrf">'
         + '<input name="music_revision" value="' + revision + '">'
         + '<button type="submit" name="music_action" value="settings">Save</button>'
-        + '<output data-music-status></output></form></div></div></details>'
+        + '<output data-music-status></output></form></div></div></section>'
     );
     mount.innerHTML = card('initial');
-    mount.querySelector('summary').click();
+    check(mount.querySelector('.gallery-media-inline') instanceof HTMLElement
+        && mount.querySelector('details.gallery-media-widget') === null,
+    'The dynamically mounted editor must start with its production inline panel shape.');
     const initialUrl = location.href;
     const nativeFetch = window.fetch;
     let writes = 0;
@@ -548,8 +562,10 @@ try {
         await finished;
         await turn();
         check(writes === expected && !old.isConnected, 'Dynamic music form was not replaced once');
-        check(mount.querySelector('details').open,
-            'Canonical music mutation lost its open playlist applet');
+        check(mount.querySelector('.gallery-media-inline') instanceof HTMLElement
+            && mount.querySelector('.gallery-media-inline').getClientRects().length > 0
+            && mount.querySelector('details.gallery-media-widget') === null,
+        'Canonical music mutation must preserve the visible inline editor without adding a public disclosure.');
         check(location.href === initialUrl && document.querySelector('aside').dataset.open === '1',
             'Music mutation navigated or closed its originating panel');
     }

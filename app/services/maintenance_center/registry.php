@@ -37,7 +37,12 @@ use RuntimeException;
 /**
  * Return the canonical task definitions.
  *
- * @return array<string,array<string,mixed>> Registry keyed by stable task key.
+ * @return array<string,array{group:string,label_key:string,label:string,
+ *     risk:string,mutates:bool,resumable:bool,progress_unit:string,
+ *     dependencies:list<string>,feature_requirement:?string,
+ *     default_selected:bool,required:bool,weight_floor:int,analyzer:string,
+ *     executor:string,atomic?:bool}> Registry keyed by stable task key;
+ *     atomic marks indivisible database work for interruption control.
  */
 function maintenance_center_task_registry(): array
 {
@@ -185,6 +190,26 @@ function maintenance_center_task_registry(): array
             'executor' =>
                 __NAMESPACE__
                     . '\\maintenance_center_execute_thumbnail_metadata',
+        ],
+        'music.repository' => [
+            'group' => 'media',
+            'label_key' => 'admin.maintenance_center.task.music_repository',
+            'label' => 'Move gallery audio to the music repository',
+            'risk' => 'low',
+            'mutates' => true,
+            'resumable' => true,
+            'progress_unit' => 'tracks',
+            'dependencies' => ['preflight'],
+            'feature_requirement' => 'gallery_music',
+            // The proposed safe move is selected by default; the Admin may
+            // deselect it before approval, and execution revalidates the plan.
+            'default_selected' => true,
+            'required' => false,
+            'weight_floor' => MAINTENANCE_CENTER_MUSIC_WEIGHT,
+            'analyzer' => __NAMESPACE__
+                . '\\maintenance_center_analyze_music_repository',
+            'executor' => __NAMESPACE__
+                . '\\maintenance_center_execute_music_repository',
         ],
         'media.deep_verify' => [
             'group' => 'media',

@@ -72,7 +72,26 @@ namespace Gallery\Core {
     }
 }
 
+namespace Gallery\Models {
+    /** Return the fixture's explicit SEO guard logging opt-out. @return array<int,array{setting_key:string,setting_value:string}> Owned setting rows. */
+    function app_settings_model_all(): array
+    {
+        return [[
+            'setting_key' => 'seo_request_guard_logging_enabled',
+            'setting_value' => '0',
+        ]];
+    }
+
+    /** Resolve one fixture setting without accessing persistent storage. @param string $key Setting identity. @return string|false Stored fixture value or absence. */
+    function app_settings_model_get(string $key): string|false
+    {
+        return $key === 'seo_request_guard_logging_enabled' ? '0' : false;
+    }
+}
+
 namespace Gallery\Services {
+    require_once dirname(__DIR__, 2) . '/app/services/app_settings.php';
+
     /**
      * Admit the attachment masters in this isolated access-policy fixture.
      * Real configured OFF/ON persistence is covered by the database workflow.
@@ -82,16 +101,6 @@ namespace Gallery\Services {
     function feature_capability_effective_enabled(string $key): bool
     {
         return in_array($key, ['gallery_pdf_documents', 'gallery_music'], true);
-    }
-
-    /** Keep the real SEO guard enabled without persisting fixture rejection logs.
-     * @param string $key Application setting name.
-     * @param string $default Setting default.
-     * @return string Guard policy value for this isolated HTTP request.
-     */
-    function app_setting(string $key, string $default = ''): string
-    {
-        return $key === 'seo_request_guard_logging_enabled' ? '0' : $default;
     }
 
     /** Return a fixture gallery row, including its true attachment owner.

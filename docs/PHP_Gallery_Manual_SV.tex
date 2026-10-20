@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda versionsändring.
-\newcommand{\version}{0.137.8}
+\newcommand{\version}{0.138}
 \newcommand{\manualdate}{20~oktober~2026}
 
 \hypersetup{
@@ -537,7 +537,7 @@ Anonyma besökare använder samma länk efter vanliga åtkomstkontroller.
 Kräver helskärm eller~ljud aktivering väntar den~svarta inledningen på
 \ui{Starta presentationen}. Efter bekräftelse fyller reservläget fönstret
 om~äkta helskärm saknar stöd; \ui{Spela} kan~försöka igen vid~senare ljudfel.
-I~\ui{Redigera galleri > PDF / Musik / Presentation} finns det~genomskinliga
+I~\ui{Redigera galleri > Media > Presentation} finns det~genomskinliga
 kortet \ui{Presentationsinställningar} för~offentliga knappar, musik och~båda
 hastigheterna. Sparaikonen använder det~skyddade galleriformuläret.
 Förhandsvisning och~delning använder aktuella, även osparade val. Nya länkar
@@ -583,22 +583,104 @@ Filväljaren och släppkön i uppladdningspanelen för ett befintligt galleri ac
 
 \index{PDF!galleridokument}
 
+Galleriredigeraren har~en huvudflik \ui{Media} med undersektionerna
+\ui{Musik}, \ui{PDF}, \ui{Presentation} och~\ui{Grafik}. Musik och~PDF
+behåller sina separata formulär; grafikinställningarna är~fortsatt kopplade
+till det skyddade formuläret för galleriets inställningar. Presentationskortet
+finns under \ui{Media} > \ui{Presentation}, allmänna dokument och~den valfria
+OFP-panelen under \ui{Media} > \ui{PDF}. Omslagsbild, varumärke och~bakgrund
+finns under \ui{Media} > \ui{Grafik}. Under \ui{Bilder} accepterar
+\ui{Ladda upp} alla medietyper som är aktiverade för~galleriet.
+
 En administratör kan bifoga ett vanligt PDF-dokument till ett fysiskt galleri även utan SimBrief-data. Galleriet sparar originalfilen och ett litet index med stabilt dokument-ID, filnamn, titel, ursprung, exakt storlek och SHA-256-kontrollsumma. Den skyddade visnings- och nedladdningslänken från samma ursprung följer galleriets regler för synlighet, lösenord, delning och NSFW. SimBriefs befintliga OFP-manifest och länkar är separata.
 
 Välj \ui{Konvertera PDF-sidor} för att rendera dokumentet i webbläsaren. PDF.js skapar PNG-sidor i turordning och den befintliga uppladdningen visar förlopp, bekräftar batcher, återupptar avbrutet arbete och kan avbrytas. Nya konverteringar använder 150~DPI som standard; välj 96, 150, 200, 300, 600, 1200 eller 2400~DPI. Antalet sidor är obegränsat. Sidor som överskrider riktvärdet 16\,384 pixlar per sida eller 32 miljoner pixlar visar en vägledande varning som inte stoppar renderingen eller förminskar sidan i tysthet. Minnesuppskattningen omfattar endast canvasens RGBA-buffert med fyra byte per pixel, inte webbläsarens totala minnesanvändning. Webbläsarens faktiska canvas- och uppladdningsgränser kan ändå hindra rendering eller uppladdning.
 
 Välj antingen ett reserverat privat undergalleri eller lägg till sidorna efter källgalleriets sista foto. Ett undergalleri förblir privat tills du uttryckligen ändrar synligheten; publicering är spärrad medan PDF-konverteringen är ofullständig eller avbruten. Slutför eller stäm av konverteringen på ett säkert sätt först. Vid tillägg behålls källgalleriets synlighet och befintliga foton, och de nya sidorna placeras sist. Original-PDF-filen ersätts aldrig. För båda målen lagras förloppsmarkörer i källgalleriets dolda sidokatalog och innehåller målgalleriets ID. Foto-ZIP-exporter och gallerimigrering överför inte dessa allmänna PDF-original. En fullständig filsystemsbackup måste ta med dolda sidokataloger. Befintliga JPG-sidgallerier är fortsatt separata. Den tidigare serverbaserade OFP-konverteringsbegäran svarar nu med HTTP 409 och ber dig läsa om redigeraren; rasteriseringshjälpen finns endast för CLI- och testkompatibilitet och anropas inte av webbläsaråtgärder. Mer information finns i \codeword{docs/GALLERY\_PDF.md}.
 
+\subsubsection{Musikhanteraren}
+
+Öppna \ui{Admin > Gallerier > Musikhanteraren} för~den~kompakta globala
+katalogen. Stäm av~befintliga spellistor i~begränsade omgångar; original
+och~ordning bevaras. Sökningen efter titel, filnamn och~musiktaggar uppdateras
+medan du~skriver; endast den~senaste begäran ändrar resultaten. Tabellen skiljer
+mellan Titel, Filer, Platser, Taggar och~Åtgärder. Klicka på~en~låttitel för~att
+öppna den~befintliga titelredigeringen; kryssrutan väljer låten separat
+för~sammanslagning. Popupen innehåller titelredigering, tillägg i~album och~knappar
+för~taggar, filer och~platser. Fliken \ui{Låtar} visar katalogen över hela bredden.
+\ui{Album och~spellistor} visar trädet och~skapandet till~vänster samt valt album
+med låtar till~höger; på~smala skärmar placeras panelerna under varandra. Utan val
+visas en~uppmaning att välja eller~skapa ett album. Äldre albumlänkar öppnar fliken.
+Ett nyskapat album väljs automatiskt; när det valda albumet tas bort rensas valet,
+och en~inaktuell albumlänk visar uppmaningen att välja album igen.
+När en~låt läggs till från titelpopupen placeras den sist i~albumet; en~befintlig
+medlemsplats behåller sin ordning. Dra en~låt i~handtaget för~att ändra ordningen
+i~albumet; en~linje visar infogningsplatsen. Pilarna finns kvar för~tangentbord
+och~förflyttning ett steg i~taget.
+Filutfällningen listar fysiska varianter. Platser visar
+direkta gallerier och~musikalbum: två varianter i~samma galleri räknas
+som~en~plats, och~härledd Smart-tillhörighet räknas inte. Gallerilänkar i~båda utfällningarna
+öppnar det~offentliga galleriet; varje musiktagg visas som~en~egen kompakt
+bricka. Rubriklänkar sorterar Titel, Filer, Platser eller~Taggar i~båda
+riktningarna över hela resultatet före sidindelningen; lika värden sorteras
+stabilt efter ID. Taggar sorteras alfabetiskt efter låtens första musiktagg.
+Den~smala åtgärdskolumnen visas bara när en~synlig låt har varianter att dela.
+Hanteraren delar webbplatsens typografi och~accentfärger, med kompakta,
+genomskinliga ytor och~mjukt rundade kanter. Filantalet visas bredvid
+låttiteln med~en~staplad ikon och~siffra. Utfällningarna för~varianter och
+platser följer den~globala animationstiden för~Admin-sidopanelen; 0 gör dem
+omedelbara.
+
+Kugghjulet i~katalogrubriken innehåller den~globala inställningen för~filändelser.
+Det~intilliggande kugghjulet för~nya album döljer val av~överordnat album och~beskrivning
+tills de~behövs. Inbyggda utfällningar håller hopfällda låt- och~albumrader
+kompakta; antalet väntande avstämningar visas bara när~det är~större än~noll.
+Import har~en~synlig textetikett i~en~tom katalog och~blir ikonbaserad när~poster
+finns. Ikonåtgärder behåller tillgängliga namn och~synlig markering av~tangentbordsfokus.
+
+Klicka på en låttitel för att öppna redigeraren nära pekaren. Ett nytt klick på
+samma titel eller utanför stänger den; ett klick på en annan titel byter
+redigerare. Text markeras inte automatiskt. Redigeraren håller sig inom vyn och
+bryter långa titlar. Enter sparar titeln på en rad; radbrytningen i textarean är
+endast visuell och byter aldrig namn på originalfilen. Det~globala valet
+\ui{Visa filändelser i låttitlar} är~avstängt även efter uppgradering
+och~påverkar endast filbaserade namn; egna titlar behåller sin text.
+Markera låtar, förhandsgranska kopplingen och~välj vilka metadata som~behålls.
+En~variant kan~frikopplas igen. Åtkomst och~hämtningsrättigheter tillhör
+fortfarande varje källa.
+
+Det kompakta albumträdet använder inbyggda utfällningar; när ett album väljs
+öppnas automatiskt vägen till dess föräldrar. Brödsmulor ger ytterligare
+navigering. Album och~underalbum innehåller låtar som kan~läggas till, tas bort
+och~sorteras. Albumets kugghjul öppnar en~inbyggd utfällning med titel,
+beskrivning, flytt och~borttagning; låtarnas medlemskap och~ordning förblir
+synliga. Trädet stöder åtta nivåer och~2\,000 album. Antalet väntande
+gallerier visar ofärdiga avstämningar; oläsbara källor hindrar fullständigt
+slutförande.
+Borttagna relationer raderar inga original. Admin-samlingarna publicerar inget globalt
+musikbibliotek. Musiktaggar använder den~gemensamma taxonomin med~egen
+medietyp; bildtaggar och~bildsökning förblir separata. PDF är~reserverat.
+Befintliga sluggar är~fortsatt globalt unika. Säkerhetskopiera SQL,
+\filepath{data/music/} och~dolda äldre index tillsammans; använd framåtriktad
+migrering och~begränsad avstämning efter
+återställning. Öppna aktuellt läge vid~revisionskonflikt. Avstängd musik
+bevarar metadata och~ljud.
+Lokal återställning ur~Papperskorgen återkopplar aktuella spår till befintliga
+identiteter efter ändrade galleri-ID:n. Äldre ögonblicksbilder eller~borttagna
+identiteter ger nya poster; överförda arkiv tillför inga betrodda logiska ID:n.
+
 \subsubsection{Musiklagring}
 
-Använd \ui{Ladda upp foton} för~att~välja eller~släppa foton, PDF och~musik
-tillsammans. Ljud förblir original och~omvandlas inte till foton. Enbart ljud
-fungerar även med~bildförberedelsen avstängd. Galleriredigerarens \ui{Dokument
-/ PDF} behåller tabellen \ui{Musik} för~uppladdning, ordning, borttagning
-och~bildspelets sparade standard. Åtgärder stannar i~panelen. MP3, M4A, AAC,
-Ogg/Opus, WAV, FLAC och~WebM accepteras; webbläsarens kodekar avgör
-uppspelning. Galleriets synlighet, lösenord, delning och~NSFW-regler gäller.
-
+Öppna \ui{Redigera galleri > Media > Musik} för~att~ladda upp ljud och~hantera
+galleriets spellista. Nya uppladdningar lagrar oföränderliga original i~det
+skyddade centrala arkivet \filepath{data/music/}; ljud omvandlas aldrig till foton.
+Direkta låttilldelningar är~fristående poster. Albumtilldelningar är~levande
+spellistor: senare ändringar av~albumets medlemskap och~ordning gäller i~alla
+anslutna gallerier. Galleriet lagrar ordnade referenser och~hämtningsrätt per~post,
+inte en~kopia av~det~delade originalet. Uppspelning och~hämtning kontrollerar
+målgalleriets aktuella åtkomst och~postens hämtningsrätt; källgalleriets sekretess
+ger inte åtkomst till orelaterade förfrågningar. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC
+och~WebM accepteras; webbläsarens kodekar avgör uppspelningen.
 Tabellen visar spårlängd och~en~Spela/Stoppa-ikon före titeln. Ikonen
 växlar med~uppspelningen; ingen paus eller~separat uppspelningskolumn finns.
 Långa titlar förkortas med~ellips och~fullständig verktygstips; endast
@@ -609,7 +691,8 @@ Föregående/Spela/Stoppa/Nästa-ikoner finns på~sidan och~i~fotovisaren när~l
 finns. En~gemensam spelare förhindrar överlappning mellan rader, redigerare
 och~bildspel. Hela listan upprepas och~navigeringen går runt vid~ändarna.
 Automatisk bildspelsmusik är~avstängd från början; administratören kan~aktivera
-den~för~galleriet. Ett~aktiverat bildspel ersätter annan musik och~börjar
+den~för~galleriet. Växeln sparar inställningen automatiskt; redigeraren förblir
+öppen och~visar sparstatus. Ett~aktiverat bildspel ersätter annan musik och~börjar
 med~första spåret. Stopp eller~stängning av~visaren frigör dess musik;
 oberoende startad tabellmusik kan~fortsätta. Foto- och~hastighetsändringar
 avbryter inte musiken. Webbläsaravslag tillåter ett~nytt Spela-försök;
@@ -619,7 +702,8 @@ Smartgallerier förenar synlig musik från alla tillgängliga fysiska källor
 med~matchande foton. Fotosidor och~tillfälliga källfilter begränsar inte
 unionen; ingen egen ljudmapp skapas. SHA-256 tar~bort identiska originaldata
 även efter namnbyte. Lika namn eller~längd räcker inte; ändrad kodning
-eller~inbäddade taggar kräver framtida fingeravtryck. Dolda spår utelämnas,
+förblir separata tills en~administratör länkar dem i~Musikhanteraren.
+Dolda spår utelämnas,
 medan synliga hämtningsspärrade spår förblir spelbara. Befintliga och~nya
 spår är~synliga från början. Skyddade källadresser kontrollerar tillgång
 och~synlighet igen. Smartredigerarens presentationsundantag har~en~egen
@@ -639,17 +723,19 @@ synlighetsobservation använder anslutna rader samma sekventiella läsare.
 Servern avkodar inget ljud. Uppladdningsförsök bevarar bekräftade foton, PDF
 och~musik; ett~okänt ljudsvar kräver kontroll av~galleriet före nästa försök.
 
-Original och~ordnat JSON-index ligger i~\filepath{.gallery-music/}. Indexet
-sparar namn, MIME-typer, storlekar, SHA-256, revision, bildspelsstandard
-och~spårens hämtningsrättigheter. Äldre poster utan rättighet förblir spärrade.
-Gränserna är~64~MiB per~fil, 100 spår och~512~MiB per~galleri; lägre
-PHP-gränser gäller. Säkerhetskopior måste inkludera dolda mappar. Foto-ZIP
-och~galleriöverföringar utelämnar musik. Se~\filepath{docs/GALLERY_MUSIC.md}.
-
-Använd den~värdbaserat förberedda kandidaten efter ruttändringar. PDF och~ljud
-delar den~befintliga körningsägaren för~bilagor; källor med~en~äldre genererad
-ruttplan kan~avvisa anrop tills den~förberedda planen har~lästs in. Lokal
-generering ersätter inte värdbaserad kvalificering.
+Galleriets ordnade spellisteindex finns kvar i~dess dolda katalog
+\filepath{.gallery-music/}; oföränderliga ljudoriginal lagras centralt i
+\filepath{data/music/}. Den valfria uppgiften i~\ui{Underhåll > Underhållscenter}
+är förvald och kan väljas bort före start. Den migrerar äldre lokala original
+ett~i~taget i~begränsade, återupptagbara steg.
+Den~verifierar den~centrala kopian innan referensen växlas atomärt och~bevarar
+spår-ID:n, logiska identiteter, ordning, synlighet, hämtningsrätt och
+bildspelsinställningar.
+Osäkra lokala filer raderas inte. Säkerhetskopiera SQL, \filepath{data/music/}
+och~dolda äldre index tillsammans. Varje centralt musikoriginal räknas en~gång
+oavsett gallerianknytningar; omigrerade lokala original räknas separat. När ett
+galleri tas bort försvinner dess referenser, inte det~delade originalet. Foto-ZIP
+och~galleriöverföringar innehåller inte musik. Se~\filepath{docs/GALLERY_MUSIC.md}.
 
 \subsection{Redigera identitet och sammanhang}
 \index{g00102@gallerimetadata}
@@ -1066,7 +1152,7 @@ råtelemetri.
 
 Webbläsaruppladdning passar vardagliga tillägg. Välj ett galleri, välj filer, granska omgången och följ förloppet medan servern validerar medier och förbereder poster och miniatyrbilder. Filsystemsupptäckt passar stora befintliga mappträd eller överföringar via FTP och webbhotellsverktyg. Automatisering och WebDAV passar återkommande eller mobila arbetsflöden när deras avgränsade inloggningsuppgifter har konfigurerats.
 
-I den högra administratörspanelen \ui{Ladda upp foton} kan du klistra in flera skärmbilder efter varandra med Ctrl+V i Windows/Linux eller Cmd+V i macOS, välja ytterligare filer och dra bilder till uppladdningsytan. Varje bild visas före sändning i en lokal kö med miniatyrbilder, filnamn och storlek. Använd pilknapparna för att ändra ordningen, ta bort en felaktig bild eller rensa hela urvalet. Den vanliga knappen \ui{Ladda upp bilder} skickar originalfilerna en gång genom den befintliga uppladdningen; miniatyrerna ersätter inte originalen. Kön är inget serverlagrat utkast: om du lämnar panelen måste du bekräfta att oskickade filer kastas, ett misslyckat försök behåller urvalet för återförsök och ett bekräftat lyckat svar tömmer kön. Format som inte kan förhandsvisas visas med en formatmarkering utan att serverns kontroll kringgås. Den fristående uppladdningssidan i administrationen och formuläret utan JavaScript fungerar som tidigare.
+I den högra administratörspanelen \ui{Ladda upp foton} kan du klistra in flera skärmbilder efter varandra med Ctrl+V i Windows/Linux eller Cmd+V i macOS, välja ytterligare filer och dra bilder till uppladdningsytan. Varje bild visas före sändning i en lokal kö med miniatyrbilder, filnamn och storlek. Använd pilknapparna för att ändra ordningen, ta bort en felaktig bild eller rensa hela urvalet. Den vanliga knappen \ui{Ladda upp} skickar originalfilerna en gång genom den befintliga uppladdningen; miniatyrerna ersätter inte originalen. Kön är inget serverlagrat utkast: om du lämnar panelen måste du bekräfta att oskickade filer kastas, ett misslyckat försök behåller urvalet för återförsök och ett bekräftat lyckat svar tömmer kön. Format som inte kan förhandsvisas visas med en formatmarkering utan att serverns kontroll kringgås. Den fristående uppladdningssidan i administrationen och formuläret utan JavaScript fungerar som tidigare.
 
 Ladda upp i meningsfulla grupper för ett stort evenemang. Mindre grupper gör fel lättare att hitta och låter dig granska titlar, ordning och synlighet stegvis.
 
@@ -2440,7 +2526,26 @@ Papperskorgsinnehåll ligger i skyddad beständig \filepath{data/gallery-trash/}
 \index{u00252@Underhållscenter}
 \index{u00251@underhåll!c00044@centralt arbetsflöde}
 
-Öppna \ui{Underhåll > Underhållscenter} för ett väglett flöde med \ui{Analysera}, \ui{Granska}, \ui{Utför} och \ui{Verifiera} över vanliga underhållsansvar. Analysera är skrivskyddat för galleri-, telemetri-, logg-, papperskorgs-, cache-, miniatyrbilds- och databasinnehåll; det skriver bara den beständiga kontrollpunkt för Underhållscentret som behövs för att återuppta undersökningen. Granska-steget grupperar uppgifter efter område, märker obligatoriska automatiska steg och placerar tillgängliga valfria uppgifter utan upptäckt arbete i en infälld grupp. Obligatoriska, förvalda och valfria uppgifter förblir tydliga före rensning; djup medieverifiering och fullständig databasoptimering går fortfarande att hitta när de är tillgängliga, även om de inte väljs automatiskt.
+Öppna \ui{Underhåll > Underhållscenter} för ett väglett flöde med
+\ui{Analysera}, \ui{Granska}, \ui{Utför} och~\ui{Verifiera} över vanliga
+underhållsansvar. Analysera är skrivskyddat för galleri-, telemetri-, logg-,
+papperskorgs-, cache-, miniatyrbilds- och databasinnehåll; det skriver bara den
+beständiga kontrollpunkt som behövs för att återuppta undersökningen.
+
+Den kompakta granskningen har tre flikar: \ui{Rensning}, \ui{Media}
+och~\ui{Databas}.
+Valfria uppgifter använder gemensamma växlar med korta etiketter; öppna
+förklaringen med den intilliggande frågeteckenknappen. Säkerhetskontroll före
+start och slutlig verifiering körs automatiskt. De är inte användarval och
+visas inte som inaktiverade växlar. Djup miniatyrbildsverifiering finns kvar
+som ett uttryckligt val, även när analysen inte hittar något arbete med
+miniatyrbilder.
+
+Fäll ut teknisk aktivitet vid felsökning. Fel behåller sin användbara status
+och anger säkert källfilens namn och rad när de finns, utan att visa privat
+sökväg eller anropsstack. Fel om odefinierad PHP-funktion, klass eller konstant
+kan även visa det säkra symbolnamnet; den ursprungliga undantagstexten döljs.
+Djup medieverifiering hanteras av miniatyrbildsadministrationen.
 
 Servern laddar de granskade beroendena för respektive område på nytt i varje separat analys- eller körningsbegäran innan uppgiften körs. Kontrollen av väntande migreringar läser endast migreringsregistret; ett saknat register eller en misslyckad kontroll behandlas som väntande arbete. Tillämpa migreringar genom det uttryckliga migreringsflödet; Analysera skapar eller reparerar inte migreringslagringen.
 
@@ -2477,9 +2582,10 @@ Filvyn visar också antal och~byte för PDF- och~musikoriginal samt en
 samlad mediesumma. Efter fotobatcher läser Uppdatera allt PDF-, musik- och~OFP-summor
 från databasen. Första körningen importerar saknade poster från högst två fysiska
 gallerier per steg, även gallerier utan foton. Dolda, privata, avstängda
-filer och~spår utan nedladdning räknas också. Fysiska kopior räknas separat;
-smarta spellistor skapar ingen kopia. Konverterade PDF-sidor räknas redan
-som foton. Index, lås, konverteringstillstånd, oindexerade filer, Papperskorg
+filer och~spår utan nedladdning räknas också. Varje centralt musikoriginal räknas
+en gång, även utan gallerianknytning; omigrerade lokala original räknas separat.
+Smarta spellistor skapar ingen kopia. Konverterade PDF-sidor räknas redan som foton.
+Index, lås, konverteringstillstånd, oindexerade filer, Papperskorg
 och~andra cacher ingår inte. Oläsbara index eller osäkra/saknade filer ger
 synlig ofullständig mätning utan reparation. Vanliga sidor läser cache;
 bilageändringar markerar den som gammal när revisionsskrivningen lyckas.
@@ -2935,6 +3041,10 @@ tests/ & Fristående PHP-tester och riktade JavaScript-tester.\\
 winapp/ & Windows-specifika verktyg och integrationer.\\
 \bottomrule
 \end{longtable}
+
+Nya och väsentligt ändrade administrationsgränssnitt följer de permanenta
+designreglerna i~\filepath{docs/ADMIN_DESIGN.md}. De beskriver den kompakta
+mediespelar- och WinApp-stilen samt CSS-granskning inom funktionens omfattning.
 
 \subsection{Kodkonventioner}
 

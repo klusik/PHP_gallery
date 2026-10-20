@@ -61,7 +61,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.137.8}
+\newcommand{\version}{0.138}
 \newcommand{\manualdate}{20 October 2026}
 
 \hypersetup{
@@ -540,7 +540,7 @@ Anonymous visitors can~use~the~same link after ordinary access checks.
 If~native fullscreen or~sound needs activation, the~black opening waits for
 \ui{Start presentation}. After confirmation, unsupported native fullscreen
 retains the~browser viewport; \ui{Play} can~retry later audio failures.
-Use~\ui{Edit gallery > PDF / Music / Presentation} and~its~transparent
+Use~\ui{Edit gallery > Media > Presentation} and~its~transparent
 \ui{Presentation settings} card to~choose public button visibility, music,
 photo speed and~transition speed. The~Save icon uses the~ordinary guarded
 gallery form. Preview and~Share use current selections, including unsaved ones.
@@ -585,21 +585,102 @@ The~existing-gallery Upload photos chooser and~drop queue also accept PDFs. By~d
 
 \index{PDF!gallery documents}
 
+The~gallery editor has~one main \ui{Media} tab with nested \ui{Music},
+\ui{PDF}, \ui{Presentation}, and~\ui{Artwork} sections. Music and~PDF keep
+their independent forms; Artwork controls remain associated with the guarded
+gallery settings form. The~Presentation card is~under \ui{Media} >
+\ui{Presentation}; general documents and~the~optional OFP panel are~under
+\ui{Media} > \ui{PDF}. The~cover, branding, and~background controls are~under
+\ui{Media} > \ui{Artwork}. In~\ui{Images}, \ui{Upload} accepts all media
+types currently enabled for~the~gallery.
+
 An~administrator can~attach a~general PDF to~a~physical gallery even when it~has no~SimBrief data. The~gallery keeps the~original file and~a~small index with its stable document ID, filename, title, provenance, exact size and~SHA-256 digest. The~protected same-origin viewer and~download link follows the~gallery's visibility, password, share-link and~NSFW access rules. SimBrief OFPs keep their existing manifest and~links.
 
 Choose \ui{Convert PDF pages} to~render the~document in~the~browser. PDF.js creates PNG pages sequentially and~the~existing upload process reports progress, acknowledges batches, resumes interrupted work and~can~be cancelled. New conversions use 150~DPI by~default; choose 96, 150, 200, 300, 600, 1200 or~2400~DPI. There is~no~page-count limit. A~page above the~conservative 16,384-pixel edge or~32-million-pixel advisory threshold shows a~warning but does not block rendering or~silently downscale the~page. Its memory estimate covers only the~canvas RGBA buffer at four bytes per pixel, not total browser memory. Actual browser canvas allocation and~upload limits can still make rendering or~upload fail.
 
 Choose either a~reserved private child gallery or~append after the~source gallery's last photograph. A~child stays private until you~change its visibility explicitly; publication is blocked while its PDF conversion is incomplete or~cancelled, so finish or~safely reconcile the conversion first. Appending keeps the~source gallery's visibility and~existing photographs, then places converted pages at~the~end. Conversion never replaces the~original PDF. Progress markers live in~the~source gallery's hidden conversion sidecar for~both destinations and~record the~target gallery ID. Photo ZIP exports and~gallery migration do~not~transfer these general PDF originals. A~full filesystem backup must include hidden sidecar folders. Existing JPG page galleries remain separate. The~former server-side OFP conversion request now returns HTTP 409 and~directs you~to~reload; its rasterizer helper is~for~CLI and~test compatibility only and~is~not~called by~browser actions. See \codeword{docs/GALLERY\_PDF.md} for~the~storage and~conversion contract.
 
+\subsubsection{Global Music Manager}
+
+Open \ui{Admin > Galleries > Music Manager} for~the~compact song catalog.
+Reconcile existing playlists in~bounded batches; originals and~playlist order
+remain intact. Search by~title, filename or~music tag as~you type; only the
+latest search response updates the~results. The~table separates Title, \ui{Files},
+\ui{Locations}, \ui{Tags}, and~Actions. Click a~song title to~open its~existing
+rename editor, add-to-album control, and~shortcuts to~tag, file, and~location
+details; its~independent checkbox selects it for~merge. The~\ui{Songs} tab is~a
+full-width catalog. \ui{Albums \& playlists} places the~tree and~creation form
+left of~the~selected album and~its songs, stacking on~narrow screens. With no
+selection, a~prompt invites you~to~choose or~create an~album. Legacy album links
+open this tab. Creating an~album selects it automatically; deleting the~selected
+album clears the~selection, and~a~stale album link returns to~the~prompt. Adding
+from~the title popup appends a~song to~an~album; an~existing
+membership stays in~its current order. Drag a~song by~its grip to~change album
+order; an~insertion line marks the~destination. Up/down buttons remain available
+for~keyboard use and~single-step moves. The~Files
+disclosure lists physical variants. \ui{Locations} expands to~direct gallery
+and~music-album placements: two variants in~one gallery count as~one location,
+and~derived Smart inclusion adds nothing. Gallery links in~both disclosures
+open the~public gallery, and~each music tag appears as~its own compact chip.
+Header links sort Title, Files, Locations, or~Tags in~either direction across
+the~complete result set before pagination, with stable ID tie-breaking. Tags
+sort alphabetically by~the~song's first music tag.
+The~narrow action column appears only when a~visible song has variants to~split.
+The~manager shares the~site's typography and~accent colors, with compact
+translucent surfaces and~softly rounded borders. Each song title sits beside
+its~file count, shown with a~stacked icon and~number. Variant and~\ui{Locations}
+disclosures follow the~global Admin side-panel duration; 0 makes them immediate.
+
+The~catalog-heading gear contains the~global filename-extension preference.
+The~adjacent new-album gear hides parent and~description fields until needed.
+Native disclosures keep collapsed song and~album rows compact; the~pending
+reconciliation count appears only when nonzero. Import keeps its~text label for
+an~empty catalog and~becomes icon-only after entries exist. Icon-only actions
+retain accessible names and~visible keyboard focus.
+
+Click a~song title to~open its~inline editor near the~pointer. Clicking the~same
+title or~outside closes it; clicking another title switches editors. Text is~not
+selected automatically. The~editor stays within the~viewport and~wraps long
+titles. Enter saves the~title as~one line; textarea wrapping is~visual only and
+never renames the~original file. The~global
+\ui{Show file extensions in song titles} switch defaults OFF, including after
+upgrade, and~affects filename-derived names only. Explicit titles keep their
+text. Select songs to~preview an~explicit same-song relationship and~choose
+surviving metadata; split a~variant to~undo a~wrong link. This never grants
+access to~another source or~changes its download permission.
+
+Create albums and~nested subalbums, then navigate the~compact tree with native
+disclosure controls or~use breadcrumbs. Selecting an~album opens its~ancestor
+path automatically. Its~context gear opens native details for~the~album title,
+description, move and~delete controls; song membership and~ordering stay
+visible. Add, remove or~reorder songs. The~tree supports eight levels and~2,000
+albums. A~pending gallery count identifies snapshots awaiting
+reconciliation; an~unreadable source prevents a~complete import. Removing
+relationships do~not~delete centrally stored originals. Albums are~Admin
+collections without a~new public
+library. Music tags use the~shared taxonomy with a~separate media type;
+image/gallery tags and~public image searches remain isolated. PDF tagging
+is~reserved. Existing tag slugs remain globally unique. Back up~SQL,
+\filepath{data/music/} and~hidden legacy indexes together; run normal forward
+migrations and~bounded reconciliation after recovery. Resolve stale-edit refusals by~reopening current
+state. Disabling \ui{Gallery music} preserves this metadata and~all~audio.
+Local Trash restore reconnects current tracks to~existing song identities
+after gallery IDs change. Old snapshots or~removed identities create fresh
+catalog entries; transferred archives never supply trusted logical IDs.
+
 \subsubsection{Music storage}
 
-Use \ui{Upload photos} to~select or~drop photographs, PDFs and~music together.
-Audio remains an~original and~never enters image conversion. Audio-only uploads
-also work with image preparation off. The~gallery editor's \ui{Documents /
-PDFs} tab retains a~separate \ui{Music} table for~upload, ordering, removal
-and~the~saved slideshow default. Actions stay in~the~panel. MP3, M4A, AAC,
+Open~\ui{Edit gallery > Media > Music} to~upload audio and~manage this gallery's
+playlist. New uploads store immutable originals in~the~protected central
+\filepath{data/music/} repository; audio never enters image conversion.
+Direct song assignments remain independent items. Album assignments are~live
+playlists: later album membership and~order changes appear in~every assigned
+gallery. The~gallery stores ordered references and~per-item download permission,
+not~a~copy of~the~shared original. MP3, M4A, AAC,
 Ogg/Opus, WAV, FLAC and~WebM are~accepted; browser codecs determine
-playability. Gallery visibility, password, sharing and~NSFW rules apply.
+playability. Playback and~download use the~destination gallery's current access
+rules and~that item's download permission; source-gallery privacy does~not
+authorize unrelated requests.
 
 The~table shows each track's duration and~one Play/Stop icon before
 its~title. The~same icon changes with playback; there is~no~Pause action
@@ -611,8 +692,9 @@ Previous/Play/Stop/Next icons are~available on~the~page and~in~the~photo viewer
 whenever audio exists. One shared player prevents overlapping music between
 rows, editor and~slideshow. The~whole playlist repeats and~navigation wraps.
 Automatic slideshow music is~initially off; an~administrator can~enable
-it~for~this gallery. An~enabled slideshow replaces other music and~starts
-at~the~first track. Stopping or~closing the~viewer releases its music;
+it~for~this gallery. The~switch saves its~preference automatically and~keeps
+the~editor open while reporting save status. An~enabled slideshow replaces
+other music and~starts at~the~first track. Stopping or~closing the~viewer releases its music;
 independently requested table playback can~continue. Photo and~speed changes
 leave music running. Browser refusal permits an~explicit Play retry;
 a~completely unplayable playlist stops after one pass.
@@ -621,8 +703,9 @@ Smart Galleries merge visible music from~all~accessible physical sources
 contributing matching photos. Pagination and~temporary source filters do~not
 narrow this union; no~Smart audio folder is~created. SHA-256 deduplicates
 identical original bytes even after renaming. Equal names or~durations alone
-never remove different audio; changed encodings or~embedded tags need future
-fingerprinting. Hidden tracks are~excluded, while visible download-locked
+never remove different audio. Different encodings remain distinct unless
+an~administrator explicitly links them in~Music Manager. Hidden tracks
+are~excluded, while visible download-locked
 tracks remain playable. Existing and~new tracks default visible. Protected
 source URLs recheck access and~visibility. In~the~Smart editor's presentation
 overrides, enable its~independent slideshow music preference; it~starts off
@@ -642,18 +725,17 @@ server decoding occurs. Upload retries preserve acknowledged photos, PDFs
 and~audio; an~unknown audio response requires checking the~gallery before
 submitting again.
 
-Originals and~their ordered JSON index use the~hidden
-\filepath{.gallery-music/} folder. The~index stores names, MIME types, sizes,
-SHA-256 digests, revision, slideshow default and~individual download
-permissions. Older records without permission remain locked. Limits are~64~MiB
-per~file, 100 tracks and~512~MiB per~gallery; lower PHP limits apply. Backups
-must include hidden folders. Photo ZIP exports and~gallery transfers omit
-music. See \filepath{docs/GALLERY_MUSIC.md}.
-
-For~a~development checkout, use the~hosted prepared candidate after changing
-routes. PDF and~audio share the~existing attachment runtime owner; source with
-an~older generated route plan may~refuse requests until the~prepared plan
-is~loaded. Local generation does not~replace hosted qualification.
+The~existing gallery playlist index remains in~its~hidden
+\filepath{.gallery-music/} folder; immutable audio bytes live centrally in
+\filepath{data/music/}. The~optional \ui{Maintenance > Maintenance Center} task
+migrates legacy originals in~bounded, resumable steps. It~verifies each central
+copy before switching the~reference and~preserves track IDs, order, visibility,
+download flags and~slideshow settings; uncertain local files are~not~deleted.
+Back up SQL, \filepath{data/music/} and~hidden legacy
+indexes together. Each central asset counts once in~storage totals regardless of
+gallery links; unmigrated local originals count separately. Deleting a~gallery
+removes its~references but~retains shared originals. Gallery ZIP exports and~transfers
+omit music. See \filepath{docs/GALLERY_MUSIC.md}.
 
 \subsection{Edit identity and~context}
 \index{gallery metadata}
@@ -1067,7 +1149,7 @@ inherit gallery visibility, and~contain no~raw telemetry.
 
 Browser upload suits everyday additions. Select a~gallery, choose files, review the~batch, and~follow progress while the~server validates media and~prepares records and~thumbnails. Filesystem discovery suits large existing folder trees or~transfers made through FTP and~hosting tools. Automation and~WebDAV suit repeated or~mobile workflows after their scoped credentials are~configured.
 
-In~the~right-hand Admin \ui{Upload photos} panel, paste successive screenshots with Ctrl+V on~Windows/Linux or~Cmd+V on~macOS, choose additional files, or~drop images into the~upload area. Each selected image appears in~a~local thumbnail queue before submission, together with its filename and~size. Move images with the~arrow controls, remove an~unwanted screenshot, or~clear the~selection. The~existing \ui{Upload images} button sends the~originals through the~normal upload process once; preview tiles are not replacement upload files. This queue is~not a~server-side draft: leaving the~panel asks before discarding unsent files, a~failed upload retains the~selection for retry, and~successful server acknowledgement clears it. Unsupported preview formats show a~format tile without bypassing the~server's upload checks. The~standalone Admin upload page and~no-JavaScript form continue to~use their previous workflow.
+In~the~right-hand Admin \ui{Upload photos} panel, paste successive screenshots with Ctrl+V on~Windows/Linux or~Cmd+V on~macOS, choose additional files, or~drop images into the~upload area. Each selected image appears in~a~local thumbnail queue before submission, together with its filename and~size. Move images with the~arrow controls, remove an~unwanted screenshot, or~clear the~selection. The~existing \ui{Upload} button sends the~originals through the~normal upload process once; preview tiles are not replacement upload files. This queue is~not a~server-side draft: leaving the~panel asks before discarding unsent files, a~failed upload retains the~selection for retry, and~successful server acknowledgement clears it. Unsupported preview formats show a~format tile without bypassing the~server's upload checks. The~standalone Admin upload page and~no-JavaScript form continue to~use their previous workflow.
 
 For~a~large event, upload in~meaningful groups. Smaller groups make errors easier to~identify and~allow titles, ordering, and~visibility to~be~reviewed incrementally.
 
@@ -1616,7 +1698,7 @@ Browser upload is~the~friendliest choice for~routine work. It~can~upload into an
 
 With JavaScript enabled, focus the~upload area and~paste an~image or~screenshot using Ctrl+V on~Windows/Linux or~Cmd+V on~macOS. The~focused or~most recently used visible uploader receives the~images; an~open side panel owns its upload target. Paste appends all supported image items exposed by~the~browser to~the~same file selection used by~the~chooser. JPEG, PNG, GIF and~WebP follow the~picker policy; HEIC, HEIF and~DNG additionally require an~explicit server-capability hint. Browser-provided filenames are~retained; unnamed image data receives a~distinct timestamp/sequence name with the~matching extension. Submit the~ordinary form to~upload through the~selected browser/server pipeline, with its usual validation, size limits, metadata, thumbnails, progress and~errors. Text fields keep ordinary text paste; unsupported content and~paste during an~active upload are~ignored. If~the~browser cannot expose or~add clipboard images, use the~chooser or~file drop. Side-panel uploads retain the~open panel and~current URL.
 
-In~the~right-hand upload drawer, repeated paste, file-picker choices and~drop append to~one local preview queue. Inspect its count and~total size; use Remove, Clear selection or~the~arrow buttons to~adjust the~FileList and~upload order. Then press the~ordinary Upload images button once. Both existing-gallery and~create-with-upload drawers use this queue; the~dedicated full-page picker keeps its established behavior. The~queue does not~create a~server draft and~has~no~Commit publication action.
+In~the~right-hand upload drawer, repeated paste, file-picker choices and~drop append to~one local preview queue. Inspect its count and~total size; use Remove, Clear selection or~the~arrow buttons to~adjust the~FileList and~upload order. Then press the~ordinary Upload button once. Both existing-gallery and~create-with-upload drawers use this queue; the~dedicated full-page picker keeps its established behavior. The~queue does not~create a~server draft and~has~no~Commit publication action.
 
 Preview work is~lazy and~serialized: one decoder, at~most twelve miniature resources, and~PNG miniatures no~larger than 256 pixels per~edge. Before decoding, only the~first 256 KiB of~headers are~inspected; a~source must fit within 24 MiB, 8192 pixels per~edge and~16 * 1024 * 1024 pixels overall. Unsupported, animated, unreadable or~larger candidates show an~icon or~warning while the~original remains selected. These preview limits do~not~replace server upload limits. Selection never strips EXIF or~replaces the~original with a~miniature.
 
@@ -2460,7 +2542,24 @@ Trash payloads live in~protected persistent \filepath{data/gallery-trash/} stora
 \index{Maintenance Center}
 \index{maintenance!central workflow}
 
-Open \ui{Maintenance > Maintenance Center} for~a~guided \ui{Analyze}, \ui{Review}, \ui{Execute}, and~\ui{Verify} workflow across routine maintenance owners. Analyze is~read-only for~gallery, telemetry, log, Trash, cache, thumbnail, and~database content; it~writes only the~durable Maintenance Center checkpoint needed to~resume the~inspection. The~Review step groups tasks by~area, labels required automatic steps, and~places available optional tasks with~no~detected work in~a~collapsed disclosure. Required, default, and~optional tasks remain clear before any selected cleanup starts. Deep media verification and~full database optimization remain discoverable when relevant, even though they are~not~selected automatically.
+Open \ui{Maintenance > Maintenance Center} for~a~guided \ui{Analyze},
+\ui{Review}, \ui{Execute}, and~\ui{Verify} workflow across routine
+maintenance owners. Analyze is~read-only for~gallery, telemetry, log, Trash,
+cache, thumbnail, and~database content; it~writes only the~durable checkpoint
+needed to~resume the~inspection.
+
+The~compact Review has~three tabs: Cleanup, Media, and~Database. Optional tasks
+use shared switches with short labels; open the~adjacent question-mark details
+for~an~explanation. Safety preflight and~final verification run automatically.
+They are~not user choices and~do~not appear as~disabled switches. Deep
+thumbnail verification remains available as~an~explicit opt-in, even when
+analysis finds no~thumbnail work.
+
+Expand technical activity when diagnosing a~run. Errors retain their useful
+status and~identify the~safe source basename and~line when available, without
+exposing a~private path or~stack trace. Undefined PHP function, class, or~constant
+errors can~also show the~safe symbol name; raw exception text remains hidden.
+Deep media verification is~routed to~the~thumbnail administration owner.
 
 The~server loads the~reviewed subsystem dependencies again for~each separate analysis or~execution request before running its~task. Checking for~pending migrations only reads the~migration ledger; a~missing ledger or~failed inspection is~treated as~pending work. Apply migrations through the~explicit migration workflow; Analyze does~not~create or~repair migration storage.
 
@@ -2498,7 +2597,8 @@ plus an~overall media total. Update all reads PDF/music/OFP totals from
 the~database after photo batches. The~first update imports missing accounting
 from at~most two physical galleries per~step, including empty galleries. Hidden,
 private and~disabled files and~tracks with downloads denied still consume
-storage. Separate physical copies count separately; Smart playlists add no~copy.
+storage. Each central music asset counts once, including unassigned assets;
+unmigrated local originals count separately. Smart playlists add no~copy.
 Generated PDF pages already count as~photographs. Indexes, locks, conversion
 state, unindexed files, Trash and~other caches are~outside these media totals.
 Unreadable indexes or~unsafe/missing files produce partial-accounting warnings
@@ -2956,6 +3056,10 @@ tests/ & Standalone PHP and~focused JavaScript tests.\\
 winapp/ & Windows-specific tools and~integrations.\\
 \bottomrule
 \end{longtable}
+
+For~new or~materially changed Admin interfaces, follow the~permanent visual
+guidance in~\filepath{docs/ADMIN_DESIGN.md}. It~defines the~compact media-player
+and~WinApp direction and~feature-scoped CSS review.
 
 \subsection{Coding conventions}
 

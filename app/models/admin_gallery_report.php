@@ -226,26 +226,51 @@ function admin_gallery_report_model_gallery_detail_rows(array $capabilities): ar
  * @param bool $hasTags Verified tag-table availability.
  * @param bool $hasGalleryTags Verified tag and gallery-tag storage availability.
  * @param bool $hasImageTags Verified tag and image-tag storage availability.
- * @return array{tag_count:int,gallery_tag_rows:list<array<string,mixed>>,image_tag_rows:list<array<string,mixed>>} Total and bounded label/count usage groups, empty where storage is unavailable.
+ * @param string $mediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
+ * @return array{tag_count:int,gallery_tag_rows:list<array{label:string,count:int|string}>,image_tag_rows:list<array{label:string,count:int|string}>} Image-tag total and bounded label/count groups, empty where storage is unavailable.
  */
 function admin_gallery_report_model_tag_summary(
     bool $hasTags,
     bool $hasGalleryTags,
     bool $hasImageTags,
+    string $mediaTypeState,
 ): array {
+    if (!in_array($mediaTypeState, ['available', 'missing', 'unknown'], true)) {
+        $mediaTypeState = 'unknown';
+    }
+    if ($mediaTypeState === 'unknown') {
+        return [
+            'tag_count' => 0,
+            'gallery_tag_rows' => [],
+            'image_tag_rows' => [],
+        ];
+    }
+    $imageTypeCondition = $mediaTypeState === 'available'
+        ? " WHERE media_type = 'image'"
+        : '';
+    $galleryTagTypeCondition = $mediaTypeState === 'available'
+        ? " WHERE t.media_type = 'image'"
+        : '';
+    $imageTagTypeCondition = $galleryTagTypeCondition;
     return [
         'tag_count' => $hasTags
-            ? admin_gallery_report_model_scalar_int('SELECT COUNT(*) FROM tags')
+            ? admin_gallery_report_model_scalar_int(
+                'SELECT COUNT(*) FROM tags' . $imageTypeCondition,
+            )
             : 0,
         'gallery_tag_rows' => $hasGalleryTags
             ? admin_gallery_report_model_rows(
-                'SELECT t.name AS label, COUNT(gt.gallery_id) AS count FROM tags t INNER JOIN gallery_tags gt ON gt.tag_id = t.id GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT '
+                'SELECT t.name AS label, COUNT(gt.gallery_id) AS count FROM tags t INNER JOIN gallery_tags gt ON gt.tag_id = t.id'
+                    . $galleryTagTypeCondition
+                    . ' GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT '
                     . ADMIN_GALLERY_REPORT_ROW_LIMITS['tag_usage'],
             )
             : [],
         'image_tag_rows' => $hasImageTags
             ? admin_gallery_report_model_rows(
-                'SELECT t.name AS label, COUNT(it.image_id) AS count FROM tags t INNER JOIN image_tags it ON it.tag_id = t.id GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT '
+                'SELECT t.name AS label, COUNT(it.image_id) AS count FROM tags t INNER JOIN image_tags it ON it.tag_id = t.id'
+                    . $imageTagTypeCondition
+                    . ' GROUP BY t.id, t.name ORDER BY count DESC, t.name ASC LIMIT '
                     . ADMIN_GALLERY_REPORT_ROW_LIMITS['tag_usage'],
             )
             : [],

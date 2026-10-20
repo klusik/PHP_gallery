@@ -131,38 +131,9 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
-    /**
-     * Controlled ingestion prerequisite observation.
-     *
-     * @return array<string,mixed> Controlled ingestion prerequisite observation.
-     */
-    function upload_ingestion_schema_status(): array
-    {
-        return [
-            'state' =>
-                $GLOBALS['operation_fixture_ingestion_state'] ?? 'available',
-        ];
-    }
-
-    /**
-     * Refuse before combined creation in the fixture.
-     *
-     * @param array<string,mixed> $status Prerequisite observation.
-     * @param string $operation Bounded operation name.
-     * @param string $missing Missing explanation.
-     * @param string $unknown Unknown explanation.
-     * @return void Refuse before combined creation in the fixture.
-     */
-    function mutation_schema_assert_available(
-        array $status,
-        string $operation,
-        string $missing,
-        string $unknown,
-    ): void {
-        if ($status['state'] !== 'available') {
-            throw new \RuntimeException('fixture ingestion unavailable');
-        }
-    }
+    require_once __DIR__ . '/../app/models/schema_inspection.php';
+    require_once __DIR__ . '/../app/services/schema_inspection.php';
+    require_once __DIR__ . '/../app/services/mutation_schema_policy.php';
 
     /**
      * Represent verified thumbnail metadata without loading live storage.
@@ -864,7 +835,13 @@ namespace {
             $GLOBALS['operation_fixture_create_count'],
             $GLOBALS['operation_fixture_upload_count'],
         ];
-        $GLOBALS['operation_fixture_ingestion_state'] = 'unknown';
+        // The real mutation-schema owner reads this fixture executor. Reset
+        // its request cache so the earlier successful uploads cannot mask the
+        // unknown state in the combined create-plus-upload boundary.
+        $GLOBALS['operation_fixture_schema'] = 'unknown';
+        schema_inspection_set_query_executor_for_tests(
+            'operation_schema_probe',
+        );
         $refusedCombined = operation_request(
             $upload,
             array_replace($createUploadPost, [
@@ -872,7 +849,10 @@ namespace {
             ]),
             $files,
         );
-        $GLOBALS['operation_fixture_ingestion_state'] = 'available';
+        $GLOBALS['operation_fixture_schema'] = 'available';
+        schema_inspection_set_query_executor_for_tests(
+            'operation_schema_probe',
+        );
         operation_assert(
             $refusedCombined['status'] === 503
                 && $beforePreflight === [

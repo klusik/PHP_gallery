@@ -12,16 +12,36 @@ License: MIT License (see LICENSE file in repository)
 -->
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Cover stars</title>
+<link rel="stylesheet" href="/assets/styles/base.css">
+<link rel="stylesheet" href="/assets/styles/public.css">
+<link rel="stylesheet" href="/assets/styles/lightbox.css">
+<link rel="stylesheet" href="/assets/styles/admin.css">
+<link rel="stylesheet" href="/assets/styles/admin-layout.css">
+<link rel="stylesheet" href="/assets/styles/admin-subtabs.css">
+<link rel="stylesheet" href="/assets/styles/admin-music.css">
+<link rel="stylesheet" href="/assets/styles/side-panel.css">
+<link rel="stylesheet" href="/assets/styles/admin-gallery-create.css">
+<link rel="stylesheet" href="/assets/styles/admin-duplicate-photo-detector.css">
+<link rel="stylesheet" href="/assets/styles/admin-cinematic.css">
+<link rel="stylesheet" href="/assets/styles/admin-settings.css">
+<link rel="stylesheet" href="/assets/styles/utilities.css">
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/assets/styles/admin-gallery-api.css">
+<link rel="stylesheet" href="/assets/styles/admin-gallery-access.css">
+<link rel="stylesheet" href="/assets/styles/admin-gallery-display.css">
+<link rel="stylesheet" href="/assets/styles/admin-gallery-media.css">
+<link rel="stylesheet" href="/assets/styles/breadcrumbs.css">
 <style>body{height:1800px}.panel-body{height:320px;overflow:auto}.row{height:100px}</style></head>
-<body><output id="results"></output><main data-admin-side-panel><output data-admin-side-panel-status></output><div class="panel-body" data-panel-scroll>
-<button data-admin-tab="images" aria-selected="true">Images</button><section data-tab-panel="images">
-<form class="admin-edit-gallery-form"><input name="edit_revision" value="rev-1"><input name="cover_selection_revision" value="cover-1"><input name="title" value="Unsaved title"><textarea name="description">Unsaved description</textarea><select name="cover_image_id"><option value="automatic">Automatic</option><option value="0">Legacy</option><option value="1">One</option><option value="2" selected>Two</option><option value="3">Three</option><option value="4">Four</option><option value="5">Five</option></select></form>
+<body class="admin-page"><output id="results"></output><main data-admin-side-panel><output data-admin-side-panel-status></output><div class="panel-body" data-panel-scroll>
+<button data-admin-tab="images" aria-selected="true">Images</button><section id="admin-edit-images" class="admin-gallery-images" data-tab-panel="images">
+<form id="admin-gallery-settings-42" class="admin-edit-gallery-form" data-admin-gallery-settings-form><input name="edit_revision" value="rev-1"><input name="cover_selection_revision" value="cover-1"><input name="title" value="Unsaved title"><textarea name="description">Unsaved description</textarea></form>
+<label>Artwork title picture<select form="admin-gallery-settings-42" name="cover_image_id"><option value="automatic">Automatic</option><option value="0">Legacy</option><option value="1">One</option><option value="2" selected>Two</option><option value="3">Three</option><option value="4">Four</option><option value="5">Five</option></select></label>
 <form action="/admin_bulk_images" data-admin-panel-bulk-form data-admin-image-bulk-form data-cover-multi-supported="1" data-cover-multi-label="Selected photos" data-cover-selection-mode="single" data-cover-selection-revision="cover-1">
 <input type="hidden" name="csrf_token" value="token"><input type="hidden" name="gallery_id" value="42"><input type="hidden" name="cover_selection_revision" value="cover-1">
 <output data-admin-image-cover-status data-cover-limit-message="Maximum four selected photos."></output>
-<div class="row" data-admin-image-order-row data-image-name="One"><button type="submit" name="action" value="cover:1" data-admin-image-cover-star data-image-id="1" data-cover-state="off" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">☆</span></button></div>
-<div class="row" data-admin-image-order-row data-image-name="Two"><button type="submit" name="action" value="cover:2" data-admin-image-cover-star data-image-id="2" data-cover-state="single" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">★</span></button></div>
-<div class="row" data-admin-image-order-row data-image-name="Three"><button type="submit" name="action" value="cover:3" data-admin-image-cover-star data-image-id="3" data-cover-state="off" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">☆</span></button></div>
-<div class="row" data-admin-image-order-row data-image-name="Four"><button type="submit" name="action" value="cover:4" data-admin-image-cover-star data-image-id="4" data-cover-state="off" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">☆</span></button></div>
-<div class="row" data-admin-image-order-row data-image-name="Five"><button type="submit" name="action" value="cover:5" data-admin-image-cover-star data-image-id="5" data-cover-state="off" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">☆</span></button></div>
+<div class="row" data-admin-image-order-row data-image-name="One"><div class="admin-image-row-actions"><button type="submit" class="public-admin-card-action-button admin-image-cover-button" name="action" value="cover:1" aria-pressed="false" data-admin-image-cover-star data-image-id="1" data-cover-state="off" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">☆</span></button></div></div>
+<div class="row" data-admin-image-order-row data-image-name="Two"><div class="admin-image-row-actions"><button type="submit" class="public-admin-card-action-button admin-image-cover-button is-cover" name="action" value="cover:2" aria-pressed="true" data-admin-image-cover-star data-image-id="2" data-cover-state="single" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">★</span></button></div></div>
+<div class="row" data-admin-image-order-row data-image-name="Three"><div class="admin-image-row-actions"><button type="submit" class="public-admin-card-action-button admin-image-cover-button" name="action" value="cover:3" data-admin-image-cover-star data-image-id="3" data-cover-state="off" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">☆</span></button></div></div>
+<div class="row" data-admin-image-order-row data-image-name="Four"><div class="admin-image-row-actions"><button type="submit" class="public-admin-card-action-button admin-image-cover-button" name="action" value="cover:4" aria-pressed="false" data-admin-image-cover-star data-image-id="4" data-cover-state="off" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">☆</span></button></div></div>
+<div class="row" data-admin-image-order-row data-image-name="Five"><div class="admin-image-row-actions"><button type="submit" class="public-admin-card-action-button admin-image-cover-button" name="action" value="cover:5" data-admin-image-cover-star data-image-id="5" data-cover-state="off" data-cover-label-single="Select" data-cover-label-arm="Arm" data-cover-label-reset="Reset" data-cover-label-add="Add"><span aria-hidden="true">☆</span></button></div></div>
 </form></section></div></main><section class="hero" data-public-gallery-id="42" data-public-cover-selection-revision="cover-1"></section><script type="module" src="/fixture.js"></script></body></html>

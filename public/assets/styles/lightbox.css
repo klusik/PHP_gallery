@@ -2080,6 +2080,14 @@ dialog.lightbox.simbrief-ofp-dialog .simbrief-ofp-divider { background: var(--of
     margin-block: 0.75rem;
 }
 .gallery-music h3 { margin: 0 0 0.4rem; font-size: 0.95rem; }
+.gallery-music-warning {
+    margin: 0.25rem 0;
+    padding: 0.35rem 0.5rem;
+    border-inline-start: 3px solid #a86b00;
+    background: #fff8e8;
+    font-size: 0.78rem;
+}
+
 .gallery-music-table {
     width: 100%;
     border-collapse: collapse;

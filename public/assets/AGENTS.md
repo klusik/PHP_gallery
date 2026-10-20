@@ -9,6 +9,10 @@ All test commands below describe coverage owned by hosted CI; root CI-first
 rules
 control execution.
 
+For Admin UI work, read [the design contract](../../docs/ADMIN_DESIGN.md).
+New controls follow the compact media-player/WinApp appearance; legacy global
+Admin button and heading rules must not override the intended scoped design.
+
 ## Imports, request lifecycle and presentation
 
 Always document JavaScript callback parameters with JSDoc callable syntax, for

@@ -165,6 +165,16 @@ $registry = [
 
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
+        'gallery_music_service_test.php' => [
+            'extensions' => ['pdo_sqlite'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Physical playlist mutations use the production schema observer against an isolated, confirmed pre-catalog SQLite metadata fixture.',
+        ],
+        'music_catalog_title_policy_test.php' => [
+            'extensions' => ['pdo_sqlite'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Canonical title policy uses the production settings owner with isolated in-memory SQLite persistence.',
+        ],
         'runtime_module_plan_test.php' => [
             'timeout' => 240,
             'reason' => 'Compiles the complete source dependency graph and verifies each module in separate composed/legacy children; the actual count is retained in metrics, and 45 seconds does not cover the measured 72-second Windows run.',
@@ -482,6 +492,25 @@ $registry = [
         'gallery_music_browser_test.mjs' => [
             'browser' => true,
             'timeout' => 60,
+        ],
+        // Bound the production Music Manager renderer and mutation fixture.
+        // Type: int. Units: seconds. Scope: one hosted browser child.
+        // Consumers: central browser-map runner. Rationale: 90 seconds covers
+        // bounded PHP rendering, one Chromium session, both viewports and teardown.
+        'admin_music_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 90,
+        ],
+        // Bound the nested Media editor's real-view and canonical-write fixture.
+        // Type: int. Units: seconds. Scope: one hosted browser child.
+        // Consumers: central browser-map runner. Rationale: 90 seconds leaves
+        // startup/teardown headroom around the 60-second browser deadline and
+        // the bounded PHP renders performed before browser startup.
+        'admin_gallery_music_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
+            'timeout' => 90,
         ],
         'lightbox_zoom_model_test.mjs' => [],
         'progressive_thumbnail_renderer_test.mjs' => [],

@@ -205,6 +205,45 @@ namespace {
             gallery_attachment_storage_model_pending_count() === $pendingBefore,
             'Invalidation must schedule only missing derived accounting.',
         );
+        $repositoryBefore = \Gallery\Models\gallery_attachment_storage_model_repository_summary();
+        $pdo->exec(
+            'INSERT INTO music_songs (title, created_at, updated_at) '
+                . "VALUES ('Accounting fixture', NOW(), NOW())",
+        );
+        $songId = (int) $pdo->lastInsertId();
+        $assetId = bin2hex(random_bytes(16));
+        $digest = str_repeat('c', 64);
+        // The registered size differs from all local-category test values.
+        $asset = $pdo->prepare(
+            'INSERT INTO music_repository_assets '
+                . '(id, song_id, filename, indexed_title, mime, byte_size, '
+                . 'sha256, created_at, updated_at) '
+                . 'VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+        );
+        $asset->execute([
+            $assetId, $songId, 'shared.wav', 'Shared', 'audio/wav', 37, $digest,
+        ]);
+        $link = $pdo->prepare(
+            'INSERT INTO music_track_instances '
+                . '(gallery_id, track_id, song_id, asset_id, filename, '
+                . 'indexed_title, file_sha256, active, updated_at) '
+                . 'VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())',
+        );
+        // Two independently ordered references must never double physical bytes.
+        foreach ([bin2hex(random_bytes(16)), bin2hex(random_bytes(16))] as $trackId) {
+            $link->execute([
+                $galleryId, $trackId, $songId, $assetId,
+                'shared.wav', 'Shared', $digest,
+            ]);
+        }
+        $repositoryAfter = \Gallery\Models\gallery_attachment_storage_model_repository_summary();
+        check(
+            $repositoryAfter['music_count']
+                === $repositoryBefore['music_count'] + 1
+                && $repositoryAfter['music_bytes']
+                    === $repositoryBefore['music_bytes'] + 37,
+            'Shared asset bytes must count once despite multiple gallery references.',
+        );
         echo "Attachment storage database contracts passed.\n";
     } finally {
         if ($pdo instanceof \PDO && $pdo->inTransaction())

@@ -14,9 +14,12 @@
 - Smart music: complete source IDs in `app/services/smart_galleries.php`;
   read-only union/deduplication in the existing music service; source URLs in
   `app/controllers/gallery_music.php`.
-- Gallery music: `app/models/gallery_music.php` owns atomic playlist indexes;
-  `app/services/gallery_music.php` owns audio validation and revisioned file
-  workflows; `app/controllers/gallery_music.php` owns view models, Admin
+- Gallery music: `app/models/gallery_music.php` owns v1/v2 atomic indexes;
+  `app/services/gallery_music.php` owns admission and revisioned selection.
+  Its private `gallery_music/projection.php` expands only assigned live albums;
+  `gallery_music/repository.php` owns accounting and one-original migration.
+  `app/services/music_repository.php` confines immutable `data/music/` originals.
+  `app/controllers/gallery_music.php` owns view models, Admin
   responses and the protected GET/HEAD/range route. The compact table lives in
   `app/views/gallery_music.php`, delegated panel mutations in
   `admin-gallery-music.js`, exclusive table/viewer audio in
@@ -24,6 +27,17 @@
   attachment retries in `gallery-music-upload.js`.
   The lightbox owns activation/stop/teardown. See `docs/GALLERY_MUSIC.md` for
   limits, backup boundaries, runtime closure review and browser compatibility.
+- Global music identities and albums: `app/models/music_catalog.php` owns SQL;
+  `app/services/music_catalog.php` owns reconciliation, title policy and logical
+  relationships. `app/controllers/admin_music.php` prepares the compact
+  `app/views/admin_music.php` interface; `admin-music.js` completes mutations in
+  place and `admin-music.css` contains its layout. Gallery music projection
+  applies logical titles and current live membership without copying originals.
+  `music.repository` in Maintenance Center is an explicitly selected task,
+  retaining a raw source cursor and interrupted local cleanup journal.
+- Typed tags: the existing tag model and `tag_metadata.php` service validate
+  image/music assignment types and retain the global slug namespace. The
+  `music_song_tags` relation references logical songs, never physical files.
   PDF/audio runtime loading shares the existing `gallery-pdf-documents` owner.
 
 - Updater status diagnostics expose nonmutating worker-lock observation and

@@ -1056,6 +1056,32 @@ function maintenance_center_analyze_database_optimize(array $context): array
     ];
 }
 
+/**
+ * Offer the explicit music move without scanning or modifying gallery files.
+ * @param array{task:array{mutates:bool}} $context Shared analyzer context;
+ *     task metadata is supplied by the registry and is not inspected here.
+ * @return array{available:bool,has_work:bool,work_units:int,
+ *     candidate_count_known:bool,note:string} Readiness and an explicit
+ *     unknown source count; unavailable schema never authorizes a move.
+ */
+function maintenance_center_analyze_music_repository(array $context): array
+{
+    $status = music_repository_schema_status();
+    return [
+        'available' => $status['state'] === 'available',
+        'has_work' => true,
+        'work_units' => MAINTENANCE_CENTER_MUSIC_WEIGHT,
+        'candidate_count_known' => false,
+        'note' => maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.music_repository_note',
+            'Move existing gallery audio to the shared music repository. '
+                . 'Playlists, permissions and song identities remain unchanged. '
+                . 'One original is verified per step; this task runs only '
+                . 'when selected.',
+        ),
+    ];
+}
+
 /** Read-only final verification analyzer.
  * @param array<string,mixed> $context Shared task context containing prior analysis results and job state.
  * @return array<string,mixed> Structured result for this operation following the Maintenance Center state or plan contract.

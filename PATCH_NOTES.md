@@ -1,5 +1,663 @@
 # Patch notes
 
+## Version 0.138
+
+Introduced a site-wide Music Manager, normalized song identities, reusable
+nested albums, and live gallery playlists backed by a private repository of
+immutable audio originals. Reorganized the gallery editor into a unified Media
+workspace, added a checkpointed legacy-audio migration to Maintenance Center,
+and separated image and music tags without changing existing public image-tag
+identities. The release also strengthened gallery/Trash compatibility, storage
+accounting, browser interactions, maintenance diagnostics, GitHub BASIC evidence
+validation, and regression coverage. The primary feature is tracked in [issue
+#270](https://github.com/klusik/PHP_gallery/issues/270); the reviewed changes
+span [v_0.137.8 to the 0.138
+candidate](https://github.com/klusik/PHP_gallery/compare/v_0.137.8...c51b2c26b45acf90374d15ff82f38d0f5ba89903).
+
+### Highlights
+
+#### Global Music Manager and searchable song catalog
+
+- Added **Admin → Galleries → Music Manager** to the left Admin navigation with
+  the existing music icon and the `gallery_music` feature gate. This is a
+  site-wide catalog, not a replacement for the individual gallery music editor.
+  Implemented by
+  [`app/controllers/admin_music.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/controllers/admin_music.php)
+  and
+  [`app/views/admin_music.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/views/admin_music.php)
+  for [#270](https://github.com/klusik/PHP_gallery/issues/270).
+- Split the manager into **Songs** and **Albums & playlists** tabs. Songs
+  occupies the available width; the album tab presents the hierarchy and
+  creation controls alongside selected-album details, stacking the columns at
+  narrow screen widths.
+- Added live catalog search across effective song titles, original filenames,
+  and music tags; ignored out-of-order search responses so an older request
+  cannot replace newer results. Bounded song pages to 50 rows in the Admin
+  controller and provided pagination rather than rendering the full catalog at
+  once.
+- Displayed concise **Title**, **Files**, **Locations**, **Tags**, and
+  context-sensitive **Actions** columns. Made Title, Files, Locations, and Tags
+  headings sortable in both directions over the complete matching result set
+  before pagination, with deterministic ID tie-breaking.
+- Made a song title open a compact, pointer-positioned editor instead of
+  navigating away. Added related shortcuts for tags, original-file variants,
+  locations, and album assignment, while keeping the row checkbox independent
+  for multi-song merge selection. The popup switches songs, closes on a second
+  click or outside click, remains within the viewport, and wraps long displayed
+  titles without inserting newline characters into the saved title.
+- Reduced visual noise with compact music-tag chips, icon-only actions with
+  accessible labels and focus states, a file-count indicator, disclosures for
+  variants and locations, and a toolbar setting behind a gear. The split action
+  appears only for songs with separable variants; the import action becomes
+  icon-only once catalog entries exist.
+- Added a resumable, Admin-initiated reconciliation action for older playlists.
+  It processes at most 20 galleries per request, retains a continuation cursor,
+  displays pending dirty-snapshot work when nonzero, and reports unreadable
+  sources instead of silently claiming import completion. Public requests do not
+  scan every music index to build this catalog. See the [Music Manager
+  contract](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/docs/GALLERY_MUSIC.md).
+
+#### Explicit same-song identity, physical variants, and usage counts
+
+- Added administrator-controlled relationships between otherwise separate
+  physical audio files. Selected songs can be **merged into one logical song**
+  after a preview of their filenames, locations, variants, and existing
+  metadata; the administrator chooses the surviving song identity and whether to
+  combine tags or retain the survivor's tags.
+- Added splitting of selected physical track instances back into independent
+  logical identities, with deterministic metadata inheritance. Merging or
+  splitting changes catalog relationships, not audio bytes, original filenames,
+  individual gallery source ordering, or the saved source permissions.
+- Kept identity decisions explicit: equal filenames, recording durations, or
+  SHA-256 hashes do **not** automatically establish that two files are the same
+  song. Exact-byte deduplication in existing Smart Gallery music handling
+  remains a separate mechanism.
+- Consolidated each logical song into one catalog row while exposing its
+  underlying physical variants. Files disclosures show each source and original
+  filename; Locations discloses direct gallery placements and music-album
+  membership with navigable links and album paths.
+- Defined Locations as a count of **distinct direct placements**: two variants
+  in the same physical gallery count once, an assignment to another gallery
+  counts separately, and each directly assigned music album counts as a
+  placement. Derived Smart Gallery inclusion does not inflate the count.
+- Updated physical and Smart Gallery music projection to use canonical logical
+  titles and song identity while choosing only sources authorized in the current
+  gallery or visitor context. An Admin-wide inventory never grants playback or
+  exposes another gallery's otherwise inaccessible source. See
+  [`app/services/gallery_music.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/gallery_music.php)
+  and
+  [`app/services/music_catalog.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/music_catalog.php).
+
+#### Canonical song titles and extension visibility
+
+- Added a persistent custom display title per logical song, independent of the
+  audio file's real name. Used a common resolution order: custom logical-song
+  override, meaningful saved track title, then original filename-derived title.
+- Added the global **Show file extensions in song titles** setting, stored as
+  `music_show_file_extensions`. It defaults to **OFF** when absent on both new
+  and upgraded installations, hiding recognized audio extensions only in
+  filename-derived fallback titles; enabling it preserves those extensions.
+- Preserved the precise text of explicit custom titles, including any
+  deliberately entered extension. Neither title edits nor the extension switch
+  rename, transcode, replace, or modify the downloadable original; original
+  filenames remain visible in file details and downloads.
+- Propagated catalog title and setting changes to the public content revision so
+  existing gallery assignments, public music lists, player/lightbox surfaces,
+  slideshows, and Smart projections can display updated names after refresh
+  without reuploading tracks. Preserved the existing decimal public
+  content-revision contract rather than coupling it to the catalog's independent
+  optimistic revision.
+- Extended labels, help, feedback, and new manager/media controls across
+  **English, Czech, German, and Swedish**. Registered the setting in
+  [`app/services/admin_settings_registry.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/admin_settings_registry.php)
+  with Music Manager as its specialized editor.
+
+#### Nested music albums and live gallery playlists
+
+- Added logical albums with titles, optional descriptions, ordered song
+  membership, child albums, parent changes, and deletion. A song can belong to
+  multiple albums without duplicating source files; album hierarchy is
+  independent of physical gallery folders and image-gallery ancestry.
+- Added tree navigation, automatic expansion of a selected album's ancestor
+  path, breadcrumbs, native disclosure controls, contextual album settings, and
+  an album-selection prompt when no valid album is selected. Creating an album
+  selects it; deleting or losing the selected album returns to a safe unselected
+  state.
+- Added drag-and-drop song reordering with an insertion marker and pointer
+  capture, together with keyboard-friendly Up/Down actions. Order changes pass
+  through the existing revision-checked Admin mutation coordinator. Album
+  nesting is limited to **eight levels**, the catalog tree to **2,000 albums**,
+  and cyclic parent changes are refused.
+- Allowed gallery administrators to add an individual catalog song as a **direct
+  source** or attach an entire album as a **live source group** in **Edit
+  gallery → Media → Music**. Future edits to that album's direct song membership
+  and order are reflected in all galleries that reference it; separate
+  direct-song assignments retain their own order.
+- Added source-level reorder, removal, and per-gallery download controls for
+  direct tracks and attached albums. Removing an album assignment changes only
+  the current gallery selection; removing album membership changes only the
+  logical collection. Neither operation deletes a central original.
+- Preserved existing limits of **64 MiB per original**, **100 effective
+  tracks**, and **512 MiB per gallery**. Admission checks refuse oversized new
+  selections; if an already attached live album later expands past playback
+  limits, the editor reports omitted/partial or over-limit coverage instead of
+  silently rewriting the saved playlist. Source:
+  [`app/services/gallery_music/projection.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/gallery_music/projection.php).
+
+#### Private central audio repository and legacy compatibility
+
+- Moved the storage design for **new uploads** from gallery-local
+  `.gallery-music/*.bin` files to shared, immutable originals under protected
+  `data/music/`. The SQL asset registry holds the stable asset ID, original
+  filename, stored title, MIME type, byte size, SHA-256, owning logical song,
+  and optional legacy-origin reference. Multiple galleries can link to the same
+  registered asset without duplicating its bytes.
+- Added confined-path checks, symlink refusal, private file/directory modes
+  (`0600`/`0700`), bounded staged copies, byte-count and SHA-256 verification,
+  and publication before SQL-backed references are used. A central asset is not
+  exposed as a public URL or resolved by arbitrary user-supplied asset ID.
+  Implementation:
+  [`app/services/music_repository.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/music_repository.php).
+- Retained read and playback compatibility with version-1
+  `.gallery-music/index.json` playlists and local originals. Version 2 adds
+  direct shared-asset references, live album assignment IDs, ordered source
+  groups, and a persisted journal for legacy-file cleanup. Existing local files
+  are **not** relocated merely by applying database migrations or visiting a
+  gallery.
+- Preserved per-gallery authorization, visibility, password/share policy, and
+  download permissions for all directly and indirectly assigned tracks.
+  Assigning an asset to a destination gallery explicitly authorizes that
+  gallery's configured use; it does not make every other gallery's audio
+  available.
+- Kept central assets after removing a gallery assignment, album membership, or
+  even the gallery itself; unreferenced shared originals are **not automatically
+  purged**. Updated statistics to count each central original once, including
+  unassigned assets, while separately accounting for remaining local copies and
+  pending cleanup files.
+- Clarified recovery requirements: back up and restore the SQL catalog,
+  `data/music/`, and hidden `.gallery-music/` sidecars together. Photo ZIP
+  exports and cross-site gallery transfer packages still do not transport audio
+  assets or global song IDs. Detailed guidance: [gallery
+  music](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/docs/GALLERY_MUSIC.md)
+  and [database
+  storage/recovery](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/DATABASE.md).
+
+#### Unified gallery Media editor and immediate preference saving
+
+- Consolidated formerly separate media presentation areas into one **Edit
+  gallery → Media** tab with scoped **Music**, **PDF**, **Presentation**, and
+  **Artwork** subtabs, shown according to feature availability. Music and PDF
+  keep independent protected forms; Artwork retains native association with the
+  gallery's guarded settings form.
+- Preserved old `admin-edit-documents` bookmarks by redirecting to the new
+  Media/PDF section while retaining the drawer request and selected language.
+  Updated links and tab return-state handling so media operations reopen the
+  intended context.
+- Rendered music and PDF editing controls inline within their Media subtabs
+  instead of nesting the normal public popover widget. Streamlined file actions,
+  searchable catalog/album choosers, grouped music source rows, compact help,
+  and touch-friendly responsive layout while leaving public-facing media
+  disclosures intact.
+- Converted the slideshow soundtrack enable switch into an **autosaved**
+  preference. A change uses the existing serialized gallery mutation path, shows
+  saving/saved/failure feedback in place, and does not require a separate Save
+  click. A failed response is never described as success, and an unconfirmed
+  editor refresh blocks another mutation until recovery; the no-JavaScript Save
+  fallback remains available.
+- Collapsed longer PDF conversion/DPI explanations and advanced PDF upload
+  controls behind appropriate disclosures, kept the legacy SimBrief OFP panel
+  available within PDF, and organized Presentation and Artwork settings under
+  their respective sections. See
+  [`app/views/admin_gallery_edit_tabs.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/views/admin_gallery_edit_tabs.php)
+  and
+  [`app/views/gallery_pdf_documents.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/views/gallery_pdf_documents.php).
+
+#### Typed tags without image-tag leakage
+
+- Extended the **existing** `tags` taxonomy with `media_type = image | music |
+  pdf`, retaining prior tag IDs, descriptions, unique slugs, gallery/image
+  assignments, and public image-tag URLs. Migrated existing tags implicitly to
+  `image` via the new column's default; `pdf` is reserved for future work and
+  **does not** add a PDF-tag editor.
+- Added music-song/tag relationships and media-filtered Admin tag management.
+  Songs can use music tags; images and galleries continue to use image tags.
+  Same-looking cross-media names are accommodated by prefixed, collision-checked
+  non-image slugs without changing existing image slugs.
+- Refused cross-media tag assignment and merge operations. Updated image cards,
+  gallery hero metadata, image search, public tag pages, Smart image rules,
+  suggestions, and related tag joins to read the appropriate image category so
+  music/PDF tags cannot leak into the existing image presentation. References:
+  [`app/models/tags.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/models/tags.php)
+  and
+  [`app/services/tag_metadata.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/tag_metadata.php).
+
+#### Compact Maintenance Center and resumable relocation
+
+- Added the optional `music.repository` task, **Move gallery audio to the music
+  repository**, under Maintenance Center's Media work. It is selected in
+  proposed plans by default but remains independently deselectable before
+  approval, requires the existing `gallery_music` capability, and depends on the
+  mandatory preflight stage.
+- Kept analysis read-only: no gallery files are scanned or moved just to display
+  the proposed music task, and its candidate count is explicitly unknown until
+  execution. During approved execution, each step handles at most **one**
+  verified legacy original, keeps a persisted `(gallery_id, track_id)` cursor,
+  and reports moved-track and moved-byte progress.
+- Verified the old original before copying, verified the new central original
+  before changing the authoritative gallery index, and removed the old copy only
+  after rechecking the matching bytes and digest. Retained a sidecar cleanup
+  journal across interruption points; uncertainty or failed cleanup refuses the
+  task and preserves the last successful checkpoint and recoverable source data.
+  See
+  [`app/services/gallery_music/repository.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/gallery_music/repository.php).
+- Rebuilt the Maintenance Center review as compact **Cleanup**, **Media**, and
+  **Database** task tabs with shared switches for optional tasks, short labels,
+  contextual `?` help, and a concise selection summary. Kept safety preflight
+  and final verification automatic and mandatory rather than presenting them as
+  optional boxes; placed technical activity behind an expandable panel.
+- Fixed deferred dependency loading for `media.deep_verify` so thumbnail summary
+  and checking adapters are available during analysis and execution, including
+  when work is delegated to the thumbnail owner rather than a full bootstrap.
+  Added bounded error diagnostics containing an exception class, safe reason
+  code, source basename/line, and an optional missing PHP symbol without
+  exposing raw exception messages, SQL, credentials, stack traces, or private
+  filesystem paths. See
+  [`app/services/maintenance_center.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/maintenance_center.php).
+
+### Technical Details
+
+#### Database migrations and normalized schema
+
+- Added
+  [`database/migrations/202610200001_tag_media_types.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/database/migrations/202610200001_tag_media_types.php):
+  the `tags.media_type` `ENUM('image','music','pdf') NOT NULL DEFAULT 'image'`
+  column, leaving the globally unique `tags.slug` constraint and historical
+  image assignments unchanged.
+- Added
+  [`database/migrations/202610200002_music_catalog.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/database/migrations/202610200002_music_catalog.php):
+  `music_songs` for logical identities/title overrides; `music_track_instances`
+  keyed by `(gallery_id, track_id)` with song ID, filename, digest, and active
+  status; `music_albums` for parent/order/revision; `music_album_songs` for
+  ordered membership; `music_song_tags` for typed taxonomy links;
+  `music_catalog_state` for the shared revision; and
+  `music_catalog_dirty_galleries` for pending synchronization.
+- Added
+  [`database/migrations/202610200003_music_repository.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/database/migrations/202610200003_music_repository.php):
+  `music_repository_assets` for registered immutable originals and optional
+  idempotent legacy-origin identity; `music_gallery_album_links` for derived
+  assignment usage; and nullable `music_track_instances.asset_id` with its index
+  and restrictive foreign key.
+- Preserved foreign-key lifecycle rules: deleting a gallery removes its
+  physical-instance and assignment rows, deleting an album removes its child
+  associations, and a referenced central asset is protected by restrictive
+  track/asset and song/asset relations. The playlist sidecar, not the SQL usage
+  snapshot, remains the authority for ordering and playback selection.
+- Made the repository migration's post-DDL steps inspect existing column, index,
+  and foreign-key definitions and refuse incompatible partial structures instead
+  of blindly replacing schema objects. Used the existing forward migration and
+  interrupted-migration recovery owner; ordinary page requests never create the
+  new tables.
+- Added no database storage of audio bytes. Physical immutable files remain on
+  disk, while SQL stores logical relationships, metadata, catalog revisions,
+  reconciliation state, and repository references. No destructive reconstruction
+  of legacy `tags` rows or album/track source JSON was introduced.
+
+#### Backend routing, controllers, services, and module ownership
+
+- Registered the authenticated `admin_music` route in
+  `app/bootstrap/dispatch.php`, navigation in `app/views/admin_chrome.php`, and
+  the matching controller, model, service, view, and language resources. The
+  route reuses the existing taxonomy Admin runtime root rather than consuming
+  another global logical-module slot.
+- Added `cms_admin_music()` and revisioned title, tag, extension, merge, split,
+  album, ordering, and reconciliation handlers in
+  `app/controllers/admin_music.php`. Mutations require Admin authentication and
+  CSRF, validate IDs and supported actions, and return the existing normalized
+  Admin mutation success/error envelope or a guarded redirect.
+- Added catalog persistence in
+  [`app/models/music_catalog.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/models/music_catalog.php)
+  and business policies in `app/services/music_catalog.php`, including title
+  validation, bounded search, batch title lookup, direct usage, merge previews,
+  album path/member lookup, conflict-aware revision transactions, and schema
+  readiness checks.
+- Added `app/services/music_repository.php` for original-file validation, byte
+  copying, SHA-256 checking, private path resolution, SQL asset registration,
+  and deterministic retrieval through a verified metadata record. Existing
+  authorized gallery delivery routes continue to serve audio; no generic public
+  repository browse or asset endpoint was created.
+- Split gallery-music internals into `app/services/gallery_music/projection.php`
+  for ordered v1/v2/live-album read projections and
+  `app/services/gallery_music/repository.php` for central-source accounting and
+  resumable relocation, while retaining `app/services/gallery_music.php` as the
+  existing mutation/validation owner.
+- Expanded `app/controllers/gallery_music.php`,
+  `app/controllers/admin_galleries_edit_page/tab_documents.php`, and
+  `app/controllers/admin_galleries_edit_page/tab_media.php` to prepare scoped
+  Media content, catalog selectors, source-group actions, and compatible
+  PDF/OFP/Artwork forms without replacing the existing gallery editor's
+  authorization boundary.
+- Updated runtime module maps, feature declarations, dynamic dependency
+  auditing, production file manifests, and relevant AGENTS/code-map contracts to
+  include the new controller/model/services and their selectively loaded
+  dependencies. The tracked initial planning snapshot cited 98 logical modules
+  and 437 unique PHP files; final hosted qualification counts were not supplied
+  with this diff.
+
+#### Schema states, fail-closed mutations, and compatibility
+
+- Distinguished catalog-schema availability from repository-schema availability:
+  `music_catalog_schema_status()` checks the full logical catalog and its
+  prerequisites, while `music_repository_schema_status()` independently checks
+  asset tables, `asset_id`, and gallery/album links.
+- Required a fully **available** repository schema before new upload, central
+  copy, asset linking, or live album selection. A **confirmed missing**
+  repository schema retains documented local-only reads and old-index operations
+  where valid; **unknown**, partially installed, or incompatible schema refuses
+  repository mutation instead of guessing.
+- Kept a narrow **legacy** physical mutation path only when all pre-catalog
+  tables are conclusively absent. Fully available catalog tables activate
+  dirty-marker/snapshot synchronization. Unknown or partially constructed
+  catalog schema blocks physical writes before changing bytes or source JSON.
+- Made optional read/reporting behavior distinct from write permission:
+  confirmed pre-repository schema contributes zero central assets to statistics;
+  unknown/partial repository-reporting metadata generates a partial/error
+  indication instead of a misleading total. Public reads of v1 indexes do not
+  require new DDL, while v2 references and live albums require proven repository
+  metadata.
+- Kept feature-disabled behavior non-destructive: turning `gallery_music` OFF
+  hides/rejects its manager and music operations while retaining existing song
+  identities, album relations, tags, originals, and gallery selections. A
+  disabled capability is not interpreted as missing content or permission to
+  delete it.
+- Preserved old v1 JSON structure and write revisions for legacy
+  preference/order edits; only adding a central asset/live album upgrades a
+  sidecar to v2. Local Trash and whole-gallery moves retain sidecar identity,
+  and migrations do not automatically rewrite an installed library. See
+  [compatibility
+  lifecycle](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/docs/COMPATIBILITY_LIFECYCLE.md).
+
+#### Playlist consistency, concurrency, access control, and recovery
+
+- Retained per-gallery exclusive sidecar locks and optimistic playlist
+  revisions. Adding an existing catalog song or album additionally checks the
+  catalog revision and preflights the target gallery selection and effective
+  quota before the source list is published.
+- Marked a gallery catalog snapshot **dirty before** a physical playlist
+  mutation, committed the authoritative JSON index under its existing lock, and
+  then synchronized just that gallery's SQL projection. If the projection update
+  fails, a durable dirty marker prevents stale direct-usage counts from being
+  trusted until bounded Admin reconciliation repairs them.
+- Kept the album assignment as a stored **reference** rather than materializing
+  album contents into the gallery JSON. Album member expansion is bounded and
+  performed against current catalog membership during effective playlist reads;
+  source-local hidden/downloadable settings are applied to resulting playable
+  tracks.
+- Rejected source selections that would exceed current track/byte limits;
+  bounded album-member pages and projection lookup batches, and surfaced missing
+  assets or live-album overflow as incomplete coverage rather than silently
+  changing saved selections. Deterministically derived per-assignment delivery
+  IDs avoid making a global asset identifier a public authorization token.
+- Kept audio resolution inside the authorized gallery-scoped endpoint. Shared
+  asset registration, logical merge, title lookup, or knowledge of a song ID
+  cannot bypass the destination gallery's access policy or per-source download
+  setting; same-song links do not grant access to other galleries' originals.
+- Extended Trash snapshots with trusted local `music_catalog_refs`, mapping
+  current track IDs to surviving song identities when a restored gallery
+  receives a new database ID. Older snapshots, absent links, or obsolete
+  identities receive fresh local catalog relationships; foreign transfer
+  archives are never trusted to import another site's song IDs. See
+  [`app/services/gallery_trash.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/app/services/gallery_trash.php).
+- Retained assets across deletes and restore workflows, prevented
+  double-counting a central original linked to multiple galleries, and counted
+  legacy originals or pending cleanup copies separately from repository assets.
+  The statistical total reports unresolved metadata as partial coverage rather
+  than fabricating exact bytes.
+- Kept storage recovery forward-only. An uncertain move leaves the last safe
+  checkpoint and sidecar cleanup journal for a later retry; deletion never
+  follows an unverified digest. Backups must include all three owners: SQL,
+  `data/music/`, and hidden gallery sidecars, with no automatic orphan collector
+  or cross-site music import.
+
+#### Music metadata, image-tag isolation, and search semantics
+
+- Extended `app/models/tags.php` and `app/services/tag_metadata.php` to validate
+  tag `media_type` for create, update, assignment, deletion, suggestions, usage,
+  and merge. Music tags attach to logical song IDs through `music_song_tags`;
+  PDF tagging remains schema-reserved only.
+- Preserved global slug uniqueness and historical image slugs by prefixing
+  non-image slug candidates, checking bounded collisions, and refusing
+  cross-type merges. Confirmed pre-migration schema preserves the permitted
+  image-only path; unknown media-schema inspection does not authorize typed-tag
+  mutation or untrusted cached reads.
+- Added image-category filters to `app/models/public_search.php`,
+  progressive/deferred search models/services, `app/models/smart_galleries.php`,
+  gallery reports, and hero/tag-related paths. Image cards, public tag pages,
+  gallery metadata, and image facets do not incorporate the new music taxonomy.
+- Kept catalog-wide song searches and usage calculations indexed and bounded.
+  Whole-result sorting occurs before the page window; direct gallery counts
+  deduplicate multiple physical instances in one gallery and album memberships
+  remain separate. Derived Smart Gallery reachability is not stored as an extra
+  direct location.
+- Updated server-side and public content revision/metadata handling for catalog
+  title propagation while retaining strict HTML escaping and current gallery
+  authorization. Music metadata reads remain scoped to requested tracks and do
+  not turn a public page load into global reconciliation.
+
+#### Admin frontend, interaction protocol, accessibility, and visual design
+
+- Added
+  [`public/assets/gallery-modules/admin-music.js`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/public/assets/gallery-modules/admin-music.js)
+  for live search, popovers, filters, tab state, bounded disclosures, and
+  canonical in-place mutation completion. Search generation tracking discards
+  stale responses; a failed refresh does not falsely clear an editor's unsaved
+  state.
+- Added
+  [`public/assets/gallery-modules/admin-music-album-order.js`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/public/assets/gallery-modules/admin-music-album-order.js)
+  for pointer-based song ordering, destination markers, revisioned moves,
+  cancellation, and duplicate-write guards, with native button actions retained
+  for keyboard/non-pointer operation.
+- Updated `public/assets/gallery-modules/admin-gallery-music.js` for
+  catalog/album chooser interactions, source reordering, download controls,
+  preference autosave, asynchronous status, and preservation of the active
+  gallery editor and side-panel context on refresh.
+- Reorganized `public/assets/gallery-modules/admin-maintenance-center.js` and
+  `app/views/admin_maintenance_center.php` for compact optional-task tabs,
+  switch summaries, detailed help, expandable activity, and automatic safety
+  stages without changing their underlying approval requirement.
+- Added feature-scoped styles in
+  [`public/assets/styles/admin-music.css`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/public/assets/styles/admin-music.css)
+  and
+  [`public/assets/styles/admin-gallery-media.css`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/public/assets/styles/admin-gallery-media.css),
+  and refined Admin maintenance, reordering, lightbox, and side-panel CSS. Kept
+  responsive controls, keyboard focus, accessible icon labels, native
+  disclosure/form semantics, and the global side-panel duration preference.
+- Documented the new compact, icon-first Admin visual contract in
+  [`docs/ADMIN_DESIGN.md`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/docs/ADMIN_DESIGN.md),
+  including contextual help, short toolbars, restrained translucent surfaces,
+  keyboard/mobile review, reduced-motion considerations, and scoping new CSS
+  rather than redesigning unrelated Admin pages.
+- Retained public media popup behavior while letting authenticated Media subtabs
+  render inline. Reassociated cover/background/branding controls with the
+  guarded gallery settings form after moving them out of its DOM subtree;
+  preserved PDF/OFP upload and conversion form boundaries.
+
+#### Maintenance execution, diagnostics, and selective runtime loading
+
+- Registered `music.repository` with group `media`, low risk, resumable track
+  units, a preflight dependency, `gallery_music` capability, and an **optional**
+  but **default-selected** plan state in
+  `app/services/maintenance_center/registry.php`.
+- Added `maintenance_center_analyze_music_repository()` as a read-only readiness
+  check reporting an unknown candidate count, and
+  `maintenance_center_execute_music_repository()` to run one verified source
+  transfer per step, increment moved tracks/bytes, and return durable
+  cursor/progress state.
+- Advanced the Maintenance Center registry revision to
+  `2026-10-20.compact-maintenance`, invalidating previously approved plan
+  assumptions about the new selected task and dependency arrangement. Preserved
+  existing required preflight/final verification behavior and opted-in
+  deep-media verification.
+- Delegated `media.deep_verify` work to the thumbnail runtime owner and asserted
+  all five deferred thumbnail-maintenance adapters in
+  `tests/support/runtime_module_fixture.php`; this avoids treating a partially
+  loaded handler as proof that the needed task callbacks exist.
+- Tightened failure diagnostics to bounded, structured exception
+  class/reason/source-basename/line and optional safe missing symbol.
+  User-visible/logged diagnostics do not include raw SQL, database exception
+  text, credentials, authentication tokens, internal absolute paths, or stack
+  traces.
+- Recorded a limited localhost validation in the compatibility notes: one
+  maintenance job moved three legacy originals totaling **16,059,961 bytes**,
+  and the resulting copies matched their recorded size and SHA-256 with no
+  remaining local copies or pending cleanup entries. This observation is not a
+  claim that every deployed gallery has been migrated.
+
+#### Integration checks, tests, and regression evidence
+
+- Updated
+  [`.github/scripts/develop-integration.mjs`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/.github/scripts/develop-integration.mjs)
+  so BASIC reuse authenticates the exact successful check run and the **native
+  execution's** successful check suite, source SHA, branch, GitHub Actions App,
+  workflow run/attempt, and named job. An unrelated earlier aggregate suite for
+  the same SHA no longer determines whether the selected BASIC execution
+  succeeded.
+- Added
+  [`tests/music_catalog_database_test.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/tests/music_catalog_database_test.php)
+  covering real relational identities, dirty/reconciled snapshots, merge/split,
+  album tree and ordering, typed-tag isolation, sorting, image/hero/tag
+  regressions, and local Trash identity recovery.
+- Added `tests/music_catalog_title_policy_test.php` for default-off extension
+  behavior, recognized and unknown extensions, meaningful indexed titles,
+  Unicode custom titles, and production title/settings logic with isolated
+  SQLite storage.
+- Added
+  [`tests/music_repository_database_test.php`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/tests/music_repository_database_test.php)
+  for central upload and verification, v1 playback, two-source migration,
+  crash/cleanup replay, live album behavior, authorization, deletion retention,
+  and once-only repository-byte accounting.
+- Added
+  [`tests/admin_music_browser_test.mjs`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/tests/admin_music_browser_test.mjs)
+  for the production manager on desktop/narrow screens: search races, popup
+  editing, merge selection and overlays, tags, split, tab persistence, album
+  controls/drag order, accessible behavior, stale edits, and mutation refresh
+  failures.
+- Added
+  [`tests/admin_gallery_music_browser_test.mjs`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/tests/admin_gallery_music_browser_test.mjs)
+  for the real Media editor, live/direct sources, chooser replacement,
+  serialized autosave, URL and drawer restoration, nested tabs, and independent
+  playlist/catalog revisions.
+- Expanded `tests/maintenance_center_test.php`,
+  `tests/admin_storage_statistics_test.php`,
+  `tests/gallery_music_service_test.php`,
+  `tests/gallery_attachment_storage_database_test.php`,
+  `tests/gallery_workflow_integration_test.php`, and relevant tag, Smart
+  Gallery, HTTP/PDF, browser, operation-key, and runtime-module fixtures for the
+  new safety, UI, and legacy paths.
+- Documented SQLite as required coverage for relevant title/schema and gallery
+  music service tests, and recorded that missing SQLite blocks those checks
+  rather than silently counting them as passed. The supplied source diff does
+  **not** include a completed FULL/hosted qualification result; tests above are
+  added or updated coverage, not an assertion that production acceptance passed.
+  See
+  [`TESTING.md`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/TESTING.md)
+  and the [CI reuse
+  contract](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/docs/CI_COVERAGE_REUSE_CONTRACT.md).
+
+#### Documentation, translations, and release provenance
+
+- Updated the canonical music behavior, editor, central storage, compatibility,
+  and recovery contracts in `docs/GALLERY_MUSIC.md`, `DATABASE.md`,
+  `docs/COMPATIBILITY_LIFECYCLE.md`, `README.md`, `ARCHITECTURE.md`,
+  `CODEMAP.md`, and `TESTING.md`.
+- Updated all four full manuals, `docs/PHP_Gallery_Manual.tex`,
+  `docs/PHP_Gallery_Manual_CZ.tex`, `docs/PHP_Gallery_Manual_DE.tex`, and
+  `docs/PHP_Gallery_Manual_SV.tex`, alongside EN/CS/DE/SV application
+  translations and the Admin design specification.
+- Added immutable origin and predecessor records in
+  [`.github/release-origins/v_0.138.json`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/.github/release-origins/v_0.138.json)
+  and
+  [`.github/release-predecessors/v_0.138.json`](https://github.com/klusik/PHP_gallery/blob/c51b2c26b45acf90374d15ff82f38d0f5ba89903/.github/release-predecessors/v_0.138.json)
+  for traceable source selection and predecessor identity, referencing
+  [#101](https://github.com/klusik/PHP_gallery/issues/101) and
+  [#133](https://github.com/klusik/PHP_gallery/issues/133).
+- Recorded the candidate source at
+  [`c51b2c26b45acf90374d15ff82f38d0f5ba89903`](https://github.com/klusik/PHP_gallery/commit/c51b2c26b45acf90374d15ff82f38d0f5ba89903)
+  and previous stable release `v_0.137.8`. The supplied handoff does not
+  establish a subsequently completed qualification, tag, or published binary for
+  0.138.
+
+### User Impact
+
+#### For visitors
+
+- Presented the same logical song under a consistent configured title in its
+  authorized gallery music lists, players, lightbox, slideshow, and eligible
+  Smart Gallery projections. Filename extensions are hidden by default only for
+  inferred titles, not for manually named songs.
+- Reflected changes to a gallery's assigned live album as the album's song list
+  and order evolve, without requiring the gallery owner to upload another copy
+  or rebuild the assignment.
+- Retained existing access controls for public and private galleries,
+  passwords/shares, hidden sources, and download restrictions. A catalog merge,
+  global song title, or repository asset ID never makes another gallery's
+  original publicly accessible.
+- Preserved playback of existing gallery-local audio while administrators adopt
+  the central repository. The release does not add an unguarded public
+  music-catalog browsing endpoint or change the availability of the underlying
+  original through the protected gallery route.
+- Kept photo and gallery image tags isolated from music tags, preserving the
+  established public image-tag pages, hero details, image search, and Smart
+  image rules.
+
+#### For administrators
+
+- Added one searchable site-wide place to rename displayed songs, merge
+  different audio variants deliberately, split mistaken matches, inspect exact
+  direct locations, organize music tags, and build nested, ordered, reusable
+  music albums.
+- Allowed a gallery to select catalog songs or attach live albums through one
+  compact Media workspace; direct additions, source ordering,
+  visibility/download choices, and slideshow music preferences remain scoped to
+  the destination gallery.
+- Reduced editor navigation and clicks by grouping
+  Music/PDF/Presentation/Artwork into one tab, making the music enable switch
+  immediately persistent, retaining contextual media state, and preserving
+  bookmarks to the previous Documents panel.
+- Made the transition to shared storage explicit and recoverable: the proposed
+  music relocation is selected by default but may be disabled, only approved
+  maintenance performs copies, each original is verified before retirement, and
+  failed moves preserve retry state.
+- Corrected storage reporting for centrally shared originals while retaining a
+  separate count of legacy bytes. Administrators must include SQL,
+  `data/music/`, and all hidden sidecars in their backups and should not expect
+  photo ZIP or gallery-transfer packages to include music.
+- Required the forward database migrations before using the catalog or new
+  central upload paths; partial or unknown schemas refuse unsafe writes rather
+  than risking inconsistent playlist authority. Disabling the music feature
+  preserves its persisted data.
+
+#### For maintainers
+
+- Added explicit, normalized SQL contracts for logical songs, stable physical
+  links, typed tags, ordered albums, shared assets, and dirty-snapshot
+  reconciliation while keeping the existing versioned gallery JSON authoritative
+  for physical playlist selection.
+- Reduced exposure to interrupted writes through per-gallery locks, catalog
+  revisions, dirty markers, SHA-256-verified immutable copies, a resumable
+  cleanup journal, and strict `available`/confirmed `missing`/`unknown` schema
+  decisions.
+- Improved inspectability of Maintenance Center failures through bounded,
+  redacted identifiers and explicit deferred-thumbnail module verification,
+  without logging sensitive exception messages or private paths.
+- Refined GitHub integration qualification to rely on the exact executed BASIC
+  check instead of a potentially unrelated grouped check-suite result. Added
+  targeted database, browser, title-policy, runtime, and HTTP/authorization
+  regression scenarios.
+- Documented an Admin visual system, four-language manuals, compatibility and
+  recovery procedures, and immutable release provenance to support subsequent
+  qualification. The handoff contains reviewed source evidence, not a completed
+  hosted FULL run or deployment acceptance claim.
+
 ## Version 0.137.8
 
 Standardized PHP documentation, type contracts, and source formatting across

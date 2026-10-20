@@ -157,6 +157,7 @@ function admin_gallery_report_tag_summary(): array
         admin_gallery_report_table_exists('tags'),
         admin_gallery_report_table_exists('gallery_tags'),
         admin_gallery_report_table_exists('image_tags'),
+        tag_media_type_schema_state(),
     );
 }
 

@@ -6,11 +6,13 @@
  * Module Type: Stylesheet
  *
  * Purpose:
- *   Provides native Admin presentation for the central Maintenance Center workflow.
+ *   Presents the Maintenance Center as a compact, responsive task workspace.
  *
  * Responsibilities:
- *   - Present weighted progress, review task groups, activity, and result metrics
- *   - Keep responsive Maintenance Center surfaces aligned with the existing Admin visual language
+ *   - Keep status and operator actions in one compact toolbar
+ *   - Arrange selectable maintenance tasks in category tabs and fluid grids
+ *   - Expose detailed task evidence through accessible inline help
+ *   - Preserve compact progress, diagnostics, and result presentation
  *
  * Author:
  *   Rudolf Klusal
@@ -25,37 +27,85 @@
  *   - Presentation only; maintenance state and policy remain server-owned.
  *
  * Last Updated:
- *   2026-09-20
+ *   2026-10-20
  */
 
 .admin-maintenance-center-hero,
-.maintenance-center-status-heading,
 .maintenance-center-section-heading {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: .35rem .6rem;
 }
 
-.admin-maintenance-center-hero {
+.admin-page .hero.admin-maintenance-center-hero {
     position: relative;
+    z-index: 2;
+    min-height: 0;
+    margin-bottom: .3rem;
+    padding: .4rem .6rem;
+    border-radius: .65rem;
+    border: 0;
+    background: color-mix(in srgb, var(--admin-surface, white) 52%, transparent);
+    backdrop-filter: blur(8px);
+    box-shadow: none;
 }
 
-.admin-maintenance-center-hero > div:first-child .admin-inline-help {
+.admin-page .hero.admin-maintenance-center-hero h1 {
+    margin: 0;
+    font-size: 1.08rem;
+    line-height: 1.25;
+}
+
+.maintenance-center-title-row {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+}
+
+.admin-maintenance-center-hero .admin-inline-help {
     position: static;
 }
 
 .admin-maintenance-center-hero .admin-inline-help-content {
     right: auto;
     left: 0;
-    box-sizing: border-box;
-    width: min(26rem, calc(100vw - 2rem));
-    max-width: calc(100vw - 2rem);
+    width: min(24rem, calc(100vw - 2rem));
+}
+
+.maintenance-center-navigation {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: .25rem;
+}
+
+.admin-page .admin-maintenance-center-hero .maintenance-center-navigation a.button,
+.admin-page [data-maintenance-center] .maintenance-center-actions button[data-maintenance-action] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    min-width: 1.75rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
+    padding: .25rem;
+    border: 0;
+    border-radius: .35rem;
+    background: transparent;
+    color: var(--admin-ink, #182230);
+    box-shadow: none;
+    text-decoration: none;
+}
+
+.admin-page .admin-maintenance-center-hero .maintenance-center-navigation a.button:hover,
+.admin-page [data-maintenance-center] .maintenance-center-actions button[data-maintenance-action]:hover {
+    background: color-mix(in srgb, var(--admin-accent, #315f9b) 8%, transparent);
+    color: var(--admin-accent, #315f9b);
 }
 
 .admin-maintenance-center {
     display: grid;
-    gap: .45rem;
+    gap: .25rem;
     min-width: 0;
 }
 
@@ -68,88 +118,86 @@
     display: none !important;
 }
 
-.maintenance-center-navigation {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-}
-
-.maintenance-center-title-row {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-}
-
-/* Override shared page-card spacing only inside this compact maintenance workspace. */
-.admin-page .admin-maintenance-center-hero,
 .admin-page .admin-maintenance-center .panel {
-    margin: 0;
-    padding: .55rem .75rem;
     min-width: 0;
+    margin: 0;
+    padding: .4rem .6rem;
+    border-radius: .65rem;
+    border: 0;
+    background: color-mix(in srgb, var(--admin-surface, white) 52%, transparent);
+    backdrop-filter: blur(8px);
+    box-shadow: none;
 }
 
-.admin-page .admin-maintenance-center-hero {
-    margin-bottom: .45rem;
-    align-items: center;
+.admin-page .admin-maintenance-center h2,
+.admin-page .admin-maintenance-center h3 {
+    margin: 0;
 }
 
-.admin-page .admin-maintenance-center-hero h1,
 .admin-page .admin-maintenance-center h2 {
-    margin: 0;
-    font-size: 1.15rem;
-    line-height: 1.35;
+    font-size: .95rem;
+    line-height: 1.3;
 }
 
-.admin-maintenance-center-hero p,
-.admin-maintenance-center p {
-    margin: .35rem 0 0;
-}
-
-.admin-maintenance-center-hero .admin-kicker,
 .admin-maintenance-center .admin-kicker {
-    margin: 0 0 .2rem;
+    margin: 0 0 .1rem;
+    font-size: .68rem;
 }
 
-.maintenance-center-analysis-note {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: .25rem .75rem;
-    font-size: .85rem;
-}
-
-.admin-maintenance-center .maintenance-center-analysis-note p {
-    margin: 0;
+.admin-maintenance-center p {
+    margin: .25rem 0 0;
 }
 
 .maintenance-center-status-card {
-    overflow: hidden;
+    position: relative;
+    z-index: 1;
+    overflow: visible;
 }
 
-.maintenance-center-status-card > *,
-.maintenance-center-section-heading > *,
-.maintenance-center-task-group > *,
-.maintenance-center-report-breakdown > * {
+.maintenance-center-status-card > [data-maintenance-report] {
+    padding: .35rem 0 !important;
+    border: 0;
+    border-top: 1px solid var(--border-color, rgb(127 127 127 / 18%));
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.maintenance-center-status-card > .maintenance-center-review {
+    margin-top: .25rem;
+    padding: .3rem 0 0 !important;
+    border: 0;
+    border-top: 1px solid var(--border-color, rgb(127 127 127 / 18%));
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.maintenance-center-status-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
+    gap: .25rem .5rem;
+    align-items: center;
+}
+
+.maintenance-center-status-heading > div:first-child {
     min-width: 0;
+}
+
+.admin-page .admin-maintenance-center .maintenance-center-status-heading h2 {
+    font-size: .98rem;
 }
 
 .maintenance-center-status-badge {
     display: inline-flex;
     align-items: center;
-    border: 1px solid var(--border-color, rgba(127, 127, 127, .32));
+    padding: .1rem .35rem;
+    border: 1px solid var(--border-color, rgb(127 127 127 / 30%));
     border-radius: 999px;
-    padding: .22rem .55rem;
-    font-size: .78rem;
+    font-size: .64rem;
     font-weight: 700;
+    letter-spacing: .03em;
     text-transform: uppercase;
-    letter-spacing: .04em;
-}
-
-.maintenance-center-status-heading {
-    align-items: center;
-}
-
-.maintenance-center-status-heading > div:first-child {
-    flex: 1 1 auto;
 }
 
 .maintenance-center-status-badge[data-status="running"],
@@ -161,9 +209,18 @@
     border-color: var(--danger, #b42318);
 }
 
+.maintenance-center-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .25rem;
+    margin: 0;
+}
+
 .maintenance-center-progress {
-    height: .5rem;
-    margin-top: .4rem;
+    height: .35rem;
+    margin-top: .25rem;
     overflow: hidden;
     border-radius: 999px;
     background: color-mix(in srgb, currentColor 10%, transparent);
@@ -182,252 +239,39 @@
 .maintenance-center-current {
     display: flex;
     flex-wrap: wrap;
-    gap: .3rem .8rem;
-    margin-top: .25rem;
-}
-
-.maintenance-center-progress-meta {
+    align-items: center;
     justify-content: space-between;
+    gap: .12rem .55rem;
+    margin-top: .15rem;
+    font-size: .74rem;
 }
 
 .maintenance-center-current {
-    padding: .3rem 0;
-    font-size: .85rem;
-    border-top: 1px solid var(--border-color, rgba(127, 127, 127, .2));
-    border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .2));
+    justify-content: flex-start;
+    padding: .15rem 0;
+    border-top: 1px solid var(--border-color, rgb(127 127 127 / 20%));
+    border-bottom: 1px solid var(--border-color, rgb(127 127 127 / 20%));
 }
 
-.maintenance-center-actions {
-    flex: 0 1 auto;
-    justify-content: flex-end;
-    margin-top: 0;
+.maintenance-center-current > span,
+.maintenance-center-progress-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .maintenance-center-cancel-note {
-    margin: .7rem 0 0;
-}
-
-.maintenance-center-plan-totals {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    gap: .3rem;
-}
-
-.maintenance-center-plan-totals > span,
-.maintenance-center-task-facts > span {
-    display: grid;
-    gap: .05rem;
-    min-width: 0;
-    padding: .3rem .5rem;
-    border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
-    border-radius: .6rem;
-}
-
-.maintenance-center-plan-totals > span {
-    display: inline-flex;
-    align-items: baseline;
-    gap: .25rem .4rem;
-    min-width: 0;
-    padding: .2rem .4rem;
-}
-
-.maintenance-center-plan-totals small,
-.maintenance-center-task-facts small {
-    opacity: .72;
-}
-
-.maintenance-center-task-groups {
-    /* Independent columns avoid large empty CSS-grid row tracks between groups. */
-    columns: 2;
-    column-gap: .55rem;
-    margin-top: .45rem;
-}
-
-.maintenance-center-task-group {
-    display: inline-block;
-    width: 100%;
-    margin: 0 0 .5rem;
-    vertical-align: top;
-    break-inside: avoid;
-    overflow: hidden;
-    border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
-    border-radius: .85rem;
-}
-
-.maintenance-center-task-group h3 {
-    margin: 0;
-    padding: .35rem .55rem;
-    font-size: .9rem;
-    background: color-mix(in srgb, var(--admin-brand, currentColor) 7%, transparent);
-    border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .22));
-}
-
-.admin-page .maintenance-center-task:has(input[type="checkbox"]) {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-    gap: .35rem;
-    padding: .38rem .55rem;
-    font-size: .85rem;
-    line-height: 1.4;
-    border-radius: 0;
-    background: transparent;
-}
-
-.maintenance-center-task-item + .maintenance-center-task-item {
-    border-top: 1px solid var(--border-color, rgba(127, 127, 127, .14));
-}
-
-.maintenance-center-task-item:has(input:enabled):hover,
-.maintenance-center-task:focus-within {
-    background: color-mix(in srgb, var(--admin-brand, currentColor) 5%, transparent);
-}
-
-.maintenance-center-task.is-unavailable {
-    opacity: 1;
-}
-
-.maintenance-center-task > input {
-    margin-top: .25rem;
-}
-
-.maintenance-center-task-body,
-.maintenance-center-task-facts,
-.maintenance-center-task-heading {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .4rem;
-}
-
-.maintenance-center-task-body {
-    flex-direction: column;
-    align-items: stretch;
-    min-width: 0;
-    gap: .25rem;
-    overflow-wrap: anywhere;
-}
-
-.maintenance-center-task-heading {
-    align-items: baseline;
-    justify-content: space-between;
-    gap: .2rem .5rem;
-}
-
-.maintenance-center-task-title,
-.maintenance-center-task-requirement,
-.maintenance-center-task-unavailable,
-.maintenance-center-task-facts,
-.maintenance-center-current,
-.maintenance-center-progress-label,
-.maintenance-center-activity li > span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.maintenance-center-task-title {
-    font-weight: 700;
-}
-
-.maintenance-center-task-requirement,
-.maintenance-center-task-unavailable {
-    flex: 0 0 auto;
+    margin-top: .3rem !important;
     font-size: .74rem;
-    font-weight: 700;
-}
-
-.maintenance-center-task-requirement {
-    color: var(--accent, currentColor);
-}
-
-.maintenance-center-task-unavailable {
-    color: var(--danger, #b42318);
-}
-
-.maintenance-center-task-facts > span {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: .15rem .3rem;
-    min-width: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-}
-
-.maintenance-center-task-facts small {
-    opacity: .72;
-    font-size: .76rem;
-}
-
-.maintenance-center-task-facts strong {
-    text-align: left;
-}
-
-.maintenance-center-task-facts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .1rem .65rem;
-}
-
-.maintenance-center-no-work {
-    display: block;
-    width: 100%;
-    margin: .15rem 0 .5rem;
-    padding: .45rem .6rem;
-    column-span: all;
-    border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
-    border-radius: .7rem;
-}
-
-.maintenance-center-no-work > summary {
-    display: flex;
-    align-items: baseline;
-    gap: .5rem;
-    cursor: pointer;
-    list-style: none;
-    font-weight: 700;
-}
-
-.maintenance-center-no-work > summary::-webkit-details-marker {
-    display: none;
-}
-
-.maintenance-center-no-work > summary::before {
-    content: "▸";
-    flex: 0 0 auto;
-}
-
-.maintenance-center-no-work[open] > summary::before {
-    content: "▾";
-}
-
-.maintenance-center-no-work > summary:focus-visible {
-    outline: 2px solid var(--accent, currentColor);
-    outline-offset: 3px;
-}
-
-.maintenance-center-no-work-groups {
-    columns: 2;
-    column-gap: .55rem;
-    margin-top: .4rem;
-}
-
-.maintenance-center-no-work-group {
-    break-inside: avoid;
-}
-
-.maintenance-center-no-work-group .maintenance-center-task-item {
-    border-top: 1px solid var(--border-color, rgba(127, 127, 127, .14));
 }
 
 .maintenance-center-review > summary {
     display: flex;
-    align-items: baseline;
-    gap: .25rem .65rem;
+    align-items: center;
+    gap: .25rem .5rem;
+    min-height: 1.65rem;
     cursor: pointer;
     list-style: none;
+    text-decoration: none;
 }
 
 .maintenance-center-review > summary::-webkit-details-marker {
@@ -436,83 +280,385 @@
 
 .maintenance-center-review > summary::before {
     content: "▸";
-    flex: 0 0 auto;
-    font-size: 1.05em;
-    line-height: 1;
 }
 
 .maintenance-center-review[open] > summary::before {
     content: "▾";
 }
 
-.maintenance-center-review > summary .admin-kicker {
-    margin: 0;
+.maintenance-center-review > summary strong {
+    font-size: .92rem;
+}
+
+.maintenance-center-review-summary {
+    margin-left: auto;
+    color: var(--muted, currentColor);
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
 }
 
 .maintenance-center-review-content {
-    margin-top: .5rem;
+    display: grid;
+    gap: .3rem;
+    min-width: 0;
+    margin-top: .25rem;
 }
 
-/* Keep evidence below the task name and availability state in narrower workspaces. */
-@media (max-width: 1150px) {
-    .maintenance-center-task-facts {
-        grid-column: 1 / -1;
-    }
+.maintenance-center-plan-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: .25rem;
+    min-height: 0;
+    margin-bottom: -1.65rem;
+    z-index: 1;
+    pointer-events: none;
 }
 
-@media (max-width: 560px) {
-    .maintenance-center-task-body {
-        min-width: 0;
-    }
+.maintenance-center-plan-toolbar > details {
+    pointer-events: auto;
+}
 
-    .maintenance-center-task-facts {
-        gap: .1rem .45rem;
-    }
+.maintenance-center-plan-toolbar > .admin-inline-help > summary,
+.maintenance-center-task-help > summary {
+    width: 1.35rem;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    font-size: .78rem;
+}
 
-    .maintenance-center-no-work-groups {
-        columns: 1;
-    }
+.admin-page :is(.admin-maintenance-center, .admin-maintenance-center-hero) .admin-inline-help > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--admin-accent, #315f9b);
+}
+
+.maintenance-center-plan-toolbar .admin-inline-help-content,
+.maintenance-center-task-help .admin-inline-help-content {
+    width: min(22rem, calc(100vw - 2.5rem));
+    padding: .55rem .7rem;
+    font-size: .78rem;
+    border: 0;
+}
+
+.maintenance-center-plan-totals {
+    display: grid;
+    gap: .1rem;
+}
+
+.maintenance-center-plan-totals > span {
+    display: flex;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .2rem 0;
+    border-bottom: 1px solid var(--border-color, rgb(127 127 127 / 16%));
+}
+
+.maintenance-center-plan-totals small {
+    opacity: .72;
+}
+
+.admin-maintenance-center [data-maintenance-plan-warnings] .notice {
+    margin: .2rem 0;
+    padding: .35rem .5rem;
+    font-size: .78rem;
+}
+
+.maintenance-center-automatic {
+    margin: 0;
+    padding: .25rem .4rem;
+    border: 1px solid var(--border-color, rgb(127 127 127 / 20%));
+    border-radius: .5rem;
+    font-size: .76rem;
+}
+
+.maintenance-center-automatic > summary {
+    cursor: pointer;
+    font-weight: 700;
+    list-style: none;
+}
+
+.maintenance-center-automatic > summary::-webkit-details-marker {
+    display: none;
+}
+
+.maintenance-center-automatic > summary::before {
+    content: "▸";
+    display: inline-block;
+    width: 1rem;
+}
+
+.maintenance-center-automatic[open] > summary::before {
+    content: "▾";
+}
+
+.maintenance-center-automatic-task {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .12rem .5rem;
+    padding: .25rem .1rem;
+    border-top: 1px solid var(--border-color, rgb(127 127 127 / 15%));
+    font-size: .76rem;
+}
+
+.maintenance-center-automatic-task small {
+    grid-column: 1 / -1;
+    color: var(--muted, currentColor);
+    overflow-wrap: anywhere;
+}
+
+.maintenance-center-automatic-task .is-error {
+    color: var(--danger, #b42318);
+}
+
+.maintenance-center-automatic-task .is-complete {
+    color: var(--success, #16803c);
+}
+
+.maintenance-center-task-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2rem;
+    padding-bottom: .2rem;
+    border-bottom: 1px solid var(--border-color, rgb(127 127 127 / 20%));
+}
+
+.admin-page [data-maintenance-center] button.maintenance-center-task-tab[role="tab"] {
+    min-width: 0;
+    min-height: 1.75rem;
+    padding: .18rem .5rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: .4rem .4rem 0 0;
+    background: transparent;
+    color: inherit;
+    font-size: .78rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: none;
+}
+
+.admin-page [data-maintenance-center] button.maintenance-center-task-tab[aria-selected="true"] {
+    border-bottom-color: var(--admin-accent, #315f9b);
+    background: color-mix(in srgb, var(--admin-accent, #315f9b) 5%, transparent);
+}
+
+.admin-page [data-maintenance-center] button.maintenance-center-task-tab:is(:hover, :focus-visible) {
+    background: color-mix(in srgb, var(--admin-accent, #315f9b) 8%, transparent);
+    color: var(--admin-ink, #182230);
+}
+
+.maintenance-center-task-tab:focus-visible,
+.maintenance-center-task-help > summary:focus-visible,
+.maintenance-center-task input[role="switch"]:focus-visible,
+.maintenance-center-full-optimize input[role="switch"]:focus-visible {
+    outline: 2px solid var(--accent, currentColor);
+    outline-offset: 2px;
+}
+
+.maintenance-center-task-panels,
+.maintenance-center-task-panel {
+    min-width: 0;
+}
+
+.maintenance-center-task-panel {
+    padding-top: .3rem;
+}
+
+.maintenance-center-task-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+    align-items: start;
+    gap: .25rem;
+}
+
+.maintenance-center-task-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .2rem;
+    min-width: 0;
+    padding: .1rem .2rem;
+    border: 0;
+    border-radius: .45rem;
+    background: transparent;
+}
+
+.admin-page .maintenance-center-task {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    min-width: 0;
+    min-height: 1.7rem;
+    padding: .18rem .25rem;
+    border-radius: .3rem;
+    background: transparent;
+    font-size: .76rem;
+    line-height: 1.2;
+    text-decoration: none;
+}
+
+.maintenance-center-task-title {
+    min-width: 0;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+
+.maintenance-center-task-state,
+.maintenance-center-task-requirement,
+.maintenance-center-task-unavailable {
+    flex: 0 0 auto;
+    font-size: .64rem;
+    line-height: 1.2;
+}
+
+.maintenance-center-task-state {
+    color: var(--muted, currentColor);
+}
+
+.maintenance-center-task-unavailable {
+    color: var(--danger, #b42318);
+}
+
+.maintenance-center-task-help {
+    align-self: center;
+}
+
+.maintenance-center-task-help .admin-inline-help-content ul {
+    margin: .3rem 0 0;
+    padding-left: 1rem;
+}
+
+.maintenance-center-task-help .admin-inline-help-content li {
+    margin: .08rem 0;
+}
+
+.admin-page [data-maintenance-center] input[type="checkbox"][role="switch"] {
+    appearance: none;
+    position: relative;
+    flex: 0 0 32px;
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    height: 18px;
+    min-height: 18px;
+    max-height: 18px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 2rem;
+    background: color-mix(in srgb, currentColor 15%, transparent);
+    cursor: pointer;
+}
+
+.admin-page [data-maintenance-center] input[type="checkbox"][role="switch"]::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: auto;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    border: 0;
+    transform: none;
+    border-radius: 50%;
+    background: var(--panel, white);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
+}
+
+.admin-page [data-maintenance-center] input[type="checkbox"][role="switch"]:checked {
+    border-color: var(--accent, #4664df);
+    background: var(--accent, #4664df);
+}
+
+.admin-page [data-maintenance-center] input[type="checkbox"][role="switch"]:checked::after {
+    right: 2px;
+    left: auto;
+}
+
+.maintenance-center-task input[role="switch"]:disabled {
+    cursor: default;
+    opacity: .6;
 }
 
 .maintenance-center-full-optimize {
-    margin: .1rem .55rem .4rem 2.3rem;
-    padding: .35rem .5rem;
-    border-left: 2px solid var(--accent, currentColor);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .35rem;
+    margin-top: .3rem;
+    padding: .3rem .4rem;
+    border: 0;
     background: color-mix(in srgb, var(--accent, currentColor) 5%, transparent);
+    font-size: .76rem;
 }
 
 .maintenance-center-full-optimize label {
     display: flex;
-    align-items: flex-start;
-    gap: .4rem;
-    font-size: .82rem;
+    align-items: center;
+    gap: .35rem;
+    margin: 0;
+    font-size: .76rem;
     font-weight: 600;
 }
 
 .maintenance-center-full-optimize p {
-    margin: .2rem 0 0 1.35rem;
-    font-size: .78rem;
-}
-
-.maintenance-center-review-actions {
-    justify-content: flex-end;
-    margin-top: .5rem;
-    padding-top: .45rem;
-    border-top: 1px solid var(--border-color, rgba(127, 127, 127, .18));
+    margin: .15rem 0 0 2.35rem;
+    font-size: .7rem;
 }
 
 .maintenance-center-lower-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr);
     align-items: start;
-    gap: .45rem;
+    gap: .3rem;
+}
+
+.maintenance-center-lower-grid > .panel {
+    padding: .35rem .5rem !important;
+}
+
+.admin-page .admin-maintenance-center .maintenance-center-lower-grid h2 {
+    margin: 0;
+    font-size: .85rem;
+}
+
+.maintenance-center-activity-panel > summary {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    list-style: none;
+}
+
+.maintenance-center-activity-panel > summary::-webkit-details-marker {
+    display: none;
+}
+
+.maintenance-center-activity-panel > summary::before {
+    content: "▸";
+    display: inline-block;
+    width: .9rem;
+}
+
+.maintenance-center-activity-panel[open] > summary::before {
+    content: "▾";
 }
 
 .maintenance-center-activity {
     display: grid;
-    gap: .2rem;
-    max-height: 9rem;
-    margin: .35rem 0 0;
+    gap: .15rem;
+    max-height: 8rem;
+    margin: .2rem 0 0;
     padding: 0;
     overflow: auto;
     list-style: none;
@@ -520,10 +666,11 @@
 
 .maintenance-center-activity li {
     display: grid;
-    grid-template-columns: 5.4rem minmax(0, 1fr);
-    gap: .4rem;
-    padding: .25rem .35rem;
-    border-bottom: 1px solid var(--border-color, rgba(127, 127, 127, .16));
+    grid-template-columns: 3.4rem minmax(0, 1fr);
+    gap: .25rem;
+    padding: .12rem .1rem;
+    border-bottom: 1px solid var(--border-color, rgb(127 127 127 / 16%));
+    font-size: .72rem;
 }
 
 .maintenance-center-activity time {
@@ -531,33 +678,20 @@
     opacity: .65;
 }
 
+.maintenance-center-activity li > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .maintenance-center-activity .is-warning {
     font-weight: 600;
 }
 
-.maintenance-center-history-note {
-    margin-top: 1rem;
-}
-
-.admin-maintenance-center-card span {
-    min-height: 2.5em;
-}
-
-
-.maintenance-center-report-breakdown {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-    align-items: start;
-    gap: .45rem;
-    margin-top: .45rem;
-}
-
-/* Results stay scannable without giving each value a full dashboard-sized card. */
 .admin-maintenance-center .metric-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: .3rem;
-    margin-top: .4rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: .25rem;
+    margin-top: .3rem;
 }
 
 .admin-maintenance-center .metric-card {
@@ -566,24 +700,46 @@
     justify-content: space-between;
     gap: .35rem;
     min-height: 0;
-    padding: .3rem .4rem;
+    padding: .25rem .35rem;
 }
 
 .admin-maintenance-center .metric-card strong {
     flex: 0 0 auto;
-    font-size: 1rem;
+    font-size: .92rem;
 }
 
 .admin-maintenance-center .metric-card span {
     min-width: 0;
-    font-size: .78rem;
+    font-size: .72rem;
     text-align: right;
 }
 
-.maintenance-center-report-breakdown ul {
-    columns: 14rem;
-    column-gap: 1.5rem;
-    font-size: .85rem;
+.maintenance-center-report-breakdown {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    align-items: start;
+    gap: .3rem;
+    margin-top: .3rem;
+}
+
+.maintenance-center-report-breakdown section,
+.maintenance-center-report-detail {
+    min-width: 0;
+    padding: .3rem .4rem;
+    border: 1px solid var(--border-color, rgb(127 127 127 / 20%));
+    border-radius: .5rem;
+}
+
+.maintenance-center-report-breakdown h3 {
+    margin: 0 0 .25rem;
+    font-size: .82rem;
+}
+
+.maintenance-center-report-breakdown ul,
+.maintenance-center-report-detail ul {
+    margin: .25rem 0 0;
+    padding-left: 1rem;
+    font-size: .76rem;
     overflow-wrap: anywhere;
 }
 
@@ -591,83 +747,48 @@
     break-inside: avoid;
 }
 
-.maintenance-center-report-breakdown section {
-    padding: .75rem;
-    border: 1px solid var(--border-color, rgba(127, 127, 127, .2));
-    border-radius: .7rem;
-}
-
-.maintenance-center-report-detail {
-    min-width: 0;
-    padding: .4rem .5rem;
-    border: 1px solid var(--border-color, rgba(127, 127, 127, .2));
-    border-radius: .7rem;
-}
-
 .maintenance-center-report-detail > summary {
     cursor: pointer;
+    font-size: .78rem;
     font-weight: 700;
     overflow-wrap: anywhere;
 }
 
 .maintenance-center-report-detail ul {
-    max-height: 12rem;
-    margin: .55rem 0 0;
+    max-height: 10rem;
     overflow: auto;
 }
 
-.maintenance-center-report-breakdown h3 {
-    margin: 0 0 .5rem;
-    font-size: .95rem;
+.maintenance-center-history-note {
+    margin-top: .3rem;
+    font-size: .76rem;
 }
 
-.maintenance-center-report-breakdown ul {
-    margin: 0;
-    padding-left: 1.2rem;
+.admin-maintenance-center a,
+.admin-maintenance-center summary,
+.admin-maintenance-center-hero a {
+    text-decoration: none;
 }
 
-@media (max-width: 820px) {
-    .admin-maintenance-center-hero,
-    .maintenance-center-status-heading,
-    .maintenance-center-section-heading {
-        display: grid;
-    }
-
-    .maintenance-center-plan-totals {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        justify-content: stretch;
-    }
-
-    .admin-maintenance-center .metric-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 720px) {
+    .admin-maintenance-center .maintenance-center-status-heading {
+        grid-template-columns: minmax(0, 1fr) auto;
     }
 
     .maintenance-center-status-heading .maintenance-center-actions {
+        grid-column: 1 / -1;
         justify-content: flex-start;
     }
 
-    .maintenance-center-plan-totals > span {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 0;
-    }
-
-    .maintenance-center-plan-totals small {
-        overflow-wrap: anywhere;
+    .maintenance-center-navigation {
+        justify-content: flex-start;
     }
 
     .maintenance-center-lower-grid {
         grid-template-columns: 1fr;
     }
 
-    .maintenance-center-task-groups {
-        columns: 1;
-    }
-}
-
-@media (max-width: 420px) {
-    .admin-maintenance-center .metric-grid {
-        grid-template-columns: 1fr;
+    .maintenance-center-task-grid {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
     }
 }

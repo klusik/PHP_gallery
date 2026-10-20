@@ -83,6 +83,24 @@ function runtime_module_fixture_run(
     } else {
         $kernel->load($module);
     }
+    // Maintenance analysis and execution defer this owner independently. A
+    // prepared handler alone does not prove its dynamic task adapters exist.
+    if ($module === 'domain-admin-thumbnails') {
+        foreach ([
+            'cached_thumbnail_maintenance_summary_if_available',
+            'thumbnail_maintenance_check_batch',
+            'thumbnail_maintenance_empty_check_report',
+            'thumbnail_maintenance_merge_check_reports',
+            'thumbnail_maintenance_finalize_check_report',
+        ] as $thumbnailFunction) {
+            if (!function_exists('Gallery\\Services\\' . $thumbnailFunction)) {
+                throw new RuntimeException(
+                    'Missing deferred thumbnail maintenance adapter: '
+                        . $thumbnailFunction,
+                );
+            }
+        }
+    }
     // Both gallery-editor and image-bulk routes invoke the title-picture
     // service directly after only their reviewed selective module is loaded.
     // Unlike handler existence alone, these assertions prevent HTTP 500 caused

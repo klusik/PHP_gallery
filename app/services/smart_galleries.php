@@ -3115,6 +3115,7 @@ function smart_gallery_rule_summary_node(array $node): array
         if ($node['field'] === 'tag' && !is_array($value) && (int) $value > 0) {
             $value = \Gallery\Models\smart_gallery_model_tag_name(
                 (int) $value,
+                tag_media_type_schema_state(),
             ) ?? t('smart_gallery.missing_reference', '[missing reference]');
         } elseif ($node['field'] === 'gallery' && (int) $value > 0) {
             $value = \Gallery\Models\smart_gallery_model_gallery_title(

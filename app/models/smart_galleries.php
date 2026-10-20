@@ -1149,10 +1149,24 @@ function smart_gallery_model_galleries_by_ids(array $galleryIds): array
     return $rows;
 }
 
-/** Return one tag display name or null when the reference is missing. */
-function smart_gallery_model_tag_name(int $tagId): ?string
+/** Return one image-tag display name when the media-type schema state permits lookup.
+ *
+ * @param int $tagId Persistent tag identifier.
+ * @param string $mediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
+ * @return ?string Image-tag name, or null when unavailable.
+ */
+function smart_gallery_model_tag_name(
+    int $tagId,
+    string $mediaTypeState,
+): ?string
 {
-    $stmt = db()->prepare('SELECT name FROM tags WHERE id = ?');
+    if (!in_array($mediaTypeState, ['available', 'missing'], true)) {
+        return null;
+    }
+    $typeCondition = $mediaTypeState === 'available'
+        ? " AND media_type = 'image'"
+        : '';
+    $stmt = db()->prepare('SELECT name FROM tags WHERE id = ?' . $typeCondition);
     $stmt->execute([$tagId]);
     $value = $stmt->fetchColumn();
     return $value === false ? null : (string) $value;

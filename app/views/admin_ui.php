@@ -51,9 +51,9 @@ function view_admin_trash_icon(): string
 }
 
 /**
- * Return a decorative outline symbol for a main Admin navigation item.
+ * Return a decorative outline symbol for Admin navigation and compact controls.
  *
- * @param string $icon Presentation identifier from the navigation structure.
+ * @param string $icon Semantic symbol identifier, including the drag grip.
  * @return string Trusted SVG hidden from assistive technology, or empty for unknown icons.
  */
 function view_admin_menu_icon(string $icon): string
@@ -70,6 +70,11 @@ function view_admin_menu_icon(string $icon): string
         'galleries' => '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="m3 16 5-5 5 5 3-3 5 5"/><circle cx="16" cy="9" r="1"/>',
         'create' => '<path d="M3 7V5h7l2 2h9v13H3V7M12 10v7M8.5 13.5h7"/>',
         'smart' => '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3"/>',
+        'music' => '<path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',
+        'up' => '<path d="M12 20V4m-6 6 6-6 6 6"/>',
+        'drag' => '<circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/>',
+        'down' => '<path d="M12 4v16m-6-6 6 6 6-6"/>',
+        'link' => '<path d="m10 13 4-4M8 16l-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m4 0 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/>',
         'upload' => '<path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/>',
         'mobile' => '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4m-2-4V6m-3 3 3-3 3 3"/>',
         'rename' => '<path d="m14 5 5 5M4 20l4-1L21 6l-5-5L3 14l-1 6h2M12 21h9"/>',

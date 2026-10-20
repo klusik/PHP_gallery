@@ -25,6 +25,7 @@ inspect exact-SHA CI and state missing coverage.
 | PHP/MVC/runtime/capabilities/Admin | [app rules](app/AGENTS.md), [architecture](ARCHITECTURE.md) |
 | Schema/access/auth/mutation readiness | [schema policy](docs/AGENT_SCHEMA_POLICY.md), [database](DATABASE.md) |
 | Browser/assets/thumbnails/lightbox/OFP | [asset rules](public/assets/AGENTS.md) |
+| Admin UI/design/controls | [design contract](docs/ADMIN_DESIGN.md) |
 | Fixtures/children/browser harnesses | [test rules](tests/AGENTS.md), relevant [testing](TESTING.md) section |
 | CLI/audit/scanners/inventory/packaging | [tool rules](scripts/AGENTS.md) |
 | CI/evidence/preparation/integration | [CI rules](.github/AGENTS.md), [CI contract](docs/CI_COVERAGE_REUSE_CONTRACT.md) |

@@ -21,7 +21,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.137.8';
+const CMS_VERSION = '0.138';
 ```
 
 Update-related code uses:
@@ -155,11 +155,44 @@ Unreadable indexes/originals produce explicit partial-accounting warnings.
 Passive pages only read cached totals. See the accounting scope in
 [gallery PDF documents](docs/GALLERY_PDF.md#admin-storage-accounting).
 
-Gallery music originals and ordered preferences use a confined hidden sidecar.
-`app/services/gallery_music.php` owns content admission and revisioned
-filesystem
-workflows; `app/models/gallery_music.php` owns atomic index persistence. No SQL
-schema is added. See [music storage and limits](docs/GALLERY_MUSIC.md).
+Gallery music selections and ordered preferences use a confined hidden sidecar.
+`app/services/gallery_music.php` and its private projection/repository parts own
+source selection, revisioned updates and one-original migration checkpoints.
+`app/models/gallery_music.php` owns v1/v2 atomic index persistence. Immutable new
+audio originals use the protected `data/music/` repository through
+`app/services/music_repository.php`; existing gallery-local files remain valid.
+The separate SQL catalog owns logical identities, asset metadata, stable
+gallery/track links, albums and song tags. It stores no audio bytes. Direct song
+references and live album groups are expanded under the destination gallery's
+access/download policy. Public projection batches metadata for requested sources
+and never promotes or hashes the whole library. The protected gallery endpoint
+validates the selected original before streaming. See
+[music storage and limits](docs/GALLERY_MUSIC.md).
+
+The editor's Media panel uses scoped nested Music, PDF and Presentation tabs;
+the outer gallery tab and its independent form ownership remain unchanged.
+The local music manager chooses standalone songs or live album references.
+Global album edits update each referencing gallery's effective playlist and
+public revision. Source-group order and download flags remain gallery-local.
+Gallery assignment and future album additions preserve existing admission
+limits; unexpected oversized live state is reported with bounded projection.
+
+Maintenance Center registers `music.repository` as optional and selected by
+default. Administrators can deselect it before approval. Analysis observes
+readiness without moving files. Execution loads
+the complete existing attachment owner only for this task, verifies at most one
+original, switches its index reference and resumes verified local cleanup through
+a persisted journal. Central originals survive gallery deletion and Trash.
+Storage reporting adds their SQL byte totals once and accounts remaining local
+copies separately; ordinary gallery links never duplicate physical totals.
+
+Runtime source impact before this batch: 98 logical modules, 4,085 direct file
+entries, 441 unique PHP files and 3,644 duplicate entries in the tracked plan.
+The global module allowance (96 plus two) is consumed. This batch reuses the
+attachment owner and adds an estimated three PHP files: one central storage
+service and two private playlist parts. No new logical root or raised baseline
+is authorized. Hosted preparation and unchanged route/file/duplicate ratchets
+establish actual closure conformance; these counts are static source review.
 
 PDF and audio routes share the existing attachment runtime owner under its
 historical `gallery-pdf-documents` machine name. Public presentation loads it
@@ -176,7 +209,9 @@ share one description column; the existing miniplayer stays outside the list.
 
 Smart music resolves complete canonical source-summary IDs before optional
 attachment loading. The existing music service merges visible indexed tracks
-by stored content digest, without SQL or audio decoding. Source authorization
+by stored content digest and explicit logical identity, without audio decoding.
+Catalog metadata is projected in batches over the authorized track list;
+public requests never reconcile the whole filesystem. Source authorization
 and track visibility remain enforced by protected physical delivery. Smart
 presentation owns its independent default-off autoplay flag; no Smart music
 filesystem is created. See `docs/SMART_GALLERIES.md` for union semantics.
@@ -190,6 +225,14 @@ per track, defaults false and is checked in the protected controller as well as
 presentation. See the music contract for lifecycle and byte-capture limitations.
 The independent editor card uses canonical mutation completion and delegated
 fragment replacement.
+
+The compact `admin_music` controller delegates catalog operations to
+`app/services/music_catalog.php`; its model owns SQL and revision-locked
+transactions. The music capability gates the route and navigation together.
+The manager shares the existing taxonomy administration runtime root so the
+consumed logical-module allowance does not grow. `tags.media_type` isolates
+image/gallery assignments from music assignments, with PDF reserved. Existing
+image slugs retain their globally unique namespace.
 
 ## Runtime slideshow timing controls
 
@@ -4196,8 +4239,9 @@ database/migrations/202609200004_maintenance_center.php
 Each analysis/execution HTTP step injects the request-local Core kernel loader
 from the controller. `maintenance_center_task_runtime_modules()` maps the task
 and phase to reviewed existing `site-maintenance-work`,
-`archive-maintenance-work` or `domain-admin-database-maintenance` modules,
-loaded before the dynamic task callback. The optional null loader supports
+`archive-maintenance-work`, `domain-admin-thumbnails`,
+`domain-admin-database-maintenance` or `gallery-pdf-documents` modules, loaded
+before the dynamic task callback. The optional null loader supports
 full-bootstrap CLI/test consumers with dependencies already present. Migration
 inspection is read-only: a missing ledger or inspection failure is pending work,
 and only explicit migration runners create the ledger.

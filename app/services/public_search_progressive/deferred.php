@@ -47,13 +47,14 @@ use function Gallery\Models\public_search_model_image_ai_rows;
 use function Gallery\Models\public_search_model_image_description_rows;
 use function Gallery\Models\public_search_model_image_tag_description_rows;
 use function Gallery\Models\public_search_model_image_translation_rows;
+use function Gallery\Services\tag_media_type_schema_state;
 
 /**
  * Return deferred gallery-description matches for the descriptive phase.
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of gallery results.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Descriptive public result models.
  */
 function public_search_descriptive_results(
@@ -83,7 +84,7 @@ function public_search_descriptive_results(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of final candidates.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Ordered gallery candidate models.
  */
 function public_search_descriptive_gallery_candidates(
@@ -137,7 +138,7 @@ function public_search_descriptive_gallery_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Gallery-description candidate models.
  */
 function public_search_descriptive_gallery_description_candidates(
@@ -176,7 +177,7 @@ function public_search_descriptive_gallery_description_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Gallery-tag-description candidate models.
  */
 function public_search_descriptive_gallery_tag_description_candidates(
@@ -184,10 +185,15 @@ function public_search_descriptive_gallery_tag_description_candidates(
     int $limit,
     ?array $contextGallery = null,
 ): array {
+    $tagState = tag_media_type_schema_state();
+    if ($tagState === 'unknown') {
+        return [];
+    }
     $rows = public_search_model_gallery_tag_description_rows(
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
+        $tagState,
         $limit,
     );
     $score = public_search_relevance_score('tag_description');
@@ -215,7 +221,7 @@ function public_search_descriptive_gallery_tag_description_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Translated-title gallery candidates.
  */
 function public_search_descriptive_gallery_translated_title_candidates(
@@ -263,7 +269,7 @@ function public_search_descriptive_gallery_translated_title_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of mixed gallery/photo results.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Deep public result models.
  */
 function public_search_deep_results(
@@ -310,7 +316,7 @@ function public_search_deep_results(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Translated-description gallery candidates.
  */
 function public_search_deep_gallery_translated_description_candidates(
@@ -360,7 +366,7 @@ function public_search_deep_gallery_translated_description_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of final photo candidates.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Ordered deep image candidates.
  */
 function public_search_deep_image_candidates(
@@ -411,7 +417,7 @@ function public_search_deep_image_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Image-description candidate models.
  */
 function public_search_deep_image_description_candidates(
@@ -437,7 +443,7 @@ function public_search_deep_image_description_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Image-tag-description candidate models.
  */
 function public_search_deep_image_tag_description_candidates(
@@ -445,10 +451,15 @@ function public_search_deep_image_tag_description_candidates(
     int $limit,
     ?array $contextGallery = null,
 ): array {
+    $tagState = tag_media_type_schema_state();
+    if ($tagState === 'unknown') {
+        return [];
+    }
     $rows = public_search_model_image_tag_description_rows(
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
+        $tagState,
         $limit,
     );
     return public_search_deep_image_rows_to_candidates(
@@ -463,7 +474,7 @@ function public_search_deep_image_tag_description_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Localized image candidate models.
  */
 function public_search_deep_image_translation_candidates(
@@ -520,7 +531,7 @@ function public_search_deep_image_translation_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> AI-backed image candidate models.
  */
 function public_search_deep_image_ai_candidates(
@@ -588,7 +599,7 @@ function public_search_deep_image_rows_to_candidates(
  * @param int $score Relevance score.
  * @param string $matchSource Stable match-source identifier.
  * @param string $titleSort Display title used for deterministic tie-breaking.
- * @return array<string, mixed> Candidate model.
+ * @return array{entity_type:'gallery'|'photo',entity_id:int,result_key:string,score:int,match_source:string,title_sort:string} Normalized candidate identity, ranking, and display-sort fields.
  */
 function public_search_candidate_model(
     string $entityType,
@@ -611,8 +622,8 @@ function public_search_candidate_model(
 /**
  * Merge candidate rows by stable result key while retaining the strongest match.
  *
- * @param array<string, array<string, mixed>> $target Candidate map modified in place.
- * @param array<int, array<string, mixed>> $incoming Candidate rows from one source.
+ * @param array<string, array{entity_type:'gallery'|'photo',entity_id:int,result_key:string,score:int,match_source:string,title_sort:string}> $target Candidate rows keyed by their stable result_key; updated in place with the strongest match.
+ * @param list<array{entity_type:'gallery'|'photo',entity_id:int,result_key:string,score:int,match_source:string,title_sort:string}> $incoming Candidate rows discovered by one source.
  * @return void
  */
 function public_search_merge_candidate_rows(
@@ -673,7 +684,7 @@ function public_search_sort_candidate_rows(array $candidates): array
  * Hydrate a mixed deep candidate list while preserving its relevance order.
  *
  * @param array<int, array<string, mixed>> $candidates Ordered mixed candidate models.
- * @param ?array $contextGallery Optional branch-limiting gallery.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Hydrated result models in candidate order.
  */
 function public_search_hydrate_deep_candidates(

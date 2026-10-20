@@ -8,7 +8,7 @@
  * Module Type: Controller
  *
  * Purpose:
- *   Renders the gallery editor's Documents / PDFs tab.
+ *   Prepares the gallery editor's capability-scoped Media subtabs.
  *
  * Responsibilities:
  *   - Keep general gallery PDF attachments outside the API configuration tab
@@ -31,35 +31,37 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use function Gallery\Core\csrf_field;
-use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Core\url_for;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_flight_map_row;
 use function Gallery\Views\view_render_admin_simbrief_legacy_panel;
 
 /**
- * Render the document manager as a standalone editor tab.
+ * Render all available gallery media sections inside the unified Media tab.
  *
  * Both the gallery PDF manager and optional SimBrief legacy panel own independent
  * multipart forms and JavaScript delegates. They must not be nested inside the
  * editor's shared settings form or displayed with the upload API configuration.
  *
- * @param array{id:int,folder_path:string,presentation_json?:string|null}
- *     $gallery Authorized identity, attachment path and presentation preferences.
- * @param string $activeEditTab Currently selected editor tab.
- * @return void Emit independent attachment forms and presentation controls
- *     associated with the existing guarded gallery settings form.
+ * @param array{id:int|string,folder_path:string,title?:string,
+ *     presentation_json?:string|null,cover_image_id?:int|string|null,
+ *     cover_image_ids?:string|null,cover_image_path?:string|null,
+ *     background_source?:string|null,visibility?:string|null,
+ *     access_listing?:string|null,access_mode?:string|null,
+ *     parent_id?:int|string|null,nsfw_enabled?:int|string|null,
+ *     banner_image_path?:string|null,logo_image_path?:string|null,
+ *     separator_image_path?:string|null} $gallery Authorized gallery data
+ *     for attachments, presentation and Artwork preparation.
+ * @param string $activeEditTab Currently selected main editor tab.
+ * @return void Emit the unified Media tab with capability-scoped subtabs.
  */
 function admin_edit_gallery_render_documents_tab(
     array $gallery,
     string $activeEditTab,
 ): void {
-    if (
-        !feature_capability_effective_enabled('gallery_pdf_documents')
-        && !feature_capability_effective_enabled('gallery_music')
-        && !feature_capability_effective_enabled('lightbox_modes')
-    ) {
-        return;
+    $mediaSection = (string) ($_GET['media_section'] ?? '');
+    if ((string) ($_GET['tab'] ?? '') === 'admin-edit-documents') {
+        $mediaSection = 'pdf';
     }
     $presentationHtml = '';
     if (feature_capability_effective_enabled('lightbox_modes')) {
@@ -77,13 +79,27 @@ function admin_edit_gallery_render_documents_tab(
         ]);
         $presentationHtml = (string) ob_get_clean();
     }
+    $musicHtml = '';
+    if (feature_capability_effective_enabled('gallery_music')) {
+        $musicHtml = admin_gallery_music_html(
+            $gallery,
+            trim((string) ($_GET['music_query'] ?? '')),
+        );
+    }
+    $documentsHtml = '';
+    if (feature_capability_effective_enabled('gallery_pdf_documents')) {
+        $documentsHtml = admin_gallery_pdf_documents_html($gallery)
+            . admin_edit_gallery_simbrief_legacy_panel_html($gallery);
+    }
     \Gallery\Views\view_render_admin_gallery_media_tab([
-        'active' => $activeEditTab === 'admin-edit-documents',
+        'active' => $activeEditTab === 'admin-edit-media',
+        'active_section' => $mediaSection,
         'presentation_html' => $presentationHtml,
-        'documents_html' => admin_gallery_pdf_documents_html($gallery),
-        'music_html' => admin_gallery_music_html($gallery),
-        'simbrief_html' =>
-            admin_edit_gallery_simbrief_legacy_panel_html($gallery),
+        'documents_html' => $documentsHtml,
+        'music_html' => $musicHtml,
+        'artwork_html' => admin_edit_gallery_render_media_tab($gallery),
+        'settings_form_id' => 'admin-gallery-settings-'
+            . (int) $gallery['id'],
     ]);
 }
 
@@ -130,7 +146,11 @@ function admin_edit_gallery_simbrief_legacy_panel_html(array $gallery): string
     view_render_admin_simbrief_legacy_panel([
         'gallery' => $gallery,
         'csrf_html' => csrf_field(),
-        'action_url' => url_for('admin_edit_gallery', ['id' => $id]),
+        'action_url' => url_for('admin_edit_gallery', [
+            'id' => $id,
+            'tab' => 'admin-edit-media',
+            'media_section' => 'pdf',
+        ]),
         'pdf_view_url' => url_for('gallery_ofp_pdf', ['id' => $id]),
         'pdf_download_url' => url_for('gallery_ofp_pdf', [
             'id' => $id,

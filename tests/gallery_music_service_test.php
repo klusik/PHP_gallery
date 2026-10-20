@@ -13,6 +13,15 @@ declare(strict_types=1);
 
 namespace Gallery\Core {
     /**
+     * Return the isolated database used for catalog schema preflight.
+     * @return \PDO SQLite connection with an attached empty information schema.
+     */
+    function db(): \PDO
+    {
+        return $GLOBALS['music_schema_fixture_db'];
+    }
+
+    /**
      * Escape fixture view strings using the production HTML encoding boundary.
      * @param string $value Plain translated text or prepared URL.
      * @return string HTML-safe UTF-8 text.
@@ -118,6 +127,52 @@ namespace Gallery\Services {
 }
 
 namespace {
+    /** Keep fixture gallery files private to the test account.
+     * Type: int. Units: POSIX permission bits. Scope: isolated gallery fixtures.
+     * Consumers: music_seed_legacy_playlist.
+     * Rationale: match production sidecar confinement without sharing test data.
+     * Value: POSIX mode 0700.
+     */
+    const MUSIC_FIXTURE_DIRECTORY_MODE = 0700;
+
+    if (!in_array('sqlite', \PDO::getAvailableDrivers(), true)) {
+        echo "SKIP: gallery music service fixture requires PDO SQLite\n";
+        exit(0);
+    }
+
+    $GLOBALS['music_schema_fixture_db'] = new \PDO('sqlite::memory:');
+    $GLOBALS['music_schema_fixture_db']->setAttribute(
+        \PDO::ATTR_ERRMODE,
+        \PDO::ERRMODE_EXCEPTION,
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        'CREATE TABLE app_settings ('
+            . 'setting_key TEXT PRIMARY KEY, '
+            . 'setting_value TEXT NOT NULL, '
+            . 'updated_at TEXT NOT NULL)',
+    );
+    $GLOBALS['music_schema_fixture_db']->sqliteCreateFunction(
+        'DATABASE',
+        static fn(): string => 'main',
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        "ATTACH DATABASE ':memory:' AS information_schema",
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        'CREATE TABLE information_schema.TABLES ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT)',
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        'CREATE TABLE information_schema.COLUMNS ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT, COLUMN_NAME TEXT, '
+            . 'COLUMN_TYPE TEXT, IS_NULLABLE TEXT, ORDINAL_POSITION INTEGER)',
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        'CREATE TABLE information_schema.STATISTICS ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT, INDEX_NAME TEXT)',
+    );
+    require_once dirname(__DIR__) . '/app/models/app_settings.php';
+    require_once dirname(__DIR__) . '/app/models/schema_inspection.php';
     require_once dirname(__DIR__) . '/app/services/gallery_music.php';
 
     /**
@@ -130,6 +185,145 @@ namespace {
     {
         if (!$condition)
             throw new RuntimeException($message);
+    }
+
+    /** Seed an authentic v1 index and its gallery-local original files.
+     * @param array{id:int,folder_path:string} $gallery Fixture gallery identity.
+     * @param list<array{id:string,filename:string,title:string,bytes:string,hidden?:bool,downloadable?:bool}> $tracks Complete legacy originals to seed.
+     * @param bool $enabled Whether the legacy playlist starts enabled.
+     * @return array{revision:string,enabled:bool,tracks:list<array{id:string,filename:string,title:string,mime:string,size:int,sha256:string,hidden:bool,downloadable:bool}>} Production-normalized v1 playlist.
+     * @throws \RuntimeException When the production index writer refuses fixture data.
+     */
+    function music_seed_legacy_playlist(
+        array $gallery,
+        array $tracks,
+        bool $enabled = false,
+    ): array {
+        $directory = \Gallery\Services\gallery_music_directory($gallery);
+        if (!is_dir($directory)) {
+            mkdir($directory, MUSIC_FIXTURE_DIRECTORY_MODE, true);
+        }
+        $storedTracks = [];
+        foreach ($tracks as $track) {
+            $size = strlen($track['bytes']);
+            $digest = hash('sha256', $track['bytes']);
+            file_put_contents(
+                $directory . DIRECTORY_SEPARATOR . $track['id'] . '.bin',
+                $track['bytes'],
+            );
+            $storedTrack = [
+                'id' => $track['id'],
+                'filename' => $track['filename'],
+                'title' => $track['title'],
+                'mime' => 'audio/wav',
+                'size' => $size,
+                'sha256' => $digest,
+            ];
+            foreach (['hidden', 'downloadable'] as $field) {
+                if (array_key_exists($field, $track)) {
+                    $storedTrack[$field] = $track[$field];
+                }
+            }
+            $storedTracks[] = $storedTrack;
+        }
+        \Gallery\Models\gallery_music_model_write($directory, [
+            'revision' => bin2hex(random_bytes(16)),
+            'enabled' => $enabled,
+            'tracks' => $storedTracks,
+        ]);
+        return \Gallery\Services\gallery_music_playlist($gallery);
+    }
+
+    // The attached information_schema begins empty, representing a confirmed
+    // pre-catalog installation rather than a failed metadata inspection.
+    \Gallery\Services\schema_inspection_reset_request_cache();
+    music_assert(
+        \Gallery\Services\music_catalog_physical_write_mode() === 'legacy',
+        'A completely absent catalog schema must permit the legacy playlist path.',
+    );
+
+    $schemaDatabase = $GLOBALS['music_schema_fixture_db'];
+    $schemaDatabase->beginTransaction();
+    try {
+        $schemaDatabase->prepare(
+            'INSERT INTO information_schema.TABLES '
+                . '(TABLE_SCHEMA, TABLE_NAME) VALUES (?, ?)',
+        )->execute(['main', 'music_songs']);
+        $insertColumn = $schemaDatabase->prepare(
+            'INSERT INTO information_schema.COLUMNS '
+                . '(TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME) '
+                . 'VALUES (?, ?, ?)',
+        );
+        foreach (['id', 'title', 'created_at', 'updated_at'] as $column) {
+            $insertColumn->execute(['main', 'music_songs', $column]);
+        }
+        // The available songs table makes this a partial catalog, despite all
+        // other catalog tables remaining positively absent.
+        \Gallery\Services\schema_inspection_reset_request_cache();
+        try {
+            \Gallery\Services\music_catalog_physical_write_mode();
+            throw new LogicException(
+                'A partial catalog schema was accepted for physical writes.',
+            );
+        } catch (\Gallery\Services\PresentationSchemaUnavailableException $error) {
+            music_assert(
+                $error->feature() === 'presentation.music_catalog'
+                    && $error->state() === 'missing'
+                    && $error->operation() === 'music_catalog.playlist_mutation',
+                'Partial catalog refusal must preserve its typed missing-state diagnostics.',
+            );
+        }
+
+        try {
+            \Gallery\Services\schema_inspection_set_query_executor_for_tests(
+                static function (
+                    string $objectType,
+                    string $table,
+                    string $object,
+                ): bool {
+                    throw new \PDOException(
+                        'Fixture schema metadata inspection is unavailable.',
+                    );
+                },
+            );
+            try {
+                \Gallery\Services\music_catalog_physical_write_mode();
+                throw new LogicException(
+                    'Unknown catalog schema was accepted for physical writes.',
+                );
+            } catch (\Gallery\Services\PresentationSchemaUnavailableException $error) {
+                music_assert(
+                    $error->feature() === 'presentation.music_catalog'
+                        && $error->state() === 'unknown'
+                        && $error->operation() === 'music_catalog.playlist_mutation',
+                    'Unknown catalog refusal must retain its typed diagnostics.',
+                );
+            }
+        } finally {
+            // The override is process-wide, so restore production metadata reads
+            // before testing confirmed absence or continuing playlist coverage.
+            \Gallery\Services\schema_inspection_set_query_executor_for_tests(null);
+        }
+
+        $schemaDatabase->exec(
+            "DELETE FROM information_schema.COLUMNS "
+                . "WHERE TABLE_SCHEMA = 'main' AND TABLE_NAME = 'music_songs'",
+        );
+        $schemaDatabase->exec(
+            "DELETE FROM information_schema.TABLES "
+                . "WHERE TABLE_SCHEMA = 'main' AND TABLE_NAME = 'music_songs'",
+        );
+        \Gallery\Services\schema_inspection_reset_request_cache();
+        music_assert(
+            \Gallery\Services\music_catalog_physical_write_mode() === 'legacy',
+            'Removing all partial catalog metadata must restore confirmed legacy mode.',
+        );
+    } finally {
+        \Gallery\Services\schema_inspection_set_query_executor_for_tests(null);
+        \Gallery\Services\schema_inspection_reset_request_cache();
+        if ($schemaDatabase->inTransaction()) {
+            $schemaDatabase->rollBack();
+        }
     }
 
     $root = sys_get_temp_dir() . '/gallery-music-' . bin2hex(random_bytes(8));
@@ -156,31 +350,79 @@ namespace {
             !$initial['enabled'] && $initial['tracks'] === [],
             'New gallery must have music off.',
         );
-        $uploaded = \Gallery\Services\gallery_music_mutate(
-            $gallery,
-            $initial['revision'],
-            'upload',
-            '',
-            $source,
-            'first.wav',
-        );
-        $first = \Gallery\Services\gallery_music_playlist($gallery);
+        try {
+            \Gallery\Services\gallery_music_mutate(
+                $gallery,
+                $initial['revision'],
+                'upload',
+                '',
+                $source,
+                'first.wav',
+            );
+            throw new LogicException(
+                'Central upload succeeded without verified repository schema.',
+            );
+        } catch (RuntimeException $error) {
+            music_assert(
+                $error->getMessage() === 'music.failed'
+                    && !is_dir($root . '/one/.gallery-music'),
+                'Missing repository schema must refuse before sidecar creation.',
+            );
+        }
+        try {
+            \Gallery\Services\schema_inspection_set_query_executor_for_tests(
+                static function (
+                    string $objectType,
+                    string $table,
+                    string $object,
+                ): bool {
+                    throw new \PDOException(
+                        'Fixture schema metadata inspection is unavailable.',
+                    );
+                },
+            );
+            \Gallery\Services\schema_inspection_reset_request_cache();
+            try {
+                \Gallery\Services\gallery_music_mutate(
+                    $gallery,
+                    $initial['revision'],
+                    'upload',
+                    '',
+                    $source,
+                    'unknown-schema.wav',
+                );
+                throw new LogicException(
+                    'Upload succeeded after schema inspection became unknown.',
+                );
+            } catch (\Gallery\Services\PresentationSchemaUnavailableException $error) {
+                music_assert(
+                    $error->feature() === 'presentation.music_catalog'
+                        && $error->state() === 'unknown'
+                        && $error->operation() === 'music_catalog.playlist_mutation'
+                        && !is_dir($root . '/one/.gallery-music'),
+                    'Unknown schema must retain typed refusal before creating storage.',
+                );
+            }
+        } finally {
+            \Gallery\Services\schema_inspection_set_query_executor_for_tests(null);
+            \Gallery\Services\schema_inspection_reset_request_cache();
+        }
+        $firstId = sprintf('%032x', 1);
+        $first = music_seed_legacy_playlist($gallery, [[
+            'id' => $firstId,
+            'filename' => 'first.wav',
+            'title' => 'first.wav',
+            'bytes' => $wav,
+        ]]);
         $id = $first['tracks'][0]['id'];
         music_assert(
-            $uploaded === [
-                'revision' => $first['revision'],
-                'track_id' => $id,
-            ],
-            'Upload must return its exact committed identity and revision.',
-        );
-        music_assert(
             !$first['tracks'][0]['downloadable'],
-            'Every new original must initially forbid downloads.',
+            'Legacy records without permission fields must deny downloads.',
         );
         $read = \Gallery\Services\gallery_music_track($gallery, $id);
         music_assert(
             $read !== null && file_get_contents($read['path']) === $wav,
-            'Upload must retain exact audio bytes.',
+            'Legacy reader must return the exact original bytes.',
         );
         file_put_contents($read['path'], str_repeat('x', strlen($wav)));
         music_assert(
@@ -214,15 +456,20 @@ namespace {
                 'Stale revision must have a specific refusal.',
             );
         }
-        \Gallery\Services\gallery_music_mutate(
-            $gallery,
-            $first['revision'],
-            'upload',
-            '',
-            $source,
-            'second.wav',
-        );
-        $second = \Gallery\Services\gallery_music_playlist($gallery);
+        $second = music_seed_legacy_playlist($gallery, [
+            [
+                'id' => $firstId,
+                'filename' => 'first.wav',
+                'title' => 'first.wav',
+                'bytes' => $wav,
+            ],
+            [
+                'id' => sprintf('%032x', 2),
+                'filename' => 'second.wav',
+                'title' => 'second.wav',
+                'bytes' => $wav,
+            ],
+        ]);
         $secondId = $second['tracks'][1]['id'];
         $download = \Gallery\Services\gallery_music_mutate(
             $gallery,
@@ -260,29 +507,43 @@ namespace {
             === [true, true],
             'Bulk permission must update all current tracks.',
         );
-        $later = \Gallery\Services\gallery_music_mutate(
-            $gallery,
-            $allAllowed['revision'],
-            'upload',
-            '',
-            $source,
-            'later.wav',
-        );
-        $withLater = \Gallery\Services\gallery_music_playlist($gallery);
+        $laterId = sprintf('%032x', 3);
+        $withLater = music_seed_legacy_playlist($gallery, [
+            [
+                'id' => $firstId,
+                'filename' => 'first.wav',
+                'title' => 'first.wav',
+                'bytes' => $wav,
+                'downloadable' => true,
+            ],
+            [
+                'id' => $secondId,
+                'filename' => 'second.wav',
+                'title' => 'second.wav',
+                'bytes' => $wav,
+                'downloadable' => true,
+            ],
+            [
+                'id' => $laterId,
+                'filename' => 'later.wav',
+                'title' => 'later.wav',
+                'bytes' => $wav,
+            ],
+        ]);
         music_assert(
             array_column($withLater['tracks'], 'downloadable')
             === [true, true, false],
-            'A later upload must not inherit a previous bulk permission.',
+            'An unpermitted legacy track must not inherit bulk permission.',
         );
-        $allAllowed = \Gallery\Services\gallery_music_mutate(
+        $afterLaterDelete = \Gallery\Services\gallery_music_mutate(
             $gallery,
-            $later['revision'],
+            $withLater['revision'],
             'delete',
-            $later['track_id'],
+            $laterId,
         );
         \Gallery\Services\gallery_music_mutate(
             $gallery,
-            $allAllowed['revision'],
+            $afterLaterDelete['revision'],
             'download_all',
         );
         $second = \Gallery\Services\gallery_music_playlist($gallery);
@@ -297,6 +558,12 @@ namespace {
             unset($track['downloadable'], $track['hidden']);
         }
         unset($track);
+        unset(
+            $legacy['version'],
+            $legacy['albums'],
+            $legacy['order'],
+            $legacy['legacy_cleanup'],
+        );
         \Gallery\Models\gallery_music_model_write(
             \Gallery\Services\gallery_music_directory($gallery),
             $legacy,
@@ -320,6 +587,17 @@ namespace {
             'enabled' => false,
             'error' => '',
             'tracks' => [$viewTrack],
+            'sources' => [[
+                'id' => $id,
+                'type' => 'direct',
+                'song_id' => 1,
+                'album_id' => null,
+                'title' => $viewTrack['title'],
+                'downloadable' => true,
+                'hidden' => false,
+                'track_count' => 1,
+                'position' => 0,
+            ]],
         ];
         ob_start();
         \Gallery\Views\view_render_gallery_music($viewModel);
@@ -395,6 +673,7 @@ namespace {
         );
         $viewModel['tracks'][0]['download_url'] = '';
         $viewModel['tracks'][0]['downloadable'] = false;
+        $viewModel['sources'][0]['downloadable'] = false;
         ob_start();
         \Gallery\Views\view_render_gallery_music($viewModel);
         $lockedHtml = (string) ob_get_clean();
@@ -449,8 +728,8 @@ namespace {
                 && !file_exists($read['path']),
             'Deletion must remove only the selected original.',
         );
-        // Fill the metadata count boundary without allocating 100 audio files;
-        // upload admission must refuse before it installs any new original.
+        // Keep the legacy index at its historic count boundary. Central upload
+        // admission now requires the verified repository migration first.
         $full = $deleted;
         $full['tracks'] = [];
         for (
@@ -473,19 +752,21 @@ namespace {
                 $source,
                 'too-many.wav',
             );
-            throw new LogicException('Track-count quota was bypassed.');
+            throw new LogicException(
+                'Central upload reached count admission without repository schema.',
+            );
         } catch (RuntimeException $error) {
             music_assert(
-                $error->getMessage() === 'music.quota',
-                'Count quota must refuse before publication.',
+                $error->getMessage() === 'music.failed',
+                'Missing repository schema must refuse before count admission.',
             );
         }
         music_assert(
             \Gallery\Services\gallery_music_playlist($gallery) === $full,
-            'Count refusal must preserve the complete saved playlist.',
+            'Repository refusal must preserve the complete legacy playlist.',
         );
-        // Fill the aggregate byte boundary with metadata-only original sizes;
-        // admission checks totals before touching any retained payload.
+        // Fill aggregate metadata to its historic boundary without allocating
+        // large payloads; repository readiness still precedes upload admission.
         $bytesFull = $deleted;
         $bytesFull['tracks'] = [];
         while (
@@ -509,16 +790,18 @@ namespace {
                 $source,
                 'over-total.wav',
             );
-            throw new LogicException('Aggregate byte quota was bypassed.');
+            throw new LogicException(
+                'Central upload reached byte admission without repository schema.',
+            );
         } catch (RuntimeException $error) {
             music_assert(
-                $error->getMessage() === 'music.quota',
-                'Aggregate quota must refuse before publication.',
+                $error->getMessage() === 'music.failed',
+                'Missing repository schema must refuse before aggregate admission.',
             );
         }
         music_assert(
             \Gallery\Services\gallery_music_playlist($gallery) === $bytesFull,
-            'Byte quota refusal must preserve the complete saved playlist.',
+            'Repository refusal must preserve the complete legacy playlist.',
         );
         \Gallery\Models\gallery_music_model_write($directory, $deleted);
         $oversize = $root . '/oversize.wav';
@@ -616,30 +899,27 @@ namespace {
         mkdir($root . '/merge-b', 0700);
         $a = ['id' => 101, 'folder_path' => 'merge-a'];
         $b = ['id' => 102, 'folder_path' => 'merge-b'];
-        $mergeSource = $root . '/merge.wav';
-        file_put_contents($mergeSource, $wav);
-        foreach ([$a, $b] as $item) {
-            $state = \Gallery\Services\gallery_music_playlist($item);
-            \Gallery\Services\gallery_music_mutate(
-                $item,
-                $state['revision'],
-                'upload',
-                '',
-                $mergeSource,
-                $item === $a ? 'same.wav' : 'renamed.wav',
-            );
-        }
-        // Same duration/container length and name, different actual audio data.
-        file_put_contents($mergeSource, substr($wav, 0, -1) . "\x81");
-        $state = \Gallery\Services\gallery_music_playlist($b);
-        \Gallery\Services\gallery_music_mutate(
-            $b,
-            $state['revision'],
-            'upload',
-            '',
-            $mergeSource,
-            'same.wav',
-        );
+        $differentWav = substr($wav, 0, -1) . "\x81";
+        music_seed_legacy_playlist($a, [[
+            'id' => sprintf('%032x', 101),
+            'filename' => 'same.wav',
+            'title' => 'same.wav',
+            'bytes' => $wav,
+        ]]);
+        music_seed_legacy_playlist($b, [
+            [
+                'id' => sprintf('%032x', 102),
+                'filename' => 'renamed.wav',
+                'title' => 'renamed.wav',
+                'bytes' => $wav,
+            ],
+            [
+                'id' => sprintf('%032x', 103),
+                'filename' => 'same.wav',
+                'title' => 'same.wav',
+                'bytes' => $differentWav,
+            ],
+        ]);
         require_once dirname(__DIR__) . '/app/services/smart_galleries.php';
         $cache = &\Gallery\Services\smart_gallery_graph_request_cache();
         $cache['source_gallery_rows'] = [
@@ -768,7 +1048,7 @@ namespace {
             'One damaged index must preserve bytes and other visible sources.',
         );
         echo
-            "PASS: gallery music exact bytes, revisions, ordering, validation and confinement\n";
+            "PASS: gallery music legacy bytes, revisions, ordering, validation and confinement\n";
     } finally {
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator(

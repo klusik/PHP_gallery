@@ -228,6 +228,7 @@ require_once __DIR__ . '/services/openai_text_assist.php';
 require_once __DIR__ . '/services/navigation_data.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
+require_once __DIR__ . '/services/music_catalog.php';
 require_once __DIR__ . '/services/public_search.php';
 // Load staged public-search contracts after the legacy compatibility search helpers.
 require_once __DIR__ . '/services/public_search_progressive.php';

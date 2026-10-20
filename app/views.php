@@ -71,6 +71,7 @@ require_once __DIR__ . '/views/admin_gallery_edit_components.php';
 require_once __DIR__ . '/views/admin_public_inline.php';
 require_once __DIR__ . '/views/admin_gallery_metadata_organizer.php';
 require_once __DIR__ . '/views/admin_tags.php';
+require_once __DIR__ . '/views/admin_music.php';
 require_once __DIR__ . '/views/admin_theme.php';
 require_once __DIR__ . '/views/admin_updates.php';
 require_once __DIR__ . '/views/admin_logs.php';

@@ -28,7 +28,8 @@ function admin_edit_gallery_handle_pdf_action(array $gallery): void
     $galleryId = (int) $gallery['id'];
     $editUrl = \Gallery\Core\url_for('admin_edit_gallery', [
         'id' => $galleryId,
-        'tab' => 'admin-edit-documents',
+        'tab' => 'admin-edit-media',
+        'media_section' => 'pdf',
     ]);
     try {
         if ((int) ($_POST['id'] ?? 0) !== $galleryId) {

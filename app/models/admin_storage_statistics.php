@@ -327,3 +327,26 @@ function gallery_attachment_storage_model_summary(): array
         return $summary;
     });
 }
+
+/**
+ * Sum immutable central originals once, including currently unassigned assets.
+ * @return array{music_count:int,music_bytes:int} Registered physical original
+ *     count and bytes; gallery references never multiply either total.
+ */
+function gallery_attachment_storage_model_repository_summary(): array
+{
+    return storage_observer_call(
+        'db.music_repository_summary',
+        static function (): array {
+            $row = db()->query(
+                'SELECT COUNT(*) AS file_count, '
+                    . 'COALESCE(SUM(byte_size), 0) AS file_bytes '
+                    . 'FROM music_repository_assets',
+            )->fetch();
+            return [
+                'music_count' => (int) $row['file_count'],
+                'music_bytes' => (int) $row['file_bytes'],
+            ];
+        },
+    );
+}

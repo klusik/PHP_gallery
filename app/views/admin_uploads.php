@@ -535,7 +535,7 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
     if ($panelMode) {
         echo
             '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit data-gallery-upload-submit>'
-                . e(t('admin.upload.upload_images', 'Upload images'))
+                . e(t('admin.upload.upload_images', 'Upload'))
                 . '</button><p class="muted">'
                 . e(t(
                     'admin.upload.progress_top_panel',
@@ -545,7 +545,7 @@ function view_render_admin_upload_existing_gallery_form(array $viewModel): void
     } else {
         echo
             '<button type="submit" data-gallery-upload-submit>'
-                . e(t('admin.upload.upload_images', 'Upload images'))
+                . e(t('admin.upload.upload_images', 'Upload'))
                 . '</button>';
     }
     echo '</form></section>';

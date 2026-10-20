@@ -232,7 +232,10 @@ picture-only total and photograph charts keep their prior meanings.
 
 After bounded photo-derivative work, SQL aggregates PDF/music/OFP counts and
 bytes
-from `gallery_attachment_storage`. Uploads, replacement and deletion update only
+from `gallery_attachment_storage`, plus each immutable central music asset once
+from `music_repository_assets`. Gallery music references do not multiply shared
+audio bytes; retained legacy copies and pending cleanup journals still count as
+local physical storage. Uploads, replacement and deletion update only
 their category from committed metadata. Repeat updates do not open attachment
 directories, JSON indexes or original payloads. Smart unions never add copies.
 

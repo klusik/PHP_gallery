@@ -238,6 +238,7 @@ function cms_route_handlers(): array
         'admin_trash_purge' => '\\Gallery\\Controllers\\cms_admin_trash_purge',
         'admin_trash_empty' => '\\Gallery\\Controllers\\cms_admin_trash_empty',
         'admin_tags' => '\\Gallery\\Controllers\\cms_admin_tags',
+        'admin_music' => '\\Gallery\\Controllers\\cms_admin_music',
         'admin_smart_galleries' => '\\Gallery\\Controllers\\cms_admin_smart_galleries',
         'admin_run_migrations' => '\\Gallery\\Controllers\\cms_admin_run_migrations',
         'admin_update_navdata' => '\\Gallery\\Controllers\\cms_admin_update_navdata',

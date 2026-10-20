@@ -40,7 +40,7 @@ import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from 
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261016-cover-in-place-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261003-images-v4';
-import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261016-three-state-covers-v1';
+import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261020-unified-media-forms-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261002-gallery-tree-v3';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261017-media-summary-v1';

@@ -34,7 +34,10 @@ require_once __DIR__ . '/gallery_pdf_settings.php';
  *
  * Storage accounting is independent of visibility, download permission and
  * feature state. Each physical copy consumes bytes; a Smart playlist consumes
- * none. Invalid indexes remain untouched and contribute a warning, while other
+ * none. Central music references contribute no per-gallery bytes; retained
+ * migration cleanup records still describe a local physical copy. Central
+ * originals are counted once by the SQL repository aggregate. Invalid indexes
+ * remain untouched and contribute a warning, while other
  * independent categories are still measured. Unindexed staging/backup files
  * and sidecar metadata are intentionally outside these original-media totals.
  *
@@ -64,14 +67,34 @@ function gallery_attachment_storage_summary(
         if ($onlyKind !== null && $onlyKind !== $kind)
             continue;
         try {
+            $rawMusic = $kind === 'music'
+                ? \Gallery\Models\gallery_music_model_read(
+                    $root . '/.gallery-music',
+                )
+                : null;
             $entries = $kind === 'pdf'
                 ? gallery_pdf_documents_read_index($root)
-                : \Gallery\Models\gallery_music_model_read(
-                    $root . '/.gallery-music',
-                )['tracks'];
+                : $rawMusic['tracks'];
         } catch (RuntimeException) {
             $summary['errors']++;
             continue;
+        }
+        if ($kind === 'music') {
+            // Shared originals are counted once by the repository aggregate.
+            // The crash journal still owns a local copy until verified unlink.
+            $entries = array_merge(
+                array_values(array_filter(
+                    $rawMusic['tracks'],
+                    static fn(array $track): bool => empty($track['asset_id']),
+                )),
+                array_map(
+                    static fn(array $entry): array => [
+                        'id' => $entry['track_id'],
+                        'size' => $entry['size'],
+                    ],
+                    $rawMusic['legacy_cleanup'] ?? [],
+                ),
+            );
         }
         foreach ($entries as $entry) {
             storage_observer_add('counts.' . $kind . '_originals_checked');

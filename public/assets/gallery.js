@@ -68,7 +68,8 @@ import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js
 import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261017-media-summary-v1';
-import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261017-music-v3';
+import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
+import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261020-music-tabs-popover-drag-v6';
 import {
     setupGalleryMusicPlayback,
 } from './gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
@@ -77,7 +78,7 @@ import {
 } from './gallery-modules/gallery-media-panels.js?v=20261018-presentation-confirm-v1';
 import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261016-three-state-covers-v1';
 import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261003-admin-language-picker-v1';
-import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261016-three-state-covers-v1';
+import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261020-unified-media-forms-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260913-progressive-search-v4';
@@ -95,7 +96,7 @@ import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperat
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20261004-storage-update-all-v3';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
-import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261004-maintenance-center-v7';
+import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261020-compact-maintenance-v5';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
 import { setupAdminSearchDiagnostics } from './gallery-modules/admin-search-diagnostics.js?v=20260913-search-diagnostics-v1';
 import { setupAdminTestRun } from './gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3';
@@ -124,7 +125,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261018-presentation-confirm-v1';
+} from './gallery-modules/admin-operations.js?v=20261020-unified-media-forms-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -220,6 +221,7 @@ function bootGalleryBrowserFeatures() {
     setupSimbriefOfpViewer();
     setupGalleryPdfDocuments();
     setupGalleryMusic();
+    setupAdminMusic();
     setupGalleryMusicPlayback();
     setupGalleryMediaPanels();
     setupPictureManager();

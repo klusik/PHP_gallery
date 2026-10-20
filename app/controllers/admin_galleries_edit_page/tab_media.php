@@ -8,12 +8,13 @@
  * Module Type: Controller
  *
  * Purpose:
- *   Renders the Media tab of the gallery editor.
+ *   Prepares gallery Artwork controls for the unified Media tab.
  *
  * Responsibilities:
  *   - Select or upload the gallery title picture
  *   - Edit the optional gallery branding assets
  *   - Choose the gallery background source or inherit the theme background
+ *   - Associate all artwork fields with the shared settings form
  *
  * Author:
  *   Rudolf Klusal
@@ -37,7 +38,6 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-use function Gallery\Core\render_admin_tab_panel;
 use function Gallery\Services\gallery_background_source;
 use function Gallery\Services\gallery_background_source_schema_ready;
 use function Gallery\Services\gallery_cover_asset_schema_ready;
@@ -48,16 +48,22 @@ use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_gallery_media_fields;
 
 /**
- * Render the Media tab panel.
+ * Prepare the artwork subtab associated with the gallery settings form.
  *
- * @param array{id:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,folder_path?:string,title?:string,description?:string,background_source?:string|null} $gallery Gallery identity, cover mode, optional uploaded cover and media settings being edited.
- * @param string $activeEditTab Currently selected editor tab.
- * @return void Emit the gallery Media tab from prepared presentation state.
+ * @param array{id:int|string,folder_path:string,title?:string,
+ *     description?:string,cover_image_id?:int|string|null,
+ *     cover_image_ids?:string|null,cover_image_path?:string|null,
+ *     background_source?:string|null,visibility?:string|null,
+ *     access_listing?:string|null,access_mode?:string|null,
+ *     parent_id?:int|string|null,nsfw_enabled?:int|string|null,
+ *     banner_image_path?:string|null,logo_image_path?:string|null,
+ *     separator_image_path?:string|null} $gallery Gallery identity, inherited
+ *     access policy, cover mode, optional assets and media settings.
+ * @return string Trusted artwork markup for the unified Media panel.
  */
 function admin_edit_gallery_render_media_tab(
     array $gallery,
-    string $activeEditTab,
-): void {
+): string {
     $coverMode = gallery_cover_selection_mode($gallery);
     $coverMultiCount = $coverMode === 'multi'
         ? count(gallery_cover_selection_ids($gallery))
@@ -71,7 +77,8 @@ function admin_edit_gallery_render_media_tab(
     );
 
     ob_start();
-    render_admin_gallery_branding_fields($gallery);
+    $settingsFormId = 'admin-gallery-settings-' . (int) $gallery['id'];
+    render_admin_gallery_branding_fields($gallery, $settingsFormId);
     $brandingFieldsHtml = (string) ob_get_clean();
 
     $backgroundSourceSchemaReady = gallery_background_source_schema_ready();
@@ -91,6 +98,7 @@ function admin_edit_gallery_render_media_tab(
         'cover_asset_schema_ready' => gallery_cover_asset_schema_ready(),
         'background_source_schema_ready' => $backgroundSourceSchemaReady,
         'background_source' => $backgroundSource,
+        'settings_form_id' => $settingsFormId,
         'labels' => [
             'media_title' => t(
                 'admin.gallery_editor.media_title',
@@ -167,9 +175,5 @@ function admin_edit_gallery_render_media_tab(
             ),
         ],
     ]);
-    render_admin_tab_panel(
-        'admin-edit-media',
-        (string) ob_get_clean(),
-        $activeEditTab === 'admin-edit-media',
-    );
+    return (string) ob_get_clean();
 }

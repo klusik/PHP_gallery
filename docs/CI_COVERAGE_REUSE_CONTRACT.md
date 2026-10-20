@@ -6,6 +6,13 @@ Feature pushes and the final source squash receive hosted BASIC syntax and named
 declaration checks. `scripts/audit.php` and its registries remain the sole test
 orchestrator. BASIC is feedback; it does not replace complete integration.
 
+Integration authenticates the exact successful BASIC check run and its
+associated suite's branch, SHA and Actions App identity. GitHub may associate a
+REST-created check with an earlier suite for that same source; that aggregate's
+status does not establish BASIC success. The selected preparation run's own
+`check_suite_id`, completed successful suite and unique `Basic source checks`
+job remain the execution authority.
+
 In **Integrate into develop → Run workflow**, select **main or the intended
 feature branch** in GitHub's workflow-ref selector, then select the source
 branch.

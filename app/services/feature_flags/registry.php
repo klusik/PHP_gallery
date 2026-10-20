@@ -207,7 +207,7 @@ function feature_capability_definitions(): array
             'default_enabled' => true,
             'fresh_default_enabled' => true,
             'dependencies' => [],
-            'routes' => ['gallery_music'],
+            'routes' => ['gallery_music', 'admin_music'],
             'data_disable_policy' => 'preserve',
             'behavior_tags' => ['public', 'admin-only', 'writes-files'],
             'settings_route' => 'admin_features',

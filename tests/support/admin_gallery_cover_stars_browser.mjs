@@ -31,12 +31,16 @@ const routes = new Map([
 const server = createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     const route = routes.get(pathname) || (pathname.startsWith('/assets/')
-        ? 'public' + pathname.slice(0, -'.js'.length) + '.js'
+        ? 'public' + pathname
         : pathname === '/admin-gallery-images.js' ? 'public/assets/gallery-modules/admin-gallery-images.js'
             : pathname === '/admin-side-panel.js' ? 'public/assets/gallery-modules/admin-side-panel.js' : null);
     if (!route) { response.writeHead(404).end(); return; }
     try {
-        response.setHeader('Content-Type', route.endsWith('.html') ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8');
+        const contentType = route.endsWith('.html')
+            ? 'text/html; charset=utf-8'
+            : route.endsWith('.css') ? 'text/css; charset=utf-8'
+                : 'text/javascript; charset=utf-8';
+        response.setHeader('Content-Type', contentType);
         response.end(await readFile(path.join(projectRoot, route)));
     } catch { response.writeHead(500).end(); }
 });

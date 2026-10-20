@@ -29,6 +29,22 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services {
+    /**
+     * Supply one controlled source outcome to the real maintenance executor.
+     * @param array{gallery_id:int,track_id:string}|null $cursor Last durable
+     *     source key, or null for the initial scan.
+     * @return array{cursor:?array{gallery_id:int,track_id:string},moved:int,
+     *     bytes:int,complete:bool,error:?array{gallery_id:int,track_id:string,
+     *     code:string}} Fixture-owned source result without filesystem writes.
+     */
+    function gallery_music_migrate_repository(?array $cursor = null): array
+    {
+        $GLOBALS['maintenance_music_calls'][] = $cursor;
+        return $GLOBALS['maintenance_music_result'];
+    }
+}
+
 namespace {
     require_once __DIR__ . '/support/php_source.php';
 
@@ -92,6 +108,7 @@ namespace {
         'security.cleanup',
         'downloads.cache',
         'thumbnail.metadata',
+        'music.repository',
         'media.deep_verify',
         'database.logical',
         'maintenance.history',
@@ -140,6 +157,72 @@ namespace {
     maintenance_center_test_assert(
         empty($registry['media.deep_verify']['default_selected']),
         'Deep media verification must remain opt-in by default.',
+    );
+    maintenance_center_test_assert(
+        $registry['music.repository']['default_selected'] === true
+            && $registry['music.repository']['required'] === false
+            && $registry['music.repository']['mutates'] === true
+            && $registry['music.repository']['dependencies'] === ['preflight']
+            && $registry['music.repository']['feature_requirement']
+                === 'gallery_music',
+        'Music migration must default on while remaining optional and protected by preflight.',
+    );
+    foreach (['analysis', 'execution'] as $phase) {
+        maintenance_center_test_assert(
+            maintenance_center_task_runtime_modules('music.repository', $phase)
+                === ['gallery-pdf-documents'],
+            'Music migration must reuse the complete deferred attachment owner.',
+        );
+        maintenance_center_test_assert(
+            maintenance_center_task_runtime_modules('media.deep_verify', $phase)
+                === ['domain-admin-thumbnails'],
+            'Deep verification must load its thumbnail service in each request phase.',
+        );
+    }
+    // Distinct fixture byte values prove per-slice metrics versus lifetime totals.
+    $checkpoint = [
+        'cursor' => ['gallery_id' => 7, 'track_id' => str_repeat('a', 32)],
+        'moved' => 1,
+        'bytes' => 17,
+    ];
+    $nextCursor = ['gallery_id' => 7, 'track_id' => str_repeat('b', 32)];
+    $GLOBALS['maintenance_music_calls'] = [];
+    $GLOBALS['maintenance_music_result'] = [
+        'cursor' => $nextCursor,
+        'moved' => 1,
+        'bytes' => 23,
+        'complete' => false,
+        'error' => null,
+    ];
+    $slice = \Gallery\Services\maintenance_center_execute_music_repository([
+        'task_state' => $checkpoint,
+    ]);
+    maintenance_center_test_assert(
+        $GLOBALS['maintenance_music_calls'] === [$checkpoint['cursor']]
+            && $slice['done'] === false
+            && $slice['task_state']['cursor'] === $nextCursor
+            && $slice['task_state']['moved'] === 2
+            && $slice['task_state']['bytes'] === 40
+            && $slice['metrics']['music_tracks_moved'] === 1
+            && $slice['metrics']['music_bytes_moved'] === 23,
+        'A maintenance step must call one source slice and retain its cursor.',
+    );
+    $GLOBALS['maintenance_music_result']['error'] = [
+        'gallery_id' => 7,
+        'track_id' => str_repeat('b', 32),
+        'code' => 'source_unverified',
+    ];
+    $failed = false;
+    try {
+        \Gallery\Services\maintenance_center_execute_music_repository([
+            'task_state' => $checkpoint,
+        ]);
+    } catch (RuntimeException) {
+        $failed = true;
+    }
+    maintenance_center_test_assert(
+        $failed && $checkpoint['cursor']['track_id'] === str_repeat('a', 32),
+        'A refused source must not publish a successful advanced checkpoint.',
     );
     maintenance_center_test_assert(
         !empty($registry['database.optimize']['atomic']),
@@ -253,6 +336,15 @@ namespace {
         $verifyOnly === ['preflight', 'verify'],
         'Required verification must expand only its true preflight dependency.',
     );
+    maintenance_center_test_assert(
+        !in_array('music.repository', $verifyOnly, true),
+        'Deselecting the default music move must prevent implicit migration.',
+    );
+    maintenance_center_test_assert(
+        maintenance_center_expand_selection(['music.repository'], $planTasks)
+            === ['preflight', 'music.repository', 'verify'],
+        'An approved music move must retain both automatic safety boundaries.',
+    );
     $physicalSelection = maintenance_center_expand_selection(
         ['database.optimize'],
         $planTasks,
@@ -295,6 +387,41 @@ namespace {
         !in_array('private path must not be logged', $runtimeDiagnostic, true),
         'Maintenance diagnostics must not contain raw exception messages.',
     );
+    maintenance_center_test_assert(
+        $runtimeDiagnostic['error_site'] === 'maintenance_center_test.php'
+            && $runtimeDiagnostic['error_line'] > 0
+            && !isset($runtimeDiagnostic['error_symbol']),
+        'Failure provenance must retain the PHP basename and line without a private path.',
+    );
+    foreach ([
+        'Call to undefined function Gallery\\Services\\missing_thumbnail_owner()'
+            => 'Gallery\\Services\\missing_thumbnail_owner',
+        'Class "Gallery\\Services\\MissingThumbnailOwner" not found'
+            => 'Gallery\\Services\\MissingThumbnailOwner',
+        'Undefined constant "Gallery\\Services\\MISSING_THUMBNAIL_OWNER"'
+            => 'Gallery\\Services\\MISSING_THUMBNAIL_OWNER',
+    ] as $engineMessage => $missingSymbol) {
+        $engineDiagnostic = maintenance_center_exception_diagnostic(
+            new Error($engineMessage),
+        );
+        maintenance_center_test_assert(
+            ($engineDiagnostic['error_symbol'] ?? null) === $missingSymbol
+                && $engineDiagnostic['error_code'] === 'php_error',
+            'Engine-shaped missing PHP identifiers must have actionable bounded diagnostics.',
+        );
+    }
+    foreach ([
+        new RuntimeException('Call to undefined function private_value()'),
+        new Error('Call to undefined function /private/password=value()'),
+        new Error('Host failure: password=private_value'),
+    ] as $privateFailure) {
+        maintenance_center_test_assert(
+            !isset(maintenance_center_exception_diagnostic(
+                $privateFailure,
+            )['error_symbol']),
+            'Only exact PHP engine identifier shapes may contribute a symbol.',
+        );
+    }
     $reasonDiagnostic = maintenance_center_exception_diagnostic(new /** Exception fixture exposing one stable diagnostic reason. */ class(
         'safe localized text',
     ) extends RuntimeException {
@@ -811,11 +938,11 @@ namespace {
     maintenance_center_test_assert(
         php_source_contains(
             $maintenanceViewSource,
-            '<details class="panel maintenance-center-review" data-maintenance-review',
+            '<details class="maintenance-center-review" data-maintenance-review',
         )
             && php_source_contains(
                 $maintenanceViewSource,
-                'data-maintenance-task-groups',
+                'data-maintenance-task-panels',
             )
             && php_source_contains(
                 $maintenanceViewSource,
@@ -826,13 +953,13 @@ namespace {
     maintenance_center_test_assert(
         php_source_contains(
             $maintenanceViewSource,
-            "\$showAnalysisNote = \$job === null || in_array((string) (\$job['status'] ?? ''), ['analyzing', 'ready'], true)",
+            'data-maintenance-task-tabs role="tablist"',
         )
             && php_source_contains(
                 $javascriptSource,
-                "analysisNote.hidden = Boolean(job) && !['analyzing', 'ready'].includes(status)",
+                "checkbox.setAttribute('role', 'switch')",
             ),
-        'The Analyze-before-mutation banner must be visible before a plan exists or while it is analyzing/ready, then hide during and after execution.',
+        'The compact plan must use accessible task tabs and switches instead of a separate safety banner.',
     );
     maintenance_center_test_assert(
         php_source_contains(
@@ -852,22 +979,22 @@ namespace {
     maintenance_center_test_assert(
         php_source_contains(
             $javascriptSource,
-            'task.available === true && !task.required && task.analysis?.has_work === false && !keepDiscoverable',
+            "if (['preflight', 'verify'].includes(String(task?.key || '')))",
         ),
-        'Only explicitly available optional tasks with a strict no-work result may move into the collapsed group.',
+        'Required safety steps must remain automatic rather than selectable task rows.',
     );
     maintenance_center_test_assert(
-        php_source_contains($javascriptSource, "task.key === 'media.deep_verify'")
+        php_source_contains($javascriptSource, "task.group === 'media'")
             && php_source_contains(
                 $javascriptSource,
-                "task.key === 'database.optimize' && task.analysis?.full_optimization_available === true",
+                'optimizeTask.analysis?.full_optimization_available',
             ),
-        'Opt-in deep media verification and currently available full optimization must stay discoverable.',
+        'Media tasks and eligible full optimization must stay discoverable in their owning tabs.',
     );
     maintenance_center_test_assert(
         php_source_contains(
             $javascriptSource,
-            'checkbox.checked = task.required || (executionStarted ? selectedPersisted.has(task.key) : Boolean(task.default_selected))',
+            'checkbox.checked = task.required || (executionStarted ? selectedPersisted.has(taskKey) : previousSelections.has(taskKey) ? Boolean(previousSelections.get(taskKey)) : Boolean(task.default_selected))',
         )
             && php_source_contains(
                 $javascriptSource,
@@ -878,19 +1005,19 @@ namespace {
     maintenance_center_test_assert(
         php_source_contains(
             $javascriptSource,
-            "previouslyExpandedNoWork = Boolean(taskGroups.querySelector('.maintenance-center-no-work')?.open)",
+            "const activeTabBeforeRender = taskTabs.dataset.activeTab || 'cleanup'",
         )
             && php_source_contains(
                 $javascriptSource,
-                'noWork.open = previouslyExpandedNoWork',
+                'activateTaskTab(activeTabBeforeRender, false)',
             )
             && php_source_contains($javascriptSource, 'analysisFacts(task, strings)'),
-        'Rerendering must preserve the no-work disclosure state and retain every task analysis fact inside its group.',
+        'Rerendering must preserve the active category and retain every task analysis fact in its contextual help.',
     );
     maintenance_center_test_assert(
         php_source_contains($javascriptSource, 'strings.required_automatic')
-            && php_source_contains($javascriptSource, 'strings.no_work_count'),
-        'Required automatic steps and collapsed no-work counts must use localized labels.',
+            && php_source_contains($javascriptSource, 'strings.no_work'),
+        'Automatic steps and compact no-work status must use localized labels.',
     );
     maintenance_center_test_assert(
         php_source_contains(

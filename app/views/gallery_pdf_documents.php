@@ -19,11 +19,15 @@ use function Gallery\Core\format_bytes;
 use function Gallery\Services\t;
 
 /**
- * Render a persisted DPI selection and explain its memory cost.
+ * Render a persisted DPI selection and its visible or collapsed guidance.
  * @param int $dpi Current administrator resolution in dots per inch.
- * @return void Emit the named resolution select.
+ * @param bool $compactHelp Whether to collapse the longer DPI explanation.
+ * @return void Emit the select and a visible or collapsible help paragraph.
  */
-function view_render_gallery_pdf_resolution(int $dpi): void
+function view_render_gallery_pdf_resolution(
+    int $dpi,
+    bool $compactHelp = false,
+): void
 {
     echo
         '<label>'
@@ -39,14 +43,17 @@ function view_render_gallery_pdf_resolution(int $dpi): void
                 . $choice
                 . ' DPI</option>';
     }
-    echo
-        '</select></label><p class="muted">'
-            . e(t(
-                'pdf.dpi_help',
-                'Higher DPI increases dimensions, memory, upload size and'
-                    . ' processing time. PNG pages are lossless.',
-            ))
-            . '</p>';
+    $help = e(t(
+        'pdf.dpi_help',
+        'Higher DPI increases dimensions, memory, upload size and'
+            . ' processing time. PNG pages are lossless.',
+    ));
+    echo '</select></label>';
+    echo $compactHelp
+        ? '<details class="gallery-pdf-help"><summary>'
+            . e(t('pdf.dpi', 'PDF page rendering resolution (DPI)'))
+            . '</summary><p class="muted">' . $help . '</p></details>'
+        : '<p class="muted">' . $help . '</p>';
 }
 
 /**
@@ -77,21 +84,25 @@ function view_render_gallery_pdf_destination(bool $upload): void
 }
 
 /**
- * Render a bounded document disclosure and collapsed conversion controls.
+ * Render the inline editor list or public document disclosure and conversion controls.
  * @param array{gallery_id:int,admin:bool,editor:bool,action_url:string,
  *     csrf_html:string,operation_key:string,dpi:int,browser_config:string,
  *     language:string,documents:list<array{id:string,title:string,
  *     filename:string,size:int,hidden:bool,version:string,view_url:string,
  *     download_url:string}>} $model Safe documents with source versions for
  *     page-count cache identity.
- * @return void Emit independent forms outside the gallery settings form.
+ * @return void Emit an inline editor table/forms or public media disclosure,
+ *     with attachment actions independent of the gallery settings form.
  */
 function view_render_gallery_pdf_documents(array $model): void
 {
     if (!$model['editor'] && $model['documents'] === []) {
         return;
     }
-    echo '<section class="gallery-pdf-documents" data-gallery-pdf-documents>';
+    echo
+        '<section class="gallery-pdf-documents'
+            . ($model['editor'] ? ' gallery-pdf-inline-editor' : '')
+            . '" data-gallery-pdf-documents>';
     if (!$model['editor']) {
         // Summarize only the controller-authorized list, including its OFP.
         echo
@@ -119,6 +130,7 @@ function view_render_gallery_pdf_documents(array $model): void
         t('pdf.documents', 'Documents / PDFs'),
         count($model['documents']),
         view_music_control_icon('document'),
+        $model['editor'],
     );
     echo
         '<table class="gallery-pdf-table'
@@ -274,16 +286,20 @@ function view_render_gallery_pdf_documents(array $model): void
                 '<tr id="'
                     . e($controlsId)
                     . '" data-pdf-controls hidden><td colspan="4">';
-            echo
-                '<p class="muted">'
-                    . e(t(
-                        'pdf.convert_help',
-                        'Render pages in this browser;'
-                            . ' choose a private subgallery or append after this'
-                            . ' gallery’s last photo. The original PDF remains'
-                            . ' unchanged.',
-                    ))
-                    . '</p>';
+            $convertHelp = e(t(
+                'pdf.convert_help',
+                'Render pages in this browser;'
+                    . ' choose a private subgallery or append after this'
+                    . ' gallery’s last photo. The original PDF remains'
+                    . ' unchanged.',
+            ));
+            echo $model['editor']
+                ? '<details class="gallery-pdf-help"><summary>'
+                    . e(t('pdf.convert', 'Convert PDF pages to PNG'))
+                    . '</summary><p class="muted">'
+                    . $convertHelp
+                    . '</p></details>'
+                : '<p class="muted">' . $convertHelp . '</p>';
             echo
                 '<form method="post" action="'
                     . e($model['action_url'])
@@ -318,7 +334,10 @@ function view_render_gallery_pdf_documents(array $model): void
                     . e($model['browser_config'])
                     . '">';
             view_render_gallery_pdf_destination(false);
-            view_render_gallery_pdf_resolution($model['dpi']);
+            view_render_gallery_pdf_resolution(
+                $model['dpi'],
+                $model['editor'],
+            );
             echo
                 '<label><input type="checkbox" name="allow_new" value="1"> '
                     . e(t(
@@ -400,7 +419,8 @@ function view_render_gallery_pdf_documents(array $model): void
         echo
             '<form method="post" enctype="multipart/form-data" action="'
                 . e($model['action_url'])
-                . '" data-pdf-attachment-form>'
+                . '" class="gallery-pdf-upload-form"'
+                . ' data-pdf-attachment-form>'
                 . $model['csrf_html'];
         echo
             '<input type="hidden" name="pdf_action" value="upload">'
@@ -414,8 +434,13 @@ function view_render_gallery_pdf_documents(array $model): void
                 . e(t('pdf.choose', 'Choose PDF (maximum 25 MiB)'))
                 . '<input type="file" name="pdf_file"'
                 . ' accept=".pdf,application/pdf" required></label>';
+        echo
+            '<details class="gallery-pdf-upload-advanced"><summary>'
+                . e(t('pdf.upload.advanced', 'Advanced'))
+                . '</summary>';
         view_render_gallery_pdf_destination(true);
-        view_render_gallery_pdf_resolution($model['dpi']);
+        view_render_gallery_pdf_resolution($model['dpi'], true);
+        echo '</details>';
         echo
             '<button type="submit" class="gallery-pdf-icon" title="'
                 . e(t('pdf.upload'))
@@ -427,7 +452,7 @@ function view_render_gallery_pdf_documents(array $model): void
                 . '<output data-pdf-status role="status" aria-live="polite">'
                 . '</output></form>';
     }
-    view_media_panel_end();
+    view_media_panel_end($model['editor']);
     echo '</section>';
 }
 

@@ -143,6 +143,13 @@ function view_admin_menu_structure(array $model = []): array
                     'icon' => 'rename',
                 ],
                 [
+                    'label' => t('admin.menu.music_manager', 'Music Manager'),
+                    'page' => 'admin_music',
+                    'url' => url_for('admin_music'),
+                    'feature' => 'gallery_music',
+                    'icon' => 'music',
+                ],
+                [
                     'label' => t('admin.menu.api_manager', 'API manager'),
                     'page' => 'admin_api_manager',
                     'url' => url_for('admin_api_manager'),

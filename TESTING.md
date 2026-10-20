@@ -1,5 +1,65 @@
 # Testing Guide
 
+## Central music and live gallery playlists
+
+`music_repository_database_test.php` uses owned disposable SQL rows and tracked
+filesystem identities to cover new central uploads, unchanged v1 playback,
+two-source migration within one gallery, verified-copy refusal and interrupted
+cleanup replay. It exercises live album membership/order against unchanged
+gallery selection JSON, direct assignment independence, optimistic conflicts,
+gallery deletion retention and per-gallery permissions. Cleanup must remove only
+fixture-owned asset identities; it never sweeps the shared `data/music/` folder.
+
+`admin_gallery_music_browser_test.mjs` renders the real Media/music view and
+uses production styles and mutation handlers on desktop and narrow screens.
+It covers scoped nested tabs, direct/live source groups, chooser replacement
+without rebasing unrelated revision tokens, canonical completion and retained
+panel/URL state. Controlled audio/transport adapters do not qualify real codecs.
+The global manager fixture also covers repository-only file details, promoted
+origin deduplication and direct/live gallery location links.
+
+The Maintenance Center contract keeps music relocation opt-in, delegates one
+source slice per step and preserves the last successful checkpoint on refusal.
+Attachment accounting proves that two references still count one central
+original. Hosted FULL owns all executions. Real hosting migration throughput,
+large-library timing, device codecs and installation-specific backup recovery
+remain manual acceptance; localhost debugging does not qualify deployment.
+
+## Global Music Manager
+
+`music_catalog_database_test.php` uses the serial, owned disposable database
+fixture to exercise stable gallery/track identities, a real index bridge across
+three playlist sources, revision conflicts, song merging and splitting, nested
+album membership, typed-tag isolation and whole-result sorting before
+pagination. Public image paths exclude music and
+PDF tag names, slugs and descriptions. Hero usage counts promote PHP warnings to
+failures and count image-category assignments only; cached single and plural
+tag reads must refuse results when schema inspection becomes unknown. Trash
+restore verifies local track-to-song remapping after gallery IDs change.
+Migration assertions retain existing tag IDs and slugs. Cleanup restores
+fixture settings and removes only records created by this test.
+
+`music_catalog_title_policy_test.php` calls the production title and settings
+owners with isolated SQLite storage. It covers the default-off extension
+preference, recognized extensions, meaningful indexed titles, exact custom
+Unicode titles and unknown extensions. `gallery_music_service_test.php` also
+requires SQLite for its production schema observer's confirmed legacy path.
+The central requirements registry marks missing SQLite as blocked coverage.
+
+`admin_music_browser_test.mjs` renders the production manager view and runs its
+production browser module at desktop and narrow mobile widths. It covers
+live-search response races, native title-summary editing with independent merge
+selection, title popover shortcuts, retained Songs/Albums tabs and return state,
+disclosures, visible tag actions, focus, composite split identities, album
+controls and pointer drag reorder through the existing mutation coordinator,
+including busy, stale, click, no-op, and native-fallback duplicate-write guards;
+the merge overlay's top-layer behavior and last-row visibility; and the shared
+mutation completion protocol.
+Refused writes preserve input; an unconfirmed fragment refresh locks further
+writes. These fixtures do not qualify a deployed database migration, real
+library reconciliation throughput, or live backup/Trash recovery. Review those
+against representative hosting data separately.
+
 `database_maintenance_test.php` checks indexed identifier membership against the
 legacy case-insensitive PCRE word-boundary contract, including underscores,
 numeric words, punctuation and non-ASCII names. It feeds the actual per-source
@@ -332,6 +392,10 @@ snapshot parameters. Native form association is asserted by the isolated gallery
 edit fixture. Manual acceptance additionally covers saving from the mounted
 drawer,
 preview/copy after changing values, window resizing, and real sound activation.
+For the slideshow music preference, confirm the switch saves in place and the
+live status reports the actual server result. A failed request must not become a
+success message; if completion cannot refresh the editor, another write stays
+blocked until recovery. The separate `<noscript>` Save fallback remains usable.
 The configurable share disclosure must open before copy, preserve the locale,
 default autoplay ON/exclusive OFF, serialize every control, and retain
 selectable
@@ -687,7 +751,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.137.8. Release verification uses the
+This guide applies to PHP Gallery Version 0.138. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1884,7 +1948,10 @@ independent download/cache operation order and failure isolation, bounded
 exception classification and raw-message redaction, POST/CSRF/Admin
 mutation-envelope contracts, route wiring, browser continuation without reload,
 Dashboard/navigation integration, and Maintenance Center translation-key parity
-across English, Czech, German, and Swedish.
+across English, Czech, German, and Swedish. The compact review keeps required
+preflight and final verification automatic, shares switches across optional
+tasks, routes deep media verification through the thumbnail administration
+owner, and defaults the optional music-repository relocation to selected.
 
 A real MySQL/MariaDB physical rebuild is environment-dependent and is not proven
 by the source-level fixture. On a disposable migrated installation, manually
@@ -1897,10 +1964,21 @@ verify:
    maintenance owners without missing-function errors. On a disposable
    installation with a missing migration ledger, confirm the pending-migration
    inspection refuses readiness without creating the ledger.
-2. Review the ready plan. Confirm deep thumbnail verification is not selected by
-   default and large/protected/unknown database tables are not silently
-   scheduled. Change an application/schema/registry revision on a disposable
-   instance and confirm an old ready plan is rejected as stale.
+2. Review the compact ready plan. Confirm Cleanup, Media, and Database tabs
+   group the optional work under shared switches, with short task labels and
+   question-mark details. Confirm preflight and final verification run
+   automatically without disabled checkboxes, music relocation starts selected
+   but can be turned off before execution, and deep thumbnail verification
+   remains opt-in and available even with no findings, through its thumbnail
+   owner.
+   Confirm large/protected/unknown database tables are not silently scheduled.
+   Change an application/schema/registry revision on a disposable instance and
+   confirm an old ready plan is rejected as stale.
+   Confirm important status and errors stay visible, technical activity is
+   available on expansion, and diagnostic error context exposes only the
+   source basename and line rather than a private path or stack trace. For an
+   undefined PHP function, class, or constant, the safe symbol name may appear;
+   raw exception text remains hidden.
 3. Start maintenance, reload during normal cleanup, close/reopen the Admin page,
    and confirm progress resumes without restarting completed tasks. Open a
    second tab and confirm it cannot advance the same job concurrently or start a

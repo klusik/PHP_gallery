@@ -115,7 +115,7 @@ export function applyCoverSelectionPresentation(form, result) {
         const star = button.querySelector('[aria-hidden="true"]');
         if (star) star.textContent = selected ? '★' : '☆';
     });
-    const coverSelect = settingsForm?.querySelector('select[name="cover_image_id"]');
+    const coverSelect = settingsForm?.elements.namedItem('cover_image_id');
     if (coverSelect instanceof HTMLSelectElement) {
         const selectedValue = mode === 'automatic' ? 'automatic'
             : mode === 'multi' ? 'multi'

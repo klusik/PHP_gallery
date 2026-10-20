@@ -73,6 +73,22 @@ namespace Gallery\Core {
 namespace Gallery\Services {
     $GLOBALS['hero_tag_theme_test_settings'] = [];
 
+    /** Confirm only the tag media discriminator required by this fixture.
+     * @param string $objectType Schema object category requested by the service.
+     * @param string $table Table whose metadata the fixture models.
+     * @param string $object Column or index name requested from that table.
+     * @return bool True only for the fixture's confirmed tags.media_type column.
+     */
+    function hero_tag_theme_schema_executor(
+        string $objectType,
+        string $table,
+        string $object,
+    ): bool {
+        return $objectType === 'column'
+            && $table === 'tags'
+            && $object === 'media_type';
+    }
+
     /**
      * Minimal app_settings reader used by the standalone Theme model test.
      *
@@ -99,8 +115,11 @@ namespace {
     use function Gallery\Services\theme_hero_tag_visible_limit_value;
     use function Gallery\Services\sort_public_hero_tag_groups;
     use function Gallery\Services\tag_usage_counts;
+    use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
 
     require_once __DIR__ . '/../app/services/theme.php';
+    require_once __DIR__ . '/../app/models/schema_inspection.php';
+    require_once __DIR__ . '/../app/services/schema_inspection.php';
     require_once __DIR__ . '/../app/models/tags.php';
     require_once __DIR__ . '/../app/services/tag_metadata.php';
 
@@ -307,11 +326,18 @@ namespace {
             };
         }
     };
-    assert_hero_tag_theme_same(
-        [1 => 2, 2 => 8, 3 => 8],
-        tag_usage_counts([3, 1, 2, 2]),
-        'usage aggregate normalizes IDs and maps counts',
+    schema_inspection_set_query_executor_for_tests(
+        'Gallery\\Services\\hero_tag_theme_schema_executor',
     );
+    try {
+        assert_hero_tag_theme_same(
+            [1 => 2, 2 => 8, 3 => 8],
+            tag_usage_counts([3, 1, 2, 2]),
+            'usage aggregate normalizes IDs and maps counts',
+        );
+    } finally {
+        schema_inspection_set_query_executor_for_tests(null);
+    }
     assert_hero_tag_source_contains(
         $GLOBALS['hero_tag_theme_test_db']->sql,
         'FROM gallery_tags',

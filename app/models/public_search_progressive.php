@@ -50,14 +50,34 @@ function public_search_model_placeholders(array $ids): string
 }
 
 /**
+ * Return the model-owned predicate for the optional tag media discriminator.
+ *
+ * @param string $alias Internal tags-table alias supplied by the query owner.
+ * @param string $state Confirmed media_type state: available, missing, or unknown.
+ * @return string Predicate for the known schema, empty for legacy schema, or a false predicate when unknown.
+ */
+function public_search_model_tag_media_predicate(
+    string $alias,
+    string $state,
+): string {
+    if ($state === 'available') {
+        return "$alias.media_type = 'image' AND ";
+    }
+    if ($state === 'missing') {
+        return '';
+    }
+    return '1 = 0 AND ';
+}
+
+/**
  * Fetch gallery-title candidates for the primary search phase.
  *
  * @param string $query Normalized query.
  * @param array<string, int> $scores Relevance scores used by SQL ordering.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw candidate rows.
+ * @return list<array{id:int|string,title:string,match_score:int|string}> Gallery identifiers, titles, and title-match scores.
  */
 function public_search_model_primary_gallery_title_rows(
     string $query,
@@ -108,15 +128,17 @@ function public_search_model_primary_gallery_title_rows(
  * @param string $query Normalized query.
  * @param array<string, int> $scores Relevance scores used by SQL ordering.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw candidate rows.
+ * @return list<array{id:int|string,title:string,match_score:int|string}> Gallery identifiers, titles, and tag-match scores.
  */
 function public_search_model_primary_gallery_tag_rows(
     string $query,
     array $scores,
     bool $listedOnly,
     ?array $contextGallery,
+    string $tagMediaTypeState,
     int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
@@ -142,7 +164,7 @@ function public_search_model_primary_gallery_tag_rows(
         FROM tags t
         INNER JOIN gallery_tags gt ON gt.tag_id = t.id
         INNER JOIN galleries g ON g.id = gt.gallery_id
-        WHERE t.name LIKE ?
+        WHERE " . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . "t.name LIKE ?
           AND $listingCondition
         GROUP BY g.id, g.title
         ORDER BY match_score DESC, LOWER(g.title) ASC, g.id ASC
@@ -178,9 +200,10 @@ function public_search_model_gallery_rows_by_ids(array $ids): array
  * Fetch aggregated gallery tag names after candidate reduction.
  *
  * @param array<int, int> $ids Gallery identifiers.
- * @return array<int, array<string, mixed>> Gallery/tag rows.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
+ * @return list<array{gallery_id:int|string,gallery_tag_names:string}> Aggregated gallery tag names.
  */
-function public_search_model_gallery_tag_name_rows(array $ids): array
+function public_search_model_gallery_tag_name_rows(array $ids, string $tagMediaTypeState): array
 {
     if ($ids === []) {
         return [];
@@ -190,7 +213,7 @@ function public_search_model_gallery_tag_name_rows(array $ids): array
             GROUP_CONCAT(DISTINCT t.name ORDER BY t.name SEPARATOR ', ') AS gallery_tag_names
         FROM gallery_tags gt
         INNER JOIN tags t ON t.id = gt.tag_id
-        WHERE gt.gallery_id IN ($placeholders)
+        WHERE " . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . "gt.gallery_id IN ($placeholders)
         GROUP BY gt.gallery_id";
     return public_search_diagnostics_fetch_all(
         'hydrate.gallery_tag_names',
@@ -205,9 +228,9 @@ function public_search_model_gallery_tag_name_rows(array $ids): array
  * @param string $query Normalized query.
  * @param array<string, int> $scores Relevance scores used by SQL ordering.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw image candidate rows.
+ * @return list<array{id:int|string,filename:string,title:?string,match_score:int|string}> Image identifiers, filenames, titles, and name-match scores.
  */
 function public_search_model_media_image_name_rows(
     string $query,
@@ -263,15 +286,17 @@ function public_search_model_media_image_name_rows(
  * @param string $query Normalized query.
  * @param array<string, int> $scores Relevance scores used by SQL ordering.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw image candidate rows.
+ * @return list<array{id:int|string,filename:string,title:?string,match_score:int|string}> Image identifiers, filenames, titles, and tag-match scores.
  */
 function public_search_model_media_image_tag_rows(
     string $query,
     array $scores,
     bool $listedOnly,
     ?array $contextGallery,
+    string $tagMediaTypeState,
     int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
@@ -298,7 +323,7 @@ function public_search_model_media_image_tag_rows(
                 END) AS match_score
             FROM tags t
             INNER JOIN image_tags it ON it.tag_id = t.id
-            WHERE t.name LIKE ?
+            WHERE " . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . "t.name LIKE ?
             GROUP BY it.image_id
         ) tag_match
         INNER JOIN images i ON i.id = tag_match.image_id
@@ -319,7 +344,7 @@ function public_search_model_media_image_tag_rows(
  *
  * @param array<int, int> $ids Image identifiers.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @return array<int, array<string, mixed>> Image rows.
  */
 function public_search_model_media_image_rows_by_ids(
@@ -353,9 +378,10 @@ function public_search_model_media_image_rows_by_ids(
  * Fetch aggregated image tag names after candidate reduction.
  *
  * @param array<int, int> $ids Image identifiers.
- * @return array<int, array<string, mixed>> Image/tag rows.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
+ * @return list<array{image_id:int|string,image_tag_names:string}> Aggregated image tag names.
  */
-function public_search_model_image_tag_name_rows(array $ids): array
+function public_search_model_image_tag_name_rows(array $ids, string $tagMediaTypeState): array
 {
     if ($ids === []) {
         return [];
@@ -365,7 +391,7 @@ function public_search_model_image_tag_name_rows(array $ids): array
             GROUP_CONCAT(DISTINCT t.name ORDER BY t.name SEPARATOR ', ') AS image_tag_names
         FROM image_tags it
         INNER JOIN tags t ON t.id = it.tag_id
-        WHERE it.image_id IN ($placeholders)
+        WHERE " . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . "it.image_id IN ($placeholders)
         GROUP BY it.image_id";
     return public_search_diagnostics_fetch_all(
         'hydrate.image_tag_names',
@@ -388,6 +414,7 @@ function public_search_model_image_tag_name_rows(array $ids): array
  * @param bool $translated Whether the matching translation schema is available.
  * @param string $language Active content language.
  * @param bool $aiReady Whether image AI metadata may be searched.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @param bool $newOnly Limit matching to attributes introduced in this phase.
  * @return array{0:string,1:array<int,string>} Bound predicate and parameters.
  */
@@ -398,6 +425,7 @@ function public_search_model_compound_term_condition(
     bool $translated,
     string $language,
     bool $aiReady,
+    string $tagMediaTypeState,
     bool $newOnly = false,
 ): array {
     $like = public_search_model_like_pattern($term);
@@ -425,7 +453,7 @@ function public_search_model_compound_term_condition(
             $conditions[] =
                 'EXISTS (SELECT 1 FROM gallery_tags gt '
                 . 'INNER JOIN tags t ON t.id = gt.tag_id '
-                . 'WHERE gt.gallery_id = g.id AND ('
+                . 'WHERE ' . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . 'gt.gallery_id = g.id AND ('
                 . implode(' OR ', $tagParts)
                 . '))';
             foreach ($tagParts as $_) {
@@ -475,7 +503,7 @@ function public_search_model_compound_term_condition(
             $conditions[] =
                 'EXISTS (SELECT 1 FROM image_tags it '
                 . 'INNER JOIN tags t ON t.id = it.tag_id '
-                . 'WHERE it.image_id = i.id AND ('
+                . 'WHERE ' . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . 'it.image_id = i.id AND ('
                 . implode(' OR ', $tagParts)
                 . '))';
             foreach ($tagParts as $_) {
@@ -513,6 +541,7 @@ function public_search_model_compound_term_condition(
  * @param bool $translated Availability of active-language entity translations.
  * @param string $language Active content language.
  * @param bool $aiReady Whether AI image metadata is enabled.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @return array{0:string,1:array<int,string>} SQL predicate and ordered bindings.
  */
 function public_search_model_compound_expression(
@@ -522,6 +551,7 @@ function public_search_model_compound_expression(
     bool $translated,
     string $language,
     bool $aiReady,
+    string $tagMediaTypeState,
 ): array {
     $alternatives = [];
     $params = [];
@@ -536,6 +566,7 @@ function public_search_model_compound_expression(
                     $translated,
                     $language,
                     $aiReady,
+                    $tagMediaTypeState,
                 );
             $required[] = $condition;
             array_push($params, ...$termParams);
@@ -561,6 +592,7 @@ function public_search_model_compound_expression(
  * @param bool $translated Whether translated fields may be searched.
  * @param string $language Active content language.
  * @param bool $aiReady Whether AI metadata may be searched.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @return array{0:string,1:array<int,string>} Optional late-phase eligibility predicate.
  */
 function public_search_model_compound_new_source_condition(
@@ -570,6 +602,7 @@ function public_search_model_compound_new_source_condition(
     bool $translated,
     string $language,
     bool $aiReady,
+    string $tagMediaTypeState,
 ): array {
     if ($phase === 'primary' || $phase === 'media') {
         return ['1 = 1', []];
@@ -586,6 +619,7 @@ function public_search_model_compound_new_source_condition(
                     $translated,
                     $language,
                     $aiReady,
+                    $tagMediaTypeState,
                     true,
                 );
             $conditions[] = $condition;
@@ -608,11 +642,12 @@ function public_search_model_compound_new_source_condition(
  * @param array<int,array<int,string>> $groups Parsed query groups.
  * @param string $phase primary, descriptive, or deep.
  * @param bool $listedOnly Whether galleries must be publicly listed.
- * @param ?array $contextGallery Optional gallery-branch restriction.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery-branch restriction.
  * @param bool $translated Whether active-language gallery translations are ready.
  * @param string $language Active content language.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @param int $limit Maximum candidate rows.
- * @return array<int,array<string,mixed>> Bounded gallery candidate rows.
+ * @return list<array{id:int|string,title:string,match_score:int|string}> Bounded gallery identifier, title, and relevance rows.
  */
 function public_search_model_compound_gallery_rows(
     array $groups,
@@ -621,6 +656,7 @@ function public_search_model_compound_gallery_rows(
     ?array $contextGallery,
     bool $translated,
     string $language,
+    string $tagMediaTypeState,
     int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
@@ -636,6 +672,7 @@ function public_search_model_compound_gallery_rows(
         $translated,
         $language,
         false,
+        $tagMediaTypeState,
     );
     [$newSource, $newParams] =
         public_search_model_compound_new_source_condition(
@@ -645,6 +682,7 @@ function public_search_model_compound_gallery_rows(
             $translated,
             $language,
             false,
+            $tagMediaTypeState,
         );
     $joined = implode(' ', $groups[0] ?? []);
     $first = (string) ($groups[0][0] ?? '');
@@ -668,7 +706,7 @@ function public_search_model_compound_gallery_rows(
                 WHEN EXISTS (
                     SELECT 1 FROM gallery_tags gt
                     INNER JOIN tags t ON t.id = gt.tag_id
-                    WHERE gt.gallery_id = g.id AND t.name LIKE ?
+                    WHERE gt.gallery_id = g.id AND " . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . "t.name LIKE ?
                 ) THEN 800
                 $descriptionScore
                 ELSE 360
@@ -692,12 +730,13 @@ function public_search_model_compound_gallery_rows(
  * @param array<int,array<int,string>> $groups Parsed query groups.
  * @param string $phase media or deep.
  * @param bool $listedOnly Whether the parent gallery must be publicly listed.
- * @param ?array $contextGallery Optional gallery-branch restriction.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery-branch restriction.
  * @param bool $translated Whether active-language image translations are ready.
  * @param string $language Active content language.
  * @param bool $aiReady Whether AI image metadata can be searched.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @param int $limit Maximum candidate rows.
- * @return array<int,array<string,mixed>> Bounded image candidate rows.
+ * @return list<array{id:int|string,filename:string,title:?string,match_score:int|string}> Bounded image identifier, filename, title, and relevance rows.
  */
 function public_search_model_compound_image_rows(
     array $groups,
@@ -707,6 +746,7 @@ function public_search_model_compound_image_rows(
     bool $translated,
     string $language,
     bool $aiReady,
+    string $tagMediaTypeState,
     int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
@@ -722,6 +762,7 @@ function public_search_model_compound_image_rows(
         $translated,
         $language,
         $aiReady,
+        $tagMediaTypeState,
     );
     [$newSource, $newParams] =
         public_search_model_compound_new_source_condition(
@@ -731,6 +772,7 @@ function public_search_model_compound_image_rows(
             $translated,
             $language,
             $aiReady,
+            $tagMediaTypeState,
         );
     $joined = implode(' ', $groups[0] ?? []);
     $first = (string) ($groups[0][0] ?? '');
@@ -751,7 +793,7 @@ function public_search_model_compound_image_rows(
                 WHEN EXISTS (
                     SELECT 1 FROM image_tags it
                     INNER JOIN tags t ON t.id = it.tag_id
-                    WHERE it.image_id = i.id AND t.name LIKE ?
+                    WHERE it.image_id = i.id AND " . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . "t.name LIKE ?
                 ) THEN 680
                 $descriptionScore
                 ELSE 300

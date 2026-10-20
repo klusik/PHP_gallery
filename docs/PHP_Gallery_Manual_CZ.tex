@@ -63,7 +63,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu verze.
-\newcommand{\version}{0.137.8}
+\newcommand{\version}{0.138}
 \newcommand{\manualdate}{20.~října~2026}
 
 \hypersetup{
@@ -536,7 +536,7 @@ Stejný odkaz funguje i~anonymně po~běžné kontrole přístupu.
 Pokud celá obrazovka či~zvuk vyžadují souhlas, černý úvod čeká na
 \ui{Spustit prezentaci}. Po~potvrzení zůstane při nepodporovaném fullscreen
 vyplněné okno; \ui{Přehrát} umožní opakovat pozdější selhání zvuku.
-V~\ui{Upravit galerii > PDF / Hudba / Prezentace} najdete průhlednou kartu
+V~\ui{Upravit galerii > Média > Prezentace} najdete průhlednou kartu
 \ui{Nastavení prezentace}: viditelnost tlačítek, hudbu a~obě rychlosti.
 Ikona uložení používá běžný chráněný formulář galerie. Náhled a~sdílení
 použijí aktuální volby i~před uložením. Nové odkazy obsahují hudbu i~rychlosti;
@@ -580,22 +580,103 @@ Výběr souborů i~přetažení v~panelu Nahrát fotografie do~existující gale
 
 \index{PDF!dokumenty galerie}
 
+Editor galerie má~jedinou hlavní kartu \ui{Média} se~vnořenými sekcemi
+\ui{Hudba}, \ui{PDF}, \ui{Prezentace} a~\ui{Vizuální prvky}. Hudba a~PDF
+zachovávají samostatné formuláře; vizuální prvky jsou~stále propojené s~hlídaným
+formulářem nastavení galerie. Karta Prezentace je~v~\ui{Média} >
+\ui{Prezentace}, obecné dokumenty a~volitelný panel OFP v~\ui{Média} >
+\ui{PDF}. Titulní obrázek, identita značky a~pozadí jsou~v~\ui{Média} >
+\ui{Vizuální prvky}. V~sekci \ui{Obrázky} přijímá tlačítko \ui{Nahrát}
+všechna média právě povolená pro~galerii.
+
 Správce může k~fyzické galerii připojit obecný dokument PDF i~bez údajů SimBrief. Galerie uchovává původní soubor a~malý index se stabilním ID dokumentu, názvem souboru, titulkem, původem, přesnou velikostí a~kontrolním součtem SHA-256. Chráněný odkaz pro zobrazení a~stažení na~stejné doméně respektuje viditelnost galerie, heslo, sdílecí odkaz a~pravidla NSFW. Stávající manifest a~odkazy SimBrief OFP zůstávají samostatné.
 
 Volba \ui{Převést stránky PDF} vykreslí dokument v~prohlížeči. PDF.js vytváří stránky PNG postupně a~stávající proces nahrávání zobrazuje průběh, potvrzuje dávky, umožňuje navázat na~přerušenou práci a~lze jej zrušit. Nový převod používá výchozí rozlišení 150~DPI; lze zvolit 96, 150, 200, 300, 600, 1200 nebo 2400~DPI. Počet stránek není omezen. Stránka nad orientační hranicí 16\,384 pixelů na~straně nebo 32 milionů pixelů zobrazí upozornění, které vykreslení nezablokuje ani stránku potichu nezmenší. Odhad paměti zahrnuje pouze plátno RGBA při čtyřech bajtech na~pixel, nikoli celkovou spotřebu prohlížeče. Skutečné limity plátna prohlížeče a~nahrávání přesto mohou vykreslení nebo nahrání znemožnit.
 
 Zvolte vyhrazenou soukromou podřízenou galerii nebo připojení stránek za~poslední fotografii zdrojové galerie. Podřízená galerie zůstává soukromá, dokud výslovně nezměníte její viditelnost; dokud je převod PDF nedokončený nebo zrušený, nelze ji zveřejnit, proto převod nejprve dokončete nebo bezpečně uveďte do souladu. Připojení zachová viditelnost zdrojové galerie i~stávající fotografie a~vloží převedené stránky na~konec. Původní PDF se nikdy nepřepisuje. Značky průběhu jsou pro oba cíle uloženy v~skrytém úložišti zdrojové galerie a~obsahují ID cílové galerie. ZIP exporty fotografií ani migrace galerií tyto obecné originály PDF nepřenášejí. Úplná záloha souborového stromu musí zahrnout skryté složky s~bočními daty. Stávající JPG galerie se stránkami zůstávají samostatné. Dřívější požadavek na~serverový převod OFP nyní vrací HTTP 409 a~žádá o~obnovení editoru; rasterizační pomocná funkce je~určena pouze pro kompatibilitu CLI a~testů a~prohlížeč ji~nevolá. Podrobnosti: \codeword{docs/GALLERY\_PDF.md}.
 
+\subsubsection{Správce hudby}
+
+V~\ui{Administrace > Galerie > Správce hudby} je kompaktní globální katalog.
+Existující playlisty doplňujte po omezených dávkách; originály i~pořadí
+zůstávají zachovány. Hledání podle názvu, souboru a~hudebního štítku se
+průběžně aktualizuje; výsledky může změnit pouze nejnovější požadavek. Tabulka
+odděluje Název, Soubory, Umístění, Štítky a~Akce. Kliknutím na~název skladby
+otevřete editor s~možností přejmenovat skladbu, přidat ji~do~alba a~otevřít její
+štítky, soubory nebo umístění; samostatné zaškrtávací pole vybírá skladbu ke~sloučení.
+Záložka \ui{Skladby} zobrazuje katalog přes celou šířku. \ui{Alba a~playlisty}
+mají strom a~vytváření vlevo a~vybrané album se~skladbami vpravo; na~úzké obrazovce
+se~panely řadí pod sebe. Bez výběru se~zobrazí výzva k~výběru nebo vytvoření alba.
+Starší odkazy na~alba otevřou tuto záložku. Vytvořené album se~automaticky vybere;
+po~smazání vybraného alba se~výběr zruší a~zastaralý odkaz na~album zobrazí výzvu
+k~výběru. Přidání z~editoru názvu vloží skladbu na~konec alba; existující členství
+zůstane na~svém místě. Skladbu lze za~úchyt přetáhnout na~jinou pozici v~albu;
+čára ukazuje místo vložení. Šipky zůstávají pro~klávesnici a~posun o~jednu pozici.
+Ve sloupci Soubory rozbalení vypisuje fyzické varianty. Umístění zobrazuje
+přímé galerie a~hudební alba: dvě varianty v~jedné galerii se počítají jako jedno
+umístění; odvozené zařazení Smart se nepočítá. Odkazy na~galerie v~obou
+rozbaleních otevírají veřejnou galerii a~každý hudební štítek má vlastní
+kompaktní značku.
+Odkazy v~záhlaví řadí Název, Soubory, Umístění nebo Štítky oběma směry nad
+celým výsledkem ještě před stránkováním; shody se stabilně řadí podle ID.
+Štítky se řadí abecedně podle prvního hudebního štítku skladby.
+Úzký sloupec akcí se~zobrazí jen tehdy, když lze rozdělit varianty některé
+zobrazené skladby.
+Správce sdílí typografii a~zvýrazňující barvy webu; jeho plochy jsou kompaktní,
+průsvitné a~mají jemně zaoblené okraje. Počet souborů je vedle názvu skladby
+znázorněn ikonou vrstev a~číslem. Rozbalení variant a~umístění respektuje
+globální dobu animace pravého panelu administrace; hodnota 0 je okamžitá.
+
+Ozubené kolečko v~záhlaví katalogu obsahuje globální volbu přípon souborů.
+Sousední kolečko nového alba skrývá volbu nadřazeného alba i~popis, dokud
+je~nepotřebujete.
+Nativní rozbalování udržuje zavřené řádky skladeb a~alb kompaktní; počet
+čekajících synchronizací se zobrazuje jen~při nenulové hodnotě. Prázdný katalog
+zobrazuje u~Importu textový štítek; po naplnění přejde na~samotnou ikonu.
+Ikonové akce mají přístupný název a~viditelné zvýraznění klávesnicového fokusu.
+
+Kliknutím na název skladby otevřete editor poblíž ukazatele. Opětovné kliknutí
+na stejný název nebo kliknutí mimo editor jej zavře; kliknutí na jiný název
+editor přepne. Text se automaticky neoznačí. Editor zůstává ve výřezu okna a~dlouhé
+názvy zalamuje. Enter uloží název jako jeden řádek; zalomení textarey je pouze
+vizuální a~původní soubor se nikdy nepřejmenuje. Globální volba
+\ui{Zobrazovat přípony v názvech skladeb} je výchozí vypnutá i~po upgradu
+a~ovlivňuje jen názvy odvozené ze souboru; vlastní názvy zachovají svůj text.
+Vybrané skladby lze po náhledu výslovně spojit se~zvolenými metadaty.
+Odpojení varianty opraví chybnou vazbu. Spojení nezpřístupní jiný zdroj
+a~nemění jeho oprávnění ke stažení.
+
+Kompaktní strom alb rozbalujte nativními ovládacími prvky; při výběru alba se
+automaticky otevře cesta jeho předků. Navigaci doplňují drobečky. Skladby lze
+do alb a~podalb přidávat, odebírat a~řadit. Kolečko alba otevře nativní
+rozbalovací oblast s~názvem, popisem, přesunem a~smazáním; členství skladeb
+a~jejich pořadí zůstávají viditelné. Strom má nejvýše osm úrovní a~2\,000 alb.
+Počet čekajících galerií označuje nesladěné snímky; nečitelný
+zdroj brání úplnému dokončení.
+Odebrání vazby nemaže originál. Alba slouží v~Administraci,
+nevzniká veřejná hudební knihovna. Hudební tagy používají společnou taxonomii
+s~vlastním typem média; tagy a~hledání obrázků zůstávají oddělené. Typ PDF
+je rezervován. Stávající slugy zůstávají globálně jedinečné. Zálohujte SQL,
+\filepath{data/music/} i~skryté starší indexy; po obnově použijte běžné
+dopředné migrace a~dávkové sladění. Po konfliktu revize načtěte aktuální stav.
+Vypnutí funkce hudby
+zachová metadata i~originály.
+Místní obnova z~Koše připojí skladby ke stávajícím identitám i~při změně ID
+galerie. Staré snímky či zaniklé identity vytvoří nové katalogové záznamy;
+přenášené archivy nedodávají důvěryhodná logická ID.
+
 \subsubsection{Úložiště hudby}
 
-Přes \ui{Nahrát fotografie} lze společně vybrat nebo přetáhnout fotografie, PDF
-a~hudbu. Zvuk zůstává originálem a~nepřevádí se na fotografie. Samotnou hudbu
-lze nahrát i~při vypnutém zpracování obrázků. Záložka \ui{Dokumenty / PDF}
-v~editoru zachovává samostatnou tabulku \ui{Hudba} pro nahrávání, řazení,
-odstranění a~výchozí volbu slideshow. Akce zůstávají v~panelu. Přijímají se
-MP3, M4A, AAC, Ogg/Opus, WAV, FLAC a~WebM; přehratelnost závisí na kodecích
-prohlížeče. Platí viditelnost, heslo, sdílení a~NSFW pravidla galerie.
-
+Otevřete \ui{Upravit galerii > Média > Hudba} pro~nahrání zvuku a~správu
+playlistu galerie. Nové uploady ukládají neměnné originály do~chráněného
+centrálního úložiště \filepath{data/music/}; zvuk se~nikdy nepřevádí na fotografie.
+Samostatně přiřazené skladby zůstávají nezávislé položky. Přiřazení alba je~živý
+playlist: pozdější změny členství a~pořadí v~albu se~projeví ve~všech připojených
+galeriích. Galerie ukládá seřazené odkazy a~povolení stažení každé položky,
+nikoli kopii sdíleného originálu. Přehrávání a~stažení ověřuje aktuální přístup
+k~cílové galerii a~povolení položky; soukromí zdrojové galerie neautorizuje
+nesouvisející požadavky. Přijímají se MP3, M4A, AAC, Ogg/Opus, WAV, FLAC a~WebM;
+přehratelnost závisí na~kodecích prohlížeče.
 Tabulka ukazuje délku skladby a~jedinou ikonku Přehrát/Zastavit před
 názvem. Její podoba odpovídá přehrávání; není zde pauza ani samostatný
 sloupec přehrávání. Dlouhé názvy jsou zkrácené výpustkou s~plným textem
@@ -606,7 +687,8 @@ ikonky Předchozí/Přehrát/Zastavit/Další jsou dostupné na stránce i~v~pro
 fotografií, kdykoliv galerie obsahuje zvuk. Jeden společný přehrávač zabrání
 překryvu mezi skladbami, editorem a~slideshow. Playlist se opakuje a~navigace
 přechází mezi oběma konci. Automatická hudba slideshow je výchozí vypnutá;
-admin ji může pro galerii zapnout. Zapnutá slideshow nahradí ostatní hudbu
+admin ji může pro galerii zapnout. Přepínač ukládá nastavení automaticky,
+editor zůstává otevřený a~zobrazuje stav ukládání. Zapnutá slideshow nahradí ostatní hudbu
 a~začne první skladbou. Zastavení či zavření prohlížeče uvolní jeho hudbu;
 nezávisle spuštěná hudba z~tabulky může pokračovat. Změny fotek a~rychlostí
 hudbu nepřerušují. Odmítnutí prohlížečem umožní nový pokus přes Přehrát; zcela
@@ -616,8 +698,8 @@ Smart galerie slučují viditelnou hudbu ze~všech přístupných fyzických
 zdrojů, které přispívají odpovídajícími fotografiemi. Stránkování ani dočasný
 filtr zdroje tento souhrn neomezí; vlastní složka hudby nevzniká. SHA-256
 odstraní opakování stejných původních bajtů i~po~přejmenování. Shodný název
-či~délka nestačí; jiné kódování či~změněné vložené tagy vyžadují budoucí
-otisk obsahu. Skryté skladby se~vynechají, viditelné zamčené proti stažení
+či~délka nestačí; jiná kódování zůstanou oddělená, dokud je správce výslovně
+nespojí ve~Správci hudby. Skryté skladby se~vynechají, viditelné zamčené proti stažení
 zůstanou přehratelné. Starší i~nové skladby jsou výchozí viditelné. Chráněné
 odkazy zdroje znovu kontrolují přístup a~viditelnost. V~přepsání prezentace
 Smart galerie lze zapnout její samostatnou výchozí hudbu slideshow; začíná
@@ -636,18 +718,19 @@ sledování viditelnosti stejná čtečka postupně obslouží připojené řád
 zvuk nedekóduje. Opakování uploadu zachovává potvrzené fotografie, PDF i~zvuk;
 neznámý výsledek nahrání hudby vyžaduje před dalším pokusem kontrolu galerie.
 
-Originály a~seřazený JSON index jsou ve skryté složce
-\filepath{.gallery-music/}. Index ukládá názvy, MIME, velikosti, SHA-256,
-revizi, výchozí volbu slideshow a~povolení stažení každé skladby. Starší
-záznamy bez povolení zůstávají zamčené. Limity jsou 64~MiB na soubor, 100
-skladeb a~512~MiB na galerii; platí i~nižší limity PHP. Zálohy musí obsahovat
-skryté složky. ZIP exporty fotek a~přenos galerie hudbu nezahrnují.
-Podrobnosti: \filepath{docs/GALLERY_MUSIC.md}.
-
-Ve vývojovém checkoutu po změně rout použijte kandidáta připraveného hosted
-workflow. PDF a~zvuk sdílí existujícího runtime vlastníka příloh; samotné
-zdroje se starším generovaným plánem mohou odmítat požadavky do načtení
-připraveného plánu. Lokální generování nenahrazuje hosted kvalifikaci.
+Seřazený playlist galerie zůstává v~jejím skrytém indexu
+\filepath{.gallery-music/}; samotné neměnné zvukové originály jsou v~centrálním
+\filepath{data/music/}. Volitelná úloha v~\ui{Údržba > Centrum údržby} je~předem
+vybraná; správce ji může před spuštěním vypnout. Přesouvá starší lokální originály
+po~jednom v~omezených, obnovitelných dávkách. Nejprve
+ověří centrální kopii a~potom atomicky přepne odkaz; zachová ID skladeb, logické
+identity, pořadí, viditelnost, povolení stažení i~nastavení slideshow.
+Nejistý lokální soubor nesmaže. Zálohujte společně SQL,
+\filepath{data/music/} i~skryté starší indexy.
+Centrální originál se~v~úložišti počítá pouze jednou bez ohledu na~počet galerií;
+nepřesunuté lokální kopie se~počítají zvlášť. Smazání galerie odstraní její
+vazby, nikoli sdílený originál. ZIP export fotografií a~přenos galerie hudbu
+nezahrnují. Podrobnosti: \filepath{docs/GALLERY_MUSIC.md}.
 
 \subsection{Úprava identity a~souvislostí}
 \index{m00084@metadata galerie}
@@ -1060,7 +1143,7 @@ telemetrii.
 
 Nahrávání v~prohlížeči se hodí pro každodenní přírůstky. Vyberte galerii, zvolte soubory, zkontrolujte dávku a~sledujte průběh, zatímco server ověřuje média a~připravuje záznamy a~náhledy. Vyhledání souborů v~souborovém systému se hodí pro velké existující stromy složek nebo přenosy pomocí FTP a~hostingových nástrojů. Automatizace a~WebDAV se hodí pro opakované či mobilní postupy po nastavení přihlašovacích údajů s~vymezeným rozsahem.
 
-V~pravém administračním panelu \ui{Nahrát fotografie} lze postupně vkládat snímky obrazovky pomocí Ctrl+V ve~Windows/Linuxu nebo Cmd+V v~macOS, přidávat další soubory výběrem a~přetahovat obrázky do~oblasti nahrávání. Každý obrázek se~před odesláním zobrazí v~místní frontě malých náhledů spolu s~názvem a~velikostí. Šipkami lze změnit pořadí, chybný snímek odebrat nebo celý výběr vymazat. Stávající tlačítko \ui{Nahrát obrázky} odešle původní soubory jediným běžným procesem; náhledy nejsou náhradními daty pro~upload. Fronta není uloženým konceptem na~serveru: před odchodem z~panelu se~potvrzuje zahození neodeslaných souborů, při chybě zůstává výběr připraven k~opakování a~teprve potvrzené úspěšné nahrání frontu vyprázdní. Nepodporovaný formát náhledu se~zobrazí jako značka formátu, nikoli jako důvod k~obejití serverové validace. Samostatná administrační stránka nahrávání a~formulář bez JavaScriptu se~nemění.
+V~pravém administračním panelu \ui{Nahrát fotografie} lze postupně vkládat snímky obrazovky pomocí Ctrl+V ve~Windows/Linuxu nebo Cmd+V v~macOS, přidávat další soubory výběrem a~přetahovat obrázky do~oblasti nahrávání. Každý obrázek se~před odesláním zobrazí v~místní frontě malých náhledů spolu s~názvem a~velikostí. Šipkami lze změnit pořadí, chybný snímek odebrat nebo celý výběr vymazat. Stávající tlačítko \ui{Nahrát} odešle původní soubory jediným běžným procesem; náhledy nejsou náhradními daty pro~upload. Fronta není uloženým konceptem na~serveru: před odchodem z~panelu se~potvrzuje zahození neodeslaných souborů, při chybě zůstává výběr připraven k~opakování a~teprve potvrzené úspěšné nahrání frontu vyprázdní. Nepodporovaný formát náhledu se~zobrazí jako značka formátu, nikoli jako důvod k~obejití serverové validace. Samostatná administrační stránka nahrávání a~formulář bez JavaScriptu se~nemění.
 
 U~velké akce nahrávejte po smysluplných skupinách. Menší skupiny usnadňují identifikaci chyb a~umožňují průběžnou kontrolu názvů, pořadí a~viditelnosti.
 
@@ -2433,7 +2516,24 @@ Obsah Koše je v~chráněném trvalém úložišti \filepath{data/gallery-trash/
 \index{c00017@centrum údržby}
 \index{u00238@údržba!c00016@centrální postup}
 
-Otevřete \ui{Údržba > Centrum údržby} pro řízený postup \ui{Analyzovat}, \ui{Zkontrolovat}, \ui{Provést} a~\ui{Ověřit} napříč oblastmi běžné údržby. Analýza je pouze pro čtení obsahu galerií, telemetrie, protokolů, Koše, mezipaměti, náhledů a~databáze; zapisuje jen trvalý kontrolní bod Centra údržby potřebný k~pokračování průzkumu. Kontrola seskupuje úkoly podle oblasti, označuje povinné automatické kroky a~dostupné volitelné úkoly bez zjištěné práce přesouvá do sbaleného oddílu. Povinné, výchozí a~volitelné úkoly zůstávají před úklidem jasné. Hloubkové ověření médií a~úplná optimalizace databáze zůstávají při dostupnosti dohledatelné, i~když se ve výchozím stavu nevybírají.
+Otevřete \ui{Údržba > Centrum údržby} pro řízený postup \ui{Analyzovat},
+\ui{Zkontrolovat}, \ui{Provést} a~\ui{Ověřit} napříč oblastmi běžné údržby.
+Analýza pouze čte obsah galerií, telemetrie, protokolů, Koše, mezipaměti,
+náhledů a~databáze; zapisuje jen trvalý kontrolní bod potřebný k~pokračování.
+
+Kompaktní kontrola má tři karty: \ui{Úklid}, \ui{Média} a~\ui{Databáze}.
+Volitelné úlohy
+mají sdílené přepínače a~krátké názvy; vysvětlení otevřete sousedním tlačítkem
+s~otazníkem. Bezpečnostní předběžná kontrola a~závěrečné ověření probíhají
+automaticky. Nejsou volbou uživatele a~nezobrazují se jako vypnuté přepínače.
+Hloubkové ověření náhledů zůstává dostupné jako výslovná volba, i~když analýza
+nenajde žádnou práci s~náhledy.
+
+Při diagnostice rozbalte technickou aktivitu. Chyby zachovávají užitečný stav
+a~uvádějí bezpečný název zdrojového souboru a~řádek, pokud jsou dostupné, bez
+odhalení soukromé cesty či zásobníku volání. Chyby kvůli nedefinované PHP
+funkci, třídě nebo konstantě mohou uvést bezpečný název symbolu; původní text
+výjimky se nezobrazuje. Hloubkové ověření médií zpracovává správce náhledů.
 
 Server před spuštěním úkolu znovu načte schválené závislosti příslušné oblasti v~každém samostatném požadavku analýzy nebo provádění. Kontrola čekajících migrací pouze čte jejich evidenční tabulku; chybějící tabulka nebo neúspěšný průzkum se považují za čekající práci. Migrace použijte výslovným migračním postupem; analýza nevytváří ani neopravuje úložiště migrací.
 
@@ -2470,9 +2570,11 @@ Pohled Soubory uvádí také počty a~velikosti originálů PDF a~hudby
 spolu s~celkovým součtem médií. Aktualizovat vše po dávkách fotografií
 načte součty PDF, hudby a~OFP z~databáze. První běh doplní chybějící evidenci
 nejvýše ze dvou fyzických galerií za krok, včetně galerií bez fotografií.
-Počítají se i~skryté, soukromé, vypnuté a~nestáhnutelné soubory. Fyzické
-kopie zabírají místo samostatně; playlist Smart galerie žádnou kopii
-nepřidává. Stránky převedené z~PDF už patří mezi fotografie. Indexy, zámky,
+Počítají se i~skryté, soukromé, vypnuté a~nestáhnutelné soubory. Každý
+centrální hudební originál se počítá jednou, včetně nepřiřazených;
+nepřesunuté lokální originály se počítají zvlášť. Playlist Smart galerie
+žádnou kopii nepřidává. Stránky převedené z~PDF už patří mezi fotografie.
+Indexy, zámky,
 stav převodů, neindexované soubory, Koš a~ostatní cache sem nepatří.
 Nečitelné indexy a~nebezpečné či~chybějící soubory vyvolají upozornění
 na neúplné měření bez oprav. Běžné stránky čtou uložené výsledky; změny
@@ -2926,6 +3028,10 @@ tests/ & Samostatné testy PHP a~cílené testy JavaScriptu.\\
 winapp/ & Nástroje a~integrace specifické pro Windows.\\
 \bottomrule
 \end{longtable}
+
+Nové a~výrazně upravené stránky administrace se řídí trvalými vizuálními
+pravidly v~\filepath{docs/ADMIN_DESIGN.md}. Ta popisují kompaktní styl
+přehrávače médií a~WinApp i~kontrolu CSS omezenou na~danou funkci.
 
 \subsection{Pravidla kódování}
 

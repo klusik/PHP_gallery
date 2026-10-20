@@ -85,12 +85,36 @@ function humanize(value) {
         .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-/** Build one Maintenance Center action button with a delegated stable action key. */
+/** Build a compact media-style action with a localized accessible label.
+ * @param {string} label Localized action name for the tooltip and accessible name.
+ * @param {string} className Existing action classes for secondary/disabled states.
+ * @param {string} action Stable delegated maintenance command.
+ * @param {boolean} disabled Whether the current server state forbids this action.
+ * @returns {HTMLButtonElement} Native action with a trusted SVG or text fallback.
+ */
 function createButton(label, className, action, disabled = false) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = className;
-    button.textContent = label;
+    button.className = `${className} maintenance-center-action`;
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    const icons = {
+        analyze: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/>',
+        retry: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/>',
+        run: '<path d="m8 5 11 7-11 7Z"/>',
+        resume: '<path d="m8 5 11 7-11 7Z"/>',
+        pause: '<path d="M8 5v14M16 5v14"/>',
+        cancel: '<path d="m6 6 12 12M18 6 6 18"/>',
+    };
+    if (icons[action]) {
+        button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24"'
+            + ' fill="none" stroke="currentColor" stroke-width="1.7"'
+            + ' stroke-linecap="round" stroke-linejoin="round"'
+            + ' aria-hidden="true" focusable="false">'
+            + icons[action] + '</svg>';
+    } else {
+        button.textContent = label;
+    }
     button.dataset.maintenanceAction = action;
     button.disabled = disabled;
     return button;
@@ -177,19 +201,41 @@ function setupOneMaintenanceCenter(root) {
     const actions = root.querySelector('[data-maintenance-actions]');
     const cancelNote = root.querySelector('[data-maintenance-cancel-note]');
     const browserError = root.querySelector('[data-maintenance-browser-error]');
-    const analysisNote = root.querySelector('[data-maintenance-analysis-note]');
     const review = root.querySelector('[data-maintenance-review]');
-    const reviewActions = root.querySelector('[data-maintenance-review-actions]');
+    const selectionSummary = root.querySelector('[data-maintenance-selection-summary]');
     const planTotals = root.querySelector('[data-maintenance-plan-totals]');
     const planWarnings = root.querySelector('[data-maintenance-plan-warnings]');
-    const taskGroups = root.querySelector('[data-maintenance-task-groups]');
+    const automaticDetails = root.querySelector('[data-maintenance-automatic]');
+    const automaticTasks = root.querySelector('[data-maintenance-automatic-tasks]');
+    const taskTabs = root.querySelector('[data-maintenance-task-tabs]');
+    const taskPanels = root.querySelector('[data-maintenance-task-panels]');
     const fullOptimizeWrap = root.querySelector('[data-maintenance-full-optimize-wrap]');
     const fullOptimize = root.querySelector('[data-maintenance-full-optimize]');
+    if (fullOptimize) fullOptimize.setAttribute('role', 'switch');
     const activity = root.querySelector('[data-maintenance-activity]');
     const diagnostics = root.querySelector('[data-maintenance-diagnostics]');
     const reportSection = root.querySelector('[data-maintenance-report]');
     const reportMetrics = root.querySelector('[data-maintenance-report-metrics]');
     const reportDetails = root.querySelector('[data-maintenance-report-details]');
+
+    /** Select one task category tab and expose its matching task panel.
+     * @param {string} tabId Stable cleanup, media, or database category identifier.
+     * @param {boolean} focus Whether keyboard navigation should focus the selected tab.
+     * @returns {void} Updates tab semantics and panel visibility.
+     */
+    function activateTaskTab(tabId, focus = false) {
+        if (!taskTabs || !taskPanels) return;
+        for (const button of taskTabs.querySelectorAll('[role="tab"]')) {
+            const active = button.dataset.maintenanceTab === tabId;
+            button.setAttribute('aria-selected', active ? 'true' : 'false');
+            button.tabIndex = active ? 0 : -1;
+            if (active && focus) button.focus();
+        }
+        for (const panel of taskPanels.querySelectorAll('[role="tabpanel"]')) {
+            panel.hidden = panel.dataset.maintenancePanel !== tabId;
+        }
+        taskTabs.dataset.activeTab = tabId;
+    }
 
     /** Send one bounded same-origin request and require the server-authoritative job envelope. */
     async function request(url, fields = {}, method = 'POST') {
@@ -223,6 +269,16 @@ function setupOneMaintenanceCenter(root) {
         browserError.hidden = message === '';
     }
 
+    /** Refresh the compact count across every category tab.
+     * @returns {void} Updates the plan summary from all task switches.
+     */
+    function updateSelectionSummary() {
+        if (!selectionSummary) return;
+        const selectable = Array.from(root.querySelectorAll('[data-maintenance-task]'));
+        const selectedCount = selectable.filter((input) => input.checked).length;
+        selectionSummary.textContent = `${formatNumber(selectedCount)} / ${formatNumber(selectable.length)}`;
+    }
+
     /** Render weighted progress and the current server-reported task/subtask.
      * @returns {void} Hides idle/ready progress and updates visible job progress otherwise.
      */
@@ -248,7 +304,9 @@ function setupOneMaintenanceCenter(root) {
         if (currentSubtask) currentSubtask.textContent = subtask;
     }
 
-    /** Render state-valid actions; the server still validates every transition. */
+    /** Render state-valid actions; the server still validates every transition.
+     * @returns {void} Replaces the compact toolbar with currently allowed actions.
+     */
     function renderActions() {
         if (!actions) return;
         actions.replaceChildren();
@@ -260,22 +318,22 @@ function setupOneMaintenanceCenter(root) {
         const status = String(job?.status || 'idle');
         const fresh = job?.plan_freshness?.fresh !== false;
         if (status === 'idle' || status === 'completed' || status === 'failed' || status === 'cancelled' || !job) {
-            actions.append(createButton(job ? (strings.analyze_again || 'Analyze again') : (strings.analyze || 'Analyze & optimize'), 'button', 'analyze'));
+            actions.append(createButton(job ? (strings.analyze_again_short || 'Analyze again') : (strings.analyze_short || 'Analyze'), 'button', 'analyze'));
         } else if (status === 'ready') {
-            actions.append(createButton(strings.run || 'Run maintenance', 'button', 'run', !fresh));
-            actions.append(createButton(strings.analyze_again || 'Analyze again', 'button secondary', 'analyze'));
+            actions.append(createButton(strings.run_short || 'Run', 'button', 'run', !fresh));
+            actions.append(createButton(strings.analyze_again_short || 'Analyze again', 'button secondary', 'analyze'));
             actions.append(createButton(strings.cancel || 'Cancel', 'button secondary', 'cancel'));
         } else if (status === 'running') {
             actions.append(createButton(strings.pause || 'Pause', 'button secondary', 'pause'));
             actions.append(createButton(strings.cancel || 'Cancel', 'button secondary', 'cancel'));
         } else if (status === 'paused') {
-            actions.append(createButton(strings.resume || 'Resume maintenance', 'button', 'resume'));
+            actions.append(createButton(strings.resume_short || 'Resume', 'button', 'resume'));
             actions.append(createButton(strings.cancel || 'Cancel', 'button secondary', 'cancel'));
         } else if (status === 'analyzing') {
             actions.append(createButton(strings.cancel || 'Cancel', 'button secondary', 'cancel'));
         }
         if (!autoContinue && ['analyzing', 'running'].includes(status)) {
-            actions.prepend(createButton(strings.retry || 'Continue from saved checkpoint', 'button', 'retry'));
+            actions.prepend(createButton(strings.retry_short || 'Continue', 'button', 'retry'));
         }
         if (cancelNote) cancelNote.hidden = !['running', 'paused'].includes(status);
     }
@@ -291,15 +349,7 @@ function setupOneMaintenanceCenter(root) {
             review.hidden = !visible;
             review.open = !['completed', 'failed', 'cancelled'].includes(status);
         }
-        if (reviewActions) {
-            reviewActions.replaceChildren();
-            reviewActions.hidden = status !== 'ready';
-            if (status === 'ready') {
-                const fresh = job?.plan_freshness?.fresh !== false;
-                reviewActions.append(createButton(strings.run || 'Run maintenance', 'button', 'run', !fresh));
-            }
-        }
-        if (!visible || !taskGroups || !planTotals) return;
+        if (!visible || !taskTabs || !taskPanels || !planTotals) return;
 
         planTotals.replaceChildren();
         const totals = [
@@ -328,100 +378,205 @@ function setupOneMaintenanceCenter(root) {
             if (warning.textContent) planWarnings.append(warning);
         }
 
-        const selectedPersisted = new Set(job?.selected_tasks || []);
+        const persistedTaskList = Array.isArray(job?.selected_tasks) ? job.selected_tasks : [];
+        const selectedPersisted = new Set(persistedTaskList);
         const executionStarted = ['running', 'paused', 'completed', 'failed', 'cancelled'].includes(status) && selectedPersisted.size > 0;
-        const previouslyExpandedNoWork = Boolean(taskGroups.querySelector('.maintenance-center-no-work')?.open);
-        const groups = new Map();
-        const noWorkGroups = new Map();
-        let noWorkCount = 0;
+        const previousSelections = new Map(
+            Array.from(root.querySelectorAll('[data-maintenance-task]'))
+                .map((input) => [input.dataset.maintenanceTask || '', input.checked]),
+        );
+        const tasksByTab = new Map([
+            ['cleanup', []],
+            ['media', []],
+            ['database', []],
+        ]);
+        const automatic = [];
         for (const task of plan.tasks || []) {
-            const key = String(task?.group || 'system');
-            const keepDiscoverable = task.key === 'media.deep_verify'
-                || (task.key === 'database.optimize' && task.analysis?.full_optimization_available === true);
-            const shouldCollapse = task.available === true && !task.required && task.analysis?.has_work === false && !keepDiscoverable;
-            const destination = shouldCollapse ? noWorkGroups : groups;
-            if (!destination.has(key)) destination.set(key, []);
-            destination.get(key).push(task);
-            if (shouldCollapse) noWorkCount += 1;
-        }
-        taskGroups.replaceChildren();
-        const appendGroups = (parent, groupedTasks, className = 'maintenance-center-task-group') => {
-            for (const [group, tasks] of groupedTasks) {
-                const section = document.createElement('section');
-                section.className = className;
-                const heading = document.createElement('h3');
-                heading.textContent = strings[`group_${group}`] || humanize(group);
-                section.append(heading);
-                for (const task of tasks) {
-                    const item = document.createElement('div');
-                    item.className = 'maintenance-center-task-item';
-                    const card = document.createElement('label');
-                    card.className = `maintenance-center-task${task.available ? '' : ' is-unavailable'}`;
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.dataset.maintenanceTask = String(task.key || '');
-                    checkbox.disabled = !task.available || Boolean(task.required) || status !== 'ready';
-                    checkbox.checked = task.required || (executionStarted ? selectedPersisted.has(task.key) : Boolean(task.default_selected));
-                    const body = document.createElement('span');
-                    body.className = 'maintenance-center-task-body';
-                    const taskHeading = document.createElement('span');
-                    taskHeading.className = 'maintenance-center-task-heading';
-                    const title = document.createElement('span');
-                    title.className = 'maintenance-center-task-title';
-                    title.textContent = String(task.display_label || task.label || task.key || '');
-                    taskHeading.append(title);
-                    if (task.required) {
-                        const required = document.createElement('small');
-                        required.className = 'maintenance-center-task-requirement';
-                        required.textContent = strings.required_automatic || 'Required · automatic';
-                        taskHeading.append(required);
-                    }
-                    if (!task.available) {
-                        const unavailable = document.createElement('small');
-                        unavailable.className = 'maintenance-center-task-unavailable';
-                        unavailable.textContent = strings.unavailable || 'Unavailable';
-                        taskHeading.append(unavailable);
-                    }
-                    const facts = document.createElement('span');
-                    facts.className = 'maintenance-center-task-facts';
-                    for (const [label, value] of analysisFacts(task, strings)) {
-                        const fact = document.createElement('span');
-                        const strong = document.createElement('strong');
-                        strong.textContent = value;
-                        const small = document.createElement('small');
-                        small.textContent = label;
-                        fact.append(small, strong);
-                        facts.append(fact);
-                    }
-                    body.append(taskHeading, facts);
-                    card.append(checkbox, body);
-                    item.append(card);
-                    if (task.key === 'database.optimize' && fullOptimizeWrap) {
-                        fullOptimizeWrap.hidden = !(task.available && task.analysis?.full_optimization_available);
-                        if (fullOptimize) {
-                            fullOptimize.disabled = status !== 'ready';
-                            if (executionStarted) fullOptimize.checked = false;
-                        }
-                        item.append(fullOptimizeWrap);
-                    }
-                    section.append(item);
-                }
-                parent.append(section);
+            if (['preflight', 'verify'].includes(String(task?.key || ''))) {
+                automatic.push(task);
+                continue;
             }
-        };
-        appendGroups(taskGroups, groups);
-        if (noWorkCount > 0) {
-            const noWork = document.createElement('details');
-            noWork.className = 'maintenance-center-no-work';
-            noWork.open = previouslyExpandedNoWork;
-            const summary = document.createElement('summary');
-            summary.textContent = String(strings.no_work_count || 'No work detected ({count})').replace('{count}', formatNumber(noWorkCount));
-            const noWorkContent = document.createElement('div');
-            noWorkContent.className = 'maintenance-center-no-work-groups';
-            appendGroups(noWorkContent, noWorkGroups, 'maintenance-center-task-group maintenance-center-no-work-group');
-            noWork.append(summary, noWorkContent);
-            taskGroups.append(noWork);
+            const tab = task.group === 'media'
+                ? 'media'
+                : task.group === 'database'
+                    ? 'database'
+                    : 'cleanup';
+            tasksByTab.get(tab).push(task);
         }
+        const activeTabBeforeRender = taskTabs.dataset.activeTab || 'cleanup';
+        taskTabs.replaceChildren();
+        taskPanels.replaceChildren();
+        if (automaticDetails && automaticTasks) {
+            const automaticWasOpen = automaticDetails.open;
+            automaticDetails.hidden = automatic.length === 0;
+            automaticTasks.replaceChildren();
+            for (const task of automatic) {
+                const row = document.createElement('div');
+                row.className = 'maintenance-center-automatic-task';
+                const label = document.createElement('strong');
+                label.textContent = String(task.display_label || task.label || task.key || '');
+                const state = document.createElement('span');
+                const selectedIndex = persistedTaskList.indexOf(String(task.key || ''));
+                if (!task.available) {
+                    state.textContent = strings.unavailable || 'Unavailable';
+                    state.classList.add('is-error');
+                } else if (selectedIndex >= 0 && selectedIndex < Number(job?.task_index || 0)) {
+                    state.textContent = strings.completed || 'Completed';
+                    state.classList.add('is-complete');
+                } else if (String(job?.current_task || '') === String(task.key || '')) {
+                    state.textContent = strings.current || 'Current';
+                    state.classList.add('is-current');
+                } else {
+                    state.textContent = strings.required_automatic || 'Required · automatic';
+                }
+                row.append(label, state);
+                const facts = analysisFacts(task, strings);
+                const warning = String(task.analysis?.warning || '');
+                const checks = Array.isArray(task.analysis?.checks)
+                    ? task.analysis.checks.map(humanize).join(', ')
+                    : '';
+                if (facts.length > 0 || warning || checks) {
+                    const detail = document.createElement('small');
+                    detail.textContent = [
+                        ...facts.map(([factLabel, value]) => `${factLabel}: ${value}`),
+                        checks,
+                        warning,
+                    ].filter(Boolean).join(' · ');
+                    row.append(detail);
+                }
+                automaticTasks.append(row);
+            }
+            automaticDetails.open = automaticWasOpen;
+        }
+        const tabDefinitions = [
+            ['cleanup', strings.tab_cleanup || 'Cleanup'],
+            ['media', strings.tab_media || 'Media'],
+            ['database', strings.tab_database || 'Database'],
+        ];
+        for (const [tabId, label] of tabDefinitions) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'maintenance-center-task-tab';
+            button.dataset.maintenanceTab = tabId;
+            button.id = `maintenance-tab-${tabId}`;
+            button.setAttribute('role', 'tab');
+            button.setAttribute('aria-controls', `maintenance-panel-${tabId}`);
+            button.textContent = label;
+            taskTabs.append(button);
+
+            const panel = document.createElement('div');
+            panel.className = 'maintenance-center-task-panel';
+            panel.id = `maintenance-panel-${tabId}`;
+            panel.dataset.maintenancePanel = tabId;
+            panel.setAttribute('role', 'tabpanel');
+            panel.setAttribute('aria-labelledby', button.id);
+            panel.tabIndex = 0;
+            const grid = document.createElement('div');
+            grid.className = 'maintenance-center-task-grid';
+            for (const task of tasksByTab.get(tabId) || []) {
+                const item = document.createElement('div');
+                item.className = 'maintenance-center-task-item';
+                const card = document.createElement('label');
+                card.className = `maintenance-center-task${task.available ? '' : ' is-unavailable'}`;
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.setAttribute('role', 'switch');
+                checkbox.dataset.maintenanceTask = String(task.key || '');
+                checkbox.disabled = !task.available || Boolean(task.required) || status !== 'ready';
+                const taskKey = String(task.key || '');
+                checkbox.checked = task.required
+                    || (executionStarted
+                        ? selectedPersisted.has(taskKey)
+                        : previousSelections.has(taskKey)
+                            ? Boolean(previousSelections.get(taskKey))
+                            : Boolean(task.default_selected));
+                const shortLabel = String(
+                    strings.task_short_labels?.[taskKey]
+                        || task.display_label
+                        || task.label
+                        || taskKey,
+                );
+                checkbox.setAttribute('aria-label', shortLabel);
+                const title = document.createElement('span');
+                title.className = 'maintenance-center-task-title';
+                title.textContent = shortLabel;
+                card.append(checkbox, title);
+                if (task.required) {
+                    const required = document.createElement('small');
+                    required.className = 'maintenance-center-task-requirement';
+                    required.textContent = strings.required_automatic || 'Required · automatic';
+                    card.append(required);
+                }
+                if (!task.available) {
+                    const unavailable = document.createElement('small');
+                    unavailable.className = 'maintenance-center-task-unavailable';
+                    unavailable.textContent = strings.unavailable || 'Unavailable';
+                    card.append(unavailable);
+                }
+                item.append(card);
+
+                const help = document.createElement('details');
+                help.className = 'admin-inline-help maintenance-center-task-help';
+                const helpSummary = document.createElement('summary');
+                helpSummary.setAttribute('aria-label', String(task.display_label || task.label || shortLabel));
+                helpSummary.setAttribute('aria-controls', `maintenance-help-${taskKey}`);
+                const question = document.createElement('span');
+                question.setAttribute('aria-hidden', 'true');
+                question.textContent = '?';
+                helpSummary.append(question);
+                const helpContent = document.createElement('div');
+                helpContent.className = 'admin-inline-help-content';
+                helpContent.id = `maintenance-help-${taskKey}`;
+                const fullLabel = document.createElement('strong');
+                fullLabel.textContent = String(task.display_label || task.label || shortLabel);
+                helpContent.append(fullLabel);
+                if (task.analysis?.has_work === false) {
+                    const noWork = document.createElement('p');
+                    noWork.textContent = strings.no_work || 'No work detected';
+                    helpContent.append(noWork);
+                }
+                const facts = analysisFacts(task, strings);
+                if (facts.length > 0) {
+                    const factList = document.createElement('ul');
+                    for (const [factLabel, value] of facts) {
+                        const fact = document.createElement('li');
+                        fact.textContent = `${factLabel}: ${value}`;
+                        factList.append(fact);
+                    }
+                    helpContent.append(factList);
+                }
+                const warning = String(task.analysis?.warning || '');
+                if (warning) {
+                    const warningNode = document.createElement('p');
+                    warningNode.textContent = warning;
+                    helpContent.append(warningNode);
+                }
+                help.append(helpSummary, helpContent);
+                item.append(help);
+                grid.append(item);
+            }
+            panel.append(grid);
+            taskPanels.append(panel);
+        }
+        if (fullOptimizeWrap) {
+            const optimizeTask = (plan.tasks || []).find(
+                (task) => task?.key === 'database.optimize',
+            );
+            fullOptimizeWrap.hidden = !(
+                optimizeTask?.available
+                && optimizeTask.analysis?.full_optimization_available
+            );
+            if (fullOptimize) {
+                fullOptimize.disabled = status !== 'ready';
+                if (executionStarted) fullOptimize.checked = false;
+            }
+            const databasePanel = taskPanels.querySelector(
+                '[data-maintenance-panel="database"]',
+            );
+            if (databasePanel) databasePanel.append(fullOptimizeWrap);
+        }
+        activateTaskTab(activeTabBeforeRender, false);
+        updateSelectionSummary();
 
     }
 
@@ -553,7 +708,6 @@ function setupOneMaintenanceCenter(root) {
      */
     function render() {
         const status = String(job?.status || 'idle');
-        if (analysisNote) analysisNote.hidden = Boolean(job) && !['analyzing', 'ready'].includes(status);
         const statusLabels = {
             analyzing: strings.analyzing,
             ready: strings.ready,
@@ -663,11 +817,54 @@ function setupOneMaintenanceCenter(root) {
         }
     }
 
+    document.addEventListener('click', (event) => {
+        for (const help of root.querySelectorAll(
+            'details.admin-inline-help[open]',
+        )) {
+            if (event.target instanceof Node && !help.contains(event.target)) {
+                help.open = false;
+            }
+        }
+    }, true);
+
     root.addEventListener('click', (event) => {
+        const tab = event.target.closest('[role="tab"][data-maintenance-tab]');
+        if (tab && taskTabs?.contains(tab)) {
+            event.preventDefault();
+            activateTaskTab(tab.dataset.maintenanceTab || 'cleanup', false);
+            return;
+        }
         const button = event.target.closest('[data-maintenance-action]');
         if (!button || !root.contains(button)) return;
         event.preventDefault();
         void handleAction(button.dataset.maintenanceAction || '');
+    });
+
+    root.addEventListener('keydown', (event) => {
+        const openHelp = event.target.closest('details.admin-inline-help[open]');
+        if (event.key === 'Escape' && openHelp) {
+            openHelp.open = false;
+            openHelp.querySelector('summary')?.focus();
+            return;
+        }
+        const tab = event.target.closest('[role="tab"][data-maintenance-tab]');
+        if (!tab || !taskTabs?.contains(tab)) return;
+        const tabButtons = Array.from(taskTabs.querySelectorAll('[role="tab"]'));
+        const currentIndex = tabButtons.indexOf(tab);
+        let nextIndex = currentIndex;
+        if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabButtons.length;
+        if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = tabButtons.length - 1;
+        if (nextIndex === currentIndex) return;
+        event.preventDefault();
+        activateTaskTab(tabButtons[nextIndex].dataset.maintenanceTab || 'cleanup', true);
+    });
+
+    root.addEventListener('change', (event) => {
+        if (event.target?.matches?.('[data-maintenance-task]')) {
+            updateSelectionSummary();
+        }
     });
 
     render();

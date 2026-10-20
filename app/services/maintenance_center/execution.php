@@ -1077,6 +1077,51 @@ function maintenance_center_complete_job(array $row, array $state): array
     return maintenance_center_job_status($jobId, $actorId);
 }
 
+/**
+ * Move at most one verified legacy original and retain its resumable cursor.
+ * @param array{task_state:array{cursor?:array{gallery_id:int,
+ *     track_id:string}|null,moved?:int,bytes?:int}} $context Persisted task
+ *     checkpoint; the surrounding executor owns the durable job write.
+ * @return array{done:bool,task_state:array{cursor:?array{gallery_id:int,
+ *     track_id:string},moved:int,bytes:int},metrics:array{
+ *     music_tracks_moved:int,music_bytes_moved:int},activity:string} Committed
+ *     slice totals and next cursor; failed moves preserve the old checkpoint.
+ * @throws RuntimeException When an original cannot be moved safely.
+ */
+function maintenance_center_execute_music_repository(array $context): array
+{
+    $previous = $context['task_state'];
+    $cursor = $previous['cursor'] ?? null;
+    $result = gallery_music_migrate_repository($cursor);
+    if ($result['error'] !== null) {
+        throw new RuntimeException(maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.music_repository_failed',
+            'An audio original could not be moved safely. The saved checkpoint '
+                . 'and original remain available for retry.',
+        ));
+    }
+    $moved = max(0, (int) $result['moved']);
+    $bytes = max(0, (int) $result['bytes']);
+    $totalMoved = max(0, (int) ($previous['moved'] ?? 0)) + $moved;
+    return [
+        'done' => $result['complete'],
+        'task_state' => [
+            'cursor' => $result['cursor'],
+            'moved' => $totalMoved,
+            'bytes' => max(0, (int) ($previous['bytes'] ?? 0)) + $bytes,
+        ],
+        'metrics' => [
+            'music_tracks_moved' => $moved,
+            'music_bytes_moved' => $bytes,
+        ],
+        'activity' => maintenance_center_runtime_text(
+            'admin.maintenance_center.runtime.music_repository_moved',
+            'Moved {count} original(s) to the music repository.',
+            ['count' => $totalMoved],
+        ),
+    ];
+}
+
 /** No-op execution boundary for server-side preflight rechecks.
  * @param array<string,mixed> $context Shared task context containing prior analysis results and job state.
  * @return array<string,mixed> Structured result for this operation following the Maintenance Center state or plan contract.

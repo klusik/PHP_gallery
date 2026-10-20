@@ -430,7 +430,7 @@ function storedZip(files) {
  * @typedef {{path:string,method:string,payload:{sha:string,force:boolean}}} FixtureRefWrite
  */
 /** Captured exact-candidate Actions check metadata.
- * @typedef {{id:number,name:string,head_sha:string,external_id:string,app:{id:number},status:string,conclusion:string}} FixtureCheck
+ * @typedef {{id:number,name:string,head_sha:string,external_id:string,app:{id:number},status:string,conclusion:string,check_suite:{id:number},details_url:string|null}} FixtureCheck
  */
 /** Inert provider surface with mutable heads and independently captured metadata/ref writes.
  * @typedef {{call:IntegrationApi,state:{source:string,develop:string,updates:FixtureRefWrite[],checks:FixtureCheck[],statuses:Array<{id:number,state:string,context:string,target_url:string,creator:{login:string}}>}}} IntegrationFixture
@@ -442,7 +442,8 @@ function storedZip(files) {
 function fixture(sourceHead=candidateSha) {
     const state={source:sourceHead,develop:developSha,updates:[],checks:[],statuses:[]};
     const basic={id:1001,name:'Basic source qualification',app:{id:15368},head_sha:sourceSha,
-        check_suite:{id:7001},external_id:'basic:801:3:'+sourceSha,status:'completed',conclusion:'success'};
+        check_suite:{id:7001},details_url:'https://github.com/'+repository+'/actions/runs/801',
+        external_id:'basic:801:3:'+sourceSha,status:'completed',conclusion:'success'};
     const jobs=ownerNames.map((name,index)=>({id:2000+index,name:'Develop integration / '+name,run_id:901,
         run_attempt:2,workflow_name:'Integrate into develop',status:'completed',conclusion:'success'}));
     const workflowStepId=2000+ownerNames.length;
@@ -482,7 +483,8 @@ function fixture(sourceHead=candidateSha) {
         if (path==='repos/'+repository+'/commits/'+candidateSha+'/check-runs?filter=all&per_page=100&page=1') return {total_count:state.checks.length,check_runs:state.checks};
         if (path==='repos/'+repository+'/check-runs' && method==='POST') {
             const check={id:state.checks.length+3000,name:payload.name,head_sha:payload.head_sha,external_id:payload.external_id,
-                app:{id:15368},status:'completed',conclusion:'success'};state.checks.push(check);return check;
+                app:{id:15368},status:'completed',conclusion:'success',check_suite:{id:7002},
+                details_url:'https://github.com/'+repository+'/actions/runs/901'};state.checks.push(check);return check;
         }
         if (path==='repos/'+repository+'/statuses/'+candidateSha && method==='POST') {
             const status={...payload,id:4000+state.statuses.length,creator:{login:'github-actions[bot]'}};
@@ -544,6 +546,44 @@ for (const invalid of ['feature/a b','feature/a#x\\y','feature/a..b','feature/.h
     // REST-created custom checks can share a prior suite while this native BASIC attempt owns a new suite.
     assert.deepEqual(selectDevelopIntegration(branch,context,repository,f.call),{branch,sourceSha,
         expectedDevelopSha:developSha,sourceBase:developSha,basicRunId:'801',basicRunAttempt:'3'});
+}
+
+{
+    const f=fixture(sourceSha),original=f.call;
+    f.call=(path,...args)=>path.endsWith('/check-suites/7001')
+        ? {...original(path,...args),conclusion:'failure'} : original(path,...args);
+    assert.deepEqual(selectDevelopIntegration(branch,context,repository,f.call),{branch,sourceSha,
+        expectedDevelopSha:developSha,sourceBase:developSha,basicRunId:'801',basicRunAttempt:'3'},
+    'An unrelated aggregate failure in the custom check run’s associated suite cannot override native BASIC success.');
+}
+
+for (const [label,patch] of [
+    ['associated suite identity',{id:7003}],
+    ['associated suite branch',{head_branch:'feature/other'}],
+    ['associated suite source SHA',{head_sha:'e'.repeat(40)}],
+    ['associated suite Actions App',{app:{id:1}}],
+]) {
+    const f=fixture(sourceSha),original=f.call;
+    f.call=(path,...args)=>path.endsWith('/check-suites/7001')
+        ? {...original(path,...args),...patch} : original(path,...args);
+    assert.throws(()=>selectDevelopIntegration(branch,context,repository,f.call),/BLOCKED/,
+        label+' mismatch remains rejected even though its aggregate result is not authoritative.');
+}
+
+{
+    const f=fixture(sourceSha),original=f.call;
+    f.call=(path,...args)=>{
+        if (path==='repos/'+repository+'/commits/'+sourceSha
+            +'/check-runs?filter=all&per_page=100&page=1') {
+            const response=original(path,...args);
+            return {...response,check_runs:response.check_runs.map(check=>({
+                ...check,conclusion:'failure',
+            }))};
+        }
+        return original(path,...args);
+    };
+    assert.throws(()=>selectDevelopIntegration(branch,context,repository,f.call),/BLOCKED/,
+        'A failed exact custom BASIC check remains rejected even when its native suite/job are green.');
 }
 
 for (const [label,patch] of [
