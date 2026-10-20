@@ -159,6 +159,8 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Services\gallery_editor_unique_slug|variable_callable|$collision()
     Gallery\Services\gallery_effective_gps_map_enabled|variable_callable|$galleryLookup()
     Gallery\Services\gallery_image_move_execute_files|variable_callable|$checkpoint()
+    Gallery\Services\gallery_attachment_usage_background_start|variable_callable|$dispatch()
+    Gallery\Services\gallery_attachment_usage_background_run|variable_callable|$dispatch()
     Gallery\Services\gallery_legacy_allows_gps_maps|variable_callable|$galleryLookup()
     Gallery\Services\gallery_migration_package_plan|variable_callable|$flush()
     Gallery\Services\gallery_move_images_locked|dynamic_callback_argument|is_callable($options)
@@ -189,6 +191,7 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Services\site_maintenance_process_cleanup_step|variable_callable|$run()
     Gallery\Services\site_maintenance_register_request_trigger|variable_callable|$loadDependencies()
     Gallery\Services\site_maintenance_register_cache_trigger|variable_callable|$loadDependencies()
+    Gallery\Services\site_maintenance_register_attachment_usage_trigger|variable_callable|$loadDependencies()
     Gallery\Services\site_maintenance_run_cleanup_operation|variable_callable|$callback()
     Gallery\Services\site_maintenance_with_lock|variable_callable|$callback()
     Gallery\Services\theme_background_with_writer_lock|variable_callable|$operation()
@@ -231,9 +234,26 @@ function runtime_dynamic_dependency_reviewed_sites(): array
             ),
             str_contains(
                 $signature,
+                'site_maintenance_register_attachment_usage_trigger|',
+            ),
+            str_contains(
+                $signature,
                 'admin_log_archive_register_request_trigger|',
             ),
                 => 'injected-module-loader:explicit-module-id',
+            // Only lexical callbacks from the public trigger and private
+            // controller supply the configured-origin ticket transport. The
+            // caller graph retains that concrete transport; input cannot pick
+            // a callable, URL, module or maintenance mode.
+            str_contains(
+                $signature,
+                'gallery_attachment_usage_background_start|',
+            ),
+            str_contains(
+                $signature,
+                'gallery_attachment_usage_background_run|',
+            )
+                => 'injected-media-ticket-transport:configured-installation-origin',
             str_contains(
                 $signature,
                 'maintenance_center_load_task_dependencies|',

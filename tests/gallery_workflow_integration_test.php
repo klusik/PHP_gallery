@@ -1180,8 +1180,24 @@ try {
     );
     foreach ($musicFiles as $file)
         check(unlink($file), 'Cannot retire audio seed.');
-    foreach ($musicFolders as $path)
-        check(rmdir($path), 'Cannot retire audio sidecar.');
+    foreach ($musicFolders as $path) {
+        // Automatic reconciliation can create the persistent source lock even
+        // before these fixture tracks exist. Retire only fixture-owned audio;
+        // unlinking that coordination inode would split concurrent writers.
+        $entries = scandir($path);
+        check(is_array($entries), 'Cannot inspect owned audio sidecar.');
+        $remaining = array_values(array_diff($entries, ['.', '..']));
+        check(
+            $remaining === []
+                || $remaining === ['.lock']
+                && is_file($path . '/.lock')
+                && !is_link($path . '/.lock'),
+            'Unexpected payload remains in the owned audio sidecar.',
+        );
+        if ($remaining === []) {
+            check(rmdir($path), 'Cannot retire empty audio sidecar.');
+        }
+    }
     echo
         "PASS gallery workflow real Smart music union and source authorization\n";
 

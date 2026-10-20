@@ -4,10 +4,10 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/telemetry_visitor_http_test.php
  * Module Type: HTTP Regression Test
- * Purpose: Verify ordinary visits dispatch private telemetry without Admin or cron.
+ * Purpose: Verify public visits admit only their intended private worker modes.
  * Responsibilities:
- *   - Exercise real registration, socket transport and controller authentication.
- *   - Verify throttling, opt-out, route restrictions and strict central ownership.
+ *   - Exercise telemetry and media-count registration in a disposable server.
+ *   - Verify strict token, method, payload and completion-receipt behavior.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -93,6 +93,18 @@ function telemetry_visitor_receipts(string $root): int
 {
     return is_file($root . '/receipts')
         ? count(file($root . '/receipts', FILE_IGNORE_NEW_LINES) ?: [])
+        : 0;
+}
+
+/**
+ * Count automatic media-count kickoffs recorded by the fixture service adapter.
+ * @param string $root Marker-owned fixture directory.
+ * @return int Number of first-load kickoff admissions.
+ */
+function telemetry_visitor_media_starts(string $root): int
+{
+    return is_file($root . '/media-starts')
+        ? count(file($root . '/media-starts', FILE_IGNORE_NEW_LINES) ?: [])
         : 0;
 }
 
@@ -232,6 +244,125 @@ try {
         );
         unlink($root . '/' . $condition);
     }
+    file_put_contents($root . '/media-enabled', 'enabled');
+    file_put_contents($root . '/off', 'telemetry disabled for media-only phase');
+    file_put_contents($root . '/master-off', 'telemetry master switch disabled');
+    $receiptsBeforeMedia = telemetry_visitor_receipts($root);
+
+    $mediaWorkerUrl = $workerUrl;
+    telemetry_visitor_assert(
+        telemetry_visitor_request($base . '/?route=admin')['status'] === 200
+            && telemetry_visitor_request(
+                $base . '/?route=gallery&preview=visual',
+            )['status'] === 200
+            && telemetry_visitor_request(
+                $base . '/?route=gallery&denied=1',
+            )['status'] === 403
+            && telemetry_visitor_request(
+                $base . '/?route=gallery',
+                'HEAD',
+            )['status'] === 200
+            && telemetry_visitor_request(
+                $base . '/?route=gallery',
+                'POST',
+            )['status'] === 200
+            && telemetry_visitor_media_starts($root) === 0
+            && telemetry_visitor_receipts($root) === $receiptsBeforeMedia,
+        'Admin, preview, failed, HEAD and POST requests must not start media counts or other workers.',
+    );
+    $mediaPage = telemetry_visitor_request(
+        $base . '/?route=gallery',
+    );
+    telemetry_visitor_assert(
+        $mediaPage['status'] === 200
+            && $mediaPage['body'] === '<main>Public gallery fixture</main>',
+        'The media-count kickoff must preserve the successful public response.',
+    );
+    for ($attempt = 0; $attempt < TELEMETRY_VISITOR_POLL_ATTEMPTS; $attempt++) {
+        if (
+            telemetry_visitor_media_starts($root) === 1
+            && is_file($root . '/media-complete')
+        ) {
+            break;
+        }
+        usleep(TELEMETRY_VISITOR_POLL_US);
+    }
+    telemetry_visitor_assert(
+        telemetry_visitor_media_starts($root) === 1
+            && is_file($root . '/media-queued')
+            && file_get_contents($root . '/media-queued')
+                === str_repeat('c', 64)
+            && is_file($root . '/media-complete')
+            && file($root . '/media-workers', FILE_IGNORE_NEW_LINES)
+                === [str_repeat('c', 64)],
+        'The first successful public GET must dispatch and receive the actual media-only socket ticket.',
+    );
+    telemetry_visitor_request($base . '/?route=smart_gallery');
+    telemetry_visitor_assert(
+        telemetry_visitor_media_starts($root) === 1
+            && telemetry_visitor_receipts($root) === $receiptsBeforeMedia,
+        'A completed media receipt must suppress later kickoffs without running telemetry.',
+    );
+
+    $mediaTicket = str_repeat('b', 64);
+    telemetry_visitor_assert(
+        telemetry_visitor_request(
+            $mediaWorkerUrl,
+            'POST',
+            ['media_ticket' => $mediaTicket],
+        )['status'] === 403,
+        'Unauthenticated media-count transport must be forbidden.',
+    );
+    telemetry_visitor_assert(
+        telemetry_visitor_request(
+            $mediaWorkerUrl . '&media_ticket=' . $mediaTicket,
+            'GET',
+            [],
+            true,
+        )['status'] === 400,
+        'Authenticated GET cannot start a media-count worker.',
+    );
+    telemetry_visitor_assert(
+        telemetry_visitor_request(
+            $mediaWorkerUrl,
+            'POST',
+            ['media_ticket' => 'invalid'],
+            true,
+        )['status'] === 400,
+        'Malformed media tickets must be refused.',
+    );
+    telemetry_visitor_assert(
+        telemetry_visitor_request(
+            $mediaWorkerUrl,
+            'POST',
+            ['media_ticket' => $mediaTicket, 'telemetry_only' => '1'],
+            true,
+        )['status'] === 400,
+        'A media ticket cannot be mixed with another maintenance mode.',
+    );
+    telemetry_visitor_assert(
+        telemetry_visitor_request(
+            $mediaWorkerUrl,
+            'POST',
+            ['media_ticket' => $mediaTicket],
+            true,
+        )['status'] === 200,
+        'A valid authenticated media ticket must reach its isolated worker branch.',
+    );
+    telemetry_visitor_assert(
+        file($root . '/media-workers', FILE_IGNORE_NEW_LINES)
+            === [str_repeat('c', 64), $mediaTicket]
+            && file($root . '/media-modules', FILE_IGNORE_NEW_LINES)
+                === [
+                    'site-maintenance-work',
+                    'gallery-pdf-documents',
+                    'site-maintenance-work',
+                    'gallery-pdf-documents',
+                ]
+            && !is_file($root . '/cache/site-maintenance/visitor.lock')
+            && telemetry_visitor_receipts($root) === $receiptsBeforeMedia,
+        'Only the media-only workers may load their reviewed owners or run.',
+    );
     echo "telemetry_visitor_http_test: ok\n";
 } finally {
     if (is_resource($process)) {

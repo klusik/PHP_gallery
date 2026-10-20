@@ -1103,39 +1103,49 @@ function site_maintenance_fire_cache_chain(string $ticket): bool
 }
 
 /**
- * Dispatch cache, telemetry or updater continuation to the configured private worker.
+ * Dispatch one exclusive maintenance mode to the configured private worker.
  *
  * The visitor sends only a bounded handoff; it never waits for maintenance SQL.
- * @param bool $telemetryOnly True for telemetry admission; false for cache/updater tickets.
+ * @param bool $telemetryOnly True for telemetry admission; false for ticket-based workers.
  * @param string $ticket Private cache continuation ticket; empty for other worker modes.
  * @param string $updateTicket Private updater continuation ticket; empty for other worker modes.
+ * @param string $mediaTicket Private attachment-count ticket; empty for other worker modes.
  * @return bool True after the complete authenticated POST is written; not proof of worker arrival.
  */
 function site_maintenance_fire_background_worker(
     bool $telemetryOnly,
     string $ticket = '',
     string $updateTicket = '',
+    string $mediaTicket = '',
 ): bool {
     $updaterOnly = $updateTicket !== '';
+    $mediaOnly = $mediaTicket !== '';
     if (
         !function_exists('stream_socket_client')
         || (
-            $updaterOnly
+            $mediaOnly
                 ? $telemetryOnly
                 || $ticket !== ''
-                || preg_match('/^[a-f0-9]{64}$/D', $updateTicket) !== 1
+                || $updateTicket !== ''
+                || preg_match('/^[a-f0-9]{64}$/D', $mediaTicket) !== 1
                 : (
-                    $telemetryOnly
-                        ? $ticket !== ''
-                        : preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
+                    $updaterOnly
+                        ? $telemetryOnly
+                        || $ticket !== ''
+                        || preg_match('/^[a-f0-9]{64}$/D', $updateTicket) !== 1
+                        : (
+                            $telemetryOnly
+                                ? $ticket !== ''
+                                : preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1
+                        )
                 )
         )
     ) {
         return false;
     }
-    // Keep the existing single-worker protection for autonomous updater hops.
-    // Permanent fallback: ordinary admitted visits still advance the job when
-    // the built-in server cannot serve an independent HTTP request safely.
+    // Preserve the updater's single-worker protection and admitted-visit
+    // fallback. Media hops, like telemetry, return after one bounded slice
+    // without waiting for another response or sleeping in a timer loop.
     if ($updaterOnly) {
         require_once __DIR__ . '/cache_lifecycle_storage.php';
         if (!cache_lifecycle_chain_runtime_available()) {
@@ -1161,13 +1171,15 @@ function site_maintenance_fire_background_worker(
     $port = (int) ($parts['port'] ?? ($parts['scheme'] === 'https' ? 443 : 80));
     if ($port < 1 || $port > 65535)
         return false;
-    $payload = $updaterOnly
-        ? ['update_ticket' => $updateTicket]
-        : (
-            $telemetryOnly
-                ? ['telemetry_only' => 1]
-                : ['cache_only' => 1, 'cache_ticket' => $ticket]
-        );
+    if ($mediaOnly) {
+        $payload = ['media_ticket' => $mediaTicket];
+    } elseif ($updaterOnly) {
+        $payload = ['update_ticket' => $updateTicket];
+    } else {
+        $payload = $telemetryOnly
+            ? ['telemetry_only' => 1]
+            : ['cache_only' => 1, 'cache_ticket' => $ticket];
+    }
     $body = http_build_query($payload, '', '&', PHP_QUERY_RFC3986);
     $target =
         rtrim((string) ($parts['path'] ?? ''), '/')
@@ -1207,13 +1219,15 @@ function site_maintenance_fire_background_worker(
         return false;
     try {
         stream_set_timeout($socket, $transportSeconds);
-        $agent = $updaterOnly
-            ? 'PHP-Gallery-Update-Worker'
-            : (
-                $telemetryOnly
-                    ? 'PHP-Gallery-Telemetry-Worker'
-                    : 'PHP-Gallery-Cache-Worker'
-            );
+        if ($mediaOnly) {
+            $agent = 'PHP-Gallery-Media-Counts-Worker';
+        } elseif ($updaterOnly) {
+            $agent = 'PHP-Gallery-Update-Worker';
+        } else {
+            $agent = $telemetryOnly
+                ? 'PHP-Gallery-Telemetry-Worker'
+                : 'PHP-Gallery-Cache-Worker';
+        }
         $request =
             'POST '
             . $target
@@ -1375,16 +1389,17 @@ function site_maintenance_queue_next_chained_slice(): bool
 }
 
 /**
- * Register public telemetry/cache opportunities and the Admin thumbnail fallback.
+ * Register public media-count/telemetry/cache opportunities and Admin thumbnails.
  *
  * @param string $page Canonical route identifier.
  * @param callable(string):mixed|null $loadDependencies Optional reviewed kernel module loader for admitted shutdown work.
- * @return void Registers private telemetry handoffs and bounded cache opportunities independently of Admin thumbnail windows; the Admin fallback retains its eligibility.
+ * @return void Registers independent private media/telemetry handoffs and bounded cache opportunities; the Admin thumbnail fallback retains its eligibility.
  */
 function site_maintenance_register_request_trigger(
     string $page,
     ?callable $loadDependencies = null,
 ): void {
+    site_maintenance_register_attachment_usage_trigger($page, $loadDependencies);
     site_maintenance_register_telemetry_trigger($page);
     site_maintenance_register_cache_trigger($page, $loadDependencies);
     if (PHP_SAPI === 'cli') {
@@ -1452,6 +1467,81 @@ function site_maintenance_register_request_trigger(
                 'execution_end',
                 ['source' => 'request_trigger_inline'],
             );
+        }
+    });
+}
+
+/**
+ * Hand unfinished initial media counts to an independent private worker.
+ *
+ * @param string $page Canonical route; only public gallery HTML GETs qualify.
+ * @param callable(string):mixed|null $loadDependencies Optional selective loader for the existing private-worker owner after a successful response.
+ * @return void Registers a bounded handoff without reading media files or invoking other maintenance; completed installations do no further work.
+ */
+function site_maintenance_register_attachment_usage_trigger(
+    string $page,
+    ?callable $loadDependencies = null,
+): void {
+    if (
+        PHP_SAPI === 'cli'
+        || !in_array($page, ['home', 'gallery', 'smart_gallery'], true)
+        || strtoupper(
+            (string) (request_data('server')['REQUEST_METHOD'] ?? 'GET'),
+        ) !== 'GET'
+        || array_key_exists('preview', request_data('query'))
+    ) {
+        return;
+    }
+    try {
+        // This passive gate avoids loading attachment workers on completed or
+        // already leased installations. The locked service repeats admission.
+        $state = json_decode(
+            (string) app_setting('gallery_attachment_usage.background_state', ''),
+            true,
+        );
+        if (
+            is_array($state)
+            && (
+                ($state['status'] ?? '') === 'complete'
+                || (int) ($state['queued_until'] ?? 0) > time()
+                || (int) ($state['next_attempt_at'] ?? 0) > time()
+            )
+        ) {
+            return;
+        }
+    } catch (Throwable) {
+        // An unavailable settings store cannot change a public response.
+        return;
+    }
+    register_shutdown_function(static function () use ($loadDependencies): void {
+        $error = error_get_last();
+        if (
+            response_status_code() < 200
+            || response_status_code() >= 300
+            || $error !== null && in_array(
+                $error['type'],
+                [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR],
+                true,
+            )
+        ) {
+            return;
+        }
+        try {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            ignore_user_abort(true);
+            site_maintenance_finish_response_before_background_work();
+            if ($loadDependencies !== null) {
+                $loadDependencies('site-maintenance-work');
+            }
+            gallery_attachment_usage_background_start(
+                static fn(string $ticket): bool =>
+                    site_maintenance_fire_background_worker(false, '', '', $ticket),
+            );
+        } catch (Throwable) {
+            // A later visit recovers an unavailable handoff through its lease;
+            // never claim completion or run the media scan in the visitor.
         }
     });
 }

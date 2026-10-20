@@ -18,9 +18,19 @@ subtree, count each recorded SHA-256 once, and follow public visibility,
 hidden-state and capability rules. Digests are counted uniquely per media kind.
 They are optional derived snapshots: missing, unknown or dirty data omits a
 badge, while a ready empty snapshot means zero. Public rendering does not read
-or hash original files. Maintenance Center provides a
-default-selected, optional legacy reconciliation, bounded to 25 galleries per
-step and at most one legacy OFP candidate hash up to 25 MiB per step. When
+or hash original files. If no durable completion receipt exists, the first
+successful public HTML GET for home, gallery, or Smart Gallery queues a
+media-only initial pass after the response through the configured-origin
+maintenance transport. It runs one batch of at most 25 galleries per worker
+request and continues while work remains; a later public request can recover
+interrupted or busy work after its bounded lease or retry delay. The pass
+completes only when all galleries reconcile without failures. It is not
+periodic and does not run general maintenance. Maintenance Center provides a
+default-selected,
+optional legacy reconciliation, bounded to 25 galleries per step and at most
+one legacy OFP candidate hash up to 25 MiB per step. Normal application
+mutations maintain projections; later out-of-band filesystem edits still
+require explicit Maintenance Center reconciliation. When
 needed, it atomically stores the computed `ofp_pdf_sha256` in the existing OFP
 manifest under the persistent shared `.simbrief-ofp-upload.lock`; original bytes
 remain unchanged. Music reconciliation uses the private `.gallery-music/.lock`.

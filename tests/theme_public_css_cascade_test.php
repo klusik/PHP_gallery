@@ -96,6 +96,7 @@ namespace {
      * @param string $overrideUrl Prepared public stylesheet URL, or empty when absent.
      * @param bool $anonymousPreview Whether the public renderer uses anonymous preview assets.
      * @param string $headExtras Prepared trusted head markup used by the cascade fixture.
+     * @param string $adminLoginReturn Prepared same-origin destination after Admin login.
      * @return string Captured HTML emitted by the production header view.
      */
     function cascade_header_html(
@@ -107,6 +108,7 @@ namespace {
         string $overrideUrl = '',
         bool $anonymousPreview = false,
         string $headExtras = '',
+        string $adminLoginReturn = '',
     ): string {
         $stylesheetUrls = \Gallery\Controllers\shared_layout_stylesheet_urls(
             $bodyClass,
@@ -147,6 +149,7 @@ namespace {
                     'custom_css_overrides_url' => $overrideUrl,
                     'stylesheet_urls' => $stylesheetUrls,
                     'head_extras' => $headExtras,
+                    'admin_login_return' => $adminLoginReturn,
                     'admin_chrome' => [],
                 ],
                 '/gallery/photos?sort=latest&lang=en',
@@ -217,6 +220,44 @@ namespace {
         )->length === count($actionLabels),
         'each public header action must use the existing decorative Admin SVG helper',
     );
+    $adminLoginReturn = '/gallery/photos?sort=latest&lang=en';
+    foreach ([
+        [null, false, 'anonymous'],
+        [$authenticatedUser, true, 'anonymous preview'],
+    ] as [$loginUser, $anonymousPreview, $audience]) {
+        $loginHeader = new DOMDocument();
+        @$loginHeader->loadHTML(cascade_header_html(
+            'public-page',
+            $loginUser,
+            anonymousPreview: $anonymousPreview,
+            adminLoginReturn: $adminLoginReturn,
+        ));
+        $loginXPath = new DOMXPath($loginHeader);
+        $loginAction = $loginXPath->query(
+            '//a[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")'
+                . ' and @title="Admin login"]',
+        );
+        $loginHref = $loginAction->item(0)?->getAttribute('href') ?? '';
+        $loginQuery = [];
+        parse_str((string) parse_url($loginHref, PHP_URL_QUERY), $loginQuery);
+        cascade_require(
+            $loginAction->length === 1
+                && ($loginQuery['page'] ?? '') === 'admin_login'
+                && ($loginQuery['return'] ?? '') === $adminLoginReturn
+                && $loginXPath->query(
+                    '//a[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
+                        . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-label ")'
+                        . ' and text()="Admin login"]',
+                )->length === 1
+                && $loginXPath->query(
+                    '//a[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]'
+                        . '/span[contains(concat(" ", normalize-space(@class), " "), " public-header-action-icon ")]'
+                        . '/svg[@class="admin-menu-icon"]',
+                )->length === 1,
+            $audience
+                . ' public header must render the compact Admin login action and preserve its return destination',
+        );
+    }
     $updatesAction = $publicHeaderXPath->query(
         '//a[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")'
             . ' and contains(concat(" ", normalize-space(@class), " "), " is-update-pending ")'
@@ -295,6 +336,29 @@ namespace {
                 '//header//nav//*[contains(concat(" ", normalize-space(@class), " "), " public-header-action ")]',
             )->length === 0,
         'Admin page Logout keeps its existing plain markup outside the public action styling',
+    );
+    $anonymousAdminHeader = new DOMDocument();
+    @$anonymousAdminHeader->loadHTML(cascade_header_html(
+        'admin-page',
+        null,
+        adminLoginReturn: $adminLoginReturn,
+    ));
+    $anonymousAdminXPath = new DOMXPath($anonymousAdminHeader);
+    $anonymousAdminLogin = $anonymousAdminXPath->query(
+        '//header//nav/a[text()="Admin login" and not(@title)'
+            . ' and not(@class) and not(.//svg)]',
+    );
+    $anonymousAdminHref = $anonymousAdminLogin->item(0)?->getAttribute('href') ?? '';
+    $anonymousAdminQuery = [];
+    parse_str(
+        (string) parse_url($anonymousAdminHref, PHP_URL_QUERY),
+        $anonymousAdminQuery,
+    );
+    cascade_require(
+        $anonymousAdminLogin->length === 1
+            && ($anonymousAdminQuery['page'] ?? '') === 'admin_login'
+            && ($anonymousAdminQuery['return'] ?? '') === $adminLoginReturn,
+        'anonymous Admin-page login keeps its prior plain markup and return destination',
     );
 
     $overrideUrl =

@@ -24,6 +24,18 @@ hidden-state, access and capability rules. They use optional derived snapshots;
 missing, unknown or dirty snapshots omit the badge rather than report zero.
 Public rendering uses existing snapshot data and never reads or hashes originals.
 
+When no durable completion receipt exists, the first successful public HTML GET
+for home, gallery, or Smart Gallery queues a media-only initial pass after the
+response. It uses the authenticated configured-origin `site_maintenance_cron`
+transport and runs one batch of at most 25 galleries per worker request,
+queueing continuation while work remains. Durable cursor state makes the pass
+resumable; a later public request can recover interrupted or busy work after
+its bounded lease or retry delay. Completion is recorded only after a full pass
+has no failed galleries. This is a one-time bootstrap, not periodic scanning or
+general maintenance. The separate Maintenance Center task remains available for
+explicit reconciliation, including after later manual filesystem edits;
+supported application mutations maintain their projections normally.
+
 In **Admin → Edit gallery**, the **Documents / PDFs** tab owns manual PDF
 upload, the attached-document table, browser PDF-to-PNG conversion, and any
 historical SimBrief OFP PDF/dispatch panel. These forms are independent of the

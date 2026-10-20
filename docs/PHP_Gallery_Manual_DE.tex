@@ -783,6 +783,16 @@ Musikprüfung kann das private Sperrverzeichnis \filepath{.gallery-music/}
 erstellen. Eine neue Galerie ohne Quelldaten kann mit bekannten Nullwerten
 beginnen.
 
+Fehlt der dauerhafte Abschlussbeleg des initialen Durchlaufs, reiht die erste
+erfolgreiche öffentliche HTML-Anfrage für die Startseite, eine Galerie oder
+Smart Gallery den Medienzählungslauf nach der Antwort im Hintergrund ein. Jeder
+Schritt verarbeitet höchstens 25 Galerien und setzt die Arbeit fort, solange
+noch Einträge offen sind; eine spätere öffentliche Anfrage kann unterbrochene
+oder blockierte Arbeit nach der begrenzten Wartezeit wieder aufnehmen. Der
+Durchlauf erfolgt einmalig und nicht regelmäßig. Der separate Wartungsauftrag
+bleibt für einen ausdrücklichen Abgleich nach späteren manuellen
+Dateisystemänderungen verfügbar.
+
 \subsection{Identität und Kontext bearbeiten}
 \index{g00129@Galeriemetadaten}
 \index{d00070@Datumsbereich}
@@ -1582,7 +1592,11 @@ vor dem geschützten Schreiben; Releases vertrauen weiterhin qualifiziertem deve
 
 Nach der Anmeldung sieht ein Administrator private Steuerungen für Übersicht, Galerien, Fotos, Design, Schlagwörter, Wartung, Aktualisierungen, Protokolle und Kontoeinstellungen. Viele Bearbeitungen öffnen sich im rechten Seitenbereich, sodass die Galerie sichtbar bleibt, während ein Eintrag geändert und gespeichert wird.\footnote{Eine vollständige Administrationsseite bleibt für Abläufe verfügbar, die mehr Platz benötigen, oder wenn die Browsererweiterung nicht verfügbar ist.}
 
-Auf öffentlichen Seiten verwenden Admin-, Testlauf-, Updates- und Abmelden-Aktionen kompakte transparente, umrandete Bedienelemente mit Symbol und lokalisiertem Text. Die Sprachauswahl bleibt weiterhin unter Design konfiguriert.
+Auf öffentlichen Seiten verwenden Admin-, Testlauf-, Updates- und Abmelden-
+Aktionen kompakte, 32 Pixel hohe transparente, umrandete Bedienelemente mit
+16-Pixel-Symbolen und lokalisiertem Text. Die Admin-Anmeldung für anonyme
+Besucher, auch in anonymen Vorschauen, verwendet dieselbe Gestaltung und
+Ausrichtung. Die Sprachauswahl bleibt weiterhin unter Design konfiguriert.
 
 Auch die öffentliche Galerie zeigt kontextbezogene Administrationssteuerungen, solange eine normale Administratorsitzung aktiv ist. Die Stiftschaltflächen von Galerien und Fotos öffnen dieselben vollständigen Editoren im Seitenbereich. Die kompakte Galerieentfernung verwendet bei aktiviertem Papierkorb den wiederherstellbaren Papierkorbablauf; bei deaktiviertem Papierkorb erfolgen zukünftige Galerieentfernungen wieder über den bisherigen Dienst zur endgültigen Teilbaum-Löschung. Die kompakte Fotoentfernung ist bewusst als \ui{Foto ... aus dem CMS entfernen} beschriftet: Diese Schnellaktion auf der öffentlichen Seite entfernt die Bildzeile aus dem Katalog und führt nicht den vollständigen Dienst zur Originaldateilöschung aus. Verwenden Sie den normalen Foto-/Sammellöschablauf, wenn auch die Originaldatei und erzeugte Ableitungen gelöscht werden sollen. Der anonyme Vorschaumodus blendet diese kontextbezogenen Administrationssteuerungen aus.
 
@@ -2341,6 +2355,11 @@ Der Designeditor verwendet keinen getrennten Hell-/Dunkelmodus-Schalter. Stattde
 Wählen Sie den globalen Breadcrumb-Stil unter \ui{Design > Layout > Karten und Kennzeichnungen}. Jede Option ist eine native Radiokarte mit einem echten gerenderten Breadcrumb-Beispiel, sodass die Auswahl nach dem Aussehen möglich ist. Die Karte \ui{Standard / vom Design übernehmen} in Galerie- und Smart-Gallery-Einstellungen zeigt den aktuell wirksamen Designstil. Die Radiokarten lassen sich per Tastatur bedienen und funktionieren ohne JavaScript. Die stabilen IDs lauten \codeword{minimal}, \codeword{chevron}, \codeword{pills}, \codeword{surface}, \codeword{ribbon}, \codeword{nodes}, \codeword{tabs}, \codeword{tiles} und \codeword{gradient}. Band (\codeword{ribbon}) bildet Pfeilsegmente; Verbundene Knoten (\codeword{nodes}) verknüpfen dekorative Punkte; Registerkarten (\codeword{tabs}) sind kompakt; Kacheln (\codeword{tiles}) sind erhabene Rechtecke; Farbverlauf (\codeword{gradient}) ergänzt eine Designfarbfläche mit Akzentstreifen.
 
 Jede Kopfzeilenverknüpfung kann zur Hauptseite oder einer Galerie führen oder leer bleiben. Anonyme Besucher sehen nur konfigurierte Galerieverknüpfungen, die weiterhin öffentlich und gelistet sind; doppelte oder gelöschte Galerieauswahlen werden beim Speichern verworfen. Drei leere Plätze verbergen diese Favoritengalerie-Schaltflächen. Galeriekarten können außerdem eine konfigurierbare Kennzeichnung enthaltener Bilder anzeigen. Ist diese für eine Galerie wirksam, bleibt beim Öffnen dieselbe Zweiganzahl im Hero-Bereich sichtbar; gezählt werden Bilder der aktuellen Galerie und ihrer zugänglichen Untergalerien nach denselben Öffentlichkeits-/Zugriffsregeln wie bei der Karte. Öffentliche Karten stapeln von null verschiedene PDF- und Musikdateizahlen kompakt und rechtsbündig unter dem Fotosymbol, mit engem Abstand zwischen den Kennzeichen. Ist das Fotozählungskennzeichen aktiviert, erscheinen dieselben Medienzahlen in der Aktionsleiste der geöffneten Galerie direkt links davon. Jede Zahl umfasst eindeutige Dateien der Galerie und ihrer Untergalerien; derselbe erfasste SHA-256-Wert zählt nur einmal. Es gelten die Regeln für öffentliche Sichtbarkeit, Ausblendung, Zugriff und Berechtigungen. Fehlende, unbekannte oder veraltete Projektionen blenden das Symbol aus; ein bekannter Nullwert bleibt verborgen. Die galerieeigene Präsentation kann Websitevorgaben erben oder die im Galerieeditor angebotenen Entscheidungen überschreiben.
+
+Fehlt der dauerhafte Abschlussbeleg des initialen Durchlaufs, reiht die erste
+erfolgreiche öffentliche HTML-Anfrage für die Startseite, eine Galerie oder
+Smart Gallery den Medienzählungslauf nach der Antwort im Hintergrund ein. Das
+Rendern der Seite durchsucht keine Originaldateien.
 
 \subsection{Referenz der Designsteuerungen}
 \index{d00073@Design!s00236@Steuerungen}

@@ -197,23 +197,39 @@ immediately to its left. Public rendering reads projection rows only and never
 reads or hashes original media; source originals and indexes remain authoritative.
 Supported mutations invalidate projection
 state before source changes, while manual filesystem edits require the explicit
-bounded Maintenance Center reconciliation. The default-selected task processes
-up to 25 galleries per step and hashes at most one legacy OFP candidate up to
-25 MiB per step. If required, it writes the resulting digest to the existing
-OFP manifest by atomic replacement under the persistent shared source lock;
-original PDF/audio bytes remain unchanged. Music reads also acquire a private
+bounded Maintenance Center reconciliation. The first successful public HTML
+GET for home, gallery, or Smart Gallery checks the durable
+`gallery_attachment_usage.background_state` app-setting receipt and, when no
+completion exists, queues a media-only initial pass through the authenticated
+configured-origin `site_maintenance_cron` transport after the response. Each
+worker request runs one existing batch of at most 25 galleries and queues
+continuation while work remains. A later public request can recover interrupted
+or busy work after the bounded lease/retry delay. This is one-time bootstrap,
+not periodic scanning or broad maintenance, and completion is recorded only
+when a full pass has no failed galleries. Supported mutations keep snapshots
+current; later manual filesystem edits still require Maintenance Center
+reconciliation. Its default-selected task processes up to 25 galleries per
+step and hashes at most one legacy OFP candidate up to 25 MiB per step. If
+required, it writes the resulting digest to the existing OFP manifest by
+atomic replacement under the persistent shared source lock; original PDF/audio
+bytes remain unchanged. Music reads also acquire a private
 `.gallery-music/.lock`, creating that sidecar directory when needed. A new empty
 gallery may receive insert-only ready-zero states only when no source metadata
-exists. Analysis remains read-only. This shares an existing logical module and
-does not add a root.
-
-Runtime source impact before this batch: 98 logical modules, 4,085 direct file
+exists. Analysis remains read-only. Automatic admission reuses the existing
+`site-maintenance-work` runtime owner, and its private worker explicitly loads
+`gallery-pdf-documents` before the bounded source scan. The public request
+trigger remains lightweight and introduces no logical runtime root. The
+unchanged plan has 98 logical modules with the two-module allowance already
+consumed; the expected delta is one existing source file in the private-worker
+closure, subject to hosted generated-plan checks against unchanged limits.
+The reviewed dynamic-site registry records the fixed module loader and lexical
+media-ticket transport callbacks; request input cannot choose their targets.
+The prior attachment migration recorded 98 logical modules, 4,085 direct file
 entries, 441 unique PHP files and 3,644 duplicate entries in the tracked plan.
-The global module allowance (96 plus two) is consumed. This batch reuses the
-attachment owner and adds an estimated three PHP files: one central storage
-service and two private playlist parts. No new logical root or raised baseline
-is authorized. Hosted preparation and unchanged route/file/duplicate ratchets
-establish actual closure conformance; these counts are static source review.
+That work reused the attachment owner for one central storage service and two
+private playlist parts. No new logical root or raised baseline is authorized.
+Hosted preparation and unchanged route/file/duplicate ratchets establish actual
+closure conformance; historical counts are static source-review observations.
 
 PDF and audio routes share the existing attachment runtime owner under its
 historical `gallery-pdf-documents` machine name. Public presentation loads it
