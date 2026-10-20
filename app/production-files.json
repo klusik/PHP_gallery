@@ -736,6 +736,7 @@
         "database/migrations/202610200003_music_repository.php",
         "deploy/.htaccess",
         "docs/.htaccess",
+        "docs/ADMIN_DESIGN.md",
         "docs/ADMIN_IMAGES_PRELOAD.md",
         "docs/ADMIN_OPERATION_KEYS.md",
         "docs/ADMIN_PANEL_LIFECYCLE.md",

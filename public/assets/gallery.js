@@ -68,7 +68,7 @@ import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js
 import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261017-media-summary-v1';
-import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261020-unified-gallery-media-v3';
+import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
 import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261020-music-tabs-popover-drag-v6';
 import {
     setupGalleryMusicPlayback,
@@ -96,7 +96,7 @@ import { setupAdminCooperativeGalleries } from './gallery-modules/admin-cooperat
 import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260902-mutation-stage3-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20261004-storage-update-all-v3';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
-import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261004-maintenance-center-v7';
+import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261020-compact-maintenance-v5';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
 import { setupAdminSearchDiagnostics } from './gallery-modules/admin-search-diagnostics.js?v=20260913-search-diagnostics-v1';
 import { setupAdminTestRun } from './gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3';

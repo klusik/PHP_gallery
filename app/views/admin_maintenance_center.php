@@ -350,6 +350,106 @@ function view_render_admin_maintenance_center_page(array $model): void
             'admin.maintenance_center.other_job_active',
             'Another administrator owns the active central maintenance job.',
         ),
+        'automatic_checks' => t(
+            'admin.maintenance_center.automatic_checks',
+            'Automatic safety checks',
+        ),
+        'selection_help' => t(
+            'admin.maintenance_center.selection_help',
+            'Choose the maintenance work to run. Safety checks and final verification run automatically.',
+        ),
+        'tab_cleanup' => t(
+            'admin.maintenance_center.tab.cleanup',
+            'Cleanup',
+        ),
+        'tab_media' => t('admin.maintenance_center.tab.media', 'Media'),
+        'tab_database' => t(
+            'admin.maintenance_center.tab.database',
+            'Database',
+        ),
+        'analyze_short' => t(
+            'admin.maintenance_center.analyze_short',
+            'Analyze',
+        ),
+        'analyze_again_short' => t(
+            'admin.maintenance_center.analyze_again_short',
+            'Reanalyze',
+        ),
+        'run_short' => t('admin.maintenance_center.run_short', 'Run'),
+        'resume_short' => t(
+            'admin.maintenance_center.resume_short',
+            'Resume',
+        ),
+        'retry_short' => t(
+            'admin.maintenance_center.retry_short',
+            'Retry',
+        ),
+        'full_optimize_short' => t(
+            'admin.maintenance_center.full_optimize_short',
+            'Include other tables',
+        ),
+        'no_work' => t(
+            'admin.maintenance_center.no_work',
+            'No work detected',
+        ),
+        'task_short_labels' => [
+            'trash.reconcile' => t(
+                'admin.maintenance_center.task.short.trash_reconcile',
+                'Reconcile Trash',
+            ),
+            'telemetry.retention' => t(
+                'admin.maintenance_center.task.short.telemetry',
+                'Telemetry retention',
+            ),
+            'logs.retention' => t(
+                'admin.maintenance_center.task.short.logs',
+                'Admin log cleanup',
+            ),
+            'trash.retention' => t(
+                'admin.maintenance_center.task.short.trash_retention',
+                'Trash retention',
+            ),
+            'security.cleanup' => t(
+                'admin.maintenance_center.task.short.security',
+                'Session cleanup',
+            ),
+            'downloads.cache' => t(
+                'admin.maintenance_center.task.short.downloads',
+                'Cache cleanup',
+            ),
+            'thumbnail.metadata' => t(
+                'admin.maintenance_center.task.short.thumbnail_metadata',
+                'Thumbnail metadata',
+            ),
+            'music.repository' => t(
+                'admin.maintenance_center.task.short.music_repository',
+                'Move audio files',
+            ),
+            'media.deep_verify' => t(
+                'admin.maintenance_center.task.short.media_deep',
+                'Check thumbnails',
+            ),
+            'database.logical' => t(
+                'admin.maintenance_center.task.short.database_logical',
+                'Database cleanup',
+            ),
+            'maintenance.history' => t(
+                'admin.maintenance_center.task.short.history',
+                'History cleanup',
+            ),
+            'database.inventory' => t(
+                'admin.maintenance_center.task.short.database_inventory',
+                'Refresh inventory',
+            ),
+            'database.analyze' => t(
+                'admin.maintenance_center.task.short.database_analyze',
+                'Analyze tables',
+            ),
+            'database.optimize' => t(
+                'admin.maintenance_center.task.short.database_optimize',
+                'Optimize tables',
+            ),
+        ],
     ];
 
     $pageTitle = t('admin.maintenance_center.title', 'Maintenance Center');
@@ -359,9 +459,7 @@ function view_render_admin_maintenance_center_page(array $model): void
     );
     render_header($pageTitle);
     echo
-        '<section class="hero admin-maintenance-center-hero"><div><p class="admin-kicker">'
-            . e(t('admin.menu.maintenance', 'Maintenance'))
-            . '</p><div class="maintenance-center-title-row"><h1>'
+        '<section class="hero admin-maintenance-center-hero"><div><div class="maintenance-center-title-row"><h1>'
             . e($pageTitle)
             . '</h1><details class="admin-inline-help"><summary aria-label="'
             . e($pageTitle)
@@ -369,14 +467,22 @@ function view_render_admin_maintenance_center_page(array $model): void
             . e($pageHelp)
             . '</div></details></div></div>';
     echo
-        '<nav class="nav maintenance-center-navigation"><a class="button secondary" href="'
+        '<nav class="nav maintenance-center-navigation"><a class="button secondary" title="'
+            . e(t('admin.storage.tab_database_maintenance', 'DB maintenance'))
+            . '" aria-label="'
+            . e(t('admin.storage.tab_database_maintenance', 'DB maintenance'))
+            . '" href="'
             . e((string) ($model['storage_maintenance_url'] ?? ''))
             . '">'
-            . e(t('admin.storage.tab_database_maintenance', 'DB maintenance'))
-            . '</a><a class="button secondary" href="'
+            . view_admin_menu_icon('maintenance')
+            . '</a><a class="button secondary" title="'
+            . e(t('admin.common.dashboard', 'Dashboard'))
+            . '" aria-label="'
+            . e(t('admin.common.dashboard', 'Dashboard'))
+            . '" href="'
             . e((string) ($model['dashboard_url'] ?? ''))
             . '">'
-            . e(t('admin.common.dashboard', 'Dashboard'))
+            . view_admin_menu_icon('overview')
             . '</a></nav></section>';
 
     if (!$available) {
@@ -459,9 +565,7 @@ function view_render_admin_maintenance_center_page(array $model): void
 
     echo '<section class="panel maintenance-center-status-card">';
     echo
-        '<div class="maintenance-center-status-heading"><div><p class="admin-kicker">'
-            . e(t('admin.maintenance_center.workflow', 'Central workflow'))
-            . '</p><h2 data-maintenance-status-title>'
+        '<div class="maintenance-center-status-heading"><div><h2 data-maintenance-status-title>'
             . e(
                 $job !== null
                     ? (string) ($job['status'] ?? '')
@@ -488,55 +592,44 @@ function view_render_admin_maintenance_center_page(array $model): void
             . '</p>';
     echo
         '<div class="notice warning" data-maintenance-browser-error hidden></div>';
-    echo '</section>';
-
-    $showAnalysisNote =
-        $job === null
-        || in_array(
-            (string) ($job['status'] ?? ''),
-            ['analyzing', 'ready'],
-            true,
-        );
-    echo
-        '<section class="panel maintenance-center-analysis-note" data-maintenance-analysis-note'
-            . ($showAnalysisNote ? '' : ' hidden')
-            . '><strong>'
-            . e(t(
-                'admin.maintenance_center.safety_title',
-                'Analyze before mutation',
-            ))
-            . '</strong><p>'
-            . e($strings['analysis_read_only'])
-            . '</p></section>';
 
     echo
-        '<section class="panel" data-maintenance-report hidden><div class="maintenance-center-section-heading"><div><p class="admin-kicker">'
-            . e(t('admin.maintenance_center.phase_verify', 'Verify'))
-            . '</p><h2>'
+        '<section class="panel" data-maintenance-report hidden><div class="maintenance-center-section-heading"><div><h2>'
             . e($strings['result_title'])
             . '</h2></div></div><div class="metric-grid" data-maintenance-report-metrics></div><div data-maintenance-report-details></div></section>';
 
     echo
-        '<details class="panel maintenance-center-review" data-maintenance-review hidden><summary><span class="admin-kicker">'
-            . e(t('admin.maintenance_center.phase_review', 'Review'))
-            . '</span><strong>'
+        '<details class="maintenance-center-review" data-maintenance-review hidden><summary><strong>'
             . e($strings['review_title'])
-            . '</strong></summary><div class="maintenance-center-review-content"><div class="maintenance-center-plan-totals" data-maintenance-plan-totals></div><div data-maintenance-plan-warnings></div><div class="maintenance-center-task-groups" data-maintenance-task-groups><div class="maintenance-center-full-optimize" data-maintenance-full-optimize-wrap hidden><label><input type="checkbox" data-maintenance-full-optimize> '
+            . '</strong><span class="maintenance-center-review-summary" data-maintenance-selection-summary></span></summary><div class="maintenance-center-review-content"><div class="maintenance-center-plan-toolbar"><details class="admin-inline-help"><summary aria-label="'
+            . e($strings['selection_help'])
+            . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">'
+            . e($strings['selection_help'])
+            . '<div class="maintenance-center-plan-totals" data-maintenance-plan-totals></div><details class="maintenance-center-automatic" data-maintenance-automatic hidden><summary>'
+            . e($strings['automatic_checks'])
+            . '</summary><div data-maintenance-automatic-tasks></div></details></div></details></div><div data-maintenance-plan-warnings></div><div class="maintenance-center-task-tabs" data-maintenance-task-tabs role="tablist" aria-label="'
+            . e($strings['review_title'])
+            . '"></div><div class="maintenance-center-task-panels" data-maintenance-task-panels></div><div class="maintenance-center-full-optimize" data-maintenance-full-optimize-wrap hidden><label><input type="checkbox" role="switch" data-maintenance-full-optimize> <span>'
+            . e($strings['full_optimize_short'])
+            . '</span></label><details class="admin-inline-help"><summary aria-label="'
             . e($strings['full_optimize'])
-            . '</label><p class="muted">'
+            . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content"><p>'
+            . e($strings['full_optimize'])
+            . '</p><p>'
             . e($strings['large_table_warning'])
-            . '</p></div></div><div class="nav maintenance-center-review-actions" data-maintenance-review-actions hidden></div></div></details>';
+            . '</p></div></details></div></div></details>';
+    echo '</section>';
 
     echo '<section class="maintenance-center-lower-grid">';
     echo
-        '<article class="panel"><h2>'
+        '<details class="panel maintenance-center-activity-panel"><summary><h2>'
             . e($strings['recent_activity'])
-            . '</h2><ol class="maintenance-center-activity" data-maintenance-activity><li class="muted">'
+            . '</h2></summary><ol class="maintenance-center-activity" data-maintenance-activity><li class="muted">'
             . e(t(
                 'admin.maintenance_center.no_activity',
                 'No maintenance activity yet.',
             ))
-            . '</li></ol></article>';
+            . '</li></ol></details>';
     echo
         '<article class="panel"><h2>'
             . e(t(

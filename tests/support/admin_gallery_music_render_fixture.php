@@ -74,6 +74,8 @@ namespace Gallery\Services {
             'music.song_variants' => '{count} available files',
             'music.failed' => 'Music operation failed.',
             'music.refresh_failed' => 'Saved, but the playlist could not be refreshed.',
+            'music.preference_saving' => 'Saving music preference…',
+            'music.preference_saved' => 'Music preference saved.',
             'music.search_failed' => 'Catalog results could not be refreshed.',
             'music.play' => 'Play',
             'music.stop' => 'Stop',

@@ -14,11 +14,17 @@ and saved download/visibility flags govern explicitly assigned shared music.
 No public repository asset endpoint or portable foreign logical ID is trusted.
 
 Schema migration is forward-only and does not relocate existing files. Only an
-explicitly selected maintenance task switches verified old originals to central
+maintenance task selected in an approved plan switches verified old originals to central
 references and removes positively matching local bytes. It processes one source
 per step, retains stable track/song identity, and stops on uncertainty with its
 last successful cursor intact. Assignment/removal/Trash do not delete central
 assets. SQL and both filesystem storage locations must be backed up together.
+The proposed music move defaults on; administrators may deselect it before
+approval. Analysis remains read-only. On the maintainer's localhost, job 7
+reported three moved originals (16,059,961 bytes); all three central files
+matched their SQL sizes and SHA-256 digests, with no local audio copies or
+pending cleanup entries. This observation does not establish deployment-wide
+migration coverage.
 There is no evidence that deployed legacy indexes have all been converted;
 retirement is not authorized. Production migration timing and device playback
 remain unknown until deployment acceptance. Hosted regression coverage must
@@ -1599,6 +1605,10 @@ not a source parser or a commitment to remove anything on a calendar date.
   phase-specific
   module selection, controller injection and loading before task callbacks;
   `scripts/runtime_dynamic_dependencies.php` registers the reviewed loader.
+  A localhost `media.deep_verify` analysis failed when assigned the site worker,
+  which omitted the thumbnail summary service. Both phases now defer to the
+  existing thumbnail owner. The isolated runtime-module fixture verifies all
+  five thumbnail adapters without a full-bootstrap fallback.
 - **Usage:** Full-bootstrap consumer adoption is unknown.
 - **Earliest safe retirement:** Migrate all supported CLI/test consumers to an
   explicit loader and prove their include contracts before removing the optional

@@ -691,7 +691,8 @@ Föregående/Spela/Stoppa/Nästa-ikoner finns på~sidan och~i~fotovisaren när~l
 finns. En~gemensam spelare förhindrar överlappning mellan rader, redigerare
 och~bildspel. Hela listan upprepas och~navigeringen går runt vid~ändarna.
 Automatisk bildspelsmusik är~avstängd från början; administratören kan~aktivera
-den~för~galleriet. Ett~aktiverat bildspel ersätter annan musik och~börjar
+den~för~galleriet. Växeln sparar inställningen automatiskt; redigeraren förblir
+öppen och~visar sparstatus. Ett~aktiverat bildspel ersätter annan musik och~börjar
 med~första spåret. Stopp eller~stängning av~visaren frigör dess musik;
 oberoende startad tabellmusik kan~fortsätta. Foto- och~hastighetsändringar
 avbryter inte musiken. Webbläsaravslag tillåter ett~nytt Spela-försök;
@@ -724,8 +725,9 @@ och~musik; ett~okänt ljudsvar kräver kontroll av~galleriet före nästa förs�
 
 Galleriets ordnade spellisteindex finns kvar i~dess dolda katalog
 \filepath{.gallery-music/}; oföränderliga ljudoriginal lagras centralt i
-\filepath{data/music/}. En~valfri uppgift i~\ui{Underhåll > Underhållscenter}
-migrerar äldre lokala original ett~i~taget i~begränsade, återupptagbara steg.
+\filepath{data/music/}. Den valfria uppgiften i~\ui{Underhåll > Underhållscenter}
+är förvald och kan väljas bort före start. Den migrerar äldre lokala original
+ett~i~taget i~begränsade, återupptagbara steg.
 Den~verifierar den~centrala kopian innan referensen växlas atomärt och~bevarar
 spår-ID:n, logiska identiteter, ordning, synlighet, hämtningsrätt och
 bildspelsinställningar.
@@ -2524,7 +2526,26 @@ Papperskorgsinnehåll ligger i skyddad beständig \filepath{data/gallery-trash/}
 \index{u00252@Underhållscenter}
 \index{u00251@underhåll!c00044@centralt arbetsflöde}
 
-Öppna \ui{Underhåll > Underhållscenter} för ett väglett flöde med \ui{Analysera}, \ui{Granska}, \ui{Utför} och \ui{Verifiera} över vanliga underhållsansvar. Analysera är skrivskyddat för galleri-, telemetri-, logg-, papperskorgs-, cache-, miniatyrbilds- och databasinnehåll; det skriver bara den beständiga kontrollpunkt för Underhållscentret som behövs för att återuppta undersökningen. Granska-steget grupperar uppgifter efter område, märker obligatoriska automatiska steg och placerar tillgängliga valfria uppgifter utan upptäckt arbete i en infälld grupp. Obligatoriska, förvalda och valfria uppgifter förblir tydliga före rensning; djup medieverifiering och fullständig databasoptimering går fortfarande att hitta när de är tillgängliga, även om de inte väljs automatiskt.
+Öppna \ui{Underhåll > Underhållscenter} för ett väglett flöde med
+\ui{Analysera}, \ui{Granska}, \ui{Utför} och~\ui{Verifiera} över vanliga
+underhållsansvar. Analysera är skrivskyddat för galleri-, telemetri-, logg-,
+papperskorgs-, cache-, miniatyrbilds- och databasinnehåll; det skriver bara den
+beständiga kontrollpunkt som behövs för att återuppta undersökningen.
+
+Den kompakta granskningen har tre flikar: \ui{Rensning}, \ui{Media}
+och~\ui{Databas}.
+Valfria uppgifter använder gemensamma växlar med korta etiketter; öppna
+förklaringen med den intilliggande frågeteckenknappen. Säkerhetskontroll före
+start och slutlig verifiering körs automatiskt. De är inte användarval och
+visas inte som inaktiverade växlar. Djup miniatyrbildsverifiering finns kvar
+som ett uttryckligt val, även när analysen inte hittar något arbete med
+miniatyrbilder.
+
+Fäll ut teknisk aktivitet vid felsökning. Fel behåller sin användbara status
+och anger säkert källfilens namn och rad när de finns, utan att visa privat
+sökväg eller anropsstack. Fel om odefinierad PHP-funktion, klass eller konstant
+kan även visa det säkra symbolnamnet; den ursprungliga undantagstexten döljs.
+Djup medieverifiering hanteras av miniatyrbildsadministrationen.
 
 Servern laddar de granskade beroendena för respektive område på nytt i varje separat analys- eller körningsbegäran innan uppgiften körs. Kontrollen av väntande migreringar läser endast migreringsregistret; ett saknat register eller en misslyckad kontroll behandlas som väntande arbete. Tillämpa migreringar genom det uttryckliga migreringsflödet; Analysera skapar eller reparerar inte migreringslagringen.
 
@@ -3020,6 +3041,10 @@ tests/ & Fristående PHP-tester och riktade JavaScript-tester.\\
 winapp/ & Windows-specifika verktyg och integrationer.\\
 \bottomrule
 \end{longtable}
+
+Nya och väsentligt ändrade administrationsgränssnitt följer de permanenta
+designreglerna i~\filepath{docs/ADMIN_DESIGN.md}. De beskriver den kompakta
+mediespelar- och WinApp-stilen samt CSS-granskning inom funktionens omfattning.
 
 \subsection{Kodkonventioner}
 

@@ -692,8 +692,9 @@ Previous/Play/Stop/Next icons are~available on~the~page and~in~the~photo viewer
 whenever audio exists. One shared player prevents overlapping music between
 rows, editor and~slideshow. The~whole playlist repeats and~navigation wraps.
 Automatic slideshow music is~initially off; an~administrator can~enable
-it~for~this gallery. An~enabled slideshow replaces other music and~starts
-at~the~first track. Stopping or~closing the~viewer releases its music;
+it~for~this gallery. The~switch saves its~preference automatically and~keeps
+the~editor open while reporting save status. An~enabled slideshow replaces
+other music and~starts at~the~first track. Stopping or~closing the~viewer releases its music;
 independently requested table playback can~continue. Photo and~speed changes
 leave music running. Browser refusal permits an~explicit Play retry;
 a~completely unplayable playlist stops after one pass.
@@ -2541,7 +2542,24 @@ Trash payloads live in~protected persistent \filepath{data/gallery-trash/} stora
 \index{Maintenance Center}
 \index{maintenance!central workflow}
 
-Open \ui{Maintenance > Maintenance Center} for~a~guided \ui{Analyze}, \ui{Review}, \ui{Execute}, and~\ui{Verify} workflow across routine maintenance owners. Analyze is~read-only for~gallery, telemetry, log, Trash, cache, thumbnail, and~database content; it~writes only the~durable Maintenance Center checkpoint needed to~resume the~inspection. The~Review step groups tasks by~area, labels required automatic steps, and~places available optional tasks with~no~detected work in~a~collapsed disclosure. Required, default, and~optional tasks remain clear before any selected cleanup starts. Deep media verification and~full database optimization remain discoverable when relevant, even though they are~not~selected automatically.
+Open \ui{Maintenance > Maintenance Center} for~a~guided \ui{Analyze},
+\ui{Review}, \ui{Execute}, and~\ui{Verify} workflow across routine
+maintenance owners. Analyze is~read-only for~gallery, telemetry, log, Trash,
+cache, thumbnail, and~database content; it~writes only the~durable checkpoint
+needed to~resume the~inspection.
+
+The~compact Review has~three tabs: Cleanup, Media, and~Database. Optional tasks
+use shared switches with short labels; open the~adjacent question-mark details
+for~an~explanation. Safety preflight and~final verification run automatically.
+They are~not user choices and~do~not appear as~disabled switches. Deep
+thumbnail verification remains available as~an~explicit opt-in, even when
+analysis finds no~thumbnail work.
+
+Expand technical activity when diagnosing a~run. Errors retain their useful
+status and~identify the~safe source basename and~line when available, without
+exposing a~private path or~stack trace. Undefined PHP function, class, or~constant
+errors can~also show the~safe symbol name; raw exception text remains hidden.
+Deep media verification is~routed to~the~thumbnail administration owner.
 
 The~server loads the~reviewed subsystem dependencies again for~each separate analysis or~execution request before running its~task. Checking for~pending migrations only reads the~migration ledger; a~missing ledger or~failed inspection is~treated as~pending work. Apply migrations through the~explicit migration workflow; Analyze does~not~create or~repair migration storage.
 
@@ -3038,6 +3056,10 @@ tests/ & Standalone PHP and~focused JavaScript tests.\\
 winapp/ & Windows-specific tools and~integrations.\\
 \bottomrule
 \end{longtable}
+
+For~new or~materially changed Admin interfaces, follow the~permanent visual
+guidance in~\filepath{docs/ADMIN_DESIGN.md}. It~defines the~compact media-player
+and~WinApp direction and~feature-scoped CSS review.
 
 \subsection{Coding conventions}
 

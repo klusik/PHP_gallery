@@ -201,8 +201,9 @@ function maintenance_center_task_registry(): array
             'progress_unit' => 'tracks',
             'dependencies' => ['preflight'],
             'feature_requirement' => 'gallery_music',
-            // A normal maintenance run never relocates existing originals.
-            'default_selected' => false,
+            // The proposed safe move is selected by default; the Admin may
+            // deselect it before approval, and execution revalidates the plan.
+            'default_selected' => true,
             'required' => false,
             'weight_floor' => MAINTENANCE_CENTER_MUSIC_WEIGHT,
             'analyzer' => __NAMESPACE__

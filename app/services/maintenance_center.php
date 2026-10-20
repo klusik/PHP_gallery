@@ -44,12 +44,28 @@ use Throwable;
 
 /** Registry revision bound into every analyzed plan. */
 /**
- * Invalidate approved plans that predate the opt-in shared music move task.
+ * Invalidate plans predating the selected music move and thumbnail task owner.
  * Type: string. Units: registry revision identifier. Scope: Maintenance Center plans.
  * Consumers: plan freshness and execution admission.
- * Rationale: require fresh analysis before selecting a new filesystem workflow.
+ * Rationale: require fresh analysis for changed task defaults and dependencies.
  */
-const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-10-20.music-repository';
+const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-10-20.compact-maintenance';
+
+/** Bound diagnostic identifiers without retaining raw exception messages.
+ * Type: int. Units: ASCII characters. Scope: one maintenance failure event.
+ * Consumers: maintenance_center_exception_diagnostic class, symbol and site.
+ * Rationale: 160 retains useful PHP identifiers within the lifecycle log cap.
+ * Value: 160 characters per safe identifier.
+ */
+const MAINTENANCE_CENTER_DIAGNOSTIC_IDENTIFIER_LIMIT = 160;
+
+/** Bound the stable reason vocabulary used by maintenance failure events.
+ * Type: int. Units: ASCII characters. Scope: one maintenance failure code.
+ * Consumers: maintenance_center_exception_diagnostic reason validation.
+ * Rationale: 80 preserves the existing bounded reason contract for log readers.
+ * Value: 80 characters per machine-readable failure code.
+ */
+const MAINTENANCE_CENTER_DIAGNOSTIC_CODE_LIMIT = 80;
 
 /**
  * Reserve a small progress weight for the explicitly selected music move.
@@ -260,7 +276,8 @@ function maintenance_center_error(
  * Application exceptions exposing a stable reason() contract may contribute that
  * already-bounded reason without parsing localized text.
  *
- * @return array{exception_class:string,error_code:string}
+ * @param Throwable $exception Failure whose bounded provenance is recorded.
+ * @return array{exception_class:string,error_code:string,error_site:string,error_line:int,error_symbol?:string} Safe class, reason, source basename/line and an optional missing PHP identifier.
  */
 function maintenance_center_exception_diagnostic(Throwable $exception): array
 {
@@ -270,7 +287,8 @@ function maintenance_center_exception_diagnostic(Throwable $exception): array
             $candidate = $exception->reason();
             if (
                 is_string($candidate)
-                && preg_match('/^[a-z0-9_.-]{1,80}$/D', $candidate) === 1
+                && strlen($candidate) <= MAINTENANCE_CENTER_DIAGNOSTIC_CODE_LIMIT
+                && preg_match('/^[a-z0-9_.-]+$/D', $candidate) === 1
             ) {
                 $errorCode = $candidate;
             }
@@ -291,10 +309,47 @@ function maintenance_center_exception_diagnostic(Throwable $exception): array
         };
     }
 
-    return [
-        'exception_class' => substr(get_class($exception), 0, 160),
-        'error_code' => substr($errorCode, 0, 80),
+    $diagnostic = [
+        'exception_class' => substr(
+            get_class($exception),
+            0,
+            MAINTENANCE_CENTER_DIAGNOSTIC_IDENTIFIER_LIMIT,
+        ),
+        'error_code' => substr(
+            $errorCode,
+            0,
+            MAINTENANCE_CENTER_DIAGNOSTIC_CODE_LIMIT,
+        ),
+        'error_site' => substr(
+            preg_replace(
+                '/[^A-Za-z0-9_.-]/',
+                '',
+                basename(str_replace('\\', '/', $exception->getFile())),
+            ) ?? 'unknown',
+            0,
+            MAINTENANCE_CENTER_DIAGNOSTIC_IDENTIFIER_LIMIT,
+        ),
+        'error_line' => max(0, $exception->getLine()),
     ];
+    // Only engine-shaped missing identifiers are safe to retain. Arbitrary
+    // runtime/PDO messages may contain private paths, values or credentials.
+    if ($exception instanceof \Error && preg_match(
+        '~^(?:Call to undefined function ([A-Za-z_\\\\][A-Za-z0-9_\\\\]*)\(\)|Class "([A-Za-z_\\\\][A-Za-z0-9_\\\\]*)" not found|Undefined constant "([A-Za-z_\\\\][A-Za-z0-9_\\\\]*)")$~D',
+        $exception->getMessage(),
+        $matches,
+    ) === 1) {
+        foreach (array_slice($matches, 1) as $symbol) {
+            if ($symbol !== '') {
+                $diagnostic['error_symbol'] = substr(
+                    $symbol,
+                    0,
+                    MAINTENANCE_CENTER_DIAGNOSTIC_IDENTIFIER_LIMIT,
+                );
+                break;
+            }
+        }
+    }
+    return $diagnostic;
 }
 
 /**
@@ -334,11 +389,13 @@ function maintenance_center_task_runtime_modules(
             'security.cleanup',
             'downloads.cache',
             'thumbnail.metadata',
-            'media.deep_verify',
         ],
         true,
     )) {
         return ['site-maintenance-work'];
+    }
+    if ($taskKey === 'media.deep_verify') {
+        return ['domain-admin-thumbnails'];
     }
     if ($taskKey === 'logs.retention') {
         return ['archive-maintenance-work'];

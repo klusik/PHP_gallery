@@ -53,10 +53,16 @@ function view_render_gallery_music(array $model): void
             . ($model['editor'] ? '1' : '0')
             . '" data-music-gallery="'
             . $model['gallery_id']
+            . '" data-music-enabled="'
+            . ($model['enabled'] ? '1' : '0')
             . '" data-music-error="'
             . e(t('music.failed'))
             . '" data-music-refresh-error="'
             . e(t('music.refresh_failed'))
+            . '" data-music-preference-saving="'
+            . e(t('music.preference_saving'))
+            . '" data-music-preference-saved="'
+            . e(t('music.preference_saved'))
             . '" data-music-search-error="'
             . e(t('music.search_failed'))
             . '">';
@@ -381,19 +387,18 @@ function view_render_gallery_music(array $model): void
                 . '</button><output data-music-status role="status"></output></form>';
         view_render_gallery_music_form_start($model, 'gallery-music-settings');
         echo
-            '<label><input type="checkbox" name="music_enabled" value="1"'
+            '<label class="gallery-presentation-setting">'
+                . '<input type="checkbox" role="switch"'
+                . ' data-music-default-switch name="music_enabled" value="1"'
                 . ($model['enabled'] ? ' checked' : '')
-                . '> '
+                . '><span>'
                 . e(t('music.default'))
-                . '</label>'
-                . '<button type="submit" class="music-icon" name="music_action"'
-                . ' value="settings" title="'
+                . '</span></label>'
+                . '<output data-music-preference-status role="status"></output>'
+                . '<noscript><button type="submit" name="music_action"'
+                . ' value="settings">'
                 . e(t('music.save_default'))
-                . '" aria-label="'
-                . e(t('music.save_default'))
-                . '">'
-                . view_music_control_icon('save')
-                . '</button><output data-music-status role="status"></output></form>';
+                . '</button></noscript></form>';
     }
     view_media_panel_end($model['editor']);
     if ($model['tracks'] !== []) {

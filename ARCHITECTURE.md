@@ -177,8 +177,9 @@ public revision. Source-group order and download flags remain gallery-local.
 Gallery assignment and future album additions preserve existing admission
 limits; unexpected oversized live state is reported with bounded projection.
 
-Maintenance Center registers `music.repository` as optional and initially
-unselected. Analysis observes readiness without moving files. Execution loads
+Maintenance Center registers `music.repository` as optional and selected by
+default. Administrators can deselect it before approval. Analysis observes
+readiness without moving files. Execution loads
 the complete existing attachment owner only for this task, verifies at most one
 original, switches its index reference and resumes verified local cleanup through
 a persisted journal. Central originals survive gallery deletion and Trash.
@@ -4238,8 +4239,9 @@ database/migrations/202609200004_maintenance_center.php
 Each analysis/execution HTTP step injects the request-local Core kernel loader
 from the controller. `maintenance_center_task_runtime_modules()` maps the task
 and phase to reviewed existing `site-maintenance-work`,
-`archive-maintenance-work` or `domain-admin-database-maintenance` modules,
-loaded before the dynamic task callback. The optional null loader supports
+`archive-maintenance-work`, `domain-admin-thumbnails`,
+`domain-admin-database-maintenance` or `gallery-pdf-documents` modules, loaded
+before the dynamic task callback. The optional null loader supports
 full-bootstrap CLI/test consumers with dependencies already present. Migration
 inspection is read-only: a missing ledger or inspection failure is pending work,
 and only explicit migration runners create the ledger.

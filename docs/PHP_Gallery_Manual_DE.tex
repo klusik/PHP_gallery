@@ -711,7 +711,9 @@ und~im~Fotobetrachter bereit, sobald Audio vorhanden ist. Ein~gemeinsamer
 Player verhindert überlappende Musik zwischen Zeilen, Editor und~Diashow.
 Die~ganze Liste wiederholt sich; Navigation springt an~den~Enden um.
 Automatische Diashow-Musik ist~anfangs aus; ein~Administrator kann
-sie~für~die~Galerie aktivieren. Eine aktivierte Diashow ersetzt andere Musik
+sie~für~die~Galerie aktivieren. Der Schalter speichert die Einstellung
+automatisch; der Editor bleibt geöffnet und zeigt den Speicherstatus.
+Eine aktivierte Diashow ersetzt andere Musik
 und~beginnt beim ersten Titel. Stoppen oder~Schließen des~Betrachters gibt
 dessen Musik frei; unabhängig gestartete Tabellenmusik kann weiterlaufen. Foto-
 und~Tempoänderungen unterbrechen Musik nicht. Browser-Ablehnung erlaubt einen
@@ -744,8 +746,9 @@ vor~einem erneuten Versuch geprüft werden.
 
 Der~geordnete Playlistindex der~Galerie bleibt in~ihrem versteckten Ordner
 \filepath{.gallery-music/}; unveränderliche Audiodateien liegen zentral in
-\filepath{data/music/}. Eine optionale Aufgabe im~\ui{Wartung > Wartungszentrum}
-migriert ältere lokale Originale einzeln in~begrenzten, fortsetzbaren Schritten.
+\filepath{data/music/}. Die optionale Aufgabe im~\ui{Wartung > Wartungszentrum}
+ist vorausgewählt und kann vor dem Start abgewählt werden. Sie migriert ältere
+lokale Originale einzeln in~begrenzten, fortsetzbaren Schritten.
 Sie~prüft zuerst die~zentrale Kopie und~schaltet dann atomar die~Referenz um;
 Song-IDs, logische Identitäten, Reihenfolge, Sichtbarkeit, Downloadrechte
 und~Diashoweinstellungen bleiben erhalten. Unsichere lokale Dateien werden
@@ -2575,7 +2578,28 @@ Papierkorbdaten liegen im geschützten dauerhaften Speicher \filepath{data/galle
 \index{w00269@Wartungszentrale}
 \index{w00268@Wartung!z00276@zentraler Ablauf}
 
-Öffnen Sie \ui{Wartung > Wartungszentrale} für einen geführten Ablauf \ui{Analysieren}, \ui{Prüfen}, \ui{Ausführen} und \ui{Verifizieren} über die Verantwortungsbereiche regelmäßiger Wartung. Analysieren ist für Galerie-, Telemetrie-, Protokoll-, Papierkorb-, Cache-, Vorschaubild- und Datenbankinhalte schreibgeschützt; geschrieben wird nur der dauerhafte Kontrollpunkt der Wartungszentrale zur Fortsetzung der Prüfung. Der Prüfschritt gruppiert Aufgaben nach Bereich, kennzeichnet erforderliche automatische Schritte und fasst verfügbare optionale Aufgaben ohne erkannten Arbeitsbedarf in einem eingeklappten Abschnitt zusammen. Erforderliche, standardmäßige und optionale Aufgaben bleiben vor Beginn der Bereinigung klar erkennbar; tiefe Medienprüfung und vollständige Datenbankoptimierung bleiben bei Verfügbarkeit auffindbar, auch wenn sie nicht automatisch ausgewählt werden.
+Öffnen Sie \ui{Wartung > Wartungszentrale} für einen geführten Ablauf
+\ui{Analysieren}, \ui{Prüfen}, \ui{Ausführen} und~\ui{Verifizieren} über die
+Verantwortungsbereiche regelmäßiger Wartung. Analysieren ist für Galerie-,
+Telemetrie-, Protokoll-, Papierkorb-, Cache-, Vorschaubild- und Datenbankinhalte
+schreibgeschützt; geschrieben wird nur der dauerhafte Kontrollpunkt zur
+Fortsetzung der Prüfung.
+
+Die kompakte Prüfung hat drei Registerkarten: \ui{Bereinigung}, \ui{Medien}
+und~\ui{Datenbank}.
+Optionale Arbeiten verwenden gemeinsame Schalter mit kurzen Bezeichnungen;
+die Erklärung öffnen Sie über das benachbarte Fragezeichen. Sicherheits-
+vorprüfung und Abschlussprüfung laufen automatisch. Sie sind keine
+Benutzerauswahl und erscheinen nicht als deaktivierte Schalter. Die tiefe
+Vorschaubildprüfung bleibt als ausdrückliche Option verfügbar, auch wenn die
+Analyse keinen Vorschaubildbedarf findet.
+
+Klappen Sie technische Aktivität zur Diagnose auf. Fehler behalten ihren
+hilfreichen Status und nennen, sofern verfügbar, den sicheren Quelldateinamen
+und~die Zeile, ohne privaten Pfad oder Stacktrace offenzulegen. Bei Fehlern
+wegen einer undefinierten PHP-Funktion, Klasse oder Konstante kann außerdem der
+sichere Symbolname erscheinen; der ursprüngliche Ausnahmetext bleibt verborgen.
+Die tiefe Medienprüfung wird an die Vorschaubildverwaltung geleitet.
 
 Der Server lädt vor jeder Aufgabe die geprüften Abhängigkeiten des jeweiligen Bereichs erneut für jede separate Analyse- oder Ausführungsanfrage. Die Prüfung ausstehender Migrationen liest nur die Migrationstabelle; eine fehlende Tabelle oder eine fehlgeschlagene Prüfung gilt als ausstehende Arbeit. Wenden Sie Migrationen über den ausdrücklichen Migrationsablauf an; die Analyse erstellt oder repariert keinen Migrationsspeicher.
 
@@ -3080,6 +3104,10 @@ tests/ & Eigenständige PHP- und gezielte JavaScript-Tests.\\
 winapp/ & Windows-spezifische Werkzeuge und Integrationen.\\
 \bottomrule
 \end{longtable}
+
+Neue und wesentlich geänderte Admin-Oberflächen folgen den dauerhaften
+Gestaltungsregeln in~\filepath{docs/ADMIN_DESIGN.md}. Sie beschreiben den
+kompakten Medienplayer- und WinApp-Stil sowie die CSS-Prüfung im Funktionsumfang.
 
 \subsection{Codekonventionen}
 

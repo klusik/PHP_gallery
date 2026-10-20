@@ -5,7 +5,8 @@ display titles, direct-usage details, nested logical albums and music tags.
 New audio uses a shared protected repository; galleries select songs or live
 albums under **Edit gallery → Media → Music**. Playlist edits propagate to all
 linked galleries. Existing gallery-local audio remains playable and can move
-through an optional resumable Maintenance Center task. Playback follows the
+through an optional resumable Maintenance Center task, selected by default and
+available to turn off before execution. Playback follows the
 assigned gallery's permissions. Filename-derived titles hide extensions by default.
 The shared tag taxonomy isolates image and music assignments and reserves PDF.
 Run normal schema migrations and bounded catalog reconciliation after upgrade.
@@ -401,9 +402,9 @@ Upload music through the ordinary Upload photos chooser/drop queue alongside
 photographs and PDFs, or through **Edit gallery → Media → Music**. New originals
 are stored once in `data/music/`. Select individual catalog songs or live albums;
 album membership/order changes appear in every gallery using that album.
-Arrange tracks, remove them and save whether slideshow starts music
-automatically
-(initially off). MP3, M4A, AAC, Ogg/Opus, WAV, FLAC and WebM are accepted,
+Arrange tracks, remove them and switch whether slideshow starts music
+automatically (initially off); the preference saves immediately while the
+editor stays open. MP3, M4A, AAC, Ogg/Opus, WAV, FLAC and WebM are accepted,
 subject to browser codecs/PHP limits: 64 MiB each, 100 tracks, 512 MiB per
 gallery.
 
@@ -545,6 +546,9 @@ installations require no configuration edit after update.
   favorite gallery/main-page shortcuts
 
 ### Updates & Maintenance
+- **Maintenance Center** - Review bounded maintenance in a compact plan with
+  shared switches for optional work; safety preflight and final verification
+  run automatically, with expandable technical activity for diagnosis
 - **One-click updates** - Check GitHub and install newer versions from admin
   dashboard
 - **Update channels** - Follow stable or beta release branches
@@ -1709,6 +1713,9 @@ future-language skeletons may be translated separately without becoming
 selectable.
 
 ## Extending & Contributing
+
+New and materially changed Admin interfaces follow the compact, media-player
+visual direction documented in [Admin UI design](docs/ADMIN_DESIGN.md).
 
 ### Adding Features
 

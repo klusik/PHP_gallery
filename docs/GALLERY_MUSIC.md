@@ -17,6 +17,13 @@ own ordered references, slideshow preference and download controls. Uploads
 require the forward repository migration; unknown or partial schema refuses the
 write before a gallery playlist changes. Photos stay in their gallery folders.
 
+The slideshow music switch saves its preference automatically when changed.
+The editor stays open and reports saving, success, or failure in its live status
+message; the ordinary switch does not require a separate Save action. The status
+reflects the server result: a failed request cannot be reported as saved. If the
+editor cannot refresh after completion, it blocks another write and reports that
+recovery is needed.
+
 Legacy `.gallery-music/index.json` v1 files and their local `.bin` originals
 remain readable without a rewrite. A v2 index stores direct asset references,
 live album assignments, source order and any interrupted local cleanup journal.
@@ -28,8 +35,9 @@ assignment makes that gallery an access authority for the selected shared music;
 it does not expose a public repository endpoint or arbitrary asset-ID lookup.
 
 Select **Move gallery audio to the music repository** in **Maintenance Center**
-to relocate older originals. This optional task is not selected by ordinary
-maintenance. Each step admits at most one original, verifies the central copy,
+to relocate older originals. This task is selected by default, but remains an
+explicit optional choice that an administrator can turn off before execution.
+Each step admits at most one original, verifies the central copy,
 atomically changes the gallery reference and then removes the matching local
 copy. A persisted cleanup journal and stable cursor support interruption/retry.
 Track IDs, song identities, saved order, titles and permissions are retained.

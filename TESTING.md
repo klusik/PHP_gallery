@@ -392,6 +392,10 @@ snapshot parameters. Native form association is asserted by the isolated gallery
 edit fixture. Manual acceptance additionally covers saving from the mounted
 drawer,
 preview/copy after changing values, window resizing, and real sound activation.
+For the slideshow music preference, confirm the switch saves in place and the
+live status reports the actual server result. A failed request must not become a
+success message; if completion cannot refresh the editor, another write stays
+blocked until recovery. The separate `<noscript>` Save fallback remains usable.
 The configurable share disclosure must open before copy, preserve the locale,
 default autoplay ON/exclusive OFF, serialize every control, and retain
 selectable
@@ -1944,7 +1948,10 @@ independent download/cache operation order and failure isolation, bounded
 exception classification and raw-message redaction, POST/CSRF/Admin
 mutation-envelope contracts, route wiring, browser continuation without reload,
 Dashboard/navigation integration, and Maintenance Center translation-key parity
-across English, Czech, German, and Swedish.
+across English, Czech, German, and Swedish. The compact review keeps required
+preflight and final verification automatic, shares switches across optional
+tasks, routes deep media verification through the thumbnail administration
+owner, and defaults the optional music-repository relocation to selected.
 
 A real MySQL/MariaDB physical rebuild is environment-dependent and is not proven
 by the source-level fixture. On a disposable migrated installation, manually
@@ -1957,10 +1964,21 @@ verify:
    maintenance owners without missing-function errors. On a disposable
    installation with a missing migration ledger, confirm the pending-migration
    inspection refuses readiness without creating the ledger.
-2. Review the ready plan. Confirm deep thumbnail verification is not selected by
-   default and large/protected/unknown database tables are not silently
-   scheduled. Change an application/schema/registry revision on a disposable
-   instance and confirm an old ready plan is rejected as stale.
+2. Review the compact ready plan. Confirm Cleanup, Media, and Database tabs
+   group the optional work under shared switches, with short task labels and
+   question-mark details. Confirm preflight and final verification run
+   automatically without disabled checkboxes, music relocation starts selected
+   but can be turned off before execution, and deep thumbnail verification
+   remains opt-in and available even with no findings, through its thumbnail
+   owner.
+   Confirm large/protected/unknown database tables are not silently scheduled.
+   Change an application/schema/registry revision on a disposable instance and
+   confirm an old ready plan is rejected as stale.
+   Confirm important status and errors stay visible, technical activity is
+   available on expansion, and diagnostic error context exposes only the
+   source basename and line rather than a private path or stack trace. For an
+   undefined PHP function, class, or constant, the safe symbol name may appear;
+   raw exception text remains hidden.
 3. Start maintenance, reload during normal cleanup, close/reopen the Admin page,
    and confirm progress resumes without restarting completed tasks. Open a
    second tab and confirm it cannot advance the same job concurrently or start a

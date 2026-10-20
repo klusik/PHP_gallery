@@ -67,7 +67,7 @@ import {
     createGalleryMusicPlayer, setupGalleryMusicPlayback,
     getGalleryMusicPlayer, formatMusicDuration,
 } from '/public/assets/gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
-import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261020-unified-gallery-media-v3';
+import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261020-music-default-autosave-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 /**
  * Yield one browser task so native form/promise completion can settle.

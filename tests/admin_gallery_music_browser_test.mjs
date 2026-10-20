@@ -272,6 +272,74 @@ const REFRESHED_MUSIC_CARD_HTML = ${encodedRefreshedMusicCard};
 const NO_PRESENTATION_MARKUP = ${encodedNoPresentationMarkup};
 const fixtureWrites = [];
 let failPanelRefresh = false;
+let holdNextPreferenceWrite = false;
+let releaseHeldPreferenceWrite = null;
+let heldMusicAction = '';
+let releaseHeldMusicAction = null;
+let failNextPreferenceWrite = false;
+let persistedMusicEnabled = true;
+// The production render fixture begins with the exact opaque write token below.
+let musicRevisionNumber = 7;
+let activePreferenceWrites = 0;
+let maximumConcurrentPreferenceWrites = 0;
+
+/** Wait until one exact count of submitted preference writes is observable.
+ * @param {number} expectedCount Expected total settings requests in this fixture.
+ * @returns {Promise<void>} Resolves when that request count has been recorded.
+ */
+async function waitForPreferenceWriteCount(expectedCount) {
+    const deadline = Date.now() + ACTION_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+        const count = fixtureWrites.filter(item => item.action === 'settings').length;
+        if (count >= expectedCount) return;
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    throw new Error('Music preference request count did not reach ' + expectedCount);
+}
+
+/** Render a server-confirmed editor card state with its write revision.
+ * @param {boolean} enabled Persisted slideshow music preference.
+ * @param {string} revision Exact opaque write token returned by the endpoint.
+ * @returns {string} Production-rendered editor card with updated persisted fields.
+ */
+function preferenceCardMarkup(enabled, revision) {
+    const template = document.createElement('template');
+    template.innerHTML = REFRESHED_MUSIC_CARD_HTML;
+    const card = template.content.querySelector(
+        '[data-gallery-music][data-music-editor="1"]',
+    );
+    if (!(card instanceof HTMLElement)) {
+        throw new Error('Production Music card fixture is missing its editor owner.');
+    }
+    card.dataset.musicEnabled = enabled ? '1' : '0';
+    const preference = card.querySelector('[data-music-default-switch]');
+    if (preference instanceof HTMLInputElement) {
+        preference.checked = enabled;
+        preference.toggleAttribute('checked', enabled);
+    }
+    for (const revisionInput of card.querySelectorAll(
+        'input[name="music_revision"]',
+    )) {
+        if (revisionInput instanceof HTMLInputElement) {
+            revisionInput.value = revision;
+            revisionInput.setAttribute('value', revision);
+        }
+    }
+    return card.outerHTML;
+}
+
+/** Hold one mocked owned music response until its browser phase is inspected.
+ * @param {string} action Music action represented by the pending response.
+ * @param {Response} response Prepared successful response for that action.
+ * @returns {Promise<Response>} Immediate or explicitly released response.
+ */
+async function holdOwnedMusicResponse(action, response) {
+    if (heldMusicAction !== action) return response;
+    heldMusicAction = '';
+    return await new Promise(resolve => {
+        releaseHeldMusicAction = () => resolve(response);
+    });
+}
 
 /** Wait until one owned playlist write releases its local card.
  * @returns {Promise<void>} Resolves once the gallery Music card is idle.
@@ -288,9 +356,10 @@ async function waitForIdle() {
 
 /** Respond with the exact canonical envelope consumed by the shared Admin coordinator.
  * @param {string} action Submitted music action.
+ * @param {{music_revision?:string,music_enabled?:boolean}} [preferenceState] Optional server-confirmed preference fields.
  * @returns {Response} Successful response retaining mutation and panel metadata.
  */
-function canonicalMutationResponse(action) {
+function canonicalMutationResponse(action, preferenceState = {}) {
     return new Response(JSON.stringify({
         ok: true,
         message: 'Music saved successfully.',
@@ -305,8 +374,15 @@ function canonicalMutationResponse(action) {
         },
         contexts: [],
         fallback: {redirect_url: '/index.php?page=admin_edit_gallery&id=42'},
+        ...(preferenceState.music_revision
+            ? {music_revision: preferenceState.music_revision} : {}),
         panel_html: failPanelRefresh ? '<section>missing owned card</section>'
-            : REFRESHED_MUSIC_CARD_HTML,
+            : preferenceState.music_revision
+                ? preferenceCardMarkup(
+                    preferenceState.music_enabled === true,
+                    preferenceState.music_revision,
+                )
+                : REFRESHED_MUSIC_CARD_HTML,
     }), {headers: {'Content-Type': 'application/json'}});
 }
 
@@ -325,20 +401,64 @@ async (input, options = {}) => {
         accept: new Headers(options.headers || {}).get('Accept') || '',
         requestedWith: new Headers(options.headers || {}).get('X-Requested-With') || '',
         action,
+        musicEnabled: String(body.get('music_enabled') || ''),
         query: String(body.get('music_query') || ''),
         revision: String(body.get('music_revision') || ''),
         catalogRevision: String(body.get('catalog_revision') || ''),
         selectionId: String(body.get('selection_id') || ''),
     });
     if (action === 'choices') {
-        return new Response(JSON.stringify({
+        const response = new Response(JSON.stringify({
             ok: true,
             choices_html: FILTERED_CHOICES_HTML,
             catalog_revision: 'catalog:raw/0009',
             write_revision: 'write:0007',
         }), {headers: {'Content-Type': 'application/json'}});
+        return await holdOwnedMusicResponse(action, response);
     }
-    return canonicalMutationResponse(action);
+    if (action === 'settings') {
+        activePreferenceWrites += 1;
+        maximumConcurrentPreferenceWrites = Math.max(
+            maximumConcurrentPreferenceWrites,
+            activePreferenceWrites,
+        );
+        const desired = body.get('music_enabled') === '1';
+        const resolvePreferenceWrite = () => {
+            activePreferenceWrites -= 1;
+            if (failNextPreferenceWrite) {
+                failNextPreferenceWrite = false;
+                return new Response(JSON.stringify({
+                    ok: false,
+                    message: 'Music preference rejected.',
+                }), {
+                    status: 422,
+                    headers: {'Content-Type': 'application/json'},
+                });
+            }
+            persistedMusicEnabled = desired;
+            musicRevisionNumber += 1;
+            // Keep the fixture's opaque token shape while advancing server state.
+            const revision = 'write:'
+                + String(musicRevisionNumber).padStart(4, '0');
+            return canonicalMutationResponse(action, {
+                music_revision: revision,
+                music_enabled: persistedMusicEnabled,
+            });
+        };
+        if (holdNextPreferenceWrite) {
+            holdNextPreferenceWrite = false;
+            return await new Promise(resolve => {
+                releaseHeldPreferenceWrite = () => resolve(
+                    resolvePreferenceWrite(),
+                );
+            });
+        }
+        return resolvePreferenceWrite();
+    }
+    return await holdOwnedMusicResponse(
+        action,
+        canonicalMutationResponse(action),
+    );
 };
 
 try {
@@ -357,6 +477,9 @@ try {
     const publicEmpty = document.querySelector(
         '.gallery-music[data-music-editor="0"]',
     );
+    // Public gallery content precedes its mounted editor in the real drawer.
+    // Keep the same gallery identity first to expose ambiguous owner lookups.
+    if (publicEmpty) document.getElementById('mount').prepend(publicEmpty);
     const publicWarnings = Array.from(
         publicEmpty?.querySelectorAll('.gallery-music-warning[role="status"]') || [],
     );
@@ -647,7 +770,17 @@ try {
     'The catalog chooser must expose a bounded native query form.');
     picker.open = true;
     query.value = 'Night';
+    heldMusicAction = 'choices';
     search.requestSubmit(search.querySelector('button[type="submit"]'));
+    const initialPreferenceSwitch = manager.querySelector(
+        '[data-music-default-switch]',
+    );
+    check(initialPreferenceSwitch instanceof HTMLInputElement
+        && initialPreferenceSwitch.disabled
+        && releaseHeldMusicAction instanceof Function,
+    'A catalog search must disable the preference switch while its owned request is in flight.');
+    releaseHeldMusicAction();
+    releaseHeldMusicAction = null;
     await waitForIdle();
     const currentManager = document.querySelector(
         '#admin-gallery-media-music [data-gallery-music][data-music-editor="1"]',
@@ -682,7 +815,13 @@ try {
     const pageUrlBeforeWrite = location.href;
     const panelBeforeWrite = document.querySelector('[data-admin-side-panel]');
     const writesBeforeAdd = fixtureWrites.length;
+    heldMusicAction = 'add_song';
     addSongForm.requestSubmit(addSongForm.querySelector('button[type="submit"]'));
+    check(initialPreferenceSwitch.disabled
+        && releaseHeldMusicAction instanceof Function,
+    'Another owned music mutation must disable the preference switch while its write is in flight.');
+    releaseHeldMusicAction();
+    releaseHeldMusicAction = null;
     await waitForIdle();
     const refreshedManager = document.querySelector(
         '#admin-gallery-media-music [data-gallery-music][data-music-editor="1"]',
@@ -706,8 +845,111 @@ try {
         && location.href === pageUrlBeforeWrite,
     'A canonical source assignment must refresh only its local Music card, preserve the side panel and stay on the same URL.');
 
+    const publicMusicCardBeforePreference = publicEmpty;
+    const preferenceWritesBefore = fixtureWrites.filter(
+        item => item.action === 'settings',
+    ).length;
+    const preferenceUrlBefore = location.href;
+    const preferenceSidePanel = document.querySelector('[data-admin-side-panel]');
+    let preferenceManager = refreshedManager;
+    let preferenceSwitch = preferenceManager.querySelector(
+        '[data-music-default-switch]',
+    );
+    const visiblePreferenceSubmitter = Array.from(preferenceManager.querySelectorAll(
+        '.gallery-music-settings button[type="submit"]',
+    )).some(button => button.checkVisibility({
+        visibilityProperty: true,
+        opacityProperty: true,
+    }));
+    check(preferenceSwitch instanceof HTMLInputElement
+        && preferenceSwitch.getAttribute('role') === 'switch'
+        && preferenceManager.querySelector('[data-music-preference-status]')
+            instanceof HTMLElement
+        && !visiblePreferenceSubmitter,
+    'The music default must render as an autosaving switch with a dedicated live status and no diskette submitter.');
+    holdNextPreferenceWrite = true;
+    preferenceSwitch.checked = false;
+    preferenceSwitch.dispatchEvent(new Event('change', {bubbles: true}));
+    await waitForPreferenceWriteCount(preferenceWritesBefore + 1);
+    const firstPreferenceWrite = fixtureWrites.filter(
+        item => item.action === 'settings',
+    ).at(-1);
+    check(firstPreferenceWrite?.revision === 'write:0007'
+        && firstPreferenceWrite.musicEnabled === '0'
+        && !preferenceSwitch.disabled
+        && preferenceManager.querySelector(
+            '[data-music-preference-status]',
+        )?.textContent === 'Saving music preference…'
+        && publicMusicCardBeforePreference?.isConnected
+        && publicMusicCardBeforePreference === document.querySelector(
+            '.gallery-music[data-music-editor="0"]',
+        ),
+    'The first delegated preference change must use the production revision and status while leaving the preceding public card untouched.');
+    preferenceSwitch.checked = true;
+    preferenceSwitch.dispatchEvent(new Event('change', {bubbles: true}));
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    check(fixtureWrites.filter(item => item.action === 'settings').length
+        === preferenceWritesBefore + 1
+        && activePreferenceWrites === 1
+        && releaseHeldPreferenceWrite instanceof Function,
+    'A newer switch intent must wait behind the held first HTTP request without overlapping writes.');
+    releaseHeldPreferenceWrite();
+    releaseHeldPreferenceWrite = null;
+    await waitForPreferenceWriteCount(preferenceWritesBefore + 2);
+    const latestPreferenceWrite = fixtureWrites.filter(
+        item => item.action === 'settings',
+    ).at(-1);
+    check(latestPreferenceWrite?.revision === 'write:0008'
+        && latestPreferenceWrite.musicEnabled === '1'
+        && maximumConcurrentPreferenceWrites === 1,
+    'The queued latest intent must use the exact revision returned by the first completed mutation and stay sequential.');
+    await waitForIdle();
+    preferenceManager = document.querySelector(
+        '#admin-gallery-media-music [data-gallery-music][data-music-editor="1"]',
+    );
+    preferenceSwitch = preferenceManager?.querySelector(
+        '[data-music-default-switch]',
+    );
+    check(preferenceSwitch instanceof HTMLInputElement
+        && preferenceSwitch.checked
+        && preferenceManager.dataset.musicEnabled === '1'
+        && preferenceManager.querySelector(
+            '.gallery-music-settings input[name="music_revision"]',
+        )?.value === 'write:0009'
+        && preferenceManager.querySelector(
+            '[data-music-preference-status]',
+        )?.textContent === 'Music preference saved.'
+        && preferenceSidePanel === document.querySelector('[data-admin-side-panel]')
+        && preferenceSidePanel?.dataset.open === '1'
+        && location.href === preferenceUrlBefore
+        && publicMusicCardBeforePreference?.isConnected
+        && publicMusicCardBeforePreference === document.querySelector(
+            '.gallery-music[data-music-editor="0"]',
+        ),
+    'The latest preference must be saved in place with its fresh revision, success status, open drawer and unchanged public card/URL.');
+
+    const writesBeforePreferenceFailure = fixtureWrites.filter(
+        item => item.action === 'settings',
+    ).length;
+    failNextPreferenceWrite = true;
+    preferenceSwitch.checked = false;
+    preferenceSwitch.dispatchEvent(new Event('change', {bubbles: true}));
+    await waitForIdle();
+    check(fixtureWrites.filter(item => item.action === 'settings').length
+        === writesBeforePreferenceFailure + 1
+        && preferenceSwitch.checked
+        && preferenceManager.querySelector(
+            '[data-music-preference-status]',
+        )?.textContent === 'Music preference rejected.'
+        && preferenceManager.querySelector(
+            '[data-music-preference-status]',
+        )?.textContent !== 'Music preference saved.',
+    'An HTTP failure must restore the confirmed switch value and keep the error visible without a false success.');
+
     failPanelRefresh = true;
-    const staleManager = refreshedManager;
+    const staleManager = document.querySelector(
+        '#admin-gallery-media-music [data-gallery-music][data-music-editor="1"]',
+    );
     const staleSource = staleManager.querySelector(
         'tr[data-music-source="song:901"]',
     );
@@ -728,8 +970,56 @@ try {
         && staleMessage.includes('could not be refreshed')
         && location.href === pageUrlBeforeWrite,
     'A successful write with an unrefreshed panel must warn and block another local write without navigating.');
+
+    failPanelRefresh = false;
+    staleManager.dataset.musicRefreshBlocked = '0';
+    const preferenceManagerBeforeSyncFailure = staleManager;
+    const preferenceSwitchBeforeSyncFailure = staleManager.querySelector(
+        '[data-music-default-switch]',
+    );
+    const settingsWritesBeforeSyncFailure = fixtureWrites.filter(
+        item => item.action === 'settings',
+    ).length;
+    failPanelRefresh = true;
+    preferenceSwitchBeforeSyncFailure.checked = false;
+    preferenceSwitchBeforeSyncFailure.dispatchEvent(
+        new Event('change', {bubbles: true}),
+    );
+    await waitForIdle();
+    const settingsWritesAfterSyncFailure = fixtureWrites.filter(
+        item => item.action === 'settings',
+    ).length;
+    const preferenceStatusAfterSyncFailure =
+        preferenceManagerBeforeSyncFailure.querySelector(
+            '[data-music-preference-status]',
+        )?.textContent || '';
+    check(settingsWritesAfterSyncFailure === settingsWritesBeforeSyncFailure + 1
+        && preferenceManagerBeforeSyncFailure.dataset.musicRefreshBlocked === '1'
+        && preferenceSwitchBeforeSyncFailure.checked === false
+        && preferenceStatusAfterSyncFailure.includes('could not be refreshed')
+        && preferenceStatusAfterSyncFailure !== 'Music preference saved.'
+        && publicMusicCardBeforePreference?.isConnected
+        && publicMusicCardBeforePreference === document.querySelector(
+            '.gallery-music[data-music-editor="0"]',
+        )
+        && preferenceSidePanel?.dataset.open === '1'
+        && location.href === preferenceUrlBefore,
+    'Failed coordinator completion must retain the persisted switch, report refresh failure, preserve the public card and block further writes in place.');
+    const settingsWritesBeforeBlockedIntent = fixtureWrites.filter(
+        item => item.action === 'settings',
+    ).length;
+    preferenceSwitchBeforeSyncFailure.checked = true;
+    preferenceSwitchBeforeSyncFailure.dispatchEvent(
+        new Event('change', {bubbles: true}),
+    );
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    check(fixtureWrites.filter(item => item.action === 'settings').length
+        === settingsWritesBeforeBlockedIntent
+        && preferenceSwitchBeforeSyncFailure.checked === false,
+    'A failed completion must reject a newer preference intent until the editor is safely refreshed.');
+    failPanelRefresh = false;
     document.getElementById('results').textContent =
-        'BROWSER PASS local gallery Music tabs, bounded chooser, source groups, CAS, coordinator and stale lock';
+        'BROWSER PASS local gallery Music tabs, chooser, source groups, autosave ordering, CAS, coordinator and stale lock';
 } catch (error) {
     document.getElementById('results').textContent =
         'BROWSER FAIL ' + (error.stack || String(error));
