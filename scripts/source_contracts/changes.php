@@ -26,15 +26,26 @@ function source_git_read(array $arguments, string $root): array
     // Git may emit one CRLF warning per changed file. Discard that untrusted
     // diagnostic stream directly; sequentially draining two pipes can deadlock.
     $nullDevice = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
-    $process = @proc_open(array_merge(['git', '--no-optional-locks', '-C', $root], $arguments),
-        [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', $nullDevice, 'w']], $pipes, $root);
+    $process = @proc_open(
+        array_merge(['git', '--no-optional-locks', '-C', $root], $arguments),
+        [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['file', $nullDevice, 'w'],
+        ],
+        $pipes,
+        $root,
+    );
     if (!is_resource($process)) {
         return ['status' => 2, 'stdout' => ''];
     }
     fclose($pipes[0]);
     $stdout = stream_get_contents($pipes[1]);
     fclose($pipes[1]);
-    return ['status' => proc_close($process), 'stdout' => is_string($stdout) ? $stdout : ''];
+    return [
+        'status' => proc_close($process),
+        'stdout' => is_string($stdout) ? $stdout : '',
+    ];
 }
 
 /**
@@ -48,7 +59,11 @@ function source_without_header(string $source, string $extension): string
     $source = str_replace("\r\n", "\n", $source);
     $offset = null;
     leading_header($source, $extension, $offset);
-    preg_match_all('/^(?:#![^\n]*|<\?xml[^>]*\?>|<!doctype[^>]*>)/im', substr($source, 0, $offset ?? 0), $preambles);
+    preg_match_all(
+        '/^(?:#![^\n]*|<\?xml[^>]*\?>|<!doctype[^>]*>)/im',
+        substr($source, 0, $offset ?? 0),
+        $preambles,
+    );
     return implode("\n", $preambles[0]) . "\n" . substr($source, $offset ?? 0);
 }
 
@@ -61,12 +76,17 @@ function source_without_header(string $source, string $extension): string
  * @param bool $withBodies Whether to hash executable bodies; policy ownership needs only identities and records.
  * @return list<array{identity:string,fingerprint:string,record:array<string,mixed>,uncertain:bool}> Internal records; no source values are printed.
  */
-function declaration_snapshots(string $source, string $extension, bool $withBodies = true): array
-{
+function declaration_snapshots(
+    string $source,
+    string $extension,
+    bool $withBodies = true,
+): array {
     $php = $extension === 'php';
     $tokens = $php ? php_tokens($source) : javascript_tokens($source);
     $pairs = delimiter_pairs($tokens);
-    $records = $php ? php_declarations($source) : javascript_declarations($source);
+    $records = $php
+        ? php_declarations($source)
+        : javascript_declarations($source);
     $snapshots = [];
     foreach ($records as $record) {
         $owner = '';
@@ -76,7 +96,12 @@ function declaration_snapshots(string $source, string $extension, bool $withBodi
                     continue;
                 }
                 $owner = '';
-                for ($index++; $index < $record['start_token'] && !in_array($tokens[$index]['text'], [';', '{'], true); $index++) {
+                for (
+                    $index++;
+                    $index < $record['start_token']
+                    && !in_array($tokens[$index]['text'], [';', '{'], true);
+                    $index++
+                ) {
                     $owner .= $tokens[$index]['text'];
                 }
             }
@@ -84,38 +109,82 @@ function declaration_snapshots(string $source, string $extension, bool $withBodi
         $nearest = -1;
         foreach ($snapshots as $snapshot) {
             $candidate = $snapshot['record'];
-            if ($candidate['start_token'] < $record['start_token'] && $candidate['end_token'] >= $record['end_token']
-                && $candidate['start_token'] > $nearest && $candidate['kind'] !== 'property') {
+            if (
+                $candidate['start_token'] < $record['start_token']
+                && $candidate['end_token'] >= $record['end_token']
+                && $candidate['start_token'] > $nearest
+                && $candidate['kind'] !== 'property'
+            ) {
                 $owner = $snapshot['identity'];
                 $nearest = $candidate['start_token'];
             }
         }
-        $identity = ($owner === '' ? '' : $owner . '/') . $record['kind'] . ':' . $record['name'];
+        $identity =
+            ($owner === '' ? '' : $owner . '/')
+            . $record['kind']
+            . ':'
+            . $record['name'];
         $executable = [];
         $uncertain = false;
-        for ($index = $record['start_token']; $withBodies && $index <= $record['end_token'] && isset($tokens[$index]); $index++) {
+        for (
+            $index = $record['start_token'];
+            $withBodies
+            && $index <= $record['end_token']
+            && isset($tokens[$index]);
+            $index++
+        ) {
             $token = $tokens[$index];
             if (in_array($token['id'], [T_COMMENT, T_DOC_COMMENT], true)) {
                 continue;
             }
             $previous = $tokens[$index - 1] ?? null;
-            $restrictedLineBreak = !$php && $previous !== null && $token['line'] > $previous['line']
-                && (in_array($previous['text'], ['return', 'throw', 'yield', 'break', 'continue', 'async'], true)
-                    || in_array($token['text'], ['++', '--'], true));
-            $executable[] = [$token['id'], $token['text'], $restrictedLineBreak];
+            $restrictedLineBreak =
+                !$php
+                && $previous !== null
+                && $token['line'] > $previous['line']
+                && (
+                    in_array(
+                        $previous['text'],
+                        [
+                            'return',
+                            'throw',
+                            'yield',
+                            'break',
+                            'continue',
+                            'async',
+                        ],
+                        true,
+                    )
+                    || in_array($token['text'], ['++', '--'], true)
+                );
+            $executable[] = [
+                $token['id'],
+                $token['text'],
+                $restrictedLineBreak,
+            ];
             if (!$php && ($token['text'][0] ?? '') === '#') {
                 $uncertain = true;
             }
             if (!$php && $token['text'] === '[' && isset($pairs[$index])) {
                 $afterName = $pairs[$index] + 1;
-                if (($tokens[$afterName]['text'] ?? '') === '('
-                    && ($tokens[($pairs[$afterName] ?? -2) + 1]['text'] ?? '') === '{') {
+                if (
+                    ($tokens[$afterName]['text'] ?? '') === '('
+                    && ($tokens[($pairs[$afterName] ?? -2) + 1]['text'] ?? '')
+                        === '{'
+                ) {
                     $uncertain = true;
                 }
             }
         }
-        $snapshots[] = ['identity' => $identity, 'fingerprint' => hash('sha256', json_encode($executable, JSON_THROW_ON_ERROR)),
-            'record' => $record, 'uncertain' => $uncertain];
+        $snapshots[] = [
+            'identity' => $identity,
+            'fingerprint' => hash('sha256', json_encode(
+                $executable,
+                JSON_THROW_ON_ERROR,
+            )),
+            'record' => $record,
+            'uncertain' => $uncertain,
+        ];
     }
     return $snapshots;
 }
@@ -127,10 +196,21 @@ function declaration_snapshots(string $source, string $extension, bool $withBodi
  * @param callable(array<string,mixed>):list<string>|null $issueCheck Optional policy-site contract evaluator; declaration rules remain the default.
  * @return array{added:int,changed:int,unchanged:int,moved:int,doc_regressions:int,findings:list<array<string,mixed>>,blocked:list<array{path:string,reason:string}>} Comparison counts and value-free findings.
  */
-function compare_declaration_snapshots(array $old, array $current, ?callable $issueCheck = null): array
-{
+function compare_declaration_snapshots(
+    array $old,
+    array $current,
+    ?callable $issueCheck = null,
+): array {
     $issueCheck ??= __NAMESPACE__ . '\\declaration_issues';
-    $result = ['added' => 0, 'changed' => 0, 'unchanged' => 0, 'moved' => 0, 'doc_regressions' => 0, 'findings' => [], 'blocked' => []];
+    $result = [
+        'added' => 0,
+        'changed' => 0,
+        'unchanged' => 0,
+        'moved' => 0,
+        'doc_regressions' => 0,
+        'findings' => [],
+        'blocked' => [],
+    ];
     $matches = [];
     $used = [];
     // Match unchanged duplicates before a new callback can consume their counterpart.
@@ -140,9 +220,15 @@ function compare_declaration_snapshots(array $old, array $current, ?callable $is
                 continue;
             }
             foreach ($old as $oldIndex => $candidate) {
-                if (!isset($used[$oldIndex]) && $snapshot['identity'] === $candidate['identity']
+                if (
+                    !isset($used[$oldIndex])
+                    && $snapshot['identity'] === $candidate['identity']
                     && $snapshot['fingerprint'] === $candidate['fingerprint']
-                    && (!$samePathOnly || $snapshot['path'] === $candidate['path'])) {
+                    && (
+                        !$samePathOnly
+                        || $snapshot['path'] === $candidate['path']
+                    )
+                ) {
                     $matches[$index] = $oldIndex;
                     $used[$oldIndex] = true;
                     break;
@@ -156,7 +242,10 @@ function compare_declaration_snapshots(array $old, array $current, ?callable $is
         $oldIndex = $matches[$index] ?? null;
         if (!$same) {
             foreach ($old as $candidateIndex => $candidate) {
-                if (!isset($used[$candidateIndex]) && $snapshot['identity'] === $candidate['identity']) {
+                if (
+                    !isset($used[$candidateIndex])
+                    && $snapshot['identity'] === $candidate['identity']
+                ) {
                     $oldIndex = $candidateIndex;
                     $used[$candidateIndex] = true;
                     break;
@@ -168,19 +257,31 @@ function compare_declaration_snapshots(array $old, array $current, ?callable $is
         if ($same) {
             $result['unchanged']++;
             $result['moved'] += $path !== $old[$oldIndex]['path'] ? 1 : 0;
-            $issues = array_values(array_diff($issues, $issueCheck($old[$oldIndex]['record'])));
+            $issues = array_values(array_diff(
+                $issues,
+                $issueCheck($old[$oldIndex]['record']),
+            ));
             if ($issues !== []) {
                 $result['doc_regressions']++;
             }
         } else {
             $result[$oldIndex === null ? 'added' : 'changed']++;
             if ($snapshot['uncertain']) {
-                $result['blocked'][] = ['path' => $path, 'reason' => 'Changed JavaScript declaration contains private/computed syntax requiring parser coverage.'];
+                $result['blocked'][] = [
+                    'path' => $path,
+                    'reason' => 'Changed JavaScript declaration contains private/computed syntax requiring parser coverage.',
+                ];
             }
         }
         foreach ($issues as $rule) {
-            $result['findings'][] = ['path' => $path, 'line' => $record['line'], 'identity' => $snapshot['identity'],
-                'name' => $record['name'], 'kind' => $record['kind'], 'rule' => $rule];
+            $result['findings'][] = [
+                'path' => $path,
+                'line' => $record['line'],
+                'identity' => $snapshot['identity'],
+                'name' => $record['name'],
+                'kind' => $record['kind'],
+                'rule' => $rule,
+            ];
         }
     }
     return $result;
@@ -194,15 +295,26 @@ function compare_declaration_snapshots(array $old, array $current, ?callable $is
  */
 function source_declaration_snapshots(string $source, string $path): array
 {
-    if (in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['sh', 'ps1', 'psm1'], true)) {
-        $snapshots = script_declaration_snapshots($source, strtolower(pathinfo($path, PATHINFO_EXTENSION)));
+    if (in_array(
+        strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+        ['sh', 'ps1', 'psm1'],
+        true,
+    )) {
+        $snapshots = script_declaration_snapshots(
+            $source,
+            strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+        );
         foreach ($snapshots as &$snapshot) {
             $snapshot['path'] = $path;
         }
         unset($snapshot);
         return $snapshots;
     }
-    if (in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['py', 'pyw'], true)) {
+    if (in_array(
+        strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+        ['py', 'pyw'],
+        true,
+    )) {
         $snapshots = python_declaration_snapshots($source);
         foreach ($snapshots as &$snapshot) {
             $snapshot['path'] = $path;
@@ -210,10 +322,17 @@ function source_declaration_snapshots(string $source, string $path): array
         unset($snapshot);
         return $snapshots;
     }
-    if (in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['html', 'htm'], true)) {
+    if (in_array(
+        strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+        ['html', 'htm'],
+        true,
+    )) {
         $snapshots = [];
         foreach (html_script_sources($source) as $script) {
-            foreach (declaration_snapshots($script['source'], 'js') as $snapshot) {
+            foreach (declaration_snapshots(
+                $script['source'],
+                'js',
+            ) as $snapshot) {
                 $snapshot['record']['line'] += $script['line'] - 1;
                 $snapshot['path'] = $path;
                 $snapshots[] = $snapshot;
@@ -221,7 +340,10 @@ function source_declaration_snapshots(string $source, string $path): array
         }
         return $snapshots;
     }
-    $snapshots = declaration_snapshots($source, strtolower(pathinfo($path, PATHINFO_EXTENSION)));
+    $snapshots = declaration_snapshots(
+        $source,
+        strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+    );
     foreach ($snapshots as &$snapshot) {
         $snapshot['path'] = $path;
     }
@@ -238,36 +360,91 @@ function html_script_sources(string $source): array
 {
     $scripts = [];
     $cursor = 0;
-    while (preg_match('/<!--|<script\b/i', $source, $start, PREG_OFFSET_CAPTURE, $cursor) === 1) {
+    while (
+        preg_match(
+            '/<!--|<script\b/i',
+            $source,
+            $start,
+            PREG_OFFSET_CAPTURE,
+            $cursor,
+        ) === 1
+    ) {
         $offset = $start[0][1];
         if ($start[0][0] === '<!--') {
             $close = strpos($source, '-->', $offset + 4);
             $cursor = $close === false ? strlen($source) : $close + 3;
             continue;
         }
-        if (preg_match('/\G<script\b((?:"[^"]*"|\'[^\']*\'|[^\'">])*)>/Ai', $source, $opening, 0, $offset) !== 1) {
+        if (
+            preg_match(
+                '/\G<script\b((?:"[^"]*"|\'[^\']*\'|[^\'">])*)>/Ai',
+                $source,
+                $opening,
+                0,
+                $offset,
+            ) !== 1
+        ) {
             throw new \RuntimeException('Unclassified HTML script opening.');
         }
         $bodyStart = $offset + strlen($opening[0]);
-        if (preg_match('/<\/script\s*>/i', $source, $closing, PREG_OFFSET_CAPTURE, $bodyStart) !== 1) {
+        if (
+            preg_match(
+                '/<\/script\s*>/i',
+                $source,
+                $closing,
+                PREG_OFFSET_CAPTURE,
+                $bodyStart,
+            ) !== 1
+        ) {
             throw new \RuntimeException('Unclassified HTML script boundary.');
         }
         $cursor = $closing[0][1] + strlen($closing[0][0]);
         $attributes = $opening[1];
-        if (preg_match('/\btype\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $attributes, $type) === 1) {
-            $kind = strtolower(trim($type[1] !== '' ? $type[1] : (($type[2] ?? '') !== '' ? $type[2] : ($type[3] ?? ''))));
-            if (in_array($kind, ['application/json', 'application/ld+json', 'importmap', 'speculationrules'], true)) {
+        if (
+            preg_match(
+                '/\btype\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i',
+                $attributes,
+                $type,
+            ) === 1
+        ) {
+            $kind = strtolower(trim(
+                $type[1] !== ''
+                    ? $type[1]
+                    : (($type[2] ?? '') !== '' ? $type[2] : $type[3] ?? ''),
+            ));
+            if (in_array(
+                $kind,
+                [
+                    'application/json',
+                    'application/ld+json',
+                    'importmap',
+                    'speculationrules',
+                ],
+                true,
+            )) {
                 continue;
             }
-            if (!in_array($kind, ['', 'module', 'text/javascript', 'application/javascript'], true)) {
-                throw new \RuntimeException('Unclassified HTML script language.');
+            if (!in_array(
+                $kind,
+                ['', 'module', 'text/javascript', 'application/javascript'],
+                true,
+            )) {
+                throw new \RuntimeException(
+                    'Unclassified HTML script language.',
+                );
             }
         }
         if (preg_match('/\bsrc\s*=/i', $attributes) === 1) {
             continue;
         }
-        $scripts[] = ['source' => substr($source, $bodyStart, $closing[0][1] - $bodyStart),
-            'line' => substr_count(substr($source, 0, $bodyStart), "\n") + 1];
+        $scripts[] = [
+            'source' => substr(
+                $source,
+                $bodyStart,
+                $closing[0][1] - $bodyStart,
+            ),
+            'line' => substr_count(substr($source, 0, $bodyStart), "\n") + 1,
+        ];
     }
     return $scripts;
 }
@@ -279,9 +456,15 @@ function html_script_sources(string $source): array
  * @param string $path Relative source identity.
  * @return array<string,mixed> Changed declaration counts, findings and coverage blockers.
  */
-function changed_source_contracts(string $before, string $after, string $path): array
-{
-    return compare_declaration_snapshots(source_declaration_snapshots($before, $path), source_declaration_snapshots($after, $path));
+function changed_source_contracts(
+    string $before,
+    string $after,
+    string $path,
+): array {
+    return compare_declaration_snapshots(
+        source_declaration_snapshots($before, $path),
+        source_declaration_snapshots($after, $path),
+    );
 }
 
 /**
@@ -293,11 +476,29 @@ function source_head_declaration_allowed(string $path): bool
 {
     $parts = explode('/', $path);
     $filename = array_pop($parts);
-    return $path !== 'config.php' && !str_starts_with((string) $filename, '.env')
-        && array_intersect($parts, source_excluded_directories()) === []
-        && in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['php', 'js', 'mjs', 'cjs', 'html', 'htm', 'py', 'pyw', 'sh', 'ps1', 'psm1'], true);
+    return (
+        $path !== 'config.php'
+            && !str_starts_with((string) $filename, '.env')
+            && array_intersect($parts, source_excluded_directories()) === []
+            && in_array(
+                strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+                [
+                    'php',
+                    'js',
+                    'mjs',
+                    'cjs',
+                    'html',
+                    'htm',
+                    'py',
+                    'pyw',
+                    'sh',
+                    'ps1',
+                    'psm1',
+                ],
+                true,
+            )
+    );
 }
-
 
 /**
  * Enforce current declarations against readable Git HEAD without repository writes.
@@ -309,39 +510,91 @@ function source_head_declaration_allowed(string $path): bool
  * @param string $base Immutable Git comparison ref; HEAD locally, first parent in CI.
  * @return array{status:string,summary:array<string,mixed>,findings:list<array<string,mixed>>,blocked:list<array{path:string,reason:string}>,coverage:array<string,string>} Bounded PASS/FAIL/BLOCKED evidence.
  */
-function changed_documentation_report(string $root, array $paths = [], ?callable $git = null, string $base = 'HEAD'): array
-{
-    $report = ['status' => 'BLOCKED', 'summary' => ['base' => $base, 'source_files' => 0, 'changed_files' => 0,
-        'added' => 0, 'changed' => 0, 'unchanged' => 0, 'moved' => 0, 'doc_regressions' => 0, 'finding_count' => 0],
-        'findings' => [], 'blocked' => [], 'coverage' => [
+function changed_documentation_report(
+    string $root,
+    array $paths = [],
+    ?callable $git = null,
+    string $base = 'HEAD',
+): array {
+    $report = [
+        'status' => 'BLOCKED',
+        'summary' => [
+            'base' => $base,
+            'source_files' => 0,
+            'changed_files' => 0,
+            'added' => 0,
+            'changed' => 0,
+            'unchanged' => 0,
+            'moved' => 0,
+            'doc_regressions' => 0,
+            'finding_count' => 0,
+        ],
+        'findings' => [],
+        'blocked' => [],
+        'coverage' => [
             'scope' => 'Added/materially changed named functions, methods and class-like declarations in PHP, Python/PYW, JS/MJS/CJS, inline HTML scripts and ordinary Bash/PowerShell functions; named-declaration doc-only regressions. Anonymous/variable-bound callbacks, arrows and properties need no docstrings. Native signature typing and parser coverage remain independent; unchanged legacy debt stays visible in the inventory.',
             'identity' => 'Namespace/containing declaration identity and executable-token fingerprints; no line-number identity or baseline.',
             'limitations' => 'Conservative JS/native-script lexers, aliases/complex types and semantic truthfulness require review. Native-script argument/result typing remains manual. Python lambdas cannot have native docstrings and are excluded. Unsupported script declarations, changed batch bodies, missing Python runtime, invalid source and missing Git history mean BLOCKED coverage. CSS/YAML/SVG/TeX/Apache use the separate native-header gate.',
-        ]];
+        ],
+    ];
     try {
         $root = realpath($root) ?: $root;
         $inventory = inventory($root);
-        $selected = $paths === [] ? $inventory['files'] : array_intersect_key($inventory['files'], array_fill_keys($paths, true));
+        $selected = $paths === []
+            ? $inventory['files']
+            : array_intersect_key($inventory['files'], array_fill_keys(
+                $paths,
+                true,
+            ));
         if (array_diff($paths, array_keys($selected)) !== []) {
-            throw new \RuntimeException('Selected source is absent or excluded.');
+            throw new \RuntimeException(
+                'Selected source is absent or excluded.',
+            );
         }
         $report['summary']['source_files'] = count($selected);
         $git ??= __NAMESPACE__ . '\\source_git_read';
-        if ($base === '' || preg_match('/^[A-Za-z0-9_][A-Za-z0-9_\/.^~{}@-]*$/D', $base) !== 1) {
+        if (
+            $base === ''
+            || preg_match('/^[A-Za-z0-9_][A-Za-z0-9_\/.^~{}@-]*$/D', $base)
+                !== 1
+        ) {
             throw new \RuntimeException('Unsupported Git comparison ref.');
         }
         $top = $git(['rev-parse', '--show-toplevel'], $root);
-        if ($top['status'] !== 0 || strcasecmp(str_replace('\\', '/', trim($top['stdout'])), str_replace('\\', '/', $root)) !== 0) {
-            throw new \RuntimeException('Git repository root unavailable or mismatched.');
+        if (
+            $top['status'] !== 0
+            || strcasecmp(
+                str_replace('\\', '/', trim($top['stdout'])),
+                str_replace('\\', '/', $root),
+            ) !== 0
+        ) {
+            throw new \RuntimeException(
+                'Git repository root unavailable or mismatched.',
+            );
         }
         $tree = $git(['ls-tree', '-r', '-z', $base], $root);
-        $delta = $git(['diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', $base, '--'], $root);
+        $delta = $git([
+            'diff',
+            '--no-ext-diff',
+            '--no-renames',
+            '--name-only',
+            '-z',
+            $base,
+            '--',
+        ], $root);
         if ($tree['status'] !== 0 || $delta['status'] !== 0) {
             throw new \RuntimeException('Git HEAD or change list unavailable.');
         }
         $tracked = [];
         foreach (explode("\0", $tree['stdout']) as $entry) {
-            if ($entry !== '' && preg_match('/^([0-9]+) blob [a-f0-9]+\t(.*)$/s', $entry, $match) === 1) {
+            if (
+                $entry !== ''
+                && preg_match(
+                    '/^([0-9]+) blob [a-f0-9]+\t(.*)$/s',
+                    $entry,
+                    $match,
+                ) === 1
+            ) {
                 $tracked[$match[2]] = $match[1];
             }
         }
@@ -355,11 +608,15 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
             $before = '';
             if (isset($tracked[$path])) {
                 if (!in_array($tracked[$path], ['100644', '100755'], true)) {
-                    throw new \RuntimeException('Unsupported HEAD source mode.');
+                    throw new \RuntimeException(
+                        'Unsupported HEAD source mode.',
+                    );
                 }
                 $blob = $git(['cat-file', 'blob', $base . ':' . $path], $root);
                 if ($blob['status'] !== 0) {
-                    throw new \RuntimeException('Required HEAD blob unreadable.');
+                    throw new \RuntimeException(
+                        'Required HEAD blob unreadable.',
+                    );
                 }
                 $before = $blob['stdout'];
             }
@@ -370,50 +627,109 @@ function changed_documentation_report(string $root, array $paths = [], ?callable
             if ($before === $after) {
                 continue;
             }
-            $supported = in_array($extension, ['php', 'js', 'mjs', 'cjs', 'html', 'htm', 'py', 'pyw', 'sh', 'ps1', 'psm1'], true);
-            if (in_array($extension, ['css', 'yml', 'yaml', 'svg', 'tex', 'htaccess'], true)) {
+            $supported = in_array(
+                $extension,
+                [
+                    'php',
+                    'js',
+                    'mjs',
+                    'cjs',
+                    'html',
+                    'htm',
+                    'py',
+                    'pyw',
+                    'sh',
+                    'ps1',
+                    'psm1',
+                ],
+                true,
+            );
+            if (in_array(
+                $extension,
+                ['css', 'yml', 'yaml', 'svg', 'tex', 'htaccess'],
+                true,
+            )) {
                 continue; // Native header contract owns these non-application-callable formats.
             }
-            if (!$supported && source_without_header($before, $extension) === source_without_header($after, $extension)) {
+            if (
+                !$supported
+                && source_without_header(
+                    $before,
+                    $extension,
+                ) === source_without_header($after, $extension)
+            ) {
                 continue;
             }
             $report['summary']['changed_files']++;
             if (!$supported) {
-                $report['blocked'][] = ['path' => $path, 'reason' => 'Changed source body has no declaration parser; coverage unknown.'];
+                $report['blocked'][] = [
+                    'path' => $path,
+                    'reason' => 'Changed source body has no declaration parser; coverage unknown.',
+                ];
                 continue;
             }
             if ($extension === 'php') {
                 token_get_all($after, TOKEN_PARSE);
+
                 // Historical code may use syntax unsupported by the current runtime
                 // (for example PHP 8.1 repairing a standalone null return type).
                 // Compare old lexical tokens; only the current source must parse.
             }
-            array_push($oldDeclarations, ...source_declaration_snapshots($before, $path));
-            array_push($currentDeclarations, ...source_declaration_snapshots($after, $path));
+            array_push($oldDeclarations, ...source_declaration_snapshots(
+                $before,
+                $path,
+            ));
+            array_push($currentDeclarations, ...source_declaration_snapshots(
+                $after,
+                $path,
+            ));
         }
         if ($paths === []) {
             foreach ($tracked as $path => $mode) {
-                if (!isset($changedPaths[$path]) || isset($inventory['files'][$path])
-                    || !source_head_declaration_allowed($path) || !in_array($mode, ['100644', '100755'], true)) {
+                if (
+                    !isset($changedPaths[$path])
+                    || isset($inventory['files'][$path])
+                    || !source_head_declaration_allowed($path)
+                    || !in_array($mode, ['100644', '100755'], true)
+                ) {
                     continue;
                 }
                 $blob = $git(['cat-file', 'blob', $base . ':' . $path], $root);
                 if ($blob['status'] !== 0) {
-                    throw new \RuntimeException('Deleted HEAD source unreadable.');
+                    throw new \RuntimeException(
+                        'Deleted HEAD source unreadable.',
+                    );
                 }
-                array_push($oldDeclarations, ...source_declaration_snapshots($blob['stdout'], $path));
+                array_push($oldDeclarations, ...source_declaration_snapshots(
+                    $blob['stdout'],
+                    $path,
+                ));
             }
         }
-        $result = compare_declaration_snapshots($oldDeclarations, $currentDeclarations);
-        foreach (['added', 'changed', 'unchanged', 'moved', 'doc_regressions'] as $counter) {
+        $result = compare_declaration_snapshots(
+            $oldDeclarations,
+            $currentDeclarations,
+        );
+        foreach ([
+            'added',
+            'changed',
+            'unchanged',
+            'moved',
+            'doc_regressions',
+        ] as $counter) {
             $report['summary'][$counter] = $result[$counter];
         }
         array_push($report['findings'], ...$result['findings']);
         array_push($report['blocked'], ...$result['blocked']);
         $report['summary']['finding_count'] = count($report['findings']);
-        $report['status'] = $report['blocked'] !== [] ? 'BLOCKED' : ($report['findings'] !== [] ? 'FAIL' : 'PASS');
+        $report['status'] = $report['blocked'] !== []
+            ? 'BLOCKED'
+            : ($report['findings'] !== [] ? 'FAIL' : 'PASS');
     } catch (\Throwable $error) {
-        $report['blocked'][] = ['path' => '', 'reason' => 'Git HEAD/source comparison could not complete; coverage unknown.'];
+        $report['blocked'][] = [
+            'path' => '',
+            'reason' => 'Git HEAD/source comparison could not complete; coverage unknown.',
+        ];
         $report['summary']['finding_count'] = count($report['findings']);
         $report['status'] = 'BLOCKED';
     }

@@ -42,7 +42,6 @@ namespace Gallery\Services;
 require_once dirname(__DIR__) . '/request_data.php';
 
 use function Gallery\Core\request_data;
-
 use function Gallery\Core\cms_config;
 
 /**
@@ -75,9 +74,15 @@ function request_client_ip_normalize(string $ip): string
 function request_trusted_proxy_config(): array
 {
     $config = cms_config();
-    $security = is_array($config['security'] ?? null) ? $config['security'] : [];
-    $proxyValues = is_array($security['trusted_proxies'] ?? null) ? $security['trusted_proxies'] : [];
-    $headerValues = is_array($security['trusted_proxy_headers'] ?? null) ? $security['trusted_proxy_headers'] : [];
+    $security = is_array($config['security'] ?? null)
+        ? $config['security']
+        : [];
+    $proxyValues = is_array($security['trusted_proxies'] ?? null)
+        ? $security['trusted_proxies']
+        : [];
+    $headerValues = is_array($security['trusted_proxy_headers'] ?? null)
+        ? $security['trusted_proxy_headers']
+        : [];
 
     $proxies = [];
     foreach ($proxyValues as $value) {
@@ -91,7 +96,10 @@ function request_trusted_proxy_config(): array
     $headers = [];
     foreach ($headerValues as $value) {
         $value = strtolower(trim((string) $value));
-        if (in_array($value, $allowedHeaders, true) && !in_array($value, $headers, true)) {
+        if (
+            in_array($value, $allowedHeaders, true)
+            && !in_array($value, $headers, true)
+        ) {
             $headers[] = $value;
         }
     }
@@ -109,8 +117,10 @@ function request_trusted_proxy_config(): array
  * @param string $trustedProxy Exact IP or CIDR configuration entry.
  * @return bool True when the address is covered by the trusted entry.
  */
-function request_ip_matches_trusted_proxy(string $ip, string $trustedProxy): bool
-{
+function request_ip_matches_trusted_proxy(
+    string $ip,
+    string $trustedProxy,
+): bool {
     $ip = request_client_ip_normalize($ip);
     $trustedProxy = trim($trustedProxy);
     if ($ip === '' || $trustedProxy === '') {
@@ -129,7 +139,11 @@ function request_ip_matches_trusted_proxy(string $ip, string $trustedProxy): boo
 
     $packedIp = @inet_pton($ip);
     $packedNetwork = @inet_pton($network);
-    if ($packedIp === false || $packedNetwork === false || strlen($packedIp) !== strlen($packedNetwork)) {
+    if (
+        $packedIp === false
+        || $packedNetwork === false
+        || strlen($packedIp) !== strlen($packedNetwork)
+    ) {
         return false;
     }
 
@@ -141,7 +155,14 @@ function request_ip_matches_trusted_proxy(string $ip, string $trustedProxy): boo
 
     $wholeBytes = intdiv($prefix, 8);
     $remainingBits = $prefix % 8;
-    if ($wholeBytes > 0 && substr($packedIp, 0, $wholeBytes) !== substr($packedNetwork, 0, $wholeBytes)) {
+    if (
+        $wholeBytes > 0
+        && substr($packedIp, 0, $wholeBytes) !== substr(
+            $packedNetwork,
+            0,
+            $wholeBytes,
+        )
+    ) {
         return false;
     }
     if ($remainingBits === 0) {
@@ -149,7 +170,10 @@ function request_ip_matches_trusted_proxy(string $ip, string $trustedProxy): boo
     }
 
     $mask = (0xFF << (8 - $remainingBits)) & 0xFF;
-    return (ord($packedIp[$wholeBytes]) & $mask) === (ord($packedNetwork[$wholeBytes]) & $mask);
+    return (
+        (ord($packedIp[$wholeBytes]) & $mask)
+            === (ord($packedNetwork[$wholeBytes]) & $mask)
+    );
 }
 
 /**
@@ -177,8 +201,11 @@ function request_ip_is_trusted_proxy(string $ip, array $trustedProxies): bool
  * @param array<int,string> $trustedProxies Trusted exact/CIDR entries.
  * @return string Resolved client address or an empty string when malformed.
  */
-function request_client_ip_from_forwarded_for(string $header, string $remoteAddress, array $trustedProxies): string
-{
+function request_client_ip_from_forwarded_for(
+    string $header,
+    string $remoteAddress,
+    array $trustedProxies,
+): string {
     $chain = [];
     foreach (explode(',', $header) as $candidate) {
         $normalized = request_client_ip_normalize($candidate);
@@ -213,21 +240,32 @@ function request_client_ip_from_forwarded_for(string $header, string $remoteAddr
  */
 function request_client_ip(): string
 {
-    $remoteAddress = request_client_ip_normalize((string) (request_data('server')['REMOTE_ADDR'] ?? ''));
+    $remoteAddress = request_client_ip_normalize(
+        (string) (request_data('server')['REMOTE_ADDR'] ?? ''),
+    );
     if ($remoteAddress === '') {
         return '';
     }
 
     $config = request_trusted_proxy_config();
-    if ($config['proxies'] === [] || !request_ip_is_trusted_proxy($remoteAddress, $config['proxies'])) {
+    if (
+        $config['proxies'] === []
+        || !request_ip_is_trusted_proxy($remoteAddress, $config['proxies'])
+    ) {
         return $remoteAddress;
     }
 
     foreach ($config['headers'] as $header) {
         if ($header === 'x-forwarded-for') {
-            $value = trim((string) (request_data('server')['HTTP_X_FORWARDED_FOR'] ?? ''));
+            $value = trim(
+                (string) (request_data('server')['HTTP_X_FORWARDED_FOR'] ?? ''),
+            );
             if ($value !== '') {
-                $resolved = request_client_ip_from_forwarded_for($value, $remoteAddress, $config['proxies']);
+                $resolved = request_client_ip_from_forwarded_for(
+                    $value,
+                    $remoteAddress,
+                    $config['proxies'],
+                );
                 if ($resolved !== '') {
                     return $resolved;
                 }
@@ -235,8 +273,12 @@ function request_client_ip(): string
             continue;
         }
 
-        $serverKey = $header === 'x-real-ip' ? 'HTTP_X_REAL_IP' : 'HTTP_CF_CONNECTING_IP';
-        $resolved = request_client_ip_normalize((string) (request_data('server')[$serverKey] ?? ''));
+        $serverKey = $header === 'x-real-ip'
+            ? 'HTTP_X_REAL_IP'
+            : 'HTTP_CF_CONNECTING_IP';
+        $resolved = request_client_ip_normalize(
+            (string) (request_data('server')[$serverKey] ?? ''),
+        );
         if ($resolved !== '') {
             return $resolved;
         }
@@ -255,7 +297,9 @@ function request_client_ip(): string
 function request_trusted_proxy_protocol_headers(): array
 {
     $config = cms_config();
-    $security = is_array($config['security'] ?? null) ? $config['security'] : [];
+    $security = is_array($config['security'] ?? null)
+        ? $config['security']
+        : [];
     $values = is_array($security['trusted_proxy_protocol_headers'] ?? null)
         ? $security['trusted_proxy_protocol_headers']
         : [];
@@ -263,7 +307,10 @@ function request_trusted_proxy_protocol_headers(): array
     $headers = [];
     foreach ($values as $value) {
         $value = strtolower(trim((string) $value));
-        if (in_array($value, $allowed, true) && !in_array($value, $headers, true)) {
+        if (
+            in_array($value, $allowed, true)
+            && !in_array($value, $headers, true)
+        ) {
             $headers[] = $value;
         }
     }
@@ -279,7 +326,9 @@ function request_trusted_proxy_protocol_headers(): array
 function request_trusted_forwarded_protocol_state(string $header): array
 {
     if ($header === 'x-forwarded-proto') {
-        $value = trim((string) (request_data('server')['HTTP_X_FORWARDED_PROTO'] ?? ''));
+        $value = trim(
+            (string) (request_data('server')['HTTP_X_FORWARDED_PROTO'] ?? ''),
+        );
         if ($value === '') {
             return ['present' => false, 'valid' => true, 'https' => false];
         }
@@ -290,11 +339,17 @@ function request_trusted_forwarded_protocol_state(string $header): array
         if (!in_array($value, ['http', 'https'], true)) {
             return ['present' => true, 'valid' => false, 'https' => false];
         }
-        return ['present' => true, 'valid' => true, 'https' => $value === 'https'];
+        return [
+            'present' => true,
+            'valid' => true,
+            'https' => $value === 'https',
+        ];
     }
 
     if ($header === 'x-forwarded-ssl') {
-        $value = trim((string) (request_data('server')['HTTP_X_FORWARDED_SSL'] ?? ''));
+        $value = trim(
+            (string) (request_data('server')['HTTP_X_FORWARDED_SSL'] ?? ''),
+        );
         if ($value === '') {
             return ['present' => false, 'valid' => true, 'https' => false];
         }
@@ -330,12 +385,17 @@ function request_transport_is_https(): bool
         return true;
     }
 
-    $remoteAddress = request_client_ip_normalize((string) (request_data('server')['REMOTE_ADDR'] ?? ''));
+    $remoteAddress = request_client_ip_normalize(
+        (string) (request_data('server')['REMOTE_ADDR'] ?? ''),
+    );
     if ($remoteAddress === '') {
         return false;
     }
     $proxyConfig = request_trusted_proxy_config();
-    if ($proxyConfig['proxies'] === [] || !request_ip_is_trusted_proxy($remoteAddress, $proxyConfig['proxies'])) {
+    if (
+        $proxyConfig['proxies'] === []
+        || !request_ip_is_trusted_proxy($remoteAddress, $proxyConfig['proxies'])
+    ) {
         return false;
     }
 

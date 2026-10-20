@@ -37,7 +37,6 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 use function Gallery\Services\auth_account_normalize_email;
-
 use function Gallery\Core\cms_admin_user_exists;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_setup_is_locked;
@@ -116,4 +115,3 @@ function cms_setup(): void
         'csrf_html' => csrf_field(),
     ]);
 }
-

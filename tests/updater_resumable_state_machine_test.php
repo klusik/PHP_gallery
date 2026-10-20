@@ -31,6 +31,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/support/php_source.php';
+require_once __DIR__ . '/support/gallery_edit_writer_source.php';
 
 require_once __DIR__ . '/support/module_source.php';
 
@@ -72,6 +73,9 @@ function assert_updater_resumable(bool $condition, string $message): void
 
 /**
  * Recursively remove a temporary updater fixture tree.
+ *
+ * @param string $path Root path of the temporary fixture tree.
+ * @return void
  */
 function remove_updater_test_tree(string $path): void
 {
@@ -81,10 +85,12 @@ function remove_updater_test_tree(string $path): void
     }
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $item) {
-        $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
+        $item->isDir()
+            ? @rmdir($item->getPathname())
+            : @unlink($item->getPathname());
     }
     @rmdir($path);
 }
@@ -104,136 +110,349 @@ function write_updater_policy_fixture(string $root, array $paths): void
         'updater_files' => $paths,
         'source_review_files' => [],
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-    if ($json === false || file_put_contents($root . '/app/production-files.json', $json . "\n") === false) {
-        throw new RuntimeException('Could not write updater policy fixture inventory.');
+    if (
+        $json === false
+        || file_put_contents($root . '/app/production-files.json', $json . "\n")
+            === false
+    ) {
+        throw new RuntimeException(
+            'Could not write updater policy fixture inventory.',
+        );
     }
 }
 
 $expectedStages = [
-    'download', 'archive_validate', 'extract', 'package_validate', 'plan', 'stage_files',
-    'backup', 'ready', 'activate', 'migrate', 'finalize', 'cleanup', 'completed',
+    'download',
+    'archive_validate',
+    'extract',
+    'package_validate',
+    'plan',
+    'stage_files',
+    'backup',
+    'ready',
+    'activate',
+    'migrate',
+    'finalize',
+    'cleanup',
+    'completed',
 ];
-assert_updater_resumable(application_update_job_stages() === $expectedStages, 'Update stages changed without updating the resumable safety contract.');
+assert_updater_resumable(
+    application_update_job_stages() === $expectedStages,
+    'Update stages changed without updating the resumable safety contract.',
+);
 foreach ($expectedStages as $index => $stage) {
-    assert_updater_resumable(application_update_job_transition_allowed($stage, $stage), 'A stage must permit idempotent same-stage persistence.');
+    assert_updater_resumable(
+        application_update_job_transition_allowed($stage, $stage),
+        'A stage must permit idempotent same-stage persistence.',
+    );
     if (isset($expectedStages[$index + 1])) {
-        assert_updater_resumable(application_update_job_transition_allowed($stage, $expectedStages[$index + 1]), 'Adjacent stage transition was rejected: ' . $stage);
+        assert_updater_resumable(
+            application_update_job_transition_allowed(
+                $stage,
+                $expectedStages[$index + 1],
+            ),
+            'Adjacent stage transition was rejected: ' . $stage,
+        );
     }
     if (isset($expectedStages[$index + 2])) {
-        assert_updater_resumable(!application_update_job_transition_allowed($stage, $expectedStages[$index + 2]), 'Unsafe stage skipping was allowed: ' . $stage);
+        assert_updater_resumable(
+            !application_update_job_transition_allowed(
+                $stage,
+                $expectedStages[$index + 2],
+            ),
+            'Unsafe stage skipping was allowed: ' . $stage,
+        );
     }
 }
 
 $budget = application_update_time_budget(2.0);
-assert_updater_resumable((float) $budget['seconds'] >= 1.0 && (float) $budget['seconds'] <= 2.0, 'Worker budget escaped its requested bounded slice.');
-assert_updater_resumable(application_update_budget_allows($budget, 0.05), 'Fresh worker budget unexpectedly contains no usable time.');
+assert_updater_resumable(
+    (float) $budget['seconds'] >= 1.0 && (float) $budget['seconds'] <= 2.0,
+    'Worker budget escaped its requested bounded slice.',
+);
+assert_updater_resumable(
+    application_update_budget_allows($budget, 0.05),
+    'Fresh worker budget unexpectedly contains no usable time.',
+);
 $limits = application_update_runtime_limits();
-assert_updater_resumable(($limits['design_depends_on_timeout_extension'] ?? true) === false, 'Updater correctness must not depend on timeout extension.');
-assert_updater_resumable(($limits['proxy_timeout_detectable'] ?? true) === false, 'Runtime diagnostics must not claim to detect an unknowable proxy timeout.');
-assert_updater_resumable(application_update_remote_timeout_seconds(microtime(true) - 1.0, 12) === 0, 'Remote metadata I/O starts after its wall-clock budget expired.');
-$remoteTimeout = application_update_remote_timeout_seconds(microtime(true) + 2.2, 12);
-assert_updater_resumable($remoteTimeout >= 1 && $remoteTimeout <= 2, 'Remote metadata timeout escaped its deadline budget.');
+assert_updater_resumable(
+    ($limits['design_depends_on_timeout_extension'] ?? true) === false,
+    'Updater correctness must not depend on timeout extension.',
+);
+assert_updater_resumable(
+    ($limits['proxy_timeout_detectable'] ?? true) === false,
+    'Runtime diagnostics must not claim to detect an unknowable proxy timeout.',
+);
+assert_updater_resumable(
+    application_update_remote_timeout_seconds(microtime(true) - 1.0, 12) === 0,
+    'Remote metadata I/O starts after its wall-clock budget expired.',
+);
+$remoteTimeout = application_update_remote_timeout_seconds(
+    microtime(true) + 2.2,
+    12,
+);
+assert_updater_resumable(
+    $remoteTimeout >= 1 && $remoteTimeout <= 2,
+    'Remote metadata timeout escaped its deadline budget.',
+);
 
 $sensitive = '/home/account/config.php token=secret SELECT password FROM users https://example.invalid/?key=secret';
 $safe = application_update_safe_error($sensitive);
-assert_updater_resumable(!str_contains(json_encode($safe), '/home/account'), 'Safe update error leaked a filesystem path.');
-assert_updater_resumable(!str_contains(json_encode($safe), 'SELECT password'), 'Safe update error leaked SQL.');
-assert_updater_resumable(!str_contains(json_encode($safe), 'key=secret'), 'Safe update error leaked a URL secret.');
-assert_updater_resumable((bool) preg_match('/^[A-F0-9]{12}$/', (string) $safe['reference']), 'Safe update error reference format changed unexpectedly.');
-$manifestMismatch = application_update_safe_error('Downloaded update archive failed core-manifest integrity validation.');
-assert_updater_resumable(($manifestMismatch['retryable'] ?? true) === false, 'A deterministic manifest mismatch is still presented as retryable.');
-assert_updater_resumable(str_contains((string) ($manifestMismatch['message'] ?? ''), 'cancel this job'), 'Manifest mismatch guidance does not direct the administrator to a recoverable action.');
-assert_updater_resumable(application_update_job_error_retryable(['error' => ['reference' => '4B0BFE5C7C13']]) === false, 'A persisted pre-fix manifest mismatch still permits an endless retry loop.');
-$legacyManifestJob = application_update_job_public_state(['status' => 'failed', 'stage' => 'package_validate', 'error' => ['message' => 'Old generic error.', 'reference' => '4B0BFE5C7C13']]);
-assert_updater_resumable(($legacyManifestJob['can_resume'] ?? true) === false && str_contains((string) ($legacyManifestJob['error']['message'] ?? ''), 'newer release or beta code'), 'Persisted pre-fix manifest mismatch does not receive current recovery guidance.');
+assert_updater_resumable(
+    !str_contains(json_encode($safe), '/home/account'),
+    'Safe update error leaked a filesystem path.',
+);
+assert_updater_resumable(
+    !str_contains(json_encode($safe), 'SELECT password'),
+    'Safe update error leaked SQL.',
+);
+assert_updater_resumable(
+    !str_contains(json_encode($safe), 'key=secret'),
+    'Safe update error leaked a URL secret.',
+);
+assert_updater_resumable(
+    (bool) preg_match('/^[A-F0-9]{12}$/', (string) $safe['reference']),
+    'Safe update error reference format changed unexpectedly.',
+);
+$manifestMismatch = application_update_safe_error(
+    'Downloaded update archive failed core-manifest integrity validation.',
+);
+assert_updater_resumable(
+    ($manifestMismatch['retryable'] ?? true) === false,
+    'A deterministic manifest mismatch is still presented as retryable.',
+);
+assert_updater_resumable(
+    str_contains(
+        (string) ($manifestMismatch['message'] ?? ''),
+        'cancel this job',
+    ),
+    'Manifest mismatch guidance does not direct the administrator to a recoverable action.',
+);
+assert_updater_resumable(application_update_job_error_retryable(['error' => [
+    'reference' => '4B0BFE5C7C13',
+]])
+    === false, 'A persisted pre-fix manifest mismatch still permits an endless retry loop.');
+$legacyManifestJob = application_update_job_public_state([
+    'status' => 'failed',
+    'stage' => 'package_validate',
+    'error' => [
+        'message' => 'Old generic error.',
+        'reference' => '4B0BFE5C7C13',
+    ],
+]);
+assert_updater_resumable(
+    ($legacyManifestJob['can_resume'] ?? true) === false
+        && str_contains(
+            (string) ($legacyManifestJob['error']['message'] ?? ''),
+            'newer release or beta code',
+        ),
+    'Persisted pre-fix manifest mismatch does not receive current recovery guidance.',
+);
 
-assert_updater_resumable(application_update_safe_zip_entry('repo/app/bootstrap.php') === 'repo/app/bootstrap.php', 'Safe archive path normalization failed.');
-foreach (['../config.php', '/etc/passwd', 'C:/Windows/test.php', 'repo/./file.php', 'repo/../file.php'] as $unsafePath) {
+assert_updater_resumable(
+    application_update_safe_zip_entry('repo/app/bootstrap.php')
+        === 'repo/app/bootstrap.php',
+    'Safe archive path normalization failed.',
+);
+foreach ([
+    '../config.php',
+    '/etc/passwd',
+    'C:/Windows/test.php',
+    'repo/./file.php',
+    'repo/../file.php',
+] as $unsafePath) {
     $rejected = false;
     try {
         application_update_safe_zip_entry($unsafePath);
     } catch (RuntimeException) {
         $rejected = true;
     }
-    assert_updater_resumable($rejected, 'Unsafe ZIP path was accepted: ' . $unsafePath);
+    assert_updater_resumable(
+        $rejected,
+        'Unsafe ZIP path was accepted: ' . $unsafePath,
+    );
 }
 
-$tempRoot = sys_get_temp_dir() . '/php-gallery-updater-state-' . bin2hex(random_bytes(6));
+$tempRoot =
+    sys_get_temp_dir()
+    . '/php-gallery-updater-state-'
+    . bin2hex(random_bytes(6));
 mkdir($tempRoot, 0775, true);
 try {
     $lockPath = $tempRoot . '/worker.lock';
     $firstLock = application_update_acquire_lock($lockPath, 5);
-    assert_updater_resumable(is_resource($firstLock), 'First updater worker could not acquire its lock.');
+    assert_updater_resumable(
+        is_resource($firstLock),
+        'First updater worker could not acquire its lock.',
+    );
     $secondLock = application_update_acquire_lock($lockPath, 5);
-    assert_updater_resumable($secondLock === null, 'Concurrent updater worker acquired the same lock.');
+    assert_updater_resumable(
+        $secondLock === null,
+        'Concurrent updater worker acquired the same lock.',
+    );
     application_update_release_lock($firstLock);
 
     file_put_contents($lockPath, '{"owner":"dead","expires_at":1}');
     $recoveredLock = application_update_acquire_lock($lockPath, 5);
-    assert_updater_resumable(is_resource($recoveredLock), 'Stale lock metadata blocked recovery after the OS lock was released.');
+    assert_updater_resumable(
+        is_resource($recoveredLock),
+        'Stale lock metadata blocked recovery after the OS lock was released.',
+    );
     application_update_release_lock($recoveredLock);
 
     $activeRoot = $tempRoot . '/active';
     $snapshotRoot = $tempRoot . '/snapshot';
     mkdir($activeRoot . '/app/nested', 0775, true);
     file_put_contents($activeRoot . '/app/example.php', "old-file\n");
-    file_put_contents($activeRoot . '/app/nested/value.txt', "old-directory-file\n");
-    assert_updater_resumable(application_update_backup_path_to_directory($activeRoot, $snapshotRoot, 'app/example.php'), 'Existing file was not included in rollback snapshot.');
-    assert_updater_resumable(application_update_backup_path_to_directory($activeRoot, $snapshotRoot, 'app/nested'), 'Existing directory was not included in rollback snapshot.');
-    assert_updater_resumable(!application_update_backup_path_to_directory($activeRoot, $snapshotRoot, 'app/new.php'), 'Missing pre-update file was incorrectly reported as backed up.');
-    assert_updater_resumable((string) file_get_contents($snapshotRoot . '/app/example.php') === "old-file\n", 'Rollback snapshot file contents changed.');
-    assert_updater_resumable((string) file_get_contents($snapshotRoot . '/app/nested/value.txt') === "old-directory-file\n", 'Rollback snapshot directory contents changed.');
+    file_put_contents(
+        $activeRoot . '/app/nested/value.txt',
+        "old-directory-file\n",
+    );
+    assert_updater_resumable(
+        application_update_backup_path_to_directory(
+            $activeRoot,
+            $snapshotRoot,
+            'app/example.php',
+        ),
+        'Existing file was not included in rollback snapshot.',
+    );
+    assert_updater_resumable(
+        application_update_backup_path_to_directory(
+            $activeRoot,
+            $snapshotRoot,
+            'app/nested',
+        ),
+        'Existing directory was not included in rollback snapshot.',
+    );
+    assert_updater_resumable(
+        !application_update_backup_path_to_directory(
+            $activeRoot,
+            $snapshotRoot,
+            'app/new.php',
+        ),
+        'Missing pre-update file was incorrectly reported as backed up.',
+    );
+    assert_updater_resumable(
+        (string) file_get_contents($snapshotRoot . '/app/example.php')
+            === "old-file\n",
+        'Rollback snapshot file contents changed.',
+    );
+    assert_updater_resumable(
+        (string) file_get_contents($snapshotRoot . '/app/nested/value.txt')
+            === "old-directory-file\n",
+        'Rollback snapshot directory contents changed.',
+    );
 
     $atomicStatePath = $tempRoot . '/atomic-state.json';
     application_update_write_json_atomic($atomicStatePath, ['revision' => 1]);
     application_update_write_json_atomic($atomicStatePath, ['revision' => 2]);
-    assert_updater_resumable(json_decode((string) file_get_contents($atomicStatePath), true) === ['revision' => 2], 'Atomic updater state replacement did not commit the complete new checkpoint.');
+    assert_updater_resumable(
+        json_decode((string) file_get_contents($atomicStatePath), true) === [
+            'revision' => 2,
+        ],
+        'Atomic updater state replacement did not commit the complete new checkpoint.',
+    );
 
     $blockedStatePath = $tempRoot . '/blocked-state';
     mkdir($blockedStatePath);
     file_put_contents($blockedStatePath . '/preserved.txt', 'preserve');
     $commitRefused = false;
     try {
-        application_update_write_json_atomic($blockedStatePath, ['revision' => 3]);
+        application_update_write_json_atomic($blockedStatePath, [
+            'revision' => 3,
+        ]);
     } catch (RuntimeException) {
         $commitRefused = true;
     }
-    assert_updater_resumable($commitRefused && file_get_contents($blockedStatePath . '/preserved.txt') === 'preserve', 'Failed atomic commit changed its existing destination.');
-    assert_updater_resumable((glob($blockedStatePath . '.tmp-*') ?: []) === [], 'Failed atomic commit left a staging file.');
+    assert_updater_resumable(
+        $commitRefused
+            && file_get_contents($blockedStatePath . '/preserved.txt')
+                === 'preserve',
+        'Failed atomic commit changed its existing destination.',
+    );
+    assert_updater_resumable(
+        (glob($blockedStatePath . '.tmp-*') ?: []) === [],
+        'Failed atomic commit left a staging file.',
+    );
 
     if (PHP_OS_FAMILY === 'Windows') {
-        assert_updater_resumable(chmod($atomicStatePath, 0444), 'Could not protect the Windows checkpoint fixture.');
+        assert_updater_resumable(
+            chmod($atomicStatePath, 0444),
+            'Could not protect the Windows checkpoint fixture.',
+        );
         $commitRefused = false;
         try {
-            application_update_write_json_atomic($atomicStatePath, ['revision' => 3]);
+            application_update_write_json_atomic($atomicStatePath, [
+                'revision' => 3,
+            ]);
         } catch (RuntimeException) {
             $commitRefused = true;
         } finally {
             chmod($atomicStatePath, 0666);
         }
-        assert_updater_resumable($commitRefused && json_decode((string) file_get_contents($atomicStatePath), true) === ['revision' => 2], 'Windows commit refusal did not preserve the previous checkpoint.');
-        assert_updater_resumable((glob($atomicStatePath . '.tmp-*') ?: []) === [], 'Windows commit refusal left a staging file.');
+        assert_updater_resumable(
+            $commitRefused
+                && json_decode(
+                    (string) file_get_contents($atomicStatePath),
+                    true,
+                ) === ['revision' => 2],
+            'Windows commit refusal did not preserve the previous checkpoint.',
+        );
+        assert_updater_resumable(
+            (glob($atomicStatePath . '.tmp-*') ?: []) === [],
+            'Windows commit refusal left a staging file.',
+        );
     }
 
     $cacheFixtureRoot = $tempRoot . '/cache-lifecycle';
     mkdir($cacheFixtureRoot . '/cache/github-api', 0775, true);
     mkdir($cacheFixtureRoot . '/cache/patch-notes', 0775, true);
     mkdir($cacheFixtureRoot . '/cache/favicon', 0775, true);
-    file_put_contents($cacheFixtureRoot . '/cache/github-api/status.json', '{"cached":true}');
-    file_put_contents($cacheFixtureRoot . '/cache/patch-notes/stable.json', '{"cached":true}');
-    file_put_contents($cacheFixtureRoot . '/cache/integrity-status.json', '{"cached":true}');
-    file_put_contents($cacheFixtureRoot . '/cache/favicon/user.png', 'preserve-user-asset');
+    file_put_contents(
+        $cacheFixtureRoot . '/cache/github-api/status.json',
+        '{"cached":true}',
+    );
+    file_put_contents(
+        $cacheFixtureRoot . '/cache/patch-notes/stable.json',
+        '{"cached":true}',
+    );
+    file_put_contents(
+        $cacheFixtureRoot . '/cache/integrity-status.json',
+        '{"cached":true}',
+    );
+    file_put_contents(
+        $cacheFixtureRoot . '/cache/favicon/user.png',
+        'preserve-user-asset',
+    );
     $cacheInvalidation = application_update_invalidate_persistent_caches(
         $cacheFixtureRoot,
         '20260821120000-abcdef123456',
-        '0.92.4'
+        '0.92.4',
     );
-    assert_updater_resumable(!is_dir($cacheFixtureRoot . '/cache/github-api'), 'Post-update invalidation left GitHub metadata at its canonical cache path.');
-    assert_updater_resumable(!is_dir($cacheFixtureRoot . '/cache/patch-notes'), 'Post-update invalidation left patch-note metadata at its canonical cache path.');
-    assert_updater_resumable(!is_file($cacheFixtureRoot . '/cache/integrity-status.json'), 'Post-update invalidation left integrity metadata at its canonical cache path.');
-    assert_updater_resumable(is_file($cacheFixtureRoot . '/cache/favicon/user.png'), 'Post-update invalidation removed a user-managed favicon asset.');
-    assert_updater_resumable((int) ($cacheInvalidation['generation']['generation'] ?? 0) === 1, 'Post-update invalidation did not advance the cache generation marker.');
-    assert_updater_resumable(is_file($cacheFixtureRoot . '/cache/application-cache-generation.json'), 'Cache generation marker was not persisted.');
+    assert_updater_resumable(
+        !is_dir($cacheFixtureRoot . '/cache/github-api'),
+        'Post-update invalidation left GitHub metadata at its canonical cache path.',
+    );
+    assert_updater_resumable(
+        !is_dir($cacheFixtureRoot . '/cache/patch-notes'),
+        'Post-update invalidation left patch-note metadata at its canonical cache path.',
+    );
+    assert_updater_resumable(
+        !is_file($cacheFixtureRoot . '/cache/integrity-status.json'),
+        'Post-update invalidation left integrity metadata at its canonical cache path.',
+    );
+    assert_updater_resumable(
+        is_file($cacheFixtureRoot . '/cache/favicon/user.png'),
+        'Post-update invalidation removed a user-managed favicon asset.',
+    );
+    assert_updater_resumable(
+        (int) ($cacheInvalidation['generation']['generation'] ?? 0) === 1,
+        'Post-update invalidation did not advance the cache generation marker.',
+    );
+    assert_updater_resumable(
+        is_file($cacheFixtureRoot . '/cache/application-cache-generation.json'),
+        'Cache generation marker was not persisted.',
+    );
 
     $pruneRoot = application_update_prune_trash_root($cacheFixtureRoot);
     for ($index = 0; $index < 60; $index++) {
@@ -241,17 +460,33 @@ try {
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
-        file_put_contents($dir . '/item-' . $index . '.tmp', str_repeat('x', 64));
+        file_put_contents($dir . '/item-' . $index . '.tmp', str_repeat(
+            'x',
+            64,
+        ));
     }
-    $firstPruneSlice = application_update_delete_tree_slice($pruneRoot, 10, 0.50);
-    assert_updater_resumable((int) ($firstPruneSlice['removed'] ?? 0) <= 10, 'Bounded cache pruning exceeded its per-slice entry cap.');
-    assert_updater_resumable(($firstPruneSlice['done'] ?? true) === false, 'Bounded cache pruning unexpectedly deleted the full fixture in one capped slice.');
+    $firstPruneSlice = application_update_delete_tree_slice(
+        $pruneRoot,
+        10,
+        0.50,
+    );
+    assert_updater_resumable(
+        (int) ($firstPruneSlice['removed'] ?? 0) <= 10,
+        'Bounded cache pruning exceeded its per-slice entry cap.',
+    );
+    assert_updater_resumable(
+        ($firstPruneSlice['done'] ?? true) === false,
+        'Bounded cache pruning unexpectedly deleted the full fixture in one capped slice.',
+    );
     $pruneIterations = 0;
     while (is_dir($pruneRoot) && $pruneIterations < 30) {
         application_update_delete_tree_slice($pruneRoot, 20, 0.50);
         $pruneIterations++;
     }
-    assert_updater_resumable(!is_dir($pruneRoot), 'Bounded cache pruning did not eventually remove the staged trash tree.');
+    assert_updater_resumable(
+        !is_dir($pruneRoot),
+        'Bounded cache pruning did not eventually remove the staged trash tree.',
+    );
 
     $sourcePlan = $tempRoot . '/source-plan';
     $destinationPlan = $tempRoot . '/destination-plan';
@@ -260,12 +495,32 @@ try {
     mkdir($destinationPlan . '/galleries/huge/private', 0775, true);
     file_put_contents($destinationPlan . '/app/stale.php', "stale\n");
     file_put_contents($sourcePlan . '/app/package.php', "package\n");
-    write_updater_policy_fixture($sourcePlan, ['app/package.php', 'app/production-files.json']);
-    write_updater_policy_fixture($destinationPlan, ['app/production-files.json', 'app/stale.php']);
-    file_put_contents($destinationPlan . '/galleries/huge/private/photo.jpg', str_repeat('x', 1024));
-    $obsolete = application_update_obsolete_paths($sourcePlan, $destinationPlan, false);
-    assert_updater_resumable(in_array('app/stale.php', $obsolete, true), 'Managed stale application file was not planned for removal.');
-    assert_updater_resumable(!array_filter($obsolete, static fn (string $path): bool => str_starts_with($path, 'galleries/')), 'Obsolete planning descended into protected gallery content.');
+    write_updater_policy_fixture($sourcePlan, [
+        'app/package.php',
+        'app/production-files.json',
+    ]);
+    write_updater_policy_fixture($destinationPlan, [
+        'app/production-files.json',
+        'app/stale.php',
+    ]);
+    file_put_contents($destinationPlan
+        . '/galleries/huge/private/photo.jpg', str_repeat('x', 1024));
+    $obsolete = application_update_obsolete_paths(
+        $sourcePlan,
+        $destinationPlan,
+        false,
+    );
+    assert_updater_resumable(
+        in_array('app/stale.php', $obsolete, true),
+        'Managed stale application file was not planned for removal.',
+    );
+    assert_updater_resumable(
+        !array_filter($obsolete, static fn(string $path): bool => str_starts_with(
+            $path,
+            'galleries/',
+        )),
+        'Obsolete planning descended into protected gallery content.',
+    );
 
     file_put_contents($sourcePlan . '/app/same.php', "same\n");
     file_put_contents($destinationPlan . '/app/same.php', "same\n");
@@ -275,39 +530,77 @@ try {
     $changedFiles = application_update_changed_release_files(
         $sourcePlan,
         $destinationPlan,
-        ['app/same.php', 'app/changed.php', 'app/new.php']
+        ['app/same.php', 'app/changed.php', 'app/new.php'],
     );
-    assert_updater_resumable($changedFiles === ['app/changed.php', 'app/new.php'], 'Activation preflight did not exclude byte-identical files.');
+    assert_updater_resumable(
+        $changedFiles === ['app/changed.php', 'app/new.php'],
+        'Activation preflight did not exclude byte-identical files.',
+    );
 
     if (function_exists('symlink')) {
-        $symlinkCreated = @symlink($destinationPlan . '/app/same.php', $destinationPlan . '/app/managed-link.php');
+        $symlinkCreated = @symlink(
+            $destinationPlan . '/app/same.php',
+            $destinationPlan . '/app/managed-link.php',
+        );
         if ($symlinkCreated) {
-            file_put_contents($sourcePlan . '/app/managed-link.php', "replacement\n");
+            file_put_contents(
+                $sourcePlan . '/app/managed-link.php',
+                "replacement\n",
+            );
             $symlinkRejected = false;
             try {
-                application_update_changed_release_files($sourcePlan, $destinationPlan, ['app/managed-link.php']);
+                application_update_changed_release_files(
+                    $sourcePlan,
+                    $destinationPlan,
+                    ['app/managed-link.php'],
+                );
             } catch (RuntimeException) {
                 $symlinkRejected = true;
             }
-            assert_updater_resumable($symlinkRejected, 'Managed symbolic-link activation destination was not rejected during preflight.');
+            assert_updater_resumable(
+                $symlinkRejected,
+                'Managed symbolic-link activation destination was not rejected during preflight.',
+            );
         }
     }
 
     mkdir($destinationPlan . '/app/conflict', 0775, true);
     $conflictRejected = false;
     try {
-        application_update_backup_items_for_plan($destinationPlan, ['app/conflict'], []);
+        application_update_backup_items_for_plan(
+            $destinationPlan,
+            ['app/conflict'],
+            [],
+        );
     } catch (RuntimeException) {
         $conflictRejected = true;
     }
-    assert_updater_resumable($conflictRejected, 'File-vs-directory replacement conflict was not rejected before backup.');
+    assert_updater_resumable(
+        $conflictRejected,
+        'File-vs-directory replacement conflict was not rejected before backup.',
+    );
 } finally {
     remove_updater_test_tree($tempRoot);
 }
 
-assert_updater_resumable(application_update_activation_priority('app/service.php') < application_update_activation_priority('app/bootstrap.php'), 'Dependencies must activate before bootstrap.');
-assert_updater_resumable(application_update_activation_priority('app/bootstrap.php') < application_update_activation_priority('public/index.php'), 'Bootstrap must activate before public entrypoint.');
-assert_updater_resumable(application_update_activation_priority('public/index.php') < application_update_activation_priority('index.php'), 'Public entrypoint must activate before root entrypoint.');
+assert_updater_resumable(
+    application_update_activation_priority(
+        'app/service.php',
+    ) < application_update_activation_priority('app/bootstrap.php'),
+    'Dependencies must activate before bootstrap.',
+);
+assert_updater_resumable(
+    application_update_activation_priority(
+        'app/bootstrap.php',
+    ) < application_update_activation_priority('public/index.php'),
+    'Bootstrap must activate before public entrypoint.',
+);
+assert_updater_resumable(
+    application_update_activation_priority(
+        'public/index.php',
+    ) < application_update_activation_priority('index.php'),
+    'Public entrypoint must activate before root entrypoint.',
+);
 
 $rollbackable = application_update_job_public_state([
     'id' => '20260812000000-abcdef123456',
@@ -316,7 +609,10 @@ $rollbackable = application_update_job_public_state([
     'stage' => 'activate',
     'checkpoints' => ['backup_complete' => true],
 ]);
-assert_updater_resumable(!empty($rollbackable['can_rollback']), 'Post-activation failure lost its rollback capability.');
+assert_updater_resumable(
+    !empty($rollbackable['can_rollback']),
+    'Post-activation failure lost its rollback capability.',
+);
 $preActivation = application_update_job_public_state([
     'id' => '20260812000000-abcdef123456',
     'operation' => 'stable_update',
@@ -324,9 +620,18 @@ $preActivation = application_update_job_public_state([
     'stage' => 'package_validate',
     'checkpoints' => ['backup_complete' => false],
 ]);
-assert_updater_resumable(empty($preActivation['can_rollback']), 'Pre-activation failure should not offer a file rollback.');
-assert_updater_resumable(!empty($preActivation['can_cancel']), 'Pre-activation running/failed job should remain cancellable.');
-assert_updater_resumable(empty($rollbackable['can_cancel']), 'Post-activation job must not be cancellable.');
+assert_updater_resumable(
+    empty($preActivation['can_rollback']),
+    'Pre-activation failure should not offer a file rollback.',
+);
+assert_updater_resumable(
+    !empty($preActivation['can_cancel']),
+    'Pre-activation running/failed job should remain cancellable.',
+);
+assert_updater_resumable(
+    empty($rollbackable['can_cancel']),
+    'Post-activation job must not be cancellable.',
+);
 
 if (class_exists(ZipArchive::class)) {
     $jobId = gmdate('YmdHis') . '-' . bin2hex(random_bytes(6));
@@ -342,15 +647,27 @@ if (class_exists(ZipArchive::class)) {
     } finally {
         remove_updater_test_tree($jobDir);
     }
-    assert_updater_resumable($rejected, 'Corrupt update archive was not rejected before extraction.');
+    assert_updater_resumable(
+        $rejected,
+        'Corrupt update archive was not rejected before extraction.',
+    );
 
     $sliceJobId = gmdate('YmdHis') . '-' . bin2hex(random_bytes(6));
     $sliceJobDir = dirname(__DIR__) . '/cache/updates/jobs/' . $sliceJobId;
     mkdir($sliceJobDir, 0775, true);
     $zip = new ZipArchive();
-    assert_updater_resumable($zip->open($sliceJobDir . '/package.zip', ZipArchive::CREATE | ZipArchive::OVERWRITE) === true, 'Could not create archive-validation fixture.');
+    assert_updater_resumable(
+        $zip->open(
+            $sliceJobDir . '/package.zip',
+            ZipArchive::CREATE | ZipArchive::OVERWRITE,
+        ) === true,
+        'Could not create archive-validation fixture.',
+    );
     for ($entryIndex = 0; $entryIndex < 620; $entryIndex++) {
-        $zip->addFromString('repo/app/fixture-' . $entryIndex . '.php', '<?php // fixture ' . $entryIndex);
+        $zip->addFromString(
+            'repo/app/fixture-' . $entryIndex . '.php',
+            '<?php // fixture ' . $entryIndex,
+        );
     }
     $zip->close();
     $sliceJob = [
@@ -362,12 +679,31 @@ if (class_exists(ZipArchive::class)) {
         'progress' => [],
     ];
     try {
-        $firstArchivePass = application_update_job_validate_archive($sliceJob, application_update_time_budget(12.0));
-        assert_updater_resumable($firstArchivePass === false, 'Archive validation ignored its bounded 500-entry checkpoint.');
-        assert_updater_resumable((int) ($sliceJob['checkpoints']['archive_validate_index'] ?? 0) === 500, 'Archive validation did not persist its first checkpoint index.');
-        $secondArchivePass = application_update_job_validate_archive($sliceJob, application_update_time_budget(12.0));
-        assert_updater_resumable($secondArchivePass === true, 'Archive validation did not resume from its durable checkpoint.');
-        assert_updater_resumable((int) ($sliceJob['checkpoints']['archive_entries'] ?? 0) === 620, 'Archive validation completion metadata is incorrect.');
+        $firstArchivePass = application_update_job_validate_archive(
+            $sliceJob,
+            application_update_time_budget(12.0),
+        );
+        assert_updater_resumable(
+            $firstArchivePass === false,
+            'Archive validation ignored its bounded 500-entry checkpoint.',
+        );
+        assert_updater_resumable(
+            (int) ($sliceJob['checkpoints']['archive_validate_index'] ?? 0)
+                === 500,
+            'Archive validation did not persist its first checkpoint index.',
+        );
+        $secondArchivePass = application_update_job_validate_archive(
+            $sliceJob,
+            application_update_time_budget(12.0),
+        );
+        assert_updater_resumable(
+            $secondArchivePass === true,
+            'Archive validation did not resume from its durable checkpoint.',
+        );
+        assert_updater_resumable(
+            (int) ($sliceJob['checkpoints']['archive_entries'] ?? 0) === 620,
+            'Archive validation completion metadata is incorrect.',
+        );
     } finally {
         remove_updater_test_tree($sliceJobDir);
     }
@@ -376,80 +712,366 @@ if (class_exists(ZipArchive::class)) {
 $root = dirname(__DIR__);
 // The updater job service is split into part files; assert against the whole module.
 $jobsSource = module_source($root . '/app/services/updates_jobs.php');
-$installSource = (string) file_get_contents($root . '/app/services/updates_install.php');
-$requestSource = (string) file_get_contents($root . '/app/services/updates_request.php');
-$controllerSource = (string) file_get_contents($root . '/app/controllers/updates.php');
-$viewSource = (string) file_get_contents($root . '/app/views/admin_updates.php');
-$adminAuthSource = (string) file_get_contents($root . '/app/controllers/admin_auth.php');
-$browserSource = (string) file_get_contents($root . '/public/assets/gallery-modules/admin-update-jobs.js');
+$installSource = (string) file_get_contents($root
+    . '/app/services/updates_install.php');
+$requestSource = (string) file_get_contents($root
+    . '/app/services/updates_request.php');
+$controllerSource = (string) file_get_contents($root
+    . '/app/controllers/updates.php');
+$viewSource = (string) file_get_contents($root
+    . '/app/views/admin_updates.php');
+$adminAuthSource = (string) file_get_contents($root
+    . '/app/controllers/admin_auth.php');
+$browserSource = (string) file_get_contents($root
+    . '/public/assets/gallery-modules/admin-update-jobs.js');
 $migrationSource = (string) file_get_contents($root . '/app/migrations.php');
-$statusSource = (string) file_get_contents($root . '/app/services/updates_status.php');
-$patchNotesSource = (string) file_get_contents($root . '/app/services/updates_patch_notes.php');
-$cliSource = (string) file_get_contents($root . '/scripts/application_update.php');
-assert_updater_resumable(str_contains($jobsSource, "'download',") && str_contains($jobsSource, "'activate',") && str_contains($jobsSource, "'completed',"), 'Durable state-machine stages are no longer explicit.');
-assert_updater_resumable(str_contains($jobsSource, 'flock($handle, LOCK_EX | LOCK_NB)'), 'Updater worker serialization no longer uses a non-blocking OS file lock.');
-assert_updater_resumable(str_contains($jobsSource, 'function application_update_clear_active_job_if') && str_contains($jobsSource, 'A non-active job must never mutate application files concurrently'), 'Global active-job ownership protection disappeared.');
-assert_updater_resumable(str_contains($jobsSource, "'If-Range: ' . \$ifRange") && str_contains($jobsSource, "['checkpoints']['archive_etag']") && str_contains($jobsSource, "['checkpoints']['archive_url']"), 'Resumable download lost its stable source/HTTP validator protections.');
-assert_updater_resumable(str_contains($jobsSource, 'application_update_changed_release_files('), 'Activation planning no longer excludes unchanged files before the critical section.');
-assert_updater_resumable(str_contains($jobsSource, 'Updater refuses symbolic links in managed activation paths.'), 'Managed activation symlink preflight protection disappeared.');
-assert_updater_resumable(str_contains($jobsSource, 'Managed active file is too large for a bounded rollback snapshot.'), 'Rollback snapshot lost its single-file boundedness guard.');
-assert_updater_resumable(str_contains($jobsSource, "'/ready/'") && str_contains($jobsSource, "'/rollback/original'"), 'Staging or rollback data no longer lives in the private update workspace.');
-assert_updater_resumable(str_contains($jobsSource, 'Core-manifest verification is temporarily disabled') && str_contains($jobsSource, 'application_update_assert_source_root($sourceRoot);'), 'Temporary manifest bypass no longer preserves source-root validation.');
-assert_updater_resumable(str_contains($jobsSource, "if ((string) (\$job['operation'] ?? '') === 'rollback')") && str_contains($jobsSource, 'Rollback does not reverse database migrations.'), 'Rollback migration policy is no longer explicit.');
-assert_updater_resumable(str_contains($migrationSource, 'function run_migrations_bounded') && str_contains($migrationSource, 'array_slice($pendingFiles, 0, $maxMigrations)'), 'Migration runner no longer checkpoints at bounded migration-file units.');
-assert_updater_resumable(!str_contains($migrationSource, "'preview' =>"), 'Migration diagnostics again expose raw SQL previews.');
+$statusSource = (string) file_get_contents($root
+    . '/app/services/updates_status.php');
+$patchNotesSource = (string) file_get_contents($root
+    . '/app/services/updates_patch_notes.php');
+$cliSource = (string) file_get_contents($root
+    . '/scripts/application_update.php');
+assert_updater_resumable(
+    php_source_contains($jobsSource, "'download',")
+        && php_source_contains($jobsSource, "'activate',")
+        && php_source_contains($jobsSource, "'completed',"),
+    'Durable state-machine stages are no longer explicit.',
+);
+assert_updater_resumable(
+    php_source_contains($jobsSource, 'flock($handle, LOCK_EX | LOCK_NB)'),
+    'Updater worker serialization no longer uses a non-blocking OS file lock.',
+);
+assert_updater_resumable(
+    php_source_contains($jobsSource, 'function application_update_clear_active_job_if')
+        && php_source_contains(
+            $jobsSource,
+            'A non-active job must never mutate application files concurrently',
+        ),
+    'Global active-job ownership protection disappeared.',
+);
+assert_updater_resumable(
+    php_source_contains($jobsSource, "'If-Range: ' . \$ifRange")
+        && php_source_contains($jobsSource, "['checkpoints']['archive_etag']")
+        && php_source_contains($jobsSource, "['checkpoints']['archive_url']"),
+    'Resumable download lost its stable source/HTTP validator protections.',
+);
+assert_updater_resumable(
+    php_source_contains($jobsSource, 'application_update_changed_release_files('),
+    'Activation planning no longer excludes unchanged files before the critical section.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        'Updater refuses symbolic links in managed activation paths.',
+    ),
+    'Managed activation symlink preflight protection disappeared.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        'Managed active file is too large for a bounded rollback snapshot.',
+    ),
+    'Rollback snapshot lost its single-file boundedness guard.',
+);
+assert_updater_resumable(
+    php_source_contains($jobsSource, "'/ready/'")
+        && php_source_contains($jobsSource, "'/rollback/original'"),
+    'Staging or rollback data no longer lives in the private update workspace.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        'Core-manifest verification is temporarily disabled',
+    )
+        && php_source_contains(
+            $jobsSource,
+            'application_update_assert_source_root($sourceRoot);',
+        ),
+    'Temporary manifest bypass no longer preserves source-root validation.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        "if ((string) (\$job['operation'] ?? '') === 'rollback')",
+    )
+        && php_source_contains(
+            $jobsSource,
+            'Rollback does not reverse database migrations.',
+        ),
+    'Rollback migration policy is no longer explicit.',
+);
+assert_updater_resumable(
+    php_source_contains($migrationSource, 'function run_migrations_bounded')
+        && php_source_contains(
+            $migrationSource,
+            'array_slice($pendingFiles, 0, $maxMigrations)',
+        ),
+    'Migration runner no longer checkpoints at bounded migration-file units.',
+);
+assert_updater_resumable(
+    !php_source_contains($migrationSource, "'preview' =>"),
+    'Migration diagnostics again expose raw SQL previews.',
+);
 
-foreach (['install_application_update', 'install_application_beta', 'restore_application_stable_release', 'clean_reinstall_current_application_version'] as $entrypoint) {
-    $position = strpos($installSource, 'function ' . $entrypoint . '(');
-    assert_updater_resumable($position !== false, 'Legacy updater entrypoint disappeared: ' . $entrypoint);
-    $snippet = substr($installSource, (int) $position, 700);
-    assert_updater_resumable(str_contains($snippet, 'application_update_start_job('), 'Legacy updater entrypoint bypasses durable jobs: ' . $entrypoint);
+foreach ([
+    'install_application_update',
+    'install_application_beta',
+    'restore_application_stable_release',
+    'clean_reinstall_current_application_version',
+] as $entrypoint) {
+    $entrypointFunction = gallery_writer_functions($installSource)[
+        $entrypoint
+    ] ?? null;
+    assert_updater_resumable(
+        is_array($entrypointFunction),
+        'Legacy updater entrypoint disappeared: ' . $entrypoint,
+    );
+    assert_updater_resumable(
+        php_source_contains(
+            $entrypointFunction['body'],
+            'application_update_start_job(',
+        ),
+        'Legacy updater entrypoint bypasses durable jobs: ' . $entrypoint,
+    );
 }
-assert_updater_resumable(str_contains($requestSource, 'application_update_continue_background_job(3.0)'), 'Background request flow no longer advances bounded durable jobs.');
-assert_updater_resumable(str_contains($jobsSource, "time() - (int) (\$job['updated_at'] ?? 0) < 60") && str_contains($jobsSource, "application_update_retry_job((string) \$job['id'])"), 'Background failure recovery bypasses safe retry cleanup or retry backoff.');
-assert_updater_resumable(str_contains($statusSource, 'float $requestedBudgetSeconds = 8.0') && str_contains($statusSource, '$branchDeadline'), 'Remote update discovery no longer has a per-request wall-clock budget shared across branches.');
-assert_updater_resumable(str_contains($patchNotesSource, 'application_update_remote_timeout_seconds($deadline, 5)'), 'Optional pending patch-note discovery must fit within the shared bounded timeout.');
-$autoStartPosition = strpos($installSource, 'function application_autoupdate_run_installing_check');
-$autoStartEnd = strpos($installSource, 'function application_update_beta_backup_path', (int) $autoStartPosition);
-$autoStartSource = substr($installSource, (int) $autoStartPosition, (int) $autoStartEnd - (int) $autoStartPosition);
-assert_updater_resumable(!str_contains($autoStartSource, 'application_update_process_job('), 'Automatic discovery and package processing were recombined into one request.');
-assert_updater_resumable(str_contains($cliSource, 'Discovery already consumed this invocation') && str_contains($cliSource, 'application_update_continue_background_job($budgetSeconds)'), 'CLI background continuation/discovery no longer uses the bounded safe retry path.');
-assert_updater_resumable(str_contains($jobsSource, "version_compare(\$validatedVersion, \$targetVersion, '<')"), 'Stable package validation no longer enforces the selected target-version floor.');
-assert_updater_resumable(str_contains($jobsSource, 'function application_update_cancel_job') && str_contains($jobsSource, 'Update cannot be cancelled after activation has begun.'), 'Pre-activation cancellation boundary disappeared.');
-assert_updater_resumable(str_contains($jobsSource, 'Caught failures require application_update_retry_job()') && str_contains($jobsSource, "if (in_array(\$stage, ['download', 'archive_validate', 'extract', 'package_validate'], true))"), 'Failed package jobs can bypass retry cleanup and resume untrusted artifacts directly.');
-assert_updater_resumable(str_contains($jobsSource, "application_update_acquire_lock(application_update_jobs_root() . '/start.lock', 15)") && str_contains($jobsSource, 'Another application update job is active.'), 'Retry/cancel paths lost global start-lock serialization.');
-assert_updater_resumable(str_contains($viewSource, 'data-update-job-form') && str_contains($viewSource, 'job_continue') && str_contains($viewSource, 'job_retry') && str_contains($viewSource, 'job_cancel'), 'Admin update controls no longer expose resumable continuation/cancellation actions.');
-assert_updater_resumable(substr_count($viewSource, 'view_render_update_job_card($activeUpdateJob') >= 2 && str_contains($viewSource, 'admin.updates.advanced_progress_hint'), 'Advanced tools no longer renders discoverable update-job progress.');
-assert_updater_resumable(str_contains($controllerSource, "feature_capability_effective_enabled('built_in_update_installer')") && str_contains($jobsSource, "feature_capability_effective_enabled('built_in_update_installer')"), 'Built-in Update Installer policy no longer guards both Admin actions and durable update-job service boundaries.');
-$resetStart = strpos($adminAuthSource, 'function cms_admin_reset(): void');
-$resetSource = substr($adminAuthSource, (int) $resetStart);
-assert_updater_resumable(php_source_contains($resetSource, "application_update_start_job('stable_restore', [], 'admin')"), 'Authenticated reset page bypasses the resumable stable-restore job.');
-assert_updater_resumable(str_contains($resetSource, 'application_update_safe_error($exception)') && !str_contains($resetSource, '$exception->getMessage()'), 'Authenticated reset page exposes raw updater exception text.');
-assert_updater_resumable(str_contains($browserSource, "document.addEventListener('submit'") && str_contains($browserSource, '[data-update-job-form], [data-update-job-control]'), 'Dynamic Admin update controls are no longer intercepted through event delegation.');
-assert_updater_resumable(str_contains($browserSource, 'scheduleContinuation') && str_contains($browserSource, 'data-update-job-status="running"'), 'Browser closure/reopen continuation hook is missing.');
-assert_updater_resumable(str_contains($browserSource, 'findUpdateScopes(document)') && str_contains($browserSource, 'renderJobInScope(scope, job)'), 'Status and Advanced updater progress cards are no longer synchronized.');
-assert_updater_resumable(str_contains($browserSource, '[data-update-job-cancel]') && str_contains($browserSource, "postJob(window.location.href, csrfToken, 'job_cancel', id)"), 'Dynamically rendered updater cancellation is not intercepted in place.');
-assert_updater_resumable(!str_contains($browserSource, 'window.location.reload') && !str_contains($browserSource, 'window.location.href ='), 'JavaScript updater reintroduced page navigation/reload.');
+assert_updater_resumable(
+    php_source_contains(
+        $requestSource,
+        'application_update_continue_background_job(3.0)',
+    ),
+    'Background request flow no longer advances bounded durable jobs.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        "(time() - (int) (\$job['updated_at'] ?? 0)) < 60",
+    )
+        && php_source_contains(
+            $jobsSource,
+            "application_update_retry_job((string) \$job['id'])",
+        ),
+    'Background failure recovery bypasses safe retry cleanup or retry backoff.',
+);
+assert_updater_resumable(
+    php_source_contains($statusSource, 'float $requestedBudgetSeconds = 8.0')
+        && php_source_contains($statusSource, '$branchDeadline'),
+    'Remote update discovery no longer has a per-request wall-clock budget shared across branches.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $patchNotesSource,
+        'application_update_remote_timeout_seconds($deadline, 5)',
+    ),
+    'Optional pending patch-note discovery must fit within the shared bounded timeout.',
+);
+$autoStartSource = gallery_writer_functions($installSource)[
+    'application_autoupdate_run_installing_check'
+]['body'] ?? '';
+assert_updater_resumable(
+    !php_source_contains($autoStartSource, 'application_update_process_job('),
+    'Automatic discovery and package processing were recombined into one request.',
+);
+assert_updater_resumable(
+    php_source_contains($cliSource, 'Discovery already consumed this invocation')
+        && php_source_contains(
+            $cliSource,
+            'application_update_continue_background_job($budgetSeconds)',
+        ),
+    'CLI background continuation/discovery no longer uses the bounded safe retry path.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        "version_compare(\$validatedVersion, \$targetVersion, '<')",
+    ),
+    'Stable package validation no longer enforces the selected target-version floor.',
+);
+assert_updater_resumable(
+    php_source_contains($jobsSource, 'function application_update_cancel_job')
+        && php_source_contains(
+            $jobsSource,
+            'Update cannot be cancelled after activation has begun.',
+        ),
+    'Pre-activation cancellation boundary disappeared.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        'Caught failures require application_update_retry_job()',
+    )
+        && php_source_contains(
+            $jobsSource,
+            "if (in_array(\$stage, ['download', 'archive_validate', 'extract', 'package_validate'], true))",
+        ),
+    'Failed package jobs can bypass retry cleanup and resume untrusted artifacts directly.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        "application_update_acquire_lock(application_update_jobs_root() . '/start.lock', 15)",
+    )
+        && php_source_contains(
+            $jobsSource,
+            'Another application update job is active.',
+        ),
+    'Retry/cancel paths lost global start-lock serialization.',
+);
+assert_updater_resumable(
+    php_source_contains($viewSource, 'data-update-job-form')
+        && php_source_contains($viewSource, 'job_continue')
+        && php_source_contains($viewSource, 'job_retry')
+        && php_source_contains($viewSource, 'job_cancel'),
+    'Admin update controls no longer expose resumable continuation/cancellation actions.',
+);
+assert_updater_resumable(
+    preg_match_all(
+        '/view_render_update_job_card\s*\(\s*\$activeUpdateJob/',
+        $viewSource,
+    ) >= 2
+        && php_source_contains($viewSource, 'admin.updates.advanced_progress_hint'),
+    'Advanced tools no longer renders discoverable update-job progress.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $controllerSource,
+        "feature_capability_effective_enabled('built_in_update_installer')",
+    )
+        && php_source_contains(
+            $jobsSource,
+            "feature_capability_effective_enabled('built_in_update_installer')",
+        ),
+    'Built-in Update Installer policy no longer guards both Admin actions and durable update-job service boundaries.',
+);
+$resetSource = gallery_writer_functions($adminAuthSource)[
+    'cms_admin_reset'
+]['body'] ?? '';
+assert_updater_resumable(
+    php_source_contains(
+        $resetSource,
+        "application_update_start_job('stable_restore', [], 'admin')",
+    ),
+    'Authenticated reset page bypasses the resumable stable-restore job.',
+);
+assert_updater_resumable(
+    php_source_contains($resetSource, 'application_update_safe_error($exception)')
+        && !php_source_contains($resetSource, '$exception->getMessage()'),
+    'Authenticated reset page exposes raw updater exception text.',
+);
+assert_updater_resumable(
+    str_contains($browserSource, "document.addEventListener('submit'")
+        && str_contains(
+            $browserSource,
+            '[data-update-job-form], [data-update-job-control]',
+        ),
+    'Dynamic Admin update controls are no longer intercepted through event delegation.',
+);
+assert_updater_resumable(
+    str_contains($browserSource, 'scheduleContinuation')
+        && str_contains($browserSource, 'data-update-job-status="running"'),
+    'Browser closure/reopen continuation hook is missing.',
+);
+assert_updater_resumable(
+    str_contains($browserSource, 'findUpdateScopes(document)')
+        && str_contains($browserSource, 'renderJobInScope(scope, job)'),
+    'Status and Advanced updater progress cards are no longer synchronized.',
+);
+assert_updater_resumable(
+    str_contains($browserSource, '[data-update-job-cancel]')
+        && str_contains(
+            $browserSource,
+            "postJob(window.location.href, csrfToken, 'job_cancel', id)",
+        ),
+    'Dynamically rendered updater cancellation is not intercepted in place.',
+);
+assert_updater_resumable(
+    !str_contains($browserSource, 'window.location.reload')
+        && !str_contains($browserSource, 'window.location.href ='),
+    'JavaScript updater reintroduced page navigation/reload.',
+);
 
-$activationStart = strpos($jobsSource, 'function application_update_job_activate(');
-$activationEnd = strpos($jobsSource, 'function application_update_job_migrate_slice(', (int) $activationStart);
-$activationSource = substr($jobsSource, (int) $activationStart, (int) $activationEnd - (int) $activationStart);
-foreach (['application_update_job_download_slice', 'application_update_job_extract_slice', 'application_update_job_backup_slice', 'run_migrations_bounded'] as $forbiddenActivationWork) {
-    assert_updater_resumable(!str_contains($activationSource, $forbiddenActivationWork), 'Activation critical section contains expensive precondition work: ' . $forbiddenActivationWork);
+$activationSource = gallery_writer_functions($jobsSource)[
+    'application_update_job_activate'
+]['body'] ?? '';
+foreach ([
+    'application_update_job_download_slice',
+    'application_update_job_extract_slice',
+    'application_update_job_backup_slice',
+    'run_migrations_bounded',
+] as $forbiddenActivationWork) {
+    assert_updater_resumable(
+        !php_source_contains($activationSource, $forbiddenActivationWork),
+        'Activation critical section contains expensive precondition work: '
+            . $forbiddenActivationWork,
+    );
 }
 
-$filesystemSource = (string) file_get_contents($root . '/app/services/updates_filesystem.php');
-assert_updater_resumable(str_contains($jobsSource, 'application_update_invalidate_persistent_caches('), 'Updater finalization no longer invalidates version-sensitive persistent caches.');
-$finalizeStart = strpos($jobsSource, 'function application_update_job_finalize(');
-$finalizeEnd = strpos($jobsSource, 'function ', (int) $finalizeStart + 1);
-$finalizeSource = substr($jobsSource, (int) $finalizeStart, (int) $finalizeEnd - (int) $finalizeStart);
-assert_updater_resumable(str_contains($finalizeSource, "delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);"), 'Update finalization no longer clears the stale pre-update GitHub check cache.');
-assert_updater_resumable(!str_contains($finalizeSource, 'check_application_update()') && str_contains($finalizeSource, 'application_update_installed_status(') && str_contains($finalizeSource, 'cache_application_update_check($freshUpdateStatus)'), 'Finalization must reconcile the verified installed version locally without repeating GitHub discovery.');
-assert_updater_resumable((int) strpos($finalizeSource, 'catch (Throwable $exception)') > (int) strpos($finalizeSource, 'application_update_installed_status('), 'Local finalization cache repair must not block an otherwise successful update.');
-assert_updater_resumable(str_contains($jobsSource, 'application_update_delete_tree_slice('), 'Updater cleanup no longer uses bounded physical cache deletion.');
-assert_updater_resumable(str_contains($jobsSource, 'if (!application_update_job_cleanup($job, $budget))'), 'Updater cleanup no longer yields across bounded worker slices.');
-assert_updater_resumable(str_contains($filesystemSource, "'github-api'") && str_contains($filesystemSource, "'patch-notes'") && str_contains($filesystemSource, "'integrity-status.json'"), 'Version-sensitive cache invalidation coverage regressed.');
-assert_updater_resumable(!str_contains($filesystemSource, "'favicon' =>") && !str_contains($filesystemSource, "'theme-background' =>") && !str_contains($filesystemSource, "'theme-branding' =>"), 'Post-update cache invalidation targets user-managed cache assets.');
+$filesystemSource = (string) file_get_contents($root
+    . '/app/services/updates_filesystem.php');
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        'application_update_invalidate_persistent_caches(',
+    ),
+    'Updater finalization no longer invalidates version-sensitive persistent caches.',
+);
+$finalizeSource = gallery_writer_functions($jobsSource)[
+    'application_update_job_finalize'
+]['body'] ?? '';
+assert_updater_resumable(
+    php_source_contains(
+        $finalizeSource,
+        "delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);",
+    ),
+    'Update finalization no longer clears the stale pre-update GitHub check cache.',
+);
+assert_updater_resumable(
+    !php_source_contains($finalizeSource, 'check_application_update()')
+        && php_source_contains($finalizeSource, 'application_update_installed_status(')
+        && php_source_contains(
+            $finalizeSource,
+            'cache_application_update_check($freshUpdateStatus)',
+        ),
+    'Finalization must reconcile the verified installed version locally without repeating GitHub discovery.',
+);
+assert_updater_resumable(
+    preg_match(
+        '/catch\s*\(\s*Throwable\s+\$exception\s*\)/',
+        $finalizeSource,
+        $catchMatch,
+        PREG_OFFSET_CAPTURE,
+    ) === 1
+        && preg_match(
+            '/application_update_installed_status\s*\(/',
+            $finalizeSource,
+            $installedStatusMatch,
+            PREG_OFFSET_CAPTURE,
+        ) === 1
+        && $catchMatch[0][1] > $installedStatusMatch[0][1],
+    'Local finalization cache repair must not block an otherwise successful update.',
+);
+assert_updater_resumable(
+    php_source_contains($jobsSource, 'application_update_delete_tree_slice('),
+    'Updater cleanup no longer uses bounded physical cache deletion.',
+);
+assert_updater_resumable(
+    php_source_contains(
+        $jobsSource,
+        'if (!application_update_job_cleanup($job, $budget))',
+    ),
+    'Updater cleanup no longer yields across bounded worker slices.',
+);
+assert_updater_resumable(
+    php_source_contains($filesystemSource, "'github-api'")
+        && php_source_contains($filesystemSource, "'patch-notes'")
+        && php_source_contains($filesystemSource, "'integrity-status.json'"),
+    'Version-sensitive cache invalidation coverage regressed.',
+);
+assert_updater_resumable(
+    !php_source_contains($filesystemSource, "'favicon' =>")
+        && !php_source_contains($filesystemSource, "'theme-background' =>")
+        && !php_source_contains($filesystemSource, "'theme-branding' =>"),
+    'Post-update cache invalidation targets user-managed cache assets.',
+);
 
 $serviceFiles = glob($root . '/app/services/updates_*.php') ?: [];
 foreach ($serviceFiles as $serviceFile) {
@@ -457,11 +1079,28 @@ foreach ($serviceFiles as $serviceFile) {
         $source = module_source($serviceFile);
         // Exclude the boundary's one intentional internal-message extraction line
         // before auditing the remaining updater service for raw disclosure.
-        $source = preg_replace('/^\s*\$internal = .*?->getMessage\(\).*?;\R/m', '', $source, 1) ?? $source;
-        assert_updater_resumable(!str_contains($source, '->getMessage()'), 'Updater service exposes raw exception messages outside the redaction boundary: ' . basename($serviceFile));
+        $source =
+            preg_replace(
+                '/^\s*\$internal\s*=\s*[^;]*?->getMessage\(\)[^;]*;\R/m',
+                '',
+                $source,
+                1,
+            ) ?? $source;
+        assert_updater_resumable(
+            !php_source_contains($source, '->getMessage()'),
+            'Updater service exposes raw exception messages outside the redaction boundary: '
+                . basename($serviceFile),
+        );
         continue;
     }
-    assert_updater_resumable(!str_contains((string) file_get_contents($serviceFile), '->getMessage()'), 'Updater service exposes raw exception messages: ' . basename($serviceFile));
+    assert_updater_resumable(
+        !str_contains(
+            (string) file_get_contents($serviceFile),
+            '->getMessage()',
+        ),
+        'Updater service exposes raw exception messages: '
+            . basename($serviceFile),
+    );
 }
 
 echo "Resumable updater state-machine tests passed.\n";

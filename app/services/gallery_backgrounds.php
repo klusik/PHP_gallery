@@ -64,7 +64,10 @@ require_once __DIR__ . '/gallery_backgrounds/visual_css_save.php';
 function gallery_background_source_schema_ready(): bool
 {
     // Reuse the canonical request snapshot and its migration invalidation.
-    return schema_inspection_is_available(schema_inspection_column('galleries', 'background_source'));
+    return schema_inspection_is_available(schema_inspection_column(
+        'galleries',
+        'background_source',
+    ));
 }
 
 /**
@@ -76,7 +79,9 @@ function theme_background_source(): ?string
 {
     // $value stores an intermediate value used by the surrounding gallery workflow.
     $value = trim((string) app_setting('theme_background_source', ''));
-    return in_array($value, ['upload', 'existing', 'collage'], true) ? $value : null;
+    return in_array($value, ['upload', 'existing', 'collage'], true)
+        ? $value
+        : null;
 }
 
 /**
@@ -89,26 +94,30 @@ function gallery_background_source(array $gallery): ?string
 {
     // $value stores an intermediate value used by the surrounding gallery workflow.
     $value = trim((string) ($gallery['background_source'] ?? ''));
-    return in_array($value, ['upload', 'existing', 'collage'], true) ? $value : null;
+    return in_array($value, ['upload', 'existing', 'collage'], true)
+        ? $value
+        : null;
 }
 
 /**
  * Resolve the effective background source for a gallery.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{background_source?:string|null} $gallery Gallery override source field.
+ * @return string Effective gallery override or theme source (`upload`, `existing`, `collage`), or an empty string.
  */
 function resolved_gallery_background_source(array $gallery): string
 {
-    return gallery_background_source($gallery)
-        ?? theme_background_source()
-        ?? '';
+    return (
+        gallery_background_source($gallery)
+            ?? theme_background_source()
+            ?? ''
+    );
 }
 
 /**
  * Return the public background asset URL for a gallery, if one can be resolved.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id?:int|string,background_source?:string|null,folder_path?:string,title?:string} $gallery Gallery identity and cover/background fields used to resolve the public asset.
  * @param bool $publicOnly Public only value.
  * @return string Text result for the caller.
  */
@@ -125,12 +134,24 @@ function gallery_background_asset_url(array $gallery, bool $publicOnly): string
     if ($source === 'existing') {
         // $image stores an intermediate value used by the surrounding gallery workflow.
         $image = gallery_cover_image((int) $gallery['id'], $publicOnly);
-        return $image ? public_render_profile_with_thumbnail_purpose('gallery background existing 800', static fn (): string => thumbnail_url($image, 800)) : '';
+        return $image
+            ? public_render_profile_with_thumbnail_purpose('gallery background existing 800', static fn(): string => thumbnail_url(
+                $image,
+                800,
+            )) : '';
     }
     if ($source === 'collage') {
         // $collage stores an intermediate value used by the surrounding gallery workflow.
-        $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly, 1);
-        return $collage ? public_render_profile_with_thumbnail_purpose('gallery background collage 800', static fn (): string => thumbnail_url($collage[0], 800)) : '';
+        $collage = gallery_cover_collage_images(
+            (int) $gallery['id'],
+            $publicOnly,
+            1,
+        );
+        return $collage
+            ? public_render_profile_with_thumbnail_purpose('gallery background collage 800', static fn(): string => thumbnail_url(
+                $collage[0],
+                800,
+            )) : '';
     }
     return '';
 }
@@ -142,7 +163,10 @@ function gallery_background_asset_url(array $gallery, bool $publicOnly): string
  */
 function theme_background_path(): ?string
 {
-    return theme_background_existing_path((string) app_setting('theme_background_path', ''));
+    return theme_background_existing_path((string) app_setting(
+        'theme_background_path',
+        '',
+    ));
 }
 
 /**
@@ -152,7 +176,10 @@ function theme_background_path(): ?string
  */
 function theme_background_original_path(): ?string
 {
-    return theme_background_existing_path((string) app_setting('theme_background_original_path', ''));
+    return theme_background_existing_path((string) app_setting(
+        'theme_background_original_path',
+        '',
+    ));
 }
 
 /**
@@ -162,7 +189,10 @@ function theme_background_original_path(): ?string
  */
 function theme_background_optimized_path(): ?string
 {
-    return theme_background_existing_path((string) app_setting('theme_background_optimized_path', ''));
+    return theme_background_existing_path((string) app_setting(
+        'theme_background_optimized_path',
+        '',
+    ));
 }
 
 /**
@@ -175,23 +205,42 @@ function theme_background_delete_optimized(): void
     $relative = theme_background_optimized_path();
     // An existing file deliberately placed outside owned storage must be refused,
     // not silently forgotten simply because the read-only asset resolver hides it.
-    $configured = trim((string) app_setting('theme_background_optimized_path', ''));
-    if ($relative === null && $configured !== ''
-        && file_exists(dirname(__DIR__, 2) . '/' . ltrim($configured, '/'))) {
-        throw new \RuntimeException('The optimized background identity could not be verified.');
+    $configured = trim((string) app_setting(
+        'theme_background_optimized_path',
+        '',
+    ));
+    if (
+        $relative === null
+        && $configured !== ''
+        && file_exists(dirname(__DIR__, 2) . '/' . ltrim($configured, '/'))
+    ) {
+        throw new \RuntimeException(
+            'The optimized background identity could not be verified.',
+        );
     }
     if ($relative !== null) {
         $path = dirname(__DIR__, 2) . '/' . ltrim($relative, '/');
         $resolved = realpath($path);
         $storage = realpath(dirname(__DIR__, 2) . '/cache/theme-background');
         $original = theme_background_original_path();
-        $originalPath = $original !== null ? realpath(dirname(__DIR__, 2) . '/' . ltrim($original, '/')) : false;
-        if (is_link($path) || $resolved === false || $storage === false
-            || dirname($resolved) !== $storage || $resolved === $originalPath) {
-            throw new \RuntimeException('The optimized background identity could not be verified.');
+        $originalPath = $original !== null
+            ? realpath(dirname(__DIR__, 2) . '/' . ltrim($original, '/'))
+            : false;
+        if (
+            is_link($path)
+            || $resolved === false
+            || $storage === false
+            || dirname($resolved) !== $storage
+            || $resolved === $originalPath
+        ) {
+            throw new \RuntimeException(
+                'The optimized background identity could not be verified.',
+            );
         }
         if (!unlink($path)) {
-            throw new \RuntimeException('The optimized background could not be removed.');
+            throw new \RuntimeException(
+                'The optimized background could not be removed.',
+            );
         }
     }
     set_app_setting('theme_background_optimized_path', '');
@@ -215,8 +264,12 @@ function theme_background_existing_path(string $path): ?string
     $storage = realpath(dirname(__DIR__, 2) . '/cache/theme-background');
     $absolute = dirname(__DIR__, 2) . '/' . ltrim($path, '/');
     $resolved = realpath($absolute);
-    return $storage !== false && $resolved !== false
-        && dirname($resolved) === $storage && is_file($absolute) ? $path : null;
+    return $storage !== false
+    && $resolved !== false
+    && dirname($resolved) === $storage
+    && is_file($absolute)
+        ? $path
+        : null;
 }
 
 /**
@@ -243,7 +296,10 @@ function theme_background_asset_url(): string
     }
     // $version stores a lightweight cache-busting value so replacing the background updates browsers quickly.
     $version = theme_background_served_version($servedPath);
-    return url_for('theme_background_asset') . ($version !== '' ? '&v=' . rawurlencode($version) : '');
+    return (
+        url_for('theme_background_asset')
+            . ($version !== '' ? '&v=' . rawurlencode($version) : '')
+    );
 }
 
 /**
@@ -260,7 +316,11 @@ function theme_background_served_version(string $relativePath): string
         return '';
     }
     // Unique staged filenames must produce distinct immutable URLs even when two uploads share one-second filemtime resolution.
-    return (string) filemtime($absolute) . '-' . substr(hash('sha256', basename($relativePath)), 0, 12);
+    return (
+        (string) filemtime($absolute)
+            . '-'
+            . substr(hash('sha256', basename($relativePath)), 0, 12)
+    );
 }
 
 /**
@@ -286,7 +346,11 @@ function theme_background_optimized_max_side_value(mixed $value): int
  */
 function theme_background_webp_generation_available(): bool
 {
-    return extension_loaded('gd') && function_exists('imagewebp') && function_exists('imagecreatefromstring');
+    return (
+        extension_loaded('gd')
+            && function_exists('imagewebp')
+            && function_exists('imagecreatefromstring')
+    );
 }
 
 /**
@@ -311,26 +375,49 @@ function theme_background_storage_dir(): string
  * @param ?int $maxSide Maximum side length for the optional WebP derivative.
  * @return string Gallery-relative path of the successfully installed original image.
  */
-function store_uploaded_theme_background(array $file, ?int $maxSide = null): string
-{
+function store_uploaded_theme_background(
+    array $file,
+    ?int $maxSide = null,
+): string {
     // $extension stores an intermediate value used by the surrounding gallery workflow.
-    $extension = strtolower(pathinfo((string) ($file['name'] ?? 'background.jpg'), PATHINFO_EXTENSION));
+    $extension = strtolower(pathinfo(
+        (string) ($file['name'] ?? 'background.jpg'),
+        PATHINFO_EXTENSION,
+    ));
     // $safeExtension stores an intermediate value used by the surrounding gallery workflow.
-    $safeExtension = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? $extension : 'jpg';
+    $safeExtension = in_array(
+        $extension,
+        ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+        true,
+    )
+        ? $extension
+        : 'jpg';
     // $filename stores an intermediate value used by the surrounding gallery workflow.
     $filename = 'background-original.' . $safeExtension;
     // Keep the previous background and optimized derivative intact until the
     // replacement upload has reached a unique staging file and been installed.
     $storageDir = theme_background_storage_dir();
     $target = $storageDir . DIRECTORY_SEPARATOR . $filename;
-    $stage = $storageDir . DIRECTORY_SEPARATOR . '.background-upload-' . bin2hex(random_bytes(12)) . '.' . $safeExtension;
+    $stage =
+        $storageDir
+        . DIRECTORY_SEPARATOR
+        . '.background-upload-'
+        . bin2hex(random_bytes(12))
+        . '.'
+        . $safeExtension;
     if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $stage)) {
         @unlink($stage);
-        throw new RuntimeException(t('theme.background.error_store_failed', 'Could not store theme background image.'));
+        throw new RuntimeException(t(
+            'theme.background.error_store_failed',
+            'Could not store theme background image.',
+        ));
     }
     try {
         if (!@rename($stage, $target)) {
-            throw new RuntimeException(t('theme.background.error_store_failed', 'Could not store theme background image.'));
+            throw new RuntimeException(t(
+                'theme.background.error_store_failed',
+                'Could not store theme background image.',
+            ));
         }
     } finally {
         if (is_file($stage)) {
@@ -343,8 +430,14 @@ function store_uploaded_theme_background(array $file, ?int $maxSide = null): str
     $relative = 'cache/theme-background/' . $filename;
     set_app_setting('theme_background_path', $relative);
     set_app_setting('theme_background_original_path', $relative);
-    set_app_setting('theme_background_optimized_max_side', (string) theme_background_optimized_max_side_value($maxSide));
-    theme_background_generate_optimized($target, theme_background_optimized_max_side_value($maxSide));
+    set_app_setting(
+        'theme_background_optimized_max_side',
+        (string) theme_background_optimized_max_side_value($maxSide),
+    );
+    theme_background_generate_optimized(
+        $target,
+        theme_background_optimized_max_side_value($maxSide),
+    );
     return $relative;
 }
 
@@ -352,11 +445,20 @@ function store_uploaded_theme_background(array $file, ?int $maxSide = null): str
  * Remove old global theme background derivatives before storing a replacement.
  *
  * @param ?string $keepPath Keep path filesystem path.
+ * @return void Removes matching stored background files.
  */
 function theme_background_clear_stored_files(?string $keepPath = null): void
 {
-    foreach (glob(theme_background_storage_dir() . DIRECTORY_SEPARATOR . 'background*.*') ?: [] as $oldFile) {
-        if (is_file($oldFile) && ($keepPath === null || $oldFile !== $keepPath)) {
+    foreach (glob(
+        theme_background_storage_dir() . DIRECTORY_SEPARATOR . 'background*.*',
+    ) ?: [] as $oldFile) {
+        if (
+            is_file($oldFile)
+            && (
+                $keepPath === null
+                || $oldFile !== $keepPath
+            )
+        ) {
             @unlink($oldFile);
         }
     }
@@ -379,7 +481,10 @@ function theme_background_regenerate_optimized(?int $maxSide = null): bool
     }
     // $absolute stores an intermediate value used by the surrounding gallery workflow.
     $absolute = dirname(__DIR__, 2) . '/' . ltrim($relative, '/');
-    return theme_background_generate_optimized($absolute, theme_background_optimized_max_side_value($maxSide));
+    return theme_background_generate_optimized(
+        $absolute,
+        theme_background_optimized_max_side_value($maxSide),
+    );
 }
 
 /**
@@ -389,17 +494,32 @@ function theme_background_regenerate_optimized(?int $maxSide = null): bool
  * @param int $maxSide Maximum output side length in pixels.
  * @return bool True when the derivative was installed and its setting updated; false when optimization is unavailable.
  */
-function theme_background_generate_optimized(string $sourcePath, int $maxSide): bool
-{
-    if (!theme_background_webp_generation_available() || !is_file($sourcePath)) {
+function theme_background_generate_optimized(
+    string $sourcePath,
+    int $maxSide,
+): bool {
+    if (
+        !theme_background_webp_generation_available()
+        || !is_file($sourcePath)
+    ) {
         set_app_setting('theme_background_optimized_path', '');
         return false;
     }
-    $targetPath = theme_background_storage_dir() . DIRECTORY_SEPARATOR . 'background-optimized.webp';
-    if (!theme_background_write_optimized_derivative($sourcePath, $maxSide, $targetPath)) {
+    $targetPath =
+        theme_background_storage_dir()
+        . DIRECTORY_SEPARATOR
+        . 'background-optimized.webp';
+    if (!theme_background_write_optimized_derivative(
+        $sourcePath,
+        $maxSide,
+        $targetPath,
+    )) {
         set_app_setting('theme_background_optimized_path', '');
         return false;
     }
-    set_app_setting('theme_background_optimized_path', 'cache/theme-background/background-optimized.webp');
+    set_app_setting(
+        'theme_background_optimized_path',
+        'cache/theme-background/background-optimized.webp',
+    );
     return true;
 }

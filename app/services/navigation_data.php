@@ -62,10 +62,15 @@ use function Gallery\Models\navigation_data_model_local_point;
 use function Gallery\Models\navigation_data_model_local_point_count;
 
 const NAVIGATION_DATA_SOURCE_LOCAL_DB = 'local_db';
+
 const NAVIGATION_DATA_SOURCE_BUNDLED = 'bundled';
+
 const NAVIGATION_DATA_SOURCE_REMOTE_CACHE = 'remote_cache';
+
 const NAVIGATION_DATA_SOURCE_NAVIGRAPH = 'navigraph';
+
 const NAVIGATION_DATA_DEFAULT_CACHE_TTL_SECONDS = 2592000;
+
 const NAVIGATION_DATA_BUNDLED_CYCLE = 'offline';
 
 /**
@@ -74,13 +79,17 @@ const NAVIGATION_DATA_BUNDLED_CYCLE = 'offline';
  * Existing installations may not have a navigation_data section in config.php.
  * This helper supplies conservative defaults so the feature degrades cleanly.
  *
- * @return array<string mixed>.
+ * @return array{bundled_navdata_path:string,cache_ttl_seconds:int,navigraph:array{enabled:bool,client_id:string,client_secret:string,scope:string,redirect_uri:string,authorization_endpoint:string,token_endpoint:string,packages_endpoint:string,package_format:string,lookup_endpoint_template:string,token_encryption_key:string}} Effective bundled-data, cache and Navigraph configuration.
  */
 function navigation_data_config(): array
 {
     $config = function_exists('Gallery\\Core\\cms_config') ? cms_config() : [];
-    $navigation = is_array($config['navigation_data'] ?? null) ? $config['navigation_data'] : [];
-    $navigraph = is_array($navigation['navigraph'] ?? null) ? $navigation['navigraph'] : [];
+    $navigation = is_array($config['navigation_data'] ?? null)
+        ? $config['navigation_data']
+        : [];
+    $navigraph = is_array($navigation['navigraph'] ?? null)
+        ? $navigation['navigraph']
+        : [];
 
     $defaultNavigraph = [
         'enabled' => false,
@@ -97,8 +106,16 @@ function navigation_data_config(): array
     ];
 
     return [
-        'bundled_navdata_path' => (string) ($navigation['bundled_navdata_path'] ?? navigation_data_default_bundled_path()),
-        'cache_ttl_seconds' => max(3600, (int) ($navigation['cache_ttl_seconds'] ?? NAVIGATION_DATA_DEFAULT_CACHE_TTL_SECONDS)),
+        'bundled_navdata_path' => (string) (
+            $navigation['bundled_navdata_path'] ?? navigation_data_default_bundled_path()
+        ),
+        'cache_ttl_seconds' => max(
+            3600,
+            (int) (
+                $navigation['cache_ttl_seconds']
+                ?? NAVIGATION_DATA_DEFAULT_CACHE_TTL_SECONDS
+            ),
+        ),
         'navigraph' => $navigraph + $defaultNavigraph,
     ];
 }
@@ -120,7 +137,10 @@ function navigation_data_default_bundled_path(): string
  */
 function navigation_data_cache_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_navigation_cache_schema_status(), 'navigation_cache_render');
+    return presentation_schema_render_available(
+        presentation_navigation_cache_schema_status(),
+        'navigation_cache_render',
+    );
 }
 
 /**
@@ -130,7 +150,10 @@ function navigation_data_cache_schema_ready(): bool
  */
 function navigation_data_account_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_navigation_account_schema_status(), 'navigation_account_render');
+    return presentation_schema_render_available(
+        presentation_navigation_account_schema_status(),
+        'navigation_account_render',
+    );
 }
 
 /**
@@ -140,7 +163,10 @@ function navigation_data_account_schema_ready(): bool
  */
 function navigation_data_local_db_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_navigation_local_schema_status(), 'navigation_local_render');
+    return presentation_schema_render_available(
+        presentation_navigation_local_schema_status(),
+        'navigation_local_render',
+    );
 }
 
 /**
@@ -174,7 +200,8 @@ function navigation_data_status(): array
 
     if ($status['local_db_ready']) {
         try {
-            $status['local_db_count'] = navigation_data_model_local_point_count();
+            $status['local_db_count'] =
+                navigation_data_model_local_point_count();
         } catch (PDOException) {
             $status['local_db_ready'] = false;
         }
@@ -190,18 +217,22 @@ function navigation_data_status(): array
  * the point is not known locally or when a caller explicitly asks for remote data.
  *
  * @param string $ident Ident value.
- * @param array $options Optional behavior flags.
- * @return array<string mixed>|null.
+ * @param array{force_remote?:bool,allow_remote?:bool} $options Optional lookup controls; force_remote skips the first local lookup, and allow_remote controls the Navigraph lookup (default true).
+ * @return array{ident:string,latitude:float,longitude:float,kind:string,source:string,cycle:string,region:string,name:string,remote_source?:string}|null Resolved local, cached or permitted remote navigation point.
  */
-function navigation_data_resolve_ident(string $ident, array $options = []): ?array
-{
+function navigation_data_resolve_ident(
+    string $ident,
+    array $options = [],
+): ?array {
     $normalizedIdent = navigation_data_normalize_ident($ident);
     if ($normalizedIdent === '') {
         return null;
     }
 
     $forceRemote = !empty($options['force_remote']);
-    $allowRemote = !array_key_exists('allow_remote', $options) || (bool) $options['allow_remote'];
+    $allowRemote =
+        !array_key_exists('allow_remote', $options)
+        || (bool) $options['allow_remote'];
 
     if (!$forceRemote) {
         $localPoint = navigation_data_local_lookup($normalizedIdent);
@@ -218,7 +249,12 @@ function navigation_data_resolve_ident(string $ident, array $options = []): ?arr
     if ($allowRemote && navigation_data_navigraph_connected()) {
         $remotePoint = navigation_data_navigraph_lookup($normalizedIdent);
         if ($remotePoint !== null) {
-            navigation_data_cache_write($normalizedIdent, $remotePoint, NAVIGATION_DATA_SOURCE_NAVIGRAPH, navigation_data_navigraph_cycle());
+            navigation_data_cache_write(
+                $normalizedIdent,
+                $remotePoint,
+                NAVIGATION_DATA_SOURCE_NAVIGRAPH,
+                navigation_data_navigraph_cycle(),
+            );
             return $remotePoint;
         }
     }
@@ -251,7 +287,7 @@ function navigation_data_local_lookup(string $ident): ?array
  * Resolve one identifier from the admin-imported local nav point table.
  *
  * @param string $ident Ident value.
- * @return array<string mixed>|null.
+ * @return array{ident:string,latitude:float,longitude:float,kind:string,source:string,cycle:string,region:string,name:string,remote_source?:string}|null Locally imported point, or null when absent or unavailable.
  */
 function navigation_data_local_db_lookup(string $ident): ?array
 {
@@ -271,7 +307,7 @@ function navigation_data_local_db_lookup(string $ident): ?array
         (string) ($row['kind'] ?? 'navdata'),
         NAVIGATION_DATA_SOURCE_LOCAL_DB,
         (string) ($row['cycle'] ?? ''),
-        (string) ($row['region'] ?? '')
+        (string) ($row['region'] ?? ''),
     );
 }
 
@@ -294,7 +330,7 @@ function navigation_data_bundled_lookup(string $ident): ?array
  * The bundled dataset is deliberately small and safe to scan into memory. Large
  * imports belong in the database table, which supports indexed incremental lookup.
  *
- * @return array<string array<string, mixed>>.
+ * @return array<string,array{ident:string,latitude:float,longitude:float,kind:string,source:string,cycle:string,region:string,name:string,remote_source?:string}> Points indexed by normalized identifier.
  */
 function navigation_data_bundled_index(): array
 {
@@ -319,7 +355,9 @@ function navigation_data_bundled_index(): array
         if (!is_array($headers)) {
             return $cache;
         }
-        $headers = array_map(static fn ($header): string => strtolower(trim((string) $header)), $headers);
+        $headers = array_map(static fn(string|null $header): string => strtolower(trim(
+            (string) $header,
+        )), $headers);
 
         while (($values = fgetcsv($stream)) !== false) {
             if (!is_array($values)) {
@@ -332,14 +370,23 @@ function navigation_data_bundled_index(): array
                 }
             }
 
-            $ident = navigation_data_normalize_ident((string) ($row['ident'] ?? ''));
-            $latitude = navigation_data_float_or_null($row['latitude'] ?? $row['lat'] ?? null);
-            $longitude = navigation_data_float_or_null($row['longitude'] ?? $row['lon'] ?? $row['lng'] ?? null);
+            $ident = navigation_data_normalize_ident(
+                (string) ($row['ident'] ?? ''),
+            );
+            $latitude = navigation_data_float_or_null(
+                $row['latitude'] ?? $row['lat'] ?? null,
+            );
+            $longitude = navigation_data_float_or_null(
+                $row['longitude'] ?? $row['lon'] ?? $row['lng'] ?? null,
+            );
             if ($ident === '' || $latitude === null || $longitude === null) {
                 continue;
             }
 
-            $candidateIdents = navigation_data_bundled_ident_candidates($row, $ident);
+            $candidateIdents = navigation_data_bundled_ident_candidates(
+                $row,
+                $ident,
+            );
             foreach ($candidateIdents as $candidateIdent) {
                 $point = navigation_data_point_from_values(
                     $candidateIdent,
@@ -349,7 +396,7 @@ function navigation_data_bundled_index(): array
                     (string) ($row['source'] ?? NAVIGATION_DATA_SOURCE_BUNDLED),
                     (string) ($row['cycle'] ?? NAVIGATION_DATA_BUNDLED_CYCLE),
                     (string) ($row['region'] ?? ''),
-                    (string) ($row['name'] ?? '')
+                    (string) ($row['name'] ?? ''),
                 );
                 if ($point !== null && !isset($cache[$candidateIdent])) {
                     $cache[$candidateIdent] = $point;
@@ -366,15 +413,19 @@ function navigation_data_bundled_index(): array
 /**
  * Return all lookup identifiers represented by one bundled CSV row.
  *
- * @param array $row Row data.
+ * @param array<string,string> $row CSV fields keyed by normalized header name.
  * @param string $fallbackIdent Fallback ident value.
- * @return array<int string>.
+ * @return list<string> Unique normalized identifiers represented by the row.
  */
-function navigation_data_bundled_ident_candidates(array $row, string $fallbackIdent): array
-{
+function navigation_data_bundled_ident_candidates(
+    array $row,
+    string $fallbackIdent,
+): array {
     $candidates = [$fallbackIdent];
     foreach (['icao', 'iata', 'gps_code', 'local_code'] as $field) {
-        $candidate = navigation_data_normalize_ident((string) ($row[$field] ?? ''));
+        $candidate = navigation_data_normalize_ident(
+            (string) ($row[$field] ?? ''),
+        );
         if ($candidate !== '') {
             $candidates[] = $candidate;
         }
@@ -393,11 +444,24 @@ function navigation_data_bundled_ident_candidates(array $row, string $fallbackId
  * @param string $cycle Cycle value.
  * @param string $region Region value.
  * @param string $name Name value.
- * @return array<string mixed>|null.
+ * @return array{ident:string,latitude:float,longitude:float,kind:string,source:string,cycle:string,region:string,name:string,remote_source?:string}|null Normalized point, or null for invalid coordinates or identifier.
  */
-function navigation_data_point_from_values(string $ident, float $latitude, float $longitude, string $kind, string $source, string $cycle = '', string $region = '', string $name = ''): ?array
-{
-    if ($latitude < -90.0 || $latitude > 90.0 || $longitude < -180.0 || $longitude > 180.0) {
+function navigation_data_point_from_values(
+    string $ident,
+    float $latitude,
+    float $longitude,
+    string $kind,
+    string $source,
+    string $cycle = '',
+    string $region = '',
+    string $name = '',
+): ?array {
+    if (
+        $latitude < -90.0
+        || $latitude > 90.0
+        || $longitude < -180.0
+        || $longitude > 180.0
+    ) {
         return null;
     }
 
@@ -407,7 +471,9 @@ function navigation_data_point_from_values(string $ident, float $latitude, float
     }
 
     $kind = navigation_data_normalize_kind($kind);
-    $source = trim($source) !== '' ? substr(trim($source), 0, 64) : NAVIGATION_DATA_SOURCE_BUNDLED;
+    $source = trim($source) !== ''
+        ? substr(trim($source), 0, 64)
+        : NAVIGATION_DATA_SOURCE_BUNDLED;
     $displayName = trim($name) !== '' ? trim($name) : $normalizedIdent;
 
     return [
@@ -417,7 +483,11 @@ function navigation_data_point_from_values(string $ident, float $latitude, float
         'longitude' => round($longitude, 7),
         'kind' => $kind,
         'source' => $source,
-        'cycle' => substr(trim($cycle) !== '' ? trim($cycle) : NAVIGATION_DATA_BUNDLED_CYCLE, 0, 32),
+        'cycle' => substr(
+            trim($cycle) !== '' ? trim($cycle) : NAVIGATION_DATA_BUNDLED_CYCLE,
+            0,
+            32,
+        ),
         'region' => substr(strtoupper(trim($region)), 0, 32),
     ];
 }
@@ -455,7 +525,20 @@ function navigation_data_normalize_kind(string $kind): string
         'vordme' => 'vor',
     ];
     $kind = $aliases[$kind] ?? $kind;
-    if (!in_array($kind, ['airport', 'fix', 'vor', 'ndb', 'navaid', 'airway', 'manual', 'coordinate'], true)) {
+    if (!in_array(
+        $kind,
+        [
+            'airport',
+            'fix',
+            'vor',
+            'ndb',
+            'navaid',
+            'airway',
+            'manual',
+            'coordinate',
+        ],
+        true,
+    )) {
         return 'waypoint';
     }
     return $kind;
@@ -481,7 +564,7 @@ function navigation_data_float_or_null(mixed $value): ?float
  * Read a cached remote point for one identifier.
  *
  * @param string $ident Ident value.
- * @return array<string mixed>|null.
+ * @return array{ident:string,latitude:float,longitude:float,kind:string,source:string,cycle:string,region:string,name:string,remote_source?:string}|null Cached point with its remote provider identity, or null when unavailable.
  */
 function navigation_data_cache_read(string $ident): ?array
 {
@@ -512,7 +595,7 @@ function navigation_data_cache_read(string $ident): ?array
         (string) ($row['source'] ?? NAVIGATION_DATA_SOURCE_REMOTE_CACHE),
         (string) ($row['cycle'] ?? $decoded['cycle'] ?? ''),
         (string) ($decoded['region'] ?? ''),
-        (string) ($decoded['name'] ?? '')
+        (string) ($decoded['name'] ?? ''),
     );
     if ($point === null) {
         return null;
@@ -527,12 +610,17 @@ function navigation_data_cache_read(string $ident): ?array
  * Persist a resolved remote point in the shared cache table.
  *
  * @param string $ident Ident value.
- * @param array $point Point value.
+ * @param array{ident:string,latitude:float,longitude:float,kind:string,source:string,cycle:string,region:string,name:string,remote_source?:string} $point Validated navigation point payload.
  * @param string $source Source value.
- * @param string $cycle Cycle value.
+ * @param string $cycle Provider dataset cycle.
+ * @return void Persists the normalized point when cache storage is available.
  */
-function navigation_data_cache_write(string $ident, array $point, string $source, string $cycle): void
-{
+function navigation_data_cache_write(
+    string $ident,
+    array $point,
+    string $source,
+    string $cycle,
+): void {
     if (!navigation_data_cache_schema_ready()) {
         return;
     }
@@ -550,24 +638,39 @@ function navigation_data_cache_write(string $ident, array $point, string $source
         $source,
         $cycle,
         (string) ($point['region'] ?? ''),
-        (string) ($point['name'] ?? '')
+        (string) ($point['name'] ?? ''),
     );
     if ($normalizedPoint === null) {
         return;
     }
 
     $now = now_sql();
-    $expiresAt = gmdate('Y-m-d H:i:s', time() + (int) navigation_data_config()['cache_ttl_seconds']);
-    $cacheKey = hash('sha256', implode('|', [$source, $cycle, $normalizedIdent, $normalizedPoint['kind']]));
+    $expiresAt = gmdate(
+        'Y-m-d H:i:s',
+        time() + (int) navigation_data_config()['cache_ttl_seconds'],
+    );
+    $cacheKey = hash('sha256', implode('|', [
+        $source,
+        $cycle,
+        $normalizedIdent,
+        $normalizedPoint['kind'],
+    ]));
     navigation_data_model_cache_upsert(
         $cacheKey,
         $normalizedIdent,
         (string) $normalizedPoint['kind'],
         substr(trim($source), 0, 64),
-        substr(trim($cycle) !== '' ? trim($cycle) : NAVIGATION_DATA_BUNDLED_CYCLE, 0, 32),
-        (string) json_encode($normalizedPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        substr(
+            trim($cycle) !== '' ? trim($cycle) : NAVIGATION_DATA_BUNDLED_CYCLE,
+            0,
+            32,
+        ),
+        (string) json_encode(
+            $normalizedPoint,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        ),
         $expiresAt,
-        $now
+        $now,
     );
 }
 
@@ -579,7 +682,10 @@ function navigation_data_cache_write(string $ident, array $point, string $source
 function navigation_data_navigraph_configured(): bool
 {
     $config = navigation_data_config()['navigraph'];
-    return !empty($config['enabled']) && trim((string) ($config['client_id'] ?? '')) !== '';
+    return (
+        !empty($config['enabled'])
+            && trim((string) ($config['client_id'] ?? '')) !== ''
+    );
 }
 
 /**
@@ -590,7 +696,10 @@ function navigation_data_navigraph_configured(): bool
 function navigation_data_navigraph_connected(): bool
 {
     $session = navigation_data_navigraph_session();
-    return trim((string) ($session['access_token'] ?? '')) !== '' || trim((string) ($session['refresh_token'] ?? '')) !== '';
+    return (
+        trim((string) ($session['access_token'] ?? '')) !== ''
+            || trim((string) ($session['refresh_token'] ?? '')) !== ''
+    );
 }
 
 /**
@@ -601,7 +710,13 @@ function navigation_data_navigraph_connected(): bool
 function navigation_data_navigraph_session(): array
 {
     $session = session_context_get('navigation_data_navigraph') ?? [];
-    if (is_array($session) && (trim((string) ($session['access_token'] ?? '')) !== '' || trim((string) ($session['refresh_token'] ?? '')) !== '')) {
+    if (
+        is_array($session)
+        && (
+            trim((string) ($session['access_token'] ?? '')) !== ''
+            || trim((string) ($session['refresh_token'] ?? '')) !== ''
+        )
+    ) {
         return $session;
     }
 
@@ -626,7 +741,7 @@ function navigation_data_navigraph_store_tokens(array $tokenPayload): void
     presentation_schema_assert_known(
         $schemaStatus,
         'navigation_account_token_store',
-        'Navigation account storage could not be verified. The OAuth token exchange was not committed to the session.'
+        'Navigation account storage could not be verified. The OAuth token exchange was not committed to the session.',
     );
     $persistentStorageAvailable = schema_inspection_is_available($schemaStatus);
     $previousSession = navigation_data_navigraph_session();
@@ -641,16 +756,33 @@ function navigation_data_navigraph_store_tokens(array $tokenPayload): void
 
     $storedSession = [
         'access_token' => $accessToken,
-        'refresh_token' => $refreshToken !== '' ? $refreshToken : (string) ($previousSession['refresh_token'] ?? ''),
-        'id_token' => $idToken !== '' ? $idToken : (string) ($previousSession['id_token'] ?? ''),
+        'refresh_token' => $refreshToken !== ''
+            ? $refreshToken
+            : (string) ($previousSession['refresh_token'] ?? ''),
+        'id_token' => $idToken !== ''
+            ? $idToken
+            : (string) ($previousSession['id_token'] ?? ''),
         'expires_at' => $expiresIn > 0 ? time() + $expiresIn - 60 : 0,
-        'scope' => (string) ($tokenPayload['scope'] ?? ($previousSession['scope'] ?? '')),
-        'subscription' => $claims['subscription'] ?? ($previousSession['subscription'] ?? null),
-        'claims' => $claims !== [] ? $claims : (is_array($previousSession['claims'] ?? null) ? $previousSession['claims'] : []),
+        'scope' => (string) (
+            $tokenPayload['scope']
+            ?? $previousSession['scope']
+            ?? ''
+        ),
+        'subscription' =>
+            $claims['subscription'] ?? $previousSession['subscription'] ?? null,
+        'claims' => $claims !== []
+            ? $claims
+            : (
+                is_array($previousSession['claims'] ?? null)
+                    ? $previousSession['claims']
+                    : []
+            ),
         'package_cycle' => (string) ($previousSession['package_cycle'] ?? ''),
         'package_status' => (string) ($previousSession['package_status'] ?? ''),
         'package_format' => (string) ($previousSession['package_format'] ?? ''),
-        'package_checked_at' => (string) ($previousSession['package_checked_at'] ?? ''),
+        'package_checked_at' => (string) (
+            $previousSession['package_checked_at'] ?? ''
+        ),
         'updated_at' => now_sql(),
     ];
 
@@ -668,7 +800,10 @@ function navigation_data_navigraph_store_tokens(array $tokenPayload): void
 function navigation_data_navigraph_disconnect(): void
 {
     navigation_data_navigraph_delete_account_session();
-    session_context_remove('navigation_data_navigraph', 'navigation_data_navigraph_oauth');
+    session_context_remove(
+        'navigation_data_navigraph',
+        'navigation_data_navigraph_oauth',
+    );
 }
 
 /**
@@ -690,8 +825,10 @@ function navigation_data_navigraph_status(): array
         'connected' => navigation_data_navigraph_connected(),
         'account_storage_ready' => navigation_data_account_schema_ready(),
         'persistent_connection' => navigation_data_navigraph_account_exists(),
-        'client_id_present' => trim((string) ($config['client_id'] ?? '')) !== '',
-        'lookup_endpoint_configured' => trim((string) ($config['lookup_endpoint_template'] ?? '')) !== '',
+        'client_id_present' =>
+            trim((string) ($config['client_id'] ?? '')) !== '',
+        'lookup_endpoint_configured' =>
+            trim((string) ($config['lookup_endpoint_template'] ?? '')) !== '',
         'packages_endpoint' => (string) ($config['packages_endpoint'] ?? ''),
         'redirect_uri' => navigation_data_navigraph_redirect_uri(),
         'package_cycle' => (string) ($session['package_cycle'] ?? ''),
@@ -745,7 +882,7 @@ function navigation_data_navigraph_account_exists(): bool
 /**
  * Load a persisted Navigraph session for the current admin user.
  *
- * @return array<string mixed>.
+ * @return array{access_token:string,refresh_token:string,id_token:string,expires_at:int,scope:string,subscription:array<string,mixed>|null,claims:array<string,mixed>,package_cycle:string,package_status:string,package_format:string,package_checked_at:string,updated_at:string} Persisted decrypted account session, or an empty array when unavailable.
  */
 function navigation_data_navigraph_load_account_session(): array
 {
@@ -767,15 +904,24 @@ function navigation_data_navigraph_load_account_session(): array
         return [];
     }
 
-    $accessToken = navigation_data_decrypt_secret((string) ($row['access_token_cipher'] ?? ''));
-    $refreshToken = navigation_data_decrypt_secret((string) ($row['refresh_token_cipher'] ?? ''));
-    $idToken = navigation_data_decrypt_secret((string) ($row['id_token_cipher'] ?? ''));
+    $accessToken = navigation_data_decrypt_secret(
+        (string) ($row['access_token_cipher'] ?? ''),
+    );
+    $refreshToken = navigation_data_decrypt_secret(
+        (string) ($row['refresh_token_cipher'] ?? ''),
+    );
+    $idToken = navigation_data_decrypt_secret(
+        (string) ($row['id_token_cipher'] ?? ''),
+    );
     if ($accessToken === '' && $refreshToken === '') {
         return [];
     }
 
     $claims = json_decode((string) ($row['claims_json'] ?? ''), true);
-    $subscription = json_decode((string) ($row['subscription_json'] ?? ''), true);
+    $subscription = json_decode(
+        (string) ($row['subscription_json'] ?? ''),
+        true,
+    );
 
     return [
         'access_token' => $accessToken,
@@ -796,7 +942,8 @@ function navigation_data_navigraph_load_account_session(): array
 /**
  * Persist the current Navigraph session for the active admin user.
  *
- * @param array $session Session value.
+ * @param array<string,mixed> $session Current Navigraph token and package session fields.
+ * @return void Persists the session when account storage exists; legacy installations retain session-only state.
  */
 function navigation_data_navigraph_persist_session(array $session): void
 {
@@ -804,7 +951,7 @@ function navigation_data_navigraph_persist_session(array $session): void
     presentation_schema_assert_known(
         $schemaStatus,
         'navigation_account_save',
-        'Navigation account storage could not be verified. Credentials were not persisted.'
+        'Navigation account storage could not be verified. Credentials were not persisted.',
     );
     if (!schema_inspection_is_available($schemaStatus)) {
         // Confirmed pre-migration installations retain the historical session-only
@@ -817,40 +964,90 @@ function navigation_data_navigraph_persist_session(array $session): void
         return;
     }
 
-    $accessTokenCipher = navigation_data_encrypt_secret((string) ($session['access_token'] ?? ''));
-    $refreshTokenCipher = navigation_data_encrypt_secret((string) ($session['refresh_token'] ?? ''));
-    $idTokenCipher = navigation_data_encrypt_secret((string) ($session['id_token'] ?? ''));
+    $accessTokenCipher = navigation_data_encrypt_secret(
+        (string) ($session['access_token'] ?? ''),
+    );
+    $refreshTokenCipher = navigation_data_encrypt_secret(
+        (string) ($session['refresh_token'] ?? ''),
+    );
+    $idTokenCipher = navigation_data_encrypt_secret(
+        (string) ($session['id_token'] ?? ''),
+    );
     if ($accessTokenCipher === '' && $refreshTokenCipher === '') {
         return;
     }
 
     $now = now_sql();
     $claims = is_array($session['claims'] ?? null) ? $session['claims'] : [];
-    $subscription = is_array($session['subscription'] ?? null) ? $session['subscription'] : null;
+    $subscription = is_array($session['subscription'] ?? null)
+        ? $session['subscription']
+        : null;
 
     try {
-        navigation_data_model_account_upsert($userId, [
-            'access_token_cipher' => $accessTokenCipher,
-            'refresh_token_cipher' => $refreshTokenCipher,
-            'id_token_cipher' => $idTokenCipher,
-            'token_expires_at' => max(0, (int) ($session['expires_at'] ?? 0)),
-            'scope_text' => substr((string) ($session['scope'] ?? ''), 0, 512),
-            'claims_json' => json_encode($claims, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'subscription_json' => $subscription !== null ? json_encode($subscription, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
-            'package_cycle' => substr((string) ($session['package_cycle'] ?? ''), 0, 32),
-            'package_status' => substr((string) ($session['package_status'] ?? ''), 0, 64),
-            'package_format' => substr((string) ($session['package_format'] ?? ''), 0, 64),
-            'package_checked_at' => trim((string) ($session['package_checked_at'] ?? '')) !== '' ? (string) $session['package_checked_at'] : null,
-        ], $now);
+        navigation_data_model_account_upsert(
+            $userId,
+            [
+                'access_token_cipher' => $accessTokenCipher,
+                'refresh_token_cipher' => $refreshTokenCipher,
+                'id_token_cipher' => $idTokenCipher,
+                'token_expires_at' => max(
+                    0,
+                    (int) ($session['expires_at'] ?? 0),
+                ),
+                'scope_text' => substr(
+                    (string) ($session['scope'] ?? ''),
+                    0,
+                    512,
+                ),
+                'claims_json' => json_encode(
+                    $claims,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                ),
+                'subscription_json' => $subscription !== null
+                    ? json_encode(
+                        $subscription,
+                        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                    )
+                    : null,
+                'package_cycle' => substr(
+                    (string) ($session['package_cycle'] ?? ''),
+                    0,
+                    32,
+                ),
+                'package_status' => substr(
+                    (string) ($session['package_status'] ?? ''),
+                    0,
+                    64,
+                ),
+                'package_format' => substr(
+                    (string) ($session['package_format'] ?? ''),
+                    0,
+                    64,
+                ),
+                'package_checked_at' => trim(
+                    (string) ($session['package_checked_at'] ?? ''),
+                ) !== ''
+                    ? (string) $session['package_checked_at']
+                    : null,
+            ],
+            $now,
+        );
     } catch (PDOException $exception) {
-        admin_log_event('warning', 'navigation_data.navigraph_persist_failed', 'Navigraph account session could not be persisted.', [
-            'error_code' => schema_inspection_error_code($exception),
-        ]);
+        admin_log_event(
+            'warning',
+            'navigation_data.navigraph_persist_failed',
+            'Navigraph account session could not be persisted.',
+            [
+                'error_code' => schema_inspection_error_code($exception),
+            ],
+        );
     }
 }
 
 /**
  * Delete the persisted Navigraph session for the active admin user.
+ *
+ * @return void Deletes the account row when persistent storage is available.
  */
 function navigation_data_navigraph_delete_account_session(): void
 {
@@ -858,7 +1055,7 @@ function navigation_data_navigraph_delete_account_session(): void
     presentation_schema_assert_known(
         $schemaStatus,
         'navigation_account_delete',
-        'Navigation account revocation could not verify its database schema. No credential row was changed.'
+        'Navigation account revocation could not verify its database schema. No credential row was changed.',
     );
     if (!schema_inspection_is_available($schemaStatus)) {
         // No persistent account table exists on confirmed legacy installations, so
@@ -873,9 +1070,14 @@ function navigation_data_navigraph_delete_account_session(): void
     try {
         navigation_data_model_account_delete($userId);
     } catch (PDOException $exception) {
-        admin_log_event('warning', 'navigation_data.navigraph_delete_failed', 'Navigraph account session could not be deleted.', [
-            'error_code' => schema_inspection_error_code($exception),
-        ]);
+        admin_log_event(
+            'warning',
+            'navigation_data.navigraph_delete_failed',
+            'Navigraph account session could not be deleted.',
+            [
+                'error_code' => schema_inspection_error_code($exception),
+            ],
+        );
     }
 }
 
@@ -913,16 +1115,25 @@ function navigation_data_encrypt_secret(string $secret): string
 
     $iv = random_bytes(12);
     $tag = '';
-    $cipher = openssl_encrypt($secret, 'aes-256-gcm', navigation_data_secret_key(), OPENSSL_RAW_DATA, $iv, $tag, 'navigation-data');
+    $cipher = openssl_encrypt(
+        $secret,
+        'aes-256-gcm',
+        navigation_data_secret_key(),
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+        'navigation-data',
+    );
     if ($cipher === false || $tag === '') {
         return '';
     }
 
-    return 'v1:' . base64_encode(json_encode([
-        'iv' => base64_encode($iv),
-        'tag' => base64_encode($tag),
-        'cipher' => base64_encode($cipher),
-    ], JSON_UNESCAPED_SLASHES));
+    return 'v1:'
+        . base64_encode(json_encode([
+            'iv' => base64_encode($iv),
+            'tag' => base64_encode($tag),
+            'cipher' => base64_encode($cipher),
+        ], JSON_UNESCAPED_SLASHES));
 }
 
 /**
@@ -933,7 +1144,11 @@ function navigation_data_encrypt_secret(string $secret): string
  */
 function navigation_data_decrypt_secret(string $encoded): string
 {
-    if ($encoded === '' || !str_starts_with($encoded, 'v1:') || !function_exists('openssl_decrypt')) {
+    if (
+        $encoded === ''
+        || !str_starts_with($encoded, 'v1:')
+        || !function_exists('openssl_decrypt')
+    ) {
         return '';
     }
 
@@ -953,7 +1168,15 @@ function navigation_data_decrypt_secret(string $encoded): string
         return '';
     }
 
-    $plain = openssl_decrypt($cipher, 'aes-256-gcm', navigation_data_secret_key(), OPENSSL_RAW_DATA, $iv, $tag, 'navigation-data');
+    $plain = openssl_decrypt(
+        $cipher,
+        'aes-256-gcm',
+        navigation_data_secret_key(),
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+        'navigation-data',
+    );
     return $plain === false ? '' : $plain;
 }
 
@@ -965,15 +1188,23 @@ function navigation_data_decrypt_secret(string $encoded): string
 function navigation_data_secret_key(): string
 {
     $config = cms_config();
-    $navigation = is_array($config['navigation_data'] ?? null) ? $config['navigation_data'] : [];
-    $navigraph = is_array($navigation['navigraph'] ?? null) ? $navigation['navigraph'] : [];
+    $navigation = is_array($config['navigation_data'] ?? null)
+        ? $config['navigation_data']
+        : [];
+    $navigraph = is_array($navigation['navigraph'] ?? null)
+        ? $navigation['navigraph']
+        : [];
     $configuredKey = trim((string) ($navigraph['token_encryption_key'] ?? ''));
-    $keyMaterial = $configuredKey !== '' ? $configuredKey : implode('|', [
-        (string) ($config['visitor_vote_secret'] ?? ''),
-        (string) ($config['setup_key'] ?? ''),
-        (string) ($config['base_url'] ?? ''),
-        is_array($config['database'] ?? null) ? (string) ($config['database']['password'] ?? '') : '',
-    ]);
+    $keyMaterial = $configuredKey !== ''
+        ? $configuredKey
+        : implode('|', [
+            (string) ($config['visitor_vote_secret'] ?? ''),
+            (string) ($config['setup_key'] ?? ''),
+            (string) ($config['base_url'] ?? ''),
+            is_array($config['database'] ?? null)
+                ? (string) ($config['database']['password'] ?? '')
+                : '',
+        ]);
 
     return hash('sha256', $keyMaterial !== '' ? $keyMaterial : __FILE__, true);
 }
@@ -998,13 +1229,18 @@ function navigation_data_navigraph_cycle(): string
 function navigation_data_navigraph_authorization_url(): string
 {
     if (!navigation_data_navigraph_configured()) {
-        throw new RuntimeException('Navigraph OAuth is not configured. Add navigation_data.navigraph.client_id to config.php first.');
+        throw new RuntimeException(
+            'Navigraph OAuth is not configured. Add navigation_data.navigraph.client_id to config.php first.',
+        );
     }
 
     $config = navigation_data_config()['navigraph'];
     $state = navigation_data_random_url_token(32);
     $verifier = navigation_data_random_url_token(64);
-    $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+    $challenge = rtrim(
+        strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'),
+        '=',
+    );
     $redirectUri = navigation_data_navigraph_redirect_uri();
 
     session_context_set('navigation_data_navigraph_oauth', [
@@ -1017,13 +1253,17 @@ function navigation_data_navigraph_authorization_url(): string
         'client_id' => (string) $config['client_id'],
         'response_type' => 'code',
         'redirect_uri' => $redirectUri,
-        'scope' => (string) ($config['scope'] ?? 'openid profile offline_access'),
+        'scope' => (string) (
+            $config['scope'] ?? 'openid profile offline_access'
+        ),
         'state' => $state,
         'code_challenge' => $challenge,
         'code_challenge_method' => 'S256',
     ]);
 
-    return rtrim((string) $config['authorization_endpoint'], '?') . '?' . $query;
+    return (
+        rtrim((string) $config['authorization_endpoint'], '?') . '?' . $query
+    );
 }
 
 /**
@@ -1034,16 +1274,26 @@ function navigation_data_navigraph_authorization_url(): string
  * @param callable(string,array<string,string>,int):string|null $postForm Optional HTTP form transport; null uses the production HTTP adapter.
  * @return void Does not return a value.
  */
-function navigation_data_navigraph_exchange_code(string $code, string $state, ?callable $postForm = null): void
-{
+function navigation_data_navigraph_exchange_code(
+    string $code,
+    string $state,
+    ?callable $postForm = null,
+): void {
     $oauth = session_context_get('navigation_data_navigraph_oauth') ?? [];
-    if (!is_array($oauth) || !hash_equals((string) ($oauth['state'] ?? ''), $state)) {
-        throw new RuntimeException('Navigraph login state did not match. Start the connection again.');
+    if (
+        !is_array($oauth)
+        || !hash_equals((string) ($oauth['state'] ?? ''), $state)
+    ) {
+        throw new RuntimeException(
+            'Navigraph login state did not match. Start the connection again.',
+        );
     }
 
     $createdAt = (int) ($oauth['created_at'] ?? 0);
-    if ($createdAt <= 0 || time() - $createdAt > 900) {
-        throw new RuntimeException('Navigraph login state expired. Start the connection again.');
+    if ($createdAt <= 0 || (time() - $createdAt) > 900) {
+        throw new RuntimeException(
+            'Navigraph login state expired. Start the connection again.',
+        );
     }
 
     $config = navigation_data_config()['navigraph'];
@@ -1060,10 +1310,19 @@ function navigation_data_navigraph_exchange_code(string $code, string $state, ?c
 
     $response = $postForm !== null
         ? $postForm((string) $config['token_endpoint'], $fields, 30)
-        : navigation_data_http_post_form((string) $config['token_endpoint'], $fields, 30);
+        : navigation_data_http_post_form(
+            (string) $config['token_endpoint'],
+            $fields,
+            30,
+        );
     $payload = json_decode($response, true);
-    if (!is_array($payload) || trim((string) ($payload['access_token'] ?? '')) === '') {
-        throw new RuntimeException('Navigraph token response did not contain an access token.');
+    if (
+        !is_array($payload)
+        || trim((string) ($payload['access_token'] ?? '')) === ''
+    ) {
+        throw new RuntimeException(
+            'Navigraph token response did not contain an access token.',
+        );
     }
 
     navigation_data_navigraph_store_tokens($payload);
@@ -1079,7 +1338,10 @@ function navigation_data_navigraph_refresh_token_if_needed(): bool
 {
     $session = navigation_data_navigraph_session();
     $expiresAt = (int) ($session['expires_at'] ?? 0);
-    if ($expiresAt > time() + 120 && trim((string) ($session['access_token'] ?? '')) !== '') {
+    if (
+        $expiresAt > (time() + 120)
+        && trim((string) ($session['access_token'] ?? '')) !== ''
+    ) {
         return true;
     }
 
@@ -1099,17 +1361,29 @@ function navigation_data_navigraph_refresh_token_if_needed(): bool
     }
 
     try {
-        $response = navigation_data_http_post_form((string) $config['token_endpoint'], $fields, 30);
+        $response = navigation_data_http_post_form(
+            (string) $config['token_endpoint'],
+            $fields,
+            30,
+        );
         $payload = json_decode($response, true);
-        if (!is_array($payload) || trim((string) ($payload['access_token'] ?? '')) === '') {
+        if (
+            !is_array($payload)
+            || trim((string) ($payload['access_token'] ?? '')) === ''
+        ) {
             return false;
         }
         navigation_data_navigraph_store_tokens($payload);
         return true;
     } catch (Throwable $exception) {
-        admin_log_event('warning', 'navigation_data.navigraph_refresh_failed', 'Navigraph token refresh failed.', [
-            'error_code' => schema_inspection_error_code($exception),
-        ]);
+        admin_log_event(
+            'warning',
+            'navigation_data.navigraph_refresh_failed',
+            'Navigraph token refresh failed.',
+            [
+                'error_code' => schema_inspection_error_code($exception),
+            ],
+        );
         return false;
     }
 }
@@ -1122,38 +1396,55 @@ function navigation_data_navigraph_refresh_token_if_needed(): bool
 function navigation_data_navigraph_refresh_packages(): array
 {
     if (!navigation_data_navigraph_refresh_token_if_needed()) {
-        throw new RuntimeException('Navigraph is not connected or the token could not be refreshed.');
+        throw new RuntimeException(
+            'Navigraph is not connected or the token could not be refreshed.',
+        );
     }
 
     $config = navigation_data_config()['navigraph'];
     $url = (string) ($config['packages_endpoint'] ?? '');
     if ($url === '') {
-        throw new RuntimeException('Navigraph packages endpoint is not configured.');
+        throw new RuntimeException(
+            'Navigraph packages endpoint is not configured.',
+        );
     }
 
     $format = trim((string) ($config['package_format'] ?? ''));
     if ($format !== '') {
-        $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query(['format' => $format]);
+        $url .=
+            (str_contains($url, '?') ? '&' : '?')
+            . http_build_query(['format' => $format]);
     }
 
     $session = navigation_data_navigraph_session();
-    $response = navigation_data_http_get_json($url, [
-        'Authorization: Bearer ' . (string) ($session['access_token'] ?? ''),
-        'Accept: application/json',
-    ], 30);
+    $response = navigation_data_http_get_json(
+        $url,
+        [
+            'Authorization: Bearer '
+                . (string) ($session['access_token'] ?? ''),
+            'Accept: application/json',
+        ],
+        30,
+    );
     $packages = json_decode($response, true);
     if (!is_array($packages)) {
-        throw new RuntimeException('Navigraph packages response was not valid JSON.');
+        throw new RuntimeException(
+            'Navigraph packages response was not valid JSON.',
+        );
     }
 
     $bestPackage = navigation_data_navigraph_select_best_package($packages);
     if ($bestPackage === null) {
-        throw new RuntimeException('Navigraph packages response did not contain a usable package.');
+        throw new RuntimeException(
+            'Navigraph packages response did not contain a usable package.',
+        );
     }
 
     $session = navigation_data_navigraph_session();
     $session['package_cycle'] = (string) ($bestPackage['cycle'] ?? '');
-    $session['package_status'] = (string) ($bestPackage['package_status'] ?? '');
+    $session['package_status'] = (string) (
+        $bestPackage['package_status'] ?? ''
+    );
     $session['package_format'] = (string) ($bestPackage['format'] ?? '');
     $session['package_checked_at'] = now_sql();
     session_context_set('navigation_data_navigraph', $session);
@@ -1170,12 +1461,14 @@ function navigation_data_navigraph_refresh_packages(): array
 /**
  * Select the most useful package from a Navigraph packages response.
  *
- * @param array $packages Packages value.
- * @return array<string mixed>|null.
+ * @param list<array<string,mixed>> $packages Candidate package records from the provider response.
+ * @return array<string,mixed>|null Highest-ranked current/older package, or null for no valid package.
  */
 function navigation_data_navigraph_select_best_package(array $packages): ?array
 {
-    $flatPackages = array_values(array_filter($packages, static fn ($package): bool => is_array($package)));
+    $flatPackages = array_values(array_filter($packages, static fn(mixed $package): bool => is_array(
+        $package,
+    )));
     if ($flatPackages === []) {
         return null;
     }
@@ -1183,11 +1476,15 @@ function navigation_data_navigraph_select_best_package(array $packages): ?array
     usort($flatPackages, static function (array $left, array $right): int {
         $statusRank = ['current' => 0, 'outdated' => 1, 'future' => 2];
         $leftRank = $statusRank[(string) ($left['package_status'] ?? '')] ?? 9;
-        $rightRank = $statusRank[(string) ($right['package_status'] ?? '')] ?? 9;
+        $rightRank =
+            $statusRank[(string) ($right['package_status'] ?? '')] ?? 9;
         if ($leftRank !== $rightRank) {
             return $leftRank <=> $rightRank;
         }
-        return strcmp((string) ($right['cycle'] ?? ''), (string) ($left['cycle'] ?? ''));
+        return strcmp(
+            (string) ($right['cycle'] ?? ''),
+            (string) ($left['cycle'] ?? ''),
+        );
     });
 
     return $flatPackages[0];
@@ -1201,7 +1498,7 @@ function navigation_data_navigraph_select_best_package(array $packages): ?array
  * a non-existent public point-search API.
  *
  * @param string $ident Ident value.
- * @return array<string mixed>|null.
+ * @return array{ident:string,latitude:float,longitude:float,kind:string,source:string,cycle:string,region:string,name:string,remote_source?:string}|null Resolved point from the configured provider endpoint, or null when unavailable.
  */
 function navigation_data_navigraph_lookup(string $ident): ?array
 {
@@ -1222,30 +1519,46 @@ function navigation_data_navigraph_lookup(string $ident): ?array
     ]);
 
     try {
-        $response = navigation_data_http_get_json($url, [
-            'Authorization: Bearer ' . (string) ($session['access_token'] ?? ''),
-            'Accept: application/json',
-        ], 20);
+        $response = navigation_data_http_get_json(
+            $url,
+            [
+                'Authorization: Bearer '
+                    . (string) ($session['access_token'] ?? ''),
+                'Accept: application/json',
+            ],
+            20,
+        );
         $payload = json_decode($response, true);
         if (!is_array($payload)) {
             return null;
         }
-        $pointPayload = isset($payload[0]) && is_array($payload[0]) ? $payload[0] : $payload;
+        $pointPayload = isset($payload[0]) && is_array($payload[0])
+            ? $payload[0]
+            : $payload;
         return navigation_data_point_from_values(
             (string) ($pointPayload['ident'] ?? $ident),
             (float) ($pointPayload['latitude'] ?? $pointPayload['lat'] ?? 0.0),
             (float) ($pointPayload['longitude'] ?? $pointPayload['lng'] ?? 0.0),
-            (string) ($pointPayload['kind'] ?? $pointPayload['type'] ?? 'waypoint'),
+            (string) (
+                $pointPayload['kind']
+                ?? $pointPayload['type']
+                ?? 'waypoint'
+            ),
             NAVIGATION_DATA_SOURCE_NAVIGRAPH,
             navigation_data_navigraph_cycle(),
             (string) ($pointPayload['region'] ?? ''),
-            (string) ($pointPayload['name'] ?? '')
+            (string) ($pointPayload['name'] ?? ''),
         );
     } catch (Throwable $exception) {
-        admin_log_event('warning', 'navigation_data.navigraph_lookup_failed', 'Navigraph point lookup failed.', [
-            'ident' => $ident,
-            'error_code' => schema_inspection_error_code($exception),
-        ]);
+        admin_log_event(
+            'warning',
+            'navigation_data.navigraph_lookup_failed',
+            'Navigraph point lookup failed.',
+            [
+                'ident' => $ident,
+                'error_code' => schema_inspection_error_code($exception),
+            ],
+        );
         return null;
     }
 }
@@ -1257,7 +1570,9 @@ function navigation_data_navigraph_lookup(string $ident): ?array
  */
 function navigation_data_navigraph_redirect_uri(): string
 {
-    $configured = trim((string) (navigation_data_config()['navigraph']['redirect_uri'] ?? ''));
+    $configured = trim(
+        (string) (navigation_data_config()['navigraph']['redirect_uri'] ?? ''),
+    );
     if ($configured !== '') {
         return $configured;
     }
@@ -1282,7 +1597,7 @@ function navigation_data_random_url_token(int $bytes): string
  * payload is used only for diagnostics and UI hints, not for granting admin access.
  *
  * @param string $jwt Jwt value.
- * @return array<string mixed>.
+ * @return array<string,mixed> Decoded unverified JWT claims, or an empty array for malformed input.
  */
 function navigation_data_jwt_payload(string $jwt): array
 {
@@ -1291,7 +1606,7 @@ function navigation_data_jwt_payload(string $jwt): array
         return [];
     }
     $payload = strtr($parts[1], '-_', '+/');
-    $payload .= str_repeat('=', (4 - strlen($payload) % 4) % 4);
+    $payload .= str_repeat('=', (4 - (strlen($payload) % 4)) % 4);
     $decoded = base64_decode($payload, true);
     if ($decoded === false) {
         return [];
@@ -1304,12 +1619,15 @@ function navigation_data_jwt_payload(string $jwt): array
  * POST an application/x-www-form-urlencoded request.
  *
  * @param string $url URL used by this workflow.
- * @param array $fields Fields value.
+ * @param array<string,string|int|float|bool> $fields Form fields encoded into the request body.
  * @param int $timeoutSeconds Timeout seconds value.
- * @return string Text result for the caller.
+ * @return string Successful HTTP response body.
  */
-function navigation_data_http_post_form(string $url, array $fields, int $timeoutSeconds): string
-{
+function navigation_data_http_post_form(
+    string $url,
+    array $fields,
+    int $timeoutSeconds,
+): string {
     if (function_exists('curl_init')) {
         $handle = curl_init($url);
         if ($handle === false) {
@@ -1323,8 +1641,17 @@ function navigation_data_http_post_form(string $url, array $fields, int $timeout
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 15),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
-            CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'],
+            CURLOPT_USERAGENT =>
+                'PHP-Gallery-CMS/'
+                    . (
+                        function_exists('Gallery\\Core\\cms_current_version')
+                            ? cms_current_version()
+                            : 'dev'
+                    ),
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Accept: application/json',
+            ],
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
@@ -1333,7 +1660,11 @@ function navigation_data_http_post_form(string $url, array $fields, int $timeout
         $error = curl_error($handle);
         curl_close($handle);
         if ($body === false || $status >= 400) {
-            throw new RuntimeException($error !== '' ? $error : 'HTTP request failed with status ' . $status . '.');
+            throw new RuntimeException(
+                $error !== ''
+                    ? $error
+                    : 'HTTP request failed with status ' . $status . '.',
+            );
         }
         return (string) $body;
     }
@@ -1353,7 +1684,9 @@ function navigation_data_http_post_form(string $url, array $fields, int $timeout
     ]);
     $body = @file_get_contents($url, false, $context);
     if ($body === false) {
-        throw new RuntimeException('HTTP request failed. Enable curl or allow_url_fopen.');
+        throw new RuntimeException(
+            'HTTP request failed. Enable curl or allow_url_fopen.',
+        );
     }
     return (string) $body;
 }
@@ -1362,12 +1695,15 @@ function navigation_data_http_post_form(string $url, array $fields, int $timeout
  * GET a JSON endpoint with optional headers.
  *
  * @param string $url URL used by this workflow.
- * @param array $headers Headers value.
+ * @param list<string> $headers HTTP request header lines.
  * @param int $timeoutSeconds Timeout seconds value.
- * @return string Text result for the caller.
+ * @return string Successful HTTP response body.
  */
-function navigation_data_http_get_json(string $url, array $headers, int $timeoutSeconds): string
-{
+function navigation_data_http_get_json(
+    string $url,
+    array $headers,
+    int $timeoutSeconds,
+): string {
     if (function_exists('Gallery\\Services\\http_fetch_with_headers')) {
         return http_fetch_with_headers($url, $timeoutSeconds, $headers);
     }
@@ -1383,7 +1719,13 @@ function navigation_data_http_get_json(string $url, array $headers, int $timeout
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 15),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
+            CURLOPT_USERAGENT =>
+                'PHP-Gallery-CMS/'
+                    . (
+                        function_exists('Gallery\\Core\\cms_current_version')
+                            ? cms_current_version()
+                            : 'dev'
+                    ),
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
@@ -1393,7 +1735,11 @@ function navigation_data_http_get_json(string $url, array $headers, int $timeout
         $error = curl_error($handle);
         curl_close($handle);
         if ($body === false || $status >= 400) {
-            throw new RuntimeException($error !== '' ? $error : 'HTTP request failed with status ' . $status . '.');
+            throw new RuntimeException(
+                $error !== ''
+                    ? $error
+                    : 'HTTP request failed with status ' . $status . '.',
+            );
         }
         return (string) $body;
     }
@@ -1402,7 +1748,10 @@ function navigation_data_http_get_json(string $url, array $headers, int $timeout
         'http' => [
             'method' => 'GET',
             'timeout' => $timeoutSeconds,
-            'header' => implode("\r\n", array_merge($headers, ['User-Agent: PHP-Gallery-CMS'])) . "\r\n",
+            'header' =>
+                implode("\r\n", array_merge($headers, [
+                    'User-Agent: PHP-Gallery-CMS',
+                ])) . "\r\n",
             'ignore_errors' => true,
         ],
         'ssl' => [
@@ -1412,7 +1761,9 @@ function navigation_data_http_get_json(string $url, array $headers, int $timeout
     ]);
     $body = @file_get_contents($url, false, $context);
     if ($body === false) {
-        throw new RuntimeException('HTTP request failed. Enable curl or allow_url_fopen.');
+        throw new RuntimeException(
+            'HTTP request failed. Enable curl or allow_url_fopen.',
+        );
     }
     return (string) $body;
 }

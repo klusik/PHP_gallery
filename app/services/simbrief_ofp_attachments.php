@@ -54,8 +54,16 @@ require_once __DIR__ . '/gallery_pdf_settings.php';
 function gallery_pdf_documents_present(array $gallery): bool
 {
     $directory = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
-    return is_file($directory . DIRECTORY_SEPARATOR . '.gallery-pdf-documents' . DIRECTORY_SEPARATOR . 'index.json')
-        || simbrief_ofp_local_pdf_path($gallery) !== null;
+    return (
+        is_file(
+            $directory
+                . DIRECTORY_SEPARATOR
+                . '.gallery-pdf-documents'
+                . DIRECTORY_SEPARATOR
+                . 'index.json',
+        )
+            || simbrief_ofp_local_pdf_path($gallery) !== null
+    );
 }
 
 /**
@@ -74,8 +82,10 @@ function gallery_pdf_documents_present(array $gallery): bool
  *                      outside anonymous-preview mode.
  * @return bool True only when PDF download and inline reading are authorized.
  */
-function simbrief_ofp_visitor_access_allowed(array $gallery, bool $isAdmin): bool
-{
+function simbrief_ofp_visitor_access_allowed(
+    array $gallery,
+    bool $isAdmin,
+): bool {
     if ($isAdmin) {
         return true;
     }
@@ -100,53 +110,99 @@ function simbrief_ofp_local_pdf_path(array $gallery): ?string
     if ($relative === '' || (int) ($gallery['id'] ?? 0) <= 0) {
         return null;
     }
-    if (!function_exists('Gallery\\Services\\gallery_abs_path')
+    if (
+        !function_exists('Gallery\\Services\\gallery_abs_path')
         || !function_exists('Gallery\\Services\\galleries_root')
-        || !function_exists('Gallery\\Core\\path_inside')) {
+        || !function_exists('Gallery\\Core\\path_inside')
+    ) {
         return null;
     }
-    $root = storage_observer_call('fs.realpath',
-        static fn(): string|false => realpath(gallery_abs_path($relative)));
-    $galleriesRoot = storage_observer_call('fs.realpath', static fn(): string|false => realpath(galleries_root()));
-    if ($root === false || $galleriesRoot === false || !\Gallery\Core\path_inside($galleriesRoot, $root)) {
+    $root = storage_observer_call('fs.realpath', static fn(): string|false => realpath(gallery_abs_path(
+        $relative,
+    )));
+    $galleriesRoot = storage_observer_call('fs.realpath', static fn(): string|false => realpath(
+        galleries_root(),
+    ));
+    if (
+        $root === false
+        || $galleriesRoot === false
+        || !\Gallery\Core\path_inside($galleriesRoot, $root)
+    ) {
         return null;
     }
     $manifestPath = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
-    if (!storage_observer_call('fs.is_file', static fn(): bool => is_file($manifestPath))
-        || storage_observer_call('fs.is_link', static fn(): bool => is_link($manifestPath))
-        || (int) storage_observer_call('fs.filesize',
-            static fn(): int|false => filesize($manifestPath)) > 32768) {
+    if (
+        !storage_observer_call('fs.is_file', static fn(): bool => is_file(
+            $manifestPath,
+        ))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link(
+            $manifestPath,
+        ))
+        || (int) storage_observer_call('fs.filesize', static fn(): int|false => filesize(
+            $manifestPath,
+        )) > 32768
+    ) {
         return null;
     }
-    $json = storage_observer_call('fs.read.ofp_manifest',
-        static fn(): string|false => @file_get_contents($manifestPath));
+    $json = storage_observer_call(
+        'fs.read.ofp_manifest',
+        static fn(): string|false => @file_get_contents($manifestPath),
+    );
     $manifest = is_string($json) ? json_decode($json, true) : null;
-    if (!is_array($manifest)
-        || ($manifest['format'] ?? '') !== 'php_gallery_simbrief_ofp_manifest_v1'
-        || ($manifest['ofp_pdf_file'] ?? '') !== 'simbrief-ofp.pdf') {
+    if (
+        !is_array($manifest)
+        || ($manifest['format'] ?? '')
+            !== 'php_gallery_simbrief_ofp_manifest_v1'
+        || ($manifest['ofp_pdf_file'] ?? '') !== 'simbrief-ofp.pdf'
+    ) {
         return null;
     }
     $candidate = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
-    if (!storage_observer_call('fs.is_file', static fn(): bool => is_file($candidate))
-        || storage_observer_call('fs.is_link', static fn(): bool => is_link($candidate))) {
+    if (
+        !storage_observer_call('fs.is_file', static fn(): bool => is_file(
+            $candidate,
+        ))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link(
+            $candidate,
+        ))
+    ) {
         return null;
     }
-    $path = storage_observer_call('fs.realpath', static fn(): string|false => realpath($candidate));
+    $path = storage_observer_call('fs.realpath', static fn(): string|false => realpath(
+        $candidate,
+    ));
     $size = $path !== false
-        ? storage_observer_call('fs.filesize', static fn(): int|false => @filesize($path)) : false;
-    if ($path === false || !\Gallery\Core\path_inside($root, $path)
-        || $size === false || $size < 8 || $size > 26214400) {
+        ? storage_observer_call(
+            'fs.filesize',
+            static fn(): int|false => @filesize($path),
+        )
+        : false;
+    if (
+        $path === false
+        || !\Gallery\Core\path_inside($root, $path)
+        || $size === false
+        || $size < 8
+        || $size > 26214400
+    ) {
         return null;
     }
     // PHP cannot express resource|false natively; preserve the original stream.
-    $handle = storage_observer_call('fs.fopen.ofp', static fn(): mixed => @fopen($path, 'rb'));
+    $handle = storage_observer_call(
+        'fs.fopen.ofp',
+        static fn(): mixed => @fopen($path, 'rb'),
+    );
     if ($handle === false) {
         return null;
     }
     try {
-        $magic = storage_observer_call('fs.read.ofp_magic', static fn(): string|false => fread($handle, 5));
+        $magic = storage_observer_call('fs.read.ofp_magic', static fn(): string|false => fread(
+            $handle,
+            5,
+        ));
     } finally {
-        storage_observer_call('fs.fclose.ofp', static fn(): bool => fclose($handle));
+        storage_observer_call('fs.fclose.ofp', static fn(): bool => fclose(
+            $handle,
+        ));
     }
     return $magic === '%PDF-' ? $path : null;
 }
@@ -162,8 +218,10 @@ function simbrief_ofp_conversion_supported(): bool
         return false;
     }
     try {
-        return in_array('PDF', \Imagick::queryFormats('PDF'), true)
-            && in_array('JPEG', \Imagick::queryFormats('JPEG'), true);
+        return (
+            in_array('PDF', \Imagick::queryFormats('PDF'), true)
+                && in_array('JPEG', \Imagick::queryFormats('JPEG'), true)
+        );
     } catch (\Throwable) {
         return false;
     }
@@ -177,8 +235,12 @@ function simbrief_ofp_conversion_supported(): bool
  */
 function simbrief_ofp_gallery_directory(array $gallery): ?string
 {
-    if ((int) ($gallery['id'] ?? 0) < 1 || !function_exists('Gallery\\Services\\gallery_abs_path')
-        || !function_exists('Gallery\\Services\\galleries_root') || !function_exists('Gallery\\Core\\path_inside')) {
+    if (
+        (int) ($gallery['id'] ?? 0) < 1
+        || !function_exists('Gallery\\Services\\gallery_abs_path')
+        || !function_exists('Gallery\\Services\\galleries_root')
+        || !function_exists('Gallery\\Core\\path_inside')
+    ) {
         return null;
     }
     $relative = trim((string) ($gallery['folder_path'] ?? ''));
@@ -188,8 +250,12 @@ function simbrief_ofp_gallery_directory(array $gallery): ?string
     $candidate = gallery_abs_path($relative);
     $root = realpath($candidate);
     $base = realpath(galleries_root());
-    if ($root === false || $base === false || is_link($candidate)
-        || !\Gallery\Core\path_inside($base, $root)) {
+    if (
+        $root === false
+        || $base === false
+        || is_link($candidate)
+        || !\Gallery\Core\path_inside($base, $root)
+    ) {
         return null;
     }
     return $root;
@@ -213,8 +279,13 @@ function simbrief_ofp_gallery_manifest(array $gallery): array
     }
     $json = @file_get_contents($path);
     $manifest = is_string($json) ? json_decode($json, true) : null;
-    return is_array($manifest) && ($manifest['format'] ?? '') === 'php_gallery_simbrief_ofp_manifest_v1'
-        ? $manifest : [];
+    return (
+        is_array($manifest)
+        && ($manifest['format'] ?? '')
+        === 'php_gallery_simbrief_ofp_manifest_v1'
+            ? $manifest
+            : []
+    );
 }
 
 /**
@@ -236,19 +307,45 @@ function simbrief_ofp_dispatch_value(string $field, string $value): string
         // Imported SimBrief snapshots may use the documented DDMMMYY form.
         // Interpret only the unambiguous 2000-2099 range also supported by the
         // client redirect encoder; never guess a 1900s century for a gallery.
-        if (preg_match('/^(\\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\\d{2})$/D', $value, $matched)) {
-            $months = ['JAN' => 1, 'FEB' => 2, 'MAR' => 3, 'APR' => 4, 'MAY' => 5, 'JUN' => 6,
-                'JUL' => 7, 'AUG' => 8, 'SEP' => 9, 'OCT' => 10, 'NOV' => 11, 'DEC' => 12];
-            $value = sprintf('%04d-%02d-%02d', 2000 + (int) $matched[3],
-                $months[$matched[2]], (int) $matched[1]);
+        if (preg_match(
+            '/^(\\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\\d{2})$/D',
+            $value,
+            $matched,
+        )) {
+            $months = [
+                'JAN' => 1,
+                'FEB' => 2,
+                'MAR' => 3,
+                'APR' => 4,
+                'MAY' => 5,
+                'JUN' => 6,
+                'JUL' => 7,
+                'AUG' => 8,
+                'SEP' => 9,
+                'OCT' => 10,
+                'NOV' => 11,
+                'DEC' => 12,
+            ];
+            $value = sprintf(
+                '%04d-%02d-%02d',
+                2000 + (int) $matched[3],
+                $months[$matched[2]],
+                (int) $matched[1],
+            );
         }
         $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-        return $date instanceof \DateTimeImmutable && $date->format('Y-m-d') === $value ? $value : '';
+        return $date instanceof \DateTimeImmutable
+        && $date->format('Y-m-d') === $value
+            ? $value
+            : '';
     }
     if ($field === 'fl' && preg_match('/^FL(\d{2,3})$/D', $value, $matched)) {
         $value = $matched[1];
-    } elseif ($field === 'fl' && preg_match('/^\d{4,5}$/D', $value)
-        && (int) $value % 100 === 0) {
+    } elseif (
+        $field === 'fl'
+        && preg_match('/^\d{4,5}$/D', $value)
+        && ((int) $value % 100) === 0
+    ) {
         $value = (string) ((int) $value / 100);
     }
     $patterns = [
@@ -266,7 +363,10 @@ function simbrief_ofp_dispatch_value(string $field, string $value): string
         'deph' => '/^\d{1,2}$/D',
         'depm' => '/^\d{1,2}$/D',
     ];
-    if (!isset($patterns[$field]) || preg_match($patterns[$field], $value) !== 1) {
+    if (
+        !isset($patterns[$field])
+        || preg_match($patterns[$field], $value) !== 1
+    ) {
         return '';
     }
     if ($field === 'fl' && (int) $value > 600) {
@@ -292,18 +392,42 @@ function simbrief_ofp_dispatch_value(string $field, string $value): string
  * @param ?array<string,mixed> $flightMap Existing structured map, if loaded.
  * @return array{fields:array<string,array{value:string,source:string,uncertain:bool}>,has_snapshot:bool} Validated value and provenance for every supported dispatch parameter.
  */
-function simbrief_ofp_dispatch_prefill(array $gallery, ?array $flightMap = null): array
-{
+function simbrief_ofp_dispatch_prefill(
+    array $gallery,
+    ?array $flightMap = null,
+): array {
     $fields = [];
-    foreach (['orig', 'dest', 'date', 'deph', 'depm', 'type', 'airline', 'fltnum',
-        'callsign', 'reg', 'route', 'fl', 'altn', 'pax'] as $field) {
-        $fields[$field] = ['value' => '', 'source' => 'missing', 'uncertain' => false];
+    foreach ([
+        'orig',
+        'dest',
+        'date',
+        'deph',
+        'depm',
+        'type',
+        'airline',
+        'fltnum',
+        'callsign',
+        'reg',
+        'route',
+        'fl',
+        'altn',
+        'pax',
+    ] as $field) {
+        $fields[$field] = [
+            'value' => '',
+            'source' => 'missing',
+            'uncertain' => false,
+        ];
     }
     $root = simbrief_ofp_gallery_directory($gallery);
     $snapshot = [];
     if ($root !== null) {
         $path = $root . '/simbrief-ofp.json';
-        if (is_file($path) && !is_link($path) && (int) @filesize($path) <= 8388608) {
+        if (
+            is_file($path)
+            && !is_link($path)
+            && (int) @filesize($path) <= 8388608
+        ) {
             $raw = @file_get_contents($path);
             $decoded = is_string($raw) ? json_decode($raw, true) : null;
             if (is_array($decoded)) {
@@ -331,53 +455,94 @@ function simbrief_ofp_dispatch_prefill(array $gallery, ?array $flightMap = null)
         foreach ($candidates as $path) {
             $node = $snapshot;
             foreach (explode('.', $path) as $segment) {
-                $node = is_array($node) ? ($node[$segment] ?? null) : null;
+                $node = is_array($node) ? $node[$segment] ?? null : null;
             }
             if (!is_string($node) && !is_numeric($node)) {
                 continue;
             }
             $value = simbrief_ofp_dispatch_value($field, (string) $node);
             if ($value !== '') {
-                $fields[$field] = ['value' => $value, 'source' => 'saved_ofp', 'uncertain' => false];
+                $fields[$field] = [
+                    'value' => $value,
+                    'source' => 'saved_ofp',
+                    'uncertain' => false,
+                ];
                 break;
             }
         }
     }
     if ($fields['date']['value'] === '') {
-        $date = simbrief_ofp_dispatch_value('date', (string) ($gallery['gallery_date'] ?? ''));
+        $date = simbrief_ofp_dispatch_value(
+            'date',
+            (string) ($gallery['gallery_date'] ?? ''),
+        );
         $end = trim((string) ($gallery['gallery_date_end'] ?? ''));
         if ($date !== '' && ($end === '' || $end === $date)) {
-            $fields['date'] = ['value' => $date, 'source' => 'gallery_date', 'uncertain' => true];
+            $fields['date'] = [
+                'value' => $date,
+                'source' => 'gallery_date',
+                'uncertain' => true,
+            ];
         }
     }
     if (is_array($flightMap)) {
         if ($fields['route']['value'] === '') {
-            $route = simbrief_ofp_dispatch_value('route', (string) ($flightMap['route_text'] ?? ''));
+            $route = simbrief_ofp_dispatch_value(
+                'route',
+                (string) ($flightMap['route_text'] ?? ''),
+            );
             if ($route !== '') {
-                $fields['route'] = ['value' => $route, 'source' => 'route_map', 'uncertain' => true];
+                $fields['route'] = [
+                    'value' => $route,
+                    'source' => 'route_map',
+                    'uncertain' => true,
+                ];
             }
         }
-        if (function_exists('Gallery\\Services\\gallery_flight_map_points_from_row')) {
+        if (function_exists(
+            'Gallery\\Services\\gallery_flight_map_points_from_row',
+        )) {
             $points = gallery_flight_map_points_from_row($flightMap);
             foreach ($points as $point) {
-                if (!is_array($point) || (string) ($point['kind'] ?? '') !== 'airport') {
+                if (
+                    !is_array($point)
+                    || (string) ($point['kind'] ?? '') !== 'airport'
+                ) {
                     continue;
                 }
-                $field = ($point['role'] ?? '') === 'start' ? 'orig'
+                $field = ($point['role'] ?? '') === 'start'
+                    ? 'orig'
                     : (($point['role'] ?? '') === 'end' ? 'dest' : '');
                 if ($field !== '' && $fields[$field]['value'] === '') {
-                    $value = simbrief_ofp_dispatch_value($field, (string) ($point['name'] ?? ''));
+                    $value = simbrief_ofp_dispatch_value(
+                        $field,
+                        (string) ($point['name'] ?? ''),
+                    );
                     if ($value !== '') {
-                        $fields[$field] = ['value' => $value, 'source' => 'route_map', 'uncertain' => true];
+                        $fields[$field] = [
+                            'value' => $value,
+                            'source' => 'route_map',
+                            'uncertain' => true,
+                        ];
                     }
                 }
             }
         }
     }
     // Never prefill half of a UTC departure time.
-    if (($fields['deph']['value'] === '') !== ($fields['depm']['value'] === '')) {
-        $fields['deph'] = ['value' => '', 'source' => 'missing', 'uncertain' => false];
-        $fields['depm'] = ['value' => '', 'source' => 'missing', 'uncertain' => false];
+    if (
+        ($fields['deph']['value'] === '') !== ($fields['depm']['value'] === '')
+    ) {
+        $fields['deph'] = [
+            'value' => '',
+            'source' => 'missing',
+            'uncertain' => false,
+        ];
+        $fields['depm'] = [
+            'value' => '',
+            'source' => 'missing',
+            'uncertain' => false,
+        ];
     }
     return ['fields' => $fields, 'has_snapshot' => $snapshot !== []];
 }
@@ -395,21 +560,33 @@ function simbrief_ofp_dispatch_prefill(array $gallery, ?array $flightMap = null)
  * @param bool $replace Explicit replacement request and confirmation.
  * @return array{sha256:string,bytes:int,provenance:string} Saved attachment summary.
  */
-function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $provenance, bool $replace = false): array
-{
-    if (!in_array($provenance, ['retrospective_user_generated', 'manually_supplied'], true)) {
+function simbrief_ofp_attach_manual_pdf(
+    array $gallery,
+    string $source,
+    string $provenance,
+    bool $replace = false,
+): array {
+    if (!in_array(
+        $provenance,
+        ['retrospective_user_generated', 'manually_supplied'],
+        true,
+    )) {
         throw new \RuntimeException('Choose a valid OFP document origin.');
     }
     $root = simbrief_ofp_gallery_directory($gallery);
     if ($root === null) {
-        throw new \RuntimeException('The selected gallery folder is unavailable.');
+        throw new \RuntimeException(
+            'The selected gallery folder is unavailable.',
+        );
     }
     if (!is_file($source) || is_link($source)) {
         throw new \RuntimeException('Select an uploaded PDF file.');
     }
     $size = @filesize($source);
     if ($size === false || $size < 16 || $size > 26214400) {
-        throw new \RuntimeException('The PDF must be between 16 bytes and 25 MiB.');
+        throw new \RuntimeException(
+            'The PDF must be between 16 bytes and 25 MiB.',
+        );
     }
     $handle = @fopen($source, 'rb');
     if ($handle === false) {
@@ -424,9 +601,18 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
     } finally {
         fclose($handle);
     }
-    $mime = function_exists('finfo_open') ? (new \finfo(FILEINFO_MIME_TYPE))->file($source) : null;
-    if ($magic !== '%PDF-' || !is_string($tail) || !str_contains($tail, '%%EOF')
-        || ($mime !== null && !in_array($mime, ['application/pdf', 'application/x-pdf'], true))) {
+    $mime = function_exists('finfo_open')
+        ? (new \finfo(FILEINFO_MIME_TYPE))->file($source)
+        : null;
+    if (
+        $magic !== '%PDF-'
+        || !is_string($tail)
+        || !str_contains($tail, '%%EOF')
+        || (
+            $mime !== null
+            && !in_array($mime, ['application/pdf', 'application/x-pdf'], true)
+        )
+    ) {
         throw new \RuntimeException('The file is not a valid PDF document.');
     }
 
@@ -455,13 +641,22 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
         }
         $existing = is_file($pdf);
         if ($existing && !$replace) {
-            throw new \RuntimeException('An OFP PDF is already attached. Use the separate confirmed replacement action.');
+            throw new \RuntimeException(
+                'An OFP PDF is already attached. Use the separate confirmed replacement action.',
+            );
         }
         if (!$existing && $replace) {
-            throw new \RuntimeException('No PDF exists to replace. Reload the gallery editor.');
+            throw new \RuntimeException(
+                'No PDF exists to replace. Reload the gallery editor.',
+            );
         }
-        if (is_file($manifestPath) && simbrief_ofp_gallery_manifest($gallery) === []) {
-            throw new \RuntimeException('The existing OFP manifest is invalid and was preserved.');
+        if (
+            is_file($manifestPath)
+            && simbrief_ofp_gallery_manifest($gallery) === []
+        ) {
+            throw new \RuntimeException(
+                'The existing OFP manifest is invalid and was preserved.',
+            );
         }
         $manifest = simbrief_ofp_gallery_manifest($gallery);
         if ($manifest === []) {
@@ -471,12 +666,20 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
         $manifest['ofp_pdf_url'] = '';
         $manifest['pdf_provenance'] = $provenance;
         $manifest['pdf_attached_at'] = gmdate('Y-m-d\TH:i:s\Z');
-        if (!isset($manifest['ofp_file']) && is_file($root . '/simbrief-ofp.json')) {
+        if (
+            !isset($manifest['ofp_file'])
+            && is_file($root . '/simbrief-ofp.json')
+        ) {
             $manifest['ofp_file'] = 'simbrief-ofp.json';
         }
-        $json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode(
+            $manifest,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         if (!is_string($json) || strlen($json) > 32768) {
-            throw new \RuntimeException('The OFP manifest cannot be stored safely.');
+            throw new \RuntimeException(
+                'The OFP manifest cannot be stored safely.',
+            );
         }
         $suffix = bin2hex(random_bytes(12));
         $stagePdf = $root . '/.simbrief-ofp-' . $suffix . '.tmp';
@@ -484,8 +687,10 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
         $in = @fopen($source, 'rb');
         $out = @fopen($stagePdf, 'xb');
         if ($in === false || $out === false) {
-            if (is_resource($in)) fclose($in);
-            if (is_resource($out)) fclose($out);
+            if (is_resource($in))
+                fclose($in);
+            if (is_resource($out))
+                fclose($out);
             throw new \RuntimeException('The PDF cannot be staged.');
         }
         $written = 0;
@@ -494,11 +699,18 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
             while (!feof($in)) {
                 $chunk = fread($in, 65536);
                 if (!is_string($chunk) || ($chunk === '' && !feof($in))) {
-                    throw new \RuntimeException('The PDF upload was interrupted.');
+                    throw new \RuntimeException(
+                        'The PDF upload was interrupted.',
+                    );
                 }
                 $written += strlen($chunk);
-                if ($written > 26214400 || fwrite($out, $chunk) !== strlen($chunk)) {
-                    throw new \RuntimeException('The PDF could not be fully staged.');
+                if (
+                    $written > 26214400
+                    || fwrite($out, $chunk) !== strlen($chunk)
+                ) {
+                    throw new \RuntimeException(
+                        'The PDF could not be fully staged.',
+                    );
                 }
             }
             fflush($out);
@@ -506,14 +718,22 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
             fclose($in);
             fclose($out);
         }
-        if ($written !== $size || @file_put_contents($stageManifest, $json . "\n", LOCK_EX) !== strlen($json) + 1) {
-            throw new \RuntimeException('The OFP attachment could not be staged completely.');
+        if (
+            $written !== $size
+            || @file_put_contents($stageManifest, $json . "\n", LOCK_EX)
+                !== (strlen($json) + 1)
+        ) {
+            throw new \RuntimeException(
+                'The OFP attachment could not be staged completely.',
+            );
         }
         @chmod($stageManifest, 0600);
         if ($existing) {
             $backup = $root . '/.simbrief-ofp-' . $suffix . '.bak';
             if (!@copy($pdf, $backup)) {
-                throw new \RuntimeException('The original PDF could not be backed up for replacement.');
+                throw new \RuntimeException(
+                    'The original PDF could not be backed up for replacement.',
+                );
             }
             @chmod($backup, 0600);
         }
@@ -528,13 +748,21 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
             } else {
                 @unlink($pdf);
             }
-            throw new \RuntimeException('The PDF manifest could not be installed; the previous attachment was retained.');
+            throw new \RuntimeException(
+                'The PDF manifest could not be installed; the previous attachment was retained.',
+            );
         }
         $stageManifest = '';
         gallery_attachment_storage_record(
-            (int) $gallery['id'], 'ofp', [['size' => $written]]
+            (int) $gallery['id'],
+            'ofp',
+            [['size' => $written]],
         );
-        return ['sha256' => (string) hash_file('sha256', $pdf), 'bytes' => $written, 'provenance' => $provenance];
+        return [
+            'sha256' => (string) hash_file('sha256', $pdf),
+            'bytes' => $written,
+            'provenance' => $provenance,
+        ];
     } finally {
         foreach ([$stagePdf, $stageManifest, $backup] as $temporary) {
             if ($temporary !== '' && is_file($temporary)) {
@@ -553,14 +781,20 @@ function simbrief_ofp_attach_manual_pdf(array $gallery, string $source, string $
  * @return bool True when the PDF attachment was removed; false when it was already absent.
  * @throws \RuntimeException When confirmation is missing or safe atomic metadata update fails.
  */
-function simbrief_ofp_delete_manual_pdf(array $gallery, bool $confirmed = false): bool
-{
+function simbrief_ofp_delete_manual_pdf(
+    array $gallery,
+    bool $confirmed = false,
+): bool {
     if (!$confirmed) {
-        throw new \RuntimeException('Deleting the OFP PDF requires explicit confirmation.');
+        throw new \RuntimeException(
+            'Deleting the OFP PDF requires explicit confirmation.',
+        );
     }
     $root = simbrief_ofp_gallery_directory($gallery);
     if ($root === null) {
-        throw new \RuntimeException('The selected gallery folder is unavailable.');
+        throw new \RuntimeException(
+            'The selected gallery folder is unavailable.',
+        );
     }
     $lockPath = $root . DIRECTORY_SEPARATOR . '.simbrief-ofp-upload.lock';
     if (is_link($lockPath)) {
@@ -579,7 +813,8 @@ function simbrief_ofp_delete_manual_pdf(array $gallery, bool $confirmed = false)
             throw new \RuntimeException('OFP attachment storage is busy.');
         }
         $pdf = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
-        $manifestPath = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
+        $manifestPath =
+            $root . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
         if (is_link($pdf) || is_link($manifestPath)) {
             throw new \RuntimeException('OFP attachment storage is unsafe.');
         }
@@ -587,34 +822,68 @@ function simbrief_ofp_delete_manual_pdf(array $gallery, bool $confirmed = false)
             return false;
         }
         if (simbrief_ofp_local_pdf_path($gallery) !== $pdf) {
-            throw new \RuntimeException('The OFP PDF is invalid or outside its registered gallery path.');
+            throw new \RuntimeException(
+                'The OFP PDF is invalid or outside its registered gallery path.',
+            );
         }
         $manifest = simbrief_ofp_gallery_manifest($gallery);
         if ($manifest === []) {
-            throw new \RuntimeException('The existing OFP manifest is invalid and was preserved.');
+            throw new \RuntimeException(
+                'The existing OFP manifest is invalid and was preserved.',
+            );
         }
         if (($manifest['ofp_pdf_file'] ?? '') !== 'simbrief-ofp.pdf') {
-            throw new \RuntimeException('The PDF attachment is not registered in the OFP manifest.');
+            throw new \RuntimeException(
+                'The PDF attachment is not registered in the OFP manifest.',
+            );
         }
-        unset($manifest['ofp_pdf_file'], $manifest['pdf_provenance'], $manifest['pdf_attached_at']);
+        unset(
+            $manifest['ofp_pdf_file'],
+            $manifest['pdf_provenance'],
+            $manifest['pdf_attached_at'],
+        );
         $manifest['ofp_pdf_url'] = '';
-        $json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode(
+            $manifest,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         if (!is_string($json) || strlen($json) > 32768) {
-            throw new \RuntimeException('The updated OFP manifest cannot be stored safely.');
+            throw new \RuntimeException(
+                'The updated OFP manifest cannot be stored safely.',
+            );
         }
         $suffix = bin2hex(random_bytes(12));
-        $stageManifest = $root . DIRECTORY_SEPARATOR . '.simbrief-ofp-delete-' . $suffix . '.json.tmp';
-        $backupPdf = $root . DIRECTORY_SEPARATOR . '.simbrief-ofp-delete-' . $suffix . '.pdf.bak';
-        if (@file_put_contents($stageManifest, $json . "\n", LOCK_EX) !== strlen($json) + 1) {
-            throw new \RuntimeException('The updated OFP manifest could not be staged.');
+        $stageManifest =
+            $root
+            . DIRECTORY_SEPARATOR
+            . '.simbrief-ofp-delete-'
+            . $suffix
+            . '.json.tmp';
+        $backupPdf =
+            $root
+            . DIRECTORY_SEPARATOR
+            . '.simbrief-ofp-delete-'
+            . $suffix
+            . '.pdf.bak';
+        if (
+            @file_put_contents($stageManifest, $json . "\n", LOCK_EX)
+            !== (strlen($json) + 1)
+        ) {
+            throw new \RuntimeException(
+                'The updated OFP manifest could not be staged.',
+            );
         }
         @chmod($stageManifest, 0600);
         if (!@rename($pdf, $backupPdf)) {
-            throw new \RuntimeException('The OFP PDF could not be protected for deletion.');
+            throw new \RuntimeException(
+                'The OFP PDF could not be protected for deletion.',
+            );
         }
         $restorePdf = $pdf;
         if (!@rename($stageManifest, $manifestPath)) {
-            throw new \RuntimeException('The updated OFP manifest could not be installed.');
+            throw new \RuntimeException(
+                'The updated OFP manifest could not be installed.',
+            );
         }
         $stageManifest = '';
         @unlink($backupPdf);
@@ -630,7 +899,10 @@ function simbrief_ofp_delete_manual_pdf(array $gallery, bool $confirmed = false)
         }
         // A failed rollback must retain the denied backup for administrator
         // recovery rather than deleting the only remaining original bytes.
-        foreach ([$stageManifest, $restorePdf === '' ? $backupPdf : ''] as $temporary) {
+        foreach ([
+            $stageManifest,
+            $restorePdf === '' ? $backupPdf : '',
+        ] as $temporary) {
             if ($temporary !== '' && is_file($temporary)) {
                 @unlink($temporary);
             }
@@ -639,4 +911,3 @@ function simbrief_ofp_delete_manual_pdf(array $gallery, bool $confirmed = false)
         fclose($lock);
     }
 }
-

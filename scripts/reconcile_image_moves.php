@@ -22,17 +22,34 @@ require dirname(__DIR__) . '/app/bootstrap_full.php';
 try {
     $arguments = array_slice($argv, 1);
     if ($arguments === [] || $arguments === ['--list']) {
-        echo json_encode(\Gallery\Services\gallery_image_move_pending(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
+        echo
+            json_encode(
+                \Gallery\Services\gallery_image_move_pending(),
+                JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR,
+            ) . PHP_EOL;
         exit(0);
     }
-    if (count($arguments) !== 2 || !preg_match('/^--recover=([a-f0-9]{32})$/D', $arguments[0], $match)
-        || $arguments[1] !== '--apply') {
-        fwrite(STDERR, "Usage: php scripts/reconcile_image_moves.php --list\n"
-            . "       php scripts/reconcile_image_moves.php --recover=<operation-id> --apply\n");
+    if (
+        count($arguments) !== 2
+        || !preg_match('/^--recover=([a-f0-9]{32})$/D', $arguments[0], $match)
+        || $arguments[1] !== '--apply'
+    ) {
+        fwrite(
+            STDERR,
+            "Usage: php scripts/reconcile_image_moves.php --list\n"
+                . "       php scripts/reconcile_image_moves.php --recover=<operation-id> --apply\n",
+        );
         exit(2);
     }
-    echo json_encode(\Gallery\Services\gallery_image_move_recover($match[1]), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
+    echo
+        json_encode(
+            \Gallery\Services\gallery_image_move_recover($match[1]),
+            JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR,
+        ) . PHP_EOL;
 } catch (Throwable) {
-    fwrite(STDERR, "Image move inspection/recovery refused. Verify pending migrations and storage; journals and uncertain files are retained.\n");
+    fwrite(
+        STDERR,
+        "Image move inspection/recovery refused. Verify pending migrations and storage; journals and uncertain files are retained.\n",
+    );
     exit(1);
 }

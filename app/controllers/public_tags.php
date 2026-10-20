@@ -95,12 +95,21 @@ function cms_tag(): void
         null,
         static function (int $pageNumber) use ($tag): string {
             $baseUrl = url_for('tag', ['slug' => (string) $tag['slug']]);
-            return $pageNumber <= 1 ? $baseUrl : $baseUrl . (str_contains($baseUrl, '?') ? '&' : '?') . 'tag_gallery_page=' . $pageNumber;
-        }
+            return $pageNumber <= 1
+                ? $baseUrl
+                : $baseUrl
+                . (str_contains($baseUrl, '?') ? '&' : '?')
+                . 'tag_gallery_page='
+                . $pageNumber;
+        },
     );
-    $visibleGalleries = !empty($tagGridSettings['enabled']) ? pagination_slice_items($galleries, $tagPagination) : $galleries;
+    $visibleGalleries = !empty($tagGridSettings['enabled'])
+        ? pagination_slice_items($galleries, $tagPagination)
+        : $galleries;
     $tagCardLayout = tag_page_gallery_description_layout();
-    $pageTitle = t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']]);
+    $pageTitle = t('public.tag.title_value', 'Tag: {tag}', [
+        'tag' => (string) $tag['name'],
+    ]);
     $pagination = !empty($tagGridSettings['enabled']) ? $tagPagination : [];
     $paginationLabel = t('public.tag.pagination_label', 'Tagged gallery pages');
 
@@ -110,7 +119,9 @@ function cms_tag(): void
 
     ob_start();
     foreach ($visibleGalleries as $cardIndex => $gallery) {
-        render_gallery_card($gallery, true, false, false, (int) $cardIndex, ['description_layout' => $tagCardLayout]);
+        render_gallery_card($gallery, true, false, false, (int) $cardIndex, [
+            'description_layout' => $tagCardLayout,
+        ]);
     }
     $galleryCardsHtml = (string) ob_get_clean();
 
@@ -122,11 +133,14 @@ function cms_tag(): void
         'title' => $pageTitle,
         'breadcrumbs' => \Gallery\Services\breadcrumb_view_model(
             [
-                ['label' => t('public.gallery.galleries', 'Galleries'), 'url' => url_for('home')],
+                [
+                    'label' => t('public.gallery.galleries', 'Galleries'),
+                    'url' => url_for('home'),
+                ],
                 ['label' => $pageTitle, 'current' => true],
             ],
             \Gallery\Services\theme_breadcrumb_style(),
-            t('public.common.breadcrumbs', 'Breadcrumbs')
+            t('public.common.breadcrumbs', 'Breadcrumbs'),
         ),
         'tag_id' => (int) $tag['id'],
         'gallery_count' => count($galleries),
@@ -134,7 +148,11 @@ function cms_tag(): void
         'admin_actions' => public_tag_admin_actions_view_model($tag),
         'description_enabled' => tag_description_schema_ready(),
         'description' => (string) ($tag['description'] ?? ''),
-        'gallery_count_label' => t('public.tag.gallery_count', '{count} galleries', ['count' => count($galleries)]),
+        'gallery_count_label' => t(
+            'public.tag.gallery_count',
+            '{count} galleries',
+            ['count' => count($galleries)],
+        ),
         'has_galleries' => $galleries !== [],
         'pagination_top_html' => $paginationHtml,
         'pagination_bottom_html' => $paginationHtml,
@@ -151,8 +169,8 @@ function cms_tag(): void
 /**
  * Prepare compact public tag Admin actions for the presentation layer.
  *
- * @param array $tag Tag value.
- * @return array<string, mixed> Prepared Admin action presentation model.
+ * @param array{id?:int|string,name?:string} $tag Tag fields used to prepare Admin actions.
+ * @return array{enabled:false}|array{enabled:true,tag_id:int,name:string,edit_label:string,delete_label:string,edit_url:string,panel_url:string,panel_kicker:string,panel_title:string,delete_url:string,return_url:string} Prepared Admin action presentation model.
  */
 function public_tag_admin_actions_view_model(array $tag): array
 {
@@ -165,13 +183,24 @@ function public_tag_admin_actions_view_model(array $tag): array
         'enabled' => true,
         'tag_id' => (int) ($tag['id'] ?? 0),
         'name' => $name,
-        'edit_label' => t('gallery.edit_tag_named', 'Edit tag {name}', ['name' => $name]),
-        'delete_label' => t('gallery.remove_tag_named', 'Remove tag {name} from CMS', ['name' => $name]),
+        'edit_label' => t('gallery.edit_tag_named', 'Edit tag {name}', [
+            'name' => $name,
+        ]),
+        'delete_label' => t(
+            'gallery.remove_tag_named',
+            'Remove tag {name} from CMS',
+            ['name' => $name],
+        ),
         'edit_url' => url_for('admin_tags', ['id' => (int) ($tag['id'] ?? 0)]),
-        'panel_url' => url_for('admin_tags', ['id' => (int) ($tag['id'] ?? 0), 'panel' => 1]),
+        'panel_url' => url_for('admin_tags', [
+            'id' => (int) ($tag['id'] ?? 0),
+            'panel' => 1,
+        ]),
         'panel_kicker' => t('gallery.tag_editor', 'Tag editor'),
         'panel_title' => t('gallery.edit_tag', 'Edit tag'),
-        'delete_url' => url_for('admin_tags', ['id' => (int) ($tag['id'] ?? 0)]),
+        'delete_url' => url_for('admin_tags', [
+            'id' => (int) ($tag['id'] ?? 0),
+        ]),
         'return_url' => url_for('home'),
     ];
 }
@@ -183,38 +212,48 @@ function public_tag_admin_actions_view_model(array $tag): array
  * remains a CSRF-protected form with a normal POST fallback, matching gallery
  * and photo contextual controls on public pages.
  *
- * @param array $tag Tag value.
+ * @param array{id?:int|string,name?:string} $tag Tag fields used to prepare Admin actions.
+ * @return void Renders the compact edit and delete controls.
  */
 function render_public_tag_admin_actions(array $tag): void
 {
-    view_render_public_tag_admin_actions(public_tag_admin_actions_view_model($tag));
+    view_render_public_tag_admin_actions(public_tag_admin_actions_view_model(
+        $tag,
+    ));
 }
 
 /**
  * Render the public tag delete action for logged-in admins.
  *
- * @param array $tag Tag value.
+ * @param array{id?:int|string,name?:string} $tag Tag fields used to prepare the delete form.
+ * @return void Renders the delete form.
  */
 function render_public_tag_admin_delete_form(array $tag): void
 {
-    view_render_public_tag_admin_delete_form(public_tag_admin_actions_view_model($tag));
+    view_render_public_tag_admin_delete_form(public_tag_admin_actions_view_model(
+        $tag,
+    ));
 }
 
 /**
  * Prepare clickable tag pills for the presentation layer.
  *
- * @param array $tags Tags value.
+ * @param list<array{name?:string,slug?:string}> $tags Tag rows used to build clickable pills.
  * @param ?string $label Label value.
- * @return array<string, mixed> Prepared tag-list presentation model.
+ * @return array{items:list<array{name:string,href:?string}>,label:?string} Prepared tag-list presentation model.
  */
 function tag_list_view_model(array $tags, ?string $label = null): array
 {
-    $publicTagBrowsingEnabled = feature_capability_effective_enabled('public_tag_browsing');
+    $publicTagBrowsingEnabled = feature_capability_effective_enabled(
+        'public_tag_browsing',
+    );
     $items = [];
     foreach ($tags as $tag) {
         $items[] = [
             'name' => (string) ($tag['name'] ?? ''),
-            'href' => $publicTagBrowsingEnabled ? url_for('tag', ['slug' => (string) ($tag['slug'] ?? '')]) : null,
+            'href' => $publicTagBrowsingEnabled
+                ? url_for('tag', ['slug' => (string) ($tag['slug'] ?? '')])
+                : null,
         ];
     }
 
@@ -254,6 +293,8 @@ function render_compact_tag_list(array $tags, int $visibleLimit = 3): void
     $hiddenCount = max(0, count($tags) - count($visibleTags));
     $viewModel = tag_list_view_model($visibleTags);
     $viewModel['hidden_count'] = $hiddenCount;
-    $viewModel['more_label'] = $hiddenCount > 0 ? t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount]) : '';
+    $viewModel['more_label'] = $hiddenCount > 0
+        ? t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])
+        : '';
     view_render_compact_tag_list($viewModel);
 }

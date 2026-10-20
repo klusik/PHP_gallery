@@ -46,6 +46,6 @@ return [
         CONSTRAINT admin_logs_user_id_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     "ALTER TABLE admin_logs ADD COLUMN status ENUM('todo','doing','done','waiting') NOT NULL DEFAULT 'todo' AFTER level",
-    "ALTER TABLE admin_logs ADD COLUMN status_updated_at DATETIME NULL AFTER status",
-    "ALTER TABLE admin_logs ADD KEY admin_logs_status_created_index (status, created_at)",
+    'ALTER TABLE admin_logs ADD COLUMN status_updated_at DATETIME NULL AFTER status',
+    'ALTER TABLE admin_logs ADD KEY admin_logs_status_created_index (status, created_at)',
 ];

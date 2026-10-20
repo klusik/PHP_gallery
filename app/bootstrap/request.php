@@ -53,7 +53,9 @@ use function Gallery\Core\viewer_identity_remember_restore_request;
 function cms_initialize_request(?Request $request = null): string
 {
     // Variable $route stores this steps working value.
-    $route = $request !== null ? $request->routeData() : cms_route_from_request();
+    $route = $request !== null
+        ? $request->routeData()
+        : cms_route_from_request();
     // Variable $page stores this steps working value.
     $page = $route['page'];
     $_GET['page'] = $page;
@@ -61,15 +63,20 @@ function cms_initialize_request(?Request $request = null): string
         $_GET[$name] = $value;
     }
     $previewReferer = (string) ($_SERVER['HTTP_REFERER'] ?? '');
-    if (array_key_exists('preview', $_GET) || str_contains($previewReferer, 'preview=visual')) {
+    if (
+        array_key_exists('preview', $_GET)
+        || str_contains($previewReferer, 'preview=visual')
+    ) {
         $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
-        $requestOrigin = $requestHost === '' ? '' : (request_is_https() ? 'https://' : 'http://') . $requestHost;
+        $requestOrigin = $requestHost === ''
+            ? ''
+            : (request_is_https() ? 'https://' : 'http://') . $requestHost;
         $previewReferrerContext = public_visual_preview_inherit_referrer_context(
             $_GET,
             request_method(),
             $previewReferer,
             $requestOrigin,
-            request_script_base_path()
+            request_script_base_path(),
         );
         $_GET = $previewReferrerContext['query'];
     }
@@ -81,7 +88,9 @@ function cms_initialize_request(?Request $request = null): string
         header('Expires: 0');
         header('X-Robots-Tag: noindex, nofollow, noarchive');
     }
-    if (function_exists('Gallery\\Services\\seo_request_guard_enforcement_decision')) {
+    if (function_exists(
+        'Gallery\\Services\\seo_request_guard_enforcement_decision',
+    )) {
         $seoDecision = seo_request_guard_enforcement_decision(
             $page,
             request_method(),
@@ -89,7 +98,7 @@ function cms_initialize_request(?Request $request = null): string
             current_user() !== null,
             (string) ($_SERVER['REQUEST_URI'] ?? ''),
             (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
-            (string) ($_SERVER['HTTP_USER_AGENT'] ?? '')
+            (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''),
         );
         cms_apply_seo_request_guard_decision($seoDecision);
     }
@@ -97,7 +106,9 @@ function cms_initialize_request(?Request $request = null): string
         'query' => $_GET,
         'admin_cookie' => (string) ($_COOKIE[CMS_ADMIN_LANGUAGE_COOKIE] ?? ''),
         'legacy_cookie' => (string) ($_COOKIE[CMS_LANGUAGE_COOKIE] ?? ''),
-        'public_cookie' => (string) ($_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''),
+        'public_cookie' => (string) (
+            $_COOKIE[CMS_PUBLIC_LANGUAGE_COOKIE] ?? ''
+        ),
     ]);
     apply_cookie_intents($languageCookieIntents);
     // Restore only the dedicated viewer persistent credential before response cache classification.
@@ -112,6 +123,7 @@ function cms_initialize_request(?Request $request = null): string
  * Apply one SEO request-guard decision at the request bootstrap boundary.
  *
  * @param array{action:string,status?:int,location?:string,headers?:array<string,string>,body?:string} $decision Guard decision.
+ * @return void Apply the response decision or terminate after emitting it.
  */
 function cms_apply_seo_request_guard_decision(array $decision): void
 {
@@ -120,24 +132,26 @@ function cms_apply_seo_request_guard_decision(array $decision): void
         return;
     }
 
-    $status = (int) ($decision['status'] ?? ($action === 'redirect' ? 301 : 404));
+    $status = (int) (
+        $decision['status'] ?? ($action === 'redirect' ? 301 : 404)
+    );
     if ($action === 'redirect') {
         $location = (string) ($decision['location'] ?? '');
         if ($location !== '') {
             header('Location: ' . $location, true, $status);
-            exit;
+            exit();
         }
         return;
     }
 
     http_response_code($status);
     if (!headers_sent()) {
-        foreach (($decision['headers'] ?? []) as $name => $value) {
+        foreach ($decision['headers'] ?? [] as $name => $value) {
             header((string) $name . ': ' . (string) $value);
         }
     }
     echo (string) ($decision['body'] ?? '');
-    exit;
+    exit();
 }
 
 /**
@@ -155,8 +169,12 @@ function cms_apply_seo_request_guard_decision(array $decision): void
  */
 function cms_prime_read_only_media_schema_cache(string $page): void
 {
-    if (!cms_route_is_read_only_media_asset($page)
-        || !function_exists('Gallery\\Services\\schema_inspection_prime_table_snapshots')) {
+    if (
+        !cms_route_is_read_only_media_asset($page)
+        || !function_exists(
+            'Gallery\\Services\\schema_inspection_prime_table_snapshots',
+        )
+    ) {
         return;
     }
     if ($page === 'link_favicon_asset') {
@@ -181,25 +199,42 @@ function cms_prime_read_only_media_schema_cache(string $page): void
         'viewer_registration_state',
         'viewer_registration_requests',
     ];
-    if ($page === 'cooperative_media'
-        && \Gallery\Services\feature_capability_effective_enabled('cooperative_galleries')) {
-        $tables = array_merge($tables, ['cooperative_identity', 'cooperative_albums', 'cooperative_peers', 'cooperative_groups']);
+    if (
+        $page === 'cooperative_media'
+        && \Gallery\Services\feature_capability_effective_enabled(
+            'cooperative_galleries',
+        )
+    ) {
+        $tables = array_merge($tables, [
+            'cooperative_identity',
+            'cooperative_albums',
+            'cooperative_peers',
+            'cooperative_groups',
+        ]);
     }
     \Gallery\Services\schema_inspection_prime_table_snapshots($tables);
 }
+
 /**
  * Start optional request diagnostics before the normal CMS lifecycle marks begin.
  *
  * The helper keeps app/bootstrap.php as a thin coordinator while allowing both the
  * existing gallery benchmark and the opt-in Admin full test run to observe the
  * same lifecycle boundaries.
+ *
+ * @return void Begin request tracing when an optional collector is available.
  */
 function cms_request_trace_begin(): void
 {
-    if (function_exists('Gallery\\Services\\admin_test_run_bind_request_transport_context')) {
+    if (function_exists(
+        'Gallery\\Services\\admin_test_run_bind_request_transport_context',
+    )) {
         \Gallery\Services\admin_test_run_bind_request_transport_context([
-            'cookie_token' => (string) ($_COOKIE[\Gallery\Services\ADMIN_TEST_RUN_COOKIE] ?? ''),
-            'request_time_float' => isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
+            'cookie_token' => (string) (
+                $_COOKIE[\Gallery\Services\ADMIN_TEST_RUN_COOKIE] ?? ''
+            ),
+            'request_time_float' => isset($_SERVER['REQUEST_TIME_FLOAT'])
+            && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
                 ? (float) $_SERVER['REQUEST_TIME_FLOAT']
                 : microtime(true),
             'request_uri' => (string) ($_SERVER['REQUEST_URI'] ?? ''),
@@ -213,8 +248,12 @@ function cms_request_trace_begin(): void
     }
     if (function_exists('Gallery\\Services\\admin_test_run_request_begin')) {
         \Gallery\Services\admin_test_run_request_begin();
-        if (function_exists('Gallery\\Services\\admin_test_run_request_header_intents')) {
-            apply_response_header_intents(\Gallery\Services\admin_test_run_request_header_intents());
+        if (function_exists(
+            'Gallery\\Services\\admin_test_run_request_header_intents',
+        )) {
+            apply_response_header_intents(
+                \Gallery\Services\admin_test_run_request_header_intents(),
+            );
         }
     }
     cms_request_trace_mark('cms_run_enter');
@@ -250,14 +289,38 @@ function cms_request_trace_mark(string $name, array $context = []): void
  */
 function cms_prime_gallery_schema_cache(string $page): void
 {
-    if (!in_array($page, ['home', 'gallery', 'smart_gallery', 'gallery_lightbox_data',
-        'smart_gallery_lightbox_data', 'tag', 'public_search'], true)
-        || !function_exists('Gallery\\Services\\schema_inspection_prime_table_snapshots')) {
+    if (
+        !in_array(
+            $page,
+            [
+                'home',
+                'gallery',
+                'smart_gallery',
+                'gallery_lightbox_data',
+                'smart_gallery_lightbox_data',
+                'tag',
+                'public_search',
+            ],
+            true,
+        )
+        || !function_exists(
+            'Gallery\\Services\\schema_inspection_prime_table_snapshots',
+        )
+    ) {
         return;
     }
     \Gallery\Services\schema_inspection_prime_table_snapshots([
-        'galleries', 'images', 'image_thumbnail_variants', 'users', 'admin_remember_tokens',
-        'gallery_translations', 'image_translations', 'tags', 'gallery_tags', 'image_tags',
-        'image_votes', 'smart_galleries',
+        'galleries',
+        'images',
+        'image_thumbnail_variants',
+        'users',
+        'admin_remember_tokens',
+        'gallery_translations',
+        'image_translations',
+        'tags',
+        'gallery_tags',
+        'image_tags',
+        'image_votes',
+        'smart_galleries',
     ]);
 }

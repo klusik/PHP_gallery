@@ -312,11 +312,14 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
         $previewDecision = \Gallery\Services\public_visual_preview_request_decision(
             $page,
             strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')),
-            is_array($principal) && (string) ($principal['role'] ?? '') === 'admin',
-            $_GET
+            is_array($principal)
+                && (string) ($principal['role'] ?? '') === 'admin',
+            $_GET,
         );
         if (!empty($previewDecision['active']) && !headers_sent()) {
-            header('Cache-Control: ' . (string) $previewDecision['cache_control']);
+            header(
+                'Cache-Control: ' . (string) $previewDecision['cache_control'],
+            );
             header('Pragma: no-cache');
             header('Expires: 0');
             header('X-Robots-Tag: noindex, nofollow, noarchive');
@@ -335,19 +338,28 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
             cms_not_found();
             return;
         }
-        if (!empty($previewDecision['active']) && !empty($previewDecision['allowed'])
-            && in_array($page, ['home', 'gallery'], true)) {
+        if (
+            !empty($previewDecision['active'])
+            && !empty($previewDecision['allowed'])
+            && in_array($page, ['home', 'gallery'], true)
+        ) {
             // Inspect active user CSS only for an authorized preview document, outside early request policy.
             $kernel->load('visual-preview-document');
-            $cssInspection = \Gallery\Services\custom_css_visual_preview_inspection_decision();
+            $cssInspection =
+                \Gallery\Services\custom_css_visual_preview_inspection_decision();
             if (!empty($cssInspection['blocked'])) {
                 http_response_code(409);
                 if (!headers_sent()) {
                     header('Content-Type: text/html; charset=utf-8');
                     header('Cache-Control: private, no-store, max-age=0');
                 }
-                if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'HEAD') {
-                    $isImportRefusal = ($cssInspection['reason'] ?? '') === 'import_unsupported';
+                if (
+                    strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'))
+                    !== 'HEAD'
+                ) {
+                    $isImportRefusal =
+                        ($cssInspection['reason'] ?? '')
+                        === 'import_unsupported';
                     $refusalReason = $isImportRefusal ? 'import' : 'inspection';
                     $messageKey = $isImportRefusal
                         ? 'admin.theme.overrides.visual_editor_import_unsupported'
@@ -356,9 +368,19 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
                         ? 'The visual editor cannot safely preview CSS with @import. Use Manual CSS, or remove the import rules before opening this preview.'
                         : 'The visual editor could not safely inspect a saved stylesheet. Use Manual CSS, or ensure the installed stylesheet is a readable regular file within the preview inspection limit.';
                     $message = t($messageKey, $messageFallback);
-                    echo '<!doctype html><html lang="' . e(translation_active_language()) . '"><head><meta charset="utf-8"><title>'
-                        . e(t('admin.theme.overrides.visual_editor_title', 'Live Visual CSS Editor'))
-                        . '</title></head><body><div data-visual-preview-blocked="' . e($refusalReason) . '">' . e($message) . '</div></body></html>';
+                    echo
+                        '<!doctype html><html lang="'
+                            . e(translation_active_language())
+                            . '"><head><meta charset="utf-8"><title>'
+                            . e(t(
+                                'admin.theme.overrides.visual_editor_title',
+                                'Live Visual CSS Editor',
+                            ))
+                            . '</title></head><body><div data-visual-preview-blocked="'
+                            . e($refusalReason)
+                            . '">'
+                            . e($message)
+                            . '</div></body></html>';
                 }
                 return;
             }
@@ -371,24 +393,70 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
         header('X-Robots-Tag: ' . $robotsDirective);
     }
 
-    if (function_exists('Gallery\Services\feature_flag_route_enabled') && !feature_flag_route_enabled($page)) {
+    if (
+        function_exists('Gallery\Services\feature_flag_route_enabled')
+        && !feature_flag_route_enabled($page)
+    ) {
         $currentUser = current_user();
-        $isAdmin = is_array($currentUser) && (string) ($currentUser['role'] ?? '') === 'admin';
+        $isAdmin =
+            is_array($currentUser)
+            && (string) ($currentUser['role'] ?? '') === 'admin';
         $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
         $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
-        $wantsJson = str_contains($accept, 'application/json')
+        $wantsJson =
+            str_contains($accept, 'application/json')
             || str_contains($contentType, 'application/json')
             || (string) ($_GET['ajax'] ?? $_POST['ajax'] ?? '') !== '';
         cms_apply_feature_disabled_route_response(
             feature_flag_disabled_route_decision($page, $wantsJson, $isAdmin),
-            $kernel
+            $kernel,
         );
         return;
     }
 
     try {
         // Verify access/privacy policy before a sensitive controller can emit partial HTML, metadata, archives, or media bytes.
-        if (in_array($page, ['cooperative_gallery', 'cooperative_content_api', 'cooperative_metadata_api', 'cooperative_media', 'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap', 'picture_game', 'media', 'gallery_ofp_pdf', 'gallery_music', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup', 'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data', 'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data', 'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest', 'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery', 'download_smart_gallery_manifest', 'download_smart_gallery_file'], true)) {
+        if (in_array(
+            $page,
+            [
+                'cooperative_gallery',
+                'cooperative_content_api',
+                'cooperative_metadata_api',
+                'cooperative_media',
+                'home',
+                'gallery',
+                'smart_gallery',
+                'gallery_access',
+                'share',
+                'tag',
+                'sitemap',
+                'picture_game',
+                'media',
+                'gallery_ofp_pdf',
+                'gallery_music',
+                'thumb',
+                'public_media',
+                'public_thumb',
+                'thumbnail_warmup',
+                'gallery_cover_asset',
+                'gallery_branding_asset',
+                'vote',
+                'gallery_map_data',
+                'gallery_lightbox_data',
+                'smart_gallery_lightbox_data',
+                'smart_gallery_map_data',
+                'public_search',
+                'download_gallery_start',
+                'download_gallery',
+                'download_gallery_manifest',
+                'download_gallery_file',
+                'download_smart_gallery_start',
+                'download_smart_gallery',
+                'download_smart_gallery_manifest',
+                'download_smart_gallery_file',
+            ],
+            true,
+        )) {
             $kernel->load('public-policy');
             gallery_visibility_assert_public_policy_available();
             gallery_access_assert_public_policy_available();
@@ -397,9 +465,13 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
         $kernel->dispatch($route);
     } catch (PublicSchemaPolicyUnavailableException $exception) {
         $kernel->load('schema-unavailable-response');
-        cms_public_schema_unavailable($page, $exception->feature(), $exception->schemaState(), $exception->errorCode());
+        cms_public_schema_unavailable(
+            $page,
+            $exception->feature(),
+            $exception->schemaState(),
+            $exception->errorCode(),
+        );
     }
-
 }
 
 /**
@@ -412,11 +484,13 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
  * @param Kernel|null $kernel Optional request coordinator already selected by dispatch.
  * @return void Emits the existing disabled-feature representation.
  */
-function cms_apply_feature_disabled_route_response(array $decision, ?Kernel $kernel = null): void
-{
+function cms_apply_feature_disabled_route_response(
+    array $decision,
+    ?Kernel $kernel = null,
+): void {
     http_response_code((int) ($decision['status'] ?? 404));
     if (!headers_sent()) {
-        foreach (($decision['headers'] ?? []) as $name => $value) {
+        foreach ($decision['headers'] ?? [] as $name => $value) {
             header((string) $name . ': ' . (string) $value);
         }
     }
@@ -425,13 +499,19 @@ function cms_apply_feature_disabled_route_response(array $decision, ?Kernel $ker
         if (!headers_sent()) {
             header('Content-Type: application/json; charset=utf-8');
         }
-        echo json_encode($decision['payload'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode(
+            $decision['payload'] ?? [],
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         return;
     }
 
     if (($decision['representation'] ?? '') === 'text') {
         header('Content-Type: text/plain; charset=utf-8');
-        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'HEAD') {
+        if (
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'))
+            !== 'HEAD'
+        ) {
             echo 'Not found.';
         }
         return;
@@ -446,7 +526,7 @@ function cms_apply_feature_disabled_route_response(array $decision, ?Kernel $ker
             $title,
             $message,
             url_for('admin_features'),
-            t('admin.features.open_settings', 'Open feature settings')
+            t('admin.features.open_settings', 'Open feature settings'),
         );
     } else {
         view_render_not_found($title, $message);

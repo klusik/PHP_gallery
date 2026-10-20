@@ -80,14 +80,21 @@ function admin_database_maintenance_redirect(): void
  *
  * Read-only inspection and dry-run planning intentionally remain available while
  * the capability is disabled.
+ *
+ * @return bool True when advanced database mutations are enabled.
  */
 function admin_database_maintenance_mutations_enabled(): bool
 {
-    return feature_capability_effective_enabled('advanced_database_maintenance');
+    return feature_capability_effective_enabled(
+        'advanced_database_maintenance',
+    );
 }
 
 /**
  * Redirect with a consistent notice when an advanced database mutation is disabled.
+ *
+ * @return bool True when mutation may proceed; otherwise redirects and returns
+ *     false.
  */
 function admin_database_maintenance_require_mutation_enabled(): bool
 {
@@ -98,8 +105,8 @@ function admin_database_maintenance_require_mutation_enabled(): bool
         'admin_notice',
         t(
             'admin.features.advanced_database_maintenance.disabled_action',
-            'Advanced database mutations are disabled in Admin > Features. Inspection and dry-run planning remain available.'
-        )
+            'Advanced database mutations are disabled in Admin > Features. Inspection and dry-run planning remain available.',
+        ),
     );
     admin_database_maintenance_redirect();
     return false;
@@ -107,6 +114,9 @@ function admin_database_maintenance_require_mutation_enabled(): bool
 
 /**
  * Run the explicit read-only database inspection.
+ *
+ * @return void Inspects database state and redirects with a completion or
+ *     failure notice.
  */
 function cms_admin_database_maintenance_inspect(): void
 {
@@ -118,26 +128,39 @@ function cms_admin_database_maintenance_inspect(): void
 
     try {
         $report = database_maintenance_inspect();
-        flash_message('admin_notice', t('admin.database_maintenance.inspect_done', 'Database inspection completed. Audited {tables} table(s), found {candidates} safe cleanup candidate row(s), and {schema} legacy schema finding(s).', [
-            'tables' => (string) (int) ($report['inventory']['table_count'] ?? 0),
-            'candidates' => (string) array_sum(array_map(static fn (array $candidate): int => (int) ($candidate['candidate_count'] ?? 0), (array) ($report['cleanup_candidates'] ?? []))),
-            'schema' => (string) count((array) ($report['legacy_schema_findings'] ?? [])),
-        ]));
+        flash_message('admin_notice', t(
+            'admin.database_maintenance.inspect_done',
+            'Database inspection completed. Audited {tables} table(s), found {candidates} safe cleanup candidate row(s), and {schema} legacy schema finding(s).',
+            [
+                'tables' => (string) (int) (
+                    $report['inventory']['table_count'] ?? 0
+                ),
+                'candidates' => (string) array_sum(array_map(
+                    static fn(array $candidate): int => (int) (
+                        $candidate['candidate_count'] ?? 0
+                    ),
+                    (array) ($report['cleanup_candidates'] ?? []),
+                )),
+                'schema' => (string) count(
+                    (array) ($report['legacy_schema_findings'] ?? []),
+                ),
+            ],
+        ));
     } catch (Throwable $exception) {
         admin_log_event(
             'error',
             'database_maintenance.inspect_failed',
             'Admin database inspection failed.',
             ['exception' => $exception->getMessage()],
-            ['category' => 'database', 'severity' => 'error']
+            ['category' => 'database', 'severity' => 'error'],
         );
         flash_message(
             'admin_notice',
             t(
                 'admin.database_maintenance.inspect_failed',
                 'Database inspection failed: {error}',
-                ['error' => $exception->getMessage()]
-            )
+                ['error' => $exception->getMessage()],
+            ),
         );
     }
 
@@ -146,6 +169,8 @@ function cms_admin_database_maintenance_inspect(): void
 
 /**
  * Run one bounded safe cleanup step or a complete dry-run.
+ *
+ * @return void Runs the requested cleanup step and redirects with its outcome.
  */
 function cms_admin_database_maintenance_cleanup(): void
 {
@@ -160,27 +185,35 @@ function cms_admin_database_maintenance_cleanup(): void
     if (!$dryRun && !admin_database_maintenance_require_mutation_enabled()) {
         return;
     }
-    if (!$dryRun && strtoupper(trim((string) ($_POST['confirmation_text'] ?? ''))) !== 'CLEAN') {
+    if (
+        !$dryRun
+        && strtoupper(trim((string) ($_POST['confirmation_text'] ?? '')))
+            !== 'CLEAN'
+    ) {
         flash_message(
             'admin_notice',
             t(
                 'admin.database_maintenance.cleanup_confirmation_required',
-                'Type CLEAN to confirm logical database cleanup.'
-            )
+                'Type CLEAN to confirm logical database cleanup.',
+            ),
         );
         admin_database_maintenance_redirect();
     }
 
     try {
-        $state = database_maintenance_cleanup_step($dryRun, (int) ($_POST['batch_size'] ?? 250), $restart);
+        $state = database_maintenance_cleanup_step(
+            $dryRun,
+            (int) ($_POST['batch_size'] ?? 250),
+            $restart,
+        );
         if (!empty($state['failed'])) {
             flash_message(
                 'admin_notice',
                 t(
                     'admin.database_maintenance.cleanup_failed',
                     'Database cleanup stopped after a failure: {error}',
-                    ['error' => (string) ($state['error'] ?? 'Unknown error')]
-                )
+                    ['error' => (string) ($state['error'] ?? 'Unknown error')],
+                ),
             );
         } elseif ($dryRun) {
             flash_message(
@@ -188,8 +221,8 @@ function cms_admin_database_maintenance_cleanup(): void
                 t(
                     'admin.database_maintenance.cleanup_dry_run_done',
                     'Database cleanup dry-run completed. {count} high-confidence row(s) would be removed.',
-                    ['count' => (string) (int) ($state['candidate_rows'] ?? 0)]
-                )
+                    ['count' => (string) (int) ($state['candidate_rows'] ?? 0)],
+                ),
             );
         } elseif (!empty($state['completed'])) {
             flash_message(
@@ -197,8 +230,8 @@ function cms_admin_database_maintenance_cleanup(): void
                 t(
                     'admin.database_maintenance.cleanup_done',
                     'Safe database cleanup completed. Removed {count} row(s). No filesystem files were deleted.',
-                    ['count' => (string) (int) ($state['deleted_rows'] ?? 0)]
-                )
+                    ['count' => (string) (int) ($state['deleted_rows'] ?? 0)],
+                ),
             );
         } else {
             flash_message(
@@ -206,8 +239,8 @@ function cms_admin_database_maintenance_cleanup(): void
                 t(
                     'admin.database_maintenance.cleanup_continue',
                     'Cleanup batch completed. Removed {count} row(s) so far. Continue the resumable operation to process remaining rules.',
-                    ['count' => (string) (int) ($state['deleted_rows'] ?? 0)]
-                )
+                    ['count' => (string) (int) ($state['deleted_rows'] ?? 0)],
+                ),
             );
         }
     } catch (Throwable $exception) {
@@ -216,15 +249,15 @@ function cms_admin_database_maintenance_cleanup(): void
             'database_maintenance.cleanup_failed',
             'Admin database cleanup request failed.',
             ['exception' => $exception->getMessage()],
-            ['category' => 'database', 'severity' => 'error']
+            ['category' => 'database', 'severity' => 'error'],
         );
         flash_message(
             'admin_notice',
             t(
                 'admin.database_maintenance.cleanup_failed',
                 'Database cleanup failed: {error}',
-                ['error' => $exception->getMessage()]
-            )
+                ['error' => $exception->getMessage()],
+            ),
         );
     }
 
@@ -233,6 +266,8 @@ function cms_admin_database_maintenance_cleanup(): void
 
 /**
  * Apply only the dedicated conditional legacy schema repair migration.
+ *
+ * @return void Plans or applies schema repair and redirects with its outcome.
  */
 function cms_admin_database_maintenance_repair(): void
 {
@@ -246,13 +281,17 @@ function cms_admin_database_maintenance_repair(): void
     if (!$dryRun && !admin_database_maintenance_require_mutation_enabled()) {
         return;
     }
-    if (!$dryRun && strtoupper(trim((string) ($_POST['confirmation_text'] ?? ''))) !== 'REPAIR') {
+    if (
+        !$dryRun
+        && strtoupper(trim((string) ($_POST['confirmation_text'] ?? '')))
+            !== 'REPAIR'
+    ) {
         flash_message(
             'admin_notice',
             t(
                 'admin.database_maintenance.repair_confirmation_required',
-                'Type REPAIR to confirm the listed legacy schema changes.'
-            )
+                'Type REPAIR to confirm the listed legacy schema changes.',
+            ),
         );
         admin_database_maintenance_redirect();
     }
@@ -260,14 +299,23 @@ function cms_admin_database_maintenance_repair(): void
     try {
         if ($dryRun) {
             $result = database_maintenance_schema_repair_plan();
-            flash_message('admin_notice', t('admin.database_maintenance.repair_dry_run_done', 'Schema repair dry-run completed. {count} object change(s) are currently identified; no DDL or data deletion ran.', [
-                'count' => (string) (int) ($result['finding_count'] ?? 0),
-            ]));
+            flash_message('admin_notice', t(
+                'admin.database_maintenance.repair_dry_run_done',
+                'Schema repair dry-run completed. {count} object change(s) are currently identified; no DDL or data deletion ran.',
+                [
+                    'count' => (string) (int) ($result['finding_count'] ?? 0),
+                ],
+            ));
         } else {
             $result = database_maintenance_apply_schema_repair();
             flash_message(
                 'admin_notice',
-                (string) ($result['message'] ?? t('admin.database_maintenance.repair_done', 'Legacy schema repair completed.'))
+                (string) (
+                    $result['message'] ?? t(
+                        'admin.database_maintenance.repair_done',
+                        'Legacy schema repair completed.',
+                    )
+                ),
             );
         }
     } catch (Throwable $exception) {
@@ -276,15 +324,15 @@ function cms_admin_database_maintenance_repair(): void
             'database_maintenance.repair_failed',
             'Admin legacy schema repair failed.',
             ['exception' => $exception->getMessage()],
-            ['category' => 'database', 'severity' => 'error']
+            ['category' => 'database', 'severity' => 'error'],
         );
         flash_message(
             'admin_notice',
             t(
                 'admin.database_maintenance.repair_failed',
                 'Legacy schema repair failed: {error}',
-                ['error' => $exception->getMessage()]
-            )
+                ['error' => $exception->getMessage()],
+            ),
         );
     }
 
@@ -293,6 +341,9 @@ function cms_admin_database_maintenance_repair(): void
 
 /**
  * Refresh optimizer statistics for explicitly selected current tables.
+ *
+ * @return void Runs ANALYZE TABLE for selected tables and redirects with its
+ *     outcome.
  */
 function cms_admin_database_maintenance_analyze(): void
 {
@@ -306,26 +357,33 @@ function cms_admin_database_maintenance_analyze(): void
     }
 
     try {
-        $result = database_maintenance_analyze_tables(array_map('strval', (array) ($_POST['tables'] ?? [])));
-        flash_message('admin_notice', t('admin.database_maintenance.analyze_done', 'ANALYZE TABLE finished for {tables} table(s), with {failed} failure(s). This refreshed optimizer metadata and did not reclaim table files.', [
-            'tables' => (string) (int) ($result['table_count'] ?? 0),
-            'failed' => (string) (int) ($result['failed_table_count'] ?? 0),
-        ]));
+        $result = database_maintenance_analyze_tables(array_map(
+            'strval',
+            (array) ($_POST['tables'] ?? []),
+        ));
+        flash_message('admin_notice', t(
+            'admin.database_maintenance.analyze_done',
+            'ANALYZE TABLE finished for {tables} table(s), with {failed} failure(s). This refreshed optimizer metadata and did not reclaim table files.',
+            [
+                'tables' => (string) (int) ($result['table_count'] ?? 0),
+                'failed' => (string) (int) ($result['failed_table_count'] ?? 0),
+            ],
+        ));
     } catch (Throwable $exception) {
         admin_log_event(
             'error',
             'database_maintenance.analyze_failed',
             'Admin ANALYZE TABLE request failed.',
             ['exception' => $exception->getMessage()],
-            ['category' => 'database', 'severity' => 'error']
+            ['category' => 'database', 'severity' => 'error'],
         );
         flash_message(
             'admin_notice',
             t(
                 'admin.database_maintenance.analyze_failed',
                 'ANALYZE TABLE failed: {error}',
-                ['error' => $exception->getMessage()]
-            )
+                ['error' => $exception->getMessage()],
+            ),
         );
     }
 
@@ -334,6 +392,9 @@ function cms_admin_database_maintenance_analyze(): void
 
 /**
  * Format bytes for maintenance flash messages without loading a view helper.
+ *
+ * @param int $bytes Non-negative byte count to format.
+ * @return string Human-readable byte value with a binary-scaled unit.
  */
 function admin_database_maintenance_format_bytes(int $bytes): string
 {
@@ -341,15 +402,22 @@ function admin_database_maintenance_format_bytes(int $bytes): string
     $units = ['B', 'KB', 'MB', 'GB', 'TB'];
     $value = (float) $bytes;
     $unitIndex = 0;
-    while ($value >= 1024 && $unitIndex < count($units) - 1) {
+    while ($value >= 1024 && $unitIndex < (count($units) - 1)) {
         $value /= 1024;
         $unitIndex++;
     }
-    return number_format($value, $unitIndex === 0 ? 0 : 1) . ' ' . $units[$unitIndex];
+    return (
+        number_format($value, $unitIndex === 0 ? 0 : 1)
+            . ' '
+            . $units[$unitIndex]
+    );
 }
 
 /**
  * Rebuild or optimize explicitly selected tables after strong confirmation.
+ *
+ * @return void Previews or runs the requested table operation and redirects
+ *     with its outcome.
  */
 function cms_admin_database_maintenance_optimize(): void
 {
@@ -363,13 +431,17 @@ function cms_admin_database_maintenance_optimize(): void
     if (!$dryRun && !admin_database_maintenance_require_mutation_enabled()) {
         return;
     }
-    if (!$dryRun && strtoupper(trim((string) ($_POST['confirmation_text'] ?? ''))) !== 'OPTIMIZE') {
+    if (
+        !$dryRun
+        && strtoupper(trim((string) ($_POST['confirmation_text'] ?? '')))
+            !== 'OPTIMIZE'
+    ) {
         flash_message(
             'admin_notice',
             t(
                 'admin.database_maintenance.optimize_confirmation_required',
-                'Type OPTIMIZE to confirm the selected table rebuild/optimization.'
-            )
+                'Type OPTIMIZE to confirm the selected table rebuild/optimization.',
+            ),
         );
         admin_database_maintenance_redirect();
     }
@@ -377,18 +449,33 @@ function cms_admin_database_maintenance_optimize(): void
     try {
         $selectedTables = array_map('strval', (array) ($_POST['tables'] ?? []));
         if ($dryRun) {
-            $result = database_maintenance_preview_optimize_tables($selectedTables);
-            flash_message('admin_notice', t('admin.database_maintenance.optimize_dry_run_done', 'OPTIMIZE dry-run validated {tables} selected table(s), totaling {size} with {free} reported data_free. No table operation ran.', [
-                'tables' => (string) (int) ($result['table_count'] ?? 0),
-                'size' => admin_database_maintenance_format_bytes((int) ($result['allocated_bytes'] ?? 0)),
-                'free' => admin_database_maintenance_format_bytes((int) ($result['reclaimable_bytes_estimate'] ?? 0)),
-            ]));
+            $result =
+                database_maintenance_preview_optimize_tables($selectedTables);
+            flash_message('admin_notice', t(
+                'admin.database_maintenance.optimize_dry_run_done',
+                'OPTIMIZE dry-run validated {tables} selected table(s), totaling {size} with {free} reported data_free. No table operation ran.',
+                [
+                    'tables' => (string) (int) ($result['table_count'] ?? 0),
+                    'size' => admin_database_maintenance_format_bytes(
+                        (int) ($result['allocated_bytes'] ?? 0),
+                    ),
+                    'free' => admin_database_maintenance_format_bytes(
+                        (int) ($result['reclaimable_bytes_estimate'] ?? 0),
+                    ),
+                ],
+            ));
         } else {
             $result = database_maintenance_optimize_tables($selectedTables);
-            flash_message('admin_notice', t('admin.database_maintenance.optimize_done', 'OPTIMIZE TABLE finished for {tables} table(s), with {failed} failure(s). Review database engine messages in Admin logs.', [
-                'tables' => (string) (int) ($result['table_count'] ?? 0),
-                'failed' => (string) (int) ($result['failed_table_count'] ?? 0),
-            ]));
+            flash_message('admin_notice', t(
+                'admin.database_maintenance.optimize_done',
+                'OPTIMIZE TABLE finished for {tables} table(s), with {failed} failure(s). Review database engine messages in Admin logs.',
+                [
+                    'tables' => (string) (int) ($result['table_count'] ?? 0),
+                    'failed' => (string) (int) (
+                        $result['failed_table_count'] ?? 0
+                    ),
+                ],
+            ));
         }
     } catch (Throwable $exception) {
         admin_log_event(
@@ -396,15 +483,15 @@ function cms_admin_database_maintenance_optimize(): void
             'database_maintenance.optimize_failed',
             'Admin OPTIMIZE TABLE request failed.',
             ['exception' => $exception->getMessage()],
-            ['category' => 'database', 'severity' => 'error']
+            ['category' => 'database', 'severity' => 'error'],
         );
         flash_message(
             'admin_notice',
             t(
                 'admin.database_maintenance.optimize_failed',
                 'OPTIMIZE TABLE failed: {error}',
-                ['error' => $exception->getMessage()]
-            )
+                ['error' => $exception->getMessage()],
+            ),
         );
     }
 

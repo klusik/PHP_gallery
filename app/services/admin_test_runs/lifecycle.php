@@ -48,7 +48,9 @@ use function Gallery\Core\url_for;
 /**
  * Create a new detailed test-run context after an authenticated Admin request.
  *
- * @return array<string,mixed>
+ * @param string $target Local request target to measure.
+ * @param string $targetPage Admin page slug associated with the run.
+ * @return array<string, mixed> Newly persisted run metadata, including token, owner, target, preflight snapshots and starter-preparation phases.
  */
 function admin_test_run_create(string $target, string $targetPage): array
 {
@@ -58,7 +60,8 @@ function admin_test_run_create(string $target, string $targetPage): array
     }
     $createStarted = microtime(true);
     $phases = [];
-    $phase = static function (string $name, callable $callback) use (&$phases) {
+    /** @var callable(string, callable(): mixed): mixed $phase Records a named starter-preparation phase. */
+    $phase = static function (string $name, callable $callback) use (&$phases): mixed {
         $started = microtime(true);
         $memory = memory_get_usage(true);
         try {
@@ -74,7 +77,10 @@ function admin_test_run_create(string $target, string $targetPage): array
                 'completed' => false,
                 'duration_ms' => (microtime(true) - $started) * 1000,
                 'memory_delta_bytes' => memory_get_usage(true) - $memory,
-                'error' => admin_test_run_text_prefix($exception->getMessage(), 1000),
+                'error' => admin_test_run_text_prefix(
+                    $exception->getMessage(),
+                    1000,
+                ),
             ];
             throw $exception;
         }
@@ -86,9 +92,17 @@ function admin_test_run_create(string $target, string $targetPage): array
         admin_test_run_requests_directory($created, true);
         return $created;
     });
-    $cacheBefore = $phase('cache_state_preflight_before_clear', static fn (): array => function_exists(__NAMESPACE__ . '\\admin_test_run_cache_preflight') ? admin_test_run_cache_preflight() : []);
-    $clearResult = $phase('safe_cache_invalidation', static fn (): array => admin_test_run_clear_safe_caches());
-    $cacheAfter = $phase('cache_state_preflight_after_clear', static fn (): array => function_exists(__NAMESPACE__ . '\\admin_test_run_cache_preflight') ? admin_test_run_cache_preflight() : []);
+    $cacheBefore = $phase('cache_state_preflight_before_clear', static fn(): array => (
+        function_exists(__NAMESPACE__ . '\\admin_test_run_cache_preflight')
+            ? admin_test_run_cache_preflight()
+            : []
+    ));
+    $clearResult = $phase('safe_cache_invalidation', static fn(): array => admin_test_run_clear_safe_caches());
+    $cacheAfter = $phase('cache_state_preflight_after_clear', static fn(): array => (
+        function_exists(__NAMESPACE__ . '\\admin_test_run_cache_preflight')
+            ? admin_test_run_cache_preflight()
+            : []
+    ));
     $createdAtUnix = microtime(true);
     $meta = [
         'schema_version' => ADMIN_TEST_RUN_SCHEMA_VERSION,
@@ -104,12 +118,19 @@ function admin_test_run_create(string $target, string $targetPage): array
         ],
         'target' => [
             'request_target' => admin_test_run_normalize_target($target),
-            'page' => preg_replace('/[^a-z0-9_]+/i', '', $targetPage) ?: 'gallery',
+            'page' => preg_replace('/[^a-z0-9_]+/i', '', $targetPage)
+                ?: 'gallery',
         ],
         'runner_policy' => [
             'diagnostic_probe_concurrency' => 1,
             'optional_concurrency_probe_enabled' => false,
-            'browser_probe_sequence' => ['static_probe', 'php_probe', 'warm_full_render', 'optional_lightbox_metadata', 'optional_first_thumbnail'],
+            'browser_probe_sequence' => [
+                'static_probe',
+                'php_probe',
+                'warm_full_render',
+                'optional_lightbox_metadata',
+                'optional_first_thumbnail',
+            ],
             'intentional_sleep_seconds' => 0,
             'max_context_lifetime_seconds' => ADMIN_TEST_RUN_TTL_SECONDS,
         ],
@@ -119,12 +140,17 @@ function admin_test_run_create(string $target, string $targetPage): array
             'duration_ms' => (microtime(true) - $createStarted) * 1000,
             'phases' => $phases,
         ],
-        'initial_runtime' => admin_test_run_runtime_preflight('test_run_created_preflight'),
+        'initial_runtime' => admin_test_run_runtime_preflight(
+            'test_run_created_preflight',
+        ),
         'cache_inventory_before_clear' => $cacheBefore,
         'cache_clear' => $clearResult,
         'cache_inventory_after_clear' => $cacheAfter,
         'detailed_cache_inventory_deferred_until_after_primary_request' => true,
-        'subsystems_before' => ['deferred' => true, 'reason' => 'Avoid pre-measurement maintenance/updater/database inventory observer effect.'],
+        'subsystems_before' => [
+            'deferred' => true,
+            'reason' => 'Avoid pre-measurement maintenance/updater/database inventory observer effect.',
+        ],
         'events' => [[
             'at' => gmdate('c'),
             'type' => 'test_run_created',
@@ -133,12 +159,16 @@ function admin_test_run_create(string $target, string $targetPage): array
         'starter_request_id' => '',
         'finalized_at' => null,
     ];
-    $phase('report_state_creation', static function () use ($token, &$meta): void {
+    $phase('report_state_creation', static function () use (
+        $token,
+        &$meta,
+    ): void {
         admin_test_run_write_json(admin_test_run_meta_path($token), $meta);
     });
     $meta['starter_preparation']['phases'] = $phases;
     $meta['starter_preparation']['completed_at_unix'] = microtime(true);
-    $meta['starter_preparation']['duration_ms'] = (microtime(true) - $createStarted) * 1000;
+    $meta['starter_preparation']['duration_ms'] =
+        (microtime(true) - $createStarted) * 1000;
     admin_test_run_write_json(admin_test_run_meta_path($token), $meta);
     return $meta;
 }
@@ -153,11 +183,22 @@ function admin_test_run_request_begin(): void
 
 /**
  * Start detailed instrumentation using an active cookie context or an authenticated starter token.
+ *
+ * @param string $token Optional authenticated test-run token.
+ * @param string $kind Sanitized request category stored in the trace.
+ * @return string Participating request identifier, or an empty string when no valid context is active.
  */
-function admin_test_run_request_begin_for_token(string $token = '', string $kind = 'request'): string
-{
-    if (isset($GLOBALS['admin_test_run_request']) && is_array($GLOBALS['admin_test_run_request'])) {
-        return (string) ($GLOBALS['admin_test_run_request']['request_id'] ?? '');
+function admin_test_run_request_begin_for_token(
+    string $token = '',
+    string $kind = 'request',
+): string {
+    if (
+        isset($GLOBALS['admin_test_run_request'])
+        && is_array($GLOBALS['admin_test_run_request'])
+    ) {
+        return (string) (
+            $GLOBALS['admin_test_run_request']['request_id'] ?? ''
+        );
     }
     $context = null;
     if ($token !== '') {
@@ -170,21 +211,39 @@ function admin_test_run_request_begin_for_token(string $token = '', string $kind
             return '';
         }
         $context = admin_test_run_active_context();
-        $token = is_array($context) ? (string) ($context['token'] ?? admin_test_run_cookie_token()) : '';
+        $token = is_array($context)
+            ? (string) ($context['token'] ?? admin_test_run_cookie_token())
+            : '';
     }
-    if (!is_array($context) || !admin_test_run_token_valid($token) || !empty($context['finalized_at'])) {
+    if (
+        !is_array($context)
+        || !admin_test_run_token_valid($token)
+        || !empty($context['finalized_at'])
+    ) {
         return '';
     }
-    $early = function_exists('Gallery\\Diagnostics\\admin_test_run_early_snapshot')
+    $early = function_exists(
+        'Gallery\\Diagnostics\\admin_test_run_early_snapshot',
+    )
         ? \Gallery\Diagnostics\admin_test_run_early_snapshot()
         : null;
     $requestId = is_array($early) && !empty($early['request_id'])
         ? (string) $early['request_id']
-        : sprintf('%s-%s-%s', (string) (function_exists('getmypid') ? getmypid() : 0), str_replace('.', '', sprintf('%.6f', microtime(true))), bin2hex(random_bytes(4)));
+        : sprintf(
+            '%s-%s-%s',
+            (string) (function_exists('getmypid') ? getmypid() : 0),
+            str_replace('.', '', sprintf('%.6f', microtime(true))),
+            bin2hex(random_bytes(4)),
+        );
     $transport = admin_test_run_request_transport_context();
-    $requestTime = is_array($early) && is_numeric($early['request_time_unix'] ?? null)
+    $requestTime = is_array($early)
+    && is_numeric($early['request_time_unix'] ?? null)
         ? (float) $early['request_time_unix']
-        : (is_numeric($transport['request_time_float'] ?? null) ? (float) $transport['request_time_float'] : microtime(true));
+        : (
+            is_numeric($transport['request_time_float'] ?? null)
+                ? (float) $transport['request_time_float']
+                : microtime(true)
+        );
     if (is_array($early)) {
         unset($early['token']);
     }
@@ -206,8 +265,12 @@ function admin_test_run_request_begin_for_token(string $token = '', string $kind
             'script_name' => (string) ($transport['script_name'] ?? ''),
             'protocol' => (string) ($transport['protocol'] ?? ''),
             'https' => !empty($transport['https']),
-            'query_keys' => is_array($transport['query_keys'] ?? null) ? $transport['query_keys'] : [],
-            'cookie_names' => is_array($transport['cookie_names'] ?? null) ? $transport['cookie_names'] : [],
+            'query_keys' => is_array($transport['query_keys'] ?? null)
+                ? $transport['query_keys']
+                : [],
+            'cookie_names' => is_array($transport['cookie_names'] ?? null)
+                ? $transport['cookie_names']
+                : [],
         ],
         'process' => admin_test_run_runtime_snapshot('request_begin'),
         'marks' => [],
@@ -236,7 +299,11 @@ function admin_test_run_request_begin_for_token(string $token = '', string $kind
         'finished' => false,
     ];
     $GLOBALS['admin_test_run_request'] = $state;
-    $activePath = admin_test_run_requests_directory($token, true) . DIRECTORY_SEPARATOR . $requestId . '.active.json';
+    $activePath =
+        admin_test_run_requests_directory($token, true)
+        . DIRECTORY_SEPARATOR
+        . $requestId
+        . '.active.json';
     admin_test_run_write_json($activePath, [
         'request_id' => $requestId,
         'kind' => $state['kind'],
@@ -245,7 +312,9 @@ function admin_test_run_request_begin_for_token(string $token = '', string $kind
         'pid' => $state['process']['pid'] ?? null,
         'uri' => $state['request']['uri'],
     ]);
-    if (function_exists('Gallery\\Diagnostics\\admin_test_run_early_mark_adopted')) {
+    if (function_exists(
+        'Gallery\\Diagnostics\\admin_test_run_early_mark_adopted',
+    )) {
         \Gallery\Diagnostics\admin_test_run_early_mark_adopted();
     }
     register_shutdown_function(static function (): void {
@@ -264,11 +333,11 @@ function admin_test_run_request_begin_for_token(string $token = '', string $kind
  */
 function admin_test_run_current_request_id(): string
 {
-    return isset($GLOBALS['admin_test_run_request']) && is_array($GLOBALS['admin_test_run_request'])
+    return isset($GLOBALS['admin_test_run_request'])
+    && is_array($GLOBALS['admin_test_run_request'])
         ? (string) ($GLOBALS['admin_test_run_request']['request_id'] ?? '')
         : '';
 }
-
 
 /**
  * Return response headers associated with the currently traced request.
@@ -293,7 +362,11 @@ function admin_test_run_request_header_intents(): array
  */
 function admin_test_run_register_final_shutdown_observer(): void
 {
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request']) || !empty($GLOBALS['admin_test_run_final_shutdown_registered'])) {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+        || !empty($GLOBALS['admin_test_run_final_shutdown_registered'])
+    ) {
         return;
     }
     $GLOBALS['admin_test_run_final_shutdown_registered'] = true;
@@ -304,14 +377,25 @@ function admin_test_run_register_final_shutdown_observer(): void
 
 /**
  * Mark the time at which application code considers the response complete, without detaching the worker.
+ *
+ * @param string $reason Short reason recorded with the logical finish event.
+ * @param int|null $httpStatus Optional HTTP status code to record when in range.
+ * @return array<int, array{name:string,value:string,replace?:bool}> Server-Timing header intent, or an empty list when no request is active/already finished.
  */
-function admin_test_run_response_logical_finish(string $reason = 'response_complete', ?int $httpStatus = null): array
-{
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request'])) {
+function admin_test_run_response_logical_finish(
+    string $reason = 'response_complete',
+    ?int $httpStatus = null,
+): array {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+    ) {
         return [];
     }
     $state = &$GLOBALS['admin_test_run_request'];
-    if (!empty($state['response_lifecycle']['logical_response_finished_at_unix'])) {
+    if (
+        !empty($state['response_lifecycle']['logical_response_finished_at_unix'])
+    ) {
         return [];
     }
     $now = microtime(true);
@@ -320,7 +404,10 @@ function admin_test_run_response_logical_finish(string $reason = 'response_compl
     if ($httpStatus !== null && $httpStatus >= 100 && $httpStatus <= 599) {
         $state['response_lifecycle']['http_status'] = $httpStatus;
     }
-    $state['response_lifecycle']['logical_response_finish_offset_ms'] = max(0.0, ($now - (float) $state['request_time_unix']) * 1000);
+    $state['response_lifecycle']['logical_response_finish_offset_ms'] = max(
+        0.0,
+        ($now - (float) $state['request_time_unix']) * 1000,
+    );
     admin_test_run_mark('response_logically_finished', ['reason' => $reason]);
     $duration = max(0.0, ($now - (float) $state['request_time_unix']) * 1000);
     return [[
@@ -332,22 +419,34 @@ function admin_test_run_response_logical_finish(string $reason = 'response_compl
 
 /**
  * Record an actual response-detach API call used by an existing maintenance subsystem.
+ *
+ * @param string $mechanism Name of the response-detach API.
+ * @param string $stage Detach lifecycle stage, normally `called`.
+ * @return void Records detach timing and marks the active request when present.
  */
-function admin_test_run_note_response_detach(string $mechanism, string $stage = 'called'): void
-{
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request'])) {
+function admin_test_run_note_response_detach(
+    string $mechanism,
+    string $stage = 'called',
+): void {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+    ) {
         return;
     }
     $mechanism = strtolower($mechanism);
     $now = microtime(true);
-    $GLOBALS['admin_test_run_request']['response_lifecycle']['detach_events'][] = [
-        'mechanism' => $mechanism,
-        'stage' => $stage,
-        'at_unix' => $now,
-    ];
+    $GLOBALS['admin_test_run_request']['response_lifecycle']['detach_events'][] =
+        [
+            'mechanism' => $mechanism,
+            'stage' => $stage,
+            'at_unix' => $now,
+        ];
     if ($stage === 'called') {
-        $GLOBALS['admin_test_run_request']['response_lifecycle']['detach_called_at_unix'] = $now;
-        $GLOBALS['admin_test_run_request']['response_lifecycle']['detach_mechanism'] = $mechanism;
+        $GLOBALS['admin_test_run_request']['response_lifecycle']['detach_called_at_unix'] =
+            $now;
+        $GLOBALS['admin_test_run_request']['response_lifecycle']['detach_mechanism'] =
+            $mechanism;
         if ($mechanism === 'fastcgi_finish_request') {
             $GLOBALS['admin_test_run_request']['response_lifecycle']['fastcgi_finish_request_called'] = true;
         }
@@ -370,11 +469,20 @@ function admin_test_run_response_headers(): array
     foreach (headers_list() as $header) {
         $line = (string) $header;
         $name = strtolower(trim((string) strtok($line, ':')));
-        if ($name === '' || preg_match('/cookie|authorization|token|csrf|api[-_]?key|secret|password|session/i', $name)) {
+        if (
+            $name === ''
+            || preg_match(
+                '/cookie|authorization|token|csrf|api[-_]?key|secret|password|session/i',
+                $name,
+            )
+        ) {
             $headers[] = ($name !== '' ? $name : 'header') . ': [REDACTED]';
             continue;
         }
-        $line = function_exists(__NAMESPACE__ . '\\admin_test_run_sanitize_text') ? admin_test_run_sanitize_text($line) : $line;
+        $line = function_exists(__NAMESPACE__
+            . '\\admin_test_run_sanitize_text')
+            ? admin_test_run_sanitize_text($line)
+            : $line;
         $headers[] = admin_test_run_text_prefix($line, 4000);
     }
     return $headers;
@@ -382,18 +490,28 @@ function admin_test_run_response_headers(): array
 
 /**
  * Finish and persist the active PHP request sidecar exactly once.
+ *
+ * @param string $reason Shutdown or response-finish reason stored in the sidecar.
+ * @return void Finalizes and persists the active request when one exists.
  */
 function admin_test_run_request_finish(string $reason = 'normal'): void
 {
-    if (!isset($GLOBALS['admin_test_run_request']) || !is_array($GLOBALS['admin_test_run_request'])) {
+    if (
+        !isset($GLOBALS['admin_test_run_request'])
+        || !is_array($GLOBALS['admin_test_run_request'])
+    ) {
         return;
     }
     $state = &$GLOBALS['admin_test_run_request'];
     if (!empty($state['finished'])) {
         return;
     }
-    if (empty($state['response_lifecycle']['logical_response_finished_at_unix'])) {
-        admin_test_run_response_logical_finish('shutdown_response_completion_estimate');
+    if (
+        empty($state['response_lifecycle']['logical_response_finished_at_unix'])
+    ) {
+        admin_test_run_response_logical_finish(
+            'shutdown_response_completion_estimate',
+        );
     }
     $finishedAt = microtime(true);
     admin_test_run_mark('request_finish', ['reason' => $reason]);
@@ -406,11 +524,21 @@ function admin_test_run_request_finish(string $reason = 'normal'): void
     $state['finished_at'] = gmdate('c');
     $state['finished_at_unix'] = $finishedAt;
     $state['finish_reason'] = $reason;
-    $state['duration_from_request_ms'] = max(0.0, ($finishedAt - (float) $state['request_time_unix']) * 1000);
-    $state['duration_instrumented_ms'] = max(0.0, ($finishedAt - (float) $state['instrumentation_enter_unix']) * 1000);
-    $logicalFinish = $state['response_lifecycle']['logical_response_finished_at_unix'] ?? null;
+    $state['duration_from_request_ms'] = max(
+        0.0,
+        ($finishedAt - (float) $state['request_time_unix']) * 1000,
+    );
+    $state['duration_instrumented_ms'] = max(
+        0.0,
+        ($finishedAt - (float) $state['instrumentation_enter_unix']) * 1000,
+    );
+    $logicalFinish =
+        $state['response_lifecycle']['logical_response_finished_at_unix']
+        ?? null;
     $state['response_lifecycle']['shutdown_at_unix'] = $finishedAt;
-    $state['response_lifecycle']['response_to_shutdown_ms'] = is_numeric($logicalFinish)
+    $state['response_lifecycle']['response_to_shutdown_ms'] = is_numeric(
+        $logicalFinish,
+    )
         ? max(0.0, ($finishedAt - (float) $logicalFinish) * 1000)
         : null;
     $state['http_status'] = isset($state['response_lifecycle']['http_status'])
@@ -420,18 +548,25 @@ function admin_test_run_request_finish(string $reason = 'normal'): void
         'headers' => admin_test_run_response_headers(),
         'header_count' => count(headers_list()),
         'output_buffer_level' => ob_get_level(),
-        'current_output_buffer_bytes' => ($bufferLength = ob_get_length()) === false ? null : $bufferLength,
+        'current_output_buffer_bytes' => ($bufferLength = ob_get_length())
+        === false
+            ? null
+            : $bufferLength,
     ];
     $state['connection'] = [
         'aborted' => connection_aborted() !== 0,
         'status' => connection_status(),
     ];
-    $state['last_error'] = is_array($lastError) ? [
-        'type' => (int) ($lastError['type'] ?? 0),
-        'message' => admin_test_run_text_prefix((string) ($lastError['message'] ?? ''), 1000),
-        'file' => basename((string) ($lastError['file'] ?? '')),
-        'line' => (int) ($lastError['line'] ?? 0),
-    ] : null;
+    $state['last_error'] = is_array($lastError)
+        ? [
+            'type' => (int) ($lastError['type'] ?? 0),
+            'message' => admin_test_run_text_prefix(
+                (string) ($lastError['message'] ?? ''),
+                1000,
+            ),
+            'file' => basename((string) ($lastError['file'] ?? '')),
+            'line' => (int) ($lastError['line'] ?? 0),
+        ] : null;
     $state['process_end'] = admin_test_run_runtime_snapshot('request_end');
     $token = (string) $state['token'];
     $requestId = (string) $state['request_id'];
@@ -439,11 +574,15 @@ function admin_test_run_request_finish(string $reason = 'normal'): void
         $directory = admin_test_run_requests_directory($token, true);
         $persist = $state;
         unset($persist['token']);
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_sanitize_browser_value')) {
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_sanitize_browser_value')) {
             $sanitized = admin_test_run_sanitize_browser_value($persist);
             $persist = is_array($sanitized) ? $sanitized : $persist;
         }
-        admin_test_run_write_json($directory . DIRECTORY_SEPARATOR . $requestId . '.json', $persist);
+        admin_test_run_write_json(
+            $directory . DIRECTORY_SEPARATOR . $requestId . '.json',
+            $persist,
+        );
         @unlink($directory . DIRECTORY_SEPARATOR . $requestId . '.active.json');
     } catch (Throwable) {
         // Diagnostics must never break the user-facing request during shutdown.
@@ -454,20 +593,29 @@ function admin_test_run_request_finish(string $reason = 'normal'): void
  * Persist browser-collected timings/probes before final report assembly.
  *
  * @param array<string,mixed> $payload Browser payload.
+ * @param string $token Test-run token receiving the payload.
+ * @return void Persists browser measurements for the run when its metadata is valid.
  */
-function admin_test_run_store_browser_payload(string $token, array $payload): void
-{
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_sanitize_browser_value')) {
+function admin_test_run_store_browser_payload(
+    string $token,
+    array $payload,
+): void {
+    if (function_exists(__NAMESPACE__
+        . '\\admin_test_run_sanitize_browser_value')) {
         $sanitized = admin_test_run_sanitize_browser_value($payload);
         $payload = is_array($sanitized) ? $sanitized : [];
     }
-    admin_test_run_write_json(admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'browser.json', $payload);
+    admin_test_run_write_json(
+        admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'browser.json',
+        $payload,
+    );
 }
 
 /**
  * Build and persist the final detailed report for one run.
  *
- * @return array<string,mixed>
+ * @param string $token Test-run token whose report is assembled.
+ * @return array<string, mixed> Final report payload with request, database, runtime, subsystem, and browser diagnostic summaries.
  */
 function admin_test_run_finalize(string $token): array
 {
@@ -478,15 +626,35 @@ function admin_test_run_finalize(string $token): array
     $records = admin_test_run_request_records($token);
     $requests = $records['completed'];
     $active = $records['active'];
-    $browser = admin_test_run_read_json(admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'browser.json');
+    $browser = admin_test_run_read_json(
+        admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'browser.json',
+    );
     $endedAt = microtime(true);
     $cacheAfterRun = admin_test_run_cache_inventory();
-    $sqlHotspots = function_exists(__NAMESPACE__ . '\\admin_test_run_sql_hotspot_analysis') ? admin_test_run_sql_hotspot_analysis($requests) : [];
-    $cron = function_exists(__NAMESPACE__ . '\\admin_test_run_cron_and_maintenance_snapshot') ? admin_test_run_cron_and_maintenance_snapshot($requests) : [];
-    $postResponse = function_exists(__NAMESPACE__ . '\\admin_test_run_post_response_summary') ? admin_test_run_post_response_summary($requests) : [];
-    $sessionContention = function_exists(__NAMESPACE__ . '\\admin_test_run_session_lock_contention_summary') ? admin_test_run_session_lock_contention_summary($requests) : [];
-    $browserCache = function_exists(__NAMESPACE__ . '\\admin_test_run_browser_cache_summary') ? admin_test_run_browser_cache_summary($browser) : [];
-    $correlation = function_exists(__NAMESPACE__ . '\\admin_test_run_browser_php_correlation') ? admin_test_run_browser_php_correlation($browser, $requests) : [];
+    $sqlHotspots = function_exists(__NAMESPACE__
+        . '\\admin_test_run_sql_hotspot_analysis')
+        ? admin_test_run_sql_hotspot_analysis($requests)
+        : [];
+    $cron = function_exists(__NAMESPACE__
+        . '\\admin_test_run_cron_and_maintenance_snapshot')
+        ? admin_test_run_cron_and_maintenance_snapshot($requests)
+        : [];
+    $postResponse = function_exists(__NAMESPACE__
+        . '\\admin_test_run_post_response_summary')
+        ? admin_test_run_post_response_summary($requests)
+        : [];
+    $sessionContention = function_exists(__NAMESPACE__
+        . '\\admin_test_run_session_lock_contention_summary')
+        ? admin_test_run_session_lock_contention_summary($requests)
+        : [];
+    $browserCache = function_exists(__NAMESPACE__
+        . '\\admin_test_run_browser_cache_summary')
+        ? admin_test_run_browser_cache_summary($browser)
+        : [];
+    $correlation = function_exists(__NAMESPACE__
+        . '\\admin_test_run_browser_php_correlation')
+        ? admin_test_run_browser_php_correlation($browser, $requests)
+        : [];
     $report = [
         'schema_version' => ADMIN_TEST_RUN_SCHEMA_VERSION,
         'diagnostics_version' => ADMIN_TEST_RUN_DIAGNOSTICS_VERSION,
@@ -495,7 +663,10 @@ function admin_test_run_finalize(string $token): array
         'token_hash' => substr(hash('sha256', $token), 0, 16),
         'created_at' => $meta['created_at'] ?? null,
         'finalized_at' => gmdate('c'),
-        'duration_seconds' => max(0.0, $endedAt - (float) ($meta['created_at_unix'] ?? $endedAt)),
+        'duration_seconds' => max(
+            0.0,
+            $endedAt - (float) ($meta['created_at_unix'] ?? $endedAt),
+        ),
         'target' => $meta['target'] ?? [],
         'admin' => $meta['admin'] ?? [],
         'runner_policy' => $meta['runner_policy'] ?? [],
@@ -504,9 +675,11 @@ function admin_test_run_finalize(string $token): array
             'preparation' => $meta['starter_preparation'] ?? [],
         ],
         'cache' => [
-            'before_clear_preflight' => $meta['cache_inventory_before_clear'] ?? [],
+            'before_clear_preflight' => $meta['cache_inventory_before_clear']
+                ?? [],
             'clear_result' => $meta['cache_clear'] ?? [],
-            'after_clear_preflight' => $meta['cache_inventory_after_clear'] ?? [],
+            'after_clear_preflight' => $meta['cache_inventory_after_clear']
+                ?? [],
             'after_run' => $cacheAfterRun,
             'observer_effect_note' => 'Detailed recursive inventory is single-pass, bounded, and deferred until after the primary measured gallery request.',
         ],
@@ -530,23 +703,35 @@ function admin_test_run_finalize(string $token): array
         'request_lifecycle' => [
             'completed_count' => count($requests),
             'active_unfinished_count' => count($active),
-            'all_completed_cleanly' => count($active) === 0 && count(array_filter($requests, static fn (array $request): bool => empty($request['finished']))) === 0,
+            'all_completed_cleanly' =>
+                count($active) === 0
+                    && count(array_filter(
+                        $requests,
+                        static fn(array $request): bool => empty($request['finished']),
+                    )) === 0,
             'unfinished_sidecars' => $active,
         ],
         'browser' => $browser,
         'requests' => $requests,
         'analysis_flags' => [],
-        'storage_cleanup' => ['performed_after_initial_final_artifacts' => true],
+        'storage_cleanup' => [
+            'performed_after_initial_final_artifacts' => true,
+        ],
     ];
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_redact_exact_token')) {
+    if (function_exists(__NAMESPACE__
+        . '\\admin_test_run_redact_exact_token')) {
         $redacted = admin_test_run_redact_exact_token($report, $token);
         $report = is_array($redacted) ? $redacted : $report;
     }
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_redact_storage_run_ids')) {
+    if (function_exists(__NAMESPACE__
+        . '\\admin_test_run_redact_storage_run_ids')) {
         $redacted = admin_test_run_redact_storage_run_ids($report);
         $report = is_array($redacted) ? $redacted : $report;
     }
-    $report['analysis_flags'] = function_exists(__NAMESPACE__ . '\\admin_test_run_analysis_flags') ? admin_test_run_analysis_flags($report) : [];
+    $report['analysis_flags'] = function_exists(__NAMESPACE__
+        . '\\admin_test_run_analysis_flags')
+        ? admin_test_run_analysis_flags($report)
+        : [];
 
     // Publish final artifacts before deleting sidecars so failed finalization retains forensic material.
     admin_test_run_write_json(admin_test_run_report_path($token), $report);

@@ -43,14 +43,17 @@ use Throwable;
  * Return the most complete Resource Timing list from the browser payload.
  *
  * @param array<string,mixed> $browser Browser payload.
- * @return array<int,array<string,mixed>>
+ * @return list<array<string,mixed>> Resource Timing rows from the first available after/before probe snapshot, falling back to the top-level resource list.
  */
 function admin_test_run_browser_resources(array $browser): array
 {
     foreach (['after_probes', 'before_probes'] as $key) {
         $snapshot = is_array($browser[$key] ?? null) ? $browser[$key] : [];
         if (is_array($snapshot['resources'] ?? null)) {
-            return array_values(array_filter($snapshot['resources'], 'is_array'));
+            return array_values(array_filter(
+                $snapshot['resources'],
+                'is_array',
+            ));
         }
     }
     if (is_array($browser['resources'] ?? null)) {
@@ -63,7 +66,7 @@ function admin_test_run_browser_resources(array $browser): array
  * Build a browser cache summary that agrees with the raw Resource Timing rows.
  *
  * @param array<string,mixed> $browser Browser payload.
- * @return array<string,mixed>
+ * @return array{resource_count:int,browser_cache_count:int,network_count:int,unknown_count:int,transfer_bytes:int,encoded_bytes:int,decoded_bytes:int,initiator_distribution:array<string,int>,network_ratio:?float,browser_cache_ratio:?float,warm_cold_classification:string,classification_note:string} Cache/network counts, byte totals, initiator distribution, ratios, and a qualified warm/cold classification.
  */
 function admin_test_run_browser_cache_summary(array $browser): array
 {
@@ -76,13 +79,24 @@ function admin_test_run_browser_cache_summary(array $browser): array
     $encoded = 0;
     $decoded = 0;
     foreach ($resources as $row) {
-        $transferSize = max(0, (int) ($row['transfer_size'] ?? $row['transferSize'] ?? 0));
-        $encodedSize = max(0, (int) ($row['encoded_body_size'] ?? $row['encodedBodySize'] ?? 0));
-        $decodedSize = max(0, (int) ($row['decoded_body_size'] ?? $row['decodedBodySize'] ?? 0));
+        $transferSize = max(
+            0,
+            (int) ($row['transfer_size'] ?? $row['transferSize'] ?? 0),
+        );
+        $encodedSize = max(
+            0,
+            (int) ($row['encoded_body_size'] ?? $row['encodedBodySize'] ?? 0),
+        );
+        $decodedSize = max(
+            0,
+            (int) ($row['decoded_body_size'] ?? $row['decodedBodySize'] ?? 0),
+        );
         $transfer += $transferSize;
         $encoded += $encodedSize;
         $decoded += $decodedSize;
-        $probableHit = !empty($row['probable_cache_hit']) || ($transferSize === 0 && $decodedSize > 0);
+        $probableHit =
+            !empty($row['probable_cache_hit'])
+            || ($transferSize === 0 && $decodedSize > 0);
         if ($probableHit) {
             $cache++;
         } elseif ($transferSize > 0) {
@@ -90,7 +104,9 @@ function admin_test_run_browser_cache_summary(array $browser): array
         } else {
             $unknown++;
         }
-        $initiator = trim((string) ($row['initiator_type'] ?? $row['initiatorType'] ?? ''));
+        $initiator = trim(
+            (string) ($row['initiator_type'] ?? $row['initiatorType'] ?? ''),
+        );
         if ($initiator === '') {
             $initiator = 'unknown';
         }
@@ -135,13 +151,18 @@ function admin_test_run_browser_cache_summary(array $browser): array
  *
  * @param array<string,mixed> $browser Browser payload.
  * @param array<int,array<string,mixed>> $requests Request sidecars.
- * @return array<string,mixed>
+ * @return array<string,mixed> Correlated probe/page request rows and availability metadata, including browser and PHP timing estimates with filtered provider headers.
  */
-function admin_test_run_browser_php_correlation(array $browser, array $requests): array
-{
+function admin_test_run_browser_php_correlation(
+    array $browser,
+    array $requests,
+): array {
     $byId = [];
     foreach ($requests as $request) {
-        if (is_array($request) && (string) ($request['request_id'] ?? '') !== '') {
+        if (
+            is_array($request)
+            && (string) ($request['request_id'] ?? '') !== ''
+        ) {
             $byId[(string) $request['request_id']] = $request;
         }
     }
@@ -156,14 +177,25 @@ function admin_test_run_browser_php_correlation(array $browser, array $requests)
             continue;
         }
         $request = $byId[$requestId];
-        $browserTtfb = isset($probe['ttfb_like_ms']) ? max(0.0, (float) $probe['ttfb_like_ms']) : null;
+        $browserTtfb = isset($probe['ttfb_like_ms'])
+            ? max(0.0, (float) $probe['ttfb_like_ms'])
+            : null;
         $requestTime = (float) ($request['request_time_unix'] ?? 0.0);
-        $logical = (float) ($request['response_lifecycle']['logical_response_finished_at_unix'] ?? 0.0);
+        $logical = (float) (
+            $request['response_lifecycle']['logical_response_finished_at_unix']
+            ?? 0.0
+        );
         if ($logical <= 0.0) {
             $logical = (float) ($request['finished_at_unix'] ?? 0.0);
         }
-        $phpBeforeResponse = $requestTime > 0.0 && $logical >= $requestTime ? ($logical - $requestTime) * 1000 : null;
-        $outsideEstimate = $browserTtfb !== null && $phpBeforeResponse !== null ? max(0.0, $browserTtfb - $phpBeforeResponse) : null;
+        $phpBeforeResponse =
+            $requestTime > 0.0 && $logical >= $requestTime
+                ? ($logical - $requestTime) * 1000
+                : null;
+        $outsideEstimate =
+            $browserTtfb !== null && $phpBeforeResponse !== null
+                ? max(0.0, $browserTtfb - $phpBeforeResponse)
+                : null;
         $rows[] = [
             'source' => 'verification_probe',
             'probe_name' => (string) ($probe['name'] ?? ''),
@@ -172,43 +204,94 @@ function admin_test_run_browser_php_correlation(array $browser, array $requests)
             'php_before_response_ms' => $phpBeforeResponse,
             'estimated_outside_php_wait_ms' => $outsideEstimate,
             'estimate_note' => 'Browser and server clocks are not assumed synchronized. The outside-PHP value subtracts server-observed request-to-response PHP time from browser-observed TTFB and therefore also includes network/proxy timing uncertainty.',
-            'provider_headers' => is_array($probe['provider_headers'] ?? null) ? admin_test_run_filter_provider_headers($probe['provider_headers']) : [],
+            'provider_headers' => is_array($probe['provider_headers'] ?? null)
+                ? admin_test_run_filter_provider_headers(
+                    $probe['provider_headers'],
+                )
+                : [],
         ];
     }
 
     $page = is_array($browser['page'] ?? null) ? $browser['page'] : [];
     $mainRequestId = trim((string) ($page['diagnostic_request_id'] ?? ''));
-    $navigationSnapshot = is_array($browser['before_probes'] ?? null) ? $browser['before_probes'] : [];
-    $navigation = is_array($navigationSnapshot['navigation'][0] ?? null) ? $navigationSnapshot['navigation'][0] : null;
-    if ($mainRequestId !== '' && isset($byId[$mainRequestId]) && is_array($navigation)) {
+    $navigationSnapshot = is_array($browser['before_probes'] ?? null)
+        ? $browser['before_probes']
+        : [];
+    $navigation = is_array($navigationSnapshot['navigation'][0] ?? null)
+        ? $navigationSnapshot['navigation'][0]
+        : null;
+    if (
+        $mainRequestId !== ''
+        && isset($byId[$mainRequestId])
+        && is_array($navigation)
+    ) {
         $request = $byId[$mainRequestId];
-        $browserTtfb = max(0.0, (float) (($navigation['responseStart'] ?? 0) - ($navigation['requestStart'] ?? $navigation['fetchStart'] ?? 0)));
+        $browserTtfb = max(
+            0.0,
+            (float) (
+                ($navigation['responseStart'] ?? 0)
+                - (
+                    $navigation['requestStart']
+                    ?? $navigation['fetchStart']
+                    ?? 0
+                )
+            ),
+        );
         $requestTime = (float) ($request['request_time_unix'] ?? 0.0);
-        $logical = (float) ($request['response_lifecycle']['logical_response_finished_at_unix'] ?? $request['finished_at_unix'] ?? 0.0);
-        $phpBeforeResponse = $requestTime > 0.0 && $logical >= $requestTime ? ($logical - $requestTime) * 1000 : null;
+        $logical = (float) (
+            $request['response_lifecycle']['logical_response_finished_at_unix']
+            ?? $request['finished_at_unix']
+            ?? 0.0
+        );
+        $phpBeforeResponse =
+            $requestTime > 0.0 && $logical >= $requestTime
+                ? ($logical - $requestTime) * 1000
+                : null;
         $rows[] = [
             'source' => 'primary_navigation',
             'request_id' => $mainRequestId,
             'browser_ttfb_ms' => $browserTtfb,
             'php_before_response_ms' => $phpBeforeResponse,
-            'estimated_outside_php_wait_ms' => $phpBeforeResponse !== null ? max(0.0, $browserTtfb - $phpBeforeResponse) : null,
-            'navigation_redirect_count' => (int) ($navigation['redirectCount'] ?? 0),
-            'navigation_redirect_ms' => max(0.0, (float) (($navigation['redirectEnd'] ?? 0) - ($navigation['redirectStart'] ?? 0))),
+            'estimated_outside_php_wait_ms' => $phpBeforeResponse !== null
+                ? max(0.0, $browserTtfb - $phpBeforeResponse)
+                : null,
+            'navigation_redirect_count' => (int) (
+                $navigation['redirectCount'] ?? 0
+            ),
+            'navigation_redirect_ms' => max(
+                0.0,
+                (float) (
+                    ($navigation['redirectEnd'] ?? 0)
+                    - ($navigation['redirectStart'] ?? 0)
+                ),
+            ),
             'estimate_note' => 'Navigation Timing and PHP request timestamps use different clock domains; only durations are compared. Network transit and proxy/CDN processing remain inside the outside-PHP estimate.',
         ];
     }
 
     $starterId = trim((string) ($page['starter_request_id'] ?? ''));
-    if ($starterId !== '' && isset($byId[$starterId]) && is_array($navigation)) {
+    if (
+        $starterId !== ''
+        && isset($byId[$starterId])
+        && is_array($navigation)
+    ) {
         $starter = $byId[$starterId];
         $starterPhp = (float) ($starter['duration_from_request_ms'] ?? 0.0);
-        $redirectMs = max(0.0, (float) (($navigation['redirectEnd'] ?? 0) - ($navigation['redirectStart'] ?? 0)));
+        $redirectMs = max(
+            0.0,
+            (float) (
+                ($navigation['redirectEnd'] ?? 0)
+                - ($navigation['redirectStart'] ?? 0)
+            ),
+        );
         $rows[] = [
             'source' => 'starter_redirect',
             'request_id' => $starterId,
             'browser_redirect_phase_ms' => $redirectMs,
             'starter_php_request_ms' => $starterPhp,
-            'estimated_outside_php_starter_wait_ms' => $redirectMs > 0.0 ? max(0.0, $redirectMs - $starterPhp) : null,
+            'estimated_outside_php_starter_wait_ms' => $redirectMs > 0.0
+                ? max(0.0, $redirectMs - $starterPhp)
+                : null,
             'estimate_note' => 'Same-origin Navigation Timing redirect duration can cover the starter request, but browser redirect timing may include connection/proxy/network work around PHP. The difference is an estimate, not synchronized-clock measurement.',
         ];
     }

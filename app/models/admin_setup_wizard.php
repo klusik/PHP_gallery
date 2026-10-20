@@ -54,22 +54,28 @@ function admin_setup_wizard_model_transaction(
     array $settingKeys,
     callable $operation,
     ?callable $compensate = null,
-    array $telemetrySettingKeys = []
+    array $telemetrySettingKeys = [],
 ): mixed {
     $pdo = db();
     if ($pdo->inTransaction()) {
-        throw new RuntimeException('Setup Wizard cannot join an existing database transaction.');
+        throw new RuntimeException(
+            'Setup Wizard cannot join an existing database transaction.',
+        );
     }
 
     if (!$pdo->beginTransaction()) {
-        throw new RuntimeException('Setup Wizard database transaction could not start.');
+        throw new RuntimeException(
+            'Setup Wizard database transaction could not start.',
+        );
     }
     try {
         admin_setup_wizard_model_lock_settings($settingKeys);
         admin_setup_wizard_model_lock_telemetry_settings($telemetrySettingKeys);
         $result = $operation();
         if (!$pdo->commit()) {
-            throw new RuntimeException('Setup Wizard database transaction could not commit.');
+            throw new RuntimeException(
+                'Setup Wizard database transaction could not commit.',
+            );
         }
         return $result;
     } catch (Throwable $exception) {
@@ -85,11 +91,19 @@ function admin_setup_wizard_model_transaction(
             try {
                 $compensate();
             } catch (Throwable) {
-                throw new RuntimeException('Setup Wizard rollback could not restore every persisted setting.', 0, $exception);
+                throw new RuntimeException(
+                    'Setup Wizard rollback could not restore every persisted setting.',
+                    0,
+                    $exception,
+                );
             }
         }
         if ($rollbackFailed) {
-            throw new RuntimeException('Setup Wizard database transaction could not roll back.', 0, $exception);
+            throw new RuntimeException(
+                'Setup Wizard database transaction could not roll back.',
+                0,
+                $exception,
+            );
         }
         throw $exception;
     }
@@ -103,23 +117,25 @@ function admin_setup_wizard_model_transaction(
  */
 function admin_setup_wizard_model_lock_settings(array $settingKeys): void
 {
-    $keys = array_values(array_unique(array_filter(array_map(
+    $keys = array_values(array_unique(array_filter(
+        array_map(
+            /**
+             * Trim a candidate setting key before filtering empty values.
+             *
+             * @param string $key Candidate canonical setting key.
+             * @return string Trimmed key.
+             */
+            static fn(mixed $key): string => trim((string) $key),
+            $settingKeys,
+        ),
         /**
-         * Trim a candidate setting key before filtering empty values.
+         * Keep only non-empty canonical setting keys.
          *
          * @param string $key Candidate canonical setting key.
-         * @return string Trimmed key.
+         * @return bool Whether the key is usable.
          */
-        static fn (mixed $key): string => trim((string) $key),
-        $settingKeys
-    ),
-    /**
-     * Keep only non-empty canonical setting keys.
-     *
-     * @param string $key Candidate canonical setting key.
-     * @return bool Whether the key is usable.
-     */
-    static fn (string $key): bool => $key !== '')));
+        static fn(string $key): bool => $key !== '',
+    )));
     sort($keys, SORT_STRING);
     if ($keys === []) {
         return;
@@ -127,7 +143,9 @@ function admin_setup_wizard_model_lock_settings(array $settingKeys): void
 
     $placeholders = implode(', ', array_fill(0, count($keys), '?'));
     $statement = db()->prepare(
-        'SELECT setting_key FROM app_settings WHERE setting_key IN (' . $placeholders . ') ORDER BY setting_key FOR UPDATE'
+        'SELECT setting_key FROM app_settings WHERE setting_key IN ('
+            . $placeholders
+            . ') ORDER BY setting_key FOR UPDATE',
     );
     $statement->execute($keys);
     $statement->fetchAll();
@@ -141,23 +159,25 @@ function admin_setup_wizard_model_lock_settings(array $settingKeys): void
  */
 function admin_setup_wizard_model_lock_telemetry_settings(array $settingKeys): void
 {
-    $keys = array_values(array_unique(array_filter(array_map(
+    $keys = array_values(array_unique(array_filter(
+        array_map(
+            /**
+             * Trim a candidate telemetry setting key before filtering empty values.
+             *
+             * @param string $key Candidate canonical telemetry setting key.
+             * @return string Trimmed key.
+             */
+            static fn(mixed $key): string => trim((string) $key),
+            $settingKeys,
+        ),
         /**
-         * Trim a candidate telemetry setting key before filtering empty values.
+         * Keep only non-empty canonical telemetry setting keys.
          *
          * @param string $key Candidate canonical telemetry setting key.
-         * @return string Trimmed key.
+         * @return bool Whether the key is usable.
          */
-        static fn (mixed $key): string => trim((string) $key),
-        $settingKeys
-    ),
-    /**
-     * Keep only non-empty canonical telemetry setting keys.
-     *
-     * @param string $key Candidate canonical telemetry setting key.
-     * @return bool Whether the key is usable.
-     */
-    static fn (string $key): bool => $key !== '')));
+        static fn(string $key): bool => $key !== '',
+    )));
     sort($keys, SORT_STRING);
     if ($keys === []) {
         return;
@@ -165,9 +185,10 @@ function admin_setup_wizard_model_lock_telemetry_settings(array $settingKeys): v
 
     $placeholders = implode(', ', array_fill(0, count($keys), '?'));
     $statement = db()->prepare(
-        'SELECT setting_key FROM telemetry_settings WHERE setting_key IN (' . $placeholders . ') ORDER BY setting_key FOR UPDATE'
+        'SELECT setting_key FROM telemetry_settings WHERE setting_key IN ('
+            . $placeholders
+            . ') ORDER BY setting_key FOR UPDATE',
     );
     $statement->execute($keys);
     $statement->fetchAll();
 }
-

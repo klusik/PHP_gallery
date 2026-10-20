@@ -66,26 +66,33 @@ function translation_catalog_test_fail(string $message): never
 /**
  * Load one JSON translation catalog as a flat string dictionary.
  *
- * @return array<string,string>
+ * @param string $path Filesystem path to the JSON catalog to load.
+ * @return array<string,string> Translation keys mapped to their string values.
  */
 function translation_catalog_test_load(string $path): array
 {
     $json = @file_get_contents($path);
     if (!is_string($json)) {
-        translation_catalog_test_fail('Could not read translation catalog: ' . $path);
+        translation_catalog_test_fail('Could not read translation catalog: '
+            . $path);
     }
     try {
         $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     } catch (Throwable $exception) {
-        translation_catalog_test_fail('Invalid translation JSON in ' . $path . ': ' . $exception->getMessage());
+        translation_catalog_test_fail(
+            'Invalid translation JSON in ' . $path . ': '
+                . $exception->getMessage(),
+        );
     }
     if (!is_array($decoded)) {
-        translation_catalog_test_fail('Translation catalog is not a JSON object: ' . $path);
+        translation_catalog_test_fail('Translation catalog is not a JSON object: '
+            . $path);
     }
     $result = [];
     foreach ($decoded as $key => $value) {
         if (!is_string($key) || !is_string($value)) {
-            translation_catalog_test_fail('Translation catalog must contain only string keys and values: ' . $path);
+            translation_catalog_test_fail('Translation catalog must contain only string keys and values: '
+                . $path);
         }
         $result[$key] = $value;
     }
@@ -112,7 +119,11 @@ foreach ($maintainedLanguages as $languageCode => $languageName) {
     $catalog = translation_catalog_test_load($catalogPath);
     if (($catalog['_language_name'] ?? '') !== $languageName) {
         translation_catalog_test_fail(
-            'Maintained language pack ' . $languageCode . ' must declare native name "' . $languageName . '".'
+            'Maintained language pack '
+                . $languageCode
+                . ' must declare native name "'
+                . $languageName
+                . '".',
         );
     }
 
@@ -120,7 +131,10 @@ foreach ($maintainedLanguages as $languageCode => $languageName) {
     sort($missing, SORT_STRING);
     if ($missing !== []) {
         translation_catalog_test_fail(
-            'Maintained language pack ' . $languageCode . ' is missing English keys: ' . implode(', ', $missing)
+            'Maintained language pack '
+                . $languageCode
+                . ' is missing English keys: '
+                . implode(', ', $missing),
         );
     }
 
@@ -128,18 +142,30 @@ foreach ($maintainedLanguages as $languageCode => $languageName) {
     sort($extra, SORT_STRING);
     if ($extra !== []) {
         translation_catalog_test_fail(
-            'Maintained language pack ' . $languageCode . ' contains keys absent from English: ' . implode(', ', $extra)
+            'Maintained language pack '
+                . $languageCode
+                . ' contains keys absent from English: '
+                . implode(', ', $extra),
         );
     }
 
     foreach ($en as $key => $englishValue) {
-        $englishPlaceholders = translation_catalog_test_placeholders($englishValue);
-        $translatedPlaceholders = translation_catalog_test_placeholders($catalog[$key]);
+        $englishPlaceholders =
+            translation_catalog_test_placeholders($englishValue);
+        $translatedPlaceholders = translation_catalog_test_placeholders(
+            $catalog[$key],
+        );
         if ($englishPlaceholders !== $translatedPlaceholders) {
             translation_catalog_test_fail(
-                'Placeholder mismatch for ' . $key . ' in ' . $languageCode . ': EN {'
-                . implode(', ', $englishPlaceholders) . '} vs translation {'
-                . implode(', ', $translatedPlaceholders) . '}'
+                'Placeholder mismatch for '
+                    . $key
+                    . ' in '
+                    . $languageCode
+                    . ': EN {'
+                    . implode(', ', $englishPlaceholders)
+                    . '} vs translation {'
+                    . implode(', ', $translatedPlaceholders)
+                    . '}',
             );
         }
     }
@@ -150,7 +176,11 @@ foreach ($dormantLanguages as $languageCode => $languageName) {
     $dormant = translation_catalog_test_load($dormantPath);
     if (($dormant['_language_name'] ?? '') !== $languageName) {
         translation_catalog_test_fail(
-            'Dormant language pack ' . $languageCode . ' must declare native name "' . $languageName . '".'
+            'Dormant language pack '
+                . $languageCode
+                . ' must declare native name "'
+                . $languageName
+                . '".',
         );
     }
 
@@ -160,16 +190,26 @@ foreach ($dormantLanguages as $languageCode => $languageName) {
         }
         if (!array_key_exists($key, $en)) {
             translation_catalog_test_fail(
-                'Dormant language pack ' . $languageCode . ' contains a key absent from English: ' . $key
+                'Dormant language pack '
+                    . $languageCode
+                    . ' contains a key absent from English: '
+                    . $key,
             );
         }
         $englishPlaceholders = translation_catalog_test_placeholders($en[$key]);
-        $translatedPlaceholders = translation_catalog_test_placeholders($translatedValue);
+        $translatedPlaceholders =
+            translation_catalog_test_placeholders($translatedValue);
         if ($englishPlaceholders !== $translatedPlaceholders) {
             translation_catalog_test_fail(
-                'Placeholder mismatch for ' . $key . ' in dormant pack ' . $languageCode . ': EN {'
-                . implode(', ', $englishPlaceholders) . '} vs translation {'
-                . implode(', ', $translatedPlaceholders) . '}'
+                'Placeholder mismatch for '
+                    . $key
+                    . ' in dormant pack '
+                    . $languageCode
+                    . ': EN {'
+                    . implode(', ', $englishPlaceholders)
+                    . '} vs translation {'
+                    . implode(', ', $translatedPlaceholders)
+                    . '}',
             );
         }
     }
@@ -179,7 +219,10 @@ $translationCallPattern = '/(?:\\b(?:t|i18n|admin_log_english_t|gallery_migratio
 $missingEnglish = [];
 $scanRoots = [$root . '/app', $root . '/public'];
 foreach ($scanRoots as $scanRoot) {
-    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($scanRoot, FilesystemIterator::SKIP_DOTS));
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(
+        $scanRoot,
+        FilesystemIterator::SKIP_DOTS,
+    ));
     foreach ($iterator as $fileInfo) {
         if (!$fileInfo->isFile()) {
             continue;
@@ -190,13 +233,24 @@ foreach ($scanRoots as $scanRoot) {
         }
         $source = @file_get_contents($fileInfo->getPathname());
         if (!is_string($source)) {
-            translation_catalog_test_fail('Could not read source file during translation scan: ' . $fileInfo->getPathname());
+            translation_catalog_test_fail(
+                'Could not read source file during translation scan: '
+                    . $fileInfo->getPathname(),
+            );
         }
-        preg_match_all($translationCallPattern, $source, $matches, PREG_SET_ORDER);
+        preg_match_all(
+            $translationCallPattern,
+            $source,
+            $matches,
+            PREG_SET_ORDER,
+        );
         foreach ($matches as $match) {
             $key = (string) ($match[2] ?? '');
             if ($key !== '' && !array_key_exists($key, $en)) {
-                $relative = ltrim(str_replace($root, '', $fileInfo->getPathname()), DIRECTORY_SEPARATOR);
+                $relative = ltrim(
+                    str_replace($root, '', $fileInfo->getPathname()),
+                    DIRECTORY_SEPARATOR,
+                );
                 $missingEnglish[$key][] = $relative;
             }
         }
@@ -207,58 +261,117 @@ if ($missingEnglish !== []) {
     ksort($missingEnglish, SORT_STRING);
     $details = [];
     foreach ($missingEnglish as $key => $files) {
-        $details[] = $key . ' [' . implode(', ', array_values(array_unique($files))) . ']';
+        $details[] =
+            $key
+            . ' ['
+            . implode(', ', array_values(array_unique($files)))
+            . ']';
     }
-    translation_catalog_test_fail('English catalog is missing literal translation keys: ' . implode('; ', $details));
+    translation_catalog_test_fail(
+        'English catalog is missing literal translation keys: '
+            . implode('; ', $details),
+    );
 }
 
-$translationsSource = @file_get_contents($root . '/app/services/translations.php');
+$translationsSource = @file_get_contents($root
+    . '/app/services/translations.php');
 if (
     !is_string($translationsSource)
-    || !str_contains($translationsSource, "const CMS_SELECTABLE_LANGUAGES = ['en', 'cs', 'de', 'sv'];")
+    || !str_contains(
+        $translationsSource,
+        "const CMS_SELECTABLE_LANGUAGES = ['en', 'cs', 'de', 'sv'];",
+    )
     || !str_contains($translationsSource, "return 'en';")
 ) {
-    translation_catalog_test_fail('translations.php no longer enforces the four selectable languages with English fallback.');
+    translation_catalog_test_fail(
+        'translations.php no longer enforces the four selectable languages with English fallback.',
+    );
 }
 
 $configExample = @file_get_contents($root . '/config.example.php');
-if (!is_string($configExample) || !preg_match("/'language'\\s*=>\\s*\\[[\\s\\S]*?'default'\\s*=>\\s*'en'/", $configExample)) {
-    translation_catalog_test_fail('config.example.php no longer configures English as the default language.');
+if (
+    !is_string($configExample)
+    || !preg_match(
+        "/'language'\\s*=>\\s*\\[[\\s\\S]*?'default'\\s*=>\\s*'en'/",
+        $configExample,
+    )
+) {
+    translation_catalog_test_fail(
+        'config.example.php no longer configures English as the default language.',
+    );
 }
-if (!preg_match("/'available'\\s*=>\\s*\\[([^\\]]*)\\]/s", $configExample, $availableMatch)) {
-    translation_catalog_test_fail('config.example.php has no readable selectable language list.');
+if (!preg_match(
+    "/'available'\\s*=>\\s*\\[([^\\]]*)\\]/s",
+    $configExample,
+    $availableMatch,
+)) {
+    translation_catalog_test_fail(
+        'config.example.php has no readable selectable language list.',
+    );
 }
-preg_match_all("/'([a-z]{2}(?:-[a-z]{2})?)'/", (string) ($availableMatch[1] ?? ''), $availableCodesMatch);
+preg_match_all(
+    "/'([a-z]{2}(?:-[a-z]{2})?)'/",
+    (string) ($availableMatch[1] ?? ''),
+    $availableCodesMatch,
+);
 $configuredLanguages = array_values($availableCodesMatch[1] ?? []);
 if ($configuredLanguages !== array_keys($maintainedLanguages)) {
     translation_catalog_test_fail(
-        'config.example.php selectable languages must be exactly: ' . implode(', ', array_keys($maintainedLanguages))
+        'config.example.php selectable languages must be exactly: '
+            . implode(', ', array_keys($maintainedLanguages)),
     );
 }
 foreach (array_keys($dormantLanguages) as $languageCode) {
     if (in_array($languageCode, $configuredLanguages, true)) {
-        translation_catalog_test_fail('Dormant language unexpectedly selectable in config.example.php: ' . $languageCode);
+        translation_catalog_test_fail(
+            'Dormant language unexpectedly selectable in config.example.php: '
+                . $languageCode,
+        );
     }
 }
 
-$adminThemeControllerSource = @file_get_contents($root . '/app/controllers/admin_theme_language.php');
-$adminThemeViewSource = @file_get_contents($root . '/app/views/admin_theme.php');
+$adminThemeControllerSource = @file_get_contents($root
+    . '/app/controllers/admin_theme_language.php');
+$adminThemeViewSource = @file_get_contents($root
+    . '/app/views/admin_theme.php');
 if (
     !is_string($adminThemeControllerSource)
     || !is_string($adminThemeViewSource)
-    || preg_match('/<select\b[^>]*\sname="cms_language"(?=\s|>)[^>]*>/', $adminThemeViewSource) !== 1
-    || preg_match('/<select\b[^>]*\sname="public_language"(?=\s|>)[^>]*>/', $adminThemeViewSource) !== 1
-    || !str_contains($adminThemeControllerSource, 'translation_supported_languages()')
-    || !str_contains($adminThemeControllerSource, 'translation_detected_language_packs()')
-    || substr_count($adminThemeViewSource, 'foreach ($languagePacks as $languagePack)') < 2
-    || !str_contains($adminThemeControllerSource, 'view_render_admin_theme_language_tab([')
+    || preg_match(
+        '/<select\b[^>]*\sname="cms_language"(?=\s|>)[^>]*>/',
+        $adminThemeViewSource,
+    ) !== 1
+    || preg_match(
+        '/<select\b[^>]*\sname="public_language"(?=\s|>)[^>]*>/',
+        $adminThemeViewSource,
+    ) !== 1
+    || !str_contains(
+        $adminThemeControllerSource,
+        'translation_supported_languages()',
+    )
+    || !str_contains(
+        $adminThemeControllerSource,
+        'translation_detected_language_packs()',
+    )
+    || substr_count(
+        $adminThemeViewSource,
+        'foreach ($languagePacks as $languagePack)',
+    ) < 2
+    || !str_contains(
+        $adminThemeControllerSource,
+        'view_render_admin_theme_language_tab([',
+    )
 ) {
-    translation_catalog_test_fail('Admin Theme no longer filters detected packs into supported Admin/public selectors through the MVC presentation boundary.');
+    translation_catalog_test_fail(
+        'Admin Theme no longer filters detected packs into supported Admin/public selectors through the MVC presentation boundary.',
+    );
 }
 
 fwrite(
     STDOUT,
-    'Translation catalogs are aligned: ' . count($en)
-    . " keys across four maintained selectable languages, " . count($dormantLanguages)
-    . " dormant future packs validated, placeholders matched, English fallback preserved.\n"
+    'Translation catalogs are aligned: '
+        . count($en)
+        . ' keys across four maintained selectable languages, '
+        . count($dormantLanguages)
+        . " dormant future packs validated, placeholders matched, English fallback preserved.\n",
 );

@@ -53,7 +53,10 @@ foreach (array_slice($argv, 1) as $argument) {
         continue;
     }
     if ($argument === '--help' || $argument === '-h') {
-        fwrite(STDOUT, "Usage: php scripts/check_release.php [version] [--quiet]\n");
+        fwrite(
+            STDOUT,
+            "Usage: php scripts/check_release.php [version] [--quiet]\n",
+        );
         exit(0);
     }
     if ($version === null) {
@@ -74,21 +77,52 @@ if (!valid_version($version)) {
 try {
     $checks = collect_consistency_checks($root, $version);
 } catch (Throwable $exception) {
-    fwrite(STDERR, 'Release consistency check failed: ' . $exception->getMessage() . "\n");
+    fwrite(
+        STDERR,
+        'Release consistency check failed: ' . $exception->getMessage() . "\n",
+    );
     exit(1);
 }
 
-$failed = array_values(array_filter($checks, static fn(array $check): bool => $check['status'] === 'FAIL'));
+$failed = array_values(array_filter(
+    $checks,
+    static fn(array $check): bool => $check['status'] === 'FAIL',
+));
 
 if (!$quiet) {
-    fwrite(STDOUT, 'PHP Gallery release consistency | Target: ' . $version . "\n");
+    fwrite(
+        STDOUT,
+        'PHP Gallery release consistency | Target: ' . $version . "\n",
+    );
     fwrite(STDOUT, str_repeat('=', 72) . "\n");
     foreach ($checks as $index => $check) {
-        fwrite(STDOUT, '[' . ($index + 1) . '/' . count($checks) . '] ' . str_pad($check['status'], 5) . ' ' . $check['label'] . ' - ' . $check['detail'] . "\n");
+        fwrite(
+            STDOUT,
+            '['
+                . ($index + 1)
+                . '/'
+                . count($checks)
+                . '] '
+                . str_pad($check['status'], 5)
+                . ' '
+                . $check['label']
+                . ' - '
+                . $check['detail']
+                . "\n",
+        );
     }
     fwrite(STDOUT, str_repeat('-', 72) . "\n");
 }
 
 $status = $failed === [] ? 'PASS' : 'FAIL';
-fwrite(STDOUT, 'Result: ' . $status . ' | ' . (count($checks) - count($failed)) . ' pass / ' . count($failed) . " fail\n");
+fwrite(
+    STDOUT,
+    'Result: '
+        . $status
+        . ' | '
+        . (count($checks) - count($failed))
+        . ' pass / '
+        . count($failed)
+        . " fail\n",
+);
 exit($failed === [] ? 0 : 1);

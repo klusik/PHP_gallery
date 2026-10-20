@@ -72,13 +72,20 @@ use function Gallery\Services\admin_log_event;
  * @param array{media_renamer_feature_enabled:bool} $capabilities Resolved availability for the guarded rename action.
  * @return void Dispatches a guarded mutation and its JSON response or redirect.
  */
-function admin_edit_gallery_handle_post(array $gallery, array $capabilities): void
-{
+function admin_edit_gallery_handle_post(
+    array $gallery,
+    array $capabilities,
+): void {
     // Media-renamer AJAX requests need JSON CSRF failures and diagnostics.
     // The normal verifier exits with plain text, which makes fetch() report
     // a confusing non-JSON response and leaves the admin without a log row.
     $isMediaRenamerPost = (string) ($_POST['action'] ?? '') === 'rename_files';
-    if ($isMediaRenamerPost && function_exists('Gallery\\Controllers\\admin_media_renamer_verify_csrf_for_ajax')) {
+    if (
+        $isMediaRenamerPost
+        && function_exists(
+            'Gallery\\Controllers\\admin_media_renamer_verify_csrf_for_ajax',
+        )
+    ) {
         if (!admin_media_renamer_verify_csrf_for_ajax()) {
             return;
         }
@@ -92,18 +99,30 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
     $attachmentRoute = '';
     if ((string) ($_POST['music_action'] ?? '') !== '') {
         $attachmentRoute = 'gallery_music';
-    } elseif ((string) ($_POST['pdf_action'] ?? '') !== ''
-        || in_array((string) ($_POST['simbrief_action'] ?? ''), [
-            'upload_pdf', 'replace_pdf', 'convert_pdf_pages',
-        ], true)) {
+    } elseif (
+        (string) ($_POST['pdf_action'] ?? '') !== ''
+        || in_array(
+            (string) ($_POST['simbrief_action'] ?? ''),
+            [
+                'upload_pdf',
+                'replace_pdf',
+                'convert_pdf_pages',
+            ],
+            true,
+        )
+    ) {
         $attachmentRoute = 'gallery_ofp_pdf';
     }
-    if ($attachmentRoute !== ''
-        && !\Gallery\Services\feature_flag_route_enabled($attachmentRoute)) {
+    if (
+        $attachmentRoute !== ''
+        && !\Gallery\Services\feature_flag_route_enabled($attachmentRoute)
+    ) {
         \Gallery\Core\cms_apply_feature_disabled_route_response(
             \Gallery\Services\feature_flag_disabled_route_decision(
-                $attachmentRoute, admin_wants_json(), true
-            )
+                $attachmentRoute,
+                admin_wants_json(),
+                true,
+            ),
         );
         return;
     }
@@ -115,7 +134,11 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
         admin_edit_gallery_handle_pdf_action($gallery);
         return;
     }
-    if (in_array((string) ($_POST['simbrief_action'] ?? ''), ['upload_pdf', 'replace_pdf'], true)) {
+    if (in_array(
+        (string) ($_POST['simbrief_action'] ?? ''),
+        ['upload_pdf', 'replace_pdf'],
+        true,
+    )) {
         admin_edit_gallery_handle_ofp_upload($gallery);
         return;
     }
@@ -124,32 +147,66 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
         return;
     }
     if ((string) ($_POST['action'] ?? '') === 'apply_exif_date_suggestion') {
-        if (!feature_capability_effective_enabled('exif_gallery_date_suggestions')) {
-            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
-                'feature' => t('admin.features.exif_gallery_date_suggestions.label', 'EXIF Gallery Date Suggestions'),
+        if (!feature_capability_effective_enabled(
+            'exif_gallery_date_suggestions',
+        )) {
+            flash_message('admin_notice', t(
+                'admin.features.disabled_route_message',
+                'This feature is disabled in Admin > Features: {feature}',
+                [
+                    'feature' => t(
+                        'admin.features.exif_gallery_date_suggestions.label',
+                        'EXIF Gallery Date Suggestions',
+                    ),
+                ],
+            ));
+            redirect_to(url_for('admin_edit_gallery', [
+                'id' => (int) $gallery['id'],
             ]));
-            redirect_to(url_for('admin_edit_gallery', ['id' => (int) $gallery['id']]));
         }
         admin_apply_gallery_date_exif_suggestion($gallery);
         return;
     }
-    if ((string) ($_POST['action'] ?? '') === 'apply_metadata_organizer_date_plan_batch'
-        || (string) ($_POST['action'] ?? '') === 'apply_metadata_organizer_date_plan') {
+    if (
+        (string) ($_POST['action'] ?? '')
+            === 'apply_metadata_organizer_date_plan_batch'
+        || (string) ($_POST['action'] ?? '')
+            === 'apply_metadata_organizer_date_plan'
+    ) {
         if (!feature_capability_effective_enabled('metadata_organizer')) {
-            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
-                'feature' => t('admin.features.metadata_organizer.label', 'Metadata Organizer'),
+            flash_message('admin_notice', t(
+                'admin.features.disabled_route_message',
+                'This feature is disabled in Admin > Features: {feature}',
+                [
+                    'feature' => t(
+                        'admin.features.metadata_organizer.label',
+                        'Metadata Organizer',
+                    ),
+                ],
+            ));
+            redirect_to(url_for('admin_edit_gallery', [
+                'id' => (int) $gallery['id'],
             ]));
-            redirect_to(url_for('admin_edit_gallery', ['id' => (int) $gallery['id']]));
         }
-        if ((string) $_POST['action'] === 'apply_metadata_organizer_date_plan_batch') {
+        if (
+            (string) $_POST['action']
+            === 'apply_metadata_organizer_date_plan_batch'
+        ) {
             admin_apply_gallery_metadata_organizer_date_plan_batch($gallery);
             return;
         }
         admin_apply_gallery_metadata_organizer_date_plan($gallery, $returnTab);
         return;
     }
-    if ((string) ($_POST['action'] ?? '') === 'cover' && isset($_POST['image_ids'])) {
-        admin_save_gallery_title_picture($gallery, array_map('intval', $_POST['image_ids'] ?? []), $returnTab);
+    if (
+        (string) ($_POST['action'] ?? '') === 'cover'
+        && isset($_POST['image_ids'])
+    ) {
+        admin_save_gallery_title_picture(
+            $gallery,
+            array_map('intval', $_POST['image_ids'] ?? []),
+            $returnTab,
+        );
         return;
     }
     if ((string) ($_POST['action'] ?? '') === 'force_ai_reprocess') {
@@ -157,7 +214,10 @@ function admin_edit_gallery_handle_post(array $gallery, array $capabilities): vo
         return;
     }
     if ((string) ($_POST['action'] ?? '') === 'rename_files') {
-        admin_edit_gallery_handle_media_rename($gallery, (bool) $capabilities['media_renamer_feature_enabled']);
+        admin_edit_gallery_handle_media_rename(
+            $gallery,
+            (bool) $capabilities['media_renamer_feature_enabled'],
+        );
         return;
     }
     admin_edit_gallery_handle_save($gallery, $returnTab);
@@ -179,65 +239,125 @@ function admin_edit_gallery_handle_ofp_upload(array $gallery): void
     $galleryId = (int) $gallery['id'];
     try {
         if (!feature_capability_effective_enabled('simbrief')) {
-            throw new \RuntimeException(t('admin.legacy_ofp.disabled', 'SimBrief integration is disabled.'));
+            throw new \RuntimeException(t(
+                'admin.legacy_ofp.disabled',
+                'SimBrief integration is disabled.',
+            ));
         }
         if ((int) ($_POST['id'] ?? 0) !== $galleryId) {
-            throw new \RuntimeException(t('admin.legacy_ofp.gallery_mismatch', 'The selected gallery changed. Reload this editor before uploading an OFP.'));
+            throw new \RuntimeException(t(
+                'admin.legacy_ofp.gallery_mismatch',
+                'The selected gallery changed. Reload this editor before uploading an OFP.',
+            ));
         }
         $action = (string) ($_POST['simbrief_action'] ?? '');
         $replace = $action === 'replace_pdf';
         if ($replace && (string) ($_POST['confirm_replace'] ?? '') !== '1') {
-            throw new \RuntimeException(t('admin.legacy_ofp.confirm_required', 'Confirm the separate PDF replacement action.'));
+            throw new \RuntimeException(t(
+                'admin.legacy_ofp.confirm_required',
+                'Confirm the separate PDF replacement action.',
+            ));
         }
         $upload = $_FILES['simbrief_ofp_pdf'] ?? null;
-        if (!is_array($upload) || !is_string($upload['tmp_name'] ?? null)
+        if (
+            !is_array($upload)
+            || !is_string($upload['tmp_name'] ?? null)
             || (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
-            || !is_uploaded_file($upload['tmp_name'])) {
-            throw new \RuntimeException(t('admin.legacy_ofp.invalid_upload', 'Select a PDF of up to 25 MiB and check PHP upload limits.'));
+            || !is_uploaded_file($upload['tmp_name'])
+        ) {
+            throw new \RuntimeException(t(
+                'admin.legacy_ofp.invalid_upload',
+                'Select a PDF of up to 25 MiB and check PHP upload limits.',
+            ));
         }
         require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';
-        $provenance = (string) ($_POST['ofp_provenance'] ?? 'retrospective_user_generated');
-        $outcome = \Gallery\Services\simbrief_ofp_attach_manual_pdf($gallery, $upload['tmp_name'], $provenance, $replace);
+        $provenance = (string) (
+            $_POST['ofp_provenance'] ?? 'retrospective_user_generated'
+        );
+        $outcome = \Gallery\Services\simbrief_ofp_attach_manual_pdf(
+            $gallery,
+            $upload['tmp_name'],
+            $provenance,
+            $replace,
+        );
         \Gallery\Services\gallery_attachment_storage_changed();
-        $message = t('admin.legacy_ofp.upload_complete', 'The OFP PDF was attached to this gallery. Existing photos, dates and routes were preserved.');
-        admin_log_event('info', 'simbrief.ofp_manual_pdf_attached', 'Administrator attached an OFP PDF.', [
-            'gallery_id' => $galleryId,
-            'bytes' => $outcome['bytes'],
-            'sha256' => $outcome['sha256'],
-            'provenance' => $outcome['provenance'],
-            'replacement' => $replace,
-        ]);
+        $message = t(
+            'admin.legacy_ofp.upload_complete',
+            'The OFP PDF was attached to this gallery. Existing photos, dates and routes were preserved.',
+        );
+        admin_log_event(
+            'info',
+            'simbrief.ofp_manual_pdf_attached',
+            'Administrator attached an OFP PDF.',
+            [
+                'gallery_id' => $galleryId,
+                'bytes' => $outcome['bytes'],
+                'sha256' => $outcome['sha256'],
+                'provenance' => $outcome['provenance'],
+                'replacement' => $replace,
+            ],
+        );
         if ($ajax) {
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: private, no-store');
             echo json_encode([
                 'ok' => true,
                 'message' => $message,
-                'panel_html' => admin_edit_gallery_simbrief_legacy_panel_html($gallery),
+                'panel_html' =>
+                    admin_edit_gallery_simbrief_legacy_panel_html($gallery),
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
         flash_message('admin_notice', $message);
     } catch (Throwable $error) {
-        admin_log_event('warning', 'simbrief.ofp_manual_pdf_failed', 'Administrator OFP attachment failed.', [
-            'gallery_id' => $galleryId,
-            'reason' => $error->getMessage(),
-        ]);
+        admin_log_event(
+            'warning',
+            'simbrief.ofp_manual_pdf_failed',
+            'Administrator OFP attachment failed.',
+            [
+                'gallery_id' => $galleryId,
+                'reason' => $error->getMessage(),
+            ],
+        );
         $localizedErrors = [
-            'An OFP PDF is already attached. Use the separate confirmed replacement action.' => t('admin.legacy_ofp.duplicate_pdf', 'An OFP PDF is already attached. Use the separate replacement action.'),
-            'No PDF exists to replace. Reload the gallery editor.' => t('admin.legacy_ofp.missing_replace', 'No PDF exists to replace. Reload the gallery editor.'),
-            'The file is not a valid PDF document.' => t('admin.legacy_ofp.invalid_pdf', 'The uploaded file is not a valid PDF.'),
-            'The PDF must be between 16 bytes and 25 MiB.' => t('admin.legacy_ofp.size_limit', 'The PDF must be at most 25 MiB.'),
-            'Choose a valid OFP document origin.' => t('admin.legacy_ofp.invalid_provenance', 'Choose a valid OFP origin.'),
-            'The existing OFP manifest is invalid and was preserved.' => t('admin.legacy_ofp.manifest_invalid', 'The existing OFP manifest is invalid. Repair it before replacing the attachment.'),
+            'An OFP PDF is already attached. Use the separate confirmed replacement action.' => t(
+                'admin.legacy_ofp.duplicate_pdf',
+                'An OFP PDF is already attached. Use the separate replacement action.',
+            ),
+            'No PDF exists to replace. Reload the gallery editor.' => t(
+                'admin.legacy_ofp.missing_replace',
+                'No PDF exists to replace. Reload the gallery editor.',
+            ),
+            'The file is not a valid PDF document.' => t(
+                'admin.legacy_ofp.invalid_pdf',
+                'The uploaded file is not a valid PDF.',
+            ),
+            'The PDF must be between 16 bytes and 25 MiB.' => t(
+                'admin.legacy_ofp.size_limit',
+                'The PDF must be at most 25 MiB.',
+            ),
+            'Choose a valid OFP document origin.' => t(
+                'admin.legacy_ofp.invalid_provenance',
+                'Choose a valid OFP origin.',
+            ),
+            'The existing OFP manifest is invalid and was preserved.' => t(
+                'admin.legacy_ofp.manifest_invalid',
+                'The existing OFP manifest is invalid. Repair it before replacing the attachment.',
+            ),
         ];
         $publicError = $localizedErrors[$error->getMessage()]
-            ?? t('admin.legacy_ofp.upload_failed', 'The PDF could not be attached. Check the file and gallery storage.');
+            ?? t(
+                'admin.legacy_ofp.upload_failed',
+                'The PDF could not be attached. Check the file and gallery storage.',
+            );
         if ($ajax) {
             http_response_code(422);
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: private, no-store');
-            echo json_encode(['ok' => false, 'error' => $publicError], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            echo json_encode([
+                'ok' => false,
+                'error' => $publicError,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
         flash_message('admin_notice', $publicError);
@@ -259,9 +379,17 @@ function admin_edit_gallery_handle_ofp_convert(array $gallery): void
     header('Cache-Control: private, no-store');
     http_response_code(409);
     echo json_encode(admin_mutation_error_envelope(
-        t('pdf.reload_converter', 'Reload this gallery and use the browser PDF-to-PNG action.'),
+        t(
+            'pdf.reload_converter',
+            'Reload this gallery and use the browser PDF-to-PNG action.',
+        ),
         'pdf_browser_conversion_required',
-        admin_mutation_descriptor('gallery.pdf.convert', 'gallery', 'update', [(int) $gallery['id']])
+        admin_mutation_descriptor(
+            'gallery.pdf.convert',
+            'gallery',
+            'update',
+            [(int) $gallery['id']],
+        ),
     ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
@@ -272,53 +400,94 @@ function admin_edit_gallery_handle_ofp_convert(array $gallery): void
  * available, using the canonical error envelope for panel requests.
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
+ * @return void Emit a JSON result or flash a message and redirect.
  */
 function admin_edit_gallery_handle_ai_reprocess(array $gallery): void
 {
-    $aiEditUrl = admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api');
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('ai_image_metadata')) {
-        $message = t('admin.gallery_editor.ai_reprocess_disabled', 'AI metadata is disabled in Admin > Features.');
+    $aiEditUrl = admin_edit_gallery_tab_url(
+        (int) $gallery['id'],
+        'admin-edit-api',
+    );
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('ai_image_metadata')
+    ) {
+        $message = t(
+            'admin.gallery_editor.ai_reprocess_disabled',
+            'AI metadata is disabled in Admin > Features.',
+        );
         if (admin_wants_json()) {
             header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(admin_mutation_error_envelope($message, 'ai_metadata_disabled', null, ['redirect_url' => $aiEditUrl]), JSON_THROW_ON_ERROR);
+            echo json_encode(admin_mutation_error_envelope(
+                $message,
+                'ai_metadata_disabled',
+                null,
+                ['redirect_url' => $aiEditUrl],
+            ), JSON_THROW_ON_ERROR);
             return;
         }
         flash_message('admin_notice', $message);
         redirect_to($aiEditUrl);
     }
-    if (!function_exists('Gallery\\Services\\ai_image_analysis_force_gallery_reprocess') || !ai_image_analysis_schema_ready()) {
-        $message = t('admin.gallery_editor.ai_reprocess_unavailable', 'AI metadata reset will be available after the AI image-analysis migration is applied.');
+    if (
+        !function_exists(
+            'Gallery\\Services\\ai_image_analysis_force_gallery_reprocess',
+        )
+        || !ai_image_analysis_schema_ready()
+    ) {
+        $message = t(
+            'admin.gallery_editor.ai_reprocess_unavailable',
+            'AI metadata reset will be available after the AI image-analysis migration is applied.',
+        );
         if (admin_wants_json()) {
             header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(admin_mutation_error_envelope($message, 'ai_metadata_unavailable', null, ['redirect_url' => $aiEditUrl]), JSON_THROW_ON_ERROR);
+            echo json_encode(admin_mutation_error_envelope(
+                $message,
+                'ai_metadata_unavailable',
+                null,
+                ['redirect_url' => $aiEditUrl],
+            ), JSON_THROW_ON_ERROR);
             return;
         }
         flash_message('admin_notice', $message);
         redirect_to($aiEditUrl);
     }
-    $resetResult = ai_image_analysis_force_gallery_reprocess((int) $gallery['id']);
-    $message = t('admin.gallery_editor.ai_reprocess_queued', 'AI metadata reset for {images} photo(s) across {galleries} gallery node(s). Removed {metadata} metadata row(s), removed {jobs} old queue row(s), and queued {queued} fresh job(s). The next AI worker poll will claim them.', [
-        'images' => (int) ($resetResult['images'] ?? 0),
-        'galleries' => (int) ($resetResult['galleries'] ?? 0),
-        'metadata' => (int) ($resetResult['metadata_deleted'] ?? 0),
-        'jobs' => (int) ($resetResult['jobs_deleted'] ?? 0),
-        'queued' => (int) ($resetResult['jobs_queued'] ?? 0),
-    ]);
+    $resetResult = ai_image_analysis_force_gallery_reprocess(
+        (int) $gallery['id'],
+    );
+    $message = t(
+        'admin.gallery_editor.ai_reprocess_queued',
+        'AI metadata reset for {images} photo(s) across {galleries} gallery node(s). Removed {metadata} metadata row(s), removed {jobs} old queue row(s), and queued {queued} fresh job(s). The next AI worker poll will claim them.',
+        [
+            'images' => (int) ($resetResult['images'] ?? 0),
+            'galleries' => (int) ($resetResult['galleries'] ?? 0),
+            'metadata' => (int) ($resetResult['metadata_deleted'] ?? 0),
+            'jobs' => (int) ($resetResult['jobs_deleted'] ?? 0),
+            'queued' => (int) ($resetResult['jobs_queued'] ?? 0),
+        ],
+    );
     if (admin_wants_json()) {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(array_merge(
             admin_mutation_success_envelope(
                 $message,
-                admin_mutation_descriptor('image.ai_metadata_reprocess', 'image', 'queue', []),
+                admin_mutation_descriptor(
+                    'image.ai_metadata_reprocess',
+                    'image',
+                    'queue',
+                    [],
+                ),
                 admin_mutation_panel_metadata('gallery-edit', $aiEditUrl, true),
                 [],
-                ['redirect_url' => $aiEditUrl]
+                ['redirect_url' => $aiEditUrl],
             ),
             [
                 'background_queued' => true,
                 'queue_result' => $resetResult,
                 'edit_url' => $aiEditUrl,
-            ]
+            ],
         ), JSON_THROW_ON_ERROR);
         return;
     }
@@ -334,24 +503,50 @@ function admin_edit_gallery_handle_ai_reprocess(array $gallery): void
  *
  * @param array<string, mixed> $gallery Gallery row being edited.
  * @param bool $mediaRenamerFeatureEnabled Whether the renamer feature is enabled.
+ * @return void Emit a panel response or flash a message and redirect.
  */
-function admin_edit_gallery_handle_media_rename(array $gallery, bool $mediaRenamerFeatureEnabled): void
-{
+function admin_edit_gallery_handle_media_rename(
+    array $gallery,
+    bool $mediaRenamerFeatureEnabled,
+): void {
     if (!$mediaRenamerFeatureEnabled) {
-        flash_message('admin_notice', t('admin.media_renamer.feature_disabled', 'Media renamer is disabled in Admin > Features.'));
-        redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-media'));
+        flash_message('admin_notice', t(
+            'admin.media_renamer.feature_disabled',
+            'Media renamer is disabled in Admin > Features.',
+        ));
+        redirect_to(admin_edit_gallery_tab_url(
+            (int) $gallery['id'],
+            'admin-edit-media',
+        ));
     }
-    $renamerPattern = media_renamer_normalize_pattern((string) ($_POST['renamer_pattern'] ?? ''));
-    $renamerReturnUrl = admin_edit_gallery_tab_url_with_renamer_pattern((int) $gallery['id'], $renamerPattern);
+    $renamerPattern = media_renamer_normalize_pattern(
+        (string) ($_POST['renamer_pattern'] ?? ''),
+    );
+    $renamerReturnUrl = admin_edit_gallery_tab_url_with_renamer_pattern(
+        (int) $gallery['id'],
+        $renamerPattern,
+    );
     $renameResult = null;
     if (empty($_POST['confirm_media_rename'])) {
-        $notice = t('admin.media_renamer.confirm_required', 'Confirm that you reviewed the preview before applying physical renames.');
-        if (admin_wants_json() && function_exists('Gallery\\Controllers\\admin_media_renamer_render_gallery_panel_html')) {
+        $notice = t(
+            'admin.media_renamer.confirm_required',
+            'Confirm that you reviewed the preview before applying physical renames.',
+        );
+        if (
+            admin_wants_json()
+            && function_exists(
+                'Gallery\\Controllers\\admin_media_renamer_render_gallery_panel_html',
+            )
+        ) {
             header('Content-Type: application/json');
             echo json_encode([
                 'ok' => false,
                 'error' => $notice,
-                'panel_html' => admin_media_renamer_render_gallery_panel_html($gallery, $renamerPattern, $notice),
+                'panel_html' => admin_media_renamer_render_gallery_panel_html(
+                    $gallery,
+                    $renamerPattern,
+                    $notice,
+                ),
             ]);
             return;
         }
@@ -359,52 +554,119 @@ function admin_edit_gallery_handle_media_rename(array $gallery, bool $mediaRenam
         redirect_to($renamerReturnUrl);
     }
     try {
-        $renameResult = media_renamer_execute_gallery((int) $gallery['id'], $renamerPattern);
-        if (function_exists('Gallery\\Controllers\\admin_media_renamer_log_event')) {
-            $completionSeverity = function_exists('Gallery\\Controllers\\admin_media_renamer_result_log_severity') ? admin_media_renamer_result_log_severity($renameResult) : 'info';
-            admin_media_renamer_log_event($completionSeverity === 'warning' ? 'warning' : 'info', 'media_renamer.gallery_completed', 'Gallery media rename completed.', [
-                'gallery_id' => (int) $gallery['id'],
-                'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
-                'pattern' => $renamerPattern,
-                'result' => function_exists('Gallery\\Controllers\\admin_media_renamer_loggable_result') ? admin_media_renamer_loggable_result($renameResult) : $renameResult,
-            ], ['category' => 'media', 'severity' => $completionSeverity]);
+        $renameResult = media_renamer_execute_gallery(
+            (int) $gallery['id'],
+            $renamerPattern,
+        );
+        if (function_exists(
+            'Gallery\\Controllers\\admin_media_renamer_log_event',
+        )) {
+            $completionSeverity = function_exists(
+                'Gallery\\Controllers\\admin_media_renamer_result_log_severity',
+            )
+                ? admin_media_renamer_result_log_severity($renameResult)
+                : 'info';
+            admin_media_renamer_log_event(
+                $completionSeverity === 'warning' ? 'warning' : 'info',
+                'media_renamer.gallery_completed',
+                'Gallery media rename completed.',
+                [
+                    'gallery_id' => (int) $gallery['id'],
+                    'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
+                    'pattern' => $renamerPattern,
+                    'result' => function_exists(
+                        'Gallery\\Controllers\\admin_media_renamer_loggable_result',
+                    )
+                        ? admin_media_renamer_loggable_result($renameResult)
+                        : $renameResult,
+                ],
+                ['category' => 'media', 'severity' => $completionSeverity],
+            );
         }
-        $notice = t('admin.media_renamer.gallery_result_notice', 'Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).', [
-            'renamed' => (string) (int) ($renameResult['renamed'] ?? 0),
-            'derivatives' => (string) ((int) ($renameResult['derivatives_moved'] ?? 0) + (int) ($renameResult['derivatives_cleaned'] ?? 0)),
-            'missing' => (string) (int) ($renameResult['missing'] ?? 0),
-            'skipped' => (string) ((int) ($renameResult['skipped'] ?? 0) + (int) ($renameResult['collisions'] ?? 0)),
-            'archives' => (string) (int) ($renameResult['zip_archives_deleted'] ?? 0),
-            'titles' => (string) (int) ($renameResult['titles_updated'] ?? 0),
-        ]);
+        $notice = t(
+            'admin.media_renamer.gallery_result_notice',
+            'Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).',
+            [
+                'renamed' => (string) (int) ($renameResult['renamed'] ?? 0),
+                'derivatives' => (string) (
+                    (int) ($renameResult['derivatives_moved'] ?? 0)
+                    + (int) ($renameResult['derivatives_cleaned'] ?? 0)
+                ),
+                'missing' => (string) (int) ($renameResult['missing'] ?? 0),
+                'skipped' => (string) (
+                    (int) ($renameResult['skipped'] ?? 0)
+                    + (int) ($renameResult['collisions'] ?? 0)
+                ),
+                'archives' => (string) (int) (
+                    $renameResult['zip_archives_deleted'] ?? 0
+                ),
+                'titles' => (string) (int) (
+                    $renameResult['titles_updated'] ?? 0
+                ),
+            ],
+        );
         if ((int) ($renameResult['derivative_failures'] ?? 0) > 0) {
-            $notice .= ' ' . t('admin.media_renamer.gallery_derivative_warnings', 'Generated derivative warnings: {count}.', [
-                'count' => (string) (int) ($renameResult['derivative_failures'] ?? 0),
-            ]);
+            $notice .= ' '
+            . t(
+                'admin.media_renamer.gallery_derivative_warnings',
+                'Generated derivative warnings: {count}.',
+                [
+                    'count' => (string) (int) (
+                        $renameResult['derivative_failures'] ?? 0
+                    ),
+                ],
+            );
         }
-        $renameWarnings = array_slice(array_map('strval', (array) ($renameResult['warnings'] ?? [])), 0, 5);
+        $renameWarnings = array_slice(
+            array_map('strval', (array) ($renameResult['warnings'] ?? [])),
+            0,
+            5,
+        );
         if ($renameWarnings) {
-            $notice .= ' ' . t('admin.media_renamer.gallery_warnings', 'Warnings: {warnings}', [
-                'warnings' => implode(' | ', $renameWarnings),
-            ]);
+            $notice .= ' '
+            . t(
+                'admin.media_renamer.gallery_warnings',
+                'Warnings: {warnings}',
+                [
+                    'warnings' => implode(' | ', $renameWarnings),
+                ],
+            );
         }
     } catch (Throwable $exception) {
         $notice = $exception->getMessage();
-        if (function_exists('Gallery\\Controllers\\admin_media_renamer_log_exception')) {
-            admin_media_renamer_log_exception('media_renamer.gallery_failed', 'Gallery media rename failed.', $exception, [
-                'gallery_id' => (int) $gallery['id'],
-                'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
-                'pattern' => $renamerPattern,
-            ]);
+        if (function_exists(
+            'Gallery\\Controllers\\admin_media_renamer_log_exception',
+        )) {
+            admin_media_renamer_log_exception(
+                'media_renamer.gallery_failed',
+                'Gallery media rename failed.',
+                $exception,
+                [
+                    'gallery_id' => (int) $gallery['id'],
+                    'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
+                    'pattern' => $renamerPattern,
+                ],
+            );
         } elseif (function_exists('Gallery\\Services\\admin_log_event')) {
-            admin_log_event('error', 'media_renamer.gallery_failed', 'Gallery media rename failed.', [
-                'gallery_id' => (int) $gallery['id'],
-                'error' => $exception->getMessage(),
-            ], ['category' => 'media', 'severity' => 'error']);
+            admin_log_event(
+                'error',
+                'media_renamer.gallery_failed',
+                'Gallery media rename failed.',
+                [
+                    'gallery_id' => (int) $gallery['id'],
+                    'error' => $exception->getMessage(),
+                ],
+                ['category' => 'media', 'severity' => 'error'],
+            );
         }
     }
     $updatedGallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
-    if (admin_wants_json() && function_exists('Gallery\Controllers\admin_media_renamer_render_gallery_panel_html')) {
+    if (
+        admin_wants_json()
+        && function_exists(
+            'Gallery\Controllers\admin_media_renamer_render_gallery_panel_html',
+        )
+    ) {
         header('Content-Type: application/json');
         // $renamedImageIds stores only rows whose persisted filename/path changed.
         $renamedImageIds = [];
@@ -420,7 +682,11 @@ function admin_edit_gallery_handle_media_rename(array $gallery, bool $mediaRenam
         // $mediaRenameContexts stays empty when the execution was a true no-op.
         $mediaRenameContexts = [];
         if ($renameResult !== null && $renamedImageIds !== []) {
-            $imageState = gallery_lightbox_state_summary($updatedGallery, false, false);
+            $imageState = gallery_lightbox_state_summary(
+                $updatedGallery,
+                false,
+                false,
+            );
             $revision = trim((string) ($imageState['revision'] ?? ''));
             $mediaRenameContexts[] = \Gallery\Core\admin_mutation_public_gallery_context(
                 (int) $updatedGallery['id'],
@@ -430,19 +696,39 @@ function admin_edit_gallery_handle_media_rename(array $gallery, bool $mediaRenam
                         'gallery_id' => (int) $updatedGallery['id'],
                         'revision' => $revision,
                     ])
-                    : null
+                    : null,
             );
         }
-        $payload = $renameResult !== null ? admin_mutation_success_envelope(
-            $notice,
-            admin_mutation_descriptor('image.media_rename', 'image', 'rename', $renamedImageIds),
-            admin_mutation_panel_metadata('media-renamer', $renamerReturnUrl, true),
-            $mediaRenameContexts,
-            ['redirect_url' => $renamerReturnUrl]
-        ) : admin_mutation_error_envelope($notice, 'media_rename_failed', null, ['redirect_url' => $renamerReturnUrl]);
+        $payload = $renameResult !== null
+            ? admin_mutation_success_envelope(
+                $notice,
+                admin_mutation_descriptor(
+                    'image.media_rename',
+                    'image',
+                    'rename',
+                    $renamedImageIds,
+                ),
+                admin_mutation_panel_metadata(
+                    'media-renamer',
+                    $renamerReturnUrl,
+                    true,
+                ),
+                $mediaRenameContexts,
+                ['redirect_url' => $renamerReturnUrl],
+            ) : admin_mutation_error_envelope(
+                $notice,
+                'media_rename_failed',
+                null,
+                ['redirect_url' => $renamerReturnUrl],
+            );
         echo json_encode(array_merge($payload, [
             'message' => $notice,
-            'panel_html' => admin_media_renamer_render_gallery_panel_html($updatedGallery, $renamerPattern, $notice, $renameResult),
+            'panel_html' => admin_media_renamer_render_gallery_panel_html(
+                $updatedGallery,
+                $renamerPattern,
+                $notice,
+                $renameResult,
+            ),
             'gallery_id' => (int) $updatedGallery['id'],
         ]));
         return;
@@ -466,71 +752,134 @@ function admin_edit_gallery_handle_save(array $gallery, string $returnTab): void
 {
     try {
         $editorInput = array_key_exists('simbrief_identifier', $_POST)
-            ? \Gallery\Services\simbrief_description_expand_identifier_input($_POST)
+            ? \Gallery\Services\simbrief_description_expand_identifier_input(
+                $_POST,
+            )
             : $_POST;
         $simbriefDraft = null;
-        $simbriefDraftRef = trim((string) ($editorInput['simbrief_draft_ref'] ?? ''));
+        $simbriefDraftRef = trim(
+            (string) ($editorInput['simbrief_draft_ref'] ?? ''),
+        );
         if ($simbriefDraftRef !== '') {
             if (!feature_capability_effective_enabled('simbrief')) {
-                throw new \RuntimeException(t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
-                    'feature' => t('admin.features.simbrief.label', 'SimBrief'),
-                ]));
+                throw new \RuntimeException(t(
+                    'admin.features.disabled_route_message',
+                    'This feature is disabled in Admin > Features: {feature}',
+                    [
+                        'feature' => t(
+                            'admin.features.simbrief.label',
+                            'SimBrief',
+                        ),
+                    ],
+                ));
             }
             $simbriefDraft = \Gallery\Services\simbrief_description_draft_read(
                 (int) (\Gallery\Core\current_user()['id'] ?? 0),
-                $simbriefDraftRef
+                $simbriefDraftRef,
             );
         }
-        $rememberDefaults = !empty($editorInput['remember_simbrief_pilot_id'])
+        $rememberDefaults =
+            !empty($editorInput['remember_simbrief_pilot_id'])
             || !empty($editorInput['remember_simbrief_pilot_name'])
             || !empty($editorInput['remember_content_language']);
         if ($rememberDefaults) {
             if (!\Gallery\Services\gallery_creation_preferences_available()) {
-                throw new \RuntimeException('Gallery creation defaults are unavailable. Run pending migrations.');
+                throw new \RuntimeException(
+                    'Gallery creation defaults are unavailable. Run pending migrations.',
+                );
             }
-            \Gallery\Services\gallery_creation_preferences_validate($editorInput);
+            \Gallery\Services\gallery_creation_preferences_validate(
+                $editorInput,
+            );
         }
         // $saveResult stores the shared gallery save outcome used by both page and panel workflows.
-        $saveResult = admin_save_gallery_from_input($gallery, $editorInput, $_FILES, $returnTab, true);
+        $saveResult = admin_save_gallery_from_input(
+            $gallery,
+            $editorInput,
+            $_FILES,
+            $returnTab,
+            true,
+        );
     } catch (GalleryEditConflict|GalleryEditUnavailable $exception) {
-        admin_gallery_edit_conflict_response($exception, (int) $gallery['id'], $returnTab, $_POST);
+        admin_gallery_edit_conflict_response(
+            $exception,
+            (int) $gallery['id'],
+            $returnTab,
+            $_POST,
+        );
         return;
     } catch (Throwable $exception) {
         if (admin_wants_json()) {
             admin_panel_error_response($exception->getMessage());
             return;
         }
-        $_SESSION['admin_gallery_error_' . (int) $gallery['id']] = $exception->getMessage();
+        $_SESSION['admin_gallery_error_' . (int) $gallery['id']] =
+            $exception->getMessage();
         flash_message('admin_notice', $exception->getMessage());
-        redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
+        redirect_to(admin_edit_gallery_tab_url(
+            (int) $gallery['id'],
+            $returnTab,
+        ));
     }
     // $gallery stores the saved gallery row from the shared persistence helper.
     $gallery = $saveResult['gallery'] ?? $gallery;
     // $notice stores an intermediate value used by the surrounding gallery workflow.
-    $notice = (string) ($saveResult['notice'] ?? t('admin.gallery_editor.notice_saved', 'Gallery saved.'));
+    $notice = (string) (
+        $saveResult['notice'] ?? t(
+            'admin.gallery_editor.notice_saved',
+            'Gallery saved.',
+        )
+    );
     if (is_array($simbriefDraft)) {
         try {
-            $attached = \Gallery\Services\simbrief_description_draft_attach($gallery, $simbriefDraft);
+            $attached = \Gallery\Services\simbrief_description_draft_attach(
+                $gallery,
+                $simbriefDraft,
+            );
             if (empty($attached['ofp']['saved'])) {
-                $notice .= ' ' . t('admin.simbrief.create_ofp_warning', 'The gallery was saved, but its SimBrief OFP could not be saved.');
+                $notice .= ' '
+                . t(
+                    'admin.simbrief.create_ofp_warning',
+                    'The gallery was saved, but its SimBrief OFP could not be saved.',
+                );
             }
             if (empty($attached['route']['saved'])) {
-                $notice .= ' ' . t('admin.simbrief.create_route_warning', 'The gallery was saved, but its SimBrief route map could not be saved.');
+                $notice .= ' '
+                . t(
+                    'admin.simbrief.create_route_warning',
+                    'The gallery was saved, but its SimBrief route map could not be saved.',
+                );
             }
         } catch (Throwable $exception) {
-            $notice .= ' ' . t('admin.simbrief.create_attach_warning', 'The gallery was saved, but the SimBrief flight data could not be attached.');
+            $notice .= ' '
+            . t(
+                'admin.simbrief.create_attach_warning',
+                'The gallery was saved, but the SimBrief flight data could not be attached.',
+            );
         }
     }
     if ($rememberDefaults) {
         try {
-            \Gallery\Services\gallery_creation_preferences_remember((int) (\Gallery\Core\current_user()['id'] ?? 0), $editorInput);
+            \Gallery\Services\gallery_creation_preferences_remember(
+                (int) (\Gallery\Core\current_user()['id'] ?? 0),
+                $editorInput,
+            );
         } catch (Throwable $exception) {
-            $notice .= ' ' . t('admin.gallery_editor.defaults_warning', 'The gallery was saved, but your new defaults could not be saved.');
+            $notice .= ' '
+            . t(
+                'admin.gallery_editor.defaults_warning',
+                'The gallery was saved, but your new defaults could not be saved.',
+            );
         }
     }
     if (admin_wants_json()) {
         header('Content-Type: application/json');
-        echo json_encode(admin_edit_gallery_success_response($gallery, $notice, $returnTab, $saveResult));
+        echo json_encode(admin_edit_gallery_success_response(
+            $gallery,
+            $notice,
+            $returnTab,
+            $saveResult,
+        ));
         return;
     }
     flash_message('admin_notice', $notice);

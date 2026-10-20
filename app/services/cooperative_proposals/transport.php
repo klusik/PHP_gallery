@@ -35,9 +35,18 @@ function cooperative_proposal_request(array $peer, array $message): array
     $token = cooperative_peer_outbound_credential($peer['instance_id']);
     $transport = &cooperative_proposal_transport_override();
     try {
-        $result = is_callable($transport) ? $transport($base, $message, $token)
-            : outbound_http_json_request($base . '/index.php?page=cooperative_proposal_api', $message, $token);
-        if (!is_array($result) || strlen(json_encode($result, JSON_THROW_ON_ERROR)) > COOPERATIVE_PAIRING_MAX_BYTES) {
+        $result = is_callable($transport)
+            ? $transport($base, $message, $token)
+            : outbound_http_json_request(
+                $base . '/index.php?page=cooperative_proposal_api',
+                $message,
+                $token,
+            );
+        if (
+            !is_array($result)
+            || strlen(json_encode($result, JSON_THROW_ON_ERROR))
+                > COOPERATIVE_PAIRING_MAX_BYTES
+        ) {
             throw new \RuntimeException('Invalid bounded reply.');
         }
     } catch (\Throwable) {
@@ -55,8 +64,12 @@ function cooperative_proposal_request(array $peer, array $message): array
  * @param string $action Offer from the local coordinator, or decision query from any member.
  * @return array<string,mixed> Updated Admin projection with one direct observation.
  */
-function cooperative_proposal_exchange_contact(string $groupId, int $expected, string $remote, string $action): array
-{
+function cooperative_proposal_exchange_contact(
+    string $groupId,
+    int $expected,
+    string $remote,
+    string $action,
+): array {
     $stored = cooperative_proposal_exchange_load($groupId);
     if ($stored['storage_revision'] !== $expected) {
         throw new CooperativeException('revision_conflict');
@@ -74,33 +87,64 @@ function cooperative_proposal_exchange_contact(string $groupId, int $expected, s
     if ($group['exchange']['decision'] === 'declined') {
         throw new CooperativeException('proposal_declined');
     }
-    if ($remote === $local || !in_array($remote, array_column($pending['body']['members'], 'instance_id'), true)
-        || ($action === 'offer' && $group['coordinator_id'] !== $local)) {
+    if (
+        $remote === $local
+        || !in_array(
+            $remote,
+            array_column($pending['body']['members'], 'instance_id'),
+            true,
+        )
+        || (
+            $action === 'offer'
+            && $group['coordinator_id'] !== $local
+        )
+    ) {
         throw new CooperativeException('proposal_unauthorized');
     }
     $peer = cooperative_peer_status($remote);
     if ($peer === null || $peer['state'] !== 'active') {
         throw new CooperativeException('friendship_unavailable');
     }
-    $message = ['protocol' => COOPERATIVE_PROTOCOL_VERSION, 'action' => $action,
-        'sender_id' => $local, 'recipient_id' => $remote, 'group_id' => $groupId, 'digest' => $pending['digest']];
+    $message = [
+        'protocol' => COOPERATIVE_PROTOCOL_VERSION,
+        'action' => $action,
+        'sender_id' => $local,
+        'recipient_id' => $remote,
+        'group_id' => $groupId,
+        'digest' => $pending['digest'],
+    ];
     if ($action === 'offer') {
         cooperative_proposal_source_assert($pending['body']);
         $message['body'] = $pending['body'];
     }
     $response = cooperative_proposal_request($peer, $message);
-    $observation = cooperative_proposal_response_validate($response, $message, $pending['body']);
+    $observation = cooperative_proposal_response_validate(
+        $response,
+        $message,
+        $pending['body'],
+    );
     if (cooperative_peer_status($remote) !== $peer) {
         throw new CooperativeException('revision_conflict');
     }
-    $group['exchange']['observations'][$remote] = $observation + ['observed_at' => time(), 'peer_revision' => $peer['revision']];
-    $verifiedGenerations = $group['exchange']['lease']['generations'][$remote]
-        ?? $group['exchange']['verification']['receipts'][$remote]['generations'] ?? null;
-    if ($observation['decision'] !== 'approved'
-        || ($verifiedGenerations !== null && $verifiedGenerations !== $observation['generations'])) {
+    $group['exchange']['observations'][$remote] = $observation
+    + ['observed_at' => time(), 'peer_revision' => $peer['revision']];
+    $verifiedGenerations =
+        $group['exchange']['lease']['generations'][$remote]
+            ?? $group['exchange']['verification']['receipts'][$remote]['generations']
+            ?? null;
+    if (
+        $observation['decision'] !== 'approved'
+        || (
+            $verifiedGenerations !== null
+            && $verifiedGenerations !== $observation['generations']
+        )
+    ) {
         $group['exchange']['lease'] = null;
         $group['exchange']['verification'] = null;
     }
     // Save against the pre-network revision: a concurrent local decline cannot be overwritten.
-    return cooperative_proposal_exchange_projection(cooperative_proposal_exchange_save($stored, $group));
+    return cooperative_proposal_exchange_projection(cooperative_proposal_exchange_save(
+        $stored,
+        $group,
+    ));
 }

@@ -41,23 +41,55 @@ function classifier_definition(): array
         'families' => [
             'documentation' => [
                 'rules' => [
-                    'documentation.missing', 'documentation.summary',
-                    'parameter.description', 'parameter.duplicate', 'parameter.extra',
-                    'parameter.missing', 'parameter.pattern_review', 'parameter.type',
-                    'parameter.type_mismatch', 'parameter.unparsed', 'return.description',
-                    'return.missing', 'return.type_mismatch', 'shape.unspecified',
-                    'header.author', 'header.file', 'header.module_type', 'header.project',
-                    'header.purpose', 'header.repository', 'header.responsibilities',
-                    'parameter.format', 'return.duplicate', 'return.format', 'return.type',
-                    'typing.parameter_missing', 'typing.return_missing',
+                    'documentation.missing',
+                    'documentation.summary',
+                    'parameter.description',
+                    'parameter.duplicate',
+                    'parameter.extra',
+                    'parameter.missing',
+                    'parameter.pattern_review',
+                    'parameter.type',
+                    'parameter.type_mismatch',
+                    'parameter.unparsed',
+                    'return.description',
+                    'return.missing',
+                    'return.type_mismatch',
+                    'shape.unspecified',
+                    'header.author',
+                    'header.file',
+                    'header.module_type',
+                    'header.project',
+                    'header.purpose',
+                    'header.repository',
+                    'header.responsibilities',
+                    'parameter.format',
+                    'return.duplicate',
+                    'return.format',
+                    'return.type',
+                    'typing.parameter_missing',
+                    'typing.return_missing',
                 ],
-                'kinds' => ['bound_callback', 'callable', 'callback', 'class', 'enum', 'function', 'interface', 'property', 'trait', 'header'],
+                'kinds' => [
+                    'bound_callback',
+                    'callable',
+                    'callback',
+                    'class',
+                    'enum',
+                    'function',
+                    'interface',
+                    'property',
+                    'trait',
+                    'header',
+                ],
             ],
             'policy' => [
                 'rules' => [
-                    'constant.documentation', 'constant.duplicate_name_review',
-                    'policy.css_duration_review', 'policy.named_numeric_assignment',
-                    'policy.script_assignment_review', 'policy.timer_literal',
+                    'constant.documentation',
+                    'constant.duplicate_name_review',
+                    'policy.css_duration_review',
+                    'policy.named_numeric_assignment',
+                    'policy.script_assignment_review',
+                    'policy.timer_literal',
                 ],
                 'kinds' => ['none'],
             ],
@@ -72,11 +104,40 @@ function classifier_definition(): array
         ],
         'scope_exact_paths' => ['index.php' => 'runtime'],
         'default_scope' => 'other',
-        'extensions' => ['bat', 'cmd', 'cjs', 'css', 'htaccess', 'htm', 'html', 'js', 'mjs', 'php', 'ps1', 'psm1', 'py', 'pyw', 'sh', 'sql', 'svg', 'tex', 'yaml', 'yml'],
-        'advisory_rules' => ['constant.duplicate_name_review', 'policy.css_duration_review', 'policy.script_assignment_review'],
+        'extensions' => [
+            'bat',
+            'cmd',
+            'cjs',
+            'css',
+            'htaccess',
+            'htm',
+            'html',
+            'js',
+            'mjs',
+            'php',
+            'ps1',
+            'psm1',
+            'py',
+            'pyw',
+            'sh',
+            'sql',
+            'svg',
+            'tex',
+            'yaml',
+            'yml',
+        ],
+        'advisory_rules' => [
+            'constant.duplicate_name_review',
+            'policy.css_duration_review',
+            'policy.script_assignment_review',
+        ],
         'detail_suffix_rules' => [
-            'parameter.description', 'parameter.duplicate', 'parameter.extra',
-            'parameter.missing', 'parameter.type', 'parameter.type_mismatch',
+            'parameter.description',
+            'parameter.duplicate',
+            'parameter.extra',
+            'parameter.missing',
+            'parameter.type',
+            'parameter.type_mismatch',
             'typing.parameter_missing',
         ],
         'category_fields' => ['family', 'scope', 'ext', 'kind', 'rulefamily'],
@@ -92,7 +153,10 @@ function classifier_definition(): array
  */
 function classifier_fingerprint(?array $definition = null): string
 {
-    $json = json_encode($definition ?? classifier_definition(), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    $json = json_encode(
+        $definition ?? classifier_definition(),
+        JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+    );
     return hash('sha256', $json);
 }
 
@@ -127,7 +191,9 @@ function normalize_report(string $family, array $report): array
 {
     $definition = classifier_definition();
     if (!array_key_exists($family, $definition['families'])) {
-        throw new InvalidArgumentException('Unknown source-contract report family.');
+        throw new InvalidArgumentException(
+            'Unknown source-contract report family.',
+        );
     }
     $reportKeys = $family === 'documentation'
         ? ['coverage', 'findings', 'inventory', 'summary']
@@ -136,9 +202,16 @@ function normalize_report(string $family, array $report): array
     $inventory = $report['inventory'];
     $summary = $report['summary'];
     $findings = $report['findings'];
-    if (!is_array($inventory) || !is_array($summary) || !is_array($report['coverage'])
-        || !is_array($findings) || !array_is_list($findings)) {
-        throw new InvalidArgumentException('Source-contract report has malformed summary or findings.');
+    if (
+        !is_array($inventory)
+        || !is_array($summary)
+        || !is_array($report['coverage'])
+        || !is_array($findings)
+        || !array_is_list($findings)
+    ) {
+        throw new InvalidArgumentException(
+            'Source-contract report has malformed summary or findings.',
+        );
     }
     validate_report_shape($family, $report);
     $files = $inventory['files'];
@@ -146,65 +219,135 @@ function normalize_report(string $family, array $report): array
     $ruleCounts = [];
     $categoryCounts = [];
     foreach ($findings as $finding) {
-        if (!is_array($finding) || !isset($finding['path'], $finding['line'], $finding['name'], $finding['rule'])
-            || !is_string($finding['path']) || !is_int($finding['line']) || $finding['line'] < 1
-            || !is_string($finding['name']) || !is_string($finding['rule'])) {
-            throw new InvalidArgumentException('Source-contract report contains a malformed finding.');
+        if (
+            !is_array($finding)
+            || !isset(
+                $finding['path'],
+                $finding['line'],
+                $finding['name'],
+                $finding['rule'],
+            )
+            || !is_string($finding['path'])
+            || !is_int($finding['line'])
+            || $finding['line'] < 1
+            || !is_string($finding['name'])
+            || !is_string($finding['rule'])
+        ) {
+            throw new InvalidArgumentException(
+                'Source-contract report contains a malformed finding.',
+            );
         }
         $path = $finding['path'];
         validate_source_path($path);
         if (!array_key_exists($path, $files)) {
-            throw new InvalidArgumentException('Finding path is outside the report inventory.');
+            throw new InvalidArgumentException(
+                'Finding path is outside the report inventory.',
+            );
         }
         $rule = $finding['rule'];
         $ruleFamily = explode(':', $rule, 2)[0];
-        if (!in_array($ruleFamily, $definition['families'][$family]['rules'], true)) {
-            throw new InvalidArgumentException('Source-contract report contains an unknown rule family.');
+        if (!in_array(
+            $ruleFamily,
+            $definition['families'][$family]['rules'],
+            true,
+        )) {
+            throw new InvalidArgumentException(
+                'Source-contract report contains an unknown rule family.',
+            );
         }
         $ruleParts = explode(':', $rule, 2);
         if (count($ruleParts) === 2) {
-            if ($family !== 'documentation' || !in_array($ruleFamily, $definition['detail_suffix_rules'], true)
-                || $ruleParts[1] === '' || str_contains($ruleParts[1], ':')) {
-                throw new InvalidArgumentException('Source-contract rule has an unsupported detail suffix.');
+            if (
+                $family !== 'documentation'
+                || !in_array(
+                    $ruleFamily,
+                    $definition['detail_suffix_rules'],
+                    true,
+                )
+                || $ruleParts[1] === ''
+                || str_contains($ruleParts[1], ':')
+            ) {
+                throw new InvalidArgumentException(
+                    'Source-contract rule has an unsupported detail suffix.',
+                );
             }
         }
         $ruleCounts[$ruleFamily] = ($ruleCounts[$ruleFamily] ?? 0) + 1;
 
         if ($family === 'documentation') {
-            validate_exact_keys($finding, ['kind', 'line', 'name', 'path', 'rule'], 'Documentation finding');
-            if (!isset($finding['kind']) || !is_string($finding['kind'])
-                || !in_array($finding['kind'], $definition['families'][$family]['kinds'], true)) {
-                throw new InvalidArgumentException('Documentation finding has an unknown declaration kind.');
+            validate_exact_keys(
+                $finding,
+                ['kind', 'line', 'name', 'path', 'rule'],
+                'Documentation finding',
+            );
+            if (
+                !isset($finding['kind'])
+                || !is_string($finding['kind'])
+                || !in_array(
+                    $finding['kind'],
+                    $definition['families'][$family]['kinds'],
+                    true,
+                )
+            ) {
+                throw new InvalidArgumentException(
+                    'Documentation finding has an unknown declaration kind.',
+                );
             }
             $kind = $finding['kind'];
             if ($finding['name'] === '' && $kind !== 'header') {
-                throw new InvalidArgumentException('Named documentation finding is missing its declaration identity.');
+                throw new InvalidArgumentException(
+                    'Named documentation finding is missing its declaration identity.',
+                );
             }
-            if (($kind === 'header') !== str_starts_with($ruleFamily, 'header.')) {
-                throw new InvalidArgumentException('Header rule family and declaration kind do not agree.');
+            if (
+                ($kind === 'header') !== str_starts_with($ruleFamily, 'header.')
+            ) {
+                throw new InvalidArgumentException(
+                    'Header rule family and declaration kind do not agree.',
+                );
             }
         } else {
             $policyFindingKeys = $ruleFamily === 'constant.documentation'
                 ? ['line', 'missing', 'name', 'path', 'rule']
                 : ['line', 'name', 'path', 'rule'];
             validate_exact_keys($finding, $policyFindingKeys, 'Policy finding');
-            if (isset($finding['missing']) && (!is_array($finding['missing']) || !array_is_list($finding['missing']))) {
-                throw new InvalidArgumentException('Policy constant documentation details are malformed.');
+            if (
+                isset($finding['missing'])
+                && (
+                    !is_array($finding['missing'])
+                    || !array_is_list($finding['missing'])
+                )
+            ) {
+                throw new InvalidArgumentException(
+                    'Policy constant documentation details are malformed.',
+                );
             }
             foreach ($finding['missing'] ?? [] as $missingField) {
                 if (!is_string($missingField) || $missingField === '') {
-                    throw new InvalidArgumentException('Policy constant documentation detail is malformed.');
+                    throw new InvalidArgumentException(
+                        'Policy constant documentation detail is malformed.',
+                    );
                 }
             }
             if ($finding['name'] === '') {
-                throw new InvalidArgumentException('Policy finding is missing its site identity.');
+                throw new InvalidArgumentException(
+                    'Policy finding is missing its site identity.',
+                );
             }
             if (array_key_exists('kind', $finding)) {
-                throw new InvalidArgumentException('Policy finding does not match its declared report shape.');
+                throw new InvalidArgumentException(
+                    'Policy finding does not match its declared report shape.',
+                );
             }
             $kind = 'none';
         }
-        $key = implode('|', [$family, source_scope($path), $files[$path], $kind, $ruleFamily]);
+        $key = implode('|', [
+            $family,
+            source_scope($path),
+            $files[$path],
+            $kind,
+            $ruleFamily,
+        ]);
         $categoryCounts[$key] = ($categoryCounts[$key] ?? 0) + 1;
     }
 
@@ -227,7 +370,8 @@ function validate_exact_keys(array $value, array $required, string $label): void
     sort($actual, SORT_STRING);
     sort($required, SORT_STRING);
     if ($actual !== $required) {
-        throw new InvalidArgumentException($label . ' does not match its complete schema.');
+        throw new InvalidArgumentException($label
+            . ' does not match its complete schema.');
     }
 }
 
@@ -246,36 +390,86 @@ function validate_report_shape(string $family, array $report): void
     $inventoryKeys = ['excluded', 'files', 'other_formats', 'provenance'];
     validate_exact_keys($inventory, $inventoryKeys, 'Source inventory');
     $summaryKeys = $family === 'documentation'
-        ? ['declarations', 'files_with_findings', 'finding_count', 'languages', 'rules', 'source_files']
-        : ['definitions', 'finding_count', 'languages', 'rules', 'source_files'];
+        ? [
+            'declarations',
+            'files_with_findings',
+            'finding_count',
+            'languages',
+            'rules',
+            'source_files',
+        ]
+        : [
+            'definitions',
+            'finding_count',
+            'languages',
+            'rules',
+            'source_files',
+        ];
     validate_exact_keys($summary, $summaryKeys, 'Source report summary');
     $coverageKeys = $family === 'documentation'
-        ? ['headers', 'javascript', 'manual_declaration_languages', 'manual_semantics', 'other_formats', 'php', 'python', 'scripts', 'typing']
+        ? [
+            'headers',
+            'javascript',
+            'manual_declaration_languages',
+            'manual_semantics',
+            'other_formats',
+            'php',
+            'python',
+            'scripts',
+            'typing',
+        ]
         : ['css', 'ownership', 'php_js', 'scripts', 'semantics'];
-    validate_exact_keys($report['coverage'], $coverageKeys, 'Source report coverage');
+    validate_exact_keys(
+        $report['coverage'],
+        $coverageKeys,
+        'Source report coverage',
+    );
     foreach ($report['coverage'] as $coverageKey => $description) {
         if (!is_string($description) || trim($description) === '') {
-            throw new InvalidArgumentException('Source report coverage description is empty.');
+            throw new InvalidArgumentException(
+                'Source report coverage description is empty.',
+            );
         }
     }
 
     $files = $inventory['files'];
-    if (!is_array($files) || !is_array($inventory['other_formats']) || !is_array($inventory['excluded'])
-        || !is_array($inventory['provenance']) || !is_array($summary['languages']) || !is_array($summary['rules'])
-        || !is_int($summary['source_files']) || $summary['source_files'] < 0
-        || !is_int($summary['finding_count']) || $summary['finding_count'] !== count($findings)) {
-        throw new InvalidArgumentException('Source report has malformed inventory or count fields.');
+    if (
+        !is_array($files)
+        || !is_array($inventory['other_formats'])
+        || !is_array($inventory['excluded'])
+        || !is_array($inventory['provenance'])
+        || !is_array($summary['languages'])
+        || !is_array($summary['rules'])
+        || !is_int($summary['source_files'])
+        || $summary['source_files'] < 0
+        || !is_int($summary['finding_count'])
+        || $summary['finding_count'] !== count($findings)
+    ) {
+        throw new InvalidArgumentException(
+            'Source report has malformed inventory or count fields.',
+        );
     }
     if ($summary['source_files'] !== count($files)) {
-        throw new InvalidArgumentException('Source report source count does not match its inventory.');
+        throw new InvalidArgumentException(
+            'Source report source count does not match its inventory.',
+        );
     }
 
     $actualLanguages = [];
     foreach ($files as $path => $extension) {
         validate_source_path($path);
-        if (!is_string($extension) || !in_array($extension, classifier_definition()['extensions'], true)
-            || $extension !== source_extension($path)) {
-            throw new InvalidArgumentException('Source inventory contains an unknown or mismatched extension.');
+        if (
+            !is_string($extension)
+            || !in_array(
+                $extension,
+                classifier_definition()['extensions'],
+                true,
+            )
+            || $extension !== source_extension($path)
+        ) {
+            throw new InvalidArgumentException(
+                'Source inventory contains an unknown or mismatched extension.',
+            );
         }
         $actualLanguages[$extension] = ($actualLanguages[$extension] ?? 0) + 1;
     }
@@ -284,28 +478,52 @@ function validate_report_shape(string $family, array $report): void
     validate_nonnegative_count_map($languages, 'Source report language counts');
     ksort($languages, SORT_STRING);
     if ($languages !== $actualLanguages) {
-        throw new InvalidArgumentException('Source report language totals do not match its inventory.');
+        throw new InvalidArgumentException(
+            'Source report language totals do not match its inventory.',
+        );
     }
     validate_inventory_side_maps($inventory);
 
     if ($family === 'documentation') {
         $declarations = $summary['declarations'];
         if (!is_array($declarations)) {
-            throw new InvalidArgumentException('Documentation declaration totals are malformed.');
+            throw new InvalidArgumentException(
+                'Documentation declaration totals are malformed.',
+            );
         }
-        validate_nonnegative_count_map($declarations, 'Documentation declaration totals');
+        validate_nonnegative_count_map(
+            $declarations,
+            'Documentation declaration totals',
+        );
         foreach ($declarations as $declaration => $_count) {
             $parts = explode('.', $declaration, 2);
-            if (count($parts) !== 2
-                || !in_array($parts[0], classifier_definition()['extensions'], true)
-                || !in_array($parts[1], classifier_definition()['families']['documentation']['kinds'], true)
-                || $parts[1] === 'header') {
-                throw new InvalidArgumentException('Documentation declaration summary contains an unknown kind.');
+            if (
+                count($parts) !== 2
+                || !in_array(
+                    $parts[0],
+                    classifier_definition()['extensions'],
+                    true,
+                )
+                || !in_array(
+                    $parts[1],
+                    classifier_definition()['families']['documentation']['kinds'],
+                    true,
+                )
+                || $parts[1] === 'header'
+            ) {
+                throw new InvalidArgumentException(
+                    'Documentation declaration summary contains an unknown kind.',
+                );
             }
         }
-        if (!is_int($summary['files_with_findings']) || $summary['files_with_findings'] < 0
-            || $summary['files_with_findings'] > $summary['source_files']) {
-            throw new InvalidArgumentException('Documentation finding-file count is malformed.');
+        if (
+            !is_int($summary['files_with_findings'])
+            || $summary['files_with_findings'] < 0
+            || $summary['files_with_findings'] > $summary['source_files']
+        ) {
+            throw new InvalidArgumentException(
+                'Documentation finding-file count is malformed.',
+            );
         }
         $findingPaths = [];
         foreach ($findings as $finding) {
@@ -314,35 +532,70 @@ function validate_report_shape(string $family, array $report): void
             }
         }
         if ($summary['files_with_findings'] !== count($findingPaths)) {
-            throw new InvalidArgumentException('Documentation finding-file count does not match findings.');
+            throw new InvalidArgumentException(
+                'Documentation finding-file count does not match findings.',
+            );
         }
     } else {
-        if (!is_array($report['definitions']) || !array_is_list($report['definitions'])
-            || !is_int($summary['definitions']) || $summary['definitions'] !== count($report['definitions'])) {
-            throw new InvalidArgumentException('Policy definition count does not match its complete definition list.');
+        if (
+            !is_array($report['definitions'])
+            || !array_is_list($report['definitions'])
+            || !is_int($summary['definitions'])
+            || $summary['definitions'] !== count($report['definitions'])
+        ) {
+            throw new InvalidArgumentException(
+                'Policy definition count does not match its complete definition list.',
+            );
         }
         foreach ($report['definitions'] as $record) {
             if (!is_array($record)) {
-                throw new InvalidArgumentException('Policy definition record is malformed.');
+                throw new InvalidArgumentException(
+                    'Policy definition record is malformed.',
+                );
             }
-            validate_exact_keys($record, ['lexical_consumers', 'line', 'missing_documentation', 'name', 'path'],
-                'Policy definition');
-            if (!is_string($record['path']) || !isset($files[$record['path']])
-                || !is_int($record['line']) || $record['line'] < 1
-                || !is_string($record['name']) || $record['name'] === ''
-                || !is_array($record['missing_documentation']) || !array_is_list($record['missing_documentation'])
-                || !is_array($record['lexical_consumers']) || !array_is_list($record['lexical_consumers'])) {
-                throw new InvalidArgumentException('Policy definition record fields are malformed.');
+            validate_exact_keys(
+                $record,
+                [
+                    'lexical_consumers',
+                    'line',
+                    'missing_documentation',
+                    'name',
+                    'path',
+                ],
+                'Policy definition',
+            );
+            if (
+                !is_string($record['path'])
+                || !isset($files[$record['path']])
+                || !is_int($record['line'])
+                || $record['line'] < 1
+                || !is_string($record['name'])
+                || $record['name'] === ''
+                || !is_array($record['missing_documentation'])
+                || !array_is_list($record['missing_documentation'])
+                || !is_array($record['lexical_consumers'])
+                || !array_is_list($record['lexical_consumers'])
+            ) {
+                throw new InvalidArgumentException(
+                    'Policy definition record fields are malformed.',
+                );
             }
-            foreach (array_merge($record['missing_documentation'], $record['lexical_consumers']) as $item) {
+            foreach (array_merge(
+                $record['missing_documentation'],
+                $record['lexical_consumers'],
+            ) as $item) {
                 if (!is_string($item)) {
-                    throw new InvalidArgumentException('Policy definition detail is malformed.');
+                    throw new InvalidArgumentException(
+                        'Policy definition detail is malformed.',
+                    );
                 }
             }
             foreach ($record['lexical_consumers'] as $consumerPath) {
                 validate_source_path($consumerPath);
                 if (!isset($files[$consumerPath])) {
-                    throw new InvalidArgumentException('Policy definition consumer is outside the inventory.');
+                    throw new InvalidArgumentException(
+                        'Policy definition consumer is outside the inventory.',
+                    );
                 }
             }
         }
@@ -360,7 +613,8 @@ function validate_nonnegative_count_map(array $counts, string $label): void
 {
     foreach ($counts as $key => $count) {
         if (!is_string($key) || $key === '' || !is_int($count) || $count < 0) {
-            throw new InvalidArgumentException($label . ' contain a malformed key or count.');
+            throw new InvalidArgumentException($label
+                . ' contain a malformed key or count.');
         }
     }
 }
@@ -373,22 +627,39 @@ function validate_nonnegative_count_map(array $counts, string $label): void
  */
 function validate_inventory_side_maps(array $inventory): void
 {
-    validate_nonnegative_count_map($inventory['other_formats'], 'Other-format inventory');
+    validate_nonnegative_count_map(
+        $inventory['other_formats'],
+        'Other-format inventory',
+    );
     foreach ($inventory['excluded'] as $path => $reason) {
         validate_inventory_path($path);
         if (!is_string($reason) || trim($reason) === '') {
-            throw new InvalidArgumentException('Excluded inventory entry has no reason.');
+            throw new InvalidArgumentException(
+                'Excluded inventory entry has no reason.',
+            );
         }
     }
     foreach ($inventory['provenance'] as $path => $details) {
         validate_inventory_path($path);
         if (!is_array($details)) {
-            throw new InvalidArgumentException('Inventory provenance record is malformed.');
+            throw new InvalidArgumentException(
+                'Inventory provenance record is malformed.',
+            );
         }
-        validate_exact_keys($details, ['license', 'origin'], 'Inventory provenance');
-        if (!is_string($details['origin']) || trim($details['origin']) === ''
-            || !is_string($details['license']) || trim($details['license']) === '') {
-            throw new InvalidArgumentException('Inventory provenance details are empty.');
+        validate_exact_keys(
+            $details,
+            ['license', 'origin'],
+            'Inventory provenance',
+        );
+        if (
+            !is_string($details['origin'])
+            || trim($details['origin']) === ''
+            || !is_string($details['license'])
+            || trim($details['license']) === ''
+        ) {
+            throw new InvalidArgumentException(
+                'Inventory provenance details are empty.',
+            );
         }
     }
 }
@@ -402,7 +673,9 @@ function validate_inventory_side_maps(array $inventory): void
 function validate_inventory_path(mixed $path): void
 {
     if (!is_string($path)) {
-        throw new InvalidArgumentException('Inventory metadata path must be a string.');
+        throw new InvalidArgumentException(
+            'Inventory metadata path must be a string.',
+        );
     }
     $normalized = str_ends_with($path, '/') ? substr($path, 0, -1) : $path;
     validate_source_path($normalized);
@@ -416,13 +689,23 @@ function validate_inventory_path(mixed $path): void
  */
 function validate_source_path(mixed $path): void
 {
-    if (!is_string($path) || $path === '' || str_contains($path, '\\') || str_starts_with($path, '/')
-        || preg_match('/^[A-Za-z]:/', $path) === 1 || str_contains($path, '//')) {
-        throw new InvalidArgumentException('Source path is not normalized and repository-relative.');
+    if (
+        !is_string($path)
+        || $path === ''
+        || str_contains($path, '\\')
+        || str_starts_with($path, '/')
+        || preg_match('/^[A-Za-z]:/', $path) === 1
+        || str_contains($path, '//')
+    ) {
+        throw new InvalidArgumentException(
+            'Source path is not normalized and repository-relative.',
+        );
     }
     foreach (explode('/', $path) as $segment) {
         if ($segment === '' || $segment === '.' || $segment === '..') {
-            throw new InvalidArgumentException('Source path contains an invalid path segment.');
+            throw new InvalidArgumentException(
+                'Source path contains an invalid path segment.',
+            );
         }
     }
 }
@@ -452,13 +735,17 @@ function validate_rule_summary(array $reported, array $actual): void
 {
     foreach ($reported as $rule => $count) {
         if (!is_string($rule) || !is_int($count) || $count < 0) {
-            throw new InvalidArgumentException('Source-contract report has malformed rule counts.');
+            throw new InvalidArgumentException(
+                'Source-contract report has malformed rule counts.',
+            );
         }
     }
     ksort($reported, SORT_STRING);
     ksort($actual, SORT_STRING);
     if ($reported !== $actual) {
-        throw new InvalidArgumentException('Source-contract report rule counts do not match findings.');
+        throw new InvalidArgumentException(
+            'Source-contract report rule counts do not match findings.',
+        );
     }
 }
 
@@ -474,12 +761,17 @@ function normalize_reports(array $reports): array
         $keys = array_keys($reports);
         sort($keys, SORT_STRING);
         if ($keys !== ['documentation', 'policy']) {
-            throw new InvalidArgumentException('Both documentation and policy reports are required exactly once.');
+            throw new InvalidArgumentException(
+                'Both documentation and policy reports are required exactly once.',
+            );
         }
     }
     $counts = [];
     foreach (['documentation', 'policy'] as $family) {
-        foreach (normalize_report($family, $reports[$family]) as $key => $count) {
+        foreach (normalize_report(
+            $family,
+            $reports[$family],
+        ) as $key => $count) {
             $counts[$key] = $count;
         }
     }
@@ -495,11 +787,18 @@ function normalize_reports(array $reports): array
  * @param string $checkpointSha Full Git SHA of the current reviewed checkpoint.
  * @return array<string, mixed> Baseline with independent observed counts and reliable caps.
  */
-function create_initial_baseline(array $reports, string $initialBaseSha, string $checkpointSha): array
-{
-    if (preg_match('/^[0-9a-f]{40,64}$/i', $initialBaseSha) !== 1
-        || preg_match('/^[0-9a-f]{40,64}$/i', $checkpointSha) !== 1) {
-        throw new InvalidArgumentException('Initial baseline provenance must name both reviewed commits.');
+function create_initial_baseline(
+    array $reports,
+    string $initialBaseSha,
+    string $checkpointSha,
+): array {
+    if (
+        preg_match('/^[0-9a-f]{40,64}$/i', $initialBaseSha) !== 1
+        || preg_match('/^[0-9a-f]{40,64}$/i', $checkpointSha) !== 1
+    ) {
+        throw new InvalidArgumentException(
+            'Initial baseline provenance must name both reviewed commits.',
+        );
     }
     $counts = normalize_reports($reports);
     $caps = [];
@@ -512,7 +811,10 @@ function create_initial_baseline(array $reports, string $initialBaseSha, string 
         'schema_version' => 1,
         'classifier_version' => CLASSIFIER_VERSION,
         'classifier_sha256' => classifier_fingerprint(),
-        'provenance' => ['initial_base_sha' => strtolower($initialBaseSha), 'checkpoint_sha' => strtolower($checkpointSha)],
+        'provenance' => [
+            'initial_base_sha' => strtolower($initialBaseSha),
+            'checkpoint_sha' => strtolower($checkpointSha),
+        ],
         'counts' => $counts,
         'caps' => $caps,
     ];
@@ -529,7 +831,10 @@ function evaluate(array $baseline, array $reports): array
 {
     validate_baseline($baseline);
     $current = normalize_reports($reports);
-    $allKeys = array_unique(array_merge(array_keys($baseline['counts']), array_keys($current)));
+    $allKeys = array_unique(array_merge(
+        array_keys($baseline['counts']),
+        array_keys($current),
+    ));
     sort($allKeys, SORT_STRING);
     $caps = $baseline['caps'];
     ksort($caps, SORT_STRING);
@@ -549,7 +854,11 @@ function evaluate(array $baseline, array $reports): array
         }
         $cap = $caps[$category] ?? 0;
         if ($count > $cap) {
-            $violations[$category] = ['cap' => $cap, 'current' => $count, 'increase' => $count - $cap];
+            $violations[$category] = [
+                'cap' => $cap,
+                'current' => $count,
+                'increase' => $count - $cap,
+            ];
         }
     }
     return [
@@ -572,11 +881,16 @@ function refresh_decrease_only(array $baseline, array $reports): array
 {
     $evaluation = evaluate($baseline, $reports);
     if ($evaluation['status'] !== 'PASS') {
-        throw new RuntimeException('Decrease-only refresh refused because reliable debt exceeds a cap.');
+        throw new RuntimeException(
+            'Decrease-only refresh refused because reliable debt exceeds a cap.',
+        );
     }
     $counts = $evaluation['counts'];
     $caps = $baseline['caps'];
-    $categories = array_unique(array_merge(array_keys($baseline['counts']), array_keys($counts)));
+    $categories = array_unique(array_merge(
+        array_keys($baseline['counts']),
+        array_keys($counts),
+    ));
     sort($categories, SORT_STRING);
     foreach ($categories as $category) {
         $count = $counts[$category] ?? 0;
@@ -601,47 +915,86 @@ function refresh_decrease_only(array $baseline, array $reports): array
  */
 function validate_baseline(array $baseline): void
 {
-    $required = ['schema_version', 'classifier_version', 'classifier_sha256', 'provenance', 'counts', 'caps'];
+    $required = [
+        'schema_version',
+        'classifier_version',
+        'classifier_sha256',
+        'provenance',
+        'counts',
+        'caps',
+    ];
     $keys = array_keys($baseline);
     sort($keys, SORT_STRING);
     $expected = $required;
     sort($expected, SORT_STRING);
-    if ($keys !== $expected || ($baseline['schema_version'] ?? null) !== 1
+    if (
+        $keys !== $expected
+        || ($baseline['schema_version'] ?? null) !== 1
         || ($baseline['classifier_version'] ?? null) !== CLASSIFIER_VERSION
-        || ($baseline['classifier_sha256'] ?? null) !== classifier_fingerprint()) {
-        throw new InvalidArgumentException('Baseline schema or category classifier has drifted.');
+        || ($baseline['classifier_sha256'] ?? null) !== classifier_fingerprint()
+    ) {
+        throw new InvalidArgumentException(
+            'Baseline schema or category classifier has drifted.',
+        );
     }
-    $provenanceKeys = is_array($baseline['provenance']) ? array_keys($baseline['provenance']) : [];
+    $provenanceKeys = is_array($baseline['provenance'])
+        ? array_keys($baseline['provenance'])
+        : [];
     sort($provenanceKeys, SORT_STRING);
-    if (!is_array($baseline['provenance']) || $provenanceKeys !== ['checkpoint_sha', 'initial_base_sha']
+    if (
+        !is_array($baseline['provenance'])
+        || $provenanceKeys !== ['checkpoint_sha', 'initial_base_sha']
         || !is_string($baseline['provenance']['initial_base_sha'])
-        || preg_match('/^[0-9a-f]{40,64}$/', $baseline['provenance']['initial_base_sha']) !== 1
+        || preg_match(
+            '/^[0-9a-f]{40,64}$/',
+            $baseline['provenance']['initial_base_sha'],
+        ) !== 1
         || !is_string($baseline['provenance']['checkpoint_sha'])
-        || preg_match('/^[0-9a-f]{40,64}$/', $baseline['provenance']['checkpoint_sha']) !== 1) {
+        || preg_match(
+            '/^[0-9a-f]{40,64}$/',
+            $baseline['provenance']['checkpoint_sha'],
+        ) !== 1
+    ) {
         throw new InvalidArgumentException('Baseline provenance is malformed.');
     }
     foreach (['counts', 'caps'] as $field) {
         if (!is_array($baseline[$field])) {
-            throw new InvalidArgumentException('Baseline category map is malformed.');
+            throw new InvalidArgumentException(
+                'Baseline category map is malformed.',
+            );
         }
         foreach ($baseline[$field] as $category => $value) {
             validate_category_key($category);
             if (!is_int($value) || $value < 0) {
-                throw new InvalidArgumentException('Baseline category count or cap is malformed.');
+                throw new InvalidArgumentException(
+                    'Baseline category count or cap is malformed.',
+                );
             }
             if ($field === 'caps' && category_is_advisory($category)) {
-                throw new InvalidArgumentException('Advisory categories cannot have blocking caps.');
+                throw new InvalidArgumentException(
+                    'Advisory categories cannot have blocking caps.',
+                );
             }
         }
     }
     foreach ($baseline['counts'] as $category => $count) {
-        if (!category_is_advisory($category) && !array_key_exists($category, $baseline['caps'])) {
-            throw new InvalidArgumentException('Every reliable historical count requires a separate cap.');
+        if (
+            !category_is_advisory($category)
+            && !array_key_exists($category, $baseline['caps'])
+        ) {
+            throw new InvalidArgumentException(
+                'Every reliable historical count requires a separate cap.',
+            );
         }
     }
     foreach ($baseline['caps'] as $category => $cap) {
-        if (!array_key_exists($category, $baseline['counts']) || $cap > $baseline['counts'][$category]) {
-            throw new InvalidArgumentException('A reliable cap must not exceed its recorded historical count.');
+        if (
+            !array_key_exists($category, $baseline['counts'])
+            || $cap > $baseline['counts'][$category]
+        ) {
+            throw new InvalidArgumentException(
+                'A reliable cap must not exceed its recorded historical count.',
+            );
         }
     }
 }
@@ -659,16 +1012,22 @@ function validate_category_key(mixed $category): void
     }
     $parts = explode('|', $category);
     if (count($parts) !== 5 || in_array('', $parts, true)) {
-        throw new InvalidArgumentException('Category key does not have five stable dimensions.');
+        throw new InvalidArgumentException(
+            'Category key does not have five stable dimensions.',
+        );
     }
     [$family, $scope, $extension, $kind, $rule] = $parts;
     $definition = classifier_definition();
-    if (!isset($definition['families'][$family])
+    if (
+        !isset($definition['families'][$family])
         || !in_array($scope, $definition['scopes'], true)
         || !in_array($extension, $definition['extensions'], true)
         || !in_array($kind, $definition['families'][$family]['kinds'], true)
-        || !in_array($rule, $definition['families'][$family]['rules'], true)) {
-        throw new InvalidArgumentException('Category key contains an unknown classifier value.');
+        || !in_array($rule, $definition['families'][$family]['rules'], true)
+    ) {
+        throw new InvalidArgumentException(
+            'Category key contains an unknown classifier value.',
+        );
     }
 }
 

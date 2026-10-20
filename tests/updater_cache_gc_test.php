@@ -19,9 +19,13 @@ namespace Gallery\Services {
      */
     function feature_capability_effective_enabled(string $key): bool
     {
-        return $key === 'built_in_update_installer'
-            || $key === 'automatic_cache_cleanup' && empty($GLOBALS['cache_gc_disabled']);
+        return (
+            $key === 'built_in_update_installer'
+                || $key === 'automatic_cache_cleanup'
+                && empty($GLOBALS['cache_gc_disabled'])
+        );
     }
+
     /**
      * Disable thumbnail maintenance while preserving default fixture settings.
      * @param string $key Requested application setting name.
@@ -32,7 +36,6 @@ namespace Gallery\Services {
     {
         return $key === 'site_maintenance_enabled' ? '0' : $default;
     }
-
 }
 
 namespace Gallery\Models {
@@ -54,7 +57,8 @@ namespace {
 
     use function Gallery\Services\application_update_cache_cleanup_status;
     use function Gallery\Services\application_update_delete_tree_slice;
-    use function Gallery\Services\application_update_run_scheduled_cache_cleanup;
+    use function Gallery\Services\application_update_run_scheduled_cache_cleanup
+    ;
     use function Gallery\Services\site_maintenance_run;
 
     /**
@@ -70,7 +74,8 @@ namespace {
         }
     }
 
-    $root = sys_get_temp_dir() . '/gallery-cache-gc-' . bin2hex(random_bytes(6));
+    $root =
+        sys_get_temp_dir() . '/gallery-cache-gc-' . bin2hex(random_bytes(6));
     $GLOBALS['cache_gc_fixture_root'] = $root;
     // Keep the shared lifecycle owner on the updater's disposable storage root.
     // Type: string. Units: absolute directory path. Scope: this updater-GC fixture.
@@ -79,63 +84,137 @@ namespace {
     mkdir($root, 0775, true);
     try {
         $preview = application_update_cache_cleanup_status();
-        assert_cache_gc(!$preview['pending'] && !file_exists($root . '/cache'), 'Read-only preview created runtime directories.');
+        assert_cache_gc(
+            !$preview['pending'] && !file_exists($root . '/cache'),
+            'Read-only preview created runtime directories.',
+        );
         $absent = application_update_run_scheduled_cache_cleanup();
-        assert_cache_gc($absent['done'] && $absent['skipped'], 'Absent cache was not safely skipped.');
+        assert_cache_gc(
+            $absent['done'] && $absent['skipped'],
+            'Absent cache was not safely skipped.',
+        );
 
         $workspace = $root . '/cache/updates';
         $trash = $workspace . '/prune-trash';
         mkdir($trash . '/current/terminal/extract', 0775, true);
         mkdir($workspace . '/jobs/protected/rollback', 0775, true);
         mkdir($root . '/cache/gallery-trash', 0775, true);
-        file_put_contents($workspace . '/jobs/protected/rollback/original.zip', 'keep rollback');
-        file_put_contents($root . '/cache/gallery-trash/original.jpg', 'keep user content');
+        file_put_contents(
+            $workspace . '/jobs/protected/rollback/original.zip',
+            'keep rollback',
+        );
+        file_put_contents(
+            $root . '/cache/gallery-trash/original.jpg',
+            'keep user content',
+        );
         file_put_contents($root . '/cache/unknown.zip', 'keep unknown');
         $expectedBytes = 0;
         for ($index = 0; $index < 10000; $index++) {
             $payload = 'deferred-' . $index;
             $expectedBytes += strlen($payload);
-            file_put_contents($trash . '/current/terminal/extract/item-' . $index, $payload);
+            file_put_contents(
+                $trash . '/current/terminal/extract/item-' . $index,
+                $payload,
+            );
         }
 
         file_put_contents($workspace . '/active-job.json', '{broken-pointer');
         $active = application_update_run_scheduled_cache_cleanup(true);
-        assert_cache_gc($active['skipped'] && $active['removed'] === 0 && is_dir($trash), 'Unknown active updater state did not block GC.');
-        assert_cache_gc(file_get_contents($workspace . '/active-job.json') === '{broken-pointer', 'GC modified an active pointer.');
-        $pointerDiagnostic = \Gallery\Services\application_update_cache_blocking_job_diagnostic($root);
-        assert_cache_gc($pointerDiagnostic['updater_pointer_state'] === 'pointer_unreadable_or_invalid', 'Corrupt pointer lacks safe diagnostics.');
+        assert_cache_gc(
+            $active['skipped'] && $active['removed'] === 0 && is_dir($trash),
+            'Unknown active updater state did not block GC.',
+        );
+        assert_cache_gc(
+            file_get_contents($workspace . '/active-job.json')
+                === '{broken-pointer',
+            'GC modified an active pointer.',
+        );
+        $pointerDiagnostic =
+            \Gallery\Services\application_update_cache_blocking_job_diagnostic(
+                $root,
+            );
+        assert_cache_gc(
+            $pointerDiagnostic['updater_pointer_state']
+                === 'pointer_unreadable_or_invalid',
+            'Corrupt pointer lacks safe diagnostics.',
+        );
         $blockingId = '20261014120000-aaaaaaaaaaaa';
         mkdir($workspace . '/jobs/' . $blockingId, 0775, true);
-        file_put_contents($workspace . '/jobs/' . $blockingId . '/job.json', json_encode([
-            'id' => $blockingId, 'status' => 'completed', 'stage' => 'completed', 'updated_at' => 123, 'secret' => 'PRIVATE_TOKEN']));
-        file_put_contents($workspace . '/active-job.json', json_encode(['job_id' => $blockingId]));
-        $terminal = \Gallery\Services\application_update_cache_blocking_job_diagnostic($root);
-        assert_cache_gc($terminal['updater_job_id'] === $blockingId && $terminal['updater_pointer_state'] === 'terminal_job_requires_owner_review'
-            && !str_contains(json_encode($terminal), 'PRIVATE_TOKEN') && is_file($workspace . '/active-job.json'), 'Read-only blocking-job diagnostics changed ownership or exposed state.');
+        file_put_contents($workspace
+            . '/jobs/'
+            . $blockingId
+            . '/job.json', json_encode([
+            'id' => $blockingId,
+            'status' => 'completed',
+            'stage' => 'completed',
+            'updated_at' => 123,
+            'secret' => 'PRIVATE_TOKEN',
+        ]));
+        file_put_contents($workspace . '/active-job.json', json_encode([
+            'job_id' => $blockingId,
+        ]));
+        $terminal =
+            \Gallery\Services\application_update_cache_blocking_job_diagnostic(
+                $root,
+            );
+        assert_cache_gc(
+            $terminal['updater_job_id'] === $blockingId
+                && $terminal['updater_pointer_state']
+                    === 'terminal_job_requires_owner_review'
+                && !str_contains(json_encode($terminal), 'PRIVATE_TOKEN')
+                && is_file($workspace . '/active-job.json'),
+            'Read-only blocking-job diagnostics changed ownership or exposed state.',
+        );
         unlink($workspace . '/active-job.json');
         $lock = fopen($workspace . '/start.lock', 'c');
-        assert_cache_gc(is_resource($lock) && flock($lock, LOCK_EX | LOCK_NB), 'Cannot hold fixture start lock.');
+        assert_cache_gc(
+            is_resource($lock) && flock($lock, LOCK_EX | LOCK_NB),
+            'Cannot hold fixture start lock.',
+        );
         $busy = application_update_run_scheduled_cache_cleanup(true);
-        assert_cache_gc($busy['skipped'] && $busy['removed'] === 0, 'Concurrent GC bypassed the updater start lock.');
+        assert_cache_gc(
+            $busy['skipped'] && $busy['removed'] === 0,
+            'Concurrent GC bypassed the updater start lock.',
+        );
         flock($lock, LOCK_UN);
         fclose($lock);
 
         $first = application_update_run_scheduled_cache_cleanup(true);
-        assert_cache_gc($first['visited'] <= 180 && !$first['done'], 'GC exceeded its entry budget or drained an entire large tree inline.');
+        assert_cache_gc(
+            $first['visited'] <= 180 && !$first['done'],
+            'GC exceeded its entry budget or drained an entire large tree inline.',
+        );
         $throttled = application_update_run_scheduled_cache_cleanup();
-        assert_cache_gc($throttled['skipped'] && $throttled['removed'] === 0, 'Scheduled GC ignored its due-time throttle.');
+        assert_cache_gc(
+            $throttled['skipped'] && $throttled['removed'] === 0,
+            'Scheduled GC ignored its due-time throttle.',
+        );
         $reclaimed = $first['bytes_removed'];
         for ($slice = 0; $slice < 200 && is_dir($trash); $slice++) {
             // Independent invocations read only the persisted stack, not a PHP iterator.
             $result = application_update_run_scheduled_cache_cleanup(true);
-            assert_cache_gc($result['ok'] && $result['visited'] <= 180, 'A continuation slice failed or exceeded its observation budget.');
+            assert_cache_gc(
+                $result['ok'] && $result['visited'] <= 180,
+                'A continuation slice failed or exceeded its observation budget.',
+            );
             $reclaimed += $result['bytes_removed'];
         }
-        assert_cache_gc(!is_dir($trash) && $reclaimed === $expectedBytes, 'Deferred queue did not drain with exact actual-byte accounting.');
+        assert_cache_gc(
+            !is_dir($trash) && $reclaimed === $expectedBytes,
+            'Deferred queue did not drain with exact actual-byte accounting.',
+        );
         $status = application_update_cache_cleanup_status();
-        assert_cache_gc(!$status['pending'] && $status['bytes_reclaimed'] === $expectedBytes, 'Committed GC diagnostics lost cumulative reclaimed bytes.');
-        assert_cache_gc(is_file($workspace . '/jobs/protected/rollback/original.zip') && is_file($root . '/cache/gallery-trash/original.jpg')
-            && is_file($root . '/cache/unknown.zip'), 'GC touched rollback, user content or unknown cache entries.');
+        assert_cache_gc(
+            !$status['pending']
+                && $status['bytes_reclaimed'] === $expectedBytes,
+            'Committed GC diagnostics lost cumulative reclaimed bytes.',
+        );
+        assert_cache_gc(
+            is_file($workspace . '/jobs/protected/rollback/original.zip')
+                && is_file($root . '/cache/gallery-trash/original.jpg')
+                && is_file($root . '/cache/unknown.zip'),
+            'GC touched rollback, user content or unknown cache entries.',
+        );
 
         $deepRoot = $root . '/deep';
         $deep = $deepRoot;
@@ -146,59 +225,150 @@ namespace {
         file_put_contents($deep . '/payload', 'deep payload');
         $cursor = [];
         for ($slice = 0; $slice < 100 && is_dir($deepRoot); $slice++) {
-            $result = application_update_delete_tree_slice($deepRoot, 8, 0.18, $cursor);
-            assert_cache_gc($result['visited'] <= 8 && !$result['blocked'], 'Deep traversal exceeded its cap or lost forward progress.');
+            $result = application_update_delete_tree_slice(
+                $deepRoot,
+                8,
+                0.18,
+                $cursor,
+            );
+            assert_cache_gc(
+                $result['visited'] <= 8 && !$result['blocked'],
+                'Deep traversal exceeded its cap or lost forward progress.',
+            );
             $cursor = $result['cursor'];
         }
-        assert_cache_gc(!is_dir($deepRoot), 'Persistent depth checkpoint did not make progress across short slices.');
+        assert_cache_gc(
+            !is_dir($deepRoot),
+            'Persistent depth checkpoint did not make progress across short slices.',
+        );
         // Keep the real site-maintenance service's fixed-depth lock path inside
         // this disposable installation; execute the original source unchanged.
         mkdir($root . '/app/services', 0775, true);
-        copy(__DIR__ . '/../app/services/site_maintenance.php', $root . '/app/services/site_maintenance.php');
-        file_put_contents($root . '/app/services/cache_lifecycle.php', '<?php require_once '
-            . var_export(dirname(__DIR__) . '/app/services/cache_lifecycle.php', true) . ';');
-        file_put_contents($root . '/app/services/cache_lifecycle_storage.php', '<?php require_once '
-            . var_export(dirname(__DIR__) . '/app/services/cache_lifecycle_storage.php', true) . ';');
+        copy(
+            __DIR__ . '/../app/services/site_maintenance.php',
+            $root . '/app/services/site_maintenance.php',
+        );
+        file_put_contents(
+            $root . '/app/services/cache_lifecycle.php',
+            '<?php require_once '
+                . var_export(
+                    dirname(__DIR__) . '/app/services/cache_lifecycle.php',
+                    true,
+                )
+                . ';',
+        );
+        file_put_contents(
+            $root . '/app/services/cache_lifecycle_storage.php',
+            '<?php require_once '
+                . var_export(
+                    dirname(__DIR__)
+                        . '/app/services/cache_lifecycle_storage.php',
+                    true,
+                )
+                . ';',
+        );
         require $root . '/app/services/site_maintenance.php';
         mkdir($trash, 0775, true);
         file_put_contents($trash . '/cron-debt', 'cron payload');
         unlink($workspace . '/cache-gc.json');
-        $cron = site_maintenance_run(['source' => 'fixture_cron', 'time_budget_seconds' => 1]);
-        assert_cache_gc($cron['ok'] && ($cron['reason'] ?? '') === 'maintenance_disabled'
-            && $cron['cache_gc']['value']['bytes_removed'] === strlen('cron payload') && !is_dir($trash),
-            'Disabled thumbnail maintenance prevented independent GC progress.');
+        $cron = site_maintenance_run([
+            'source' => 'fixture_cron',
+            'time_budget_seconds' => 1,
+        ]);
+        assert_cache_gc(
+            $cron['ok']
+                && ($cron['reason'] ?? '') === 'maintenance_disabled'
+                && $cron['cache_gc']['value']['bytes_removed'] === strlen(
+                    'cron payload',
+                )
+                && !is_dir($trash),
+            'Disabled thumbnail maintenance prevented independent GC progress.',
+        );
         mkdir($trash, 0775, true);
         file_put_contents($trash . '/central-debt', 'preserve while owned');
-        $GLOBALS['cache_gc_central_owner'] = ['id' => 12, 'phase' => 'execution'];
-        $claimed = site_maintenance_run(['cache_only' => true, 'force' => true]);
-        assert_cache_gc($claimed['skipped'] && is_file($trash . '/central-debt'), 'Cron ignored the central mutation claim.');
+        $GLOBALS['cache_gc_central_owner'] = [
+            'id' => 12,
+            'phase' => 'execution',
+        ];
+        $claimed = site_maintenance_run([
+            'cache_only' => true,
+            'force' => true,
+        ]);
+        assert_cache_gc(
+            $claimed['skipped'] && is_file($trash . '/central-debt'),
+            'Cron ignored the central mutation claim.',
+        );
         unset($GLOBALS['cache_gc_central_owner']);
         $GLOBALS['cache_gc_disabled'] = true;
-        $disabled = site_maintenance_run(['cache_only' => true, 'force' => true, 'time_budget_seconds' => 1]);
-        assert_cache_gc($disabled['skipped'] && is_file($trash . '/central-debt')
-            && ($disabled['cache_lifecycle']['value']['reason'] ?? '') === 'automatic_cache_cleanup_disabled',
-            'Explicit OFF did not preserve updater debt through the scheduled cache-only owner.');
+        $disabled = site_maintenance_run([
+            'cache_only' => true,
+            'force' => true,
+            'time_budget_seconds' => 1,
+        ]);
+        assert_cache_gc(
+            $disabled['skipped']
+                && is_file($trash . '/central-debt')
+                && ($disabled['cache_lifecycle']['value']['reason'] ?? '')
+                    === 'automatic_cache_cleanup_disabled',
+            'Explicit OFF did not preserve updater debt through the scheduled cache-only owner.',
+        );
         unset($GLOBALS['cache_gc_disabled']);
-        $cacheOnly = site_maintenance_run(['cache_only' => true, 'force' => true, 'time_budget_seconds' => 1]);
-        assert_cache_gc($cacheOnly['ok'] && $cacheOnly['cache_gc']['value']['done'] && !is_dir($trash), 'Cache-only cron failed to resume approved updater debt.');
-        assert_cache_gc($cacheOnly['done'] === (!empty($cacheOnly['cache_gc']['value']['done']) && !empty($cacheOnly['cache_lifecycle']['value']['done'])),
-            'Top-level completion did not reflect both independent owners.');
+        $cacheOnly = site_maintenance_run([
+            'cache_only' => true,
+            'force' => true,
+            'time_budget_seconds' => 1,
+        ]);
+        assert_cache_gc(
+            $cacheOnly['ok']
+                && $cacheOnly['cache_gc']['value']['done']
+                && !is_dir($trash),
+            'Cache-only cron failed to resume approved updater debt.',
+        );
+        assert_cache_gc(
+            $cacheOnly['done']
+                === (
+                    !empty($cacheOnly['cache_gc']['value']['done'])
+                    && !empty($cacheOnly['cache_lifecycle']['value']['done'])
+                ),
+            'Top-level completion did not reflect both independent owners.',
+        );
         mkdir($trash, 0775, true);
         file_put_contents($trash . '/safe', 'safe');
-        $escaped = application_update_delete_tree_slice($trash, 180, 0.18, ['', '../jobs']);
-        assert_cache_gc($escaped['blocked'] && $escaped['removed'] === 0 && is_file($trash . '/safe'), 'Untrusted cursor escaped or mutated the approved queue.');
-        assert_cache_gc($escaped['failure_code'] === 'invalid_cursor' && $escaped['failure_operation'] === 'validate_cursor', 'Unsafe cursor lacks an actionable failure reason.');
+        $escaped = application_update_delete_tree_slice(
+            $trash,
+            180,
+            0.18,
+            ['', '../jobs'],
+        );
+        assert_cache_gc(
+            $escaped['blocked']
+                && $escaped['removed'] === 0
+                && is_file($trash . '/safe'),
+            'Untrusted cursor escaped or mutated the approved queue.',
+        );
+        assert_cache_gc(
+            $escaped['failure_code'] === 'invalid_cursor'
+                && $escaped['failure_operation'] === 'validate_cursor',
+            'Unsafe cursor lacks an actionable failure reason.',
+        );
 
         if (PHP_OS_FAMILY !== 'Windows') {
             symlink($root . '/cache/gallery-trash', $trash . '/external-link');
             $linked = application_update_run_scheduled_cache_cleanup(true);
-            assert_cache_gc($linked['ok'] && is_file($root . '/cache/gallery-trash/original.jpg'), 'GC followed a symlink into user content.');
+            assert_cache_gc(
+                $linked['ok']
+                    && is_file($root . '/cache/gallery-trash/original.jpg'),
+                'GC followed a symlink into user content.',
+            );
             mkdir($trash, 0775, true);
             mkdir($trash . '/denied');
             chmod($trash . '/denied', 0000);
             try {
                 $denied = application_update_run_scheduled_cache_cleanup(true);
-                assert_cache_gc(!$denied['ok'] && $denied['blocked'] && !$denied['done'], 'Permission failure was reported as successful deletion.');
+                assert_cache_gc(
+                    !$denied['ok'] && $denied['blocked'] && !$denied['done'],
+                    'Permission failure was reported as successful deletion.',
+                );
             } finally {
                 chmod($trash . '/denied', 0775);
             }
@@ -208,44 +378,100 @@ namespace {
         $cancelDir = $workspace . '/jobs/' . $cancelId;
         mkdir($cancelDir . '/extract', 0775, true);
         file_put_contents($cancelDir . '/extract/prepared.txt', 'prepared');
-        $cancelState = ['id' => $cancelId, 'status' => 'running', 'stage' => 'unknown_stage', 'checkpoints' => []];
+        $cancelState = [
+            'id' => $cancelId,
+            'status' => 'running',
+            'stage' => 'unknown_stage',
+            'checkpoints' => [],
+        ];
         file_put_contents($cancelDir . '/job.json', json_encode($cancelState));
-        file_put_contents($workspace . '/active-job.json', json_encode(['job_id' => $cancelId]));
+        file_put_contents($workspace . '/active-job.json', json_encode([
+            'job_id' => $cancelId,
+        ]));
         // Observe the fresh fixture before cancellation legitimately acquires its worker lock.
-        $missingWorker = \Gallery\Services\application_update_job_worker_diagnostic($cancelId, 0);
-        assert_cache_gc($missingWorker['worker_lock'] === 'missing' && !file_exists($cancelDir . '/worker.lock'), 'Worker observation created a missing lock file.');
+        $missingWorker = \Gallery\Services\application_update_job_worker_diagnostic(
+            $cancelId,
+            0,
+        );
+        assert_cache_gc(
+            $missingWorker['worker_lock'] === 'missing'
+                && !file_exists($cancelDir . '/worker.lock'),
+            'Worker observation created a missing lock file.',
+        );
         $cancelRefused = false;
         try {
             \Gallery\Services\application_update_cancel_job($cancelId);
         } catch (\RuntimeException) {
             $cancelRefused = true;
         }
-        assert_cache_gc($cancelRefused && is_file($cancelDir . '/extract/prepared.txt') && is_file($workspace . '/active-job.json'), 'Unknown updater stage allowed cancellation or discarded ownership.');
+        assert_cache_gc(
+            $cancelRefused
+                && is_file($cancelDir . '/extract/prepared.txt')
+                && is_file($workspace . '/active-job.json'),
+            'Unknown updater stage allowed cancellation or discarded ownership.',
+        );
         $cancelState['stage'] = 'extract';
         file_put_contents($cancelDir . '/job.json', json_encode($cancelState));
-        $worker = \Gallery\Services\application_update_acquire_lock($cancelDir . '/worker.lock');
+        $worker = \Gallery\Services\application_update_acquire_lock($cancelDir
+            . '/worker.lock');
         try {
             $lockMetadata = file_get_contents($cancelDir . '/worker.lock');
-            $workerDiagnostic = \Gallery\Services\application_update_job_worker_diagnostic($cancelId, time() - 10);
-            assert_cache_gc($workerDiagnostic['worker_lock'] === 'held' && $workerDiagnostic['checkpoint_age_seconds'] >= 10
-                && file_get_contents($cancelDir . '/worker.lock') === $lockMetadata, 'Worker observation misreported ownership or changed its metadata.');
-            $busyCancel = \Gallery\Services\application_update_cancel_job($cancelId);
-            assert_cache_gc($busyCancel['status'] === 'running' && is_file($cancelDir . '/extract/prepared.txt'), 'Busy worker was reported stopped or its payload was removed.');
+            $workerDiagnostic = \Gallery\Services\application_update_job_worker_diagnostic(
+                $cancelId,
+                time() - 10,
+            );
+            assert_cache_gc(
+                $workerDiagnostic['worker_lock'] === 'held'
+                    && $workerDiagnostic['checkpoint_age_seconds'] >= 10
+                    && file_get_contents($cancelDir . '/worker.lock')
+                        === $lockMetadata,
+                'Worker observation misreported ownership or changed its metadata.',
+            );
+            $busyCancel =
+                \Gallery\Services\application_update_cancel_job($cancelId);
+            assert_cache_gc(
+                $busyCancel['status'] === 'running'
+                    && is_file($cancelDir . '/extract/prepared.txt'),
+                'Busy worker was reported stopped or its payload was removed.',
+            );
         } finally {
             \Gallery\Services\application_update_release_lock($worker);
         }
-        $workerDiagnostic = \Gallery\Services\application_update_job_worker_diagnostic($cancelId, 0);
-        assert_cache_gc($workerDiagnostic['worker_lock'] === 'available' && $workerDiagnostic['checkpoint_age_seconds'] === null, 'Released worker lock or unknown timestamp was misreported.');
+        $workerDiagnostic = \Gallery\Services\application_update_job_worker_diagnostic(
+            $cancelId,
+            0,
+        );
+        assert_cache_gc(
+            $workerDiagnostic['worker_lock'] === 'available'
+                && $workerDiagnostic['checkpoint_age_seconds'] === null,
+            'Released worker lock or unknown timestamp was misreported.',
+        );
         $cancelled = \Gallery\Services\application_update_cancel_job($cancelId);
-        assert_cache_gc($cancelled['status'] === 'cancelled' && !is_file($workspace . '/active-job.json')
-            && is_file($cancelDir . '/job.json') && is_file($root . '/cache/gallery-trash/original.jpg'), 'Safe pre-activation cancellation lost its record or touched user content.');
+        assert_cache_gc(
+            $cancelled['status'] === 'cancelled'
+                && !is_file($workspace . '/active-job.json')
+                && is_file($cancelDir . '/job.json')
+                && is_file($root . '/cache/gallery-trash/original.jpg'),
+            'Safe pre-activation cancellation lost its record or touched user content.',
+        );
         $cancelState['status'] = 'failed';
         $cancelState['stage'] = 'plan';
-        $cancelState['error'] = ['message' => 'Safe prior failure', 'reference' => 'fixture-ref', 'retryable' => true, 'stage' => 'plan', 'at' => time()];
+        $cancelState['error'] = [
+            'message' => 'Safe prior failure',
+            'reference' => 'fixture-ref',
+            'retryable' => true,
+            'stage' => 'plan',
+            'at' => time(),
+        ];
         file_put_contents($cancelDir . '/job.json', json_encode($cancelState));
         $retried = \Gallery\Services\application_update_retry_job($cancelId);
-        assert_cache_gc($retried['status'] === 'running' && $retried['error'] === null
-            && $retried['result']['last_failure']['reference'] === 'fixture-ref', 'Retry erased the preceding safe failure evidence.');
+        assert_cache_gc(
+            $retried['status'] === 'running'
+                && $retried['error'] === null
+                && $retried['result']['last_failure']['reference']
+                    === 'fixture-ref',
+            'Retry erased the preceding safe failure evidence.',
+        );
         echo "PASS independent updater cache GC\n";
     } finally {
         // Only this known disposable absolute root is eligible for fixture teardown.

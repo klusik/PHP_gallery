@@ -73,8 +73,10 @@ function feature_capability_domain_adapters(): array
  * @param array<string,mixed> $definition Canonical capability definition.
  * @return ?string Persisted setting key or null for a derived/unpersisted source.
  */
-function feature_capability_source_setting_key(string $key, array $definition): ?string
-{
+function feature_capability_source_setting_key(
+    string $key,
+    array $definition,
+): ?string {
     $source = $definition['source'] ?? null;
     if (!is_array($source)) {
         return null;
@@ -84,8 +86,13 @@ function feature_capability_source_setting_key(string $key, array $definition): 
         'feature_flag' => feature_flag_setting_key($key),
         'app_setting' => trim((string) ($source['key'] ?? '')) ?: null,
         'domain_adapter' => (static function () use ($source): ?string {
-            $adapterId = feature_flag_normalize_key((string) ($source['adapter'] ?? ''));
-            $settingKey = (string) (feature_capability_domain_adapters()[$adapterId]['setting_key'] ?? '');
+            $adapterId = feature_flag_normalize_key(
+                (string) ($source['adapter'] ?? ''),
+            );
+            $settingKey = (string) (
+                feature_capability_domain_adapters()[$adapterId]['setting_key']
+                ?? ''
+            );
             return $settingKey !== '' ? $settingKey : null;
         })(),
         default => null,
@@ -99,8 +106,10 @@ function feature_capability_source_setting_key(string $key, array $definition): 
  * @param array<string,mixed> $definition Canonical capability definition.
  * @return bool True when an explicit persisted value exists.
  */
-function feature_capability_source_has_explicit_value(string $key, array $definition): bool
-{
+function feature_capability_source_has_explicit_value(
+    string $key,
+    array $definition,
+): bool {
     $settingKey = feature_capability_source_setting_key($key, $definition);
     if ($settingKey === null) {
         return false;
@@ -115,15 +124,29 @@ function feature_capability_source_has_explicit_value(string $key, array $defini
  * @param bool $default Fallback when the target service is not available.
  * @return bool Configured state.
  */
-function feature_capability_domain_adapter_read(string $adapterId, bool $default): bool
-{
+function feature_capability_domain_adapter_read(
+    string $adapterId,
+    bool $default,
+): bool {
     $adapterId = feature_flag_normalize_key($adapterId);
 
     return match ($adapterId) {
-        'gallery_trash' => function_exists(__NAMESPACE__ . '\\gallery_trash_enabled') ? gallery_trash_enabled() : $default,
-        'thumbnail_warmup' => function_exists(__NAMESPACE__ . '\\thumbnail_warmup_enabled') ? thumbnail_warmup_enabled() : $default,
-        'development_diagnostics' => function_exists(__NAMESPACE__ . '\\dev_mode_enabled') ? dev_mode_enabled() : $default,
-        'automatic_updates' => function_exists(__NAMESPACE__ . '\\application_autoupdate_enabled') ? application_autoupdate_enabled() : $default,
+        'gallery_trash' => function_exists(__NAMESPACE__
+            . '\\gallery_trash_enabled')
+                ? gallery_trash_enabled()
+                : $default,
+        'thumbnail_warmup' => function_exists(__NAMESPACE__
+            . '\\thumbnail_warmup_enabled')
+                ? thumbnail_warmup_enabled()
+                : $default,
+        'development_diagnostics' => function_exists(__NAMESPACE__
+            . '\\dev_mode_enabled')
+                ? dev_mode_enabled()
+                : $default,
+        'automatic_updates' => function_exists(__NAMESPACE__
+            . '\\application_autoupdate_enabled')
+                ? application_autoupdate_enabled()
+                : $default,
         default => $default,
     };
 }
@@ -139,8 +162,10 @@ function feature_capability_domain_adapter_read(string $adapterId, bool $default
  * @param bool $enabled Configured administrator state.
  * @return bool True when the adapter accepted the write.
  */
-function feature_capability_domain_adapter_write(string $adapterId, bool $enabled): bool
-{
+function feature_capability_domain_adapter_write(
+    string $adapterId,
+    bool $enabled,
+): bool {
     $adapterId = feature_flag_normalize_key($adapterId);
 
     if ($adapterId === 'gallery_trash') {
@@ -151,13 +176,14 @@ function feature_capability_domain_adapter_write(string $adapterId, bool $enable
             $enabled,
             gallery_trash_auto_purge_enabled(),
             gallery_trash_retention_days(),
-            gallery_trash_purge_batch_size()
+            gallery_trash_purge_batch_size(),
         );
         return true;
     }
 
     if ($adapterId === 'thumbnail_warmup') {
-        if (!function_exists(__NAMESPACE__ . '\\set_thumbnail_warmup_enabled')) {
+        if (!function_exists(__NAMESPACE__
+            . '\\set_thumbnail_warmup_enabled')) {
             return false;
         }
         set_thumbnail_warmup_enabled($enabled);
@@ -173,7 +199,8 @@ function feature_capability_domain_adapter_write(string $adapterId, bool $enable
     }
 
     if ($adapterId === 'automatic_updates') {
-        if (!function_exists(__NAMESPACE__ . '\\set_application_autoupdate_enabled')) {
+        if (!function_exists(__NAMESPACE__
+            . '\\set_application_autoupdate_enabled')) {
             return false;
         }
         set_application_autoupdate_enabled($enabled);
@@ -197,12 +224,16 @@ function feature_capability_source_read(string $key, array $definition): bool
         return false;
     }
 
-    $default = !array_key_exists('default_enabled', $definition) || $definition['default_enabled'] === true;
+    $default =
+        !array_key_exists('default_enabled', $definition)
+        || $definition['default_enabled'] === true;
     $defaultValue = $default ? '1' : '0';
     $type = (string) ($source['type'] ?? '');
 
     if ($type === 'feature_flag') {
-        return app_setting(feature_flag_setting_key($key), $defaultValue) !== '0';
+        return (
+            app_setting(feature_flag_setting_key($key), $defaultValue) !== '0'
+        );
     }
 
     if ($type === 'app_setting') {
@@ -214,7 +245,10 @@ function feature_capability_source_read(string $key, array $definition): bool
     }
 
     if ($type === 'domain_adapter') {
-        return feature_capability_domain_adapter_read((string) ($source['adapter'] ?? ''), $default);
+        return feature_capability_domain_adapter_read(
+            (string) ($source['adapter'] ?? ''),
+            $default,
+        );
     }
 
     if ($type === 'derived') {
@@ -232,8 +266,11 @@ function feature_capability_source_read(string $key, array $definition): bool
  * @param bool $enabled Configured administrator state.
  * @return bool True when the source accepted the write.
  */
-function feature_capability_source_write(string $key, array $definition, bool $enabled): bool
-{
+function feature_capability_source_write(
+    string $key,
+    array $definition,
+    bool $enabled,
+): bool {
     $source = $definition['source'] ?? null;
     if (!is_array($source)) {
         return false;
@@ -255,7 +292,10 @@ function feature_capability_source_write(string $key, array $definition, bool $e
     }
 
     if ($type === 'domain_adapter') {
-        return feature_capability_domain_adapter_write((string) ($source['adapter'] ?? ''), $enabled);
+        return feature_capability_domain_adapter_write(
+            (string) ($source['adapter'] ?? ''),
+            $enabled,
+        );
     }
 
     return false;

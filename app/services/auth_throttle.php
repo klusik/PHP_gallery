@@ -53,7 +53,10 @@ use function Gallery\Core\visitor_hash;
  */
 function auth_throttle_schema_ready(): bool
 {
-    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('auth_rate_limits');
+    return (
+        function_exists('Gallery\\Services\\db_table_exists')
+            && db_table_exists('auth_rate_limits')
+    );
 }
 
 /**
@@ -64,7 +67,11 @@ function auth_throttle_schema_ready(): bool
 function auth_throttle_secret(): string
 {
     $config = cms_config();
-    return (string) ($config['visitor_vote_secret'] ?? $config['setup_secret'] ?? 'php-gallery-auth-throttle');
+    return (string) (
+        $config['visitor_vote_secret']
+        ?? $config['setup_secret']
+        ?? 'php-gallery-auth-throttle'
+    );
 }
 
 /**
@@ -96,25 +103,47 @@ function auth_throttle_subject_hash(string $subject): string
  */
 function auth_throttle_visitor_subject(string $remoteAddress = ''): string
 {
-    return function_exists('Gallery\\Core\\visitor_hash') ? visitor_hash() : auth_throttle_subject_hash($remoteAddress);
+    return function_exists('Gallery\\Core\\visitor_hash')
+        ? visitor_hash()
+        : auth_throttle_subject_hash($remoteAddress);
 }
 
 /**
  * Return bucket policy values for a throttled action.
  *
  * @param string $bucket Bucket value.
- * @return array Structured result data for the caller.
+ * @return array{max_attempts:int,window_seconds:int,lock_seconds:int} Attempt threshold, rolling window, and lock duration in seconds for the bucket or default policy.
  */
 function auth_throttle_policy(string $bucket): array
 {
     $policies = [
-        'admin_login_visitor' => ['max_attempts' => 10, 'window_seconds' => 900, 'lock_seconds' => 900],
-        'admin_login_identifier' => ['max_attempts' => 6, 'window_seconds' => 900, 'lock_seconds' => 900],
-        'password_reset_visitor' => ['max_attempts' => 5, 'window_seconds' => 1800, 'lock_seconds' => 1800],
-        'password_reset_identifier' => ['max_attempts' => 3, 'window_seconds' => 3600, 'lock_seconds' => 3600],
+        'admin_login_visitor' => [
+            'max_attempts' => 10,
+            'window_seconds' => 900,
+            'lock_seconds' => 900,
+        ],
+        'admin_login_identifier' => [
+            'max_attempts' => 6,
+            'window_seconds' => 900,
+            'lock_seconds' => 900,
+        ],
+        'password_reset_visitor' => [
+            'max_attempts' => 5,
+            'window_seconds' => 1800,
+            'lock_seconds' => 1800,
+        ],
+        'password_reset_identifier' => [
+            'max_attempts' => 3,
+            'window_seconds' => 3600,
+            'lock_seconds' => 3600,
+        ],
     ];
 
-    return $policies[$bucket] ?? ['max_attempts' => 10, 'window_seconds' => 900, 'lock_seconds' => 900];
+    return $policies[$bucket] ?? [
+        'max_attempts' => 10,
+        'window_seconds' => 900,
+        'lock_seconds' => 900,
+    ];
 }
 
 /**
@@ -150,7 +179,7 @@ function auth_throttle_row(string $bucket, string $subjectHash): ?array
  *
  * @param string $bucket Bucket value.
  * @param string $subject Subject value.
- * @return array Structured result data for the caller.
+ * @return array{allowed:bool,retry_after_seconds:int,attempts:int} Whether the attempt is allowed, remaining lock duration, and recorded attempt count.
  */
 function auth_throttle_check(string $bucket, string $subject): array
 {
@@ -175,7 +204,11 @@ function auth_throttle_check(string $bucket, string $subject): array
         ];
     }
 
-    return ['allowed' => true, 'retry_after_seconds' => 0, 'attempts' => (int) $row['attempts']];
+    return [
+        'allowed' => true,
+        'retry_after_seconds' => 0,
+        'attempts' => (int) $row['attempts'],
+    ];
 }
 
 /**
@@ -183,6 +216,7 @@ function auth_throttle_check(string $bucket, string $subject): array
  *
  * @param string $bucket Bucket value.
  * @param string $subject Subject value.
+ * @return void Starts or increments the throttle window and sets a lock when the configured attempt limit is reached.
  */
 function auth_throttle_record_attempt(string $bucket, string $subject): void
 {
@@ -195,7 +229,11 @@ function auth_throttle_record_attempt(string $bucket, string $subject): void
     $row = auth_throttle_row($bucket, $subjectHash);
     $now = now_sql();
 
-    if (!$row || strtotime((string) $row['first_attempt_at']) < time() - (int) $policy['window_seconds']) {
+    if (
+        !$row
+        || strtotime((string) $row['first_attempt_at'])
+            < (time() - (int) $policy['window_seconds'])
+    ) {
         auth_throttle_model_reset_window($bucket, $subjectHash, $now);
         return;
     }
@@ -205,7 +243,13 @@ function auth_throttle_record_attempt(string $bucket, string $subject): void
         ? date('Y-m-d H:i:s', time() + (int) $policy['lock_seconds'])
         : null;
 
-    auth_throttle_model_update_attempts($bucket, $subjectHash, $attempts, $now, $lockedUntil);
+    auth_throttle_model_update_attempts(
+        $bucket,
+        $subjectHash,
+        $attempts,
+        $now,
+        $lockedUntil,
+    );
 }
 
 /**
@@ -230,20 +274,36 @@ function auth_throttle_clear(string $bucket, string $subject): void
  * @param string $message Message value.
  * @param string $bucket Bucket value.
  * @param string $subject Subject value.
- * @param array $check Check value.
+ * @param array{allowed?:bool,retry_after_seconds?:int,attempts?:int} $check Throttle decision and attempt metadata to include in the event.
+ * @return void Logs a sanitized security event with a hashed subject and bounded throttle metadata when logging is available.
  */
-function auth_throttle_log(string $eventKey, string $message, string $bucket, string $subject, array $check): void
-{
+function auth_throttle_log(
+    string $eventKey,
+    string $message,
+    string $bucket,
+    string $subject,
+    array $check,
+): void {
     if (!function_exists('Gallery\\Services\\admin_log_event')) {
         return;
     }
 
-    admin_log_event('warning', $eventKey, $message, [
-        'bucket' => $bucket,
-        'subject_sha256' => auth_throttle_subject_hash($subject),
-        'attempts' => (int) ($check['attempts'] ?? 0),
-        'retry_after_seconds' => (int) ($check['retry_after_seconds'] ?? 0),
-        'visitor_hash' => function_exists('Gallery\\Core\\visitor_hash') ? visitor_hash() : '',
-        'request_id' => function_exists('telemetry_request_id') ? telemetry_request_id() : '',
-    ], ['category' => 'security', 'severity' => 'warning']);
+    admin_log_event(
+        'warning',
+        $eventKey,
+        $message,
+        [
+            'bucket' => $bucket,
+            'subject_sha256' => auth_throttle_subject_hash($subject),
+            'attempts' => (int) ($check['attempts'] ?? 0),
+            'retry_after_seconds' => (int) ($check['retry_after_seconds'] ?? 0),
+            'visitor_hash' => function_exists('Gallery\\Core\\visitor_hash')
+                ? visitor_hash()
+                : '',
+            'request_id' => function_exists('telemetry_request_id')
+                ? telemetry_request_id()
+                : '',
+        ],
+        ['category' => 'security', 'severity' => 'warning'],
+    );
 }

@@ -76,9 +76,15 @@ function admin_gallery_benchmark_start_json_buffer(): void
  * @param string $message Human-readable message.
  * @param array<string, mixed> $context Structured context.
  * @param array<string, mixed> $options Log routing options.
+ * @return void Attempt the log entry and suppress logging failures.
  */
-function admin_gallery_benchmark_log_event_safe(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-{
+function admin_gallery_benchmark_log_event_safe(
+    string $level,
+    string $eventKey,
+    string $message,
+    array $context = [],
+    array $options = [],
+): void {
     try {
         admin_log_event($level, $eventKey, $message, $context, $options);
     } catch (Throwable) {
@@ -90,18 +96,25 @@ function admin_gallery_benchmark_log_event_safe(string $level, string $eventKey,
  *
  * @param array<string, mixed> $payload Response payload.
  * @param int $statusCode HTTP status code.
+ * @return void Emit a JSON response and terminate the request.
  */
-function admin_gallery_benchmark_json_response(array $payload, int $statusCode = 200): void
-{
-    $baseLevel = isset($GLOBALS['gallery_benchmark_json_ob_base_level']) ? (int) $GLOBALS['gallery_benchmark_json_ob_base_level'] : ob_get_level();
+function admin_gallery_benchmark_json_response(
+    array $payload,
+    int $statusCode = 200,
+): void {
+    $baseLevel = isset($GLOBALS['gallery_benchmark_json_ob_base_level'])
+        ? (int) $GLOBALS['gallery_benchmark_json_ob_base_level']
+        : ob_get_level();
     while (ob_get_level() > $baseLevel) {
         @ob_end_clean();
     }
     http_response_code($statusCode);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{"ok":false}';
-    exit;
+    echo
+        json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            ?: '{"ok":false}';
+    exit();
 }
 
 /**
@@ -116,7 +129,10 @@ function admin_gallery_benchmark_require_admin(): bool
     }
     admin_gallery_benchmark_json_response([
         'ok' => false,
-        'error' => t('admin.gallery_benchmark.auth_required', 'Admin session expired. Reload the page and sign in again.'),
+        'error' => t(
+            'admin.gallery_benchmark.auth_required',
+            'Admin session expired. Reload the page and sign in again.',
+        ),
     ], 403);
     return false;
 }
@@ -145,19 +161,34 @@ function admin_gallery_benchmark_require_post(): bool
     if (request_method() !== 'POST') {
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.post_required', 'Benchmark requests must use POST.'),
+            'error' => t(
+                'admin.gallery_benchmark.post_required',
+                'Benchmark requests must use POST.',
+            ),
         ], 405);
         return false;
     }
     $token = (string) ($_POST['csrf_token'] ?? '');
-    if ($token === '' || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
-        admin_gallery_benchmark_log_event_safe('warning', 'gallery_benchmark.csrf_failed', 'Gallery benchmark AJAX request failed CSRF validation.', [
-            'request_uri' => (string) ($_SERVER['REQUEST_URI'] ?? ''),
-            'has_token' => $token !== '',
-        ], ['category' => 'security', 'severity' => 'warning']);
+    if (
+        $token === ''
+        || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)
+    ) {
+        admin_gallery_benchmark_log_event_safe(
+            'warning',
+            'gallery_benchmark.csrf_failed',
+            'Gallery benchmark AJAX request failed CSRF validation.',
+            [
+                'request_uri' => (string) ($_SERVER['REQUEST_URI'] ?? ''),
+                'has_token' => $token !== '',
+            ],
+            ['category' => 'security', 'severity' => 'warning'],
+        );
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.csrf_failed', 'Security token expired or invalid. Reload the gallery page and try again.'),
+            'error' => t(
+                'admin.gallery_benchmark.csrf_failed',
+                'Security token expired or invalid. Reload the gallery page and try again.',
+            ),
         ], 400);
         return false;
     }
@@ -166,6 +197,8 @@ function admin_gallery_benchmark_require_post(): bool
 
 /**
  * Start a new browser-driven benchmark for one gallery.
+ *
+ * @return void Start a benchmark and return its initial JSON result.
  */
 function cms_admin_gallery_benchmark_start(): void
 {
@@ -180,7 +213,10 @@ function cms_admin_gallery_benchmark_start(): void
     if (!$gallery) {
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.gallery_missing', 'Gallery was not found.'),
+            'error' => t(
+                'admin.gallery_benchmark.gallery_missing',
+                'Gallery was not found.',
+            ),
         ], 404);
     }
 
@@ -188,12 +224,25 @@ function cms_admin_gallery_benchmark_start(): void
         $log = gallery_benchmark_start($gallery, $runsTotal);
         $token = (string) $log['token'];
         $publicUrl = anonymous_preview_url(gallery_public_url($gallery), true);
-        $downloadUrl = url_for('admin_gallery_benchmark_download', ['token' => $token]);
-        admin_gallery_benchmark_log_event_safe('info', 'gallery_benchmark.started', 'Admin started public gallery benchmark.', [
-            'gallery_id' => $galleryId,
-            'runs_total' => (int) $log['runs_total'],
-            'token_prefix' => substr($token, 0, 8),
-        ], ['category' => 'admin', 'severity' => 'info', 'subject_type' => 'gallery', 'subject_id' => $galleryId]);
+        $downloadUrl = url_for('admin_gallery_benchmark_download', [
+            'token' => $token,
+        ]);
+        admin_gallery_benchmark_log_event_safe(
+            'info',
+            'gallery_benchmark.started',
+            'Admin started public gallery benchmark.',
+            [
+                'gallery_id' => $galleryId,
+                'runs_total' => (int) $log['runs_total'],
+                'token_prefix' => substr($token, 0, 8),
+            ],
+            [
+                'category' => 'admin',
+                'severity' => 'info',
+                'subject_type' => 'gallery',
+                'subject_id' => $galleryId,
+            ],
+        );
         admin_gallery_benchmark_json_response([
             'ok' => true,
             'schema_version' => (int) ($log['schema_version'] ?? 0),
@@ -205,19 +254,36 @@ function cms_admin_gallery_benchmark_start(): void
             'summary' => gallery_benchmark_build_summary($log),
         ]);
     } catch (Throwable $exception) {
-        admin_gallery_benchmark_log_event_safe('error', 'gallery_benchmark.start_failed', 'Public gallery benchmark start failed.', [
-            'gallery_id' => $galleryId,
-            'exception' => $exception->getMessage(),
-        ], ['category' => 'admin', 'severity' => 'error', 'subject_type' => 'gallery', 'subject_id' => $galleryId]);
+        admin_gallery_benchmark_log_event_safe(
+            'error',
+            'gallery_benchmark.start_failed',
+            'Public gallery benchmark start failed.',
+            [
+                'gallery_id' => $galleryId,
+                'exception' => $exception->getMessage(),
+            ],
+            [
+                'category' => 'admin',
+                'severity' => 'error',
+                'subject_type' => 'gallery',
+                'subject_id' => $galleryId,
+            ],
+        );
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.start_failed', 'Benchmark could not be started: {error}', ['error' => $exception->getMessage()]),
+            'error' => t(
+                'admin.gallery_benchmark.start_failed',
+                'Benchmark could not be started: {error}',
+                ['error' => $exception->getMessage()],
+            ),
         ], 500);
     }
 }
 
 /**
  * Store browser-side navigation timing for one completed benchmark iframe load.
+ *
+ * @return void Store browser timing data and return the updated result.
  */
 function cms_admin_gallery_benchmark_browser(): void
 {
@@ -230,48 +296,79 @@ function cms_admin_gallery_benchmark_browser(): void
     $runIndex = (int) ($_POST['run_index'] ?? 0);
     $browserJson = (string) ($_POST['browser_json'] ?? '{}');
     $browserPayload = json_decode($browserJson, true);
-    if (!gallery_benchmark_token_is_valid($token) || $runIndex < 1 || !is_array($browserPayload)) {
+    if (
+        !gallery_benchmark_token_is_valid($token)
+        || $runIndex < 1
+        || !is_array($browserPayload)
+    ) {
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.invalid_payload', 'Benchmark payload is invalid.'),
+            'error' => t(
+                'admin.gallery_benchmark.invalid_payload',
+                'Benchmark payload is invalid.',
+            ),
         ], 400);
     }
 
     try {
-        $log = gallery_benchmark_record_browser_load($token, $runIndex, $browserPayload);
+        $log = gallery_benchmark_record_browser_load(
+            $token,
+            $runIndex,
+            $browserPayload,
+        );
         admin_gallery_benchmark_json_response([
             'ok' => true,
-            'summary' => $log['summary'] ?? gallery_benchmark_build_summary($log),
+            'summary' => $log['summary'] ?? gallery_benchmark_build_summary(
+                $log,
+            ),
         ]);
     } catch (Throwable $exception) {
-        admin_gallery_benchmark_log_event_safe('error', 'gallery_benchmark.browser_failed', 'Public gallery benchmark browser timing save failed.', [
-            'run_index' => $runIndex,
-            'exception' => $exception->getMessage(),
-        ], ['category' => 'admin', 'severity' => 'error']);
+        admin_gallery_benchmark_log_event_safe(
+            'error',
+            'gallery_benchmark.browser_failed',
+            'Public gallery benchmark browser timing save failed.',
+            [
+                'run_index' => $runIndex,
+                'exception' => $exception->getMessage(),
+            ],
+            ['category' => 'admin', 'severity' => 'error'],
+        );
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.browser_failed', 'Browser timing could not be saved: {error}', ['error' => $exception->getMessage()]),
+            'error' => t(
+                'admin.gallery_benchmark.browser_failed',
+                'Browser timing could not be saved: {error}',
+                ['error' => $exception->getMessage()],
+            ),
         ], 500);
     }
 }
 
 /**
  * Return current benchmark status for the browser runner.
+ *
+ * @return void Return the current benchmark status as JSON.
  */
 function cms_admin_gallery_benchmark_status(): void
 {
-    $serverRequestTimeMs = isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
-        ? ((float) $_SERVER['REQUEST_TIME_FLOAT']) * 1000
+    $serverRequestTimeMs = isset($_SERVER['REQUEST_TIME_FLOAT'])
+    && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
+        ? (float) $_SERVER['REQUEST_TIME_FLOAT'] * 1000
         : microtime(true) * 1000;
     admin_gallery_benchmark_start_json_buffer();
     admin_gallery_benchmark_require_admin();
     admin_gallery_benchmark_release_session_lock();
 
-    $token = strtolower(trim((string) ($_GET['token'] ?? $_POST['token'] ?? '')));
+    $token = strtolower(trim(
+        (string) ($_GET['token'] ?? $_POST['token'] ?? ''),
+    ));
     if (!gallery_benchmark_token_is_valid($token)) {
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.invalid_token', 'Benchmark token is invalid.'),
+            'error' => t(
+                'admin.gallery_benchmark.invalid_token',
+                'Benchmark token is invalid.',
+            ),
         ], 400);
     }
 
@@ -283,13 +380,21 @@ function cms_admin_gallery_benchmark_status(): void
             'diagnostics_version' => gallery_benchmark_diagnostics_version(),
             'server_request_time_ms' => $serverRequestTimeMs,
             'server_response_time_ms' => microtime(true) * 1000,
-            'summary' => $log['summary'] ?? gallery_benchmark_build_summary($log),
-            'download_url' => url_for('admin_gallery_benchmark_download', ['token' => $token]),
+            'summary' => $log['summary'] ?? gallery_benchmark_build_summary(
+                $log,
+            ),
+            'download_url' => url_for('admin_gallery_benchmark_download', [
+                'token' => $token,
+            ]),
         ]);
     } catch (Throwable $exception) {
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.status_failed', 'Benchmark status could not be loaded: {error}', ['error' => $exception->getMessage()]),
+            'error' => t(
+                'admin.gallery_benchmark.status_failed',
+                'Benchmark status could not be loaded: {error}',
+                ['error' => $exception->getMessage()],
+            ),
         ], 404);
     }
 }
@@ -301,20 +406,30 @@ function cms_admin_gallery_benchmark_status(): void
  * therefore measures the full PHP request including bootstrap/session wait, while
  * the browser can compare that duration against its own round trip without clock
  * synchronization.
+ *
+ * @return void Return a minimal request timing probe as JSON.
  */
 function cms_admin_gallery_benchmark_probe(): void
 {
-    $requestTime = isset($_SERVER['REQUEST_TIME_FLOAT']) && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
+    $requestTime = isset($_SERVER['REQUEST_TIME_FLOAT'])
+    && is_numeric($_SERVER['REQUEST_TIME_FLOAT'])
         ? (float) $_SERVER['REQUEST_TIME_FLOAT']
         : microtime(true);
     admin_gallery_benchmark_start_json_buffer();
     admin_gallery_benchmark_require_admin();
     $token = strtolower(trim((string) ($_GET['token'] ?? '')));
     $runIndex = (int) ($_GET['run_index'] ?? 0);
-    if (!gallery_benchmark_token_is_valid($token) || $runIndex < 1 || $runIndex > 20) {
+    if (
+        !gallery_benchmark_token_is_valid($token)
+        || $runIndex < 1
+        || $runIndex > 20
+    ) {
         admin_gallery_benchmark_json_response([
             'ok' => false,
-            'error' => t('admin.gallery_benchmark.invalid_token', 'Benchmark token is invalid.'),
+            'error' => t(
+                'admin.gallery_benchmark.invalid_token',
+                'Benchmark token is invalid.',
+            ),
         ], 400);
     }
     admin_gallery_benchmark_release_session_lock();
@@ -325,7 +440,10 @@ function cms_admin_gallery_benchmark_probe(): void
         'request_time_unix' => $requestTime,
         'controller_at_unix' => $controllerAt,
         'response_at_unix' => microtime(true),
-        'request_age_to_controller_ms' => max(0.0, ($controllerAt - $requestTime) * 1000),
+        'request_age_to_controller_ms' => max(
+            0.0,
+            ($controllerAt - $requestTime) * 1000,
+        ),
         'pid' => function_exists('getmypid') ? getmypid() : null,
         'session_status_after_release' => session_status(),
     ]);
@@ -333,36 +451,57 @@ function cms_admin_gallery_benchmark_probe(): void
 
 /**
  * Download a completed or partial benchmark JSON log.
+ *
+ * @return void Send the benchmark log as a JSON download.
  */
 function cms_admin_gallery_benchmark_download(): void
 {
     if (!current_user()) {
         http_response_code(403);
-        echo t('admin.gallery_benchmark.session_expired', 'Admin session expired.');
+        echo t(
+            'admin.gallery_benchmark.session_expired',
+            'Admin session expired.',
+        );
         return;
     }
     admin_gallery_benchmark_release_session_lock();
     $token = strtolower(trim((string) ($_GET['token'] ?? '')));
     if (!gallery_benchmark_token_is_valid($token)) {
         http_response_code(400);
-        echo t('admin.gallery_benchmark.invalid_token', 'Invalid benchmark token.');
+        echo t(
+            'admin.gallery_benchmark.invalid_token',
+            'Invalid benchmark token.',
+        );
         return;
     }
 
     try {
         $log = gallery_benchmark_load_log($token);
         $log['summary'] = gallery_benchmark_build_summary($log);
-        $json = json_encode($log, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode(
+            $log,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         if (!is_string($json)) {
-            throw new \RuntimeException(t('admin.gallery_benchmark.log_encode_failed', 'Benchmark log could not be encoded.'));
+            throw new \RuntimeException(t(
+                'admin.gallery_benchmark.log_encode_failed',
+                'Benchmark log could not be encoded.',
+            ));
         }
         $filename = gallery_benchmark_download_filename($log);
         header('Content-Type: application/json; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . str_replace('"', '', $filename) . '"');
+        header(
+            'Content-Disposition: attachment; filename="'
+                . str_replace('"', '', $filename)
+                . '"',
+        );
         header('Cache-Control: no-store, private');
         echo $json . "\n";
     } catch (Throwable $exception) {
         http_response_code(404);
-        echo t('admin.gallery_benchmark.log_unavailable', 'Benchmark log was not found or could not be read.');
+        echo t(
+            'admin.gallery_benchmark.log_unavailable',
+            'Benchmark log was not found or could not be read.',
+        );
     }
 }

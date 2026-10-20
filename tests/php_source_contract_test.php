@@ -26,10 +26,17 @@ $limit = ($admin || $owner) && $enabled;
 $message = 'keep  two spaces';
 PHP;
 
-if (!php_source_contains($source, 'require_access($gallery, [\'public\' => true])')
+if (
+    !php_source_contains(
+        $source,
+        'require_access($gallery, [\'public\' => true])',
+    )
     || !php_source_contains('check(/* layout */ $gallery,);', 'check($gallery)')
-    || !php_source_contains('<div class="card">', 'class="card"')) {
-    throw new RuntimeException('PHP formatting and existing raw markup must match.');
+    || !php_source_contains('<div class="card">', 'class="card"')
+) {
+    throw new RuntimeException(
+        'PHP formatting and existing raw markup must match.',
+    );
 }
 
 // These vectors change one behavior-bearing token or literal at a time.
@@ -43,7 +50,8 @@ foreach ([
     '$message = \'keep two spaces\';',
 ] as $forbidden) {
     if (php_source_contains($source, $forbidden)) {
-        throw new RuntimeException('Changed PHP contract matched: ' . $forbidden);
+        throw new RuntimeException('Changed PHP contract matched: '
+            . $forbidden);
     }
 }
 

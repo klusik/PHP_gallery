@@ -60,9 +60,13 @@ return [
             'Gallery\\Controllers\\gallery_music_smart_view_model',
             'Gallery\\Views\\view_render_gallery_music',
         ],
-        'schema-unavailable-response' => ['Gallery\\Controllers\\cms_public_schema_unavailable'],
+        'schema-unavailable-response' => [
+            'Gallery\\Controllers\\cms_public_schema_unavailable',
+        ],
         // Authenticated document actions load the uploader only after the public attachment list is prepared.
-        'domain-admin-uploads' => ['Gallery\\Controllers\\gallery_pdf_documents_admin_controls'],
+        'domain-admin-uploads' => [
+            'Gallery\\Controllers\\gallery_pdf_documents_admin_controls',
+        ],
         // Settings-only and rendering callers share each owner independently.
         'breadcrumb-policy' => [
             'Gallery\\Services\\breadcrumb_view_model',
@@ -79,12 +83,24 @@ return [
             'Gallery\\Views\\view_render_breadcrumbs',
             'Gallery\\Views\\view_render_breadcrumb_style_picker',
         ],
-        'feature-disabled-response' => ['Gallery\\Core\\cms_apply_feature_disabled_route_response'],
-        'viewer-identity' => ['Gallery\\Core\\viewer_identity_remember_restore_request'],
-        'database-observer' => ['Gallery\\Services\\telemetry_observe_db_query'],
-        'request-maintenance' => ['Gallery\\Services\\application_autoupdate_maybe_run'],
-        'archive-request-trigger' => ['Gallery\\Services\\admin_log_archive_register_request_trigger'],
-        'site-request-trigger' => ['Gallery\\Services\\site_maintenance_register_request_trigger'],
+        'feature-disabled-response' => [
+            'Gallery\\Core\\cms_apply_feature_disabled_route_response',
+        ],
+        'viewer-identity' => [
+            'Gallery\\Core\\viewer_identity_remember_restore_request',
+        ],
+        'database-observer' => [
+            'Gallery\\Services\\telemetry_observe_db_query',
+        ],
+        'request-maintenance' => [
+            'Gallery\\Services\\application_autoupdate_maybe_run',
+        ],
+        'archive-request-trigger' => [
+            'Gallery\\Services\\admin_log_archive_register_request_trigger',
+        ],
+        'site-request-trigger' => [
+            'Gallery\\Services\\site_maintenance_register_request_trigger',
+        ],
         'site-maintenance-work' => [
             'Gallery\\Services\\cache_lifecycle_chain_runtime_available',
             'Gallery\\Services\\cache_lifecycle_chain_start',
@@ -98,7 +114,9 @@ return [
             'Gallery\\Services\\application_update_run_scheduled_cache_cleanup',
             'Gallery\\Services\\application_update_cache_cleanup_status',
         ],
-        'archive-maintenance-work' => ['Gallery\\Services\\admin_log_archive_maintenance_run'],
+        'archive-maintenance-work' => [
+            'Gallery\\Services\\admin_log_archive_maintenance_run',
+        ],
         'updater-work' => [
             'Gallery\\Services\\application_update_background_chain_start',
             'Gallery\\Services\\application_update_background_chain_run',
@@ -141,12 +159,22 @@ return [
     ],
     // These existing roots have stable lifecycle/domain ownership. The compiler
     // creates an edge only when the owner's complete historic closure is present.
-    'shared_modules' => ['database-observer', 'request-policy', 'routing-paths', 'breadcrumb-policy', 'breadcrumb-presentation', 'content-localization', 'gallery-pdf-documents'],
+    'shared_modules' => [
+        'database-observer',
+        'request-policy',
+        'routing-paths',
+        'breadcrumb-policy',
+        'breadcrumb-presentation',
+        'content-localization',
+        'gallery-pdf-documents',
+    ],
     'module_dependencies' => [
         // The full gallery editor already contains the complete metadata owner
         // closure, including cover selection. Reuse that existing domain owner
         // without adding a module, widening PHP closures or duplicating its files.
-        'domain-admin-galleries-edit-page' => ['domain-admin-galleries-edit-metadata'],
+        'domain-admin-galleries-edit-page' => [
+            'domain-admin-galleries-edit-metadata',
+        ],
         // Reuse the existing maintenance owner only where its complete historical
         // closure is already present, including Admin authentication. The edge
         // replaces four duplicated files without broadening any route's closure.
@@ -162,13 +190,37 @@ return [
     // Dispatch loads public policy before only these sensitive route families.
     'route_dependencies' => [
         'public-policy' => [
-            'home', 'gallery', 'smart_gallery', 'gallery_access', 'share', 'tag', 'sitemap',
-            'picture_game', 'media', 'gallery_ofp_pdf', 'gallery_music', 'thumb', 'public_media', 'public_thumb', 'thumbnail_warmup',
-            'gallery_cover_asset', 'gallery_branding_asset', 'vote', 'gallery_map_data',
-            'gallery_lightbox_data', 'smart_gallery_lightbox_data', 'smart_gallery_map_data',
-            'public_search', 'download_gallery_start', 'download_gallery', 'download_gallery_manifest',
-            'download_gallery_file', 'download_smart_gallery_start', 'download_smart_gallery',
-            'download_smart_gallery_manifest', 'download_smart_gallery_file',
+            'home',
+            'gallery',
+            'smart_gallery',
+            'gallery_access',
+            'share',
+            'tag',
+            'sitemap',
+            'picture_game',
+            'media',
+            'gallery_ofp_pdf',
+            'gallery_music',
+            'thumb',
+            'public_media',
+            'public_thumb',
+            'thumbnail_warmup',
+            'gallery_cover_asset',
+            'gallery_branding_asset',
+            'vote',
+            'gallery_map_data',
+            'gallery_lightbox_data',
+            'smart_gallery_lightbox_data',
+            'smart_gallery_map_data',
+            'public_search',
+            'download_gallery_start',
+            'download_gallery',
+            'download_gallery_manifest',
+            'download_gallery_file',
+            'download_smart_gallery_start',
+            'download_smart_gallery',
+            'download_smart_gallery_manifest',
+            'download_smart_gallery_file',
         ],
     ],
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
@@ -196,12 +248,15 @@ return [
             'Gallery\\Services\\cache_lifecycle_producer_lease',
         ],
         // Historical media&ofp=1 links select the PDF route module before its handler runs.
-        'Gallery\\Controllers\\cms_media' => ['Gallery\\Controllers\\cms_gallery_ofp_pdf'],
+        'Gallery\\Controllers\\cms_media' => [
+            'Gallery\\Controllers\\cms_gallery_ofp_pdf',
+        ],
         // The request bridge is loaded before route dispatch; its request-local kernel
         // explicitly loads the attachment owner at the authenticated report boundary.
-        'Gallery\\Controllers\\upload_automation_handle_flight_report_action' => [
-            'Gallery\\Core\\cms_runtime_kernel',
-        ],
+        'Gallery\\Controllers\\upload_automation_handle_flight_report_action' =>
+            [
+                'Gallery\\Core\\cms_runtime_kernel',
+            ],
         // The authenticated flight-report handler loads the existing attachment module
         // immediately before either service action; defer these edges to avoid duplicating
         // gallery_pdf_documents.php in the upload route closure.

@@ -25,6 +25,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 /** Fail one visibility-eye source contract with a readable message. */
 function visibility_eye_expect(bool $condition, string $message): void
 {
@@ -34,42 +36,159 @@ function visibility_eye_expect(bool $condition, string $message): void
     }
 }
 
-$cards = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_cards.php') . "\n" . (string) file_get_contents(__DIR__ . '/../app/views/public_gallery_cards.php');
-$page = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php');
-$inline = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_public_inline.php');
-$editActions = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_galleries_edit_actions.php');
-$bulkImages = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_images_bulk.php');
-$imageEditor = (string) file_get_contents(__DIR__ . '/../app/views/admin_gallery_edit_tabs.php');
-$browser = (string) file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-side-panel.js');
-$styles = (string) file_get_contents(__DIR__ . '/../public/assets/styles/public.css');
+$cards =
+    (string) file_get_contents(__DIR__
+        . '/../app/controllers/public_gallery_cards.php')
+    . "\n"
+    . (string) file_get_contents(__DIR__
+        . '/../app/views/public_gallery_cards.php');
+$page = (string) file_get_contents(__DIR__
+    . '/../app/controllers/public_gallery_page.php');
+$inline = (string) file_get_contents(__DIR__
+    . '/../app/controllers/admin_public_inline.php');
+$editActions = (string) file_get_contents(__DIR__
+    . '/../app/controllers/admin_galleries_edit_actions.php');
+$bulkImages = (string) file_get_contents(__DIR__
+    . '/../app/controllers/admin_images_bulk.php');
+$imageEditor = (string) file_get_contents(__DIR__
+    . '/../app/views/admin_gallery_edit_tabs.php');
+$browser = (string) file_get_contents(__DIR__
+    . '/../public/assets/gallery-modules/admin-side-panel.js');
+$styles = (string) file_get_contents(__DIR__
+    . '/../public/assets/styles/public.css');
 
-visibility_eye_expect(str_contains($cards, 'render_public_gallery_admin_visibility_menu($gallery)'), 'Gallery cards must render the visibility eye.');
-visibility_eye_expect(substr_count($page, 'render_public_image_admin_visibility_menu($image)') === 2, 'Normal and NSFW image cards must render the visibility eye.');
+visibility_eye_expect(
+    php_source_contains(
+        $cards,
+        'render_public_gallery_admin_visibility_menu($gallery)',
+    ),
+    'Gallery cards must render the visibility eye.',
+);
+visibility_eye_expect(
+    substr_count($page, 'render_public_image_admin_visibility_menu($image)')
+        === 2,
+    'Normal and NSFW image cards must render the visibility eye.',
+);
 foreach (['public', 'unpublished', 'private'] as $visibility) {
-    visibility_eye_expect(str_contains($cards, $visibility), 'Visibility menu is missing ' . $visibility . '.');
+    visibility_eye_expect(
+        str_contains($cards, $visibility),
+        'Visibility menu is missing ' . $visibility . '.',
+    );
 }
-visibility_eye_expect(str_contains($cards, 'data-public-admin-card-action data-public-admin-visibility-menu'), 'Visibility menu clicks must be excluded from the public lightbox opener.');
-visibility_eye_expect(str_contains($cards, 'data-public-admin-visibility-form'), 'Visibility choices must retain POST fallbacks.');
-visibility_eye_expect(str_contains($cards, 'public-admin-visibility-icon-unpublished'), 'Unpublished visibility icon must use fixed aligned icon markup.');
-visibility_eye_expect(str_contains($cards, 'public-admin-visibility-icon-private'), 'Private visibility icon must use fixed aligned icon markup.');
-visibility_eye_expect(str_contains($browser, 'data-public-admin-visibility-form'), 'Dynamic visibility forms must use delegated interception.');
-visibility_eye_expect(str_contains($browser, 'completeCoreGalleryMutationInCurrentView(result)'), 'Visibility mutations must use the shared completion coordinator.');
-visibility_eye_expect(str_contains($imageEditor, 'data-admin-image-row-action') && str_contains($imageEditor, 'value="cover:'), 'The drawer Images table must expose directly submitted row actions for cover selection.');
-visibility_eye_expect(str_contains($imageEditor, 'data-admin-image-cover-cell'), 'The cover action must have a replaceable row-owned presentation fragment.');
-visibility_eye_expect(str_contains($bulkImages, "preg_match('/^(delete|cover|cover_arm|cover_add|cover_reset|public|draft|private):(\\d+)$/"), 'The bulk endpoint must normalize direct row actions into one owned image operation.');
-visibility_eye_expect(str_contains($bulkImages, '$imageIds = $singleImageId > 0 ? [$singleImageId] : $submittedImageIds;'), 'Direct image actions must override any unrelated checked rows with exactly their own stable ID.');
-visibility_eye_expect(str_contains($inline, 'gallery.visibility'), 'Gallery visibility must return typed mutation metadata.');
-visibility_eye_expect(str_contains($inline, 'image.visibility'), 'Image visibility must return typed mutation metadata.');
-visibility_eye_expect(str_contains($inline, 'draft'), 'Image unpublished state must map to legacy draft storage.');
-visibility_eye_expect(str_contains($editActions, '$visibilityInputPresent = array_key_exists(\'visibility\', $input);'), 'Partial gallery visibility saves must explicitly own the listing compatibility state.');
-visibility_eye_expect(str_contains($editActions, '$shouldUpdateAccessListing = $accessReady && ($completeForm || $visibilityInputPresent);'), 'Visibility-only saves must synchronize access_listing when the access schema is available.');
-visibility_eye_expect(str_contains($editActions, 'if ($shouldUpdateAccessListing) {') && str_contains($editActions, '$fields[\'access_listing\'] = $accessListing;'), 'Visibility listing synchronization must have a dedicated semantic persistence branch.');
-visibility_eye_expect(str_contains($browser, 'beginPublicCardVisibilityFeedback(target)'), 'Visibility changes must show pending feedback before the request completes.');
-visibility_eye_expect(str_contains($browser, 'completePublicCardVisibilityFeedback(target)'), 'Verified visibility changes must animate the refreshed card.');
-visibility_eye_expect(str_contains($styles, '.public-admin-visibility-menu:hover .public-admin-visibility-options'), 'Pointer hover must expose the visibility submenu.');
-visibility_eye_expect(str_contains($styles, '.public-admin-visibility-icon-unpublished::after'), 'Unpublished icon must use an aligned CSS slash overlay.');
-visibility_eye_expect(str_contains($styles, '.public-admin-visibility-icon-private::after'), 'Private icon must use an aligned CSS lock overlay.');
-visibility_eye_expect(str_contains($styles, '.gallery-card.is-visibility-updating'), 'Gallery cards must expose pending visibility-change feedback.');
-visibility_eye_expect(str_contains($styles, 'public-admin-visibility-updated'), 'Visibility completion must have a short confirmation animation.');
+visibility_eye_expect(
+    str_contains(
+        $cards,
+        'data-public-admin-card-action data-public-admin-visibility-menu',
+    ),
+    'Visibility menu clicks must be excluded from the public lightbox opener.',
+);
+visibility_eye_expect(
+    str_contains($cards, 'data-public-admin-visibility-form'),
+    'Visibility choices must retain POST fallbacks.',
+);
+visibility_eye_expect(
+    str_contains($cards, 'public-admin-visibility-icon-unpublished'),
+    'Unpublished visibility icon must use fixed aligned icon markup.',
+);
+visibility_eye_expect(
+    str_contains($cards, 'public-admin-visibility-icon-private'),
+    'Private visibility icon must use fixed aligned icon markup.',
+);
+visibility_eye_expect(
+    str_contains($browser, 'data-public-admin-visibility-form'),
+    'Dynamic visibility forms must use delegated interception.',
+);
+visibility_eye_expect(
+    str_contains($browser, 'completeCoreGalleryMutationInCurrentView(result)'),
+    'Visibility mutations must use the shared completion coordinator.',
+);
+visibility_eye_expect(
+    str_contains($imageEditor, 'data-admin-image-row-action')
+        && str_contains($imageEditor, 'value="cover:'),
+    'The drawer Images table must expose directly submitted row actions for cover selection.',
+);
+visibility_eye_expect(
+    str_contains($imageEditor, 'data-admin-image-cover-cell'),
+    'The cover action must have a replaceable row-owned presentation fragment.',
+);
+visibility_eye_expect(
+    php_source_contains(
+        $bulkImages,
+        "preg_match(\n            '/^(delete|cover|cover_arm|cover_add|cover_reset|public|draft|private):(\\d+)$/',\n            \$action,\n            \$rowMatch,\n        ) === 1",
+    ),
+    'The bulk endpoint must normalize direct row actions into one owned image operation.',
+);
+visibility_eye_expect(
+    php_source_contains(
+        $bulkImages,
+        '$imageIds = $singleImageId > 0 ? [$singleImageId] : $submittedImageIds;',
+    ),
+    'Direct image actions must override any unrelated checked rows with exactly their own stable ID.',
+);
+visibility_eye_expect(
+    str_contains($inline, 'gallery.visibility'),
+    'Gallery visibility must return typed mutation metadata.',
+);
+visibility_eye_expect(
+    str_contains($inline, 'image.visibility'),
+    'Image visibility must return typed mutation metadata.',
+);
+visibility_eye_expect(
+    str_contains($inline, 'draft'),
+    'Image unpublished state must map to legacy draft storage.',
+);
+visibility_eye_expect(
+    php_source_contains(
+        $editActions,
+        '$visibilityInputPresent = array_key_exists(\'visibility\', $input);',
+    ),
+    'Partial gallery visibility saves must explicitly own the listing compatibility state.',
+);
+visibility_eye_expect(
+    php_source_contains(
+        $editActions,
+        '$shouldUpdateAccessListing = $accessReady && ($completeForm || $visibilityInputPresent);',
+    ),
+    'Visibility-only saves must synchronize access_listing when the access schema is available.',
+);
+visibility_eye_expect(
+    php_source_contains($editActions, 'if ($shouldUpdateAccessListing) {')
+        && php_source_contains(
+            $editActions,
+            '$fields[\'access_listing\'] = $accessListing;',
+        ),
+    'Visibility listing synchronization must have a dedicated semantic persistence branch.',
+);
+visibility_eye_expect(
+    str_contains($browser, 'beginPublicCardVisibilityFeedback(target)'),
+    'Visibility changes must show pending feedback before the request completes.',
+);
+visibility_eye_expect(
+    str_contains($browser, 'completePublicCardVisibilityFeedback(target)'),
+    'Verified visibility changes must animate the refreshed card.',
+);
+visibility_eye_expect(
+    str_contains(
+        $styles,
+        '.public-admin-visibility-menu:hover .public-admin-visibility-options',
+    ),
+    'Pointer hover must expose the visibility submenu.',
+);
+visibility_eye_expect(
+    str_contains($styles, '.public-admin-visibility-icon-unpublished::after'),
+    'Unpublished icon must use an aligned CSS slash overlay.',
+);
+visibility_eye_expect(
+    str_contains($styles, '.public-admin-visibility-icon-private::after'),
+    'Private icon must use an aligned CSS lock overlay.',
+);
+visibility_eye_expect(
+    str_contains($styles, '.gallery-card.is-visibility-updating'),
+    'Gallery cards must expose pending visibility-change feedback.',
+);
+visibility_eye_expect(
+    str_contains($styles, 'public-admin-visibility-updated'),
+    'Visibility completion must have a short confirmation animation.',
+);
 
 echo 'Public card visibility eye contracts passed.' . PHP_EOL;

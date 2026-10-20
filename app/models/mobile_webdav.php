@@ -32,13 +32,17 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
-/** @return array<int,array<string,mixed>> */
+/**
+ * Load WebDAV upload tokens joined with their gallery display metadata.
+ *
+ * @return list<array<string,mixed>> Token rows with gallery titles and folder paths, newest first.
+ */
 function mobile_webdav_model_tokens(): array
 {
-    $stmt = db()->query("SELECT t.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path
+    $stmt = db()->query('SELECT t.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path
         FROM mobile_webdav_upload_tokens t
         INNER JOIN galleries g ON g.id = t.gallery_id
-        ORDER BY t.created_at DESC, t.id DESC");
+        ORDER BY t.created_at DESC, t.id DESC');
     return $stmt ? ($stmt->fetchAll() ?: []) : [];
 }
 
@@ -54,11 +58,29 @@ function mobile_webdav_model_tokens(): array
  * @param string $now Current SQL timestamp.
  * @return int Created token identifier.
  */
-function mobile_webdav_model_create_token(int $userId, int $galleryId, string $label, string $username, string $passwordHash, string $pathToken, string $now): int
-{
+function mobile_webdav_model_create_token(
+    int $userId,
+    int $galleryId,
+    string $label,
+    string $username,
+    string $passwordHash,
+    string $pathToken,
+    string $now,
+): int {
     $pdo = db();
-    $stmt = $pdo->prepare('INSERT INTO mobile_webdav_upload_tokens (user_id, gallery_id, label, username, password_hash, path_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)');
-    $stmt->execute([$userId, $galleryId, $label, $username, $passwordHash, $pathToken, $now, $now]);
+    $stmt = $pdo->prepare(
+        'INSERT INTO mobile_webdav_upload_tokens (user_id, gallery_id, label, username, password_hash, path_token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)',
+    );
+    $stmt->execute([
+        $userId,
+        $galleryId,
+        $label,
+        $username,
+        $passwordHash,
+        $pathToken,
+        $now,
+        $now,
+    ]);
     return (int) $pdo->lastInsertId();
 }
 
@@ -66,21 +88,29 @@ function mobile_webdav_model_create_token(int $userId, int $galleryId, string $l
  * Delete one WebDAV upload token.
  *
  * @param int $tokenId WebDAV token identifier.
+ * @return void Deletes the token row.
  */
 function mobile_webdav_model_delete_token(int $tokenId): void
 {
-    $stmt = db()->prepare('DELETE FROM mobile_webdav_upload_tokens WHERE id = ?');
+    $stmt = db()->prepare(
+        'DELETE FROM mobile_webdav_upload_tokens WHERE id = ?',
+    );
     $stmt->execute([$tokenId]);
 }
 
-/** @return array<string,mixed>|null */
+/**
+ * Find an enabled WebDAV token by its opaque URL path token.
+ *
+ * @param string $pathToken Opaque path credential identifying the upload token.
+ * @return array<string,mixed>|null Active token and gallery row, or null when unavailable.
+ */
 function mobile_webdav_model_find_active_by_path_token(string $pathToken): ?array
 {
-    $stmt = db()->prepare("SELECT t.*, g.folder_path, g.title AS gallery_title
+    $stmt = db()->prepare('SELECT t.*, g.folder_path, g.title AS gallery_title
         FROM mobile_webdav_upload_tokens t
         INNER JOIN galleries g ON g.id = t.gallery_id
         WHERE t.path_token = ? AND t.enabled = 1
-        LIMIT 1");
+        LIMIT 1');
     $stmt->execute([$pathToken]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -91,9 +121,12 @@ function mobile_webdav_model_find_active_by_path_token(string $pathToken): ?arra
  *
  * @param int $tokenId WebDAV token identifier.
  * @param string $now Current SQL timestamp.
+ * @return void Updates the token's last-used and modification timestamps.
  */
 function mobile_webdav_model_mark_used(int $tokenId, string $now): void
 {
-    $stmt = db()->prepare('UPDATE mobile_webdav_upload_tokens SET last_used_at = ?, updated_at = ? WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE mobile_webdav_upload_tokens SET last_used_at = ?, updated_at = ? WHERE id = ?',
+    );
     $stmt->execute([$now, $now, $tokenId]);
 }

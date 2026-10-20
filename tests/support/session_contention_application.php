@@ -26,16 +26,37 @@ require_once __DIR__ . '/session_contention_database.php';
  * @param ?array<string,string> $fields POST fields, or null for GET.
  * @return \CurlHandle Caller owns the transfer and retains response data privately.
  */
-function application_handle(string $origin, string $path, string $owner, array $cookies = [], ?array $fields = null): \CurlHandle
-{
-    check(preg_match('~^http://127\.0\.0\.1:[1-9][0-9]{3,4}$~D', $origin) === 1, 'Application worker origin refused.');
-    check(preg_match('~^/(?:health|control|hold\?scenario=(?:held|released)-[0-2]|index\.php\?page=admin_(?:login|logout|gallery_title_completion|gallery_picker_search)(?:&[a-z_]+=[A-Za-z0-9_-]+)*)$~D', $path) === 1, 'Application request target refused.');
+function application_handle(
+    string $origin,
+    string $path,
+    string $owner,
+    array $cookies = [],
+    ?array $fields = null,
+): \CurlHandle {
+    check(
+        preg_match('~^http://127\.0\.0\.1:[1-9][0-9]{3,4}$~D', $origin) === 1,
+        'Application worker origin refused.',
+    );
+    check(
+        preg_match(
+            '~^/(?:health|control|hold\?scenario=(?:held|released)-[0-2]|index\.php\?page=admin_(?:login|logout|gallery_title_completion|gallery_picker_search)(?:&[a-z_]+=[A-Za-z0-9_-]+)*)$~D',
+            $path,
+        ) === 1,
+        'Application request target refused.',
+    );
     $handle = curl_init();
-    curl_setopt_array($handle, [CURLOPT_URL => $origin . $path, CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HEADER => true, CURLOPT_COOKIEFILE => '', CURLOPT_FOLLOWLOCATION => false,
-        CURLOPT_CONNECTTIMEOUT => READY_TIMEOUT_SECONDS, CURLOPT_TIMEOUT => HTTP_TIMEOUT_SECONDS,
-        CURLOPT_PROXY => '', CURLOPT_PROTOCOLS => CURLPROTO_HTTP,
-        CURLOPT_HTTPHEADER => ['X-Fixture-Owner: ' . $owner]]);
+    curl_setopt_array($handle, [
+        CURLOPT_URL => $origin . $path,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER => true,
+        CURLOPT_COOKIEFILE => '',
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_CONNECTTIMEOUT => READY_TIMEOUT_SECONDS,
+        CURLOPT_TIMEOUT => HTTP_TIMEOUT_SECONDS,
+        CURLOPT_PROXY => '',
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTP,
+        CURLOPT_HTTPHEADER => ['X-Fixture-Owner: ' . $owner],
+    ]);
     foreach ($cookies as $cookie) {
         curl_setopt($handle, CURLOPT_COOKIELIST, $cookie);
     }
@@ -54,8 +75,13 @@ function application_handle(string $origin, string $path, string $owner, array $
  * @param ?array<string,string> $fields POST fields, or null for GET.
  * @return array{status:int,body:string,json:mixed,headers:array<string,string>} Private response; never print wholesale.
  */
-function application_request(string $origin, string $path, string $owner, array &$cookies, ?array $fields = null): array
-{
+function application_request(
+    string $origin,
+    string $path,
+    string $owner,
+    array &$cookies,
+    ?array $fields = null,
+): array {
     $handle = application_handle($origin, $path, $owner, $cookies, $fields);
     $response = curl_exec($handle);
     check(is_string($response), 'Actual-route HTTP transport failed.');
@@ -69,8 +95,12 @@ function application_request(string $origin, string $path, string $owner, array 
     }
     $cookies = curl_getinfo($handle, CURLINFO_COOKIELIST);
     $body = substr($response, $headerSize);
-    return ['status' => (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE), 'body' => $body,
-        'json' => json_decode($body, true), 'headers' => $headers];
+    return [
+        'status' => (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE),
+        'body' => $body,
+        'json' => json_decode($body, true),
+        'headers' => $headers,
+    ];
 }
 
 /**
@@ -84,13 +114,23 @@ function application_request(string $origin, string $path, string $owner, array 
  * @param array<string,string> $environment Private disposable database/runner inputs.
  * @return array<string,string> Child worker environment with this clone's identity and DSN.
  */
-function application_environment(\GalleryWorkflow\Fixture $fixture, array $environment): array
-{
+function application_environment(
+    \GalleryWorkflow\Fixture $fixture,
+    array $environment,
+): array {
     \GalleryWorkflow\validateFixture($fixture->directory, $fixture->token);
     $child = $fixture->environment();
-    foreach (['GALLERY_WORKFLOW_FIXTURE', 'GALLERY_WORKFLOW_TOKEN', 'GALLERY_TEST_MYSQL_DSN',
-        'GALLERY_TEST_MYSQL_USER', 'GALLERY_TEST_MYSQL_PASSWORD'] as $key) {
-        check(isset($child[$key]) && is_string($child[$key]), 'Owned application environment field missing.');
+    foreach ([
+        'GALLERY_WORKFLOW_FIXTURE',
+        'GALLERY_WORKFLOW_TOKEN',
+        'GALLERY_TEST_MYSQL_DSN',
+        'GALLERY_TEST_MYSQL_USER',
+        'GALLERY_TEST_MYSQL_PASSWORD',
+    ] as $key) {
+        check(
+            isset($child[$key]) && is_string($child[$key]),
+            'Owned application environment field missing.',
+        );
         $environment[$key] = $child[$key];
     }
     unset($environment['PHP_CLI_SERVER_WORKERS']);
@@ -104,21 +144,67 @@ function application_environment(\GalleryWorkflow\Fixture $fixture, array $envir
  * @param int $index Bounded worker/log identity.
  * @return array{process:resource,origin:string} Exact process to terminate before clone cleanup.
  */
-function application_worker(\GalleryWorkflow\Fixture $fixture, array $environment, int $index): array
-{
+function application_worker(
+    \GalleryWorkflow\Fixture $fixture,
+    array $environment,
+    int $index,
+): array {
     \GalleryWorkflow\validateFixture($fixture->directory, $fixture->token);
-    check($index >= 0 && $index < WORKER_COUNT, 'Application worker identity refused.');
-    check(($environment['GALLERY_WORKFLOW_FIXTURE'] ?? '') === $fixture->directory
-        && hash_equals($fixture->token, $environment['GALLERY_WORKFLOW_TOKEN'] ?? ''), 'Application worker must inherit its own child fixture authority.');
+    check(
+        $index >= 0 && $index < WORKER_COUNT,
+        'Application worker identity refused.',
+    );
+    check(
+        ($environment['GALLERY_WORKFLOW_FIXTURE'] ?? '') === $fixture->directory
+            && hash_equals(
+                $fixture->token,
+                $environment['GALLERY_WORKFLOW_TOKEN'] ?? '',
+            ),
+        'Application worker must inherit its own child fixture authority.',
+    );
     $origin = 'http://127.0.0.1:' . \GalleryWorkflow\freePort();
     unset($environment['PHP_CLI_SERVER_WORKERS']);
-    $process = proc_open([PHP_BINARY, '-d', 'session.save_handler=files', '-d', 'session.save_path=' . $fixture->directory . '/sessions',
-        '-d', 'session.gc_probability=0', '-d', 'session.use_strict_mode=1', '-d', 'display_errors=0',
-        '-d', 'log_errors=1', '-d', 'disable_functions=mail', '-S', substr($origin, 7),
-        '-t', $fixture->directory . '/public', __DIR__ . '/session_contention_application_router.php'],
-        [0 => ['pipe', 'r'], 1 => ['file', $fixture->directory . '/session-worker-' . $index . '.log', 'a'],
-            2 => ['file', $fixture->directory . '/session-worker-' . $index . '.log', 'a']],
-        $pipes, $fixture->directory, $environment, ['bypass_shell' => true]);
+    $process = proc_open(
+        [
+            PHP_BINARY,
+            '-d',
+            'session.save_handler=files',
+            '-d',
+            'session.save_path=' . $fixture->directory . '/sessions',
+            '-d',
+            'session.gc_probability=0',
+            '-d',
+            'session.use_strict_mode=1',
+            '-d',
+            'display_errors=0',
+            '-d',
+            'log_errors=1',
+            '-d',
+            'disable_functions=mail',
+            '-S',
+            substr($origin, 7),
+            '-t',
+            $fixture->directory . '/public',
+            __DIR__ . '/session_contention_application_router.php',
+        ],
+        [
+            0 => ['pipe', 'r'],
+            1 => [
+                'file',
+                $fixture->directory . '/session-worker-' . $index . '.log',
+                'a',
+            ],
+            2 => [
+                'file',
+                $fixture->directory . '/session-worker-' . $index . '.log',
+                'a',
+            ],
+        ],
+        $pipes,
+        $fixture->directory,
+        $environment,
+        ['bypass_shell' => true],
+    );
     check(is_resource($process), 'Application worker launch failed.');
     fclose($pipes[0]);
     try {
@@ -126,8 +212,16 @@ function application_worker(\GalleryWorkflow\Fixture $fixture, array $environmen
         do {
             $cookies = [];
             try {
-                $probe = application_request($origin, '/health', $fixture->token, $cookies);
-                if ($probe['status'] === 200 && hash_equals($fixture->token, $probe['body'])) {
+                $probe = application_request(
+                    $origin,
+                    '/health',
+                    $fixture->token,
+                    $cookies,
+                );
+                if (
+                    $probe['status'] === 200
+                    && hash_equals($fixture->token, $probe['body'])
+                ) {
                     return ['process' => $process, 'origin' => $origin];
                 }
             } catch (FixtureAssertionFailure) {
@@ -154,11 +248,23 @@ function application_worker(\GalleryWorkflow\Fixture $fixture, array $environmen
  * @return array{scenario:string,reader_entry_observed:bool,same_completed_before_release:bool,overlap_ms:float,requests:array<string,array<string,mixed>>}
  *   Bounded timings/statuses only; no cookie, CSRF or application response data.
  */
-function application_sample(array $workers, \GalleryWorkflow\Fixture $fixture, string $scenario, array $shared, array $independent, string $csrf): array
-{
+function application_sample(
+    array $workers,
+    \GalleryWorkflow\Fixture $fixture,
+    string $scenario,
+    array $shared,
+    array $independent,
+    string $csrf,
+): array {
     $multi = curl_multi_init();
     $completed = [];
-    $handles = ['holder' => application_handle($workers[0]['origin'], '/hold?scenario=' . $scenario, $fixture->token, $shared, ['csrf_token' => $csrf])];
+    $handles = ['holder' => application_handle(
+        $workers[0]['origin'],
+        '/hold?scenario=' . $scenario,
+        $fixture->token,
+        $shared,
+        ['csrf_token' => $csrf],
+    )];
     try {
         curl_multi_add_handle($multi, $handles['holder']);
         $deadline = microtime(true) + READY_TIMEOUT_SECONDS;
@@ -167,10 +273,25 @@ function application_sample(array $workers, \GalleryWorkflow\Fixture $fixture, s
             clearstatcache(true, $fixture->directory . '/ready-' . $scenario);
             $ready = is_file($fixture->directory . '/ready-' . $scenario);
         } while (!$ready && microtime(true) < $deadline);
-        check($ready && !isset($completed['holder']), 'Authenticated application holder barrier failed.');
-        foreach (['same' => $shared, 'independent' => $independent] as $role => $cookies) {
-            $path = '/index.php?page=admin_gallery_title_completion&q=Workflow&parent_id=0&scenario=' . $scenario . '&reader=' . $role;
-            $handles[$role] = application_handle($workers[$role === 'same' ? 1 : 2]['origin'], $path, $fixture->token, $cookies);
+        check(
+            $ready && !isset($completed['holder']),
+            'Authenticated application holder barrier failed.',
+        );
+        foreach ([
+            'same' => $shared,
+            'independent' => $independent,
+        ] as $role => $cookies) {
+            $path =
+                '/index.php?page=admin_gallery_title_completion&q=Workflow&parent_id=0&scenario='
+                . $scenario
+                . '&reader='
+                . $role;
+            $handles[$role] = application_handle(
+                $workers[$role === 'same' ? 1 : 2]['origin'],
+                $path,
+                $fixture->token,
+                $cookies,
+            );
             curl_multi_add_handle($multi, $handles[$role]);
         }
         $released = str_starts_with($scenario, 'released-');
@@ -178,37 +299,82 @@ function application_sample(array $workers, \GalleryWorkflow\Fixture $fixture, s
         do {
             pump($multi, $handles, $completed);
             clearstatcache();
-            $entered = is_file($fixture->directory . '/enter-' . $scenario . '-same')
-                && is_file($fixture->directory . '/enter-' . $scenario . '-independent');
-            $ready = $entered && isset($completed['independent']) && (!$released || isset($completed['same']));
+            $entered =
+                is_file($fixture->directory . '/enter-' . $scenario . '-same')
+                && is_file(
+                    $fixture->directory
+                        . '/enter-'
+                        . $scenario
+                        . '-independent',
+                );
+            $ready =
+                $entered
+                && isset($completed['independent'])
+                && (!$released || isset($completed['same']));
         } while (!$ready && microtime(true) < $deadline);
-        check($ready && !isset($completed['holder']), 'Actual readers must enter before the bounded overlap.');
+        check(
+            $ready && !isset($completed['holder']),
+            'Actual readers must enter before the bounded overlap.',
+        );
         $started = microtime(true);
         do {
             pump($multi, $handles, $completed);
             $elapsed = (microtime(true) - $started) * MILLISECONDS_PER_SECOND;
         } while ($elapsed < OBSERVATION_MILLISECONDS);
-        check(!isset($completed['holder']), 'Application holder ended before observation completed.');
+        check(
+            !isset($completed['holder']),
+            'Application holder ended before observation completed.',
+        );
         $sameCompleted = isset($completed['same']);
-        check($sameCompleted === $released, 'Actual suggestion ordering disagrees with the fixture holder policy.');
-        check(file_put_contents($fixture->directory . '/release-' . $scenario, 'release') !== false, 'Application holder release failed.');
+        check(
+            $sameCompleted === $released,
+            'Actual suggestion ordering disagrees with the fixture holder policy.',
+        );
+        check(
+            file_put_contents(
+                $fixture->directory . '/release-' . $scenario,
+                'release',
+            ) !== false,
+            'Application holder release failed.',
+        );
         $deadline = microtime(true) + HTTP_TIMEOUT_SECONDS;
         do {
             pump($multi, $handles, $completed);
-        } while (count($completed) < WORKER_COUNT && microtime(true) < $deadline);
-        check(count($completed) === WORKER_COUNT, 'Actual-route completion deadline exceeded.');
+        } while (
+            count($completed) < WORKER_COUNT
+            && microtime(true) < $deadline
+        );
+        check(
+            count($completed) === WORKER_COUNT,
+            'Actual-route completion deadline exceeded.',
+        );
         foreach ($completed as $role => &$response) {
-            check($response['status'] === 200 && ($response['json']['ok'] ?? false), 'Actual authenticated application request failed.');
+            check(
+                $response['status'] === 200
+                    && ($response['json']['ok'] ?? false),
+                'Actual authenticated application request failed.',
+            );
             if ($role !== 'holder') {
-                check(count($response['json']['candidates'] ?? []) > 0, 'Actual title model returned no seeded candidate.');
+                check(
+                    count($response['json']['candidates'] ?? []) > 0,
+                    'Actual title model returned no seeded candidate.',
+                );
             }
             unset($response['json']);
         }
         unset($response);
-        return ['scenario' => $scenario, 'reader_entry_observed' => true, 'same_completed_before_release' => $sameCompleted,
-            'overlap_ms' => round($elapsed, 3), 'requests' => $completed];
+        return [
+            'scenario' => $scenario,
+            'reader_entry_observed' => true,
+            'same_completed_before_release' => $sameCompleted,
+            'overlap_ms' => round($elapsed, 3),
+            'requests' => $completed,
+        ];
     } finally {
-        file_put_contents($fixture->directory . '/release-' . $scenario, 'release');
+        file_put_contents(
+            $fixture->directory . '/release-' . $scenario,
+            'release',
+        );
         foreach ($handles as $handle) {
             curl_multi_remove_handle($multi, $handle);
         }

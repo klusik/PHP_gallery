@@ -52,12 +52,15 @@ foreach (\PhpGallery\MvcBoundary\scan_project($root) as $violation) {
         '%s:%d %s',
         (string) ($violation['path'] ?? 'unknown'),
         (int) ($violation['line'] ?? 0),
-        (string) ($violation['rule'] ?? 'unknown')
+        (string) ($violation['rule'] ?? 'unknown'),
     );
 }
 
 if ($violations !== []) {
-    throw new RuntimeException("Stage 11 view request-independence violations:\n  - " . implode("\n  - ", $violations));
+    throw new RuntimeException(
+        "Stage 11 view request-independence violations:\n  - "
+            . implode("\n  - ", $violations),
+    );
 }
 
 fwrite(STDOUT, "Stage 11 view request-independence checks passed.\n");

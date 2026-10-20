@@ -97,15 +97,20 @@ function gallery_lightbox_json_response(array $payload, int $status = 200): void
  * the CSRF token required by rendered vote forms must be captured first. Closing
  * the session afterwards keeps the in-memory values readable while allowing a
  * pagination or reload request from the same visitor to run concurrently.
+ * @return void Release an active PHP session lock when one is open.
  */
 function cms_release_gallery_lightbox_session_lock(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
-        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        if (function_exists(
+            'Gallery\\Services\\gallery_benchmark_trace_mark',
+        )) {
             gallery_benchmark_trace_mark('lightbox_session_release_begin');
         }
         session_write_close();
-        if (function_exists('Gallery\\Services\\gallery_benchmark_trace_mark')) {
+        if (function_exists(
+            'Gallery\\Services\\gallery_benchmark_trace_mark',
+        )) {
             gallery_benchmark_trace_mark('lightbox_session_release_end');
         }
     }
@@ -114,22 +119,39 @@ function cms_release_gallery_lightbox_session_lock(): void
 /**
  * Convert one image row into the browser metadata shape used by lazy lightbox navigation.
  *
- * @param array $image Image database row with a score column.
- * @param array $gallery Gallery database row.
+ * @param array<string,mixed> $image Image database row with a score column.
+ * @param array<string,mixed> $gallery Gallery database row.
  * @param int $index Zero-based gallery-local lightbox index.
  * @param bool $mapsAllowed True when GPS metadata may be exposed for this gallery.
  * @param bool $votingAllowed True when vote controls should be available.
  * @param array<int,int> $votesById Current viewer vote state keyed by image id.
  * @param bool $includeSourceGalleryContext Whether physical-source context should be exposed to the lightbox UI.
- * @return array<string,mixed> JSON-ready item payload.
+ * @return array{id:int,index:int,gallery_id:int,full_src:string,preview_src:string,quality_sources:list<array{src:string,width:int,height:int,kind:string}>,page_url:string,gallery_url:string,title:string,description:string,score:int,user_vote:int,width:int,height:int,map_point:?array{lat:float,lng:float},voting_allowed:bool,vote_form_html:string,source_gallery_id?:int,source_gallery_title?:string,source_gallery_breadcrumb?:string,source_gallery_url?:string} JSON-ready item payload.
  */
-function gallery_lightbox_json_item(array $image, array $gallery, int $index, bool $mapsAllowed, bool $votingAllowed, array $votesById, bool $includeSourceGalleryContext = false): array
-{
-    $thumbnailBundle = public_render_profile_with_thumbnail_purpose('lazy lightbox bundle discovery', static fn (): array => thumbnail_bundle($image));
+function gallery_lightbox_json_item(
+    array $image,
+    array $gallery,
+    int $index,
+    bool $mapsAllowed,
+    bool $votingAllowed,
+    array $votesById,
+    bool $includeSourceGalleryContext = false,
+): array {
+    $thumbnailBundle = public_render_profile_with_thumbnail_purpose('lazy lightbox bundle discovery', static fn(): array => thumbnail_bundle(
+        $image,
+    ));
     $mediaUrl = image_public_media_url($image, $gallery);
-    $previewUrl = public_render_profile_with_thumbnail_purpose('lazy lightbox preview 1600', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
+    $previewUrl = public_render_profile_with_thumbnail_purpose('lazy lightbox preview 1600', static fn(): string => thumbnail_bundle_url(
+        $thumbnailBundle,
+        1600,
+    ));
     $mapPoint = $mapsAllowed && image_has_gps($image)
-        ? public_render_profile_with_thumbnail_purpose('lazy lightbox map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle))
+        ? public_render_profile_with_thumbnail_purpose('lazy lightbox map preview 300', static fn(): array => image_map_point(
+            $image,
+            $gallery,
+            true,
+            $thumbnailBundle,
+        ))
         : null;
     $imageId = (int) $image['id'];
     $score = (int) ($image['score'] ?? 0);
@@ -141,7 +163,12 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
         'gallery_id' => (int) $gallery['id'],
         'full_src' => $mediaUrl,
         'preview_src' => $previewUrl,
-        'quality_sources' => lightbox_zoom_quality_candidates($image, $previewUrl, $mediaUrl, $thumbnailBundle),
+        'quality_sources' => lightbox_zoom_quality_candidates(
+            $image,
+            $previewUrl,
+            $mediaUrl,
+            $thumbnailBundle,
+        ),
         'page_url' => image_public_url($image, $gallery),
         'gallery_url' => gallery_public_url($gallery),
         'title' => public_image_display_title($image, $gallery),
@@ -152,10 +179,17 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
         'height' => (int) ($image['height'] ?? 0),
         'map_point' => $mapPoint,
         'voting_allowed' => $votingAllowed,
-        'vote_form_html' => render_vote_form_html($imageId, $score, $vote, $votingAllowed),
+        'vote_form_html' => render_vote_form_html(
+            $imageId,
+            $score,
+            $vote,
+            $votingAllowed,
+        ),
     ];
     if ($includeSourceGalleryContext) {
-        $sourceContext = is_array($gallery['_smart_gallery_source_context'] ?? null)
+        $sourceContext = is_array(
+            $gallery['_smart_gallery_source_context'] ?? null,
+        )
             ? $gallery['_smart_gallery_source_context']
             : [
                 'id' => (int) $gallery['id'],
@@ -163,35 +197,62 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
                 'breadcrumb' => (string) ($gallery['title'] ?? ''),
                 'url' => gallery_public_url($gallery),
             ];
-        $item['source_gallery_id'] = (int) ($sourceContext['id'] ?? $gallery['id']);
-        $item['source_gallery_title'] = (string) ($sourceContext['title'] ?? $gallery['title'] ?? '');
-        $item['source_gallery_breadcrumb'] = (string) ($sourceContext['breadcrumb'] ?? $sourceContext['title'] ?? '');
-        $item['source_gallery_url'] = (string) ($sourceContext['url'] ?? gallery_public_url($gallery));
+        $item['source_gallery_id'] = (int) (
+            $sourceContext['id'] ?? $gallery['id']
+        );
+        $item['source_gallery_title'] = (string) (
+            $sourceContext['title']
+            ?? $gallery['title']
+            ?? ''
+        );
+        $item['source_gallery_breadcrumb'] = (string) (
+            $sourceContext['breadcrumb']
+            ?? $sourceContext['title']
+            ?? ''
+        );
+        $item['source_gallery_url'] = (string) (
+            $sourceContext['url'] ?? gallery_public_url($gallery)
+        );
     }
     return $item;
 }
 
 /**
  * Return an asynchronous ordered metadata window for the public gallery lightbox.
+ * @return void Authorize the request and emit the ordered lightbox metadata response.
  */
 function cms_gallery_lightbox_data(): void
 {
-    $benchmarkTracing = function_exists('Gallery\\Services\\gallery_benchmark_request_trace_enabled') && gallery_benchmark_request_trace_enabled();
+    $benchmarkTracing =
+        function_exists(
+            'Gallery\\Services\\gallery_benchmark_request_trace_enabled',
+        ) && gallery_benchmark_request_trace_enabled();
     if ($benchmarkTracing) {
         gallery_benchmark_trace_mark('lightbox_controller_enter');
-        public_render_profile_start('gallery_lightbox', (int) ($_GET['id'] ?? 0));
+        public_render_profile_start(
+            'gallery_lightbox',
+            (int) ($_GET['id'] ?? 0),
+        );
     }
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
     $anonymousPreview = admin_anonymous_preview_active();
-    $viewer = $anonymousPreview ? null : (current_user_is_known_under_18() ? null : current_user());
+    $viewer = $anonymousPreview
+        ? null
+        : (current_user_is_known_under_18() ? null : current_user());
     $publicOnly = !$viewer;
 
     if (!$gallery) {
-        gallery_lightbox_json_response(['ok' => false, 'error' => 'not_found'], 404);
+        gallery_lightbox_json_response([
+            'ok' => false,
+            'error' => 'not_found',
+        ], 404);
         return;
     }
     if (!$viewer && !visitor_can_access_gallery($gallery)) {
-        gallery_lightbox_json_response(['ok' => false, 'error' => 'forbidden'], 403);
+        gallery_lightbox_json_response([
+            'ok' => false,
+            'error' => 'forbidden',
+        ], 403);
         return;
     }
 
@@ -205,10 +266,18 @@ function cms_gallery_lightbox_data(): void
     if ($targetImageId > 0) {
         $targetImage = find_image($targetImageId);
         if ($targetImage) {
-            $candidateIndex = gallery_lightbox_image_position($targetImage, $gallery, $publicOnly, true);
+            $candidateIndex = gallery_lightbox_image_position(
+                $targetImage,
+                $gallery,
+                $publicOnly,
+                true,
+            );
             if ($candidateIndex >= 0) {
                 $targetIndex = $candidateIndex;
-                $offset = max(0, min(max(0, $total - $limit), $candidateIndex - intdiv($limit, 2)));
+                $offset = max(0, min(
+                    max(0, $total - $limit),
+                    $candidateIndex - intdiv($limit, 2),
+                ));
             }
         }
     }
@@ -216,15 +285,29 @@ function cms_gallery_lightbox_data(): void
         $offset = max(0, $total - $limit);
     }
 
-    $images = gallery_lightbox_fetch_images($gallery, $publicOnly, $offset, $limit, true);
+    $images = gallery_lightbox_fetch_images(
+        $gallery,
+        $publicOnly,
+        $offset,
+        $limit,
+        true,
+    );
     $contentLanguage = translation_active_language();
-    $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    $imageIds = array_map(
+        static fn(array $image): int => (int) $image['id'],
+        $images,
+    );
     $votesById = current_votes_for_images($imageIds);
     $viewerPrincipal = current_viewer();
-    $viewerFavouriteStates = $viewerPrincipal !== null && viewer_favourites_storage_available()
-        ? viewer_favourites_for_image_ids((int) $viewerPrincipal['id'], $imageIds)
+    $viewerFavouriteStates = $viewerPrincipal !== null
+    && viewer_favourites_storage_available()
+        ? viewer_favourites_for_image_ids(
+            (int) $viewerPrincipal['id'],
+            $imageIds,
+        )
         : null;
-    $viewerFavouriteRequiresSourceRecheck = is_array($viewerFavouriteStates) && $viewer !== null;
+    $viewerFavouriteRequiresSourceRecheck =
+        is_array($viewerFavouriteStates) && $viewer !== null;
     $mapsAllowed = gallery_allows_gps_maps($gallery);
     $votingAllowed = gallery_voting_allowed($gallery);
     $nsfwAllowed = visitor_can_access_nsfw_content();
@@ -238,7 +321,11 @@ function cms_gallery_lightbox_data(): void
     $images = content_localize_entities('image', $images, $contentLanguage);
     $renderImages = [];
     foreach ($images as $rowIndex => $image) {
-        if ($publicOnly && image_nsfw_restricted($image, $gallery) && !$nsfwAllowed) {
+        if (
+            $publicOnly
+            && image_nsfw_restricted($image, $gallery)
+            && !$nsfwAllowed
+        ) {
             continue;
         }
         $renderImages[$rowIndex] = $image;
@@ -247,12 +334,25 @@ function cms_gallery_lightbox_data(): void
     $items = [];
 
     foreach ($renderImages as $rowIndex => $image) {
-        $items[] = gallery_lightbox_json_item($image, $gallery, $offset + $rowIndex, $mapsAllowed, $votingAllowed, $votesById);
-        if (is_array($viewerFavouriteStates)
-            && (!$viewerFavouriteRequiresSourceRecheck || viewer_source_image_can_reference((int) $image['id']))) {
+        $items[] = gallery_lightbox_json_item(
+            $image,
+            $gallery,
+            $offset + $rowIndex,
+            $mapsAllowed,
+            $votingAllowed,
+            $votesById,
+        );
+        if (
+            is_array($viewerFavouriteStates)
+            && (
+                !$viewerFavouriteRequiresSourceRecheck
+                || viewer_source_image_can_reference((int) $image['id'])
+            )
+        ) {
             $lastItemIndex = array_key_last($items);
             if ($lastItemIndex !== null) {
-                $items[$lastItemIndex]['viewer_favourite'] = !empty($viewerFavouriteStates[(int) $image['id']]);
+                $items[$lastItemIndex]['viewer_favourite'] =
+                    !empty($viewerFavouriteStates[(int) $image['id']]);
             }
         }
     }
@@ -263,7 +363,11 @@ function cms_gallery_lightbox_data(): void
             'limit' => $limit,
             'items' => count($items),
         ]);
-        gallery_benchmark_record_auxiliary_render($gallery, public_render_profile_snapshot(), 'lightbox_metadata');
+        gallery_benchmark_record_auxiliary_render(
+            $gallery,
+            public_render_profile_snapshot(),
+            'lightbox_metadata',
+        );
     }
 
     gallery_lightbox_json_response([

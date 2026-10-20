@@ -56,15 +56,20 @@ namespace {
         /** Report whether the model already owns a transaction.
          * @return bool Current fixture transaction state.
          */
-        public function inTransaction(): bool { return $this->active; }
+        public function inTransaction(): bool
+        {
+            return $this->active;
+        }
 
         /** Prepare the one setting upsert accepted by the model.
          * @param string $query SQL selected by the production persistence owner.
          * @param array<int,mixed> $options PDO options passed by the model.
          * @return PDOStatement|false Fixture statement or false for unrelated SQL.
          */
-        public function prepare(string $query, array $options = []): PDOStatement|false
-        {
+        public function prepare(
+            string $query,
+            array $options = [],
+        ): PDOStatement|false {
             $this->events[] = 'prepare';
             if (!str_starts_with($query, 'INSERT INTO app_settings')) {
                 return false;
@@ -120,7 +125,9 @@ namespace {
          * @param AtomicSettingsRecordingPdo $connection Transaction owner receiving setting rows.
          * @return void Stores the fixture connection only.
          */
-        public function __construct(private AtomicSettingsRecordingPdo $connection) {}
+        public function __construct(
+            private AtomicSettingsRecordingPdo $connection,
+        ) {}
 
         /** Execute one application-setting upsert selected by the production model.
          * @param array<int,mixed>|null $params Positional key, value, and timestamp from the model.
@@ -131,8 +138,15 @@ namespace {
             if ($this->connection->failure === 'execute') {
                 throw new RuntimeException('Injected setting upsert failure.');
             }
-            if (!is_array($params) || count($params) !== 3 || !is_string($params[0]) || !is_string($params[1])) {
-                throw new RuntimeException('The model supplied an invalid setting row.');
+            if (
+                !is_array($params)
+                || count($params) !== 3
+                || !is_string($params[0])
+                || !is_string($params[1])
+            ) {
+                throw new RuntimeException(
+                    'The model supplied an invalid setting row.',
+                );
             }
             $this->connection->events[] = 'upsert:' . $params[0];
             $this->connection->values[$params[0]] = $params[1];
@@ -155,38 +169,82 @@ namespace {
     require dirname(__DIR__) . '/app/models/app_settings.php';
     require dirname(__DIR__) . '/app/services/app_settings.php';
     $connection = new AtomicSettingsRecordingPdo();
-    $connection->values = ['theme_background_path' => 'old.png', 'custom_css_revision' => 'old-css'];
+    $connection->values = [
+        'theme_background_path' => 'old.png',
+        'custom_css_revision' => 'old-css',
+    ];
     $GLOBALS['atomic_settings_connection'] = $connection;
-    $newSettings = ['theme_background_path' => 'new.png', 'theme_background_source' => 'upload'];
+    $newSettings = [
+        'theme_background_path' => 'new.png',
+        'theme_background_source' => 'upload',
+    ];
     $callbackObservedRows = false;
-    \Gallery\Models\app_settings_model_set_many_with_activation($newSettings, '2030-01-01 00:00:00', static function () use ($connection, &$callbackObservedRows): void {
-        $callbackObservedRows = $connection->active
-            && $connection->values['theme_background_path'] === 'new.png'
-            && $connection->values['theme_background_source'] === 'upload';
-        $connection->events[] = 'activate';
-    });
-    atomic_settings_assert($callbackObservedRows && !$connection->active && $connection->values['theme_background_path'] === 'new.png', 'file activation did not observe staged settings inside the owning transaction');
-    atomic_settings_assert(array_slice($connection->events, -2) === ['activate', 'commit'], 'settings commit did not follow reversible file activation');
+    \Gallery\Models\app_settings_model_set_many_with_activation(
+        $newSettings,
+        '2030-01-01 00:00:00',
+        static function () use ($connection, &$callbackObservedRows): void {
+            $callbackObservedRows =
+                $connection->active
+                && $connection->values['theme_background_path'] === 'new.png'
+                && $connection->values['theme_background_source'] === 'upload';
+            $connection->events[] = 'activate';
+        },
+    );
+    atomic_settings_assert(
+        $callbackObservedRows
+            && !$connection->active
+            && $connection->values['theme_background_path'] === 'new.png',
+        'file activation did not observe staged settings inside the owning transaction',
+    );
+    atomic_settings_assert(
+        array_slice($connection->events, -2) === ['activate', 'commit'],
+        'settings commit did not follow reversible file activation',
+    );
 
     foreach (['callback', 'execute', 'commit'] as $failure) {
-        $connection->values = ['theme_background_path' => 'old.png', 'custom_css_revision' => 'old-css'];
+        $connection->values = [
+            'theme_background_path' => 'old.png',
+            'custom_css_revision' => 'old-css',
+        ];
         $connection->events = [];
         $connection->failure = $failure;
         $refused = false;
         try {
-            \Gallery\Models\app_settings_model_set_many_with_activation($newSettings, '2030-01-01 00:00:00', static function () use ($connection, $failure): void {
-                $connection->events[] = 'activate';
-                if ($failure === 'callback') {
-                    throw new RuntimeException('Injected reversible file activation failure.');
-                }
-            });
+            \Gallery\Models\app_settings_model_set_many_with_activation(
+                $newSettings,
+                '2030-01-01 00:00:00',
+                static function () use ($connection, $failure): void {
+                    $connection->events[] = 'activate';
+                    if ($failure === 'callback') {
+                        throw new RuntimeException(
+                            'Injected reversible file activation failure.',
+                        );
+                    }
+                },
+            );
         } catch (RuntimeException) {
             $refused = true;
         }
         $connection->failure = null;
-        atomic_settings_assert($refused && !$connection->active && $connection->values === ['theme_background_path' => 'old.png', 'custom_css_revision' => 'old-css'], $failure . ' failure did not roll back every setting value');
-        atomic_settings_assert(end($connection->events) === 'rollback', $failure . ' failure did not close the transaction through rollback');
-        atomic_settings_assert(($failure !== 'callback' || !in_array('commit', $connection->events, true)), $failure . ' failure unexpectedly committed');
+        atomic_settings_assert(
+            $refused
+                && !$connection->active
+                && $connection->values === [
+                    'theme_background_path' => 'old.png',
+                    'custom_css_revision' => 'old-css',
+                ],
+            $failure . ' failure did not roll back every setting value',
+        );
+        atomic_settings_assert(
+            end($connection->events) === 'rollback',
+            $failure
+                . ' failure did not close the transaction through rollback',
+        );
+        atomic_settings_assert(
+            $failure !== 'callback'
+                || !in_array('commit', $connection->events, true),
+            $failure . ' failure unexpectedly committed',
+        );
     }
 
     $connection->values = ['theme_background_path' => 'old.png'];
@@ -194,50 +252,104 @@ namespace {
     $connection->failure = 'rollback';
     $rollbackFailureReported = false;
     try {
-        \Gallery\Models\app_settings_model_set_many_with_activation($newSettings, '2030-01-01 00:00:00', static function (): void { throw new RuntimeException('Injected activation failure before rollback.'); });
+        \Gallery\Models\app_settings_model_set_many_with_activation(
+            $newSettings,
+            '2030-01-01 00:00:00',
+            static function (): void {
+                throw new RuntimeException(
+                    'Injected activation failure before rollback.',
+                );
+            },
+        );
     } catch (\Gallery\Models\AppSettingsRollbackException) {
         $rollbackFailureReported = true;
     }
     $connection->failure = null;
-    atomic_settings_assert($rollbackFailureReported && !$connection->active && $connection->values === ['theme_background_path' => 'old.png'] && end($connection->events) === 'rollback', 'rollback boundary failure was hidden or retained partial settings');
+    atomic_settings_assert(
+        $rollbackFailureReported
+            && !$connection->active
+            && $connection->values === ['theme_background_path' => 'old.png']
+            && end($connection->events) === 'rollback',
+        'rollback boundary failure was hidden or retained partial settings',
+    );
 
     $connection->values = ['theme_background_path' => 'old.png'];
     $connection->events = [];
     $connection->failure = 'begin';
     $beginRefused = false;
     try {
-        \Gallery\Models\app_settings_model_set_many_with_activation($newSettings, '2030-01-01 00:00:00', static function (): void { throw new RuntimeException('Activation must not run when begin fails.'); });
+        \Gallery\Models\app_settings_model_set_many_with_activation(
+            $newSettings,
+            '2030-01-01 00:00:00',
+            static function (): void {
+                throw new RuntimeException(
+                    'Activation must not run when begin fails.',
+                );
+            },
+        );
     } catch (RuntimeException) {
         $beginRefused = true;
     }
     $connection->failure = null;
-    atomic_settings_assert($beginRefused && !$connection->active && $connection->values === ['theme_background_path' => 'old.png'] && $connection->events === ['begin'], 'failed transaction start changed rows or entered file activation');
+    atomic_settings_assert(
+        $beginRefused
+            && !$connection->active
+            && $connection->values === ['theme_background_path' => 'old.png']
+            && $connection->events === ['begin'],
+        'failed transaction start changed rows or entered file activation',
+    );
 
     $connection->active = true;
     $connection->events = [];
     $callbackCalled = false;
     $foreignTransactionRefused = false;
     try {
-        \Gallery\Models\app_settings_model_set_many_with_activation($newSettings, '2030-01-01 00:00:00', static function () use (&$callbackCalled): void { $callbackCalled = true; });
+        \Gallery\Models\app_settings_model_set_many_with_activation(
+            $newSettings,
+            '2030-01-01 00:00:00',
+            static function () use (&$callbackCalled): void {
+                $callbackCalled = true;
+            },
+        );
     } catch (InvalidArgumentException) {
         $foreignTransactionRefused = true;
     }
-    atomic_settings_assert($foreignTransactionRefused && !$callbackCalled && $connection->events === [] && $connection->active, 'model did not refuse foreign transaction ownership before writes or activation');
+    atomic_settings_assert(
+        $foreignTransactionRefused
+            && !$callbackCalled
+            && $connection->events === []
+            && $connection->active,
+        'model did not refuse foreign transaction ownership before writes or activation',
+    );
 
     $connection->active = false;
     $connection->values = ['theme_background_path' => 'old.png'];
     $connection->events = [];
-    $GLOBALS['cms_app_settings_cache'] = ['theme_background_path'=>'old.png'];
+    $GLOBALS['cms_app_settings_cache'] = ['theme_background_path' => 'old.png'];
     $GLOBALS['cms_app_settings_cache_loaded'] = true;
     $cacheRefusal = false;
     try {
-        \Gallery\Services\set_app_settings_atomically($newSettings, static function (): void { throw new RuntimeException('Injected file activation failure.'); });
+        \Gallery\Services\set_app_settings_atomically($newSettings, static function (): void {
+            throw new RuntimeException('Injected file activation failure.');
+        });
     } catch (RuntimeException) {
         $cacheRefusal = true;
     }
-    atomic_settings_assert($cacheRefusal && $connection->values === ['theme_background_path'=>'old.png'] && $GLOBALS['cms_app_settings_cache'] === ['theme_background_path'=>'old.png'] && $GLOBALS['cms_app_settings_cache_loaded'] === true, 'failed activation changed persisted settings or invalidated the request cache');
+    atomic_settings_assert(
+        $cacheRefusal
+            && $connection->values === ['theme_background_path' => 'old.png']
+            && $GLOBALS['cms_app_settings_cache'] === [
+                'theme_background_path' => 'old.png',
+            ]
+            && $GLOBALS['cms_app_settings_cache_loaded'] === true,
+        'failed activation changed persisted settings or invalidated the request cache',
+    );
     \Gallery\Services\set_app_settings_atomically($newSettings, static function (): void {});
-    atomic_settings_assert($GLOBALS['cms_app_settings_cache'] === [] && $GLOBALS['cms_app_settings_cache_loaded'] === false, 'successful transaction did not invalidate request-local setting reads');
+    atomic_settings_assert(
+        $GLOBALS['cms_app_settings_cache'] === []
+            && $GLOBALS['cms_app_settings_cache_loaded'] === false,
+        'successful transaction did not invalidate request-local setting reads',
+    );
 
     echo "PASS application settings atomic activation model\n";
 }

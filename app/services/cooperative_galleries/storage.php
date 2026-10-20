@@ -34,10 +34,32 @@ function cooperative_storage_status(string $area): array
 {
     $definitions = [
         'albums' => ['cooperative_albums' => ['gallery_id', 'album_id']],
-        'identity' => ['cooperative_identity' => ['singleton_id', 'instance_id']],
-        'peers' => ['cooperative_peers' => ['instance_id', 'base_url', 'state', 'revision', 'incoming_hash', 'outgoing_cipher', 'confirmations_json', 'updated_at']],
-        'revoke' => ['cooperative_peers' => ['instance_id', 'state', 'revision', 'incoming_hash']],
-        'groups' => ['cooperative_groups' => ['group_id', 'storage_revision', 'state_json', 'updated_at']],
+        'identity' => ['cooperative_identity' => [
+            'singleton_id',
+            'instance_id',
+        ]],
+        'peers' => ['cooperative_peers' => [
+            'instance_id',
+            'base_url',
+            'state',
+            'revision',
+            'incoming_hash',
+            'outgoing_cipher',
+            'confirmations_json',
+            'updated_at',
+        ]],
+        'revoke' => ['cooperative_peers' => [
+            'instance_id',
+            'state',
+            'revision',
+            'incoming_hash',
+        ]],
+        'groups' => ['cooperative_groups' => [
+            'group_id',
+            'storage_revision',
+            'state_json',
+            'updated_at',
+        ]],
     ];
     if (!isset($definitions[$area])) {
         throw new CooperativeException('invalid_storage_area');
@@ -51,10 +73,16 @@ function cooperative_storage_status(string $area): array
         }
     }
     if ($area === 'albums') {
-        $requirements[] = schema_inspection_index('cooperative_albums', 'cooperative_albums_public_id');
+        $requirements[] = schema_inspection_index(
+            'cooperative_albums',
+            'cooperative_albums_public_id',
+        );
     }
     if ($area === 'identity') {
-        $requirements[] = schema_inspection_index('cooperative_identity', 'cooperative_identity_instance');
+        $requirements[] = schema_inspection_index(
+            'cooperative_identity',
+            'cooperative_identity_instance',
+        );
     }
     return schema_inspection_feature('cooperative.' . $area, $requirements);
 }
@@ -68,7 +96,11 @@ function cooperative_storage_assert(string $area): void
 {
     $status = cooperative_storage_status($area);
     if (!schema_inspection_is_available($status)) {
-        throw new CooperativeException(schema_inspection_is_missing($status) ? 'schema_missing' : 'schema_unknown');
+        throw new CooperativeException(
+            schema_inspection_is_missing($status)
+                ? 'schema_missing'
+                : 'schema_unknown',
+        );
     }
 }
 
@@ -79,7 +111,9 @@ function cooperative_storage_assert(string $area): void
 function cooperative_instance_id(): string
 {
     cooperative_storage_assert('identity');
-    return cooperative_id_validate(\Gallery\Models\cooperative_model_identity(cooperative_id_generate()));
+    return cooperative_id_validate(
+        \Gallery\Models\cooperative_model_identity(cooperative_id_generate()),
+    );
 }
 
 /** Load a peer at an explicit expected revision for trusted local orchestration.
@@ -107,7 +141,11 @@ function cooperative_peer_load_for_change(string $remote, int $expected): array
  */
 function cooperative_peer_save(array $peer, int $expected): void
 {
-    if (!\Gallery\Models\cooperative_model_peer_save($peer, $expected, gmdate('Y-m-d H:i:s'))) {
+    if (!\Gallery\Models\cooperative_model_peer_save(
+        $peer,
+        $expected,
+        gmdate('Y-m-d H:i:s'),
+    )) {
         throw new CooperativeException('revision_conflict');
     }
 }
@@ -119,8 +157,14 @@ function cooperative_peer_save(array $peer, int $expected): void
 function cooperative_group_create(): array
 {
     cooperative_storage_assert('groups');
-    $group = cooperative_group_new(cooperative_id_generate(), cooperative_instance_id());
-    \Gallery\Models\cooperative_model_group_insert($group, gmdate('Y-m-d H:i:s'));
+    $group = cooperative_group_new(
+        cooperative_id_generate(),
+        cooperative_instance_id(),
+    );
+    \Gallery\Models\cooperative_model_group_insert(
+        $group,
+        gmdate('Y-m-d H:i:s'),
+    );
     return ['storage_revision' => 1, 'group' => $group];
 }
 
@@ -135,24 +179,40 @@ function cooperative_group_create(): array
  * @param callable $operation Trusted internal operation; never selected from a remote callback payload.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_group_update(string $id, int $expected, callable $operation): array
-{
+function cooperative_group_update(
+    string $id,
+    int $expected,
+    callable $operation,
+): array {
     cooperative_id_validate($id);
     cooperative_storage_assert('groups');
     $stored = \Gallery\Models\cooperative_model_group_find($id);
-    if ($stored === null || $expected < 1 || $stored['storage_revision'] !== $expected) {
+    if (
+        $stored === null
+        || $expected < 1
+        || $stored['storage_revision'] !== $expected
+    ) {
         throw new CooperativeException('revision_conflict');
     }
     $group = $operation($stored['group']);
-    if (!is_array($group) || ($group['group_id'] ?? null) !== $id
-        || ($group['coordinator_id'] ?? null) !== $stored['group']['coordinator_id']) {
+    if (
+        !is_array($group)
+        || ($group['group_id'] ?? null) !== $id
+        || ($group['coordinator_id'] ?? null)
+            !== $stored['group']['coordinator_id']
+    ) {
         throw new CooperativeException('invalid_group_transition');
     }
-    if (!\Gallery\Models\cooperative_model_group_save($group, $expected, gmdate('Y-m-d H:i:s'))) {
+    if (!\Gallery\Models\cooperative_model_group_save(
+        $group,
+        $expected,
+        gmdate('Y-m-d H:i:s'),
+    )) {
         throw new CooperativeException('revision_conflict');
     }
     return ['storage_revision' => $expected + 1, 'group' => $group];
 }
+
 /** Lazily assign an opaque album ID after the caller authorizes local gallery ownership.
  *
  * @param int $galleryId Existing local gallery primary key, after ownership authorization.
@@ -164,7 +224,10 @@ function cooperative_album_identity(int $galleryId): string
         throw new CooperativeException('invalid_gallery');
     }
     cooperative_storage_assert('albums');
-    return cooperative_id_validate(\Gallery\Models\cooperative_model_album_identity($galleryId, cooperative_id_generate()));
+    return cooperative_id_validate(\Gallery\Models\cooperative_model_album_identity(
+        $galleryId,
+        cooperative_id_generate(),
+    ));
 }
 
 /** Resolve a local album reference; callers still enforce the canonical source policy.

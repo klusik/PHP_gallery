@@ -29,12 +29,17 @@ require_once __DIR__ . '/source_contracts/python.php';
  */
 function python_import_policy_report(string $root, array $paths = []): array
 {
-    $report = ['status' => 'BLOCKED', 'summary' => ['source_files' => 0, 'finding_count' => 0],
-        'findings' => [], 'blocked' => [], 'coverage' => [
+    $report = [
+        'status' => 'BLOCKED',
+        'summary' => ['source_files' => 0, 'finding_count' => 0],
+        'findings' => [],
+        'blocked' => [],
+        'coverage' => [
             'scope' => 'All admitted .py/.pyw sources including scripts and tests, irrespective of Git changes; existing private/generated/vendor exclusions apply.',
             'policy' => 'AST ImportFrom(__future__) containing annotations is forbidden, including aliases, multiline and combined imports. Comments and strings are inert; concurrent.futures and other future features are allowed.',
             'runtime' => 'Developer/CI audit only. Normal gallery web requests do not invoke Python. Missing Python or invalid source blocks coverage.',
-        ]];
+        ],
+    ];
     try {
         $pythonFiles = [];
         foreach (inventory($root)['files'] as $path => $extension) {
@@ -42,29 +47,42 @@ function python_import_policy_report(string $root, array $paths = []): array
                 $pythonFiles[$path] = $extension;
             }
         }
-        $selected = $paths === [] ? $pythonFiles : array_intersect_key($pythonFiles, array_fill_keys($paths, true));
+        $selected = $paths === []
+            ? $pythonFiles
+            : array_intersect_key($pythonFiles, array_fill_keys($paths, true));
         if (array_diff($paths, array_keys($selected)) !== []) {
-            throw new \RuntimeException('Selected Python source is absent or excluded.');
+            throw new \RuntimeException(
+                'Selected Python source is absent or excluded.',
+            );
         }
         $report['summary']['source_files'] = count($selected);
         $sources = [];
         foreach ($selected as $path => $extension) {
             $source = file_get_contents($root . '/' . $path);
             if (!is_string($source)) {
-                throw new \RuntimeException('Admitted Python source is unreadable.');
+                throw new \RuntimeException(
+                    'Admitted Python source is unreadable.',
+                );
             }
             $sources[$path] = $source;
         }
         python_source_cache(array_values($sources));
         foreach ($sources as $path => $source) {
             foreach (python_import_findings($source) as $finding) {
-                $report['findings'][] = ['path' => $path, 'line' => $finding['line'], 'rule' => $finding['rule']];
+                $report['findings'][] = [
+                    'path' => $path,
+                    'line' => $finding['line'],
+                    'rule' => $finding['rule'],
+                ];
             }
         }
         $report['summary']['finding_count'] = count($report['findings']);
         $report['status'] = $report['findings'] === [] ? 'PASS' : 'FAIL';
     } catch (\Throwable $error) {
-        $report['blocked'][] = ['path' => '', 'reason' => 'Python source/import inspection could not complete; coverage unknown.'];
+        $report['blocked'][] = [
+            'path' => '',
+            'reason' => 'Python source/import inspection could not complete; coverage unknown.',
+        ];
     }
     return $report;
 }
@@ -84,24 +102,50 @@ function python_import_policy_main(array $argv): int
         } elseif (str_starts_with($argument, '--root=')) {
             $root = substr($argument, strlen('--root='));
         } else {
-            fwrite(STDERR, "Expected --json or --root=PATH; Python import policy always scans the complete admitted tree.\n");
+            fwrite(
+                STDERR,
+                "Expected --json or --root=PATH; Python import policy always scans the complete admitted tree.\n",
+            );
             return 2;
         }
     }
     $report = python_import_policy_report($root);
     if ($json) {
-        echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
+        echo
+            json_encode(
+                $report,
+                JSON_PRETTY_PRINT
+                    | JSON_UNESCAPED_SLASHES
+                    | JSON_THROW_ON_ERROR,
+            ),
+            "\n";
     } else {
-        echo 'Python import policy ', $report['status'], ': ', $report['summary']['source_files'],
-            ' files; ', $report['summary']['finding_count'], " forbidden imports.\n";
+        echo
+            'Python import policy ',
+            $report['status'],
+            ': ',
+            $report['summary']['source_files'],
+            ' files; ',
+            $report['summary']['finding_count'],
+            " forbidden imports.\n";
         foreach ($report['findings'] as $finding) {
-            echo $finding['path'], ':', $finding['line'], ' ', $finding['rule'], "\n";
+            echo
+                $finding['path'],
+                ':',
+                $finding['line'],
+                ' ',
+                $finding['rule'],
+                "\n";
         }
         foreach ($report['blocked'] as $blocked) {
             echo 'BLOCKED ', $blocked['reason'], "\n";
         }
     }
-    return match ($report['status']) { 'PASS' => 0, 'FAIL' => 1, default => 2 };
+    return match ($report['status']) {
+        'PASS' => 0,
+        'FAIL' => 1,
+        default => 2,
+    };
 }
 
 if (realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {

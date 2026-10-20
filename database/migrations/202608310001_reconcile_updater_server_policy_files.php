@@ -38,7 +38,8 @@
 declare(strict_types=1);
 
 $projectRoot = dirname(__DIR__, 2);
-require_once $projectRoot . '/app/services/update_server_policy_reconciliation.php';
+require_once
+    $projectRoot . '/app/services/update_server_policy_reconciliation.php';
 
 return [
     'statements' => [],

@@ -79,7 +79,8 @@ use function Gallery\Services\main_page_gallery_grid_settings;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\pagination_global_settings;
 use function Gallery\Services\public_thumbnail_rendering_mode;
-use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision;
+use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision
+;
 use function Gallery\Services\remove_stored_favicon;
 use function Gallery\Services\reset_all_gallery_grid_overrides;
 use function Gallery\Services\sanitize_hex_color;
@@ -137,8 +138,10 @@ use function Gallery\Services\translation_language_pack_json_text;
 use function Gallery\Services\translation_missing_diagnostics;
 use function Gallery\Services\translation_normalize_language_code;
 use function Gallery\Services\translation_public_language;
-use function Gallery\Services\translation_public_language_selector_normalize_languages;
-use function Gallery\Services\translation_save_public_language_selector_settings;
+use function Gallery\Services\translation_public_language_selector_normalize_languages
+;
+use function Gallery\Services\translation_save_public_language_selector_settings
+;
 use function Gallery\Services\translation_save_public_language_selector_design;
 use function Gallery\Services\translation_supported_languages;
 use function Gallery\Services\translation_save_language_json;
@@ -160,103 +163,81 @@ use function Gallery\Views\view_render_admin_tab_intro;
  * Send validators for a streamed file and stop on a matching browser cache entry.
  */
 
-
-
 /**
  * Render the public scroll helper next to a listing without joining the listing grid.
  */
-
 
 /**
  * Public homepage showing top-level public galleries.
  */
 
-
 /**
  * Public gallery detail page with breadcrumbs, subgalleries, images, tags, and votes.
  */
-
 
 /**
  * Render gallery ancestor links for public navigation.
  */
 
-
 /**
  * Render the password prompt for a protected public gallery.
  */
-
 
 /**
  * Process a public protected-gallery password unlock.
  */
 
-
 /**
  * Resolve a share token and redirect to its protected gallery.
  */
-
 
 /**
  * Build the canonical copyable share URL for one gallery/token pair.
  */
 
-
 /**
  * Render one gallery card, including direct cover or child-cover collage.
  */
-
 
 /**
  * Render logged-in admin metadata controls directly on public gallery pages.
  */
 
-
 /**
  * Render logged-in admin metadata controls for a public image card.
  */
-
 
 /**
  * Render the lightbox shell used by public gallery JavaScript.
  */
 
-
 /**
  * Stream a generated thumbnail after the same visibility checks as originals.
  */
-
-
 
 /**
  * Stream a generated thumbnail addressed through the clean public image URL.
  */
 
-
 /**
  * Stream an original image addressed through the clean public image URL.
  */
-
 
 /**
  * Stream an uploaded gallery thumbnail asset.
  */
 
-
 /**
  * Stream a protected image file after checking gallery/image visibility.
  */
-
 
 /**
  * Serve robots.txt for search engines.
  */
 
-
 /**
  * Serve sitemap.xml for public gallery pages.
  */
-
 
 /**
  * Render and process the admin login form.
@@ -264,19 +245,30 @@ use function Gallery\Views\view_render_admin_tab_intro;
 
 /**
  * Download the requested language pack or redirect when the request is invalid.
+ *
+ * @return void Streams the language pack or redirects to the Admin page.
  */
 function admin_theme_download_language_pack(): void
 {
     // $downloadLanguage stores the normalized language code requested for export.
-    $downloadLanguage = translation_normalize_language_code((string) $_GET['download_language_pack']);
-    if ($downloadLanguage !== '' && translation_language_allowed($downloadLanguage)) {
+    $downloadLanguage = translation_normalize_language_code(
+        (string) $_GET['download_language_pack'],
+    );
+    if (
+        $downloadLanguage !== ''
+        && translation_language_allowed($downloadLanguage)
+    ) {
         header('Content-Type: application/json; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . $downloadLanguage . '.json"');
+        header(
+            'Content-Disposition: attachment; filename="'
+                . $downloadLanguage
+                . '.json"',
+        );
         echo translation_language_pack_json_text($downloadLanguage);
         return;
     }
-    redirect_to(url_for('admin_theme', ['language_error' => 'invalid_language']) . '#admin-theme-tab-language');
-
+    redirect_to(url_for('admin_theme', ['language_error' => 'invalid_language'])
+        . '#admin-theme-tab-language');
 }
 
 /**
@@ -286,18 +278,31 @@ function admin_theme_download_language_pack(): void
  */
 function admin_theme_custom_css_error_redirect(?\Gallery\Services\CustomCssRecoveryException $recovery = null): void
 {
-    $message = t('admin.theme.custom_css.save_failed', 'The custom stylesheet could not be changed. The previous stylesheet was kept; check the selected file and try again.');
+    $message = t(
+        'admin.theme.custom_css.save_failed',
+        'The custom stylesheet could not be changed. The previous stylesheet was kept; check the selected file and try again.',
+    );
     if ($recovery !== null) {
         if ($recovery->backgroundStateUncertain) {
-            $message = t('admin.theme.custom_css.rollback_uncertain', 'The combined CSS and background save could not be confirmed. Recovery files were retained. Review Theme settings and check server permissions before retrying.');
+            $message = t(
+                'admin.theme.custom_css.rollback_uncertain',
+                'The combined CSS and background save could not be confirmed. Recovery files were retained. Review Theme settings and check server permissions before retrying.',
+            );
         } elseif ($recovery->hasRecoveryCopy) {
-            $message = t('admin.theme.custom_css.recovery_required', 'The stylesheet change could not be completed. A recovery copy was kept on the server. Check file permissions before retrying.');
+            $message = t(
+                'admin.theme.custom_css.recovery_required',
+                'The stylesheet change could not be completed. A recovery copy was kept on the server. Check file permissions before retrying.',
+            );
         } else {
-            $message = t('admin.theme.custom_css.activation_incomplete', 'A stylesheet file was installed, but its saved status could not be confirmed. Check file permissions before retrying.');
+            $message = t(
+                'admin.theme.custom_css.activation_incomplete',
+                'A stylesheet file was installed, but its saved status could not be confirmed. Check file permissions before retrying.',
+            );
         }
     }
     $_SESSION['cms_custom_css_errors'] = [$message];
-    redirect_to(url_for('admin_theme', ['css_error' => 1]) . '#admin-theme-tab-custom-css');
+    redirect_to(url_for('admin_theme', ['css_error' => 1])
+        . '#admin-theme-tab-custom-css');
 }
 
 /**
@@ -307,52 +312,86 @@ function admin_theme_custom_css_error_redirect(?\Gallery\Services\CustomCssRecov
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
  * @return void Sends a Theme redirect or the dedicated editor JSON response; ordinary form domain refusals propagate to the request boundary.
  */
-function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxModesFeatureEnabled): void
-{
+function admin_theme_process_post(
+    bool $gpsMapsFeatureEnabled,
+    bool $lightboxModesFeatureEnabled,
+): void {
     verify_csrf();
     // The dedicated editor submission never processes or clears another Theme form value.
     if (array_key_exists('css_override_action', $_POST)) {
         admin_theme_process_css_overrides();
         return;
     }
-    if (isset($_POST['reset_theme_advanced']) && is_string($_POST['reset_theme_advanced'])) {
-        \Gallery\Services\theme_advanced_appearance_reset($_POST['reset_theme_advanced']);
-        redirect_to(url_for('admin_theme', ['saved' => 1, 'appearance_subtab' => 'admin-theme-appearance-subtab-advanced']) . '#admin-theme-tab-appearance');
+    if (
+        isset($_POST['reset_theme_advanced'])
+        && is_string($_POST['reset_theme_advanced'])
+    ) {
+        \Gallery\Services\theme_advanced_appearance_reset(
+            $_POST['reset_theme_advanced'],
+        );
+        redirect_to(url_for('admin_theme', [
+            'saved' => 1,
+            'appearance_subtab' => 'admin-theme-appearance-subtab-advanced',
+        ])
+            . '#admin-theme-tab-appearance');
         return;
     }
     $advancedValues = [];
     if (!empty($_POST['theme_advanced_present'])) {
         foreach (\Gallery\Services\theme_advanced_appearance_definitions() as $key => $definition) {
-            $value = $_POST['theme_' . $key] ?? ($key === 'header_transparent' ? '0' : null);
+            $value =
+                $_POST['theme_' . $key]
+                ?? ($key === 'header_transparent' ? '0' : null);
             if ($value !== null && !is_string($value)) {
-                throw new \InvalidArgumentException('Invalid appearance transport value.');
+                throw new \InvalidArgumentException(
+                    'Invalid appearance transport value.',
+                );
             }
             if ($value !== null) {
-                $advancedValues[$key] = \Gallery\Services\theme_advanced_appearance_value($key, $value);
+                $advancedValues[$key] = \Gallery\Services\theme_advanced_appearance_value(
+                    $key,
+                    $value,
+                );
             }
         }
     }
     if (!empty($_POST['public_language_selector_settings_present'])) {
-        $viewerSelectorEnabled = !empty($_POST['public_language_selector_enabled']);
-        $viewerSelectorLanguages = translation_public_language_selector_normalize_languages($_POST['public_language_selector_languages'] ?? []);
+        $viewerSelectorEnabled =
+            !empty($_POST['public_language_selector_enabled']);
+        $viewerSelectorLanguages = translation_public_language_selector_normalize_languages(
+            $_POST['public_language_selector_languages'] ?? [],
+        );
         if ($viewerSelectorLanguages === []) {
             $_SESSION['cms_public_language_selector_errors'] = [
-                'languages' => t('admin.theme.language.viewer_languages_required', 'Enable at least one viewer language.'),
+                'languages' => t(
+                    'admin.theme.language.viewer_languages_required',
+                    'Enable at least one viewer language.',
+                ),
             ];
             $_SESSION['cms_public_language_selector_submitted'] = [
                 'enabled' => $viewerSelectorEnabled,
                 'languages' => [],
                 'design' => $_POST['public_language_selector_design'] ?? [],
             ];
-            redirect_to(url_for('admin_theme', ['language_error' => 'viewer_languages_required']) . '#admin-theme-tab-language');
+            redirect_to(url_for('admin_theme', [
+                'language_error' => 'viewer_languages_required',
+            ])
+                . '#admin-theme-tab-language');
         }
-        translation_save_public_language_selector_settings($viewerSelectorEnabled, $viewerSelectorLanguages);
-        translation_save_public_language_selector_design($_POST['public_language_selector_design'] ?? []);
+        translation_save_public_language_selector_settings(
+            $viewerSelectorEnabled,
+            $viewerSelectorLanguages,
+        );
+        translation_save_public_language_selector_design(
+            $_POST['public_language_selector_design'] ?? [],
+        );
     }
     if (isset($_POST['cms_language'])) {
         $submittedAdminLanguage = (string) $_POST['cms_language'];
         if (translation_set_active_language($submittedAdminLanguage)) {
-            apply_cookie_intents(translation_admin_language_cookie_intents($submittedAdminLanguage));
+            apply_cookie_intents(translation_admin_language_cookie_intents(
+                $submittedAdminLanguage,
+            ));
         }
     }
     if (isset($_POST['public_language'])) {
@@ -360,49 +399,114 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
     }
     if (!empty($_POST['save_language_pack'])) {
         // $languageEditCode stores the language pack currently edited in the admin UI.
-        $languageEditCode = translation_normalize_language_code((string) ($_POST['language_pack_code'] ?? ''));
+        $languageEditCode = translation_normalize_language_code(
+            (string) ($_POST['language_pack_code'] ?? ''),
+        );
         // $languageJson stores the submitted editable JSON dictionary.
         $languageJson = (string) ($_POST['language_pack_json'] ?? '');
-        if ($languageEditCode === '' || !translation_language_allowed($languageEditCode)) {
-            redirect_to(url_for('admin_theme', ['language_error' => 'invalid_language']) . '#admin-theme-tab-language');
+        if (
+            $languageEditCode === ''
+            || !translation_language_allowed($languageEditCode)
+        ) {
+            redirect_to(url_for('admin_theme', [
+                'language_error' => 'invalid_language',
+            ])
+                . '#admin-theme-tab-language');
         }
-        $saveResult = translation_save_language_json($languageEditCode, $languageJson);
+        $saveResult = translation_save_language_json(
+            $languageEditCode,
+            $languageJson,
+        );
         if (empty($saveResult['saved'])) {
-            $_SESSION['cms_language_editor_errors'] = $saveResult['errors'] ?? [t('admin.theme.language.error_save_failed', 'Language pack could not be saved.')];
-            redirect_to(url_for('admin_theme', ['language_error' => 'save_failed', 'edit_language' => $languageEditCode]) . '#admin-theme-tab-language');
+            $_SESSION['cms_language_editor_errors'] = $saveResult['errors'] ?? [t(
+                'admin.theme.language.error_save_failed',
+                'Language pack could not be saved.',
+            )];
+            redirect_to(url_for('admin_theme', [
+                'language_error' => 'save_failed',
+                'edit_language' => $languageEditCode,
+            ])
+                . '#admin-theme-tab-language');
         }
-        redirect_to(url_for('admin_theme', ['language_saved' => 1, 'edit_language' => $languageEditCode]) . '#admin-theme-tab-language');
+        redirect_to(url_for('admin_theme', [
+            'language_saved' => 1,
+            'edit_language' => $languageEditCode,
+        ])
+            . '#admin-theme-tab-language');
     }
     if (!empty($_POST['import_language_pack'])) {
         // $languageImportCode stores the target language pack for uploaded JSON.
-        $languageImportCode = translation_normalize_language_code((string) ($_POST['language_pack_code'] ?? ''));
-        if ($languageImportCode === '' || !translation_language_allowed($languageImportCode)) {
-            redirect_to(url_for('admin_theme', ['language_error' => 'invalid_language']) . '#admin-theme-tab-language');
+        $languageImportCode = translation_normalize_language_code(
+            (string) ($_POST['language_pack_code'] ?? ''),
+        );
+        if (
+            $languageImportCode === ''
+            || !translation_language_allowed($languageImportCode)
+        ) {
+            redirect_to(url_for('admin_theme', [
+                'language_error' => 'invalid_language',
+            ])
+                . '#admin-theme-tab-language');
         }
-        if (empty($_FILES['language_pack_file']['tmp_name']) || !is_uploaded_file($_FILES['language_pack_file']['tmp_name'])) {
-            $_SESSION['cms_language_editor_errors'] = [t('admin.theme.language.error_import_missing', 'Choose a JSON file before importing.')];
-            redirect_to(url_for('admin_theme', ['language_error' => 'import_missing', 'edit_language' => $languageImportCode]) . '#admin-theme-tab-language');
+        if (
+            empty($_FILES['language_pack_file']['tmp_name'])
+            || !is_uploaded_file($_FILES['language_pack_file']['tmp_name'])
+        ) {
+            $_SESSION['cms_language_editor_errors'] = [t(
+                'admin.theme.language.error_import_missing',
+                'Choose a JSON file before importing.',
+            )];
+            redirect_to(url_for('admin_theme', [
+                'language_error' => 'import_missing',
+                'edit_language' => $languageImportCode,
+            ])
+                . '#admin-theme-tab-language');
         }
-        $importJson = (string) file_get_contents((string) $_FILES['language_pack_file']['tmp_name']);
-        $importResult = translation_save_language_json($languageImportCode, $importJson);
+        $importJson = (string) file_get_contents(
+            (string) $_FILES['language_pack_file']['tmp_name'],
+        );
+        $importResult = translation_save_language_json(
+            $languageImportCode,
+            $importJson,
+        );
         if (empty($importResult['saved'])) {
-            $_SESSION['cms_language_editor_errors'] = $importResult['errors'] ?? [t('admin.theme.language.error_import_failed', 'Language pack import failed.')];
-            redirect_to(url_for('admin_theme', ['language_error' => 'import_failed', 'edit_language' => $languageImportCode]) . '#admin-theme-tab-language');
+            $_SESSION['cms_language_editor_errors'] = $importResult['errors'] ?? [t(
+                'admin.theme.language.error_import_failed',
+                'Language pack import failed.',
+            )];
+            redirect_to(url_for('admin_theme', [
+                'language_error' => 'import_failed',
+                'edit_language' => $languageImportCode,
+            ])
+                . '#admin-theme-tab-language');
         }
-        redirect_to(url_for('admin_theme', ['language_imported' => 1, 'edit_language' => $languageImportCode]) . '#admin-theme-tab-language');
+        redirect_to(url_for('admin_theme', [
+            'language_imported' => 1,
+            'edit_language' => $languageImportCode,
+        ])
+            . '#admin-theme-tab-language');
     }
     if (!empty($_POST['clear_translation_diagnostics'])) {
         translation_clear_missing_diagnostics();
-        redirect_to(url_for('admin_theme', ['saved' => 1]) . '#admin-theme-tab-language');
+        redirect_to(url_for('admin_theme', ['saved' => 1])
+            . '#admin-theme-tab-language');
     }
     if (!empty($_POST['reset_custom_css'])) {
         try {
             \Gallery\Services\custom_css_reset();
         } catch (RuntimeException $exception) {
-            if ($exception instanceof \Gallery\Services\MutationSchemaUnavailableException) {
+            if (
+                $exception
+                instanceof \Gallery\Services\MutationSchemaUnavailableException
+            ) {
                 throw $exception;
             }
-            admin_theme_custom_css_error_redirect($exception instanceof \Gallery\Services\CustomCssRecoveryException ? $exception : null);
+            admin_theme_custom_css_error_redirect(
+                $exception
+                instanceof \Gallery\Services\CustomCssRecoveryException
+                    ? $exception
+                    : null,
+            );
         }
     } elseif (!empty($_POST['reset_favicon'])) {
         remove_stored_favicon();
@@ -415,8 +519,13 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         });
     } elseif (!empty($_POST['generate_theme_background_optimized'])) {
         \Gallery\Services\theme_background_with_writer_lock(static function (): void {
-            $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
-            set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
+            $backgroundMaxSide = theme_background_optimized_max_side_value(
+                $_POST['theme_background_optimized_max_side'] ?? null,
+            );
+            set_app_setting(
+                'theme_background_optimized_max_side',
+                (string) $backgroundMaxSide,
+            );
             theme_background_regenerate_optimized($backgroundMaxSide);
         });
     } elseif (!empty($_POST['delete_theme_background_optimized'])) {
@@ -448,82 +557,162 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         try {
             \Gallery\Services\custom_css_save_selection(
                 (string) ($_POST['custom_css_preset'] ?? ''),
-                isset($_FILES['custom_css']) && is_array($_FILES['custom_css']) ? $_FILES['custom_css'] : null
+                isset($_FILES['custom_css']) && is_array($_FILES['custom_css'])
+                    ? $_FILES['custom_css']
+                    : null,
             );
         } catch (RuntimeException $exception) {
-            if ($exception instanceof \Gallery\Services\MutationSchemaUnavailableException) {
+            if (
+                $exception
+                instanceof \Gallery\Services\MutationSchemaUnavailableException
+            ) {
                 throw $exception;
             }
-            admin_theme_custom_css_error_redirect($exception instanceof \Gallery\Services\CustomCssRecoveryException ? $exception : null);
+            admin_theme_custom_css_error_redirect(
+                $exception
+                instanceof \Gallery\Services\CustomCssRecoveryException
+                    ? $exception
+                    : null,
+            );
         }
         // Variable $siteName stores this steps working value.
         \Gallery\Services\theme_advanced_appearance_save($advancedValues);
         $siteName = trim((string) ($_POST['site_name'] ?? ''));
         set_site_name($siteName);
         // $themeControlsChanged stores an intermediate value used by the surrounding gallery workflow.
-        $themeControlsChanged = (string) ($_POST['theme_controls_changed'] ?? '') === '1';
-        if (!empty($_FILES['favicon_source']['tmp_name']) && is_uploaded_file($_FILES['favicon_source']['tmp_name'])) {
+        $themeControlsChanged =
+            (string) ($_POST['theme_controls_changed'] ?? '') === '1';
+        if (
+            !empty($_FILES['favicon_source']['tmp_name'])
+            && is_uploaded_file($_FILES['favicon_source']['tmp_name'])
+        ) {
             // $name stores an intermediate value used by the surrounding gallery workflow.
-            $name = strtolower((string) ($_FILES['favicon_source']['name'] ?? ''));
+            $name = strtolower(
+                (string) ($_FILES['favicon_source']['name'] ?? ''),
+            );
             if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
                 // $info stores an intermediate value used by the surrounding gallery workflow.
-                $info = @getimagesize((string) $_FILES['favicon_source']['tmp_name']);
-                if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-                    throw new RuntimeException('The uploaded favicon source is not a valid image.');
+                $info = @getimagesize(
+                    (string) $_FILES['favicon_source']['tmp_name'],
+                );
+                if (
+                    $info === false
+                    || empty($info['mime'])
+                    || !str_starts_with((string) $info['mime'], 'image/')
+                ) {
+                    throw new RuntimeException(
+                        'The uploaded favicon source is not a valid image.',
+                    );
                 }
-                store_uploaded_favicon($_FILES['favicon_source'], (string) ($_POST['favicon_cropped_png'] ?? '') ?: null);
+                store_uploaded_favicon(
+                    $_FILES['favicon_source'],
+                    (string) ($_POST['favicon_cropped_png'] ?? '') ?: null,
+                );
             }
         }
         \Gallery\Services\theme_background_with_writer_lock(static function (): void {
-            if (!empty($_FILES['theme_background']['tmp_name']) && is_uploaded_file($_FILES['theme_background']['tmp_name'])) {
-                $name = strtolower((string) ($_FILES['theme_background']['name'] ?? ''));
+            if (
+                !empty($_FILES['theme_background']['tmp_name'])
+                && is_uploaded_file($_FILES['theme_background']['tmp_name'])
+            ) {
+                $name = strtolower(
+                    (string) ($_FILES['theme_background']['name'] ?? ''),
+                );
                 if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
-                    $info = @getimagesize((string) $_FILES['theme_background']['tmp_name']);
-                    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-                        throw new RuntimeException('The uploaded theme background is not a valid image.');
+                    $info = @getimagesize(
+                        (string) $_FILES['theme_background']['tmp_name'],
+                    );
+                    if (
+                        $info === false
+                        || empty($info['mime'])
+                        || !str_starts_with((string) $info['mime'], 'image/')
+                    ) {
+                        throw new RuntimeException(
+                            'The uploaded theme background is not a valid image.',
+                        );
                     }
                     store_uploaded_theme_background(
                         $_FILES['theme_background'],
-                        theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null)
+                        theme_background_optimized_max_side_value(
+                            $_POST['theme_background_optimized_max_side']
+                                ?? null,
+                        ),
                     );
                 }
             }
             set_app_setting(
                 'theme_background_opacity',
-                (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65)))
+                (string) max(0, min(
+                    100,
+                    (int) ($_POST['theme_background_opacity'] ?? 65),
+                )),
             );
-            $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
-            $previousBackgroundMaxSide = theme_background_optimized_max_side_value(app_setting('theme_background_optimized_max_side', '1920'));
-            set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
-            if ($backgroundMaxSide !== $previousBackgroundMaxSide && empty($_FILES['theme_background']['tmp_name'])) {
+            $backgroundMaxSide = theme_background_optimized_max_side_value(
+                $_POST['theme_background_optimized_max_side'] ?? null,
+            );
+            $previousBackgroundMaxSide = theme_background_optimized_max_side_value(app_setting(
+                'theme_background_optimized_max_side',
+                '1920',
+            ));
+            set_app_setting(
+                'theme_background_optimized_max_side',
+                (string) $backgroundMaxSide,
+            );
+            if (
+                $backgroundMaxSide !== $previousBackgroundMaxSide
+                && empty($_FILES['theme_background']['tmp_name'])
+            ) {
                 theme_background_regenerate_optimized($backgroundMaxSide);
             }
-            $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
+            $themeBackgroundSource = (string) (
+                $_POST['theme_background_source'] ?? ''
+            );
             set_app_setting(
                 'theme_background_source',
-                in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : ''
+                in_array(
+                    $themeBackgroundSource,
+                    ['upload', 'existing', 'collage'],
+                    true,
+                )
+                    ? $themeBackgroundSource
+                    : '',
             );
         });
-        foreach (array_keys(theme_branding_asset_types()) as $themeBrandingKind) {
+        foreach (array_keys(
+            theme_branding_asset_types(),
+        ) as $themeBrandingKind) {
             // $uploadField stores the file input name for one global Theme fallback branding asset.
             $uploadField = 'theme_branding_' . $themeBrandingKind;
-            if (!empty($_FILES[$uploadField]['tmp_name']) && is_uploaded_file($_FILES[$uploadField]['tmp_name'])) {
-                store_uploaded_theme_branding_asset((string) $themeBrandingKind, $_FILES[$uploadField]);
+            if (
+                !empty($_FILES[$uploadField]['tmp_name'])
+                && is_uploaded_file($_FILES[$uploadField]['tmp_name'])
+            ) {
+                store_uploaded_theme_branding_asset(
+                    (string) $themeBrandingKind,
+                    $_FILES[$uploadField],
+                );
             }
         }
         if ($gpsMapsFeatureEnabled) {
-            theme_layout_safe_save('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
+            theme_layout_safe_save(
+                'theme_gps_pin_enabled',
+                !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0',
+            );
             theme_layout_safe_save(
                 'theme_gps_pin_background_enabled',
-                !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0'
+                !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0',
             );
             theme_layout_safe_save(
                 'theme_gps_pin_size',
-                (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null)
+                (string) theme_gps_pin_size_value(
+                    $_POST['theme_gps_pin_size'] ?? null,
+                ),
             );
             theme_layout_safe_save(
                 'theme_gps_pin_background_size',
-                (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null)
+                (string) theme_gps_pin_background_size_value(
+                    $_POST['theme_gps_pin_background_size'] ?? null,
+                ),
             );
             if (!empty($_POST['reset_gps_pin_size'])) {
                 theme_layout_safe_save('theme_gps_pin_enabled', '1');
@@ -533,17 +722,25 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
             }
             // The GPS pin controls are part of the theme editor even when no color/font override changed.
             // Mark the form as changed so the save flow consistently persists the full appearance state.
-            $themeControlsChanged = $themeControlsChanged
+            $themeControlsChanged =
+                $themeControlsChanged
                 || isset($_POST['theme_gps_pin_enabled'])
                 || isset($_POST['theme_gps_pin_background_enabled'])
                 || isset($_POST['theme_gps_pin_size'])
                 || isset($_POST['theme_gps_pin_background_size'])
                 || !empty($_POST['reset_gps_pin_size']);
         }
-        set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
+        set_app_setting(
+            'theme_page_width',
+            theme_page_width_mode(
+                (string) ($_POST['theme_page_width'] ?? 'default'),
+            ),
+        );
         set_app_setting(
             'theme_page_width_custom',
-            (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null)
+            (string) theme_page_width_custom_value(
+                $_POST['theme_page_width_custom'] ?? null,
+            ),
         );
         // Hero-tag controls change public HTML ordering and disclosure data attributes, so compare them before saving.
         $previousHeroTagSettings = [
@@ -555,138 +752,228 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         ];
         // Server-side normalization protects direct POST requests from bypassing slider and select constraints.
         $nextHeroTagSettings = [
-            'visible_limit' => theme_hero_tag_visible_limit_value($_POST['theme_hero_tag_visible_limit'] ?? null),
+            'visible_limit' => theme_hero_tag_visible_limit_value(
+                $_POST['theme_hero_tag_visible_limit'] ?? null,
+            ),
             'display_all' => !empty($_POST['theme_hero_tag_display_all']),
-            'scrollbar_enabled' => !empty($_POST['theme_hero_tag_scrollbar_enabled']),
-            'scrollbar_rows' => theme_hero_tag_scrollbar_rows_value($_POST['theme_hero_tag_scrollbar_rows'] ?? null),
-            'sort_mode' => theme_hero_tag_sort_mode_normalize($_POST['theme_hero_tag_sort_mode'] ?? 'usage'),
+            'scrollbar_enabled' =>
+                !empty($_POST['theme_hero_tag_scrollbar_enabled']),
+            'scrollbar_rows' => theme_hero_tag_scrollbar_rows_value(
+                $_POST['theme_hero_tag_scrollbar_rows'] ?? null,
+            ),
+            'sort_mode' => theme_hero_tag_sort_mode_normalize(
+                $_POST['theme_hero_tag_sort_mode'] ?? 'usage',
+            ),
         ];
-        set_app_setting('theme_hero_tag_visible_limit', (string) $nextHeroTagSettings['visible_limit']);
-        set_app_setting('theme_hero_tag_display_all', $nextHeroTagSettings['display_all'] ? '1' : '0');
-        set_app_setting('theme_hero_tag_scrollbar_enabled', $nextHeroTagSettings['scrollbar_enabled'] ? '1' : '0');
-        set_app_setting('theme_hero_tag_scrollbar_rows', (string) $nextHeroTagSettings['scrollbar_rows']);
-        set_app_setting('theme_hero_tag_sort_mode', $nextHeroTagSettings['sort_mode']);
+        set_app_setting(
+            'theme_hero_tag_visible_limit',
+            (string) $nextHeroTagSettings['visible_limit'],
+        );
+        set_app_setting(
+            'theme_hero_tag_display_all',
+            $nextHeroTagSettings['display_all'] ? '1' : '0',
+        );
+        set_app_setting(
+            'theme_hero_tag_scrollbar_enabled',
+            $nextHeroTagSettings['scrollbar_enabled'] ? '1' : '0',
+        );
+        set_app_setting(
+            'theme_hero_tag_scrollbar_rows',
+            (string) $nextHeroTagSettings['scrollbar_rows'],
+        );
+        set_app_setting(
+            'theme_hero_tag_sort_mode',
+            $nextHeroTagSettings['sort_mode'],
+        );
         set_app_setting(
             'theme_gallery_info_motion_ms',
-            (string) theme_gallery_info_motion_ms_value($_POST['theme_gallery_info_motion_ms'] ?? null)
+            (string) theme_gallery_info_motion_ms_value(
+                $_POST['theme_gallery_info_motion_ms'] ?? null,
+            ),
         );
         set_app_setting(
             'theme_admin_side_panel_motion_ms',
-            (string) theme_admin_side_panel_motion_ms_value($_POST['theme_admin_side_panel_motion_ms'] ?? null)
+            (string) theme_admin_side_panel_motion_ms_value(
+                $_POST['theme_admin_side_panel_motion_ms'] ?? null,
+            ),
         );
         if ($nextHeroTagSettings !== $previousHeroTagSettings) {
             // Sorting changes server-rendered tag order while the remaining values change public disclosure metadata.
             set_app_setting('theme_public_content_revision', (string) time());
         }
-        if (function_exists('Gallery\\Services\\save_theme_favorite_gallery_slots')) {
-            save_theme_favorite_gallery_slots($_POST['theme_favorite_gallery_types'] ?? [], $_POST['theme_favorite_gallery_ids'] ?? []);
-        } elseif (function_exists('Gallery\\Services\\save_theme_favorite_gallery_ids')) {
-            save_theme_favorite_gallery_ids($_POST['theme_favorite_gallery_ids'] ?? []);
+        if (function_exists(
+            'Gallery\\Services\\save_theme_favorite_gallery_slots',
+        )) {
+            save_theme_favorite_gallery_slots(
+                $_POST['theme_favorite_gallery_types'] ?? [],
+                $_POST['theme_favorite_gallery_ids'] ?? [],
+            );
+        } elseif (function_exists(
+            'Gallery\\Services\\save_theme_favorite_gallery_ids',
+        )) {
+            save_theme_favorite_gallery_ids(
+                $_POST['theme_favorite_gallery_ids'] ?? [],
+            );
         }
         set_app_setting(
             'theme_branding_separator_width',
-            (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null)
+            (string) theme_branding_separator_width_value(
+                $_POST['theme_branding_separator_width'] ?? null,
+            ),
         );
         set_app_setting(
             'theme_branding_separator_height',
-            (string) theme_branding_separator_height_value($_POST['theme_branding_separator_height'] ?? null)
+            (string) theme_branding_separator_height_value(
+                $_POST['theme_branding_separator_height'] ?? null,
+            ),
         );
-        set_app_setting('theme_branding_separator_stretch', !empty($_POST['theme_branding_separator_stretch']) ? '1' : '0');
+        set_app_setting(
+            'theme_branding_separator_stretch',
+            !empty($_POST['theme_branding_separator_stretch']) ? '1' : '0',
+        );
         // The shared Theme owner preserves the same public-content revision side effect for card-layout changes.
         theme_layout_safe_save(
             'theme_gallery_description_layout',
-            gallery_description_layout_normalize($_POST['theme_gallery_description_layout'] ?? 'vertical')
+            gallery_description_layout_normalize(
+                $_POST['theme_gallery_description_layout'] ?? 'vertical',
+            ),
         );
         if (array_key_exists('theme_breadcrumb_style', $_POST)) {
-            theme_layout_safe_save('theme_breadcrumb_style', $_POST['theme_breadcrumb_style']);
+            theme_layout_safe_save(
+                'theme_breadcrumb_style',
+                $_POST['theme_breadcrumb_style'],
+            );
         }
         theme_layout_safe_save(
             'theme_gallery_count_badge_mode',
-            $_POST['theme_gallery_count_badge_mode'] ?? theme_gallery_count_badge_mode()
+            $_POST['theme_gallery_count_badge_mode'] ?? theme_gallery_count_badge_mode(),
         );
         theme_layout_safe_save(
             'theme_gallery_count_badge_icons_enabled',
-            !empty($_POST['theme_gallery_count_badge_icons_enabled']) ? '1' : '0'
+            !empty($_POST['theme_gallery_count_badge_icons_enabled'])
+                ? '1'
+                : '0',
         );
         // Public thumbnail renderer values and their public-content revision side effect share one service path.
-        public_thumbnail_rendering_mode_save_with_revision($_POST['public_thumbnail_rendering_mode'] ?? null);
+        public_thumbnail_rendering_mode_save_with_revision(
+            $_POST['public_thumbnail_rendering_mode'] ?? null,
+        );
         if ($lightboxModesFeatureEnabled) {
             // The shared Theme owner preserves the public-content revision side effect for lightbox-mode changes.
             theme_layout_safe_save(
                 'theme_lightbox_browsing_mode',
-                gallery_lightbox_browsing_mode_normalize($_POST['theme_lightbox_browsing_mode'] ?? 'single')
+                gallery_lightbox_browsing_mode_normalize(
+                    $_POST['theme_lightbox_browsing_mode'] ?? 'single',
+                ),
             );
         }
         // Pagination and grid values use the shared safe Theme owner so the Setup Wizard and Theme editor cannot drift.
-        theme_layout_safe_save('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
+        theme_layout_safe_save(
+            'pagination_enabled',
+            !empty($_POST['pagination_enabled']) ? '1' : '0',
+        );
         theme_layout_safe_save(
             'pagination_columns',
             (string) pagination_dimension_value(
                 $_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
                 CMS_PAGINATION_DEFAULT_COLUMNS,
-                CMS_PAGINATION_MAX_COLUMNS
-            )
+                CMS_PAGINATION_MAX_COLUMNS,
+            ),
         );
         theme_layout_safe_save(
             'pagination_rows',
             (string) pagination_dimension_value(
                 $_POST['pagination_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS,
                 CMS_PAGINATION_DEFAULT_ROWS,
-                CMS_PAGINATION_MAX_ROWS
-            )
+                CMS_PAGINATION_MAX_ROWS,
+            ),
         );
         theme_layout_safe_save(
             'home_gallery_grid_columns',
             (string) pagination_dimension_value(
-                $_POST['home_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
+                $_POST['home_gallery_grid_columns']
+                    ?? CMS_PAGINATION_DEFAULT_COLUMNS,
                 CMS_PAGINATION_DEFAULT_COLUMNS,
-                CMS_PAGINATION_MAX_COLUMNS
-            )
+                CMS_PAGINATION_MAX_COLUMNS,
+            ),
         );
         theme_layout_safe_save(
             'home_gallery_grid_rows',
             (string) pagination_dimension_value(
                 $_POST['home_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS,
                 CMS_PAGINATION_DEFAULT_ROWS,
-                CMS_PAGINATION_MAX_ROWS
-            )
+                CMS_PAGINATION_MAX_ROWS,
+            ),
         );
         theme_layout_safe_save(
             'tag_page_gallery_grid_columns',
             (string) pagination_dimension_value(
-                $_POST['tag_page_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
+                $_POST['tag_page_gallery_grid_columns']
+                    ?? CMS_PAGINATION_DEFAULT_COLUMNS,
                 CMS_PAGINATION_DEFAULT_COLUMNS,
-                CMS_PAGINATION_MAX_COLUMNS
-            )
+                CMS_PAGINATION_MAX_COLUMNS,
+            ),
         );
         theme_layout_safe_save(
             'tag_page_gallery_grid_rows',
             (string) pagination_dimension_value(
-                $_POST['tag_page_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS,
+                $_POST['tag_page_gallery_grid_rows']
+                    ?? CMS_PAGINATION_DEFAULT_ROWS,
                 CMS_PAGINATION_DEFAULT_ROWS,
-                CMS_PAGINATION_MAX_ROWS
-            )
+                CMS_PAGINATION_MAX_ROWS,
+            ),
         );
         theme_layout_safe_save(
             'tag_page_gallery_description_layout',
-            gallery_description_layout_normalize($_POST['tag_page_gallery_description_layout'] ?? theme_gallery_description_layout(), theme_gallery_description_layout())
+            gallery_description_layout_normalize(
+                $_POST['tag_page_gallery_description_layout'] ?? theme_gallery_description_layout(),
+                theme_gallery_description_layout(),
+            ),
         );
         if ($themeControlsChanged) {
-            set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
-            set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
-            set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
-            set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
-            set_app_setting('theme_gallery_panel', sanitize_hex_color((string) $_POST['theme_gallery_panel'], '#fffaf0'));
-            set_app_setting('theme_header_text', sanitize_hex_color((string) $_POST['theme_header_text'], '#0f172a'));
-            set_app_setting('theme_hero_text', sanitize_hex_color((string) $_POST['theme_hero_text'], '#0f172a'));
-            set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
+            set_app_setting('theme_accent', sanitize_hex_color(
+                (string) $_POST['theme_accent'],
+                '#a5481c',
+            ));
+            set_app_setting('theme_accent_dark', sanitize_hex_color(
+                (string) $_POST['theme_accent_dark'],
+                '#713414',
+            ));
+            set_app_setting('theme_paper', sanitize_hex_color(
+                (string) $_POST['theme_paper'],
+                '#f8f4ec',
+            ));
+            set_app_setting('theme_panel', sanitize_hex_color(
+                (string) $_POST['theme_panel'],
+                '#fffaf0',
+            ));
+            set_app_setting('theme_gallery_panel', sanitize_hex_color(
+                (string) $_POST['theme_gallery_panel'],
+                '#fffaf0',
+            ));
+            set_app_setting('theme_header_text', sanitize_hex_color(
+                (string) $_POST['theme_header_text'],
+                '#0f172a',
+            ));
+            set_app_setting('theme_hero_text', sanitize_hex_color(
+                (string) $_POST['theme_hero_text'],
+                '#0f172a',
+            ));
+            set_app_setting(
+                'theme_radius',
+                (string) max(0, min(32, (int) $_POST['theme_radius'])),
+            );
             set_app_setting(
                 'theme_font',
-                in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif'
+                in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true)
+                    ? (string) $_POST['theme_font']
+                    : 'serif',
             );
         }
     }
-    $activeThemeTab = (string) ($_POST['theme_active_tab'] ?? 'admin-theme-tab-appearance');
+    $activeThemeTab = (string) (
+        $_POST['theme_active_tab'] ?? 'admin-theme-tab-appearance'
+    );
     $allowedThemeTabs = [
         'admin-theme-tab-appearance',
         'admin-theme-tab-media',
@@ -698,7 +985,9 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         $activeThemeTab = 'admin-theme-tab-appearance';
     }
     $themeRedirectParams = ['saved' => 1];
-    $activeAppearanceSubtab = (string) ($_POST['theme_active_appearance_subtab'] ?? '');
+    $activeAppearanceSubtab = (string) (
+        $_POST['theme_active_appearance_subtab'] ?? ''
+    );
     $allowedAppearanceSubtabs = [
         'admin-theme-appearance-subtab-colors',
         'admin-theme-appearance-subtab-width-map',
@@ -706,11 +995,15 @@ function admin_theme_process_post(bool $gpsMapsFeatureEnabled, bool $lightboxMod
         'admin-theme-appearance-subtab-animations',
         'admin-theme-appearance-subtab-advanced',
     ];
-    if ($activeThemeTab === 'admin-theme-tab-appearance' && in_array($activeAppearanceSubtab, $allowedAppearanceSubtabs, true)) {
+    if (
+        $activeThemeTab === 'admin-theme-tab-appearance'
+        && in_array($activeAppearanceSubtab, $allowedAppearanceSubtabs, true)
+    ) {
         $themeRedirectParams['appearance_subtab'] = $activeAppearanceSubtab;
     }
-    redirect_to(url_for('admin_theme', $themeRedirectParams) . '#' . $activeThemeTab);
-
+    redirect_to(
+        url_for('admin_theme', $themeRedirectParams) . '#' . $activeThemeTab,
+    );
 }
 
 /**
@@ -727,90 +1020,195 @@ function admin_theme_process_css_overrides(): void
     $revision = $_POST['css_override_revision'] ?? null;
     $action = $_POST['css_override_action'];
     $backgroundFile = $_FILES['theme_background_file'] ?? null;
-    $backgroundFieldPresent = array_key_exists('theme_background_file', $_FILES);
-    $backgroundOperationPresent = array_key_exists('theme_background_operation', $_POST);
-    $backgroundTargetPresent = array_key_exists('theme_background_target', $_POST);
-    $backgroundOperation = $backgroundOperationPresent ? $_POST['theme_background_operation'] : null;
-    $backgroundTarget = $backgroundTargetPresent ? $_POST['theme_background_target'] : null;
-    $malformedBackgroundTransport = $backgroundFieldPresent && !is_array($backgroundFile);
-    $hasBackgroundUpload = is_array($backgroundFile) && (
-        ($backgroundFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE
-        || trim((string) ($backgroundFile['name'] ?? '')) !== ''
-        || trim((string) ($backgroundFile['tmp_name'] ?? '')) !== ''
+    $backgroundFieldPresent = array_key_exists(
+        'theme_background_file',
+        $_FILES,
     );
+    $backgroundOperationPresent = array_key_exists(
+        'theme_background_operation',
+        $_POST,
+    );
+    $backgroundTargetPresent = array_key_exists(
+        'theme_background_target',
+        $_POST,
+    );
+    $backgroundOperation = $backgroundOperationPresent
+        ? $_POST['theme_background_operation']
+        : null;
+    $backgroundTarget = $backgroundTargetPresent
+        ? $_POST['theme_background_target']
+        : null;
+    $malformedBackgroundTransport =
+        $backgroundFieldPresent && !is_array($backgroundFile);
+    $hasBackgroundUpload =
+        is_array($backgroundFile)
+        && (
+            ($backgroundFile['error'] ?? UPLOAD_ERR_NO_FILE)
+            !== UPLOAD_ERR_NO_FILE
+            || trim((string) ($backgroundFile['name'] ?? '')) !== ''
+            || trim((string) ($backgroundFile['tmp_name'] ?? '')) !== ''
+        );
     try {
         if ($malformedBackgroundTransport) {
-            throw new \InvalidArgumentException('Invalid Theme background upload descriptor.');
+            throw new \InvalidArgumentException(
+                'Invalid Theme background upload descriptor.',
+            );
         }
-        if (!is_string($action) || !in_array($action, ['save', 'clear', 'reload'], true)) {
+        if (
+            !is_string($action)
+            || !in_array($action, ['save', 'clear', 'reload'], true)
+        ) {
             throw new \InvalidArgumentException('Invalid editor action.');
         }
         if ($hasBackgroundUpload && $action !== 'save') {
-            throw new \InvalidArgumentException('Theme background images can only be saved with CSS.');
+            throw new \InvalidArgumentException(
+                'Theme background images can only be saved with CSS.',
+            );
         }
         if ($backgroundOperationPresent || $backgroundTargetPresent) {
-            if ($action !== 'save' || !is_string($backgroundOperation) || $backgroundTarget !== 'theme') {
-                throw new \InvalidArgumentException('Choose a supported global Theme background action during explicit Save.');
+            if (
+                $action !== 'save'
+                || !is_string($backgroundOperation)
+                || $backgroundTarget !== 'theme'
+            ) {
+                throw new \InvalidArgumentException(
+                    'Choose a supported global Theme background action during explicit Save.',
+                );
             }
-            if (!in_array($backgroundOperation, ['keep', 'replace', 'remove'], true)) {
-                throw new \InvalidArgumentException('Unknown global Theme background action.');
+            if (!in_array(
+                $backgroundOperation,
+                ['keep', 'replace', 'remove'],
+                true,
+            )) {
+                throw new \InvalidArgumentException(
+                    'Unknown global Theme background action.',
+                );
             }
-            if (($backgroundOperation === 'keep' && $hasBackgroundUpload)
-                || ($backgroundOperation === 'replace' && !$hasBackgroundUpload)
-                || ($backgroundOperation === 'remove' && $hasBackgroundUpload)) {
-                throw new \InvalidArgumentException('The global Theme background action conflicts with its uploaded file.');
+            if (
+                (
+                    $backgroundOperation === 'keep'
+                    && $hasBackgroundUpload
+                )
+                || (
+                    $backgroundOperation === 'replace'
+                    && !$hasBackgroundUpload
+                )
+                || (
+                    $backgroundOperation === 'remove'
+                    && $hasBackgroundUpload
+                )
+            ) {
+                throw new \InvalidArgumentException(
+                    'The global Theme background action conflicts with its uploaded file.',
+                );
             }
         }
         if ($action === 'reload') {
             $state = \Gallery\Services\custom_css_overrides_state();
         } else {
             if (!is_string($draft) || !is_string($revision)) {
-                throw new \InvalidArgumentException('Missing explicit editor text or revision.');
+                throw new \InvalidArgumentException(
+                    'Missing explicit editor text or revision.',
+                );
             }
-            if ($action === 'clear' && ($_POST['css_override_clear_confirm'] ?? '') !== '1') {
-                throw new \InvalidArgumentException('Confirm the dedicated override clear action.');
+            if (
+                $action === 'clear'
+                && ($_POST['css_override_clear_confirm'] ?? '') !== '1'
+            ) {
+                throw new \InvalidArgumentException(
+                    'Confirm the dedicated override clear action.',
+                );
             }
             $backgroundChange = null;
             if ($backgroundOperationPresent) {
-                $backgroundRevision = $_POST['theme_background_revision'] ?? null;
-                if (in_array($backgroundOperation, ['replace', 'remove'], true) && !is_string($backgroundRevision)) {
-                    throw new \InvalidArgumentException('Reload the Theme background before saving this change.');
+                $backgroundRevision =
+                    $_POST['theme_background_revision'] ?? null;
+                if (
+                    in_array($backgroundOperation, ['replace', 'remove'], true)
+                    && !is_string($backgroundRevision)
+                ) {
+                    throw new \InvalidArgumentException(
+                        'Reload the Theme background before saving this change.',
+                    );
                 }
-                $backgroundChange = ['operation' => $backgroundOperation, 'target' => 'theme'];
-                if (in_array($backgroundOperation, ['replace', 'remove'], true)) {
-                    $backgroundChange['expected_revision'] = $backgroundRevision;
+                $backgroundChange = [
+                    'operation' => $backgroundOperation,
+                    'target' => 'theme',
+                ];
+                if (in_array(
+                    $backgroundOperation,
+                    ['replace', 'remove'],
+                    true,
+                )) {
+                    $backgroundChange['expected_revision'] =
+                        $backgroundRevision;
                 }
-                if ($backgroundOperation === 'replace' && is_array($backgroundFile)) {
+                if (
+                    $backgroundOperation === 'replace'
+                    && is_array($backgroundFile)
+                ) {
                     $backgroundChange['file'] = [
-                        'name' => is_string($backgroundFile['name'] ?? null) ? $backgroundFile['name'] : '',
-                        'tmp_name' => is_string($backgroundFile['tmp_name'] ?? null) ? $backgroundFile['tmp_name'] : '',
-                        'error' => is_int($backgroundFile['error'] ?? null) ? $backgroundFile['error'] : UPLOAD_ERR_NO_FILE,
-                        'size' => is_int($backgroundFile['size'] ?? null) ? $backgroundFile['size'] : 0,
+                        'name' => is_string($backgroundFile['name'] ?? null)
+                            ? $backgroundFile['name']
+                            : '',
+                        'tmp_name' => is_string(
+                            $backgroundFile['tmp_name'] ?? null,
+                        )
+                            ? $backgroundFile['tmp_name']
+                            : '',
+                        'error' => is_int($backgroundFile['error'] ?? null)
+                            ? $backgroundFile['error']
+                            : UPLOAD_ERR_NO_FILE,
+                        'size' => is_int($backgroundFile['size'] ?? null)
+                            ? $backgroundFile['size']
+                            : 0,
                     ];
                 }
             } elseif ($hasBackgroundUpload) {
                 // Existing native CSS-editor form posts use these two fields without operation metadata.
-                $backgroundRevision = $_POST['theme_background_revision'] ?? null;
-                if (!is_string($backgroundRevision) || !is_array($backgroundFile)) {
-                    throw new \InvalidArgumentException('Reload the Theme background before saving this image.');
+                $backgroundRevision =
+                    $_POST['theme_background_revision'] ?? null;
+                if (
+                    !is_string($backgroundRevision)
+                    || !is_array($backgroundFile)
+                ) {
+                    throw new \InvalidArgumentException(
+                        'Reload the Theme background before saving this image.',
+                    );
                 }
                 $backgroundChange = [
                     'file' => [
-                        'name' => is_string($backgroundFile['name'] ?? null) ? $backgroundFile['name'] : '',
-                        'tmp_name' => is_string($backgroundFile['tmp_name'] ?? null) ? $backgroundFile['tmp_name'] : '',
-                        'error' => is_int($backgroundFile['error'] ?? null) ? $backgroundFile['error'] : UPLOAD_ERR_NO_FILE,
-                        'size' => is_int($backgroundFile['size'] ?? null) ? $backgroundFile['size'] : 0,
+                        'name' => is_string($backgroundFile['name'] ?? null)
+                            ? $backgroundFile['name']
+                            : '',
+                        'tmp_name' => is_string(
+                            $backgroundFile['tmp_name'] ?? null,
+                        )
+                            ? $backgroundFile['tmp_name']
+                            : '',
+                        'error' => is_int($backgroundFile['error'] ?? null)
+                            ? $backgroundFile['error']
+                            : UPLOAD_ERR_NO_FILE,
+                        'size' => is_int($backgroundFile['size'] ?? null)
+                            ? $backgroundFile['size']
+                            : 0,
                     ],
                     'expected_revision' => $backgroundRevision,
                 ];
             }
-            $state = \Gallery\Services\custom_css_overrides_save($action === 'clear' ? '' : $draft, $revision, $backgroundChange);
+            $state = \Gallery\Services\custom_css_overrides_save(
+                $action === 'clear' ? '' : $draft,
+                $revision,
+                $backgroundChange,
+            );
         }
         $ok = true;
         $message = t('admin.theme.overrides.saved', 'Saved overrides loaded.');
         try {
             $background = \Gallery\Services\theme_background_editor_state();
-            $background['operation'] = is_string($backgroundOperation) ? $backgroundOperation : ($hasBackgroundUpload ? 'replace' : 'keep');
+            $background['operation'] = is_string($backgroundOperation)
+                ? $backgroundOperation
+                : ($hasBackgroundUpload ? 'replace' : 'keep');
             $background['target'] = 'theme';
         } catch (RuntimeException) {
             // The completed save remains successful even if a follow-up display snapshot is temporarily unavailable.
@@ -818,43 +1216,90 @@ function admin_theme_process_css_overrides(): void
         }
     } catch (\Gallery\Services\CustomCssOverrideConflictException) {
         $status = 409;
-        $message = t('admin.theme.overrides.conflict', 'Another editor changed the saved CSS or Theme background. Keep your draft, then reload before saving again.');
+        $message = t(
+            'admin.theme.overrides.conflict',
+            'Another editor changed the saved CSS or Theme background. Keep your draft, then reload before saving again.',
+        );
     } catch (\InvalidArgumentException) {
         $status = 422;
-        $message = $hasBackgroundUpload || $malformedBackgroundTransport || $backgroundOperationPresent || $backgroundTargetPresent
-            ? t('admin.theme.overrides.background_invalid', 'Choose a valid JPEG, PNG, GIF, or WebP image and reload the background if another editor changed it.')
-            : ($action === 'clear' && ($_POST['css_override_clear_confirm'] ?? '') !== '1'
-            ? t('admin.theme.overrides.clear_required', 'Confirm clearing the manual overrides before submitting this action.')
-            : t('admin.theme.overrides.invalid', 'Enter valid UTF-8 CSS up to 256 KiB and reload if the saved revision is missing.'));
+        $message = $hasBackgroundUpload
+        || $malformedBackgroundTransport
+        || $backgroundOperationPresent
+        || $backgroundTargetPresent
+            ? t(
+                'admin.theme.overrides.background_invalid',
+                'Choose a valid JPEG, PNG, GIF, or WebP image and reload the background if another editor changed it.',
+            )
+            : (
+                $action === 'clear'
+                    && ($_POST['css_override_clear_confirm'] ?? '') !== '1'
+                        ? t(
+                            'admin.theme.overrides.clear_required',
+                            'Confirm clearing the manual overrides before submitting this action.',
+                        )
+                        : t(
+                            'admin.theme.overrides.invalid',
+                            'Enter valid UTF-8 CSS up to 256 KiB and reload if the saved revision is missing.',
+                        )
+            );
     } catch (\Gallery\Services\CustomCssRecoveryException $exception) {
         $status = 503;
         if ($exception->backgroundStateUncertain) {
-            $message = t('admin.theme.custom_css.rollback_uncertain', 'The combined CSS and background save could not be confirmed. Recovery files were retained. Review Theme settings and check server permissions before retrying.');
+            $message = t(
+                'admin.theme.custom_css.rollback_uncertain',
+                'The combined CSS and background save could not be confirmed. Recovery files were retained. Review Theme settings and check server permissions before retrying.',
+            );
         } elseif ($exception->hasRecoveryCopy) {
-            $message = t('admin.theme.custom_css.recovery_required', 'The stylesheet change could not be completed. A recovery copy was kept on the server. Check file permissions before retrying.');
+            $message = t(
+                'admin.theme.custom_css.recovery_required',
+                'The stylesheet change could not be completed. A recovery copy was kept on the server. Check file permissions before retrying.',
+            );
         } else {
-            $message = t('admin.theme.custom_css.activation_incomplete', 'A stylesheet file was installed, but its saved status could not be confirmed. Check file permissions before retrying.');
+            $message = t(
+                'admin.theme.custom_css.activation_incomplete',
+                'A stylesheet file was installed, but its saved status could not be confirmed. Check file permissions before retrying.',
+            );
         }
     } catch (RuntimeException) {
         $status = 503;
-        $message = t('admin.theme.overrides.failed', 'CSS and Theme background could not be saved. The previous assets were kept. Check asset permissions and retry.');
+        $message = t(
+            'admin.theme.overrides.failed',
+            'CSS and Theme background could not be saved. The previous assets were kept. Check asset permissions and retry.',
+        );
     }
-    if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+    if (str_contains(
+        (string) ($_SERVER['HTTP_ACCEPT'] ?? ''),
+        'application/json',
+    )) {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: private, no-store');
-        echo json_encode(['ok' => $ok, 'message' => $message, 'state' => $state, 'background' => $background], JSON_HEX_TAG | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        echo json_encode(
+            [
+                'ok' => $ok,
+                'message' => $message,
+                'state' => $state,
+                'background' => $background,
+            ],
+            JSON_HEX_TAG | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+        );
         return;
     }
     unset($_SESSION['cms_css_override_draft']);
     if (!$ok && is_string($draft) && is_string($revision)) {
         try {
             \Gallery\Services\custom_css_overrides_validate($draft);
-            $_SESSION['cms_css_override_draft'] = ['text' => $draft, 'revision' => preg_match('/^[a-f0-9]{64}$/D', $revision) === 1 ? $revision : ''];
+            $_SESSION['cms_css_override_draft'] = [
+                'text' => $draft,
+                'revision' => preg_match('/^[a-f0-9]{64}$/D', $revision) === 1
+                    ? $revision
+                    : '',
+            ];
         } catch (\InvalidArgumentException) {
             // Invalid transport bytes are never copied into the session or HTML editor.
         }
     }
     $_SESSION['cms_css_override_notice'] = ['ok' => $ok, 'message' => $message];
-    redirect_to(url_for('admin_theme', ['css_editor' => 1]) . '#admin-theme-tab-custom-css');
+    redirect_to(url_for('admin_theme', ['css_editor' => 1])
+        . '#admin-theme-tab-custom-css');
 }

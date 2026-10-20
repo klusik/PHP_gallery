@@ -51,7 +51,8 @@ function module_source(string $path): string
         return '';
     }
 
-    $partDirectory = dirname($path) . DIRECTORY_SEPARATOR . basename($path, '.php');
+    $partDirectory =
+        dirname($path) . DIRECTORY_SEPARATOR . basename($path, '.php');
     if (!is_dir($partDirectory)) {
         return $entry;
     }
@@ -60,7 +61,10 @@ function module_source(string $path): string
     $matches = [];
     preg_match_all("#require_once __DIR__ \. '/([^']+)';#", $entry, $matches);
     foreach ($matches[1] as $relative) {
-        $partPath = dirname($path) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $partPath =
+            dirname($path)
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         if (!str_starts_with($partPath, $partDirectory . DIRECTORY_SEPARATOR)) {
             continue;
         }

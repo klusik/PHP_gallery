@@ -36,20 +36,31 @@ function migration_copy_assert(bool $condition, string $label): void
  * @param string $label Expected refusal class.
  * @return void No result after expected refusal.
  */
-function migration_copy_refused(string $source, string $target, string $checksum, string $label): void
-{
+function migration_copy_refused(
+    string $source,
+    string $target,
+    string $checksum,
+    string $label,
+): void {
     try {
-        Gallery\Services\gallery_migration_copy_if_same_or_missing($source, $target, $checksum);
+        Gallery\Services\gallery_migration_copy_if_same_or_missing(
+            $source,
+            $target,
+            $checksum,
+        );
     } catch (RuntimeException) {
         return;
     }
     throw new RuntimeException($label . ': rejected copy was accepted.');
 }
 
-$root = sys_get_temp_dir() . '/gallery-migration-copy-' . bin2hex(random_bytes(9));
+$root =
+    sys_get_temp_dir() . '/gallery-migration-copy-' . bin2hex(random_bytes(9));
 $album = $root . '/album';
 if (!mkdir($album, 0700, true)) {
-    throw new RuntimeException('Cannot create disposable migration copy fixture.');
+    throw new RuntimeException(
+        'Cannot create disposable migration copy fixture.',
+    );
 }
 $source = $root . '/incoming.jpg';
 $target = $album . '/photo.jpg';
@@ -61,40 +72,95 @@ try {
     file_put_contents($source, 'complete verified source asset');
     file_put_contents($outside, 'outside asset remains untouched');
     $hash = hash_file('sha256', $source);
-    migration_copy_assert(is_string($hash), 'Fixture checksum is not available.');
+    migration_copy_assert(
+        is_string($hash),
+        'Fixture checksum is not available.',
+    );
 
-    Gallery\Services\gallery_migration_copy_if_same_or_missing($source, $target, $hash);
-    migration_copy_assert(is_file($target) && file_get_contents($target) === 'complete verified source asset',
-        'New target must be completely staged and installed.');
-    migration_copy_assert((glob($album . '/.gallery-migration-*') ?: []) === [],
-        'Successful migration must leave no temporary staging files.');
+    Gallery\Services\gallery_migration_copy_if_same_or_missing(
+        $source,
+        $target,
+        $hash,
+    );
+    migration_copy_assert(
+        is_file($target)
+            && file_get_contents($target) === 'complete verified source asset',
+        'New target must be completely staged and installed.',
+    );
+    migration_copy_assert(
+        (glob($album . '/.gallery-migration-*') ?: []) === [],
+        'Successful migration must leave no temporary staging files.',
+    );
 
-    Gallery\Services\gallery_migration_copy_if_same_or_missing($source, $target, $hash);
-    migration_copy_assert(file_get_contents($target) === 'complete verified source asset',
-        'Matching existing target must remain idempotent.');
+    Gallery\Services\gallery_migration_copy_if_same_or_missing(
+        $source,
+        $target,
+        $hash,
+    );
+    migration_copy_assert(
+        file_get_contents($target) === 'complete verified source asset',
+        'Matching existing target must remain idempotent.',
+    );
 
     file_put_contents($conflicting, 'different previously stored data');
-    migration_copy_refused($source, $conflicting, $hash, 'Conflicting existing target');
-    migration_copy_assert(file_get_contents($conflicting) === 'different previously stored data',
-        'Refusal must preserve the conflicting existing file.');
+    migration_copy_refused(
+        $source,
+        $conflicting,
+        $hash,
+        'Conflicting existing target',
+    );
+    migration_copy_assert(
+        file_get_contents($conflicting) === 'different previously stored data',
+        'Refusal must preserve the conflicting existing file.',
+    );
 
-    migration_copy_refused($root . '/missing.jpg', $failed, $hash, 'Missing incoming source');
-    migration_copy_assert(!file_exists($failed) && (glob($album . '/.gallery-migration-*') ?: []) === [],
-        'Failed migration must not leave partial final or staging files.');
+    migration_copy_refused(
+        $root . '/missing.jpg',
+        $failed,
+        $hash,
+        'Missing incoming source',
+    );
+    migration_copy_assert(
+        !file_exists($failed)
+            && (glob($album . '/.gallery-migration-*') ?: []) === [],
+        'Failed migration must not leave partial final or staging files.',
+    );
 
-    migration_copy_refused($source, $failed, str_repeat('0', 64), 'Wrong manifest checksum');
-    migration_copy_assert(!file_exists($failed) && (glob($album . '/.gallery-migration-*') ?: []) === [],
-        'Checksum refusal must leave no partial migration target.');
+    migration_copy_refused(
+        $source,
+        $failed,
+        str_repeat('0', 64),
+        'Wrong manifest checksum',
+    );
+    migration_copy_assert(
+        !file_exists($failed)
+            && (glob($album . '/.gallery-migration-*') ?: []) === [],
+        'Checksum refusal must leave no partial migration target.',
+    );
 
     if (function_exists('symlink') && @symlink($outside, $unsafe)) {
-        migration_copy_refused($source, $unsafe, hash_file('sha256', $outside), 'Existing symlink target');
-        migration_copy_assert(file_get_contents($outside) === 'outside asset remains untouched',
-            'Symlink refusal must not rewrite a file outside gallery storage.');
+        migration_copy_refused(
+            $source,
+            $unsafe,
+            hash_file('sha256', $outside),
+            'Existing symlink target',
+        );
+        migration_copy_assert(
+            file_get_contents($outside) === 'outside asset remains untouched',
+            'Symlink refusal must not rewrite a file outside gallery storage.',
+        );
     }
 
     echo "Atomic migration asset copy tests passed.\n";
 } finally {
-    foreach ([$unsafe, $target, $conflicting, $failed, $source, $outside] as $path) {
+    foreach ([
+        $unsafe,
+        $target,
+        $conflicting,
+        $failed,
+        $source,
+        $outside,
+    ] as $path) {
         @unlink($path);
     }
     foreach (glob($album . '/.gallery-migration-*') ?: [] as $stage) {

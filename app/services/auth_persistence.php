@@ -62,11 +62,16 @@ final class AuthenticationSchemaUnavailableException extends RuntimeException
      * Create a bounded storage-unavailable exception for an authentication feature.
      *
      * @param string $feature Stable authentication feature identifier.
+     * @return void Initializes the exception message and stores a bounded feature key.
      */
     public function __construct(string $feature)
     {
-        $this->feature = preg_match('/^[a-z0-9_]+$/', $feature) === 1 ? $feature : 'authentication';
-        parent::__construct('Authentication storage is temporarily unavailable.');
+        $this->feature = preg_match('/^[a-z0-9_]+$/', $feature) === 1
+            ? $feature
+            : 'authentication';
+        parent::__construct(
+            'Authentication storage is temporarily unavailable.',
+        );
     }
 
     /**
@@ -154,17 +159,27 @@ function auth_schema_assert_known(array $status, string $feature): void
  *
  * @param string $feature Bounded capability key.
  * @param string $operation Fixed operation identifier.
+ * @return void Writes a warning event with sanitized feature and operation identifiers when logging is available.
  */
 function auth_log_schema_unavailable(string $feature, string $operation): void
 {
-    $safeFeature = preg_match('/^[a-z0-9_]+$/', $feature) === 1 ? $feature : 'authentication';
-    $safeOperation = preg_match('/^[a-z0-9_.]+$/', $operation) === 1 ? $operation : 'operation';
+    $safeFeature = preg_match('/^[a-z0-9_]+$/', $feature) === 1
+        ? $feature
+        : 'authentication';
+    $safeOperation = preg_match('/^[a-z0-9_.]+$/', $operation) === 1
+        ? $operation
+        : 'operation';
     try {
         if (function_exists('Gallery\\Services\\admin_log_event')) {
-            admin_log_event('warning', 'auth.schema_inspection_unavailable', 'Authentication schema inspection unavailable.', [
-                'feature' => $safeFeature,
-                'operation' => $safeOperation,
-            ]);
+            admin_log_event(
+                'warning',
+                'auth.schema_inspection_unavailable',
+                'Authentication schema inspection unavailable.',
+                [
+                    'feature' => $safeFeature,
+                    'operation' => $safeOperation,
+                ],
+            );
         }
     } catch (Throwable) {
         // Logging must never hide the original authentication policy result.
@@ -174,7 +189,7 @@ function auth_log_schema_unavailable(string $feature, string $operation): void
 /**
  * Return authentication configuration merged with safe defaults.
  *
- * @return array Structured result data for the caller.
+ * @return array{session_lifetime_days:int,remember_lifetime_days:int,persistent_login_enabled:bool,persistent_login_default_checked:bool} Authentication settings merged with bounded defaults.
  */
 function auth_persistence_config(): array
 {
@@ -184,10 +199,26 @@ function auth_persistence_config(): array
     $auth = is_array($config['auth'] ?? null) ? $config['auth'] : [];
 
     return [
-        'session_lifetime_days' => max(1, min(90, (int) ($auth['session_lifetime_days'] ?? 14))),
-        'remember_lifetime_days' => max(1, min(365, (int) ($auth['remember_lifetime_days'] ?? 30))),
-        'persistent_login_enabled' => array_key_exists('persistent_login_enabled', $auth) ? (bool) $auth['persistent_login_enabled'] : true,
-        'persistent_login_default_checked' => array_key_exists('persistent_login_default_checked', $auth) ? (bool) $auth['persistent_login_default_checked'] : true,
+        'session_lifetime_days' => max(1, min(
+            90,
+            (int) ($auth['session_lifetime_days'] ?? 14),
+        )),
+        'remember_lifetime_days' => max(1, min(
+            365,
+            (int) ($auth['remember_lifetime_days'] ?? 30),
+        )),
+        'persistent_login_enabled' => array_key_exists(
+            'persistent_login_enabled',
+            $auth,
+        )
+            ? (bool) $auth['persistent_login_enabled']
+            : true,
+        'persistent_login_default_checked' => array_key_exists(
+            'persistent_login_default_checked',
+            $auth,
+        )
+            ? (bool) $auth['persistent_login_default_checked']
+            : true,
     ];
 }
 
@@ -248,7 +279,9 @@ function auth_persistent_login_operation_available(string $operation): bool
     $status = auth_persistent_login_schema_status();
     if (schema_inspection_is_unknown($status)) {
         auth_log_schema_unavailable('auth_persistent_login', $operation);
-        throw new AuthenticationSchemaUnavailableException('auth_persistent_login');
+        throw new AuthenticationSchemaUnavailableException(
+            'auth_persistent_login',
+        );
     }
     return schema_inspection_is_available($status);
 }
@@ -261,7 +294,11 @@ function auth_persistent_login_operation_available(string $operation): bool
 function auth_remember_cookie_name(): string
 {
     // $sessionName stores the configured admin session name.
-    $sessionName = preg_replace('/[^a-zA-Z0-9_]/', '_', (string) cms_config()['admin_session_name']);
+    $sessionName = preg_replace(
+        '/[^a-zA-Z0-9_]/',
+        '_',
+        (string) cms_config()['admin_session_name'],
+    );
     return $sessionName . '_remember';
 }
 
@@ -305,8 +342,10 @@ function auth_prune_persistent_tokens(?int $userId = null): void
  * @param string $userAgent Request user-agent value supplied by the HTTP adapter.
  * @return ?array Cookie instruction, or null when persistent login is unavailable.
  */
-function auth_issue_persistent_login(int $userId, string $userAgent = ''): ?array
-{
+function auth_issue_persistent_login(
+    int $userId,
+    string $userAgent = '',
+): ?array {
     if (!auth_persistent_login_operation_available('issue')) {
         return null;
     }
@@ -327,9 +366,20 @@ function auth_issue_persistent_login(int $userId, string $userAgent = ''): ?arra
     // $oldTokenLimit stores the number of newest active tokens to keep before issuing this one.
     $oldTokenLimit = 10;
     // Persistence receives only the selector and one-way credential hashes, never the raw validator.
-    auth_persistence_model_issue_token($userId, $selector, $validatorHash, $userAgentHash, now_sql(), $expiresAt, $oldTokenLimit);
+    auth_persistence_model_issue_token(
+        $userId,
+        $selector,
+        $validatorHash,
+        $userAgentHash,
+        now_sql(),
+        $expiresAt,
+        $oldTokenLimit,
+    );
 
-    return auth_remember_cookie_instruction($selector . ':' . $validator, time() + auth_remember_lifetime_seconds());
+    return auth_remember_cookie_instruction(
+        $selector . ':' . $validator,
+        time() + auth_remember_lifetime_seconds(),
+    );
 }
 
 /**
@@ -345,7 +395,10 @@ function auth_parse_remember_cookie(string $cookie): ?array
     }
 
     [$selector, $validator] = explode(':', $cookie, 2);
-    if (!preg_match('/^[a-f0-9]{36}$/', $selector) || !preg_match('/^[a-f0-9]{64}$/', $validator)) {
+    if (
+        !preg_match('/^[a-f0-9]{36}$/', $selector)
+        || !preg_match('/^[a-f0-9]{64}$/', $validator)
+    ) {
         return null;
     }
 
@@ -375,12 +428,18 @@ function auth_restore_persistent_login(string $cookieValue): array
     }
 
     // $row stores the matched remember token and user data returned by the persistence model.
-    $row = auth_persistence_model_find_active((string) $cookie['selector'], now_sql());
+    $row = auth_persistence_model_find_active(
+        (string) $cookie['selector'],
+        now_sql(),
+    );
     if (!$row) {
         return ['user' => null, 'clear_cookie' => true];
     }
 
-    if (!hash_equals((string) $row['token_hash'], hash('sha256', (string) $cookie['validator']))) {
+    if (!hash_equals((string) $row['token_hash'], hash(
+        'sha256',
+        (string) $cookie['validator'],
+    ))) {
         // A selector with a bad validator is treated as a stolen or corrupted cookie.
         auth_persistence_model_revoke_id((int) $row['id'], now_sql());
         return ['user' => null, 'clear_cookie' => true];
@@ -407,6 +466,7 @@ function auth_restore_persistent_login(string $cookieValue): array
  * Revoke the current persistent login token when an explicit browser cookie is supplied.
  *
  * @param string $cookieValue Raw remember-cookie value supplied by the HTTP adapter.
+ * @return void Revokes the parsed selector when schema policy permits; unavailable schema or invalid cookies leave state unchanged.
  */
 function auth_revoke_current_persistent_login(string $cookieValue): void
 {
@@ -421,7 +481,10 @@ function auth_revoke_current_persistent_login(string $cookieValue): void
     // $cookie stores validated persistent cookie parts.
     $cookie = auth_parse_remember_cookie($cookieValue);
     if ($cookie !== null) {
-        auth_persistence_model_revoke_selector((string) $cookie['selector'], now_sql());
+        auth_persistence_model_revoke_selector(
+            (string) $cookie['selector'],
+            now_sql(),
+        );
     }
 }
 

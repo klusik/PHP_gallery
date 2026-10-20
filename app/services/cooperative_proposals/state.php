@@ -64,7 +64,11 @@ function cooperative_proposal_source_assert(array $body): int
 function cooperative_proposal_document(array $group): array
 {
     $document = $group['pending'] ?? $group['exchange']['document'] ?? null;
-    if (!is_array($document) || !is_array($document['body'] ?? null) || !is_string($document['digest'] ?? null)) {
+    if (
+        !is_array($document)
+        || !is_array($document['body'] ?? null)
+        || !is_string($document['digest'] ?? null)
+    ) {
         throw new CooperativeException('proposal_mismatch');
     }
     return $document;
@@ -82,19 +86,48 @@ function cooperative_proposal_exchange_load(string $groupId): array
         throw new CooperativeException('proposal_not_found');
     }
     $group = $stored['group'];
-    if (($group['exchange']['format'] ?? '') !== 'initial-v1'
+    if (
+        ($group['exchange']['format'] ?? '') !== 'initial-v1'
         || !in_array($group['state'], ['pending', 'active', 'suspended'], true)
-        || ($group['state'] === 'pending' && ($group['revision'] !== 0 || !is_array($group['pending'])))
-        || ($group['state'] === 'active' && ($group['revision'] !== 1 || $group['pending'] !== null))
-        || ($group['state'] === 'suspended' && ($group['revision'] < 1 || $group['pending'] !== null))) {
+        || (
+            $group['state'] === 'pending'
+            && (
+                $group['revision'] !== 0
+                || !is_array($group['pending'])
+            )
+        )
+        || (
+            $group['state'] === 'active'
+            && (
+                $group['revision'] !== 1
+                || $group['pending'] !== null
+            )
+        )
+        || (
+            $group['state'] === 'suspended'
+            && (
+                $group['revision'] < 1
+                || $group['pending'] !== null
+            )
+        )
+    ) {
         throw new CooperativeException('proposal_revision_unsupported');
     }
     $document = cooperative_proposal_document($group);
     $body = cooperative_proposal_body($document['body']);
-    if ($body['base_revision'] !== 0 || $body['group_id'] !== $groupId
+    if (
+        $body['base_revision'] !== 0
+        || $body['group_id'] !== $groupId
         || $body['coordinator_id'] !== $group['coordinator_id']
         || !hash_equals(cooperative_proposal_digest($body), $document['digest'])
-        || ($group['state'] === 'active' && ($group['members'] !== $body['members'] || $group['last_proposal_digest'] !== $document['digest']))) {
+        || (
+            $group['state'] === 'active'
+            && (
+                $group['members'] !== $body['members']
+                || $group['last_proposal_digest'] !== $document['digest']
+            )
+        )
+    ) {
         throw new CooperativeException('proposal_mismatch');
     }
     cooperative_proposal_local_member($body);
@@ -109,12 +142,15 @@ function cooperative_proposal_exchange_load(string $groupId): array
 function cooperative_proposal_exchange_save(array $stored, array $group): array
 {
     // Even an identical response must validate the pre-network storage revision.
-    return cooperative_group_update($group['group_id'], $stored['storage_revision'],
+    return cooperative_group_update(
+        $group['group_id'],
+        $stored['storage_revision'],
         /** Return only the already computed local transition after storage CAS preflight.
          * @param array<string,mixed> $current Current stored aggregate.
          * @return array<string,mixed> Validated replacement for this same revision.
          */
-        static fn(array $current): array => $group);
+        static fn(array $current): array => $group,
+    );
 }
 
 /** Attach locally empty decision state to a new immutable initial proposal.
@@ -123,15 +159,28 @@ function cooperative_proposal_exchange_save(array $stored, array $group): array
  */
 function cooperative_proposal_exchange_group(array $body): array
 {
-    if (!in_array($body['coordinator_id'], array_column($body['members'], 'instance_id'), true)) {
+    if (!in_array(
+        $body['coordinator_id'],
+        array_column($body['members'], 'instance_id'),
+        true,
+    )) {
         throw new CooperativeException('coordinator_not_member');
     }
     if ($body['base_revision'] !== 0) {
         throw new CooperativeException('proposal_revision_unsupported');
     }
     $group = cooperative_group_new($body['group_id'], $body['coordinator_id']);
-    $group['pending'] = ['body' => $body, 'digest' => cooperative_proposal_digest($body), 'approvals' => []];
-    $group['exchange'] = ['format' => 'initial-v1', 'decision' => 'pending', 'generations' => [], 'observations' => []];
+    $group['pending'] = [
+        'body' => $body,
+        'digest' => cooperative_proposal_digest($body),
+        'approvals' => [],
+    ];
+    $group['exchange'] = [
+        'format' => 'initial-v1',
+        'decision' => 'pending',
+        'generations' => [],
+        'observations' => [],
+    ];
     return $group;
 }
 
@@ -140,8 +189,10 @@ function cooperative_proposal_exchange_group(array $body): array
  * @param list<array<string,mixed>> $members Exact prepared local and remote album references.
  * @return array<string,mixed> Nonsecret Admin proposal projection.
  */
-function cooperative_proposal_exchange_create(string $requestId, array $members): array
-{
+function cooperative_proposal_exchange_create(
+    string $requestId,
+    array $members,
+): array {
     cooperative_proposal_exchange_ready();
     cooperative_id_validate($requestId);
     $members = cooperative_members_normalize($members);
@@ -149,18 +200,35 @@ function cooperative_proposal_exchange_create(string $requestId, array $members)
     $existing = cooperative_group_read($requestId);
     if ($existing !== null) {
         $stored = cooperative_proposal_exchange_load($requestId);
-        if ($stored['group']['coordinator_id'] !== $local || cooperative_proposal_document($stored['group'])['body']['members'] !== $members) {
+        if (
+            $stored['group']['coordinator_id'] !== $local
+            || cooperative_proposal_document(
+                $stored['group'],
+            )['body']['members'] !== $members
+        ) {
             throw new CooperativeException('request_conflict');
         }
         return cooperative_proposal_exchange_projection($stored);
     }
-    $draft = cooperative_group_propose(cooperative_group_new($requestId, $local), $local, $members, time());
+    $draft = cooperative_group_propose(
+        cooperative_group_new($requestId, $local),
+        $local,
+        $members,
+        time(),
+    );
     $galleryId = cooperative_proposal_source_assert($draft['pending']['body']);
     $group = cooperative_proposal_exchange_group($draft['pending']['body']);
     $group['exchange']['gallery_id'] = $galleryId;
-    \Gallery\Models\cooperative_model_group_insert_once($group, gmdate('Y-m-d H:i:s'));
+    \Gallery\Models\cooperative_model_group_insert_once(
+        $group,
+        gmdate('Y-m-d H:i:s'),
+    );
     $stored = cooperative_proposal_exchange_load($requestId);
-    if ($stored['group']['coordinator_id'] !== $local || cooperative_proposal_document($stored['group'])['body']['members'] !== $members) {
+    if (
+        $stored['group']['coordinator_id'] !== $local
+        || cooperative_proposal_document($stored['group'])['body']['members']
+            !== $members
+    ) {
         throw new CooperativeException('request_conflict');
     }
     return cooperative_proposal_exchange_projection($stored);
@@ -172,21 +240,34 @@ function cooperative_proposal_exchange_create(string $requestId, array $members)
  * @param string $digest Exact wire digest supplied alongside the immutable body.
  * @return array<string,mixed> Existing or newly persisted non-authorizing proposal.
  */
-function cooperative_proposal_exchange_import(array $body, string $coordinator, string $digest): array
-{
+function cooperative_proposal_exchange_import(
+    array $body,
+    string $coordinator,
+    string $digest,
+): array {
     cooperative_proposal_exchange_ready();
     $body = cooperative_proposal_body($body);
-    if ($body['coordinator_id'] !== $coordinator || !hash_equals(cooperative_proposal_digest($body), $digest)) {
+    if (
+        $body['coordinator_id'] !== $coordinator
+        || !hash_equals(cooperative_proposal_digest($body), $digest)
+    ) {
         throw new CooperativeException('proposal_mismatch');
     }
     $group = cooperative_proposal_exchange_group($body);
     cooperative_group_pending($group, $digest, time());
     if (cooperative_group_read($body['group_id']) === null) {
-        $group['exchange']['gallery_id'] = cooperative_proposal_source_assert($body);
-        \Gallery\Models\cooperative_model_group_insert_once($group, gmdate('Y-m-d H:i:s'));
+        $group['exchange']['gallery_id'] =
+            cooperative_proposal_source_assert($body);
+        \Gallery\Models\cooperative_model_group_insert_once(
+            $group,
+            gmdate('Y-m-d H:i:s'),
+        );
     }
     $stored = cooperative_proposal_exchange_load($body['group_id']);
-    if (cooperative_proposal_document($stored['group'])['body'] !== $body || cooperative_proposal_document($stored['group'])['digest'] !== $digest) {
+    if (
+        cooperative_proposal_document($stored['group'])['body'] !== $body
+        || cooperative_proposal_document($stored['group'])['digest'] !== $digest
+    ) {
         throw new CooperativeException('request_conflict');
     }
     return $stored;
@@ -212,5 +293,10 @@ function cooperative_proposal_exchange_inbox(string $afterId = ''): array
             $items[] = cooperative_proposal_exchange_projection($stored);
         }
     }
-    return ['items' => $items, 'next_cursor' => count($rows) > 20 ? $rows[19]['group']['group_id'] : null];
+    return [
+        'items' => $items,
+        'next_cursor' => count($rows) > 20
+            ? $rows[19]['group']['group_id']
+            : null,
+    ];
 }

@@ -68,9 +68,12 @@ function release_files_has_flag(string $flag): bool
 function release_files_print_usage(): void
 {
     echo "Usage:\n";
-    echo "  php scripts/release_files.php list --root=PATH [--profile=production|updater] [--format=json|nul]\n";
-    echo "  php scripts/release_files.php verify --root=STAGE [--source-root=SOURCE] [--profile=production|updater]\n";
-    echo "Membership verification alone does not verify file bytes; use package_production.php for complete packaging.\n";
+    echo
+        "  php scripts/release_files.php list --root=PATH [--profile=production|updater] [--format=json|nul]\n";
+    echo
+        "  php scripts/release_files.php verify --root=STAGE [--source-root=SOURCE] [--profile=production|updater]\n";
+    echo
+        "Membership verification alone does not verify file bytes; use package_production.php for complete packaging.\n";
 }
 
 /**
@@ -91,8 +94,12 @@ function release_files_main(): int
     $root = release_files_root_option('root');
     $profile = release_files_option('profile') ?? 'production';
     foreach (array_slice($argv, 2) as $argument) {
-        if (preg_match('/^--(root|source-root|profile|format)=.+$/D', $argument) !== 1) {
-            throw new RuntimeException('Unknown or empty package policy option: ' . $argument);
+        if (
+            preg_match('/^--(root|source-root|profile|format)=.+$/D', $argument)
+            !== 1
+        ) {
+            throw new RuntimeException('Unknown or empty package policy option: '
+                . $argument);
         }
     }
 
@@ -110,10 +117,12 @@ function release_files_main(): int
         }
         $json = json_encode(
             ['schema_version' => 1, 'profile' => $profile, 'files' => $paths],
-            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
         );
         if ($json === false) {
-            throw new RuntimeException('Could not encode the production file list.');
+            throw new RuntimeException(
+                'Could not encode the production file list.',
+            );
         }
         echo $json, "\n";
         return 0;
@@ -121,18 +130,34 @@ function release_files_main(): int
 
     if ($command === 'verify') {
         $sourceRoot = release_files_root_option('source-root');
-        $result = \Gallery\Core\release_file_policy_verify_tree($root, $sourceRoot, $profile);
+        $result = \Gallery\Core\release_file_policy_verify_tree(
+            $root,
+            $sourceRoot,
+            $profile,
+        );
         $json = json_encode(
-            ['schema_version' => 1, 'profile' => $profile, 'ok' => !$result['unexpected'] && !$result['missing']] + $result,
-            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            [
+                'schema_version' => 1,
+                'profile' => $profile,
+                'ok' => !$result['unexpected'] && !$result['missing'],
+            ] + $result,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
         );
         if ($json === false) {
-            throw new RuntimeException('Could not encode the package verification result.');
+            throw new RuntimeException(
+                'Could not encode the package verification result.',
+            );
         }
         echo $json, "\n";
         if ($result['unexpected'] || $result['missing']) {
-            fwrite(STDERR, 'Package path verification failed: ' . count($result['missing']) . ' missing, '
-                . count($result['unexpected']) . " unexpected.\n");
+            fwrite(
+                STDERR,
+                'Package path verification failed: '
+                    . count($result['missing'])
+                    . ' missing, '
+                    . count($result['unexpected'])
+                    . " unexpected.\n",
+            );
             return 1;
         }
         return 0;

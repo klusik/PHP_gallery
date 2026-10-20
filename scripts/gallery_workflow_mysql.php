@@ -19,10 +19,13 @@ gallery_require_cli_sapi();
 if (($argv[1] ?? '') === '--quick') {
     $argv = [__DIR__ . '/audit.php', '--profile=quick'];
     require __DIR__ . '/audit.php';
-    exit;
+    exit();
 }
 if (!is_file(__DIR__ . '/../tests/support/gallery_workflow_fixture.php')) {
-    fwrite(STDERR, "BLOCKED gallery workflow source checkout with test support required\n");
+    fwrite(
+        STDERR,
+        "BLOCKED gallery workflow source checkout with test support required\n",
+    );
     exit(1);
 }
 require_once __DIR__ . '/../tests/support/gallery_workflow_fixture.php';
@@ -41,29 +44,53 @@ use function GalleryWorkflow\removeFixture;
  * @param bool $reports Whether to print safe PASS/FAIL/SKIP/BLOCKED report lines.
  * @return void Stops the workflow with an exception when the child fails or times out.
  */
-function gallery_workflow_mysql_child(array $command, string $directory, array $environment, int $timeout, bool $reports = false): void
-{
+function gallery_workflow_mysql_child(
+    array $command,
+    string $directory,
+    array $environment,
+    int $timeout,
+    bool $reports = false,
+): void {
     $stream = fopen($directory . '/command.log', 'w+b');
-    check(is_resource($stream), 'Could not allocate private MySQL diagnostic stream.');
-    $process = proc_open($command, [0 => ['pipe', 'r'], 1 => $stream, 2 => $stream],
-        $pipes, dirname(__DIR__), $environment, ['bypass_shell' => true]);
+    check(
+        is_resource($stream),
+        'Could not allocate private MySQL diagnostic stream.',
+    );
+    $process = proc_open(
+        $command,
+        [0 => ['pipe', 'r'], 1 => $stream, 2 => $stream],
+        $pipes,
+        dirname(__DIR__),
+        $environment,
+        ['bypass_shell' => true],
+    );
     check(is_resource($process), 'Private MySQL child launch failed.');
     fclose($pipes[0]);
     $deadline = microtime(true) + $timeout;
     do {
         $status = proc_get_status($process);
-        if (!$status['running']) break;
+        if (!$status['running'])
+            break;
         usleep(100000);
     } while (microtime(true) < $deadline);
-    if ($status['running']) proc_terminate($process);
+    if ($status['running'])
+        proc_terminate($process);
     proc_close($process);
     fclose($stream);
     if ($reports) {
-        foreach (file($directory . '/command.log', FILE_IGNORE_NEW_LINES) ?: [] as $line) {
-            if (preg_match('/^(PASS|FAIL|SKIP|BLOCKED) gallery workflow [a-zA-Z0-9 .:_()-]+$/D', trim($line))) echo trim($line) . "\n";
+        foreach (file($directory . '/command.log', FILE_IGNORE_NEW_LINES)
+            ?: [] as $line) {
+            if (preg_match(
+                '/^(PASS|FAIL|SKIP|BLOCKED) gallery workflow [a-zA-Z0-9 .:_()-]+$/D',
+                trim($line),
+            ))
+                echo trim($line) . "\n";
         }
     }
-    check(!$status['running'] && $status['exitcode'] === 0, 'Private MySQL child failed.');
+    check(
+        !$status['running'] && $status['exitcode'] === 0,
+        'Private MySQL child failed.',
+    );
 }
 
 $directory = '';
@@ -74,34 +101,103 @@ $exit = 0;
 $stage = 'local MySQL prerequisites';
 try {
     $mode = (string) ($argv[1] ?? '');
-    check(in_array($mode, ['--development', '--audit-quick', '--audit', '--release', '--route-probes'], true), 'Choose development checks, route probes, or a central audit profile.');
+    check(
+        in_array(
+            $mode,
+            [
+                '--development',
+                '--audit-quick',
+                '--audit',
+                '--release',
+                '--route-probes',
+            ],
+            true,
+        ),
+        'Choose development checks, route probes, or a central audit profile.',
+    );
     $routeProbeLabel = '';
     if ($mode === '--route-probes') {
-        $routeProbeLabel = trim((string) ($argv[2] ?? getenv('PHP_GALLERY_ROUTE_PROBE_EVIDENCE') ?: ''));
-        check(in_array($routeProbeLabel, ['phase3', 'phase4', 'phase5', 'after'], true), 'Route probe evidence label must be phase3, phase4, phase5, or after.');
+        $routeProbeLabel = trim(
+            (string) (
+                $argv[2] ?? getenv('PHP_GALLERY_ROUTE_PROBE_EVIDENCE')
+                ?: ''
+            ),
+        );
+        check(
+            in_array(
+                $routeProbeLabel,
+                ['phase3', 'phase4', 'phase5', 'after'],
+                true,
+            ),
+            'Route probe evidence label must be phase3, phase4, phase5, or after.',
+        );
     }
-    check(getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only', 'Explicit disposable opt-in required.');
+    check(
+        getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only',
+        'Explicit disposable opt-in required.',
+    );
     $binary = (string) getenv('GALLERY_WORKFLOW_MYSQL_BIN');
-    check(is_file($binary) && in_array(strtolower(basename($binary)), ['mysqld.exe', 'mysqld'], true), 'A MySQL 8 server executable is required.');
+    check(
+        is_file($binary)
+            && in_array(
+                strtolower(basename($binary)),
+                ['mysqld.exe', 'mysqld'],
+                true,
+            ),
+        'A MySQL 8 server executable is required.',
+    );
     $token = bin2hex(random_bytes(12));
     $directory = sys_get_temp_dir() . '/gallery-workflow-' . $token;
-    check(mkdir($directory, 0700), 'Could not allocate private MySQL directory.');
+    check(
+        mkdir($directory, 0700),
+        'Could not allocate private MySQL directory.',
+    );
     file_put_contents($directory . '/.workflow-owner', $token);
     $stage = 'private MySQL initialization';
-    gallery_workflow_mysql_child([$binary, '--no-defaults', '--initialize-insecure', '--datadir=' . $directory . '/mysql-data',
-        '--log-error=' . $directory . '/initialize.log'], $directory, getenv(), 120);
+    gallery_workflow_mysql_child(
+        [
+            $binary,
+            '--no-defaults',
+            '--initialize-insecure',
+            '--datadir=' . $directory . '/mysql-data',
+            '--log-error=' . $directory . '/initialize.log',
+        ],
+        $directory,
+        getenv(),
+        120,
+    );
     $port = freePort();
     $stage = 'private MySQL startup';
-    $process = proc_open([$binary, '--no-defaults', '--datadir=' . $directory . '/mysql-data', '--port=' . $port,
-        '--bind-address=127.0.0.1', '--mysqlx=0', '--skip-log-bin',
-        '--socket=' . $directory . '/mysql.sock', '--pid-file=' . $directory . '/mysql.pid', '--log-error=' . $directory . '/server.log'],
-        [0 => ['pipe', 'r'], 1 => ['file', $directory . '/daemon.log', 'a'], 2 => ['file', $directory . '/daemon.log', 'a']],
-        $pipes, $directory, getenv(), ['bypass_shell' => true]);
+    $process = proc_open(
+        [
+            $binary,
+            '--no-defaults',
+            '--datadir=' . $directory . '/mysql-data',
+            '--port=' . $port,
+            '--bind-address=127.0.0.1',
+            '--mysqlx=0',
+            '--skip-log-bin',
+            '--socket=' . $directory . '/mysql.sock',
+            '--pid-file=' . $directory . '/mysql.pid',
+            '--log-error=' . $directory . '/server.log',
+        ],
+        [
+            0 => ['pipe', 'r'],
+            1 => ['file', $directory . '/daemon.log', 'a'],
+            2 => ['file', $directory . '/daemon.log', 'a'],
+        ],
+        $pipes,
+        $directory,
+        getenv(),
+        ['bypass_shell' => true],
+    );
     check(is_resource($process), 'Could not launch private MySQL process.');
     fclose($pipes[0]);
     for ($attempt = 0; $attempt < 200; $attempt++) {
         try {
-            $pdo = new PDO('mysql:host=127.0.0.1;port=' . $port, 'root', '', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            $pdo = new PDO('mysql:host=127.0.0.1;port=' . $port, 'root', '', [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            ]);
             break;
         } catch (Throwable) {
             usleep(100000);
@@ -109,16 +205,34 @@ try {
     }
     check($pdo instanceof PDO, 'Private MySQL did not become ready.');
     // Prove this is the daemon just initialized before any credential or grant write.
-    check(realpath((string) $pdo->query('SELECT @@datadir')->fetchColumn()) === realpath($directory . '/mysql-data'), 'Private MySQL data-directory identity mismatch.');
+    check(
+        realpath(
+            (string) $pdo->query('SELECT @@datadir')->fetchColumn(),
+        ) === realpath($directory . '/mysql-data'),
+        'Private MySQL data-directory identity mismatch.',
+    );
     $serverVerified = true;
     $stage = 'private MySQL account provisioning';
     $password = bin2hex(random_bytes(24));
-    $pdo->exec("ALTER USER 'root'@'localhost' IDENTIFIED BY " . $pdo->quote(bin2hex(random_bytes(24))));
-    $pdo->exec("CREATE USER 'gallery_workflow_runner'@'localhost' IDENTIFIED BY " . $pdo->quote($password));
-    $pdo->exec("GRANT ALL PRIVILEGES ON `gallery\\_workflow\\_%`.* TO 'gallery_workflow_runner'@'localhost'");
-    $environment = array_merge(getenv(), ['GALLERY_WORKFLOW_DB_HOST' => '127.0.0.1', 'GALLERY_WORKFLOW_DB_PORT' => (string) $port,
-        'GALLERY_WORKFLOW_DB_USER' => 'gallery_workflow_runner', 'GALLERY_WORKFLOW_DB_PASSWORD' => $password]);
-    echo "PASS gallery workflow private MySQL initialized with dedicated account\n";
+    $pdo->exec(
+        "ALTER USER 'root'@'localhost' IDENTIFIED BY "
+            . $pdo->quote(bin2hex(random_bytes(24))),
+    );
+    $pdo->exec(
+        "CREATE USER 'gallery_workflow_runner'@'localhost' IDENTIFIED BY "
+            . $pdo->quote($password),
+    );
+    $pdo->exec(
+        "GRANT ALL PRIVILEGES ON `gallery\\_workflow\\_%`.* TO 'gallery_workflow_runner'@'localhost'",
+    );
+    $environment = array_merge(getenv(), [
+        'GALLERY_WORKFLOW_DB_HOST' => '127.0.0.1',
+        'GALLERY_WORKFLOW_DB_PORT' => (string) $port,
+        'GALLERY_WORKFLOW_DB_USER' => 'gallery_workflow_runner',
+        'GALLERY_WORKFLOW_DB_PASSWORD' => $password,
+    ]);
+    echo
+        "PASS gallery workflow private MySQL initialized with dedicated account\n";
     $stage = match ($mode) {
         '--development' => 'new workflow development checks',
         '--route-probes' => 'route lifecycle probes with disposable database',
@@ -135,27 +249,54 @@ try {
     // Scope: Outer child deadline; 540 seconds for development mode and 1320 seconds for other workflow modes.
     // Consumers: gallery_workflow_mysql_child() supervising gallery_workflow_run.php.
     // Rationale: Development runs the 180-second HTTP child and 300-second browser child, leaving 60 seconds for fixture setup and cleanup; route probes and central audit modes retain their larger 1320-second envelope.
-    gallery_workflow_mysql_child($childCommand, $directory, $environment,
-        $mode === '--development' ? 540 : 1320, true);
+    gallery_workflow_mysql_child(
+        $childCommand,
+        $directory,
+        $environment,
+        $mode === '--development' ? 540 : 1320,
+        true,
+    );
 } catch (Throwable $exception) {
-    fwrite(STDERR, 'FAIL gallery workflow ' . $stage . ' at line ' . $exception->getLine() . ' code ' . (string) $exception->getCode() . "\n");
+    fwrite(
+        STDERR,
+        'FAIL gallery workflow '
+            . $stage
+            . ' at line '
+            . $exception->getLine()
+            . ' code '
+            . (string) $exception->getCode()
+            . "\n",
+    );
     $exit = 1;
 } finally {
     // SHUTDOWN only over the identity-checked connection; terminate only the exact child handle otherwise.
     if ($serverVerified && $pdo instanceof PDO) {
-        try { $pdo->exec('SHUTDOWN'); } catch (Throwable) { /* Fall through to owned process termination. */ }
+        try {
+            $pdo->exec('SHUTDOWN');
+        } catch (Throwable) { /* Fall through to owned process termination. */
+        }
         $pdo = null;
     }
     $pdo = null;
     if (is_resource($process)) {
         $deadline = microtime(true) + 15;
-        while (proc_get_status($process)['running'] && microtime(true) < $deadline) usleep(100000);
-        if (proc_get_status($process)['running']) proc_terminate($process);
+        while (
+            proc_get_status($process)['running']
+            && microtime(true) < $deadline
+        )
+            usleep(100000);
+        if (proc_get_status($process)['running'])
+            proc_terminate($process);
         proc_close($process);
     }
     if ($directory !== '' && is_dir($directory)) {
-        try { removeFixture($directory, $token); echo "PASS gallery workflow private MySQL stopped and removed\n"; }
-        catch (Throwable) { fwrite(STDERR, "FAIL gallery workflow private MySQL cleanup\n"); $exit = 1; }
+        try {
+            removeFixture($directory, $token);
+            echo "PASS gallery workflow private MySQL stopped and removed\n";
+        } catch (Throwable) {
+            fwrite(STDERR, "FAIL gallery workflow private MySQL cleanup\n");
+            $exit = 1;
+        }
     }
 }
 exit($exit);

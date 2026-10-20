@@ -16,6 +16,7 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    require_once __DIR__ . '/support/php_source.php';
     /**
      * Prepare predictable route URLs for view assertions.
      *
@@ -25,7 +26,11 @@ namespace Gallery\Core {
      */
     function url_for(string $page, array $query = []): string
     {
-        return '/?page=' . $page . ($query === [] ? '' : '&' . http_build_query($query));
+        return (
+            '/?page='
+                . $page
+                . ($query === [] ? '' : '&' . http_build_query($query))
+        );
     }
 
     /**
@@ -87,54 +92,145 @@ namespace {
     }
 
     $routes = ['admin_upload', 'admin_upload_settings', 'admin_mobile_uploads'];
-    $features = ['mobile_webdav' => true, 'smart_galleries' => true, 'upload_api' => true];
-    foreach ([[], ['admin_legacy_upload_navigation_enabled' => false]] as $preference) {
-        $html = legacy_navigation_sidebar($preference + ['feature_enabled' => $features]);
+    $features = [
+        'mobile_webdav' => true,
+        'smart_galleries' => true,
+        'upload_api' => true,
+    ];
+    foreach ([
+        [],
+        ['admin_legacy_upload_navigation_enabled' => false],
+    ] as $preference) {
+        $html = legacy_navigation_sidebar(
+            $preference + ['feature_enabled' => $features],
+        );
         foreach ($routes as $route) {
-            legacy_navigation_expect(!str_contains($html, 'page=' . $route . '"'), 'Default sidebar must hide ' . $route);
+            legacy_navigation_expect(
+                !str_contains($html, 'page=' . $route . '"'),
+                'Default sidebar must hide ' . $route,
+            );
         }
-        foreach (['admin_settings', 'admin_new_gallery', 'admin_smart_galleries', 'admin_api_manager', 'admin_tags'] as $route) {
-            legacy_navigation_expect(str_contains($html, 'page=' . $route . '"'), 'Unrelated sidebar route remains available: ' . $route);
+        foreach ([
+            'admin_settings',
+            'admin_new_gallery',
+            'admin_smart_galleries',
+            'admin_api_manager',
+            'admin_tags',
+        ] as $route) {
+            legacy_navigation_expect(
+                str_contains($html, 'page=' . $route . '"'),
+                'Unrelated sidebar route remains available: ' . $route,
+            );
         }
     }
 
-    $enabled = ['admin_legacy_upload_navigation_enabled' => true, 'feature_enabled' => $features];
+    $enabled = [
+        'admin_legacy_upload_navigation_enabled' => true,
+        'feature_enabled' => $features,
+    ];
     $html = legacy_navigation_sidebar($enabled);
     foreach ($routes as $route) {
-        legacy_navigation_expect(str_contains($html, 'page=' . $route . '"'), 'Opt-in sidebar must expose ' . $route);
+        legacy_navigation_expect(
+            str_contains($html, 'page=' . $route . '"'),
+            'Opt-in sidebar must expose ' . $route,
+        );
     }
-    foreach (['Legacy uploads', 'Legacy upload settings', 'Legacy mobile uploads'] as $label) {
-        legacy_navigation_expect(str_contains($html, $label), 'Restored navigation identifies legacy workflow: ' . $label);
+    foreach ([
+        'Legacy uploads',
+        'Legacy upload settings',
+        'Legacy mobile uploads',
+    ] as $label) {
+        legacy_navigation_expect(
+            str_contains($html, $label),
+            'Restored navigation identifies legacy workflow: ' . $label,
+        );
     }
-    legacy_navigation_expect(str_contains($html, 'admin-menu-link is-active'), 'Legacy route preserves active-menu styling');
+    legacy_navigation_expect(
+        str_contains($html, 'admin-menu-link is-active'),
+        'Legacy route preserves active-menu styling',
+    );
     $enabled['feature_enabled']['mobile_webdav'] = false;
     $html = legacy_navigation_sidebar($enabled);
-    legacy_navigation_expect(!str_contains($html, 'page=admin_mobile_uploads"'), 'Mobile capability OFF keeps legacy mobile navigation hidden');
-    legacy_navigation_expect(str_contains($html, 'page=admin_upload"') && str_contains($html, 'page=admin_upload_settings"'), 'Mobile OFF does not hide other opted-in legacy routes');
+    legacy_navigation_expect(
+        !str_contains($html, 'page=admin_mobile_uploads"'),
+        'Mobile capability OFF keeps legacy mobile navigation hidden',
+    );
+    legacy_navigation_expect(
+        str_contains($html, 'page=admin_upload"')
+            && str_contains($html, 'page=admin_upload_settings"'),
+        'Mobile OFF does not hide other opted-in legacy routes',
+    );
 
     ob_start();
     \Gallery\Views\view_render_admin_dashboard_upload_card();
     $card = (string) ob_get_clean();
-    legacy_navigation_expect(str_contains($card, 'page=home"') && str_contains($card, 'Open galleries'), 'Dashboard directs uploads through public galleries');
-    legacy_navigation_expect(str_contains($card, 'page=admin_new_gallery"'), 'Dashboard keeps empty-gallery creation');
-    legacy_navigation_expect(!str_contains($card, 'page=admin_upload'), 'Dashboard card does not expose obsolete upload route');
+    legacy_navigation_expect(
+        str_contains($card, 'page=home"')
+            && str_contains($card, 'Open galleries'),
+        'Dashboard directs uploads through public galleries',
+    );
+    legacy_navigation_expect(
+        str_contains($card, 'page=admin_new_gallery"'),
+        'Dashboard keeps empty-gallery creation',
+    );
+    legacy_navigation_expect(
+        !str_contains($card, 'page=admin_upload'),
+        'Dashboard card does not expose obsolete upload route',
+    );
 
-    $dashboard = (string) file_get_contents(__DIR__ . '/../app/views/admin_dashboard.php');
-    legacy_navigation_expect(!str_contains($dashboard, "url_for('admin_upload')"), 'Dashboard toolbar and galleries actions must use public gallery shortcuts');
-    legacy_navigation_expect(substr_count($dashboard, "t('admin.dashboard.open_galleries', 'Open galleries')") === 1, 'Primary dashboard shortcut clearly names its gallery destination without a duplicate panel link');
-    $dispatch = (string) file_get_contents(__DIR__ . '/../app/bootstrap/dispatch.php');
-    foreach (array_merge($routes, ['admin_upload_browser_batch', 'admin_upload_automation_token']) as $route) {
-        legacy_navigation_expect(str_contains($dispatch, "'" . $route . "' =>"), 'Hidden legacy routes and their actions remain dispatched: ' . $route);
+    $dashboard = (string) file_get_contents(__DIR__
+        . '/../app/views/admin_dashboard.php');
+    legacy_navigation_expect(
+        !php_source_contains($dashboard, "url_for('admin_upload')"),
+        'Dashboard toolbar and galleries actions must use public gallery shortcuts',
+    );
+    legacy_navigation_expect(
+        substr_count(
+            $dashboard,
+            "t('admin.dashboard.open_galleries', 'Open galleries')",
+        ) === 1,
+        'Primary dashboard shortcut clearly names its gallery destination without a duplicate panel link',
+    );
+    $dispatch = (string) file_get_contents(__DIR__
+        . '/../app/bootstrap/dispatch.php');
+    foreach (array_merge($routes, [
+        'admin_upload_browser_batch',
+        'admin_upload_automation_token',
+    ]) as $route) {
+        legacy_navigation_expect(
+            php_source_contains($dispatch, "'" . $route . "' =>"),
+            'Hidden legacy routes and their actions remain dispatched: '
+                . $route,
+        );
     }
-    $controller = (string) file_get_contents(__DIR__ . '/../app/controllers/shared_layout.php');
-    legacy_navigation_expect(str_contains($controller, "'admin_legacy_upload_navigation_enabled' => admin_legacy_upload_navigation_enabled()"), 'Controller prepares central navigation preference before rendering');
+    $controller = (string) file_get_contents(__DIR__
+        . '/../app/controllers/shared_layout.php');
+    legacy_navigation_expect(
+        php_source_contains(
+            $controller,
+            "'admin_legacy_upload_navigation_enabled' => admin_legacy_upload_navigation_enabled()",
+        ),
+        'Controller prepares central navigation preference before rendering',
+    );
     foreach ([false, true] as $widgetsActive) {
         ob_start();
-        \Gallery\Views\view_render_admin_sidebar('admin_theme', ['theme_widgets_active' => $widgetsActive]);
+        \Gallery\Views\view_render_admin_sidebar('admin_theme', [
+            'theme_widgets_active' => $widgetsActive,
+        ]);
         $themeSidebar = (string) ob_get_clean();
-        preg_match_all('/<a class="admin-menu-link is-active" href="([^"]+)"/', $themeSidebar, $activeLinks);
-        $expectedUrl = \Gallery\Core\e(\Gallery\Core\url_for('admin_theme', $widgetsActive ? ['widgets' => '1'] : []));
-        legacy_navigation_expect($activeLinks[1] === [$expectedUrl], 'Theme and Widgets must have exactly one correctly selected sidebar link');
+        preg_match_all(
+            '/<a class="admin-menu-link is-active" href="([^"]+)"/',
+            $themeSidebar,
+            $activeLinks,
+        );
+        $expectedUrl = \Gallery\Core\e(\Gallery\Core\url_for(
+            'admin_theme',
+            $widgetsActive ? ['widgets' => '1'] : [],
+        ));
+        legacy_navigation_expect(
+            $activeLinks[1] === [$expectedUrl],
+            'Theme and Widgets must have exactly one correctly selected sidebar link',
+        );
     }
     echo "Legacy upload and Theme surface navigation tests passed.\n";
 }

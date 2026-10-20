@@ -79,12 +79,14 @@ function gallery_count_dated_rows(array $galleries): int
  * occupied by dated rows. This lets the public preview and the persistent admin
  * save action use the same deterministic order.
  *
- * @param array $galleries Gallery rows in their current order.
+ * @param list<array<string,mixed>> $galleries Gallery rows in their current order; rows may include gallery_date, sort_order, title, and id.
  * @param string $mode Sort mode: asc or desc.
- * @return array Gallery rows with dated rows sorted inside dated positions.
+ * @return list<array<string,mixed>> Gallery rows with dated rows sorted inside dated positions and undated slots preserved.
  */
-function gallery_sort_rows_by_date_preserving_undated_positions(array $galleries, string $mode): array
-{
+function gallery_sort_rows_by_date_preserving_undated_positions(
+    array $galleries,
+    string $mode,
+): array {
     // $datedRows stores sortable gallery rows keyed by their original index.
     $datedRows = [];
     foreach ($galleries as $index => $gallery) {
@@ -99,7 +101,9 @@ function gallery_sort_rows_by_date_preserving_undated_positions(array $galleries
 
     // $datedPositions stores the current slots occupied by dated rows.
     $datedPositions = array_keys($datedRows);
-    usort($datedRows, static function (array $left, array $right) use ($mode): int {
+    usort($datedRows, static function (array $left, array $right) use (
+        $mode,
+    ): int {
         // $leftDate stores the normalized start date used as the primary key.
         $leftDate = (string) ($left['gallery_date'] ?? '');
         // $rightDate stores the normalized start date used as the primary key.
@@ -108,12 +112,18 @@ function gallery_sort_rows_by_date_preserving_undated_positions(array $galleries
         $dateComparison = strcmp($leftDate, $rightDate);
         if ($dateComparison === 0) {
             // $orderComparison keeps date ties deterministic and close to normal gallery order.
-            $orderComparison = ((int) ($left['sort_order'] ?? 0)) <=> ((int) ($right['sort_order'] ?? 0));
+            $orderComparison =
+                (int) ($left['sort_order'] ?? 0)
+                <=> (int) ($right['sort_order'] ?? 0);
             if ($orderComparison === 0) {
-                $orderComparison = strcasecmp((string) ($left['title'] ?? ''), (string) ($right['title'] ?? ''));
+                $orderComparison = strcasecmp(
+                    (string) ($left['title'] ?? ''),
+                    (string) ($right['title'] ?? ''),
+                );
             }
             if ($orderComparison === 0) {
-                $orderComparison = ((int) ($left['id'] ?? 0)) <=> ((int) ($right['id'] ?? 0));
+                $orderComparison =
+                    (int) ($left['id'] ?? 0) <=> (int) ($right['id'] ?? 0);
             }
             return $orderComparison;
         }
@@ -156,9 +166,12 @@ function gallery_reorder_save_tree_order(array $submittedEntries): array
  *
  * @param int $parentGalleryId Parent gallery identifier.
  * @param array<int,int> $orderedIds Complete direct-child gallery identifiers.
+ * @return void Persists the supplied complete child order for the parent gallery.
  */
-function gallery_reorder_save_child_order(int $parentGalleryId, array $orderedIds): void
-{
+function gallery_reorder_save_child_order(
+    int $parentGalleryId,
+    array $orderedIds,
+): void {
     gallery_order_model_save_children($parentGalleryId, $orderedIds, now_sql());
 }
 

@@ -36,7 +36,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE password_reset_tokens (
+    'CREATE TABLE password_reset_tokens (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
         selector VARCHAR(32) NOT NULL,
@@ -48,6 +48,6 @@ return [
         UNIQUE KEY password_reset_selector_unique (selector),
         KEY password_reset_user_idx (user_id),
         KEY password_reset_expiry_idx (expires_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "DELETE prt FROM password_reset_tokens prt LEFT JOIN users u ON u.id = prt.user_id WHERE u.id IS NULL",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'DELETE prt FROM password_reset_tokens prt LEFT JOIN users u ON u.id = prt.user_id WHERE u.id IS NULL',
 ];

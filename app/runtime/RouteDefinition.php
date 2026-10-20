@@ -29,20 +29,35 @@ final class RouteDefinition
     public function __construct(
         public readonly string $name,
         public readonly string $handler,
-        public readonly array $modules
+        public readonly array $modules,
     ) {
-        if (preg_match('/^[a-z][a-z0-9_]*$/D', $name) !== 1
-            || preg_match('/^\\\\?Gallery\\\\Controllers\\\\[A-Za-z_][A-Za-z0-9_]*$/D', $handler) !== 1
-            || $modules === [] || !array_is_list($modules)) {
-            throw new \InvalidArgumentException('Invalid runtime route definition.');
+        if (
+            preg_match('/^[a-z][a-z0-9_]*$/D', $name) !== 1
+            || preg_match(
+                '/^\\\\?Gallery\\\\Controllers\\\\[A-Za-z_][A-Za-z0-9_]*$/D',
+                $handler,
+            ) !== 1
+            || $modules === []
+            || !array_is_list($modules)
+        ) {
+            throw new \InvalidArgumentException(
+                'Invalid runtime route definition.',
+            );
         }
         foreach ($modules as $module) {
-            if (!is_string($module) || preg_match('/^[a-z][a-z0-9-]*$/D', $module) !== 1) {
-                throw new \InvalidArgumentException('Invalid route module identifier.');
+            if (
+                !is_string($module)
+                || preg_match('/^[a-z][a-z0-9-]*$/D', $module) !== 1
+            ) {
+                throw new \InvalidArgumentException(
+                    'Invalid route module identifier.',
+                );
             }
         }
         if (count(array_unique($modules)) !== count($modules)) {
-            throw new \InvalidArgumentException('Duplicate route module identifier.');
+            throw new \InvalidArgumentException(
+                'Duplicate route module identifier.',
+            );
         }
     }
 }

@@ -65,7 +65,8 @@ function gallery_date_schema_ready(): bool
  */
 function gallery_date_range_schema_ready(): bool
 {
-    return gallery_date_schema_ready() && db_column_exists('galleries', 'gallery_date_end');
+    return gallery_date_schema_ready()
+        && db_column_exists('galleries', 'gallery_date_end');
 }
 
 /**
@@ -75,14 +76,15 @@ function gallery_date_range_schema_ready(): bool
  */
 function gallery_date_exif_suggestions_schema_ready(): bool
 {
-    return gallery_date_schema_ready() && db_column_exists('images', 'exif_taken_at');
+    return gallery_date_schema_ready()
+        && db_column_exists('images', 'exif_taken_at');
 }
 
 /**
  * Normalize an admin-submitted gallery date for database storage.
  *
- * @param mixed $value Value to process.
- * @return ?string Text result for the caller.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Date value cast to text before strict YYYY-MM-DD validation; blank text maps to null and malformed nonblank text throws InvalidArgumentException.
+ * @return string|null Exact validated YYYY-MM-DD value, null for blank input; malformed nonblank values throw InvalidArgumentException.
  */
 function gallery_date_storage_value(mixed $value): ?string
 {
@@ -93,7 +95,10 @@ function gallery_date_storage_value(mixed $value): ?string
     }
     $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
     if (!$parsed || $parsed->format('Y-m-d') !== $date) {
-        throw new InvalidArgumentException(t('admin.gallery_editor.invalid_gallery_date', 'Enter a valid gallery date.'));
+        throw new InvalidArgumentException(t(
+            'admin.gallery_editor.invalid_gallery_date',
+            'Enter a valid gallery date.',
+        ));
     }
     return $date;
 }
@@ -101,19 +106,24 @@ function gallery_date_storage_value(mixed $value): ?string
 /**
  * Normalize a submitted gallery date range for database storage.
  *
- * @param mixed $startValue Start value value.
- * @param mixed $endValue End value value.
- * @return array{start:?string,end:?string} Structured result data for the caller.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $startValue Start date value cast to text before strict YYYY-MM-DD validation; blank text maps to null.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $endValue Inclusive end date value cast to text before strict YYYY-MM-DD validation; blank text maps to null.
+ * @return array{start:string|null,end:string|null} Associative range with inclusive YYYY-MM-DD start/end values or null for either blank endpoint; throws InvalidArgumentException for malformed dates or reversed ranges.
  */
-function gallery_date_range_storage_values(mixed $startValue, mixed $endValue): array
-{
+function gallery_date_range_storage_values(
+    mixed $startValue,
+    mixed $endValue,
+): array {
     // $start stores the normalized start date persisted in the legacy gallery_date column.
     $start = gallery_date_storage_value($startValue);
     // $end stores the optional range end date persisted in gallery_date_end when available.
     $end = gallery_date_storage_value($endValue);
 
     if ($start !== null && $end !== null && strcmp($end, $start) < 0) {
-        throw new InvalidArgumentException(t('admin.gallery_editor.invalid_gallery_date_range', 'The gallery date range end cannot be before the start date.'));
+        throw new InvalidArgumentException(t(
+            'admin.gallery_editor.invalid_gallery_date_range',
+            'The gallery date range end cannot be before the start date.',
+        ));
     }
 
     return ['start' => $start, 'end' => $end];
@@ -122,7 +132,7 @@ function gallery_date_range_storage_values(mixed $startValue, mixed $endValue): 
 /**
  * Normalize a sidecar gallery date without letting malformed legacy metadata stop scanning.
  *
- * @param mixed $value Value to process.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Legacy sidecar date cast to text; malformed dates are caught and return null.
  * @return ?string Text result for the caller.
  */
 function gallery_date_sidecar_value(mixed $value): ?string
@@ -137,16 +147,21 @@ function gallery_date_sidecar_value(mixed $value): ?string
 /**
  * Normalize sidecar gallery date-range metadata without letting malformed values stop scanning.
  *
- * @param mixed $startValue Start value value.
- * @param mixed $endValue End value value.
- * @return array{start:?string,end:?string} Structured result data for the caller.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $startValue Legacy sidecar start value cast to text; malformed dates are caught and produce a null normalized start.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $endValue Legacy sidecar end value cast to text; malformed dates are caught and produce a null end.
+ * @return array{start:string|null,end:string|null} Associative range with normalized inclusive dates; invalid input yields the normalized start and a null end.
  */
-function gallery_date_sidecar_range_values(mixed $startValue, mixed $endValue): array
-{
+function gallery_date_sidecar_range_values(
+    mixed $startValue,
+    mixed $endValue,
+): array {
     try {
         return gallery_date_range_storage_values($startValue, $endValue);
     } catch (InvalidArgumentException) {
-        return ['start' => gallery_date_sidecar_value($startValue), 'end' => null];
+        return [
+            'start' => gallery_date_sidecar_value($startValue),
+            'end' => null,
+        ];
     }
 }
 
@@ -154,7 +169,7 @@ function gallery_date_sidecar_range_values(mixed $startValue, mixed $endValue): 
  * Return a valid input[type=date] value for admin forms.
  *
  * @param mixed $value Value to process.
- * @return string Text result for the caller.
+ * @return string Validated YYYY-MM-DD input value, or an empty string when blank or invalid.
  */
 function gallery_date_input_value(mixed $value): string
 {
@@ -169,7 +184,7 @@ function gallery_date_input_value(mixed $value): string
  * Format one stored gallery date for public display.
  *
  * @param mixed $value Value to process.
- * @return string Text result for the caller.
+ * @return string Localized single date, or an empty string when blank or invalid.
  */
 function gallery_date_single_display_value(mixed $value): string
 {
@@ -201,12 +216,14 @@ function gallery_date_range_separator(): string
 /**
  * Format a stored gallery date or date range for public display.
  *
- * @param mixed $startValue Start value value.
- * @param mixed $endValue End value value.
- * @return string Text result for the caller.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $startValue Stored start date value cast to text for display normalization.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $endValue Stored end date value cast to text for display normalization.
+ * @return string Localized inclusive date range, a single localized date, or an empty string when neither endpoint is valid.
  */
-function gallery_date_range_display_value(mixed $startValue, mixed $endValue = null): string
-{
+function gallery_date_range_display_value(
+    mixed $startValue,
+    mixed $endValue = null,
+): string {
     // $startDisplay stores the visitor-facing start date string.
     $startDisplay = gallery_date_single_display_value($startValue);
     // $endDisplay stores the visitor-facing end date string.
@@ -232,7 +249,7 @@ function gallery_date_range_display_value(mixed $startValue, mixed $endValue = n
  * Format a stored gallery date for public display.
  *
  * @param mixed $value Value to process.
- * @return string Text result for the caller.
+ * @return string Localized display range, a single date, or an empty string when neither date is valid.
  */
 function gallery_date_display_value(mixed $value): string
 {
@@ -242,12 +259,14 @@ function gallery_date_display_value(mixed $value): string
 /**
  * Return a compact storage label for admin tables.
  *
- * @param mixed $startValue Start value value.
- * @param mixed $endValue End value value.
- * @return string Text result for the caller.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $startValue Stored start date value cast to text for compact label normalization.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $endValue Stored end date value cast to text for compact label normalization.
+ * @return string Compact YYYY-MM-DD range label, single date, or empty string when both endpoints are blank or invalid.
  */
-function gallery_date_range_storage_label(mixed $startValue, mixed $endValue = null): string
-{
+function gallery_date_range_storage_label(
+    mixed $startValue,
+    mixed $endValue = null,
+): string {
     // $start stores a normalized date value for admin diagnostics.
     $start = gallery_date_sidecar_value($startValue);
     // $end stores a normalized date value for admin diagnostics.
@@ -268,16 +287,26 @@ function gallery_date_range_storage_label(mixed $startValue, mixed $endValue = n
 /**
  * Return true when the current stored gallery range equals the suggested range.
  *
- * @param mixed $currentStart Current start value.
- * @param mixed $currentEnd Current end value.
- * @param mixed $suggestedStart Suggested start value.
- * @param mixed $suggestedEnd Suggested end value.
- * @return bool True when the condition matches.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $currentStart Current start value cast to text for sidecar normalization.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $currentEnd Current end value cast to text for sidecar normalization.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $suggestedStart Suggested start value cast to text for sidecar normalization.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $suggestedEnd Suggested end value cast to text for sidecar normalization.
+ * @return bool True when normalized current and suggested start values match and their normalized end values match.
  */
-function gallery_date_range_matches(mixed $currentStart, mixed $currentEnd, mixed $suggestedStart, mixed $suggestedEnd): bool
-{
-    return gallery_date_sidecar_value($currentStart) === gallery_date_sidecar_value($suggestedStart)
-        && gallery_date_sidecar_value($currentEnd) === gallery_date_sidecar_value($suggestedEnd);
+function gallery_date_range_matches(
+    mixed $currentStart,
+    mixed $currentEnd,
+    mixed $suggestedStart,
+    mixed $suggestedEnd,
+): bool {
+    return (
+        gallery_date_sidecar_value(
+            $currentStart,
+        ) === gallery_date_sidecar_value($suggestedStart)
+            && gallery_date_sidecar_value(
+                $currentEnd,
+            ) === gallery_date_sidecar_value($suggestedEnd)
+    );
 }
 
 /**
@@ -288,11 +317,18 @@ function gallery_date_range_matches(mixed $currentStart, mixed $currentEnd, mixe
  * @param string|null $endValue Inclusive YYYY-MM-DD end; blank/null clears it.
  * @return array{gallery:array<string,mixed>,start:?string,end:?string} Structured result data for the caller.
  */
-function gallery_date_save_range(int $galleryId, mixed $startValue, mixed $endValue): array
-{
+function gallery_date_save_range(
+    int $galleryId,
+    mixed $startValue,
+    mixed $endValue,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return gallery_date_save_range_owned($galleryId, $startValue, $endValue);
+        return gallery_date_save_range_owned(
+            $galleryId,
+            $startValue,
+            $endValue,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -310,16 +346,26 @@ function gallery_date_save_range(int $galleryId, mixed $startValue, mixed $endVa
  * @return array{gallery:array<string,mixed>,start:?string,end:?string} Refreshed gallery and normalized dates; blank inputs become null.
  * @author Rudolf Klusal
  */
-function gallery_date_save_range_owned(int $galleryId, mixed $startValue, mixed $endValue): array
-{
+function gallery_date_save_range_owned(
+    int $galleryId,
+    mixed $startValue,
+    mixed $endValue,
+): array {
     if (!gallery_date_schema_ready()) {
-        throw new RuntimeException(t('admin.gallery_dates.requires_migration', 'Gallery date maintenance will be available after the database migration is applied.'));
+        throw new RuntimeException(t(
+            'admin.gallery_dates.requires_migration',
+            'Gallery date maintenance will be available after the database migration is applied.',
+        ));
     }
 
     // $gallery stores the row being updated and re-exported to gallery.json.
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
-        throw new RuntimeException(t('admin.gallery_dates.error_gallery_missing', 'Gallery #{id} no longer exists.', ['id' => (string) $galleryId]));
+        throw new RuntimeException(t(
+            'admin.gallery_dates.error_gallery_missing',
+            'Gallery #{id} no longer exists.',
+            ['id' => (string) $galleryId],
+        ));
     }
 
     // $range stores normalized database values accepted by the gallery date columns.
@@ -337,7 +383,11 @@ function gallery_date_save_range_owned(int $galleryId, mixed $startValue, mixed 
         write_gallery_sidecar($updatedGallery);
     }
 
-    return ['gallery' => $updatedGallery, 'start' => $range['start'], 'end' => $range['end']];
+    return [
+        'gallery' => $updatedGallery,
+        'start' => $range['start'],
+        'end' => $range['end'],
+    ];
 }
 
 /**
@@ -377,11 +427,13 @@ function gallery_date_view_model(array $gallery): ?array
 /**
  * Return all gallery rows with columns needed for EXIF date-range suggestions.
  *
- * @return array<int array<string, mixed>>.
+ * @return list<array{id:int|string,parent_id:int|string|null,folder_path:string,title:string,gallery_date:string|null,gallery_date_end:string|null}> Gallery rows ordered by folder path for EXIF suggestions.
  */
 function gallery_date_suggestion_gallery_rows(): array
 {
-    return gallery_model_date_suggestion_rows(gallery_date_range_schema_ready());
+    return gallery_model_date_suggestion_rows(
+        gallery_date_range_schema_ready(),
+    );
 }
 
 /**
@@ -400,38 +452,61 @@ function gallery_date_direct_exif_ranges(): array
 /**
  * Merge one direct EXIF date aggregate into one ancestor gallery suggestion.
  *
- * @param array $suggestion Suggestion value.
- * @param array $directRange Direct range value.
+ * @param array{suggested_start:?string,suggested_end:?string,exif_image_count:int,source_gallery_count:int} $suggestion Branch suggestion updated in place.
+ * @param array{suggested_start:?string,suggested_end:?string,image_count:int|string} $directRange Direct image aggregate range and count.
+ * @return void Expands the suggestion's date bounds and adds image and source-gallery counts in place.
  */
-function gallery_date_merge_direct_range(array &$suggestion, array $directRange): void
-{
+function gallery_date_merge_direct_range(
+    array &$suggestion,
+    array $directRange,
+): void {
     // $start stores the direct image minimum date in YYYY-MM-DD form.
-    $start = gallery_date_sidecar_value($directRange['suggested_start'] ?? null);
+    $start = gallery_date_sidecar_value(
+        $directRange['suggested_start'] ?? null,
+    );
     // $end stores the direct image maximum date in YYYY-MM-DD form.
     $end = gallery_date_sidecar_value($directRange['suggested_end'] ?? null);
     if ($start === null && $end === null) {
         return;
     }
-    if ($start !== null && ($suggestion['suggested_start'] === null || strcmp($start, (string) $suggestion['suggested_start']) < 0)) {
+    if (
+        $start !== null
+        && (
+            $suggestion['suggested_start'] === null
+            || strcmp($start, (string) $suggestion['suggested_start']) < 0
+        )
+    ) {
         $suggestion['suggested_start'] = $start;
     }
-    if ($end !== null && ($suggestion['suggested_end'] === null || strcmp($end, (string) $suggestion['suggested_end']) > 0)) {
+    if (
+        $end !== null
+        && (
+            $suggestion['suggested_end'] === null
+            || strcmp($end, (string) $suggestion['suggested_end']) > 0
+        )
+    ) {
         $suggestion['suggested_end'] = $end;
     }
-    $suggestion['exif_image_count'] = (int) ($suggestion['exif_image_count'] ?? 0) + (int) ($directRange['image_count'] ?? 0);
-    $suggestion['source_gallery_count'] = (int) ($suggestion['source_gallery_count'] ?? 0) + 1;
+    $suggestion['exif_image_count'] =
+        (int) ($suggestion['exif_image_count'] ?? 0)
+        + (int) ($directRange['image_count'] ?? 0);
+    $suggestion['source_gallery_count'] =
+        (int) ($suggestion['source_gallery_count'] ?? 0) + 1;
 }
 
 /**
  * Return true when one gallery belongs to another gallery branch.
  *
- * @param array $byId By id identifier.
+ * @param array<int,array<string,mixed>> $byId Gallery rows indexed by gallery ID; each row may contain parent_id.
  * @param int $galleryId Gallery identifier.
  * @param int $branchRootId Branch root id identifier.
- * @return bool True when the condition matches.
+ * @return bool True when the candidate gallery or one of its ancestors is the branch root.
  */
-function gallery_date_gallery_is_in_branch(array $byId, int $galleryId, int $branchRootId): bool
-{
+function gallery_date_gallery_is_in_branch(
+    array $byId,
+    int $galleryId,
+    int $branchRootId,
+): bool {
     // $currentId walks from the candidate gallery toward the root gallery.
     $currentId = $galleryId;
     while ($currentId > 0 && isset($byId[$currentId])) {
@@ -452,7 +527,7 @@ function gallery_date_gallery_is_in_branch(array $byId, int $galleryId, int $bra
  * provided, only that gallery and its descendants are returned.
  *
  * @param ?int $scopeGalleryId Scope gallery id identifier.
- * @return array<int array<string, mixed>>.
+ * @return list<array{id:int,title:string,folder_path:string,current_start:?string,current_end:?string,suggested_start:string,suggested_end:?string,exif_image_count:int,source_gallery_count:int,matches_current:bool,has_current_range:bool}> Suggestions for galleries with EXIF dates, scoped to the requested gallery branch when supplied.
  */
 function gallery_date_exif_suggestion_rows(?int $scopeGalleryId = null): array
 {
@@ -481,8 +556,12 @@ function gallery_date_exif_suggestion_rows(?int $scopeGalleryId = null): array
             'id' => $galleryId,
             'title' => (string) ($gallery['title'] ?? ''),
             'folder_path' => (string) ($gallery['folder_path'] ?? ''),
-            'current_start' => gallery_date_sidecar_value($gallery['gallery_date'] ?? null),
-            'current_end' => gallery_date_sidecar_value($gallery['gallery_date_end'] ?? null),
+            'current_start' => gallery_date_sidecar_value(
+                $gallery['gallery_date'] ?? null,
+            ),
+            'current_end' => gallery_date_sidecar_value(
+                $gallery['gallery_date_end'] ?? null,
+            ),
             'suggested_start' => null,
             'suggested_end' => null,
             'exif_image_count' => 0,
@@ -493,8 +572,14 @@ function gallery_date_exif_suggestion_rows(?int $scopeGalleryId = null): array
     foreach (gallery_date_direct_exif_ranges() as $directRange) {
         // $currentId walks from the direct image gallery up to the root gallery.
         $currentId = (int) ($directRange['gallery_id'] ?? 0);
-        while ($currentId > 0 && isset($byId[$currentId], $suggestions[$currentId])) {
-            gallery_date_merge_direct_range($suggestions[$currentId], $directRange);
+        while (
+            $currentId > 0
+            && isset($byId[$currentId], $suggestions[$currentId])
+        ) {
+            gallery_date_merge_direct_range(
+                $suggestions[$currentId],
+                $directRange,
+            );
             $currentId = (int) ($byId[$currentId]['parent_id'] ?? 0);
         }
     }
@@ -503,24 +588,39 @@ function gallery_date_exif_suggestion_rows(?int $scopeGalleryId = null): array
     $rows = [];
     foreach ($suggestions as $suggestion) {
         $suggestionId = (int) ($suggestion['id'] ?? 0);
-        if ($scopeGalleryId !== null && !gallery_date_gallery_is_in_branch($byId, $suggestionId, $scopeGalleryId)) {
+        if (
+            $scopeGalleryId !== null
+            && !gallery_date_gallery_is_in_branch(
+                $byId,
+                $suggestionId,
+                $scopeGalleryId,
+            )
+        ) {
             continue;
         }
-        if ((int) ($suggestion['exif_image_count'] ?? 0) <= 0 || $suggestion['suggested_start'] === null) {
+        if (
+            (int) ($suggestion['exif_image_count'] ?? 0) <= 0
+            || $suggestion['suggested_start'] === null
+        ) {
             continue;
         }
         $suggestion['matches_current'] = gallery_date_range_matches(
             $suggestion['current_start'],
             $suggestion['current_end'],
             $suggestion['suggested_start'],
-            $suggestion['suggested_end']
+            $suggestion['suggested_end'],
         );
-        $suggestion['has_current_range'] = $suggestion['current_start'] !== null || $suggestion['current_end'] !== null;
+        $suggestion['has_current_range'] =
+            $suggestion['current_start'] !== null
+            || $suggestion['current_end'] !== null;
         $rows[] = $suggestion;
     }
 
     usort($rows, static function (array $a, array $b): int {
-        return strcmp((string) ($a['folder_path'] ?? ''), (string) ($b['folder_path'] ?? ''));
+        return strcmp(
+            (string) ($a['folder_path'] ?? ''),
+            (string) ($b['folder_path'] ?? ''),
+        );
     });
 
     return $rows;
@@ -555,29 +655,51 @@ function gallery_date_exif_suggestion_for_gallery(int $galleryId): ?array
  */
 function gallery_date_apply_exif_suggestion_to_gallery(int $galleryId): array
 {
-    if (!gallery_date_range_schema_ready() || !gallery_date_exif_suggestions_schema_ready()) {
-        throw new RuntimeException(t('admin.gallery_dates.exif_unavailable', 'EXIF capture-date suggestions require the EXIF/GPS image metadata migration and scanned image rows.'));
+    if (
+        !gallery_date_range_schema_ready()
+        || !gallery_date_exif_suggestions_schema_ready()
+    ) {
+        throw new RuntimeException(t(
+            'admin.gallery_dates.exif_unavailable',
+            'EXIF capture-date suggestions require the EXIF/GPS image metadata migration and scanned image rows.',
+        ));
     }
 
     // $gallery stores the existing row so missing ids fail before suggestion work starts.
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
-        throw new RuntimeException(t('admin.gallery_dates.error_gallery_missing', 'Gallery #{id} no longer exists.', ['id' => (string) $galleryId]));
+        throw new RuntimeException(t(
+            'admin.gallery_dates.error_gallery_missing',
+            'Gallery #{id} no longer exists.',
+            ['id' => (string) $galleryId],
+        ));
     }
 
     // $suggestion stores the computed recursive range for this exact gallery branch.
     $suggestion = gallery_date_exif_suggestion_for_gallery($galleryId);
     if (!$suggestion) {
-        throw new RuntimeException(t('admin.gallery_editor.exif_date_suggestion_empty', 'No scanned EXIF capture dates were found in this gallery branch yet. Scan/import images first if the files were imported before EXIF extraction existed.'));
+        throw new RuntimeException(t(
+            'admin.gallery_editor.exif_date_suggestion_empty',
+            'No scanned EXIF capture dates were found in this gallery branch yet. Scan/import images first if the files were imported before EXIF extraction existed.',
+        ));
     }
 
     // $saveResult stores the persisted values returned by the shared range writer.
-    $saveResult = gallery_date_save_range($galleryId, $suggestion['suggested_start'] ?? '', $suggestion['suggested_end'] ?? '');
+    $saveResult = gallery_date_save_range(
+        $galleryId,
+        $suggestion['suggested_start'] ?? '',
+        $suggestion['suggested_end'] ?? '',
+    );
     // $rangeLabel stores the compact admin-facing storage label, using the central en dash separator.
-    $rangeLabel = gallery_date_range_storage_label($suggestion['suggested_start'] ?? null, $suggestion['suggested_end'] ?? null);
+    $rangeLabel = gallery_date_range_storage_label(
+        $suggestion['suggested_start'] ?? null,
+        $suggestion['suggested_end'] ?? null,
+    );
 
     return [
-        'gallery' => is_array($saveResult['gallery'] ?? null) ? $saveResult['gallery'] : $gallery,
+        'gallery' => is_array($saveResult['gallery'] ?? null)
+            ? $saveResult['gallery']
+            : $gallery,
         'start' => $saveResult['start'] ?? null,
         'end' => $saveResult['end'] ?? null,
         'suggestion' => $suggestion,

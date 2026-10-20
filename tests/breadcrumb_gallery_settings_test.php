@@ -16,6 +16,7 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    require_once __DIR__ . '/support/php_source.php';
     /** Persist a test setting in the fixture map. @param string $key Setting key. @param string $value Setting value. @return void Store the setting. */
     function set_app_setting(string $key, string $value): void
     {
@@ -37,7 +38,8 @@ namespace Gallery\Services {
 
 namespace {
     require_once dirname(__DIR__) . '/app/services/breadcrumbs.php';
-    require_once dirname(__DIR__) . '/app/services/gallery_editor_mutations.php';
+    require_once
+        dirname(__DIR__) . '/app/services/gallery_editor_mutations.php';
 
     /** Assert one breadcrumb gallery contract. @param bool $condition Observed result. @param string $message Failure explanation. @return void Throw when false. */
     function breadcrumb_gallery_assert(bool $condition, string $message): void
@@ -61,24 +63,45 @@ namespace {
     breadcrumb_gallery_assert(
         \Gallery\Services\BREADCRUMB_STYLE_DEFAULT === 'chevron'
             && \Gallery\Services\BREADCRUMB_STYLE_INHERIT === 'inherit',
-        'Breadcrumb default and inheritance constants must preserve their stable setting values.'
+        'Breadcrumb default and inheritance constants must preserve their stable setting values.',
     );
-    $breadcrumbStyleIds = array_keys(\Gallery\Services\breadcrumb_style_registry());
+    $breadcrumbStyleIds = array_keys(
+        \Gallery\Services\breadcrumb_style_registry(),
+    );
     breadcrumb_gallery_assert(
-        $breadcrumbStyleIds === ['minimal', 'chevron', 'pills', 'surface', 'ribbon', 'nodes', 'tabs', 'tiles', 'gradient'],
-        'The gallery-setting contract must include all nine registered style identifiers in stable order.'
+        $breadcrumbStyleIds === [
+            'minimal',
+            'chevron',
+            'pills',
+            'surface',
+            'ribbon',
+            'nodes',
+            'tabs',
+            'tiles',
+            'gradient',
+        ],
+        'The gallery-setting contract must include all nine registered style identifiers in stable order.',
     );
     foreach ($breadcrumbStyleIds as $styleId) {
         breadcrumb_gallery_assert(
-            \Gallery\Services\gallery_breadcrumb_style_save(27, $styleId) === $styleId
-                && ($GLOBALS['breadcrumb_gallery_settings']['gallery_breadcrumb_style.27'] ?? null) === $styleId,
-            'A registered gallery style was not validated and persisted: ' . $styleId
+            \Gallery\Services\gallery_breadcrumb_style_save(27, $styleId)
+                === $styleId
+                && (
+                    $GLOBALS['breadcrumb_gallery_settings']['gallery_breadcrumb_style.27']
+                    ?? null
+                ) === $styleId,
+            'A registered gallery style was not validated and persisted: '
+                . $styleId,
         );
     }
     breadcrumb_gallery_assert(
-        \Gallery\Services\gallery_breadcrumb_style_save(27, 'inherit') === 'inherit'
-            && ($GLOBALS['breadcrumb_gallery_settings']['gallery_breadcrumb_style.27'] ?? null) === 'inherit',
-        'The inherited Theme fallback was not persisted for the selected gallery.'
+        \Gallery\Services\gallery_breadcrumb_style_save(27, 'inherit')
+            === 'inherit'
+            && (
+                $GLOBALS['breadcrumb_gallery_settings']['gallery_breadcrumb_style.27']
+                ?? null
+            ) === 'inherit',
+        'The inherited Theme fallback was not persisted for the selected gallery.',
     );
 
     $invalidCases = [
@@ -88,53 +111,111 @@ namespace {
     ];
     foreach ($invalidCases as $invalidCase) {
         try {
-            \Gallery\Services\gallery_breadcrumb_style_save($invalidCase['gallery_id'], $invalidCase['value']);
-            throw new \RuntimeException('Invalid breadcrumb style input was accepted.');
+            \Gallery\Services\gallery_breadcrumb_style_save(
+                $invalidCase['gallery_id'],
+                $invalidCase['value'],
+            );
+            throw new \RuntimeException(
+                'Invalid breadcrumb style input was accepted.',
+            );
         } catch (\InvalidArgumentException) {
         }
     }
     breadcrumb_gallery_assert(
-        ($GLOBALS['breadcrumb_gallery_settings']['gallery_breadcrumb_style.27'] ?? null) === 'inherit',
-        'Rejected input changed the previously saved gallery style.'
+        (
+            $GLOBALS['breadcrumb_gallery_settings']['gallery_breadcrumb_style.27']
+            ?? null
+        ) === 'inherit',
+        'Rejected input changed the previously saved gallery style.',
     );
 
-    $actions = breadcrumb_gallery_source('app/controllers/admin_galleries_edit_actions.php');
+    $actions = breadcrumb_gallery_source(
+        'app/controllers/admin_galleries_edit_actions.php',
+    );
+    $actionTokens = php_source_contract_tokens($actions);
     breadcrumb_gallery_assert(
-        str_contains($actions, "array_key_exists('gallery_breadcrumb_style', \$input)")
-            && strpos($actions, "gallery_breadcrumb_style_validate(\$input['gallery_breadcrumb_style'])") < strpos($actions, 'gallery_edit_begin($gallery,')
-            && str_contains($actions, 'if ($submittedBreadcrumbStyle !== null)')
-            && str_contains($actions, 'gallery_breadcrumb_style_save($galleryId, $submittedBreadcrumbStyle);'),
-        'The editor must validate only a submitted style and preserve saved preferences when the field is omitted.'
+        php_source_contains(
+            $actions,
+            "array_key_exists('gallery_breadcrumb_style', \$input)",
+        )
+            && strpos(
+                $actionTokens,
+                php_source_contract_tokens(
+                    "<?php gallery_breadcrumb_style_validate(\$input['gallery_breadcrumb_style'])",
+                ),
+            ) < strpos(
+                $actionTokens,
+                php_source_contract_tokens('<?php gallery_edit_begin($gallery,'),
+            )
+            && php_source_contains($actions, 'if ($submittedBreadcrumbStyle !== null)')
+            && php_source_contains(
+                $actions,
+                'gallery_breadcrumb_style_save($galleryId, $submittedBreadcrumbStyle);',
+            ),
+        'The editor must validate only a submitted style and preserve saved preferences when the field is omitted.',
     );
 
-    $displayController = breadcrumb_gallery_source('app/controllers/admin_galleries_edit_page/tab_display.php');
-    $displayView = breadcrumb_gallery_source('app/views/admin_gallery_edit_tabs.php');
+    $displayController = breadcrumb_gallery_source(
+        'app/controllers/admin_galleries_edit_page/tab_display.php',
+    );
+    $displayView = breadcrumb_gallery_source(
+        'app/views/admin_gallery_edit_tabs.php',
+    );
     breadcrumb_gallery_assert(
-        str_contains($displayController, 'gallery_breadcrumb_style_override(')
-            && str_contains($displayController, 'breadcrumb_style_picker_options(true, theme_breadcrumb_style())')
-            && str_contains($displayController, "'field_name' => 'gallery_breadcrumb_style'")
-            && str_contains($displayView, 'view_render_breadcrumb_style_picker($breadcrumbStyle)'),
-        'The Display tab must prepare the shared registry-driven picker with a Theme-inheritance option.'
+        php_source_contains($displayController, 'gallery_breadcrumb_style_override(')
+            && php_source_contains(
+                $displayController,
+                'breadcrumb_style_picker_options(true, theme_breadcrumb_style())',
+            )
+            && php_source_contains(
+                $displayController,
+                "'field_name' => 'gallery_breadcrumb_style'",
+            )
+            && php_source_contains(
+                $displayView,
+                'view_render_breadcrumb_style_picker($breadcrumbStyle)',
+            ),
+        'The Display tab must prepare the shared registry-driven picker with a Theme-inheritance option.',
     );
 
     $sidecars = breadcrumb_gallery_source('app/services/gallery_sidecars.php');
     $trash = breadcrumb_gallery_source('app/services/gallery_trash.php');
     $model = breadcrumb_gallery_source('app/models/gallery_mutations.php');
-    $mutations = breadcrumb_gallery_source('app/services/gallery_mutations.php');
-    breadcrumb_gallery_assert(
-        str_contains($sidecars, "\$data['breadcrumb_style'] = \$breadcrumbStyle")
-            && str_contains($sidecars, "'breadcrumb_style' => breadcrumb_style_normalize(\$metadata['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true)")
-            && str_contains($sidecars, 'gallery_breadcrumb_style_save($createdGalleryId, $candidate[\'breadcrumb_style\'])'),
-        'Gallery sidecars must export and re-import explicit breadcrumb styles.'
+    $mutations = breadcrumb_gallery_source(
+        'app/services/gallery_mutations.php',
     );
     breadcrumb_gallery_assert(
-        str_contains($trash, "'breadcrumb_style' => gallery_breadcrumb_style_override")
-            && str_contains($trash, "breadcrumb_style_normalize(\$record['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true)")
-            && str_contains($model, "'gallery_breadcrumb_style.' . \$galleryId")
-            && str_contains($model, 'app_settings_model_delete($breadcrumbSettingKeys)')
-            && str_contains($mutations, 'app_settings_reset_request_cache();')
-            && str_contains($trash, 'app_settings_reset_request_cache();'),
-        'Trash restore must recover breadcrumb styles, subtree deletion must clean old keys, and committed deletes must invalidate cached settings.'
+        php_source_contains(
+            $sidecars,
+            "\$data['breadcrumb_style'] = \$breadcrumbStyle",
+        )
+            && php_source_contains(
+                $sidecars,
+                "'breadcrumb_style' => breadcrumb_style_normalize(\$metadata['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true)",
+            )
+            && php_source_contains(
+                $sidecars,
+                'gallery_breadcrumb_style_save($createdGalleryId, $candidate[\'breadcrumb_style\'])',
+            ),
+        'Gallery sidecars must export and re-import explicit breadcrumb styles.',
+    );
+    breadcrumb_gallery_assert(
+        php_source_contains(
+            $trash,
+            "'breadcrumb_style' => gallery_breadcrumb_style_override",
+        )
+            && php_source_contains(
+                $trash,
+                "breadcrumb_style_normalize(\$record['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true)",
+            )
+            && php_source_contains($model, "'gallery_breadcrumb_style.' . \$galleryId")
+            && php_source_contains(
+                $model,
+                'app_settings_model_delete($breadcrumbSettingKeys)',
+            )
+            && php_source_contains($mutations, 'app_settings_reset_request_cache();')
+            && php_source_contains($trash, 'app_settings_reset_request_cache();'),
+        'Trash restore must recover breadcrumb styles, subtree deletion must clean old keys, and committed deletes must invalidate cached settings.',
     );
 
     fwrite(STDOUT, "Per-gallery breadcrumb settings: PASS\n");

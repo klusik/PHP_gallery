@@ -145,17 +145,20 @@ namespace Gallery\Services {
     }
 
     require_once __DIR__ . '/../app/models/images.php';
-require_once __DIR__ . '/../app/models/upload_automation.php';
-require_once __DIR__ . '/../app/services/upload_automation.php';
+    require_once __DIR__ . '/../app/models/upload_automation.php';
+    require_once __DIR__ . '/../app/services/upload_automation.php';
 
     /**
      * Emit one compact assertion result and fail the standalone test on mismatch.
      *
      * @param bool $condition Assertion condition.
      * @param string $label Human-readable assertion label.
+     * @return void Returns normally only when the condition is true.
      */
-    function upload_automation_inventory_load_assert(bool $condition, string $label): void
-    {
+    function upload_automation_inventory_load_assert(
+        bool $condition,
+        string $label,
+    ): void {
         if (!$condition) {
             fwrite(STDERR, "FAIL: {$label}\n");
             exit(1);
@@ -175,31 +178,42 @@ require_once __DIR__ . '/../app/services/upload_automation.php';
 
     $gallery = ['folder_path' => 'gallery'];
 
-    $routine = upload_automation_gallery_inventory_response(7, $gallery, $candidates, false);
+    $routine = upload_automation_gallery_inventory_response(
+        7,
+        $gallery,
+        $candidates,
+        false,
+    );
     upload_automation_inventory_load_assert(
         $GLOBALS['upload_automation_inventory_gallery_abs_path_calls'] === 0,
-        'routine inventory does not enter the filesystem fallback'
+        'routine inventory does not enter the filesystem fallback',
     );
     upload_automation_inventory_load_assert(
         ($routine['deep_check_applied'] ?? null) === false,
-        'routine inventory reports that no deep check ran'
+        'routine inventory reports that no deep check ran',
     );
 
     $GLOBALS['upload_automation_inventory_gallery_abs_path_calls'] = 0;
-    $deep = upload_automation_gallery_inventory_response(7, $gallery, $candidates, true);
+    $deep = upload_automation_gallery_inventory_response(
+        7,
+        $gallery,
+        $candidates,
+        true,
+    );
     upload_automation_inventory_load_assert(
         $GLOBALS['upload_automation_inventory_gallery_abs_path_calls'] === 1,
-        'explicit deep inventory enters the filesystem fallback exactly once'
+        'explicit deep inventory enters the filesystem fallback exactly once',
     );
     upload_automation_inventory_load_assert(
         ($deep['deep_check_applied'] ?? null) === true,
-        'explicit deep inventory reports that recovery checking was applied'
+        'explicit deep inventory reports that recovery checking was applied',
     );
 
-    $source = file_get_contents(__DIR__ . '/../app/services/upload_automation.php') ?: '';
+    $source = file_get_contents(__DIR__
+        . '/../app/services/upload_automation.php') ?: '';
     upload_automation_inventory_load_assert(
         str_contains($source, 'array_slice($candidates, 0, 8)'),
-        'deep filesystem recovery is capped to eight candidates'
+        'deep filesystem recovery is capped to eight candidates',
     );
 
     fwrite(STDOUT, "Upload automation inventory load tests passed.\n");

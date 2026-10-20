@@ -11,6 +11,7 @@
  */
 declare(strict_types=1);
 namespace Gallery\Models;
+
 use function Gallery\Core\db;
 
 /** Read only non-secret hierarchy and requested feature state columns.
@@ -18,17 +19,38 @@ use function Gallery\Core\db;
  * @param bool $lock Whether the caller owns an applying transaction.
  * @return list<array<string,mixed>> Stable non-secret catalog snapshot.
  */
-function gallery_feature_plan_model_snapshot(array $features, bool $lock = false): array
-{
-    $columns = ['id', 'parent_id', 'title', 'folder_path', 'sort_order', 'edit_revision'];
-    $featureColumns = ['maps' => 'gps_map_enabled', 'filenames' => 'show_filenames', 'voting' => 'voting_enabled', 'game' => 'picture_game_enabled'];
+function gallery_feature_plan_model_snapshot(
+    array $features,
+    bool $lock = false,
+): array {
+    $columns = [
+        'id',
+        'parent_id',
+        'title',
+        'folder_path',
+        'sort_order',
+        'edit_revision',
+    ];
+    $featureColumns = [
+        'maps' => 'gps_map_enabled',
+        'filenames' => 'show_filenames',
+        'voting' => 'voting_enabled',
+        'game' => 'picture_game_enabled',
+    ];
     foreach ($features as $feature) {
         if (!isset($featureColumns[$feature])) {
             throw new \InvalidArgumentException('Unsupported gallery feature.');
         }
         $columns[] = $featureColumns[$feature];
     }
-    return db()->query('SELECT ' . implode(', ', array_unique($columns)) . ' FROM galleries ORDER BY id' . ($lock ? ' FOR UPDATE' : ''))->fetchAll();
+    return db()
+        ->query(
+            'SELECT '
+                . implode(', ', array_unique($columns))
+                . ' FROM galleries ORDER BY id'
+                . ($lock ? ' FOR UPDATE' : ''),
+        )
+        ->fetchAll();
 }
 
 /** Execute an exact-scope feature update while retaining row and insertion-gap locks until commit.
@@ -43,7 +65,9 @@ function gallery_feature_plan_model_transaction(callable $operation): mixed
 {
     $connection = db();
     if ($connection->inTransaction()) {
-        throw new \RuntimeException('Gallery feature transaction already active.');
+        throw new \RuntimeException(
+            'Gallery feature transaction already active.',
+        );
     }
     $connection->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
     $connection->beginTransaction();

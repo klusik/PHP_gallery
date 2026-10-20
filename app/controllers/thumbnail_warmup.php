@@ -47,6 +47,8 @@ use function Gallery\Services\thumbnail_warmup_process_items;
 
 /**
  * Process a guarded thumbnail warmup request.
+ *
+ * @return void Emits a JSON summary of accepted thumbnail warmup work.
  */
 function cms_thumbnail_warmup(): void
 {
@@ -54,14 +56,19 @@ function cms_thumbnail_warmup(): void
         http_response_code(405);
         header('Allow: POST');
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'ok' => false,
+            'error' => 'POST required',
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         return;
     }
 
     // $rawItemsJson stores the JSON candidate list posted by the browser module.
     $rawItemsJson = (string) ($_POST['items'] ?? '');
     // $decodedItems stores the decoded item array before strict normalization.
-    $decodedItems = $rawItemsJson !== '' ? json_decode($rawItemsJson, true) : [];
+    $decodedItems = $rawItemsJson !== ''
+        ? json_decode($rawItemsJson, true)
+        : [];
     // $items stores accepted candidate shapes capped by the warmup service.
     $items = thumbnail_warmup_normalize_items($decodedItems);
 
@@ -70,7 +77,16 @@ function cms_thumbnail_warmup(): void
     header('Cache-Control: no-store');
 
     if (!$items) {
-        $response = ['ok' => true, 'enabled' => thumbnail_warmup_enabled(), 'accepted' => 0, 'processed' => 0, 'created' => 0, 'skipped' => 0, 'failed' => 0, 'busy' => false];
+        $response = [
+            'ok' => true,
+            'enabled' => thumbnail_warmup_enabled(),
+            'accepted' => 0,
+            'processed' => 0,
+            'created' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'busy' => false,
+        ];
         if ($rawItemsJson !== '') {
             thumbnail_warmup_log_event(
                 'info',
@@ -80,10 +96,13 @@ function cms_thumbnail_warmup(): void
                     'raw_items_json_length' => strlen($rawItemsJson),
                     'json_error' => json_last_error_msg(),
                 ]),
-                ['severity' => 'notice']
+                ['severity' => 'notice'],
             );
         }
-        echo json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode(
+            $response,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
         return;
     }
 
@@ -92,7 +111,10 @@ function cms_thumbnail_warmup(): void
     }
 
     try {
-        echo json_encode(thumbnail_warmup_process_items($items), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode(
+            thumbnail_warmup_process_items($items),
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
     } catch (Throwable $exception) {
         thumbnail_warmup_log_event(
             'error',
@@ -104,7 +126,7 @@ function cms_thumbnail_warmup(): void
                 'exception_class' => get_class($exception),
                 'exception_message' => $exception->getMessage(),
             ]),
-            ['severity' => 'error']
+            ['severity' => 'error'],
         );
         http_response_code(500);
         echo json_encode([

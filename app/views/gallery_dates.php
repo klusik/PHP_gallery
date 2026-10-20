@@ -43,18 +43,26 @@ use function Gallery\Core\e;
  *
  * @param ?array{start:?string,end:?string,display:string} $date Prepared date presentation data.
  * @param string $class CSS class applied to the time element.
+ * @return void Emits the time element when display text is available.
  */
-function view_render_gallery_date(?array $date, string $class = 'gallery-date'): void
-{
+function view_render_gallery_date(
+    ?array $date,
+    string $class = 'gallery-date',
+): void {
     if ($date === null || trim((string) ($date['display'] ?? '')) === '') {
         return;
     }
 
-    $start = isset($date['start']) && $date['start'] !== '' ? (string) $date['start'] : null;
-    $end = isset($date['end']) && $date['end'] !== '' ? (string) $date['end'] : null;
+    $start = isset($date['start']) && $date['start'] !== ''
+        ? (string) $date['start']
+        : null;
+    $end = isset($date['end']) && $date['end'] !== ''
+        ? (string) $date['end']
+        : null;
     $attributes = ' class="' . e($class) . '"';
     if ($start !== null) {
-        $attributes .= ' datetime="' . e($start) . '" data-date-start="' . e($start) . '"';
+        $attributes .=
+            ' datetime="' . e($start) . '" data-date-start="' . e($start) . '"';
     }
     if ($end !== null) {
         $attributes .= ' data-date-end="' . e($end) . '"';

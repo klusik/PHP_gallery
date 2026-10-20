@@ -45,7 +45,9 @@ namespace Gallery\Services {
     function app_setting(string $key, ?string $default = null): ?string
     {
         $settings = $GLOBALS['thumbnail_compatibility_test_settings'] ?? [];
-        return array_key_exists($key, $settings) ? (string) $settings[$key] : $default;
+        return array_key_exists($key, $settings)
+            ? (string) $settings[$key]
+            : $default;
     }
 
     /**
@@ -82,23 +84,47 @@ namespace Gallery\Services {
     /**
      * Resolve one deterministic generated thumbnail path.
      *
-     * @param array $image Image row or image data.
-     * @param array $gallery Gallery row or gallery data.
+     * @param array{filename:string} $image Image row with its source filename.
+     * @param array{thumbs_dir:string} $gallery Gallery row with its thumbnail directory.
      * @param int $size Size value.
      * @param string $format Format value.
      * @return string Text result for the caller.
      */
-    function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
-    {
+    function thumbnail_abs_path(
+        array $image,
+        array $gallery,
+        int $size,
+        string $format = 'jpg',
+    ): string {
         $base = pathinfo((string) $image['filename'], PATHINFO_FILENAME);
-        return rtrim((string) $gallery['thumbs_dir'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $base . '_thumb' . $size . '.' . $format;
+        return (
+            rtrim((string) $gallery['thumbs_dir'], DIRECTORY_SEPARATOR)
+                . DIRECTORY_SEPARATOR
+                . $base
+                . '_thumb'
+                . $size
+                . '.'
+                . $format
+        );
     }
 
-    /** Record metadata cleanup calls without requiring a database. */
-    function thumbnail_metadata_delete_variant(array|int $image, int $size, string $format): void
-    {
+    /**
+     * Record metadata cleanup calls without requiring a database.
+     *
+     * @param array{id?:int}|int $image Image row or database image identifier.
+     * @param int $size Derivative width in pixels.
+     * @param string $format Derivative format identifier.
+     * @return void Append the deletion request to fixture state.
+     */
+    function thumbnail_metadata_delete_variant(
+        array|int $image,
+        int $size,
+        string $format,
+    ): void {
         $GLOBALS['thumbnail_compatibility_test_metadata_deletes'][] = [
-            'image_id' => is_array($image) ? (int) ($image['id'] ?? 0) : (int) $image,
+            'image_id' => is_array($image)
+                ? (int) ($image['id'] ?? 0)
+                : (int) $image,
             'size' => $size,
             'format' => $format,
         ];
@@ -149,8 +175,13 @@ namespace Gallery\Core {
     {
         $rootReal = realpath($root);
         $pathReal = realpath($path);
-        return is_string($rootReal)
-            && is_string($pathReal)
-            && str_starts_with($pathReal, rtrim($rootReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR);
+        return (
+            is_string($rootReal)
+                && is_string($pathReal)
+                && str_starts_with(
+                    $pathReal,
+                    rtrim($rootReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR,
+                )
+        );
     }
 }

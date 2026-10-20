@@ -57,7 +57,8 @@ function thumbnail_bounds_schema_ready(): bool
         return $ready;
     }
 
-    $ready = db_column_exists('galleries', 'thumbnail_min_size')
+    $ready =
+        db_column_exists('galleries', 'thumbnail_min_size')
         && db_column_exists('galleries', 'thumbnail_max_size')
         && db_column_exists('images', 'thumbnail_min_size')
         && db_column_exists('images', 'thumbnail_max_size');
@@ -122,16 +123,21 @@ function thumbnail_bound_pair_from_post(string $prefix, array $input): array
 /**
  * Return gallery IDs for one gallery and all descendants based on folder paths.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param array{id:int|string,folder_path?:string} $gallery Gallery identity and normalized relative folder path.
+ * @return list<int> Root gallery ID and all descendant gallery IDs in its folder branch.
  */
 function thumbnail_bound_gallery_branch_ids(array $gallery): array
 {
-    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    $folderPath = normalize_relative_path(
+        (string) ($gallery['folder_path'] ?? ''),
+    );
     if ($folderPath === '') {
         return [(int) $gallery['id']];
     }
-    return gallery_model_branch_ids_by_folder_path((int) $gallery['id'], $folderPath);
+    return gallery_model_branch_ids_by_folder_path(
+        (int) $gallery['id'],
+        $folderPath,
+    );
 }
 
 /**
@@ -143,11 +149,20 @@ function thumbnail_bound_gallery_branch_ids(array $gallery): array
  * @param bool $recursive Recursive value.
  * @return int Integer result for the caller.
  */
-function save_gallery_thumbnail_bounds(array $gallery, ?int $minSize, ?int $maxSize, bool $recursive): int
-{
+function save_gallery_thumbnail_bounds(
+    array $gallery,
+    ?int $minSize,
+    ?int $maxSize,
+    bool $recursive,
+): int {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return save_gallery_thumbnail_bounds_owned($gallery, $minSize, $maxSize, $recursive);
+        return save_gallery_thumbnail_bounds_owned(
+            $gallery,
+            $minSize,
+            $maxSize,
+            $recursive,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -166,8 +181,12 @@ function save_gallery_thumbnail_bounds(array $gallery, ?int $minSize, ?int $maxS
  * @return int Number of changed gallery rows.
  * @author Rudolf Klusal
  */
-function save_gallery_thumbnail_bounds_owned(array $gallery, ?int $minSize, ?int $maxSize, bool $recursive): int
-{
+function save_gallery_thumbnail_bounds_owned(
+    array $gallery,
+    ?int $minSize,
+    ?int $maxSize,
+    bool $recursive,
+): int {
     if (!thumbnail_bounds_schema_ready()) {
         return 0;
     }
@@ -177,8 +196,15 @@ function save_gallery_thumbnail_bounds_owned(array $gallery, ?int $minSize, ?int
     if (!$gallery) {
         return 0;
     }
-    $galleryIds = $recursive ? thumbnail_bound_gallery_branch_ids($gallery) : [(int) $gallery['id']];
-    $changedRows = gallery_model_set_thumbnail_bounds($galleryIds, $minSize, $maxSize, now_sql());
+    $galleryIds = $recursive
+        ? thumbnail_bound_gallery_branch_ids($gallery)
+        : [(int) $gallery['id']];
+    $changedRows = gallery_model_set_thumbnail_bounds(
+        $galleryIds,
+        $minSize,
+        $maxSize,
+        now_sql(),
+    );
     if (function_exists('Gallery\\Services\\write_gallery_sidecar')) {
         foreach ($galleryIds as $galleryId) {
             $updatedGallery = find_gallery((int) $galleryId, true);
@@ -197,21 +223,34 @@ function save_gallery_thumbnail_bounds_owned(array $gallery, ?int $minSize, ?int
  * @param ?int $storedMaxSize Stored maximum size.
  * @return array{values:array<int,int>,min_index:int,max_index:int} Prepared slider state.
  */
-function admin_thumbnail_bound_slider_state(?int $storedMinSize, ?int $storedMaxSize): array
-{
+function admin_thumbnail_bound_slider_state(
+    ?int $storedMinSize,
+    ?int $storedMaxSize,
+): array {
     $values = thumbnail_bound_slider_values();
     $maxIndex = max(0, count($values) - 1);
-    $minIndex = array_search(thumbnail_bound_form_value($storedMinSize), $values, true);
+    $minIndex = array_search(
+        thumbnail_bound_form_value($storedMinSize),
+        $values,
+        true,
+    );
     $maxValue = thumbnail_bound_form_value($storedMaxSize);
-    $maxIndexValue = $maxValue === 0 ? $maxIndex : array_search($maxValue, $values, true);
+    $maxIndexValue = $maxValue === 0
+        ? $maxIndex
+        : array_search($maxValue, $values, true);
     $minIndex = $minIndex === false ? 0 : (int) $minIndex;
-    $maxIndexValue = $maxIndexValue === false ? $maxIndex : (int) $maxIndexValue;
+    $maxIndexValue = $maxIndexValue === false
+        ? $maxIndex
+        : (int) $maxIndexValue;
     if ($minIndex > $maxIndexValue) {
         $minIndex = $maxIndexValue;
     }
-    return ['values' => $values, 'min_index' => $minIndex, 'max_index' => $maxIndexValue];
+    return [
+        'values' => $values,
+        'min_index' => $minIndex,
+        'max_index' => $maxIndexValue,
+    ];
 }
-
 
 /**
  * Return the nearest generated thumbnail size inside the supplied bounds.
@@ -221,11 +260,19 @@ function admin_thumbnail_bound_slider_state(?int $storedMinSize, ?int $storedMax
  * @param ?int $maxSize Max size value.
  * @return int Integer result for the caller.
  */
-function thumbnail_bound_clamp_size(int $size, ?int $minSize, ?int $maxSize): int
-{
+function thumbnail_bound_clamp_size(
+    int $size,
+    ?int $minSize,
+    ?int $maxSize,
+): int {
     $availableSizes = thumbnail_sizes();
     if (!in_array($size, $availableSizes, true)) {
-        usort($availableSizes, static fn (int $left, int $right): int => abs($left - $size) <=> abs($right - $size));
+        usort(
+            $availableSizes,
+            static fn(int $left, int $right): int => (
+                abs($left - $size) <=> abs($right - $size)
+            ),
+        );
         $size = $availableSizes[0] ?? $size;
     }
     if ($minSize !== null && $size < $minSize) {
@@ -234,18 +281,22 @@ function thumbnail_bound_clamp_size(int $size, ?int $minSize, ?int $maxSize): in
     if ($maxSize !== null && $size > $maxSize) {
         $size = $maxSize;
     }
-    return in_array($size, thumbnail_sizes(), true) ? $size : (thumbnail_sizes()[0] ?? 300);
+    return in_array($size, thumbnail_sizes(), true)
+        ? $size
+        : thumbnail_sizes()[0] ?? 300;
 }
 
 /**
  * Return effective thumbnail bounds for one image, with image values taking precedence over gallery values.
  *
- * @param array $image Image row or image data.
- * @param ?array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param array{gallery_id?:int|string,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $image Image row with optional per-image bounds.
+ * @param ?array{thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Optional owning gallery row with inherited bounds.
+ * @return array{0:?int,1:?int} Effective minimum and maximum sizes, with image values taking precedence.
  */
-function thumbnail_bound_effective_pair(array $image, ?array $gallery = null): array
-{
+function thumbnail_bound_effective_pair(
+    array $image,
+    ?array $gallery = null,
+): array {
     if (!thumbnail_bounds_schema_ready()) {
         return [null, null];
     }
@@ -254,10 +305,18 @@ function thumbnail_bound_effective_pair(array $image, ?array $gallery = null): a
         $gallery = find_gallery((int) $image['gallery_id']);
     }
 
-    $galleryMinSize = thumbnail_bound_post_value($gallery['thumbnail_min_size'] ?? null);
-    $galleryMaxSize = thumbnail_bound_post_value($gallery['thumbnail_max_size'] ?? null);
-    $imageMinSize = thumbnail_bound_post_value($image['thumbnail_min_size'] ?? null);
-    $imageMaxSize = thumbnail_bound_post_value($image['thumbnail_max_size'] ?? null);
+    $galleryMinSize = thumbnail_bound_post_value(
+        $gallery['thumbnail_min_size'] ?? null,
+    );
+    $galleryMaxSize = thumbnail_bound_post_value(
+        $gallery['thumbnail_max_size'] ?? null,
+    );
+    $imageMinSize = thumbnail_bound_post_value(
+        $image['thumbnail_min_size'] ?? null,
+    );
+    $imageMaxSize = thumbnail_bound_post_value(
+        $image['thumbnail_max_size'] ?? null,
+    );
 
     $minSize = $imageMinSize ?? $galleryMinSize;
     $maxSize = $imageMaxSize ?? $galleryMaxSize;
@@ -272,13 +331,16 @@ function thumbnail_bound_effective_pair(array $image, ?array $gallery = null): a
 /**
  * Filter responsive thumbnail candidates so browser auto-selection respects configured guardrails.
  *
- * @param array $sizes Sizes value.
- * @param array $image Image row or image data.
- * @param ?array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param list<int> $sizes Available thumbnail candidate sizes.
+ * @param array{gallery_id?:int|string,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $image Image row with optional per-image bounds.
+ * @param ?array{thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Optional owning gallery row with inherited bounds.
+ * @return list<int> Unique available sizes inside the bounds, or one clamped fallback size when none remain.
  */
-function thumbnail_bound_filter_sizes(array $sizes, array $image, ?array $gallery = null): array
-{
+function thumbnail_bound_filter_sizes(
+    array $sizes,
+    array $image,
+    ?array $gallery = null,
+): array {
     [$minSize, $maxSize] = thumbnail_bound_effective_pair($image, $gallery);
     if ($minSize === null && $maxSize === null) {
         return $sizes;
@@ -307,13 +369,16 @@ function thumbnail_bound_filter_sizes(array $sizes, array $image, ?array $galler
 /**
  * Clamp a requested fallback thumbnail size to the effective guardrails for one image.
  *
- * @param array $image Image row or image data.
+ * @param array{gallery_id?:int|string,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $image Image row with optional per-image bounds.
  * @param int $fallbackSize Fallback size value.
- * @param ?array $gallery Gallery row or gallery data.
+ * @param ?array{thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Optional owning gallery row with inherited bounds.
  * @return int Integer result for the caller.
  */
-function thumbnail_bound_fallback_size(array $image, int $fallbackSize, ?array $gallery = null): int
-{
+function thumbnail_bound_fallback_size(
+    array $image,
+    int $fallbackSize,
+    ?array $gallery = null,
+): int {
     [$minSize, $maxSize] = thumbnail_bound_effective_pair($image, $gallery);
     if ($minSize === null && $maxSize === null) {
         return $fallbackSize;

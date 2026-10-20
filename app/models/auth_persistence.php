@@ -39,16 +39,23 @@ use function Gallery\Core\db;
  *
  * @param ?int $userId Optional admin user identifier.
  * @param string $now Current SQL timestamp.
+ * @return void Deletes expired or revoked remember-token rows in the requested scope.
  */
 function auth_persistence_model_prune(?int $userId, string $now): void
 {
     if ($userId !== null) {
-        $stmt = db()->prepare('DELETE FROM admin_remember_tokens WHERE user_id = ? AND (expires_at < ? OR revoked_at IS NOT NULL)');
+        $stmt = db()->prepare(
+            'DELETE FROM admin_remember_tokens WHERE user_id = ? AND (expires_at < ? OR revoked_at IS NOT NULL)',
+        );
         $stmt->execute([$userId, $now]);
         return;
     }
 
-    db()->prepare('DELETE FROM admin_remember_tokens WHERE expires_at < ? OR revoked_at IS NOT NULL')->execute([$now]);
+    db()
+        ->prepare(
+            'DELETE FROM admin_remember_tokens WHERE expires_at < ? OR revoked_at IS NOT NULL',
+        )
+        ->execute([$now]);
 }
 
 /**
@@ -61,21 +68,46 @@ function auth_persistence_model_prune(?int $userId, string $now): void
  * @param string $now Current SQL timestamp.
  * @param string $expiresAt Token expiry timestamp.
  * @param int $keepNewest Number of existing newest active tokens to retain.
+ * @return void Revokes excess active tokens and inserts the new token.
  */
-function auth_persistence_model_issue_token(int $userId, string $selector, string $tokenHash, string $userAgentHash, string $now, string $expiresAt, int $keepNewest): void
-{
+function auth_persistence_model_issue_token(
+    int $userId,
+    string $selector,
+    string $tokenHash,
+    string $userAgentHash,
+    string $now,
+    string $expiresAt,
+    int $keepNewest,
+): void {
     $keepNewest = max(0, min(100, $keepNewest));
-    $stmt = db()->prepare('SELECT id FROM admin_remember_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at >= ? ORDER BY created_at DESC, id DESC LIMIT 100 OFFSET ' . $keepNewest);
+    $stmt = db()->prepare(
+        'SELECT id FROM admin_remember_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at >= ? ORDER BY created_at DESC, id DESC LIMIT 100 OFFSET '
+            . $keepNewest,
+    );
     $stmt->execute([$userId, $now]);
     $oldIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
     if ($oldIds !== []) {
         $placeholders = implode(',', array_fill(0, count($oldIds), '?'));
-        db()->prepare('UPDATE admin_remember_tokens SET revoked_at = ? WHERE id IN (' . $placeholders . ')')
+        db()
+            ->prepare(
+                'UPDATE admin_remember_tokens SET revoked_at = ? WHERE id IN ('
+                    . $placeholders
+                    . ')',
+            )
             ->execute(array_merge([$now], $oldIds));
     }
 
-    $stmt = db()->prepare('INSERT INTO admin_remember_tokens (user_id, selector, token_hash, user_agent_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$userId, $selector, $tokenHash, $userAgentHash, $now, $expiresAt]);
+    $stmt = db()->prepare(
+        'INSERT INTO admin_remember_tokens (user_id, selector, token_hash, user_agent_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    $stmt->execute([
+        $userId,
+        $selector,
+        $tokenHash,
+        $userAgentHash,
+        $now,
+        $expiresAt,
+    ]);
 }
 
 /**
@@ -85,38 +117,76 @@ function auth_persistence_model_issue_token(int $userId, string $selector, strin
  * @param string $now Current SQL timestamp.
  * @return ?array<string,mixed> Token and user row or null.
  */
-function auth_persistence_model_find_active(string $selector, string $now): ?array
-{
-    $stmt = db()->prepare('SELECT art.*, u.username, u.email, u.role FROM admin_remember_tokens art INNER JOIN users u ON u.id = art.user_id WHERE art.selector = ? AND art.revoked_at IS NULL AND art.expires_at >= ? LIMIT 1');
+function auth_persistence_model_find_active(
+    string $selector,
+    string $now,
+): ?array {
+    $stmt = db()->prepare(
+        'SELECT art.*, u.username, u.email, u.role FROM admin_remember_tokens art INNER JOIN users u ON u.id = art.user_id WHERE art.selector = ? AND art.revoked_at IS NULL AND art.expires_at >= ? LIMIT 1',
+    );
     $stmt->execute([$selector, $now]);
     $row = $stmt->fetch();
     return $row ?: null;
 }
 
-/** Revoke one remember token by row identifier. */
+/**
+ * Revoke one remember token by row identifier.
+ *
+ * @param int $tokenId Remember-token row identifier.
+ * @param string $now Current SQL timestamp.
+ * @return void Sets the token's revocation timestamp.
+ */
 function auth_persistence_model_revoke_id(int $tokenId, string $now): void
 {
-    $stmt = db()->prepare('UPDATE admin_remember_tokens SET revoked_at = ? WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE admin_remember_tokens SET revoked_at = ? WHERE id = ?',
+    );
     $stmt->execute([$now, $tokenId]);
 }
 
-/** Mark one remember token as successfully used. */
+/**
+ * Mark one remember token as successfully used.
+ *
+ * @param int $tokenId Remember-token row identifier.
+ * @param string $now Current SQL timestamp.
+ * @return void Updates the token's last-used timestamp.
+ */
 function auth_persistence_model_touch(int $tokenId, string $now): void
 {
-    $stmt = db()->prepare('UPDATE admin_remember_tokens SET last_used_at = ? WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE admin_remember_tokens SET last_used_at = ? WHERE id = ?',
+    );
     $stmt->execute([$now, $tokenId]);
 }
 
-/** Revoke the remember token addressed by a public selector. */
-function auth_persistence_model_revoke_selector(string $selector, string $now): void
-{
-    $stmt = db()->prepare('UPDATE admin_remember_tokens SET revoked_at = ? WHERE selector = ?');
+/**
+ * Revoke the remember token addressed by a public selector.
+ *
+ * @param string $selector Public token selector.
+ * @param string $now Current SQL timestamp.
+ * @return void Sets the matching token's revocation timestamp.
+ */
+function auth_persistence_model_revoke_selector(
+    string $selector,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'UPDATE admin_remember_tokens SET revoked_at = ? WHERE selector = ?',
+    );
     $stmt->execute([$now, $selector]);
 }
 
-/** Revoke all currently active remember tokens for one administrator. */
+/**
+ * Revoke all currently active remember tokens for one administrator.
+ *
+ * @param int $userId Administrator user identifier.
+ * @param string $now Current SQL timestamp.
+ * @return void Sets the revocation timestamp for active user tokens.
+ */
 function auth_persistence_model_revoke_user(int $userId, string $now): void
 {
-    $stmt = db()->prepare('UPDATE admin_remember_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL');
+    $stmt = db()->prepare(
+        'UPDATE admin_remember_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL',
+    );
     $stmt->execute([$now, $userId]);
 }

@@ -258,7 +258,10 @@ return [
     'gallery.tag_editor' => 'Schlagworteditor',
     'gallery.edit_tag' => 'Schlagwort bearbeiten',
     'gallery.edit_tag_named' => 'Schlagwort „{name}“ bearbeiten',
-    'gallery.remove_tag_named' => 'Schlagwort „{name}“ aus dem CMS entfernen',    'js.admin.date_picker.open' => 'Open calendar',    'js.admin.date_picker.today' => 'Today',    'js.admin.date_picker.delete' => 'Delete',
+    'gallery.remove_tag_named' => 'Schlagwort „{name}“ aus dem CMS entfernen',
+    'js.admin.date_picker.open' => 'Open calendar',
+    'js.admin.date_picker.today' => 'Today',
+    'js.admin.date_picker.delete' => 'Delete',
     'admin.theme.media.theme_background_image_hint' => 'Laden Sie das Bild hoch, das als Original erhalten bleiben soll. Die Galerie kann Besuchern eine kleinere WebP-Kopie ausliefern.',
     'admin.theme.media.background_optimized_size' => 'Optimierte Anzeigegröße',
     'admin.theme.media.background_optimized_size_hint' => 'Verwenden Sie 1920 px für normale Bildschirme und 2560 px oder mehr für sehr große Anzeigen.',
@@ -1164,69 +1167,56 @@ return [
     'music.allow_all' => 'Download aller aktuellen Titel erlauben',
     'music.lock_all' => 'Download aller aktuellen Titel sperren',
 
-    'admin.features.gallery_pdf_documents.label' =>
-        'PDF-Dokumente der Galerien',
+    'admin.features.gallery_pdf_documents.label' => 'PDF-Dokumente der Galerien',
     'admin.features.gallery_pdf_documents.description' =>
         'Galerie-PDFs einschließlich SimBrief-Originalen hochladen, '
-        . 'anzeigen und konvertieren. Deaktivieren erhält Dateien und '
-        . 'Einstellungen.',
-    'admin.features.gallery_music.label' =>
-        'Galeriemusik',
+            . 'anzeigen und konvertieren. Deaktivieren erhält Dateien und '
+            . 'Einstellungen.',
+    'admin.features.gallery_music.label' => 'Galeriemusik',
     'admin.features.gallery_music.description' =>
         'Musik für Galerien und Smart-Galerien hochladen und abspielen. '
-        . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
-        . 'Diashow-Einstellungen.',
-    'admin.upload.media_files_label' =>
-        'Dateien',
+            . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
+            . 'Diashow-Einstellungen.',
+    'admin.upload.media_files_label' => 'Dateien',
     'admin.upload.media_files_help' =>
         'Unterstützte Dateien auswählen oder ablegen. Der Dateidialog '
-        . 'zeigt aktivierte Galerie-Medientypen.',
-    'admin.storage.pdf_originals' =>
-        'PDF-Originale',
-    'admin.storage.pdf_originals_hint' =>
-        '{count} Galeriedokument(e), einschließlich SimBrief-PDFs.',
-    'admin.storage.music_originals' =>
-        'Musikoriginale',
+            . 'zeigt aktivierte Galerie-Medientypen.',
+    'admin.storage.pdf_originals' => 'PDF-Originale',
+    'admin.storage.pdf_originals_hint' => '{count} Galeriedokument(e), einschließlich SimBrief-PDFs.',
+    'admin.storage.music_originals' => 'Musikoriginale',
     'admin.storage.music_originals_hint' =>
         '{count} gespeicherte Audiodatei(en), einschließlich '
-        . 'ausgeblendeter und nicht herunterladbarer Titel.',
-    'admin.storage.total_media' =>
-        'Gesamter Medienspeicher',
-    'admin.storage.total_media_hint' =>
-        'Bilder und ihre Ableitungen sowie PDF- und Musikoriginale.',
-    'admin.storage.attachment_warnings' =>
-        'Unvollständige Anhangsmessung',
+            . 'ausgeblendeter und nicht herunterladbarer Titel.',
+    'admin.storage.total_media' => 'Gesamter Medienspeicher',
+    'admin.storage.total_media_hint' => 'Bilder und ihre Ableitungen sowie PDF- und Musikoriginale.',
+    'admin.storage.attachment_warnings' => 'Unvollständige Anhangsmessung',
     'admin.storage.attachment_warnings_hint' =>
         'Einige Originale oder Indizes waren nicht lesbar. Summen '
-        . 'enthalten nur gemessene Dateien.',
+            . 'enthalten nur gemessene Dateien.',
     'admin.storage.description' =>
         'Fotogrößen stammen aus der Datenbank. Alles aktualisieren misst '
-        . 'Ableitungen und indexierte PDF-/Musikoriginale.',
+            . 'Ableitungen und indexierte PDF-/Musikoriginale.',
     'admin.storage.no_snapshot_hint' =>
         'Alles aktualisieren misst Fotos, Ableitungen und '
-        . 'PDF-/Musikoriginale und erstellt Diagramme.',
-    'admin.settings.item.feature_gallery_pdf_documents' =>
-        'PDF-Dokumente der Galerien',
+            . 'PDF-/Musikoriginale und erstellt Diagramme.',
+    'admin.settings.item.feature_gallery_pdf_documents' => 'PDF-Dokumente der Galerien',
     'admin.settings.item.feature_gallery_pdf_documents.hint' =>
         'Galerie-PDFs einschließlich SimBrief-Originalen hochladen, '
-        . 'anzeigen und konvertieren. Deaktivieren erhält Dateien und '
-        . 'Einstellungen.',
+            . 'anzeigen und konvertieren. Deaktivieren erhält Dateien und '
+            . 'Einstellungen.',
     'admin.settings.item.feature_gallery_pdf_documents.example' =>
         'ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist '
-        . 'umkehrbar.',
-    'admin.settings.item.feature_gallery_music' =>
-        'Galeriemusik',
+            . 'umkehrbar.',
+    'admin.settings.item.feature_gallery_music' => 'Galeriemusik',
     'admin.settings.item.feature_gallery_music.hint' =>
         'Musik für Galerien und Smart-Galerien hochladen und abspielen. '
-        . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
-        . 'Diashow-Einstellungen.',
+            . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
+            . 'Diashow-Einstellungen.',
     'admin.settings.item.feature_gallery_music.example' =>
         'ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist '
-        . 'umkehrbar.',
-    'admin.storage.progress_counts' =>
-        '{processed} / {total} Datensätze',
-    'admin.storage.tab_files_hint' =>
-        'Fotos, Ableitungen, PDF- und Musikoriginale',
+            . 'umkehrbar.',
+    'admin.storage.progress_counts' => '{processed} / {total} Datensätze',
+    'admin.storage.tab_files_hint' => 'Fotos, Ableitungen, PDF- und Musikoriginale',
     'media_summary.files' => 'Dateien',
     'media_summary.tracks' => 'Titel',
     'media_summary.duration' => 'Gesamtdauer',

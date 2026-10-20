@@ -40,6 +40,25 @@ declare(strict_types=1);
 namespace Gallery\Core {
     require_once __DIR__ . '/support/php_source.php';
 
+    /** Exposes the SQL operations required by the hero-tag usage fixture. */
+    interface HeroTagThemeStatementFixture
+    {
+        /**
+         * Accept the bounded tag IDs used by the aggregate query.
+         *
+         * @param list<int> $parameters Ordered tag IDs bound to the query.
+         * @return void
+         */
+        public function execute(array $parameters): void;
+
+        /**
+         * Return the deterministic aggregate rows used by sorting assertions.
+         *
+         * @return list<array{tag_id:int,usage_count:int}> Aggregate rows.
+         */
+        public function fetchAll(): array;
+    }
+
     /**
      * Minimal database accessor used by the tag-usage sorting fixture.
      *
@@ -83,19 +102,28 @@ namespace {
 
     require_once __DIR__ . '/../app/services/theme.php';
     require_once __DIR__ . '/../app/models/tags.php';
-require_once __DIR__ . '/../app/services/tag_metadata.php';
+    require_once __DIR__ . '/../app/services/tag_metadata.php';
 
     /**
      * Throw when two hero-tag model values are not identical.
      *
-     * @param mixed $expected Expected value.
-     * @param mixed $actual Actual value.
+     * @template TExpected
+     * @template TActual
+     * @param TExpected $expected Value expected to match strictly, including its collection shape.
+     * @param TActual $actual Value compared by strict equality, including its collection shape.
      * @param string $label Assertion label.
+     * @return void Returns normally only when expected and actual match strictly.
      */
-    function assert_hero_tag_theme_same(mixed $expected, mixed $actual, string $label): void
-    {
+    function assert_hero_tag_theme_same(
+        mixed $expected,
+        mixed $actual,
+        string $label,
+    ): void {
         if ($expected !== $actual) {
-            throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+            throw new RuntimeException(
+                $label . ' expected ' . var_export($expected, true) . ', got '
+                    . var_export($actual, true),
+            );
         }
     }
 
@@ -107,29 +135,94 @@ require_once __DIR__ . '/../app/services/tag_metadata.php';
      * @param string $label Assertion label.
      * @return void Throws when neither the exact fragment nor its PHP tokens occur.
      */
-    function assert_hero_tag_source_contains(string $source, string $needle, string $label): void
-    {
+    function assert_hero_tag_source_contains(
+        string $source,
+        string $needle,
+        string $label,
+    ): void {
         if (!php_source_contains($source, $needle)) {
-            throw new RuntimeException($label . ' is missing required source fragment: ' . $needle);
+            throw new RuntimeException(
+                $label . ' is missing required source fragment: ' . $needle,
+            );
         }
     }
 
-    assert_hero_tag_theme_same(20, theme_hero_tag_visible_limit_value(null), 'missing visible limit uses default');
-    assert_hero_tag_theme_same(20, theme_hero_tag_visible_limit_value(0), 'zero visible limit uses default');
-    assert_hero_tag_theme_same(1, theme_hero_tag_visible_limit_value(1), 'minimum visible limit accepted');
-    assert_hero_tag_theme_same(200, theme_hero_tag_visible_limit_value(999), 'visible limit clamps high');
-    assert_hero_tag_theme_same(5, theme_hero_tag_scrollbar_rows_value(null), 'missing scrollbar rows uses default');
-    assert_hero_tag_theme_same(1, theme_hero_tag_scrollbar_rows_value(1), 'minimum scrollbar rows accepted');
-    assert_hero_tag_theme_same(12, theme_hero_tag_scrollbar_rows_value(99), 'scrollbar rows clamp high');
-    assert_hero_tag_theme_same('usage', theme_hero_tag_sort_mode_normalize(null), 'missing sort mode defaults to usage');
-    assert_hero_tag_theme_same('usage', theme_hero_tag_sort_mode_normalize('invalid'), 'invalid sort mode defaults to usage');
-    assert_hero_tag_theme_same('alphabetical', theme_hero_tag_sort_mode_normalize('alphabetical'), 'alphabetical mode accepted');
+    assert_hero_tag_theme_same(
+        20,
+        theme_hero_tag_visible_limit_value(null),
+        'missing visible limit uses default',
+    );
+    assert_hero_tag_theme_same(
+        20,
+        theme_hero_tag_visible_limit_value(0),
+        'zero visible limit uses default',
+    );
+    assert_hero_tag_theme_same(
+        1,
+        theme_hero_tag_visible_limit_value(1),
+        'minimum visible limit accepted',
+    );
+    assert_hero_tag_theme_same(
+        200,
+        theme_hero_tag_visible_limit_value(999),
+        'visible limit clamps high',
+    );
+    assert_hero_tag_theme_same(
+        5,
+        theme_hero_tag_scrollbar_rows_value(null),
+        'missing scrollbar rows uses default',
+    );
+    assert_hero_tag_theme_same(
+        1,
+        theme_hero_tag_scrollbar_rows_value(1),
+        'minimum scrollbar rows accepted',
+    );
+    assert_hero_tag_theme_same(
+        12,
+        theme_hero_tag_scrollbar_rows_value(99),
+        'scrollbar rows clamp high',
+    );
+    assert_hero_tag_theme_same(
+        'usage',
+        theme_hero_tag_sort_mode_normalize(null),
+        'missing sort mode defaults to usage',
+    );
+    assert_hero_tag_theme_same(
+        'usage',
+        theme_hero_tag_sort_mode_normalize('invalid'),
+        'invalid sort mode defaults to usage',
+    );
+    assert_hero_tag_theme_same(
+        'alphabetical',
+        theme_hero_tag_sort_mode_normalize('alphabetical'),
+        'alphabetical mode accepted',
+    );
 
-    assert_hero_tag_theme_same(20, theme_hero_tag_visible_limit(), 'persisted visible limit default is 20');
-    assert_hero_tag_theme_same(false, theme_hero_tag_display_all_enabled(), 'display-all default keeps disclosure enabled');
-    assert_hero_tag_theme_same(true, theme_hero_tag_scrollbar_enabled(), 'scrollbar default is enabled');
-    assert_hero_tag_theme_same(5, theme_hero_tag_scrollbar_rows(), 'scrollbar row default is five');
-    assert_hero_tag_theme_same('usage', theme_hero_tag_sort_mode(), 'usage sort is default');
+    assert_hero_tag_theme_same(
+        20,
+        theme_hero_tag_visible_limit(),
+        'persisted visible limit default is 20',
+    );
+    assert_hero_tag_theme_same(
+        false,
+        theme_hero_tag_display_all_enabled(),
+        'display-all default keeps disclosure enabled',
+    );
+    assert_hero_tag_theme_same(
+        true,
+        theme_hero_tag_scrollbar_enabled(),
+        'scrollbar default is enabled',
+    );
+    assert_hero_tag_theme_same(
+        5,
+        theme_hero_tag_scrollbar_rows(),
+        'scrollbar row default is five',
+    );
+    assert_hero_tag_theme_same(
+        'usage',
+        theme_hero_tag_sort_mode(),
+        'usage sort is default',
+    );
 
     $GLOBALS['hero_tag_theme_test_settings'] = [
         'theme_hero_tag_visible_limit' => '37',
@@ -138,14 +231,36 @@ require_once __DIR__ . '/../app/services/tag_metadata.php';
         'theme_hero_tag_scrollbar_rows' => '8',
         'theme_hero_tag_sort_mode' => 'alphabetical',
     ];
-    assert_hero_tag_theme_same(37, theme_hero_tag_visible_limit(), 'stored visible limit resolves');
-    assert_hero_tag_theme_same(true, theme_hero_tag_display_all_enabled(), 'stored display-all resolves');
-    assert_hero_tag_theme_same(false, theme_hero_tag_scrollbar_enabled(), 'stored scrollbar disable resolves');
-    assert_hero_tag_theme_same(8, theme_hero_tag_scrollbar_rows(), 'stored scrollbar rows resolve');
-    assert_hero_tag_theme_same('alphabetical', theme_hero_tag_sort_mode(), 'stored alphabetical sort resolves');
+    assert_hero_tag_theme_same(
+        37,
+        theme_hero_tag_visible_limit(),
+        'stored visible limit resolves',
+    );
+    assert_hero_tag_theme_same(
+        true,
+        theme_hero_tag_display_all_enabled(),
+        'stored display-all resolves',
+    );
+    assert_hero_tag_theme_same(
+        false,
+        theme_hero_tag_scrollbar_enabled(),
+        'stored scrollbar disable resolves',
+    );
+    assert_hero_tag_theme_same(
+        8,
+        theme_hero_tag_scrollbar_rows(),
+        'stored scrollbar rows resolve',
+    );
+    assert_hero_tag_theme_same(
+        'alphabetical',
+        theme_hero_tag_sort_mode(),
+        'stored alphabetical sort resolves',
+    );
 
     // The fake database returns the aggregate rows that the real bounded UNION query would return.
-    $GLOBALS['hero_tag_theme_test_db'] = new class {
+    $GLOBALS['hero_tag_theme_test_db'] = new
+    /** Minimal PDO-compatible adapter for the tag-usage aggregate query fixture. */
+    class {
         /** @var string Last prepared SQL for contract assertions. */
         public string $sql = '';
 
@@ -153,21 +268,26 @@ require_once __DIR__ . '/../app/services/tag_metadata.php';
          * Return a minimal statement fixture for the usage aggregate.
          *
          * @param string $sql Prepared SQL.
-         * @return object Statement-like fixture.
+         * @return \Gallery\Core\HeroTagThemeStatementFixture Statement adapter for the aggregate query fixture.
          */
-        public function prepare(string $sql): object
+        public function prepare(string $sql): \Gallery\Core\HeroTagThemeStatementFixture
         {
             $this->sql = $sql;
-            return new class {
+            return new
+            /** Statement fixture validating bindings and supplying aggregate rows. */
+            class implements \Gallery\Core\HeroTagThemeStatementFixture {
                 /**
                  * Accept bounded tag-ID parameters.
                  *
-                 * @param array $parameters Query parameters.
+                 * @param list<int> $parameters Ordered tag IDs bound twice by the aggregate query.
+                 * @return void Returns normally only when the expected bounded IDs were supplied.
                  */
                 public function execute(array $parameters): void
                 {
                     if ($parameters !== [1, 2, 3, 1, 2, 3]) {
-                        throw new RuntimeException('Hero tag usage query did not bind the expected bounded tag IDs twice.');
+                        throw new RuntimeException(
+                            'Hero tag usage query did not bind the expected bounded tag IDs twice.',
+                        );
                     }
                 }
 
@@ -187,9 +307,21 @@ require_once __DIR__ . '/../app/services/tag_metadata.php';
             };
         }
     };
-    assert_hero_tag_theme_same([1 => 2, 2 => 8, 3 => 8], tag_usage_counts([3, 1, 2, 2]), 'usage aggregate normalizes IDs and maps counts');
-    assert_hero_tag_source_contains($GLOBALS['hero_tag_theme_test_db']->sql, 'FROM gallery_tags', 'usage aggregate includes gallery assignments');
-    assert_hero_tag_source_contains($GLOBALS['hero_tag_theme_test_db']->sql, 'FROM image_tags', 'usage aggregate includes photo assignments');
+    assert_hero_tag_theme_same(
+        [1 => 2, 2 => 8, 3 => 8],
+        tag_usage_counts([3, 1, 2, 2]),
+        'usage aggregate normalizes IDs and maps counts',
+    );
+    assert_hero_tag_source_contains(
+        $GLOBALS['hero_tag_theme_test_db']->sql,
+        'FROM gallery_tags',
+        'usage aggregate includes gallery assignments',
+    );
+    assert_hero_tag_source_contains(
+        $GLOBALS['hero_tag_theme_test_db']->sql,
+        'FROM image_tags',
+        'usage aggregate includes photo assignments',
+    );
 
     $unsortedGroups = [
         'gallery' => [
@@ -203,71 +335,255 @@ require_once __DIR__ . '/../app/services/tag_metadata.php';
         ],
     ];
     $usageSortedGroups = sort_public_hero_tag_groups($unsortedGroups, 'usage');
-    assert_hero_tag_theme_same([2, 3, 1], array_column($usageSortedGroups['gallery'], 'id'), 'usage mode sorts highest counts first with alphabetical ties');
-    assert_hero_tag_theme_same([2, 1], array_column($usageSortedGroups['contained'], 'id'), 'usage mode preserves and independently sorts contained group');
-    $alphabeticalGroups = sort_public_hero_tag_groups($unsortedGroups, 'alphabetical');
-    assert_hero_tag_theme_same(['Alpha', 'Beta', 'Zulu'], array_column($alphabeticalGroups['gallery'], 'name'), 'alphabetical mode sorts natural names');
-    assert_hero_tag_theme_same(['Alpha', 'Zulu'], array_column($alphabeticalGroups['contained'], 'name'), 'alphabetical mode preserves contained group boundary');
+    assert_hero_tag_theme_same(
+        [2, 3, 1],
+        array_column($usageSortedGroups['gallery'], 'id'),
+        'usage mode sorts highest counts first with alphabetical ties',
+    );
+    assert_hero_tag_theme_same(
+        [2, 1],
+        array_column($usageSortedGroups['contained'], 'id'),
+        'usage mode preserves and independently sorts contained group',
+    );
+    $alphabeticalGroups = sort_public_hero_tag_groups(
+        $unsortedGroups,
+        'alphabetical',
+    );
+    assert_hero_tag_theme_same(
+        ['Alpha', 'Beta', 'Zulu'],
+        array_column($alphabeticalGroups['gallery'], 'name'),
+        'alphabetical mode sorts natural names',
+    );
+    assert_hero_tag_theme_same(
+        ['Alpha', 'Zulu'],
+        array_column($alphabeticalGroups['contained'], 'name'),
+        'alphabetical mode preserves contained group boundary',
+    );
 
-    $adminThemeSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_theme.php')
-        . (string) file_get_contents(__DIR__ . '/../app/controllers/admin_theme_actions.php')
-        . (string) file_get_contents(__DIR__ . '/../app/controllers/admin_theme_appearance.php');
-    $adminTagsSource = (string) file_get_contents(__DIR__ . '/../app/controllers/admin_tags.php');
-    assert_hero_tag_source_contains($adminThemeSource, "theme_hero_tag_visible_limit_value(\$_POST['theme_hero_tag_visible_limit'] ?? null)", 'Admin visible-limit normalization');
-    assert_hero_tag_source_contains($adminThemeSource, "theme_hero_tag_sort_mode_normalize(\$_POST['theme_hero_tag_sort_mode'] ?? 'usage')", 'Admin sort normalization');
-    assert_hero_tag_source_contains($adminThemeSource, "set_app_setting('theme_hero_tag_scrollbar_enabled'", 'Admin scrollbar persistence');
-    assert_hero_tag_source_contains($adminThemeSource, "url_for('admin_tags')", 'Theme links to tag metadata management');
-assert_hero_tag_source_contains($adminTagsSource, "appearance_subtab", 'Admin tag editor links to contextual tag display settings');
-assert_hero_tag_source_contains($adminTagsSource, "#admin-theme-tab-appearance", 'Admin tag editor opens the Appearance tab for contextual settings');
-assert_hero_tag_source_contains($adminThemeSource, "appearance_subtab", 'Theme controller accepts a Gallery tags deep link');
+    $adminThemeSource =
+        (string) file_get_contents(__DIR__
+            . '/../app/controllers/admin_theme.php')
+        . (string) file_get_contents(__DIR__
+            . '/../app/controllers/admin_theme_actions.php')
+        . (string) file_get_contents(__DIR__
+            . '/../app/controllers/admin_theme_appearance.php');
+    $adminTagsSource = (string) file_get_contents(__DIR__
+        . '/../app/controllers/admin_tags.php');
+    assert_hero_tag_source_contains(
+        $adminThemeSource,
+        "theme_hero_tag_visible_limit_value(\$_POST['theme_hero_tag_visible_limit'] ?? null)",
+        'Admin visible-limit normalization',
+    );
+    assert_hero_tag_source_contains(
+        $adminThemeSource,
+        "theme_hero_tag_sort_mode_normalize(\$_POST['theme_hero_tag_sort_mode'] ?? 'usage')",
+        'Admin sort normalization',
+    );
+    assert_hero_tag_source_contains(
+        $adminThemeSource,
+        "set_app_setting('theme_hero_tag_scrollbar_enabled'",
+        'Admin scrollbar persistence',
+    );
+    assert_hero_tag_source_contains(
+        $adminThemeSource,
+        "url_for('admin_tags')",
+        'Theme links to tag metadata management',
+    );
+    assert_hero_tag_source_contains(
+        $adminTagsSource,
+        'appearance_subtab',
+        'Admin tag editor links to contextual tag display settings',
+    );
+    assert_hero_tag_source_contains(
+        $adminTagsSource,
+        '#admin-theme-tab-appearance',
+        'Admin tag editor opens the Appearance tab for contextual settings',
+    );
+    assert_hero_tag_source_contains(
+        $adminThemeSource,
+        'appearance_subtab',
+        'Theme controller accepts a Gallery tags deep link',
+    );
 
-    $publicGallerySource = (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery.php')
-        . (string) file_get_contents(__DIR__ . '/../app/controllers/public_gallery_page.php')
-        . (string) file_get_contents(__DIR__ . '/../app/views/public_gallery_pages.php')
+    $publicGallerySource =
+        (string) file_get_contents(__DIR__
+            . '/../app/controllers/public_gallery.php')
+        . (string) file_get_contents(__DIR__
+            . '/../app/controllers/public_gallery_page.php')
+        . (string) file_get_contents(__DIR__
+            . '/../app/views/public_gallery_pages.php')
         . (string) file_get_contents(__DIR__ . '/../app/views/public_tags.php');
-    assert_hero_tag_source_contains($publicGallerySource, 'sort_public_hero_tag_groups($heroTagGroups, theme_hero_tag_sort_mode())', 'public server-side hero sort');
-    assert_hero_tag_source_contains($publicGallerySource, 'data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit=', 'public hero server-first configuration markup');
-    assert_hero_tag_source_contains($publicGallerySource, 'data-hero-tags-disclosure', 'public hero native disclosure markup');
-    assert_hero_tag_source_contains($publicGallerySource, 'array_slice($items, 0, $visibleLimit)', 'visible hero tags are selected on the server');
-    assert_hero_tag_source_contains($publicGallerySource, "t('gallery.show_all_tags', 'Display all tags')", 'public native disclosure translation');
-    assert_hero_tag_source_contains($publicGallerySource, "t('gallery.show_fewer_tags', 'Show fewer tags')", 'public expanded-state translation');
+    assert_hero_tag_source_contains(
+        $publicGallerySource,
+        'sort_public_hero_tag_groups($heroTagGroups, theme_hero_tag_sort_mode())',
+        'public server-side hero sort',
+    );
+    assert_hero_tag_source_contains(
+        $publicGallerySource,
+        'data-hero-tags data-hero-tags-native="1" data-hero-tag-visible-limit=',
+        'public hero server-first configuration markup',
+    );
+    assert_hero_tag_source_contains(
+        $publicGallerySource,
+        'data-hero-tags-disclosure',
+        'public hero native disclosure markup',
+    );
+    assert_hero_tag_source_contains(
+        $publicGallerySource,
+        'array_slice($items, 0, $visibleLimit)',
+        'visible hero tags are selected on the server',
+    );
+    assert_hero_tag_source_contains(
+        $publicGallerySource,
+        "t('gallery.show_all_tags', 'Display all tags')",
+        'public native disclosure translation',
+    );
+    assert_hero_tag_source_contains(
+        $publicGallerySource,
+        "t('gallery.show_fewer_tags', 'Show fewer tags')",
+        'public expanded-state translation',
+    );
 
-    $heroTagBrowserSource = (string) file_get_contents(__DIR__ . '/../public/assets/gallery-modules/hero-tags.js');
-    assert_hero_tag_source_contains($heroTagBrowserSource, 'export function setupHeroTagDisclosure()', 'hero browser setup export');
-    assert_hero_tag_source_contains($heroTagBrowserSource, "root.dataset.heroTagsNative === '1'", 'native roots bypass client-side layout changes');
-    assert_hero_tag_source_contains($heroTagBrowserSource, "if (root.dataset.heroTagsNative === '1') {", 'browser hook exits before legacy layout work for server-owned roots');
-    $nativeLayoutGuard = strpos($heroTagBrowserSource, "root.dataset.heroTagsNative === '1'");
-    $legacyVisibilityMutation = strpos($heroTagBrowserSource, 'tag.hidden = !expanded && index >= visibleLimit;');
-    if ($nativeLayoutGuard === false || $legacyVisibilityMutation === false || $nativeLayoutGuard > $legacyVisibilityMutation) {
-        throw new RuntimeException('Native tag roots must bypass the legacy visibility mutation before it can run.');
+    $heroTagBrowserSource = (string) file_get_contents(__DIR__
+        . '/../public/assets/gallery-modules/hero-tags.js');
+    assert_hero_tag_source_contains(
+        $heroTagBrowserSource,
+        'export function setupHeroTagDisclosure()',
+        'hero browser setup export',
+    );
+    assert_hero_tag_source_contains(
+        $heroTagBrowserSource,
+        "root.dataset.heroTagsNative === '1'",
+        'native roots bypass client-side layout changes',
+    );
+    assert_hero_tag_source_contains(
+        $heroTagBrowserSource,
+        "if (root.dataset.heroTagsNative === '1') {",
+        'browser hook exits before legacy layout work for server-owned roots',
+    );
+    $nativeLayoutGuard = strpos(
+        $heroTagBrowserSource,
+        "root.dataset.heroTagsNative === '1'",
+    );
+    $legacyVisibilityMutation = strpos(
+        $heroTagBrowserSource,
+        'tag.hidden = !expanded && index >= visibleLimit;',
+    );
+    if (
+        $nativeLayoutGuard === false
+        || $legacyVisibilityMutation === false
+        || $nativeLayoutGuard > $legacyVisibilityMutation
+    ) {
+        throw new RuntimeException(
+            'Native tag roots must bypass the legacy visibility mutation before it can run.',
+        );
     }
 
-    $anonymousEntrypoint = (string) file_get_contents(__DIR__ . '/../public/assets/public-gallery.js');
-    $adminEntrypoint = (string) file_get_contents(__DIR__ . '/../public/assets/gallery.js');
-    assert_hero_tag_source_contains($anonymousEntrypoint, "'setupHeroTagDisclosure', '[data-hero-tags]'", 'anonymous hero initialization');
-    assert_hero_tag_source_contains($adminEntrypoint, 'setupHeroTagDisclosure();', 'logged-in hero initialization');
+    $anonymousEntrypoint = (string) file_get_contents(__DIR__
+        . '/../public/assets/public-gallery.js');
+    $adminEntrypoint = (string) file_get_contents(__DIR__
+        . '/../public/assets/gallery.js');
+    assert_hero_tag_source_contains(
+        $anonymousEntrypoint,
+        "'setupHeroTagDisclosure', '[data-hero-tags]'",
+        'anonymous hero initialization',
+    );
+    assert_hero_tag_source_contains(
+        $adminEntrypoint,
+        'setupHeroTagDisclosure();',
+        'logged-in hero initialization',
+    );
 
-    foreach (['public-shared.css', 'admin-layout.css', 'admin.css'] as $stylesheet) {
-        $cssSource = (string) file_get_contents(__DIR__ . '/../public/assets/styles/' . $stylesheet);
-        assert_hero_tag_source_contains($cssSource, '.public-page .hero .tag-list {', $stylesheet . ' hero tag-list rule');
-        assert_hero_tag_source_contains($cssSource, 'max-width: none;', $stylesheet . ' full-width hero tag override');
+    foreach ([
+        'public-shared.css',
+        'admin-layout.css',
+        'admin.css',
+    ] as $stylesheet) {
+        $cssSource = (string) file_get_contents(
+            __DIR__ . '/../public/assets/styles/' . $stylesheet,
+        );
+        assert_hero_tag_source_contains(
+            $cssSource,
+            '.public-page .hero .tag-list {',
+            $stylesheet . ' hero tag-list rule',
+        );
+        assert_hero_tag_source_contains(
+            $cssSource,
+            'max-width: none;',
+            $stylesheet . ' full-width hero tag override',
+        );
     }
-    $publicTagCss = (string) file_get_contents(__DIR__ . '/../public/assets/styles/public-shared.css');
-    assert_hero_tag_source_contains($publicTagCss, '.public-page .hero-tag-disclosure {', 'native disclosure stays in the flex tag row');
-    assert_hero_tag_source_contains($publicTagCss, 'display: contents;', 'native disclosure children retain the shared wrapping layout');
-    assert_hero_tag_source_contains($publicTagCss, '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] [data-hero-tags-content] {', 'server-configured scrollbar CSS');
-    assert_hero_tag_source_contains($publicTagCss, 'max-height: var(--hero-tag-scrollbar-height);', 'first-paint row cap uses server-computed geometry');
-    assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-public-info-panel {', 'card tag disclosure opens a public-information overlay');
-    assert_hero_tag_source_contains($publicTagCss, 'position: absolute;', 'public-information overlay does not change card flow');
-    assert_hero_tag_source_contains($publicTagCss, '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .gallery-card-tags-content:has(.gallery-card-info-disclosure[open]) {', 'card overlay is not clipped by the configured tag scrollbar');
-    assert_hero_tag_source_contains($publicTagCss, '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .hero-tags-content:has(.gallery-card-info-disclosure[open]) {', 'hero overlay is not clipped by the configured tag scrollbar');
-    assert_hero_tag_source_contains($publicTagCss, '.public-page .gallery-card-tags .tag-list {', 'gallery card tag margins are owned by the dedicated layout rule');
+    $publicTagCss = (string) file_get_contents(__DIR__
+        . '/../public/assets/styles/public-shared.css');
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        '.public-page .hero-tag-disclosure {',
+        'native disclosure stays in the flex tag row',
+    );
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        'display: contents;',
+        'native disclosure children retain the shared wrapping layout',
+    );
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] [data-hero-tags-content] {',
+        'server-configured scrollbar CSS',
+    );
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        'max-height: var(--hero-tag-scrollbar-height);',
+        'first-paint row cap uses server-computed geometry',
+    );
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        '.public-page .gallery-card-public-info-panel {',
+        'card tag disclosure opens a public-information overlay',
+    );
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        'position: absolute;',
+        'public-information overlay does not change card flow',
+    );
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .gallery-card-tags-content:has(.gallery-card-info-disclosure[open]) {',
+        'card overlay is not clipped by the configured tag scrollbar',
+    );
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        '.public-page [data-hero-tags][data-hero-tag-scrollbar-enabled="1"] .hero-tags-content:has(.gallery-card-info-disclosure[open]) {',
+        'hero overlay is not clipped by the configured tag scrollbar',
+    );
+    assert_hero_tag_source_contains(
+        $publicTagCss,
+        '.public-page .gallery-card-tags .tag-list {',
+        'gallery card tag margins are owned by the dedicated layout rule',
+    );
 
     foreach (['en', 'cs'] as $language) {
-        $catalog = json_decode((string) file_get_contents(__DIR__ . '/../app/lang/' . $language . '.json'), true, 512, JSON_THROW_ON_ERROR);
-        foreach (['gallery.show_all_tags', 'gallery.show_fewer_tags', 'gallery.public_info', 'gallery.all_tags', 'admin.theme.appearance.hero_tag_sort_usage'] as $key) {
-            if (!isset($catalog[$key]) || trim((string) $catalog[$key]) === '') {
-                throw new RuntimeException($language . ' JSON catalog is missing ' . $key);
+        $catalog = json_decode(
+            (string) file_get_contents(
+                __DIR__ . '/../app/lang/' . $language . '.json',
+            ),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+        foreach ([
+            'gallery.show_all_tags',
+            'gallery.show_fewer_tags',
+            'gallery.public_info',
+            'gallery.all_tags',
+            'admin.theme.appearance.hero_tag_sort_usage',
+        ] as $key) {
+            if (
+                !isset($catalog[$key])
+                || trim((string) $catalog[$key]) === ''
+            ) {
+                throw new RuntimeException(
+                    $language . ' JSON catalog is missing ' . $key,
+                );
             }
         }
     }

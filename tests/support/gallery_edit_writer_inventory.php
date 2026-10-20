@@ -26,18 +26,60 @@ declare(strict_types=1);
 function gallery_edit_writer_fixture_inventory(): array
 {
     return [
-        'gallery_sidecars.php' => ['create_empty_gallery', 'create_gallery_row_for_folder', 'normalize_gallery_sidecar_tags_recursive'],
-        'gallery_mutations.php' => ['delete_gallery_subtrees', 'delete_gallery_images', 'move_gallery_folder_to_parent', 'import_galleries', 'import_galleries_without_thumbnails'],
-        'uploads.php' => ['store_uploaded_gallery_images', 'store_uploaded_gallery_cover', 'store_uploaded_gallery_branding_asset'],
+        'gallery_sidecars.php' => [
+            'create_empty_gallery',
+            'create_gallery_row_for_folder',
+            'normalize_gallery_sidecar_tags_recursive',
+        ],
+        'gallery_mutations.php' => [
+            'delete_gallery_subtrees',
+            'delete_gallery_images',
+            'move_gallery_folder_to_parent',
+            'import_galleries',
+            'import_galleries_without_thumbnails',
+        ],
+        'uploads.php' => [
+            'store_uploaded_gallery_images',
+            'store_uploaded_gallery_cover',
+            'store_uploaded_gallery_branding_asset',
+        ],
         'browser_uploads.php' => ['browser_upload_store_prepared_zip_batch'],
         'mobile_webdav.php' => ['mobile_webdav_store_put'],
-        'image_scanning.php' => ['scan_gallery_images', 'scan_gallery_selected_images', 'scan_gallery_selected_uploaded_images'],
-        'gallery_trash.php' => ['move_gallery_subtrees_to_trash', 'restore_gallery_trash_entry', 'gallery_trash_reconcile_entry'],
-        'picture_manager.php' => ['copy_gallery_images', 'picture_manager_copy_gallery_subtrees'],
-        'media_renamer.php' => ['media_renamer_execute_gallery', 'media_renamer_execute_gallery_image_batch', 'media_renamer_execute_image_batch', 'media_renamer_execute_galleries', 'media_renamer_execute_plan'],
+        'image_scanning.php' => [
+            'scan_gallery_images',
+            'scan_gallery_selected_images',
+            'scan_gallery_selected_uploaded_images',
+        ],
+        'gallery_trash.php' => [
+            'move_gallery_subtrees_to_trash',
+            'restore_gallery_trash_entry',
+            'gallery_trash_reconcile_entry',
+        ],
+        'picture_manager.php' => [
+            'copy_gallery_images',
+            'picture_manager_copy_gallery_subtrees',
+        ],
+        'media_renamer.php' => [
+            'media_renamer_execute_gallery',
+            'media_renamer_execute_gallery_image_batch',
+            'media_renamer_execute_image_batch',
+            'media_renamer_execute_galleries',
+            'media_renamer_execute_plan',
+        ],
         'gallery_branding.php' => ['delete_gallery_branding_asset'],
-        'gallery_migration.php' => ['gallery_migration_prepare_target_job', 'gallery_migration_install_package_file', 'gallery_migration_install_asset_file', 'gallery_migration_sync_received_assets', 'gallery_migration_job_status_response', 'gallery_migration_complete_job'],
-        'gallery_editor_mutations.php' => ['gallery_editor_set_cover_image', 'gallery_editor_set_cover_images', 'gallery_editor_change_cover_selection'],
+        'gallery_migration.php' => [
+            'gallery_migration_prepare_target_job',
+            'gallery_migration_install_package_file',
+            'gallery_migration_install_asset_file',
+            'gallery_migration_sync_received_assets',
+            'gallery_migration_job_status_response',
+            'gallery_migration_complete_job',
+        ],
+        'gallery_editor_mutations.php' => [
+            'gallery_editor_set_cover_image',
+            'gallery_editor_set_cover_images',
+            'gallery_editor_change_cover_selection',
+        ],
         'gallery_dates.php' => ['gallery_date_save_range'],
         'thumbnail_bounds.php' => ['save_gallery_thumbnail_bounds'],
         'gallery_grid.php' => ['reset_all_gallery_grid_overrides'],
@@ -64,7 +106,9 @@ function gallery_edit_writer_fixture_arguments(ReflectionFunction $function): ar
             'array', '?array' => [],
             'bool', '?bool' => true,
             'mixed' => null,
-            default => throw new RuntimeException('Uncovered gallery writer fixture parameter.'),
+            default => throw new RuntimeException(
+                'Uncovered gallery writer fixture parameter.',
+            ),
         };
     }
     return $arguments;

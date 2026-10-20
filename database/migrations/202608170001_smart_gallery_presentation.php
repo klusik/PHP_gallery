@@ -24,6 +24,6 @@
 declare(strict_types=1);
 
 return [
-    "ALTER TABLE smart_galleries
-        ADD COLUMN presentation_json MEDIUMTEXT NULL AFTER sort_direction",
+    'ALTER TABLE smart_galleries
+        ADD COLUMN presentation_json MEDIUMTEXT NULL AFTER sort_direction',
 ];

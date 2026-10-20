@@ -40,12 +40,17 @@ namespace Gallery\Services {
          * Return a deterministic translation fallback for standalone model tests.
          *
          * @param string $key Lookup key.
-         * @param string|array|null $fallback Fallback value.
-         * @param array $parameters Replacement values keyed by placeholder name.
+         * @param string|array<string,string|int|float|bool|null>|null $fallback
+         *   Text fallback or placeholder values keyed by name.
+         * @param array<string,string|int|float|bool|null> $parameters
+         *   Scalar replacement values keyed by placeholder name.
          * @return string Text result for the caller.
          */
-        function t(string $key, string|array|null $fallback = null, array $parameters = []): string
-        {
+        function t(
+            string $key,
+            string|array|null $fallback = null,
+            array $parameters = [],
+        ): string {
             if (is_array($fallback)) {
                 $parameters = $fallback;
                 $fallback = null;
@@ -68,7 +73,10 @@ namespace Gallery\Services {
          */
         function db_column_exists(string $table, string $column): bool
         {
-            if ($table === 'galleries' && in_array($column, ['gallery_date', 'gallery_date_end'], true)) {
+            if (
+                $table === 'galleries'
+                && in_array($column, ['gallery_date', 'gallery_date_end'], true)
+            ) {
                 return true;
             }
             return $table === 'images' && $column === 'exif_taken_at';
@@ -79,13 +87,17 @@ namespace Gallery\Services {
         /**
          * Return whether a gallery row is visible to anonymous navigation.
          *
-         * @param array $gallery Gallery row or gallery data.
+         * @param array{visibility?:string,access_listing?:string} $gallery
+         *   Visibility and listing fields used by anonymous navigation.
          * @return bool True when the gallery is public and listed.
          */
         function gallery_is_public_listed(array $gallery): bool
         {
-            return (string) ($gallery['visibility'] ?? 'public') === 'public'
-                && (string) ($gallery['access_listing'] ?? 'listed') === 'listed';
+            return (
+                (string) ($gallery['visibility'] ?? 'public') === 'public'
+                    && (string) ($gallery['access_listing'] ?? 'listed')
+                    === 'listed'
+            );
         }
     }
 }
@@ -100,7 +112,11 @@ namespace Gallery\Core {
          */
         function e(?string $value): string
         {
-            return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            return htmlspecialchars(
+                (string) $value,
+                ENT_QUOTES | ENT_SUBSTITUTE,
+                'UTF-8',
+            );
         }
     }
 
@@ -125,12 +141,25 @@ namespace Gallery\Core {
         /**
          * Build a deterministic gallery URL for standalone navigation tests.
          *
-         * @param array $gallery Gallery row or gallery data.
+         * @param array{url_path?:string,folder_path?:string,slug?:string} $gallery
+         *   Path or slug fields used to build the public URL.
          * @return string URL result for the caller.
          */
         function gallery_public_url(array $gallery): string
         {
-            return '/gallery/' . rawurlencode(trim((string) ($gallery['url_path'] ?? $gallery['folder_path'] ?? $gallery['slug'] ?? 'gallery'), '/')) . '/';
+            return (
+                '/gallery/'
+                    . rawurlencode(trim(
+                        (string) (
+                            $gallery['url_path']
+                            ?? $gallery['folder_path']
+                            ?? $gallery['slug']
+                            ?? 'gallery'
+                        ),
+                        '/',
+                    ))
+                    . '/'
+            );
         }
     }
 }

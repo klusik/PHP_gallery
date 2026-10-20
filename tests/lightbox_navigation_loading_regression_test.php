@@ -30,85 +30,176 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-$lightboxSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
-$preloadSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-preload-lifecycle.js');
-$lightboxStyles = (string) file_get_contents($root . '/public/assets/styles/lightbox.css');
+$lightboxSource = (string) file_get_contents($root
+    . '/public/assets/gallery-modules/lightbox.js');
+$preloadSource = (string) file_get_contents($root
+    . '/public/assets/gallery-modules/lightbox-preload-lifecycle.js');
+$lightboxStyles = (string) file_get_contents($root
+    . '/public/assets/styles/lightbox.css');
 
 /**
  * Throw when a navigation-loading regression contract fails.
  *
  * @param bool $condition Assertion result.
  * @param string $message Failure diagnostic.
+ * @return void Throws when the loading-state contract is false.
  */
-function lightbox_navigation_loading_assert(bool $condition, string $message): void
-{
+function lightbox_navigation_loading_assert(
+    bool $condition,
+    string $message,
+): void {
     if (!$condition) {
         throw new RuntimeException($message);
     }
 }
 
 lightbox_navigation_loading_assert(
-    str_contains($lightboxSource, 'function setLightboxNavigationLoading(loading)')
+    str_contains(
+        $lightboxSource,
+        'function setLightboxNavigationLoading(loading)',
+    )
         && str_contains($lightboxSource, 'setLightboxNavigationLoading(true);')
-        && str_contains($lightboxSource, 'setLightboxNavigationLoading(false);'),
-    'Navigation loading must use one explicit shared progress-state helper.'
+        && str_contains(
+            $lightboxSource,
+            'setLightboxNavigationLoading(false);',
+        ),
+    'Navigation loading must use one explicit shared progress-state helper.',
 );
 lightbox_navigation_loading_assert(
     !str_contains($lightboxStyles, 'lightbox-navigation-spinner')
-        && !str_contains($lightboxStyles, '.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-stage-link::after')
-        && str_contains($lightboxStyles, '.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-quality-progress')
-        && str_contains($lightboxStyles, 'animation: lightbox-navigation-progress'),
-    'Repeated navigation must use an indeterminate progress bar and must not restore the center spinner.'
+        && !str_contains(
+            $lightboxStyles,
+            '.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-stage-link::after',
+        )
+        && str_contains(
+            $lightboxStyles,
+            '.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-quality-progress',
+        )
+        && str_contains(
+            $lightboxStyles,
+            'animation: lightbox-navigation-progress',
+        ),
+    'Repeated navigation must use an indeterminate progress bar and must not restore the center spinner.',
 );
 
-$resetStart = strpos($lightboxSource, 'function resetLightboxPreloadQueue(options = {})');
-$resetEnd = strpos($lightboxSource, 'function handleLightboxVisibilityChange()', $resetStart === false ? 0 : $resetStart);
-lightbox_navigation_loading_assert($resetStart !== false && $resetEnd !== false, 'Preload reset helper with lifecycle options is missing.');
-$resetSource = substr($lightboxSource, (int) $resetStart, (int) $resetEnd - (int) $resetStart);
+$resetStart = strpos(
+    $lightboxSource,
+    'function resetLightboxPreloadQueue(options = {})',
+);
+$resetEnd = strpos(
+    $lightboxSource,
+    'function handleLightboxVisibilityChange()',
+    $resetStart === false ? 0 : $resetStart,
+);
+lightbox_navigation_loading_assert(
+    $resetStart !== false && $resetEnd !== false,
+    'Preload reset helper with lifecycle options is missing.',
+);
+$resetSource = substr(
+    $lightboxSource,
+    (int) $resetStart,
+    (int) $resetEnd - (int) $resetStart,
+);
 lightbox_navigation_loading_assert(
     str_contains($resetSource, 'lightboxPreloads.reset(options);'),
-    'Viewer reset must forward lifecycle options to the extracted queue owner.'
+    'Viewer reset must forward lifecycle options to the extracted queue owner.',
 );
-$resetStart = strpos($preloadSource, 'function resetLightboxPreloadQueue(options = {})');
-$resetEnd = strpos($preloadSource, 'function queueDecodedLightboxPreload(', $resetStart === false ? 0 : $resetStart);
-lightbox_navigation_loading_assert($resetStart !== false && $resetEnd !== false, 'Extracted preload reset helper is missing.');
-$resetSource = substr($preloadSource, (int) $resetStart, (int) $resetEnd - (int) $resetStart);
+$resetStart = strpos(
+    $preloadSource,
+    'function resetLightboxPreloadQueue(options = {})',
+);
+$resetEnd = strpos(
+    $preloadSource,
+    'function queueDecodedLightboxPreload(',
+    $resetStart === false ? 0 : $resetStart,
+);
 lightbox_navigation_loading_assert(
-    str_contains($resetSource, 'const abortActive = options.abortActive !== false;')
+    $resetStart !== false && $resetEnd !== false,
+    'Extracted preload reset helper is missing.',
+);
+$resetSource = substr(
+    $preloadSource,
+    (int) $resetStart,
+    (int) $resetEnd - (int) $resetStart,
+);
+lightbox_navigation_loading_assert(
+    str_contains(
+        $resetSource,
+        'const abortActive = options.abortActive !== false;',
+    )
         && str_contains($resetSource, 'if (abortActive) {')
-        && str_contains($resetSource, 'lightboxPreloadAbortController.abort();'),
-    'Preload reset must distinguish queue invalidation from hard cancellation of active requests.'
+        && str_contains(
+            $resetSource,
+            'lightboxPreloadAbortController.abort();',
+        ),
+    'Preload reset must distinguish queue invalidation from hard cancellation of active requests.',
 );
 
-$transactionStart = strpos($lightboxSource, 'function beginLightboxNavigationTransaction(index)');
-$transactionEnd = strpos($lightboxSource, 'function finalizeLightboxNavigationTransaction(', $transactionStart === false ? 0 : $transactionStart);
-lightbox_navigation_loading_assert($transactionStart !== false && $transactionEnd !== false, 'Lightbox navigation transaction helper is missing.');
-$transactionSource = substr($lightboxSource, (int) $transactionStart, (int) $transactionEnd - (int) $transactionStart);
+$transactionStart = strpos(
+    $lightboxSource,
+    'function beginLightboxNavigationTransaction(index)',
+);
+$transactionEnd = strpos(
+    $lightboxSource,
+    'function finalizeLightboxNavigationTransaction(',
+    $transactionStart === false ? 0 : $transactionStart,
+);
 lightbox_navigation_loading_assert(
-    str_contains($transactionSource, 'resetLightboxPreloadQueue({abortActive: false});'),
-    'Ordinary photo navigation must preserve already-running adjacent preview preloads.'
+    $transactionStart !== false && $transactionEnd !== false,
+    'Lightbox navigation transaction helper is missing.',
+);
+$transactionSource = substr(
+    $lightboxSource,
+    (int) $transactionStart,
+    (int) $transactionEnd - (int) $transactionStart,
+);
+lightbox_navigation_loading_assert(
+    str_contains(
+        $transactionSource,
+        'resetLightboxPreloadQueue({abortActive: false});',
+    ),
+    'Ordinary photo navigation must preserve already-running adjacent preview preloads.',
 );
 
-$finalizeStart = strpos($lightboxSource, 'function finalizeLightboxNavigationTransaction(');
-$finalizeEnd = strpos($lightboxSource, 'function readLightboxTimingSetting(', $finalizeStart === false ? 0 : $finalizeStart);
-lightbox_navigation_loading_assert($finalizeStart !== false && $finalizeEnd !== false, 'Navigation terminal-state helper is missing.');
-$finalizeSource = substr($lightboxSource, (int) $finalizeStart, (int) $finalizeEnd - (int) $finalizeStart);
+$finalizeStart = strpos(
+    $lightboxSource,
+    'function finalizeLightboxNavigationTransaction(',
+);
+$finalizeEnd = strpos(
+    $lightboxSource,
+    'function readLightboxTimingSetting(',
+    $finalizeStart === false ? 0 : $finalizeStart,
+);
+lightbox_navigation_loading_assert(
+    $finalizeStart !== false && $finalizeEnd !== false,
+    'Navigation terminal-state helper is missing.',
+);
+$finalizeSource = substr(
+    $lightboxSource,
+    (int) $finalizeStart,
+    (int) $finalizeEnd - (int) $finalizeStart,
+);
 lightbox_navigation_loading_assert(
     str_contains($finalizeSource, 'scheduleLightboxQualityUpgrade();')
         && !str_contains($finalizeSource, 'scheduleLightboxQualityUpgrade(0);'),
-    'Automatic quality promotion must keep the configured debounce window during manual navigation.'
+    'Automatic quality promotion must keep the configured debounce window during manual navigation.',
 );
 lightbox_navigation_loading_assert(
-    str_contains($lightboxStyles, '.lightbox.is-navigation-error:not(.is-initial-loading) .lightbox-quality-progress'),
-    'A terminal current-navigation failure must replace permanent busy state with recoverable feedback.'
+    str_contains(
+        $lightboxStyles,
+        '.lightbox.is-navigation-error:not(.is-initial-loading) .lightbox-quality-progress',
+    ),
+    'A terminal current-navigation failure must replace permanent busy state with recoverable feedback.',
 );
 
 foreach (['en', 'cs', 'de', 'sv'] as $language) {
     $catalogPath = $root . '/app/lang/' . $language . '.json';
     $catalog = json_decode((string) file_get_contents($catalogPath), true);
     lightbox_navigation_loading_assert(
-        is_array($catalog) && isset($catalog['lightbox.image_loading']) && trim((string) $catalog['lightbox.image_loading']) !== '',
-        'Missing lightbox.image_loading translation in ' . $language . '.json.'
+        is_array($catalog)
+            && isset($catalog['lightbox.image_loading'])
+            && trim((string) $catalog['lightbox.image_loading']) !== '',
+        'Missing lightbox.image_loading translation in ' . $language . '.json.',
     );
 }
 

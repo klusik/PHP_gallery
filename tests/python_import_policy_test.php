@@ -40,13 +40,28 @@ $spellings = [
 ];
 foreach ($spellings as $source) {
     $findings = python_import_findings($source);
-    python_import_policy_assert(count($findings) === 1 && $findings[0]['line'] === 1
-        && is_string($findings[0]['rule']) && $findings[0]['rule'] !== '', 'Every real forbidden import spelling must produce one located rule.');
+    python_import_policy_assert(
+        count($findings) === 1
+            && $findings[0]['line'] === 1
+            && is_string($findings[0]['rule'])
+            && $findings[0]['rule'] !== '',
+        'Every real forbidden import spelling must produce one located rule.',
+    );
 }
-$nested = python_import_findings("def nested():\n    from __future__ import annotations\n");
-python_import_policy_assert(count($nested) === 1 && $nested[0]['line'] === 2, 'Nested syntactic imports must retain their policy occurrence even if future compilation would reject placement.');
-$sites = python_import_findings("# Fixture preamble\nfrom __future__ import annotations\n\nfrom __future__ import (annotations)\n");
-python_import_policy_assert(array_column($sites, 'line') === [2, 4], 'Separate import sites must retain their exact source lines.');
+$nested = python_import_findings(
+    "def nested():\n    from __future__ import annotations\n",
+);
+python_import_policy_assert(
+    count($nested) === 1 && $nested[0]['line'] === 2,
+    'Nested syntactic imports must retain their policy occurrence even if future compilation would reject placement.',
+);
+$sites = python_import_findings(
+    "# Fixture preamble\nfrom __future__ import annotations\n\nfrom __future__ import (annotations)\n",
+);
+python_import_policy_assert(
+    array_column($sites, 'line') === [2, 4],
+    'Separate import sites must retain their exact source lines.',
+);
 $allowed = <<<'PY'
 """Mention from __future__ import annotations without importing it."""
 # from __future__ import annotations
@@ -55,9 +70,15 @@ import concurrent.futures
 from concurrent.futures import Future
 message = "from __future__ import annotations"
 PY;
-python_import_policy_assert(python_import_findings($allowed) === [], 'Comments, docstrings, strings and allowed imports must remain inert.');
+python_import_policy_assert(
+    python_import_findings($allowed) === [],
+    'Comments, docstrings, strings and allowed imports must remain inert.',
+);
 
-$root = sys_get_temp_dir() . '/gallery-python-import-policy-' . bin2hex(random_bytes(8));
+$root =
+    sys_get_temp_dir()
+    . '/gallery-python-import-policy-'
+    . bin2hex(random_bytes(8));
 $files = [];
 $directories = [$root];
 try {
@@ -68,7 +89,16 @@ try {
         'allowed.py' => $allowed,
         'fixture.php' => '<?php $source = "from __future__ import annotations";',
     ];
-    foreach (['cache', 'vendor', 'data', 'galleries', 'deploy', '.agent-local', '.venv', '__pycache__'] as $excluded) {
+    foreach ([
+        'cache',
+        'vendor',
+        'data',
+        'galleries',
+        'deploy',
+        '.agent-local',
+        '.venv',
+        '__pycache__',
+    ] as $excluded) {
         mkdir($root . '/' . $excluded);
         $directories[] = $root . '/' . $excluded;
         $sources[$excluded . '/excluded.py'] = $spellings[0];
@@ -78,24 +108,49 @@ try {
         file_put_contents($root . '/' . $path, $source);
     }
     $report = python_import_policy_report($root);
-    python_import_policy_assert($report['status'] === 'FAIL' && $report['summary']['source_files'] === 3
-        && $report['summary']['finding_count'] === 2, 'Complete discovery must reject existing Python and PYW imports without Git metadata and prune excluded trees.');
+    python_import_policy_assert(
+        $report['status'] === 'FAIL'
+            && $report['summary']['source_files'] === 3
+            && $report['summary']['finding_count'] === 2,
+        'Complete discovery must reject existing Python and PYW imports without Git metadata and prune excluded trees.',
+    );
     $paths = array_column($report['findings'], 'path');
     sort($paths);
-    python_import_policy_assert($paths === ['desktop.pyw', 'existing.py'], 'Findings must identify only admitted source files.');
+    python_import_policy_assert(
+        $paths === ['desktop.pyw', 'existing.py'],
+        'Findings must identify only admitted source files.',
+    );
     $repeat = python_import_policy_report($root);
-    python_import_policy_assert($repeat['status'] === 'FAIL' && $repeat['summary']['finding_count'] === 2, 'Unchanged files must continue to fail every policy pass.');
+    python_import_policy_assert(
+        $repeat['status'] === 'FAIL'
+            && $repeat['summary']['finding_count'] === 2,
+        'Unchanged files must continue to fail every policy pass.',
+    );
     $files[] = $root . '/broken.py';
     file_put_contents($root . '/broken.py', "private_fixture_secret = (\n");
     $blocked = python_import_policy_report($root);
-    python_import_policy_assert($blocked['status'] === 'BLOCKED' && $blocked['blocked'] !== [], 'Unparseable admitted source must block complete coverage.');
-    python_import_policy_assert(!str_contains(json_encode($blocked, JSON_THROW_ON_ERROR), 'private_fixture_secret'), 'Parser diagnostics must not disclose examined source contents.');
+    python_import_policy_assert(
+        $blocked['status'] === 'BLOCKED' && $blocked['blocked'] !== [],
+        'Unparseable admitted source must block complete coverage.',
+    );
+    python_import_policy_assert(
+        !str_contains(
+            json_encode($blocked, JSON_THROW_ON_ERROR),
+            'private_fixture_secret',
+        ),
+        'Parser diagnostics must not disclose examined source contents.',
+    );
     unlink($root . '/broken.py');
     file_put_contents($root . '/existing.py', $allowed);
     file_put_contents($root . '/desktop.pyw', $allowed);
     $clean = python_import_policy_report($root);
-    python_import_policy_assert($clean['status'] === 'PASS' && $clean['summary']['source_files'] === 3
-        && $clean['summary']['finding_count'] === 0 && $clean['blocked'] === [], 'Removing prohibited imports must restore a complete PASS without treating excluded imports as findings.');
+    python_import_policy_assert(
+        $clean['status'] === 'PASS'
+            && $clean['summary']['source_files'] === 3
+            && $clean['summary']['finding_count'] === 0
+            && $clean['blocked'] === [],
+        'Removing prohibited imports must restore a complete PASS without treating excluded imports as findings.',
+    );
 } finally {
     foreach ($files as $path) {
         if (is_file($path)) {

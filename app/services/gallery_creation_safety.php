@@ -47,7 +47,9 @@ final class GalleryCatalogConflict extends RuntimeException
     public function __construct(int $galleryId)
     {
         $this->galleryId = $galleryId;
-        parent::__construct('An existing gallery catalog occupies this folder path. Restore its folder or reconcile it through discovery before creating here.');
+        parent::__construct(
+            'An existing gallery catalog occupies this folder path. Restore its folder or reconcile it through discovery before creating here.',
+        );
     }
 }
 
@@ -71,7 +73,11 @@ function gallery_creation_target_observation(string $relativePath): string
         clearstatcache(true);
         $rootBefore = @stat(galleries_root());
         $parentBefore = @stat($parent);
-        if ($rootBefore === false || $parentBefore === false || !is_readable($parent)) {
+        if (
+            $rootBefore === false
+            || $parentBefore === false
+            || !is_readable($parent)
+        ) {
             return FILESYSTEM_OBSERVATION_UNKNOWN;
         }
         $handle = @opendir($parent);
@@ -91,11 +97,17 @@ function gallery_creation_target_observation(string $relativePath): string
              */
             static function (int $severity, string $message): never {
                 throw new RuntimeException('Directory observation failed.');
-            }
+            },
         );
         $handlingWarnings = true;
         while (($entry = readdir($handle)) !== false) {
-            if ($entry === $name || (PHP_OS_FAMILY === 'Windows' && strcasecmp($entry, $name) === 0)) {
+            if (
+                $entry === $name
+                || (
+                    PHP_OS_FAMILY === 'Windows'
+                    && strcasecmp($entry, $name) === 0
+                )
+            ) {
                 $found = true;
                 break;
             }
@@ -103,17 +115,25 @@ function gallery_creation_target_observation(string $relativePath): string
         clearstatcache(true);
         $rootAfter = @stat(galleries_root());
         $parentAfter = @stat($parent);
-        if ($rootAfter === false || $parentAfter === false
-            || $rootBefore['dev'] !== $rootAfter['dev'] || $rootBefore['ino'] !== $rootAfter['ino']
-            || $parentBefore['dev'] !== $parentAfter['dev'] || $parentBefore['ino'] !== $parentAfter['ino']
-            || !gallery_filesystem_path_inside_root($parent)) {
+        if (
+            $rootAfter === false
+            || $parentAfter === false
+            || $rootBefore['dev'] !== $rootAfter['dev']
+            || $rootBefore['ino'] !== $rootAfter['ino']
+            || $parentBefore['dev'] !== $parentAfter['dev']
+            || $parentBefore['ino'] !== $parentAfter['ino']
+            || !gallery_filesystem_path_inside_root($parent)
+        ) {
             return FILESYSTEM_OBSERVATION_UNKNOWN;
         }
         if (!$found) {
             return FILESYSTEM_OBSERVATION_MISSING;
         }
-        return is_dir($target) && is_readable($target) && gallery_filesystem_path_inside_root($target)
-            ? FILESYSTEM_OBSERVATION_AVAILABLE : FILESYSTEM_OBSERVATION_UNKNOWN;
+        return is_dir($target)
+        && is_readable($target)
+        && gallery_filesystem_path_inside_root($target)
+            ? FILESYSTEM_OBSERVATION_AVAILABLE
+            : FILESYSTEM_OBSERVATION_UNKNOWN;
     } catch (Throwable) {
         return FILESYSTEM_OBSERVATION_UNKNOWN;
     } finally {
@@ -143,12 +163,18 @@ function gallery_creation_assert_catalog_preserved(string $relativePath): void
     try {
         $owner = gallery_model_catalog_path_owner($relativePath);
     } catch (Throwable $exception) {
-        throw new RuntimeException('Gallery catalog could not be verified. No existing catalog was changed.', 0, $exception);
+        throw new RuntimeException(
+            'Gallery catalog could not be verified. No existing catalog was changed.',
+            0,
+            $exception,
+        );
     }
     if ($owner > 0 && $state !== FILESYSTEM_OBSERVATION_AVAILABLE) {
         throw new GalleryCatalogConflict($owner);
     }
     if ($state === FILESYSTEM_OBSERVATION_UNKNOWN) {
-        throw new RuntimeException('Gallery storage could not be verified. No existing catalog was changed; check storage availability before retrying.');
+        throw new RuntimeException(
+            'Gallery storage could not be verified. No existing catalog was changed; check storage availability before retrying.',
+        );
     }
 }

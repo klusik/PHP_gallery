@@ -42,8 +42,10 @@ use function Gallery\Core\db;
  * @param ?int $limit Optional positive row limit.
  * @return array<int,array<string,mixed>> Gallery rows.
  */
-function downloads_model_gallery_subtree(string $folderPath, ?int $limit = null): array
-{
+function downloads_model_gallery_subtree(
+    string $folderPath,
+    ?int $limit = null,
+): array {
     if ($folderPath === '') {
         return [];
     }
@@ -59,14 +61,20 @@ function downloads_model_gallery_subtree(string $folderPath, ?int $limit = null)
 /**
  * Return ordered image rows for selected galleries.
  *
- * @param array $galleryIds Gallery identifiers.
+ * @param list<int> $galleryIds Gallery identifiers whose image rows are requested.
  * @param bool $publicOnly Whether only public image rows are eligible.
  * @param ?int $limit Optional positive row limit.
  * @return array<int,array<string,mixed>> Image rows.
  */
-function downloads_model_images_for_galleries(array $galleryIds, bool $publicOnly, ?int $limit = null): array
-{
-    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+function downloads_model_images_for_galleries(
+    array $galleryIds,
+    bool $publicOnly,
+    ?int $limit = null,
+): array {
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($galleryIds === []) {
         return [];
     }
@@ -116,13 +124,20 @@ function downloads_model_delete_zip_archive(int $archiveId): int
  * @param string $contentSignature Content signature.
  * @return ?array<string,mixed> Cache row or null.
  */
-function downloads_model_find_zip_archive(string $scope, ?int $galleryId, string $contentSignature): ?array
-{
+function downloads_model_find_zip_archive(
+    string $scope,
+    ?int $galleryId,
+    string $contentSignature,
+): ?array {
     if ($galleryId === null) {
-        $stmt = db()->prepare('SELECT * FROM zip_archives WHERE scope = ? AND gallery_id IS NULL AND content_signature = ? ORDER BY id DESC LIMIT 1');
+        $stmt = db()->prepare(
+            'SELECT * FROM zip_archives WHERE scope = ? AND gallery_id IS NULL AND content_signature = ? ORDER BY id DESC LIMIT 1',
+        );
         $stmt->execute([$scope, $contentSignature]);
     } else {
-        $stmt = db()->prepare('SELECT * FROM zip_archives WHERE scope = ? AND gallery_id = ? AND content_signature = ? ORDER BY id DESC LIMIT 1');
+        $stmt = db()->prepare(
+            'SELECT * FROM zip_archives WHERE scope = ? AND gallery_id = ? AND content_signature = ? ORDER BY id DESC LIMIT 1',
+        );
         $stmt->execute([$scope, $galleryId, $contentSignature]);
     }
     $row = $stmt->fetch();
@@ -137,11 +152,26 @@ function downloads_model_find_zip_archive(string $scope, ?int $galleryId, string
  * @param string $filePath Generated ZIP filesystem path.
  * @param string $contentSignature Content signature.
  * @param string $now Current SQL timestamp.
+ * @return void Inserts one ZIP archive cache metadata row.
  */
-function downloads_model_insert_zip_archive(string $scope, ?int $galleryId, string $filePath, string $contentSignature, string $now): void
-{
-    $stmt = db()->prepare('INSERT INTO zip_archives (scope, gallery_id, file_path, content_signature, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$scope, $galleryId, $filePath, $contentSignature, $now, $now]);
+function downloads_model_insert_zip_archive(
+    string $scope,
+    ?int $galleryId,
+    string $filePath,
+    string $contentSignature,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO zip_archives (scope, gallery_id, file_path, content_signature, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    $stmt->execute([
+        $scope,
+        $galleryId,
+        $filePath,
+        $contentSignature,
+        $now,
+        $now,
+    ]);
 }
 
 /**
@@ -151,10 +181,10 @@ function downloads_model_insert_zip_archive(string $scope, ?int $galleryId, stri
  */
 function downloads_model_all_signature_rows(): array
 {
-    $stmt = db()->query("SELECT g.folder_path, g.updated_at AS gallery_updated_at, i.relative_path, i.file_size, i.modified_at, i.visibility
+    $stmt = db()->query('SELECT g.folder_path, g.updated_at AS gallery_updated_at, i.relative_path, i.file_size, i.modified_at, i.visibility
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id
-        ORDER BY g.folder_path, i.relative_path");
+        ORDER BY g.folder_path, i.relative_path');
     return $stmt ? ($stmt->fetchAll() ?: []) : [];
 }
 
@@ -165,6 +195,8 @@ function downloads_model_all_signature_rows(): array
  */
 function downloads_model_all_galleries(): array
 {
-    $stmt = db()->query('SELECT * FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
+    $stmt = db()->query(
+        'SELECT * FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id',
+    );
     return $stmt ? ($stmt->fetchAll() ?: []) : [];
 }

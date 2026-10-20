@@ -39,7 +39,11 @@ function cooperative_pairing_json(array $payload, int $status = 200): void
  */
 function cooperative_pairing_request_body(): array
 {
-    if (strtolower(trim(explode(';', (string) ($_SERVER['CONTENT_TYPE'] ?? ''), 2)[0])) !== 'application/json') {
+    if (
+        strtolower(trim(
+            explode(';', (string) ($_SERVER['CONTENT_TYPE'] ?? ''), 2)[0],
+        )) !== 'application/json'
+    ) {
         throw new CooperativeException('json_required');
     }
     $stream = fopen('php://input', 'rb');
@@ -47,11 +51,17 @@ function cooperative_pairing_request_body(): array
         throw new CooperativeException('invalid_message');
     }
     try {
-        $raw = stream_get_contents($stream, Service\COOPERATIVE_PAIRING_MAX_BYTES + 1);
+        $raw = stream_get_contents(
+            $stream,
+            Service\COOPERATIVE_PAIRING_MAX_BYTES + 1,
+        );
     } finally {
         fclose($stream);
     }
-    if (!is_string($raw) || strlen($raw) > Service\COOPERATIVE_PAIRING_MAX_BYTES) {
+    if (
+        !is_string($raw)
+        || strlen($raw) > Service\COOPERATIVE_PAIRING_MAX_BYTES
+    ) {
         throw new CooperativeException('message_too_large');
     }
     try {
@@ -71,8 +81,15 @@ function cooperative_pairing_request_body(): array
  */
 function cooperative_pairing_bearer(): string
 {
-    $value = (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
-    return preg_match('/\ABearer ([A-Za-z0-9_-]{32,128})\z/', $value, $match) === 1 ? $match[1] : '';
+    $value = (string) (
+        $_SERVER['HTTP_AUTHORIZATION']
+        ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+        ?? ''
+    );
+    return preg_match('/\ABearer ([A-Za-z0-9_-]{32,128})\z/', $value, $match)
+    === 1
+        ? $match[1]
+        : '';
 }
 
 /** Return a bounded status code without exposing storage or transport exception details.
@@ -85,10 +102,20 @@ function cooperative_pairing_error_status(string $reason): int
     return match ($reason) {
         'feature_disabled', 'pairing_not_found' => 404,
         'pairing_unauthorized', 'wrong_invitation_recipient' => 403,
-        'revision_conflict', 'request_conflict', 'exchange_conflict', 'peer_already_registered' => 409,
+        'revision_conflict',
+        'request_conflict',
+        'exchange_conflict',
+        'peer_already_registered',
+            => 409,
         'retry_not_due' => 429,
-        'schema_missing', 'schema_unknown', 'peer_unavailable', 'peer_response_invalid',
-        'pairing_secret_unavailable', 'secret_unavailable', 'canonical_base_required' => 503,
+        'schema_missing',
+        'schema_unknown',
+        'peer_unavailable',
+        'peer_response_invalid',
+        'pairing_secret_unavailable',
+        'secret_unavailable',
+        'canonical_base_required',
+            => 503,
         default => 400,
     };
 }
@@ -109,14 +136,26 @@ function cms_cooperative_peer_api(): void
             return;
         }
         if ($method !== 'POST') {
-            cooperative_pairing_json(['ok' => false, 'error_code' => 'method_not_allowed'], 405);
+            cooperative_pairing_json([
+                'ok' => false,
+                'error_code' => 'method_not_allowed',
+            ], 405);
             return;
         }
-        cooperative_pairing_json(Service\cooperative_pairing_receive(cooperative_pairing_request_body(), cooperative_pairing_bearer()));
+        cooperative_pairing_json(Service\cooperative_pairing_receive(
+            cooperative_pairing_request_body(),
+            cooperative_pairing_bearer(),
+        ));
     } catch (CooperativeException $error) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => $error->reason], cooperative_pairing_error_status($error->reason));
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => $error->reason,
+        ], cooperative_pairing_error_status($error->reason));
     } catch (\Throwable) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'pairing_unavailable'], 503);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'pairing_unavailable',
+        ], 503);
     }
 }
 
@@ -128,7 +167,10 @@ function cms_admin_cooperative_state(): void
 {
     Core\require_admin();
     if (Core\request_method() !== 'GET') {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'method_not_allowed'], 405);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'method_not_allowed',
+        ], 405);
         return;
     }
     try {
@@ -136,11 +178,20 @@ function cms_admin_cooperative_state(): void
         if ($cursor === false || $cursor < 0) {
             throw new CooperativeException('invalid_cursor');
         }
-        cooperative_pairing_json(['ok' => true, 'state' => Service\cooperative_pairing_admin_state($cursor)]);
+        cooperative_pairing_json([
+            'ok' => true,
+            'state' => Service\cooperative_pairing_admin_state($cursor),
+        ]);
     } catch (CooperativeException $error) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => $error->reason], cooperative_pairing_error_status($error->reason));
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => $error->reason,
+        ], cooperative_pairing_error_status($error->reason));
     } catch (\Throwable) {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'pairing_unavailable'], 503);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'pairing_unavailable',
+        ], 503);
     }
 }
 
@@ -154,8 +205,10 @@ function cms_admin_cooperative_state(): void
  * @param int $limit Maximum number of records or bytes to accept.
  * @return string Result described by the operation above.
  */
-function cooperative_pairing_form_string(string $key, int $limit = Service\COOPERATIVE_PAIRING_CODE_MAX_BYTES): string
-{
+function cooperative_pairing_form_string(
+    string $key,
+    int $limit = Service\COOPERATIVE_PAIRING_CODE_MAX_BYTES,
+): string {
     $value = $_POST[$key] ?? '';
     if (!is_string($value) || strlen($value) > $limit) {
         throw new CooperativeException('invalid_input');
@@ -171,7 +224,10 @@ function cms_admin_cooperative_action(): void
 {
     Core\require_admin();
     if (Core\request_method() !== 'POST') {
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'method_not_allowed'], 405);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'method_not_allowed',
+        ], 405);
         return;
     }
     Core\verify_csrf();
@@ -187,19 +243,48 @@ function cms_admin_cooperative_action(): void
             throw new CooperativeException('invalid_revision');
         }
         $result = match ($action) {
-            'invite' => Service\cooperative_pairing_create(cooperative_pairing_form_string('base_url', 2048), cooperative_pairing_form_string('request_id', 32)),
-            'import' => ['pairing' => Service\cooperative_pairing_import(cooperative_pairing_form_string('invitation_code'))],
-            'accept' => ['pairing' => Service\cooperative_pairing_accept($invitationId, $revision)],
-            'retry' => ['pairing' => Service\cooperative_pairing_resume($invitationId)],
-            'revoke', 'decline' => ['pairing' => Service\cooperative_pairing_revoke($invitationId, $revision)],
+            'invite' => Service\cooperative_pairing_create(
+                cooperative_pairing_form_string('base_url', 2048),
+                cooperative_pairing_form_string('request_id', 32),
+            ),
+            'import' => [
+                'pairing' => Service\cooperative_pairing_import(cooperative_pairing_form_string(
+                    'invitation_code',
+                )),
+            ],
+            'accept' => ['pairing' => Service\cooperative_pairing_accept(
+                $invitationId,
+                $revision,
+            )],
+            'retry' => [
+                'pairing' => Service\cooperative_pairing_resume($invitationId),
+            ],
+            'revoke',
+            'decline',
+                => ['pairing' => Service\cooperative_pairing_revoke(
+                $invitationId,
+                $revision,
+            )],
             default => throw new CooperativeException('invalid_action'),
         };
         $envelope = Core\admin_mutation_success_envelope(
-            Service\t('admin.cooperative.updated', 'Cooperative pairing state updated.'),
-            Core\admin_mutation_descriptor('cooperative_pairing.' . $action, 'cooperative_pairing', $action, [$result['pairing']['id']]),
-            Core\admin_mutation_panel_metadata('cooperative_pairing', Core\url_for('admin_cooperative_galleries', ['panel' => 1]), true),
+            Service\t(
+                'admin.cooperative.updated',
+                'Cooperative pairing state updated.',
+            ),
+            Core\admin_mutation_descriptor(
+                'cooperative_pairing.' . $action,
+                'cooperative_pairing',
+                $action,
+                [$result['pairing']['id']],
+            ),
+            Core\admin_mutation_panel_metadata(
+                'cooperative_pairing',
+                Core\url_for('admin_cooperative_galleries', ['panel' => 1]),
+                true,
+            ),
             [],
-            ['redirect_url' => Core\url_for('admin_cooperative_galleries')]
+            ['redirect_url' => Core\url_for('admin_cooperative_galleries')],
         );
         // A deliberate invitation-creation response may carry its short-lived share code.
         // System API keys, hashes and encrypted records never enter this UI response.
@@ -210,11 +295,19 @@ function cms_admin_cooperative_action(): void
         cooperative_pairing_action_response($envelope);
     } catch (CooperativeException $error) {
         cooperative_pairing_action_response(Core\admin_mutation_error_envelope(
-            Service\t('admin.cooperative.refused', 'Cooperative pairing could not be completed.'), 'cooperative.' . $error->reason
+            Service\t(
+                'admin.cooperative.refused',
+                'Cooperative pairing could not be completed.',
+            ),
+            'cooperative.' . $error->reason,
         ), cooperative_pairing_error_status($error->reason));
     } catch (\Throwable) {
         cooperative_pairing_action_response(Core\admin_mutation_error_envelope(
-            Service\t('admin.cooperative.unavailable', 'Cooperative pairing is temporarily unavailable.'), 'cooperative.unavailable'
+            Service\t(
+                'admin.cooperative.unavailable',
+                'Cooperative pairing is temporarily unavailable.',
+            ),
+            'cooperative.unavailable',
         ), 503);
     }
 }
@@ -224,8 +317,10 @@ function cms_admin_cooperative_action(): void
  * @param int $status HTTP response status.
  * @return void Emits the selected transport representation.
  */
-function cooperative_pairing_action_response(array $envelope, int $status = 200): void
-{
+function cooperative_pairing_action_response(
+    array $envelope,
+    int $status = 200,
+): void {
     if (($_POST['cooperative_ui'] ?? '') === '1') {
         admin_cooperative_ui_response($envelope, $status);
         return;

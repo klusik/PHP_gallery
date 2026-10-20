@@ -35,7 +35,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE auth_rate_limits (
+    'CREATE TABLE auth_rate_limits (
         id INT AUTO_INCREMENT PRIMARY KEY,
         bucket VARCHAR(64) NOT NULL,
         subject_hash CHAR(64) NOT NULL,
@@ -46,5 +46,5 @@ return [
         UNIQUE KEY auth_rate_bucket_subject_unique (bucket, subject_hash),
         KEY auth_rate_locked_until_idx (locked_until),
         KEY auth_rate_last_attempt_idx (last_attempt_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

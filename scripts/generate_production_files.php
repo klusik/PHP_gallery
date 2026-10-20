@@ -73,7 +73,10 @@ function production_files_has_flag(string $flag): bool
  */
 function production_files_server_policy_allowlist(): array
 {
-    return array_fill_keys(\Gallery\Core\release_file_policy_server_paths(), true);
+    return array_fill_keys(
+        \Gallery\Core\release_file_policy_server_paths(),
+        true,
+    );
 }
 
 /**
@@ -96,8 +99,12 @@ function production_files_is_updater_owned(string $relativePath): bool
 function production_files_is_approved(string $relativePath): bool
 {
     $relativePath = str_replace('\\', '/', $relativePath);
-    return \Gallery\Core\release_file_policy_is_safe_relative_path($relativePath)
-        && \Gallery\Core\release_file_policy_is_production_path($relativePath);
+    return (
+        \Gallery\Core\release_file_policy_is_safe_relative_path($relativePath)
+            && \Gallery\Core\release_file_policy_is_production_path(
+                $relativePath,
+            )
+    );
 }
 
 /**
@@ -110,9 +117,15 @@ function production_files_is_approved(string $relativePath): bool
 function production_files_git_index(string $root): array
 {
     $command = ['git', '-C', $root, 'ls-files', '--stage', '-z', '--cached'];
-    $process = proc_open($command, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $process = proc_open(
+        $command,
+        [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+        $pipes,
+    );
     if (!is_resource($process)) {
-        throw new RuntimeException('Could not read the Git index for production inventory generation.');
+        throw new RuntimeException(
+            'Could not read the Git index for production inventory generation.',
+        );
     }
     fclose($pipes[0]);
     $stdout = stream_get_contents($pipes[1]);
@@ -121,7 +134,9 @@ function production_files_git_index(string $root): array
     fclose($pipes[2]);
     $status = proc_close($process);
     if ($status !== 0 || !is_string($stdout)) {
-        throw new RuntimeException('Git index listing failed: ' . trim((string) $stderr));
+        throw new RuntimeException(
+            'Git index listing failed: ' . trim((string) $stderr),
+        );
     }
 
     $records = [];
@@ -131,15 +146,27 @@ function production_files_git_index(string $root): array
         }
         $tab = strpos($line, "\t");
         if ($tab === false) {
-            throw new RuntimeException('Git index listing contains a malformed entry.');
+            throw new RuntimeException(
+                'Git index listing contains a malformed entry.',
+            );
         }
         $metadata = substr($line, 0, $tab);
         $path = substr($line, $tab + 1);
-        if (preg_match('/^(100644|100755|120000|160000) [0-9a-f]{40} 0$/', $metadata, $match) !== 1) {
-            throw new RuntimeException('Git index listing contains an unsupported file mode.');
+        if (
+            preg_match(
+                '/^(100644|100755|120000|160000) [0-9a-f]{40} 0$/',
+                $metadata,
+                $match,
+            ) !== 1
+        ) {
+            throw new RuntimeException(
+                'Git index listing contains an unsupported file mode.',
+            );
         }
         if (!\Gallery\Core\release_file_policy_is_safe_relative_path($path)) {
-            throw new RuntimeException('Git index contains an unsafe production path.');
+            throw new RuntimeException(
+                'Git index contains an unsafe production path.',
+            );
         }
         $records[] = ['mode' => $match[1], 'path' => $path];
     }
@@ -172,12 +199,26 @@ function production_files_build_inventory(string $root): array
         $relative = $record['path'];
         if (isset(production_files_server_policy_allowlist()[$relative])) {
             if (in_array($record['mode'], ['120000', '160000'], true)) {
-                throw new RuntimeException('Production inventory cannot contain symlinks or submodules.');
+                throw new RuntimeException(
+                    'Production inventory cannot contain symlinks or submodules.',
+                );
             }
-            $absolute = $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-            if (is_link($absolute) || !is_file($absolute) || !is_readable($absolute)
-                || !\Gallery\Core\release_file_policy_resolves_to_expected_path($root, $relative, $absolute)) {
-                throw new RuntimeException('A tracked server-policy file is missing, unreadable, or unsafe: ' . $relative);
+            $absolute =
+                $root
+                . DIRECTORY_SEPARATOR
+                . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+            if (
+                is_link($absolute)
+                || !is_file($absolute)
+                || !is_readable($absolute)
+                || !\Gallery\Core\release_file_policy_resolves_to_expected_path(
+                    $root,
+                    $relative,
+                    $absolute,
+                )
+            ) {
+                throw new RuntimeException('A tracked server-policy file is missing, unreadable, or unsafe: '
+                    . $relative);
             }
             $production[] = $relative;
             $updater[] = $relative;
@@ -185,7 +226,9 @@ function production_files_build_inventory(string $root): array
         }
         if (str_starts_with($relative, 'tests/')) {
             if (in_array($record['mode'], ['120000', '160000'], true)) {
-                throw new RuntimeException('Source-review inventory cannot contain symlinks or submodules.');
+                throw new RuntimeException(
+                    'Source-review inventory cannot contain symlinks or submodules.',
+                );
             }
             $sourceReview[] = $relative;
             continue;
@@ -194,18 +237,36 @@ function production_files_build_inventory(string $root): array
             continue;
         }
         if (in_array($record['mode'], ['120000', '160000'], true)) {
-            throw new RuntimeException('Production inventory cannot contain symlinks or submodules.');
+            throw new RuntimeException(
+                'Production inventory cannot contain symlinks or submodules.',
+            );
         }
-        $absolute = $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        if (is_link($absolute) || !is_file($absolute) || !is_readable($absolute)
-            || !\Gallery\Core\release_file_policy_resolves_to_expected_path($root, $relative, $absolute)) {
-            throw new RuntimeException('A tracked production file is missing, unreadable, or unsafe: ' . $relative);
+        $absolute =
+            $root
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        if (
+            is_link($absolute)
+            || !is_file($absolute)
+            || !is_readable($absolute)
+            || !\Gallery\Core\release_file_policy_resolves_to_expected_path(
+                $root,
+                $relative,
+                $absolute,
+            )
+        ) {
+            throw new RuntimeException('A tracked production file is missing, unreadable, or unsafe: '
+                . $relative);
         }
         // Keep the schema-1 base readable by installed CMS updaters with the older allowlist.
-        if (\Gallery\Core\release_file_policy_is_winapp_resource_path($relative)) {
+        if (\Gallery\Core\release_file_policy_is_winapp_resource_path(
+            $relative,
+        )) {
             // Do not extend companion_files beyond installed readers' allowlist.
             $companionResources[] = $relative;
-        } elseif (\Gallery\Core\release_file_policy_is_winapp_source_path($relative)) {
+        } elseif (\Gallery\Core\release_file_policy_is_winapp_source_path(
+            $relative,
+        )) {
             $companion[] = $relative;
         } else {
             $production[] = $relative;
@@ -220,19 +281,32 @@ function production_files_build_inventory(string $root): array
     sort($companionResources, SORT_STRING);
     sort($updater, SORT_STRING);
     sort($sourceReview, SORT_STRING);
-    $production = \Gallery\Core\release_file_policy_validate_path_list($production);
-    $companion = \Gallery\Core\release_file_policy_validate_path_list($companion);
-    $companionResources = \Gallery\Core\release_file_policy_validate_path_list($companionResources);
+    $production =
+        \Gallery\Core\release_file_policy_validate_path_list($production);
+    $companion =
+        \Gallery\Core\release_file_policy_validate_path_list($companion);
+    $companionResources =
+        \Gallery\Core\release_file_policy_validate_path_list(
+            $companionResources,
+        );
     $updater = \Gallery\Core\release_file_policy_validate_path_list($updater);
-    $sourceReview = \Gallery\Core\release_file_policy_validate_path_list($sourceReview);
-    $all = array_merge($production, $companion, $companionResources, $sourceReview);
+    $sourceReview =
+        \Gallery\Core\release_file_policy_validate_path_list($sourceReview);
+    $all = array_merge(
+        $production,
+        $companion,
+        $companionResources,
+        $sourceReview,
+    );
     sort($all, SORT_STRING);
     \Gallery\Core\release_file_policy_validate_path_list($all);
     return [
         'schema_version' => 1,
         'production_files' => array_values(array_unique($production)),
         'companion_files' => array_values(array_unique($companion)),
-        'companion_resource_files' => array_values(array_unique($companionResources)),
+        'companion_resource_files' => array_values(array_unique(
+            $companionResources,
+        )),
         'updater_files' => array_values(array_unique($updater)),
         'source_review_files' => array_values(array_unique($sourceReview)),
     ];
@@ -245,10 +319,13 @@ function production_files_build_inventory(string $root): array
  */
 function production_files_print_usage(): void
 {
-    echo "Usage: php scripts/generate_production_files.php [--root=PATH] [--check]\n";
+    echo
+        "Usage: php scripts/generate_production_files.php [--root=PATH] [--check]\n";
     echo "\n";
-    echo "Refresh app/production-files.json from approved tracked/staged paths.\n";
-    echo "  --check  Compare the checked-in inventory with Git-index membership without writing.\n";
+    echo
+        "Refresh app/production-files.json from approved tracked/staged paths.\n";
+    echo
+        "  --check  Compare the checked-in inventory with Git-index membership without writing.\n";
 }
 
 /**
@@ -258,8 +335,10 @@ function production_files_print_usage(): void
  * @param string $expected Canonical generated inventory contents with LF endings.
  * @return bool True when contents match after CRLF normalization.
  */
-function production_files_inventory_content_matches(?string $current, string $expected): bool
-{
+function production_files_inventory_content_matches(
+    ?string $current,
+    string $expected,
+): bool {
     if ($current === null) {
         return false;
     }
@@ -278,39 +357,66 @@ if (production_files_has_flag('--help') || production_files_has_flag('-h')) {
 try {
     $root = production_files_root();
     $inventory = production_files_build_inventory($root);
-    $json = json_encode($inventory, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $json = json_encode(
+        $inventory,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    );
     if ($json === false) {
-        throw new RuntimeException('Could not encode the production file inventory.');
+        throw new RuntimeException(
+            'Could not encode the production file inventory.',
+        );
     }
     $output = $root . '/app/production-files.json';
     $content = $json . "\n";
 
     if (production_files_has_flag('--check')) {
-        $current = is_file($output) && !is_link($output) ? file_get_contents($output) : false;
+        $current = is_file($output) && !is_link($output)
+            ? file_get_contents($output)
+            : false;
         // Ignore checkout EOL conversion while retaining the full deterministic content comparison.
-        if (!production_files_inventory_content_matches(is_string($current) ? $current : null, $content)) {
-            fwrite(STDERR, "Production file inventory is stale. Run php scripts/generate_production_files.php after staging intended production files.\n");
+        if (!production_files_inventory_content_matches(
+            is_string($current) ? $current : null,
+            $content,
+        )) {
+            fwrite(
+                STDERR,
+                "Production file inventory is stale. Run php scripts/generate_production_files.php after staging intended production files.\n",
+            );
             exit(1);
         }
         echo "Production file inventory is current.\n";
         exit(0);
     }
 
-    $existing = is_file($output) && !is_link($output) ? file_get_contents($output) : false;
-    if (production_files_inventory_content_matches(is_string($existing) ? $existing : null, $content)) {
+    $existing = is_file($output) && !is_link($output)
+        ? file_get_contents($output)
+        : false;
+    if (production_files_inventory_content_matches(
+        is_string($existing) ? $existing : null,
+        $content,
+    )) {
         echo "Production file inventory already current (no write).\n";
         exit(0);
     }
-    if (is_link($output) || file_put_contents($output, $content, LOCK_EX) === false) {
-        throw new RuntimeException('Could not write app/production-files.json.');
+    if (
+        is_link($output)
+        || file_put_contents($output, $content, LOCK_EX) === false
+    ) {
+        throw new RuntimeException(
+            'Could not write app/production-files.json.',
+        );
     }
-    $companionCount = count($inventory['companion_files'])
+    $companionCount =
+        count($inventory['companion_files'])
         + count($inventory['companion_resource_files']);
-    echo 'Wrote app/production-files.json ('
-        . (count($inventory['production_files']) + $companionCount)
-        . ' production files including '
-        . $companionCount . ' companion files/resources, '
-        . count($inventory['source_review_files']) . " source-review files).\n";
+    echo
+        'Wrote app/production-files.json ('
+            . (count($inventory['production_files']) + $companionCount)
+            . ' production files including '
+            . $companionCount
+            . ' companion files/resources, '
+            . count($inventory['source_review_files'])
+            . " source-review files).\n";
 } catch (RuntimeException $exception) {
     fwrite(STDERR, $exception->getMessage() . "\n");
     exit(1);

@@ -130,7 +130,9 @@ function gallery_trash_enabled(): bool
  */
 function gallery_trash_auto_purge_enabled(): bool
 {
-    return (string) app_setting('gallery_trash_auto_purge_enabled', '0') === '1';
+    return (
+        (string) app_setting('gallery_trash_auto_purge_enabled', '0') === '1'
+    );
 }
 
 /**
@@ -155,7 +157,10 @@ function gallery_trash_auto_purge_active(): bool
 function gallery_trash_retention_days(): int
 {
     return gallery_trash_normalize_retention_days(
-        (int) app_setting('gallery_trash_retention_days', (string) GALLERY_TRASH_DEFAULT_RETENTION_DAYS)
+        (int) app_setting(
+            'gallery_trash_retention_days',
+            (string) GALLERY_TRASH_DEFAULT_RETENTION_DAYS,
+        ),
     );
 }
 
@@ -167,7 +172,10 @@ function gallery_trash_retention_days(): int
  */
 function gallery_trash_normalize_retention_days(int $days): int
 {
-    return max(GALLERY_TRASH_MIN_RETENTION_DAYS, min(GALLERY_TRASH_MAX_RETENTION_DAYS, $days));
+    return max(GALLERY_TRASH_MIN_RETENTION_DAYS, min(
+        GALLERY_TRASH_MAX_RETENTION_DAYS,
+        $days,
+    ));
 }
 
 /**
@@ -178,7 +186,10 @@ function gallery_trash_normalize_retention_days(int $days): int
 function gallery_trash_purge_batch_size(): int
 {
     return gallery_trash_normalize_purge_batch_size(
-        (int) app_setting('gallery_trash_purge_batch', (string) GALLERY_TRASH_DEFAULT_PURGE_BATCH)
+        (int) app_setting(
+            'gallery_trash_purge_batch',
+            (string) GALLERY_TRASH_DEFAULT_PURGE_BATCH,
+        ),
     );
 }
 
@@ -190,7 +201,10 @@ function gallery_trash_purge_batch_size(): int
  */
 function gallery_trash_normalize_purge_batch_size(int $batchSize): int
 {
-    return max(GALLERY_TRASH_MIN_PURGE_BATCH, min(GALLERY_TRASH_MAX_PURGE_BATCH, $batchSize));
+    return max(GALLERY_TRASH_MIN_PURGE_BATCH, min(
+        GALLERY_TRASH_MAX_PURGE_BATCH,
+        $batchSize,
+    ));
 }
 
 /**
@@ -206,9 +220,14 @@ function gallery_trash_normalize_purge_batch_size(int $batchSize): int
  * @param bool $autoPurgeEnabled Whether maintenance may permanently purge expired entries.
  * @param int $retentionDays Requested retention length in days.
  * @param int $purgeBatch Requested maintenance/empty-trash batch size.
+ * @return void Persists normalized trash settings and rearms deadlines when automatic purge is newly enabled.
  */
-function set_gallery_trash_settings(bool $enabled, bool $autoPurgeEnabled, int $retentionDays, int $purgeBatch): void
-{
+function set_gallery_trash_settings(
+    bool $enabled,
+    bool $autoPurgeEnabled,
+    int $retentionDays,
+    int $purgeBatch,
+): void {
     // $retentionDays stores the normalized retention value written and used for any deadline reset.
     $retentionDays = gallery_trash_normalize_retention_days($retentionDays);
     // $purgeBatch stores the normalized maintenance batch value written below.
@@ -228,13 +247,23 @@ function set_gallery_trash_settings(bool $enabled, bool $autoPurgeEnabled, int $
 
     // Activating the destructive combination after either component was paused gets a fresh
     // retention window while at least one old guard is still off. This prevents immediate purge.
-    if ($enabled && $autoPurgeEnabled && (!$wasEnabled || !$wasAutoPurgeEnabled)) {
+    if (
+        $enabled
+        && $autoPurgeEnabled
+        && (
+            !$wasEnabled
+            || !$wasAutoPurgeEnabled
+        )
+    ) {
         gallery_trash_rearm_retention_deadlines($retentionDays);
     }
 
     set_app_setting('gallery_trash_retention_days', (string) $retentionDays);
     set_app_setting('gallery_trash_purge_batch', (string) $purgeBatch);
-    set_app_setting('gallery_trash_auto_purge_enabled', $autoPurgeEnabled ? '1' : '0');
+    set_app_setting(
+        'gallery_trash_auto_purge_enabled',
+        $autoPurgeEnabled ? '1' : '0',
+    );
     set_app_setting('gallery_trash_enabled', $enabled ? '1' : '0');
 }
 
@@ -246,6 +275,7 @@ function set_gallery_trash_settings(bool $enabled, bool $autoPurgeEnabled, int $
  * rows may already belong to an explicit administrator action.
  *
  * @param int $retentionDays Normalized retention window in days.
+ * @return void Sets fresh purge deadlines for eligible existing trash rows.
  */
 function gallery_trash_rearm_retention_deadlines(int $retentionDays): void
 {
@@ -253,15 +283,22 @@ function gallery_trash_rearm_retention_deadlines(int $retentionDays): void
         gallery_trash_schema_status(),
         'gallery.trash.settings_auto_purge',
         'The gallery trash bin needs a database migration before automatic purge can be enabled.',
-        'The gallery trash schema could not be verified, so automatic purge was not enabled.'
+        'The gallery trash schema could not be verified, so automatic purge was not enabled.',
     );
 
     // $now stores one stable timestamp for both updated_at and the new purge deadline.
     $now = now_sql();
     // $deadline stores a fresh full retention window from the explicit enable action.
-    $deadlineTimestamp = strtotime($now . ' +' . gallery_trash_normalize_retention_days($retentionDays) . ' days');
+    $deadlineTimestamp = strtotime(
+        $now
+            . ' +'
+            . gallery_trash_normalize_retention_days($retentionDays)
+            . ' days',
+    );
     if ($deadlineTimestamp === false) {
-        throw new RuntimeException('Could not calculate the gallery trash retention deadline.');
+        throw new RuntimeException(
+            'Could not calculate the gallery trash retention deadline.',
+        );
     }
     $deadline = date('Y-m-d H:i:s', $deadlineTimestamp);
     gallery_trash_model_rearm_retention_deadlines($deadline, $now);
@@ -286,15 +323,23 @@ function gallery_trash_project_root(): string
  * boundary, so the feature fails closed instead of trying to compensate.
  *
  * @param string $storageRoot Existing absolute trash storage root.
+ * @return void Returns when roots are disjoint; throws when the trash root overlaps live gallery storage.
  */
 function gallery_trash_assert_storage_root_disjoint(string $storageRoot): void
 {
     $galleryRoot = galleries_root();
     if (!is_dir($storageRoot) || !is_dir($galleryRoot)) {
-        throw new RuntimeException('Could not verify that gallery trash storage is outside the live gallery root.');
+        throw new RuntimeException(
+            'Could not verify that gallery trash storage is outside the live gallery root.',
+        );
     }
-    if (path_inside($galleryRoot, $storageRoot) || path_inside($storageRoot, $galleryRoot)) {
-        throw new RuntimeException('Gallery trash storage must not overlap the configured live gallery root.');
+    if (
+        path_inside($galleryRoot, $storageRoot)
+        || path_inside($storageRoot, $galleryRoot)
+    ) {
+        throw new RuntimeException(
+            'Gallery trash storage must not overlap the configured live gallery root.',
+        );
     }
 }
 
@@ -306,20 +351,37 @@ function gallery_trash_assert_storage_root_disjoint(string $storageRoot): void
 function gallery_trash_root(): string
 {
     // $directory stores recoverable user data outside galleries_root() and outside disposable cache.
-    $directory = gallery_trash_project_root() . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . GALLERY_TRASH_DATA_DIRECTORY;
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new RuntimeException('Could not create the gallery trash storage directory.');
+    $directory =
+        gallery_trash_project_root()
+        . DIRECTORY_SEPARATOR
+        . 'data'
+        . DIRECTORY_SEPARATOR
+        . GALLERY_TRASH_DATA_DIRECTORY;
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new RuntimeException(
+            'Could not create the gallery trash storage directory.',
+        );
     }
     gallery_trash_assert_storage_root_disjoint($directory);
 
     // Keep runtime-created stores protected even before an application update reconciles policy files.
     // The identity header lets future updater policy reconciliation recognize the file as application-owned.
     $policyPath = $directory . DIRECTORY_SEPARATOR . '.htaccess';
-    $policyContents = "# Project: PHP Gallery\n# File: data/gallery-trash/.htaccess\n"
+    $policyContents =
+        "# Project: PHP Gallery\n# File: data/gallery-trash/.htaccess\n"
         . "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
         . "<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n";
-    if (!is_file($policyPath) && @file_put_contents($policyPath, $policyContents) === false) {
-        throw new RuntimeException('Could not create the gallery trash HTTP protection policy.');
+    if (
+        !is_file($policyPath)
+        && @file_put_contents($policyPath, $policyContents) === false
+    ) {
+        throw new RuntimeException(
+            'Could not create the gallery trash HTTP protection policy.',
+        );
     }
     return $directory;
 }
@@ -350,7 +412,14 @@ function gallery_trash_entry_dir(string $trashToken): string
     // a legacy cache-backed entry readable even if the persistent data root is temporarily
     // unavailable during an upgrade.
     $projectRoot = gallery_trash_project_root();
-    $persistent = $projectRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . GALLERY_TRASH_DATA_DIRECTORY . DIRECTORY_SEPARATOR . $trashToken;
+    $persistent =
+        $projectRoot
+        . DIRECTORY_SEPARATOR
+        . 'data'
+        . DIRECTORY_SEPARATOR
+        . GALLERY_TRASH_DATA_DIRECTORY
+        . DIRECTORY_SEPARATOR
+        . $trashToken;
     if (is_dir($persistent)) {
         gallery_trash_assert_storage_root_disjoint(dirname($persistent));
         return $persistent;
@@ -375,7 +444,13 @@ function gallery_trash_entry_dir(string $trashToken): string
  */
 function gallery_trash_legacy_root(): string
 {
-    return gallery_trash_project_root() . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . GALLERY_TRASH_LEGACY_CACHE_DIRECTORY;
+    return (
+        gallery_trash_project_root()
+            . DIRECTORY_SEPARATOR
+            . 'cache'
+            . DIRECTORY_SEPARATOR
+            . GALLERY_TRASH_LEGACY_CACHE_DIRECTORY
+    );
 }
 
 /**
@@ -395,7 +470,11 @@ function gallery_trash_entry_storage_root(string $trashToken): string
     // Resolve the legacy root first so compatibility operations do not depend on the
     // corrected persistent root being writable merely to remove an old isolated payload.
     $legacyRoot = gallery_trash_legacy_root();
-    if (is_dir($legacyRoot) && is_dir($directory) && path_inside($legacyRoot, $directory)) {
+    if (
+        is_dir($legacyRoot)
+        && is_dir($directory)
+        && path_inside($legacyRoot, $directory)
+    ) {
         return $legacyRoot;
     }
 
@@ -405,10 +484,18 @@ function gallery_trash_entry_storage_root(string $trashToken): string
     }
 
     // A not-yet-created new entry always belongs to persistent storage.
-    if (!file_exists($directory) && str_starts_with($directory, rtrim($persistentRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) {
+    if (
+        !file_exists($directory)
+        && str_starts_with(
+            $directory,
+            rtrim($persistentRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR,
+        )
+    ) {
         return $persistentRoot;
     }
-    throw new RuntimeException('Trash entry storage path is outside the managed trash roots.');
+    throw new RuntimeException(
+        'Trash entry storage path is outside the managed trash roots.',
+    );
 }
 
 /**
@@ -418,11 +505,23 @@ function gallery_trash_entry_storage_root(string $trashToken): string
  * @param string $folderPath Original gallery folder path.
  * @return string Absolute payload path for the moved gallery folder.
  */
-function gallery_trash_payload_path(string $trashToken, string $folderPath): string
-{
+function gallery_trash_payload_path(
+    string $trashToken,
+    string $folderPath,
+): string {
     // $relative stores the original gallery path rebuilt with platform separators.
-    $relative = str_replace('/', DIRECTORY_SEPARATOR, normalize_relative_path($folderPath));
-    return gallery_trash_entry_dir($trashToken) . DIRECTORY_SEPARATOR . 'payload' . DIRECTORY_SEPARATOR . $relative;
+    $relative = str_replace(
+        '/',
+        DIRECTORY_SEPARATOR,
+        normalize_relative_path($folderPath),
+    );
+    return (
+        gallery_trash_entry_dir($trashToken)
+            . DIRECTORY_SEPARATOR
+            . 'payload'
+            . DIRECTORY_SEPARATOR
+            . $relative
+    );
 }
 
 /**
@@ -444,7 +543,9 @@ function gallery_trash_gallery_path(string $folderPath): string
     if ($folderPath === '' || $folderPath === '.') {
         throw new RuntimeException('Invalid gallery folder path.');
     }
-    return galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folderPath);
+    return galleries_root()
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $folderPath);
 }
 
 /**
@@ -469,13 +570,15 @@ function gallery_trash_assert_token(string $trashToken): void
  */
 function gallery_trash_available(): bool
 {
-    return gallery_trash_enabled() && schema_inspection_is_available(gallery_trash_schema_status());
+    return gallery_trash_enabled()
+        && schema_inspection_is_available(gallery_trash_schema_status());
 }
 
 /**
  * Refuse a trash mutation when the required storage cannot be verified.
  *
  * @param string $operation Stable operation identifier used by refusal logs.
+ * @return void Returns when the required trash schema is available; otherwise throws when unavailable.
  */
 function gallery_trash_assert_available(string $operation): void
 {
@@ -483,7 +586,7 @@ function gallery_trash_assert_available(string $operation): void
         gallery_trash_schema_status(),
         $operation,
         'The gallery trash bin requires the current database schema. Run pending migrations first.',
-        'The gallery trash bin is temporarily unavailable because the required database schema could not be verified.'
+        'The gallery trash bin is temporarily unavailable because the required database schema could not be verified.',
     );
 }
 
@@ -500,9 +603,13 @@ function gallery_trash_assert_available(string $operation): void
  * @param string $source Existing absolute source directory.
  * @param string $destination Absolute destination directory that must not exist.
  * @param string $deleteAllowedRoot Allowed root for the fallback source removal.
+ * @return void Moves and verifies the directory at its destination, throwing on failure.
  */
-function gallery_trash_move_directory(string $source, string $destination, string $deleteAllowedRoot): void
-{
+function gallery_trash_move_directory(
+    string $source,
+    string $destination,
+    string $deleteAllowedRoot,
+): void {
     if (!is_dir($source)) {
         throw new RuntimeException('Source folder does not exist.');
     }
@@ -524,11 +631,19 @@ function gallery_trash_move_directory(string $source, string $destination, strin
     $staged = $destination . '.partial-' . bin2hex(random_bytes(6));
     try {
         gallery_trash_copy_directory($source, $staged);
-        if (gallery_trash_directory_signature($source) !== gallery_trash_directory_signature($staged)) {
-            throw new RuntimeException('Cross-filesystem gallery copy verification failed.');
+        if (
+            gallery_trash_directory_signature(
+                $source,
+            ) !== gallery_trash_directory_signature($staged)
+        ) {
+            throw new RuntimeException(
+                'Cross-filesystem gallery copy verification failed.',
+            );
         }
         if (!@rename($staged, $destination)) {
-            throw new RuntimeException('Could not finalize the copied gallery folder.');
+            throw new RuntimeException(
+                'Could not finalize the copied gallery folder.',
+            );
         }
         delete_directory_tree($source, $deleteAllowedRoot);
     } catch (Throwable $exception) {
@@ -548,21 +663,30 @@ function gallery_trash_move_directory(string $source, string $destination, strin
  *
  * @param string $source Existing absolute source directory.
  * @param string $destination Absolute destination directory.
+ * @return void Copies the tree recursively, refusing unsupported or unsafe entries.
  */
 function gallery_trash_copy_directory(string $source, string $destination): void
 {
-    if (!is_dir($destination) && !@mkdir($destination, 0775, true) && !is_dir($destination)) {
-        throw new RuntimeException('Could not create folder: ' . basename($destination));
+    if (
+        !is_dir($destination)
+        && !@mkdir($destination, 0775, true)
+        && !is_dir($destination)
+    ) {
+        throw new RuntimeException(
+            'Could not create folder: ' . basename($destination),
+        );
     }
 
     // $iterator stores a parent-first walk so directories exist before their files.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
+        RecursiveIteratorIterator::SELF_FIRST,
     );
     foreach ($iterator as $entry) {
         if ($entry->isLink()) {
-            throw new RuntimeException('Cross-filesystem trash moves do not follow symbolic links.');
+            throw new RuntimeException(
+                'Cross-filesystem trash moves do not follow symbolic links.',
+            );
         }
         // $relative stores the entry path relative to the copied root.
         $relative = substr($entry->getPathname(), strlen($source) + 1);
@@ -572,8 +696,13 @@ function gallery_trash_copy_directory(string $source, string $destination): void
         // $target stores the matching path inside the destination tree.
         $target = $destination . DIRECTORY_SEPARATOR . $relative;
         if ($entry->isDir()) {
-            if (!is_dir($target) && !@mkdir($target, 0775, true) && !is_dir($target)) {
-                throw new RuntimeException('Could not create folder: ' . $relative);
+            if (
+                !is_dir($target)
+                && !@mkdir($target, 0775, true)
+                && !is_dir($target)
+            ) {
+                throw new RuntimeException('Could not create folder: '
+                    . $relative);
             }
             continue;
         }
@@ -602,31 +731,48 @@ function gallery_trash_directory_signature(string $directory): string
     // $records stores deterministic path/size/content identities before sorting.
     $records = [];
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
+        new RecursiveDirectoryIterator(
+            $directory,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::SELF_FIRST,
     );
     foreach ($iterator as $entry) {
         if ($entry->isLink()) {
-            throw new RuntimeException('Trash copy verification refuses symbolic links.');
+            throw new RuntimeException(
+                'Trash copy verification refuses symbolic links.',
+            );
         }
         if (!$entry->isFile()) {
             continue;
         }
-        $relative = substr($entry->getPathname(), strlen(rtrim($directory, DIRECTORY_SEPARATOR)) + 1);
+        $relative = substr(
+            $entry->getPathname(),
+            strlen(rtrim($directory, DIRECTORY_SEPARATOR)) + 1,
+        );
         if (!is_string($relative) || $relative === '') {
-            throw new RuntimeException('Trash copy verification could not resolve a relative file path.');
+            throw new RuntimeException(
+                'Trash copy verification could not resolve a relative file path.',
+            );
         }
         $size = max(0, (int) $entry->getSize());
         $hash = @hash_file('sha256', $entry->getPathname());
         if (!is_string($hash) || $hash === '') {
-            throw new RuntimeException('Trash copy verification could not hash a copied file.');
+            throw new RuntimeException(
+                'Trash copy verification could not hash a copied file.',
+            );
         }
         $files++;
         $bytes += $size;
-        $records[] = str_replace('\\', '/', $relative) . "\0" . $size . "\0" . $hash;
+        $records[] =
+            str_replace('\\', '/', $relative) . "\0" . $size . "\0" . $hash;
     }
     sort($records, SORT_STRING);
-    return $files . ':' . $bytes . ':' . hash('sha256', implode("\n", $records));
+    return $files
+        . ':'
+        . $bytes
+        . ':'
+        . hash('sha256', implode("\n", $records));
 }
 
 /**
@@ -645,8 +791,11 @@ function gallery_trash_directory_size(string $directory): int
     $bytes = 0;
     try {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
+            new RecursiveDirectoryIterator(
+                $directory,
+                FilesystemIterator::SKIP_DOTS,
+            ),
+            RecursiveIteratorIterator::CHILD_FIRST,
         );
         foreach ($iterator as $entry) {
             if ($entry->isFile() && !$entry->isLink()) {
@@ -748,7 +897,10 @@ function gallery_trash_existing_columns(string $table, array $columns): array
     // $available stores only columns whose presence was positively confirmed.
     $available = [];
     foreach ($columns as $column) {
-        if (schema_inspection_is_available(schema_inspection_column($table, $column))) {
+        if (schema_inspection_is_available(schema_inspection_column(
+            $table,
+            $column,
+        ))) {
             $available[] = $column;
         }
     }
@@ -764,31 +916,48 @@ function gallery_trash_existing_columns(string $table, array $columns): array
 function gallery_trash_snapshot_gallery_record(array $gallery): array
 {
     // $folderPath stores the stable filesystem identity used during restore.
-    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    $folderPath = normalize_relative_path(
+        (string) ($gallery['folder_path'] ?? ''),
+    );
     // $parentPath stores the stable parent filesystem identity, when nested.
     $parentPath = trim(str_replace('\\', '/', dirname($folderPath)), '.');
     // $record stores only explicitly restorable durable columns.
     $record = [
         'folder_path' => $folderPath,
-        'parent_folder_path' => ($parentPath === '' || $parentPath === '/') ? null : $parentPath,
-        'tags' => implode(', ', array_column(tags_for_entity('gallery', (int) ($gallery['id'] ?? 0)), 'name')),
-        'cover_image_relative_path' => gallery_trash_cover_relative_path($gallery),
-        'breadcrumb_style' => gallery_breadcrumb_style_override((int) ($gallery['id'] ?? 0)),
+        'parent_folder_path' =>
+            $parentPath === '' || $parentPath === '/' ? null : $parentPath,
+        'tags' => implode(', ', array_column(
+            tags_for_entity('gallery', (int) ($gallery['id'] ?? 0)),
+            'name',
+        )),
+        'cover_image_relative_path' =>
+            gallery_trash_cover_relative_path($gallery),
+        'breadcrumb_style' => gallery_breadcrumb_style_override(
+            (int) ($gallery['id'] ?? 0),
+        ),
     ];
-    foreach (gallery_trash_existing_columns('galleries', gallery_trash_restorable_gallery_columns()) as $column) {
+    foreach (gallery_trash_existing_columns(
+        'galleries',
+        gallery_trash_restorable_gallery_columns(),
+    ) as $column) {
         if (array_key_exists($column, $gallery)) {
             $record[$column] = $gallery[$column];
         }
     }
 
     if (content_localization_schema_ready('gallery')) {
-        $translationRows = content_translation_rows('gallery', [(int) ($gallery['id'] ?? 0)]);
-        $record['translations'] = $translationRows[(int) ($gallery['id'] ?? 0)] ?? [];
+        $translationRows = content_translation_rows('gallery', [
+            (int) ($gallery['id'] ?? 0),
+        ]);
+        $record['translations'] = $translationRows[(int) ($gallery['id'] ?? 0)]
+        ?? [];
     }
 
-    if (function_exists('Gallery\\Services\\flight_map_schema_ready')
+    if (
+        function_exists('Gallery\\Services\\flight_map_schema_ready')
         && function_exists('Gallery\\Services\\gallery_flight_map_row')
-        && flight_map_schema_ready()) {
+        && flight_map_schema_ready()
+    ) {
         // $flightMap stores durable route-map metadata; numeric ownership ids are omitted.
         $flightMap = gallery_flight_map_row((int) ($gallery['id'] ?? 0));
         if (is_array($flightMap)) {
@@ -815,17 +984,26 @@ function gallery_trash_snapshot_gallery_record(array $gallery): array
  * @param array<int,array<int,array<string,mixed>>> $tags Preloaded tags keyed by image id.
  * @return array<string,mixed> Restore-safe image metadata.
  */
-function gallery_trash_snapshot_image_record(array $image, string $galleryFolderPath, array $translations = [], array $tags = []): array
-{
+function gallery_trash_snapshot_image_record(
+    array $image,
+    string $galleryFolderPath,
+    array $translations = [],
+    array $tags = [],
+): array {
     // $imageId stores the live id used only to load dependent metadata before deletion.
     $imageId = (int) ($image['id'] ?? 0);
     // $record stores path identity and durable user-authored metadata.
     $record = [
         'gallery_folder_path' => $galleryFolderPath,
-        'relative_path' => normalize_relative_path((string) ($image['relative_path'] ?? '')),
+        'relative_path' => normalize_relative_path(
+            (string) ($image['relative_path'] ?? ''),
+        ),
         'tags' => implode(', ', array_column($tags[$imageId] ?? [], 'name')),
     ];
-    foreach (gallery_trash_existing_columns('images', gallery_trash_restorable_image_columns()) as $column) {
+    foreach (gallery_trash_existing_columns(
+        'images',
+        gallery_trash_restorable_image_columns(),
+    ) as $column) {
         if (array_key_exists($column, $image)) {
             $record[$column] = $image[$column];
         }
@@ -843,8 +1021,10 @@ function gallery_trash_snapshot_image_record(array $image, string $galleryFolder
  * @param bool $payloadPresent Whether the physical source folder exists and will travel with the entry.
  * @return array<string,mixed> Snapshot document stored with the trash entry.
  */
-function gallery_trash_capture_snapshot(array $rootGallery, bool $payloadPresent = true): array
-{
+function gallery_trash_capture_snapshot(
+    array $rootGallery,
+    bool $payloadPresent = true,
+): array {
     // $rootPath stores the normalized root folder path of this subtree.
     $rootPath = normalize_relative_path((string) $rootGallery['folder_path']);
     // $galleries stores one snapshot record per gallery, ordered parent-first by path.
@@ -862,7 +1042,10 @@ function gallery_trash_capture_snapshot(array $rootGallery, bool $payloadPresent
         // $galleryImages stores image rows in a stable order for deterministic snapshots.
         $galleryImages = gallery_trash_image_rows($galleryId);
         // $imageIds stores live ids used only for bulk dependent-metadata capture.
-        $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $galleryImages);
+        $imageIds = array_map(
+            static fn(array $image): int => (int) $image['id'],
+            $galleryImages,
+        );
         // $translationRows stores all image translations for this gallery in one lookup.
         $translationRows = [];
         if ($galleryImages && content_localization_schema_ready('image')) {
@@ -871,13 +1054,19 @@ function gallery_trash_capture_snapshot(array $rootGallery, bool $payloadPresent
         // $imageTags stores all image tags for this gallery in one lookup.
         $imageTags = $imageIds ? tags_for_entities('image', $imageIds) : [];
         foreach ($galleryImages as $image) {
-            $images[] = gallery_trash_snapshot_image_record($image, $folderPath, $translationRows, $imageTags);
+            $images[] = gallery_trash_snapshot_image_record(
+                $image,
+                $folderPath,
+                $translationRows,
+                $imageTags,
+            );
         }
     }
 
     return [
         'version' => GALLERY_TRASH_SNAPSHOT_VERSION,
-        'description_layout_semantics_version' => GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION,
+        'description_layout_semantics_version' =>
+            GALLERY_DESCRIPTION_LAYOUT_SEMANTICS_VERSION,
         'root_folder_path' => $rootPath,
         'payload_present' => $payloadPresent,
         'app_version' => defined('CMS_VERSION') ? CMS_VERSION : '',
@@ -906,7 +1095,9 @@ function gallery_trash_snapshot_upgrade(array $snapshot): array
     // $version stores the declared snapshot format version.
     $version = (int) ($snapshot['version'] ?? 1);
     if ($version !== GALLERY_TRASH_SNAPSHOT_VERSION) {
-        throw new RuntimeException('This trash entry uses an unsupported restore snapshot version.');
+        throw new RuntimeException(
+            'This trash entry uses an unsupported restore snapshot version.',
+        );
     }
     if (!isset($snapshot['payload_present'])) {
         // Early development snapshots always represented a real moved payload.
@@ -956,8 +1147,10 @@ function gallery_trash_cover_relative_path(array $gallery): ?string
  * @param array<string,mixed> $options Optional user_id and deleted_from context.
  * @return array{requested_root_count:int,root_count:int,row_count:int,image_count:int,missing_folders:int,failed_root_count:int,entries:array<int,string>,failures:array<int,array<string,mixed>>} Structured result data for the caller.
  */
-function move_gallery_subtrees_to_trash(array $galleryIds, array $options = []): array
-{
+function move_gallery_subtrees_to_trash(
+    array $galleryIds,
+    array $options = [],
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
         return move_gallery_subtrees_to_trash_owned($galleryIds, $options);
@@ -977,12 +1170,26 @@ function move_gallery_subtrees_to_trash(array $galleryIds, array $options = []):
  * @return array{requested_root_count:int,root_count:int,row_count:int,image_count:int,missing_folders:int,failed_root_count:int,entries:list<string>,failures:list<array<string,mixed>>} Successful Trash tokens and independent per-root failure details.
  * @author Rudolf Klusal
  */
-function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options = []): array
-{
+function move_gallery_subtrees_to_trash_owned(
+    array $galleryIds,
+    array $options = [],
+): array {
     // $rootIds stores the unique positive gallery ids selected for deletion.
-    $rootIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds))));
+    $rootIds = array_values(array_unique(array_filter(array_map(
+        'intval',
+        $galleryIds,
+    ))));
     if (!$rootIds) {
-        return ['requested_root_count' => count($rootIds), 'root_count' => 0, 'row_count' => 0, 'image_count' => 0, 'missing_folders' => 0, 'failed_root_count' => 0, 'entries' => [], 'failures' => []];
+        return [
+            'requested_root_count' => count($rootIds),
+            'root_count' => 0,
+            'row_count' => 0,
+            'image_count' => 0,
+            'missing_folders' => 0,
+            'failed_root_count' => 0,
+            'entries' => [],
+            'failures' => [],
+        ];
     }
 
     gallery_trash_assert_available('gallery.trash_subtree');
@@ -990,19 +1197,32 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
         gallery_deletion_schema_status(),
         'gallery.trash_subtree_rows',
         'Gallery deletion requires the current core gallery/image database schema. Run pending migrations first.',
-        'Gallery deletion is temporarily unavailable because the required database schema could not be verified.'
+        'Gallery deletion is temporarily unavailable because the required database schema could not be verified.',
     );
 
     // $keptRoots stores the selected roots after nested selections are collapsed.
     $keptRoots = gallery_trash_collapse_selected_roots($rootIds);
     if (!$keptRoots) {
-        return ['requested_root_count' => count($rootIds), 'root_count' => 0, 'row_count' => 0, 'image_count' => 0, 'missing_folders' => 0, 'failed_root_count' => 0, 'entries' => [], 'failures' => []];
+        return [
+            'requested_root_count' => count($rootIds),
+            'root_count' => 0,
+            'row_count' => 0,
+            'image_count' => 0,
+            'missing_folders' => 0,
+            'failed_root_count' => 0,
+            'entries' => [],
+            'failures' => [],
+        ];
     }
 
     // $userId stores the administrator credited with the deletion, when known.
-    $userId = isset($options['user_id']) && (int) $options['user_id'] > 0 ? (int) $options['user_id'] : null;
+    $userId = isset($options['user_id']) && (int) $options['user_id'] > 0
+        ? (int) $options['user_id']
+        : null;
     // $deletedFrom stores the bounded origin label recorded for auditing.
-    $deletedFrom = gallery_trash_normalize_origin((string) ($options['deleted_from'] ?? 'admin'));
+    $deletedFrom = gallery_trash_normalize_origin(
+        (string) ($options['deleted_from'] ?? 'admin'),
+    );
 
     // $entries stores the created trash tokens in processing order.
     $entries = [];
@@ -1017,7 +1237,9 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
 
     foreach ($keptRoots as $rootGallery) {
         // $folderPath stores the normalized root folder path.
-        $folderPath = normalize_relative_path((string) $rootGallery['folder_path']);
+        $folderPath = normalize_relative_path(
+            (string) $rootGallery['folder_path'],
+        );
         // $absolutePath stores the live gallery folder about to leave galleries_root().
         $absolutePath = gallery_trash_gallery_path($folderPath);
         // $subtreeRows stores one stable view of the live subtree used by this operation.
@@ -1030,7 +1252,9 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
              * @return int Gallery ID included in the deletion snapshot.
              * @author Rudolf Klusal
              */
-            static fn (array $row): int => (int) $row['id'], $subtreeRows);
+            static fn(array $row): int => (int) $row['id'],
+            $subtreeRows,
+        );
         // $payloadPresent records whether recoverable files exist for this entry.
         $payloadPresent = is_dir($absolutePath);
         // $trashToken stores the unique identity of this attempted trash entry.
@@ -1045,7 +1269,9 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
         try {
             if ($payloadPresent) {
                 if (!path_inside(galleries_root(), $absolutePath)) {
-                    throw new RuntimeException('Refusing to trash a gallery path outside the gallery root.');
+                    throw new RuntimeException(
+                        'Refusing to trash a gallery path outside the gallery root.',
+                    );
                 }
                 // Refresh every sidecar first so the moved folder carries current metadata.
                 foreach ($subtreeRows as $row) {
@@ -1056,20 +1282,41 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
             }
 
             // $snapshot stores the restore document captured while every live row still exists.
-            $snapshot = gallery_trash_capture_snapshot($rootGallery, $payloadPresent);
+            $snapshot = gallery_trash_capture_snapshot(
+                $rootGallery,
+                $payloadPresent,
+            );
             // $byteSize stores the measured payload size shown in the trash listing.
-            $byteSize = $payloadPresent ? gallery_trash_directory_size($absolutePath) : 0;
+            $byteSize = $payloadPresent
+                ? gallery_trash_directory_size($absolutePath)
+                : 0;
             $trashToken = bin2hex(random_bytes(16));
             $payloadPath = gallery_trash_payload_path($trashToken, $folderPath);
 
             // Persist PREPARING before the first filesystem move so a fatal timeout leaves a recoverable state marker.
-            $entryTiming = gallery_trash_insert_preparing_entry($trashToken, $rootGallery, $snapshot, $byteSize, $userId, $deletedFrom);
+            $entryTiming = gallery_trash_insert_preparing_entry(
+                $trashToken,
+                $rootGallery,
+                $snapshot,
+                $byteSize,
+                $userId,
+                $deletedFrom,
+            );
 
             if ($payloadPresent) {
-                gallery_trash_move_directory($absolutePath, $payloadPath, galleries_root());
+                gallery_trash_move_directory(
+                    $absolutePath,
+                    $payloadPath,
+                    galleries_root(),
+                );
                 $payloadMoved = true;
             }
-            gallery_trash_write_manifest($trashToken, $snapshot, $entryTiming, $byteSize);
+            gallery_trash_write_manifest(
+                $trashToken,
+                $snapshot,
+                $entryTiming,
+                $byteSize,
+            );
 
             // Live-row removal and PREPARING -> TRASHED become one atomic database commit.
             try {
@@ -1077,7 +1324,7 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
                     $trashToken,
                     $subtreeIds,
                     gallery_mutation_delete_dependency_availability(),
-                    now_sql()
+                    now_sql(),
                 );
             } catch (GalleryTrashCommitOutcomeUnknownException $exception) {
                 // A transport failure during COMMIT can leave the client unable to prove whether
@@ -1111,9 +1358,19 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
             // A rolled-back database transaction leaves the live rows intact. Restore the payload before
             // removing PREPARING; if the move-back itself fails, keep PREPARING for maintenance reconciliation.
             $recovered = !$payloadMoved;
-            if ($payloadMoved && $trashToken !== '' && $payloadPath !== '' && is_dir($payloadPath) && !is_dir($absolutePath)) {
+            if (
+                $payloadMoved
+                && $trashToken !== ''
+                && $payloadPath !== ''
+                && is_dir($payloadPath)
+                && !is_dir($absolutePath)
+            ) {
                 try {
-                    gallery_trash_move_directory($payloadPath, $absolutePath, gallery_trash_root());
+                    gallery_trash_move_directory(
+                        $payloadPath,
+                        $absolutePath,
+                        gallery_trash_root(),
+                    );
                     $recovered = true;
                 } catch (Throwable) {
                     $recovered = false;
@@ -1141,15 +1398,25 @@ function move_gallery_subtrees_to_trash_owned(array $galleryIds, array $options 
         try {
             gallery_trash_refresh_after_structure_change();
         } catch (Throwable $exception) {
-            admin_log_event('warning', 'gallery.trash_post_commit_refresh_failed', 'Gallery trash post-commit refresh failed.', [
-                'trashed_roots' => count($entries),
-                'error' => substr($exception->getMessage(), 0, 500),
-            ]);
+            admin_log_event(
+                'warning',
+                'gallery.trash_post_commit_refresh_failed',
+                'Gallery trash post-commit refresh failed.',
+                [
+                    'trashed_roots' => count($entries),
+                    'error' => substr($exception->getMessage(), 0, 500),
+                ],
+            );
         }
     }
 
     if (!$entries && $failures) {
-        throw new RuntimeException((string) ($failures[0]['error'] ?? 'No selected gallery could be moved to the trash.'));
+        throw new RuntimeException(
+            (string) (
+                $failures[0]['error']
+                ?? 'No selected gallery could be moved to the trash.'
+            ),
+        );
     }
 
     return [
@@ -1185,7 +1452,14 @@ function gallery_trash_collapse_selected_roots(array $rootIds): array
         return [];
     }
 
-    usort($roots, static fn (array $left, array $right): int => strlen((string) $left['folder_path']) <=> strlen((string) $right['folder_path']));
+    usort(
+        $roots,
+        static fn(array $left, array $right): int => (
+            strlen((string) $left['folder_path']) <=> strlen(
+                (string) $right['folder_path'],
+            )
+        ),
+    );
 
     // $keptRoots stores roots that are not already covered by a shallower selection.
     $keptRoots = [];
@@ -1196,8 +1470,13 @@ function gallery_trash_collapse_selected_roots(array $rootIds): array
         $isCovered = false;
         foreach ($keptRoots as $keptRoot) {
             // $keptPath stores the normalized path of an already accepted root.
-            $keptPath = normalize_relative_path((string) $keptRoot['folder_path']);
-            if ($folderPath === $keptPath || str_starts_with($folderPath, $keptPath . '/')) {
+            $keptPath = normalize_relative_path(
+                (string) $keptRoot['folder_path'],
+            );
+            if (
+                $folderPath === $keptPath
+                || str_starts_with($folderPath, $keptPath . '/')
+            ) {
                 $isCovered = true;
                 break;
             }
@@ -1218,7 +1497,13 @@ function gallery_trash_collapse_selected_roots(array $rootIds): array
  */
 function gallery_trash_normalize_origin(string $origin): string
 {
-    return in_array($origin, ['dashboard_bulk', 'public_inline', 'admin', 'other'], true) ? $origin : 'other';
+    return in_array(
+        $origin,
+        ['dashboard_bulk', 'public_inline', 'admin', 'other'],
+        true,
+    )
+        ? $origin
+        : 'other';
 }
 
 /**
@@ -1232,19 +1517,34 @@ function gallery_trash_normalize_origin(string $origin): string
  * @param array<string,mixed> $snapshot Restore snapshot document.
  * @param array{deleted_at:string,purge_after:string} $timing Entry retention timestamps.
  * @param int $byteSize Measured payload size in bytes.
+ * @return void Writes the sanitized recovery manifest beside the payload.
  */
-function gallery_trash_write_manifest(string $trashToken, array $snapshot, array $timing, int $byteSize): void
-{
+function gallery_trash_write_manifest(
+    string $trashToken,
+    array $snapshot,
+    array $timing,
+    int $byteSize,
+): void {
     // $directory stores the entry root that owns the manifest.
     $directory = gallery_trash_entry_dir($trashToken);
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new RuntimeException('Could not create the trash entry directory.');
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new RuntimeException(
+            'Could not create the trash entry directory.',
+        );
     }
     // $manifest stores only non-secret recovery metadata.
     $manifest = [
-        'version' => (int) ($snapshot['version'] ?? GALLERY_TRASH_SNAPSHOT_VERSION),
+        'version' => (int) (
+            $snapshot['version'] ?? GALLERY_TRASH_SNAPSHOT_VERSION
+        ),
         'trash_token' => $trashToken,
-        'original_folder_path' => (string) ($snapshot['root_folder_path'] ?? ''),
+        'original_folder_path' => (string) (
+            $snapshot['root_folder_path'] ?? ''
+        ),
         'payload_present' => !empty($snapshot['payload_present']),
         'deleted_at' => (string) $timing['deleted_at'],
         'purge_after' => (string) $timing['purge_after'],
@@ -1254,9 +1554,20 @@ function gallery_trash_write_manifest(string $trashToken, array $snapshot, array
         'app_version' => (string) ($snapshot['app_version'] ?? ''),
     ];
     // $encoded stores the serialized sanitized document.
-    $encoded = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($encoded) || @file_put_contents($directory . DIRECTORY_SEPARATOR . 'manifest.json', $encoded . "\n") === false) {
-        throw new RuntimeException('Could not write the gallery trash recovery manifest.');
+    $encoded = json_encode(
+        $manifest,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
+    if (
+        !is_string($encoded)
+        || @file_put_contents(
+            $directory . DIRECTORY_SEPARATOR . 'manifest.json',
+            $encoded . "\n",
+        ) === false
+    ) {
+        throw new RuntimeException(
+            'Could not write the gallery trash recovery manifest.',
+        );
     }
 }
 
@@ -1271,8 +1582,14 @@ function gallery_trash_write_manifest(string $trashToken, array $snapshot, array
  * @param string $deletedFrom Bounded origin label.
  * @return array{deleted_at:string,purge_after:string} Shared timestamps used by the manifest.
  */
-function gallery_trash_insert_preparing_entry(string $trashToken, array $rootGallery, array $snapshot, int $byteSize, ?int $userId, string $deletedFrom): array
-{
+function gallery_trash_insert_preparing_entry(
+    string $trashToken,
+    array $rootGallery,
+    array $snapshot,
+    int $byteSize,
+    ?int $userId,
+    string $deletedFrom,
+): array {
     // $folderPath stores the normalized original root folder path.
     $folderPath = normalize_relative_path((string) $rootGallery['folder_path']);
     // $parentPath stores the original parent folder path, when this root was nested.
@@ -1280,26 +1597,38 @@ function gallery_trash_insert_preparing_entry(string $trashToken, array $rootGal
     // $deletedAt stores the shared timestamp used for retention math.
     $deletedAt = now_sql();
     // $purgeAfter stores the moment scheduled maintenance may destroy this entry.
-    $purgeAfterTimestamp = strtotime($deletedAt . ' +' . gallery_trash_retention_days() . ' days');
+    $purgeAfterTimestamp = strtotime(
+        $deletedAt . ' +' . gallery_trash_retention_days() . ' days',
+    );
     if ($purgeAfterTimestamp === false) {
-        throw new RuntimeException('Could not calculate the gallery trash retention deadline.');
+        throw new RuntimeException(
+            'Could not calculate the gallery trash retention deadline.',
+        );
     }
     $purgeAfter = date('Y-m-d H:i:s', $purgeAfterTimestamp);
     // $snapshotJson stores the authoritative restore document.
-    $snapshotJson = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $snapshotJson = json_encode(
+        $snapshot,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($snapshotJson)) {
-        throw new RuntimeException('Could not encode the gallery restore snapshot.');
+        throw new RuntimeException(
+            'Could not encode the gallery restore snapshot.',
+        );
     }
 
     gallery_trash_model_insert_preparing([
         'trash_token' => $trashToken,
         'original_folder_path' => $folderPath,
-        'original_parent_folder_path' => ($parentPath === '' || $parentPath === '/') ? null : $parentPath,
+        'original_parent_folder_path' =>
+            $parentPath === '' || $parentPath === '/' ? null : $parentPath,
         'title' => (string) ($rootGallery['title'] ?? basename($folderPath)),
         'subtree_gallery_count' => (int) ($snapshot['gallery_count'] ?? 0),
         'image_count' => (int) ($snapshot['image_count'] ?? 0),
         'byte_size' => max(0, $byteSize),
-        'snapshot_version' => (int) ($snapshot['version'] ?? GALLERY_TRASH_SNAPSHOT_VERSION),
+        'snapshot_version' => (int) (
+            $snapshot['version'] ?? GALLERY_TRASH_SNAPSHOT_VERSION
+        ),
         'snapshot_json' => $snapshotJson,
         'trash_relative_path' => gallery_trash_relative_path($trashToken),
         'deleted_by_user_id' => $userId,
@@ -1333,9 +1662,15 @@ function gallery_trash_delete_preparing_entry(string $trashToken): void
  * @param string $toStatus New lifecycle state.
  * @param bool $clearSnapshot Whether finalized restore data should be released.
  * @param ?string $errorCode Optional bounded reconciliation/error code.
+ * @return void Applies the state transition within the caller's active transaction.
  */
-function gallery_trash_transition_status_in_transaction(string $trashToken, string $fromStatus, string $toStatus, bool $clearSnapshot = false, ?string $errorCode = null): void
-{
+function gallery_trash_transition_status_in_transaction(
+    string $trashToken,
+    string $fromStatus,
+    string $toStatus,
+    bool $clearSnapshot = false,
+    ?string $errorCode = null,
+): void {
     gallery_trash_assert_token($trashToken);
     gallery_trash_model_transition_in_transaction(
         $trashToken,
@@ -1343,7 +1678,7 @@ function gallery_trash_transition_status_in_transaction(string $trashToken, stri
         $toStatus,
         $clearSnapshot,
         $errorCode,
-        now_sql()
+        now_sql(),
     );
 }
 
@@ -1355,16 +1690,26 @@ function gallery_trash_transition_status_in_transaction(string $trashToken, stri
  * @param string $fromStatus Required source state, normally trashed; purge may explicitly claim broken.
  * @return bool True when this caller acquired ownership.
  */
-function gallery_trash_claim_entry(string $trashToken, string $targetStatus, string $fromStatus = 'trashed'): bool
-{
+function gallery_trash_claim_entry(
+    string $trashToken,
+    string $targetStatus,
+    string $fromStatus = 'trashed',
+): bool {
     gallery_trash_assert_token($trashToken);
-    if (!in_array($targetStatus, ['restoring', 'purging'], true)
-        || !in_array($fromStatus, ['trashed', 'broken'], true)) {
+    if (
+        !in_array($targetStatus, ['restoring', 'purging'], true)
+        || !in_array($fromStatus, ['trashed', 'broken'], true)
+    ) {
         throw new RuntimeException('Invalid trash claim status.');
     }
     // $timestamp stores when reconciliation may begin aging this operation.
     $timestamp = now_sql();
-    return gallery_trash_model_claim($trashToken, $targetStatus, $fromStatus, $timestamp);
+    return gallery_trash_model_claim(
+        $trashToken,
+        $targetStatus,
+        $fromStatus,
+        $timestamp,
+    );
 }
 
 /**
@@ -1376,14 +1721,26 @@ function gallery_trash_claim_entry(string $trashToken, string $targetStatus, str
  * @param string $returnStatus Recoverable/problem state restored after a failed claim.
  * @return bool True when the claim was released.
  */
-function gallery_trash_release_claim(string $trashToken, string $claimedStatus, ?string $errorCode = null, string $returnStatus = 'trashed'): bool
-{
+function gallery_trash_release_claim(
+    string $trashToken,
+    string $claimedStatus,
+    ?string $errorCode = null,
+    string $returnStatus = 'trashed',
+): bool {
     gallery_trash_assert_token($trashToken);
-    if (!in_array($claimedStatus, ['restoring', 'purging'], true)
-        || !in_array($returnStatus, ['trashed', 'broken'], true)) {
+    if (
+        !in_array($claimedStatus, ['restoring', 'purging'], true)
+        || !in_array($returnStatus, ['trashed', 'broken'], true)
+    ) {
         return false;
     }
-    return gallery_trash_model_release_claim($trashToken, $claimedStatus, $errorCode, $returnStatus, now_sql());
+    return gallery_trash_model_release_claim(
+        $trashToken,
+        $claimedStatus,
+        $errorCode,
+        $returnStatus,
+        now_sql(),
+    );
 }
 
 /**
@@ -1392,16 +1749,20 @@ function gallery_trash_release_claim(string $trashToken, string $claimedStatus, 
  * @param string $trashToken Trash entry token.
  * @param string $fromStatus Required current status.
  * @param string $errorCode Bounded diagnostic category.
+ * @return void Marks the matching transitional entry broken without clearing its snapshot.
  */
-function gallery_trash_mark_broken(string $trashToken, string $fromStatus, string $errorCode): void
-{
+function gallery_trash_mark_broken(
+    string $trashToken,
+    string $fromStatus,
+    string $errorCode,
+): void {
     gallery_trash_model_transition(
         $trashToken,
         $fromStatus,
         'broken',
         false,
         substr($errorCode, 0, 64),
-        now_sql()
+        now_sql(),
     );
 }
 
@@ -1430,8 +1791,10 @@ function gallery_trash_refresh_after_structure_change(): void
  * @param array<string,mixed> $options Reserved for future restore overrides.
  * @return array{gallery_count:int,image_count:int,root_gallery_id:int,folder_path:string,metadata_only:bool,ancestor_shells_created:int} Structured result data for the caller.
  */
-function restore_gallery_trash_entry(string $trashToken, array $options = []): array
-{
+function restore_gallery_trash_entry(
+    string $trashToken,
+    array $options = [],
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
         return restore_gallery_trash_entry_owned($trashToken, $options);
@@ -1451,20 +1814,22 @@ function restore_gallery_trash_entry(string $trashToken, array $options = []): a
  * @return array{gallery_count:int,image_count:int,root_gallery_id:int,folder_path:string,metadata_only:bool,ancestor_shells_created:int} Restored live identity and metadata/payload recovery counts.
  * @author Rudolf Klusal
  */
-function restore_gallery_trash_entry_owned(string $trashToken, array $options = []): array
-{
+function restore_gallery_trash_entry_owned(
+    string $trashToken,
+    array $options = [],
+): array {
     gallery_trash_assert_available('gallery.trash_restore');
     mutation_schema_assert_available(
         gallery_move_schema_status(),
         'gallery.trash_restore_rows',
         'Restoring a gallery requires the current gallery/image ownership schema. Run pending migrations first.',
-        'Restoring a gallery is temporarily unavailable because the required database schema could not be verified.'
+        'Restoring a gallery is temporarily unavailable because the required database schema could not be verified.',
     );
     mutation_schema_assert_available(
         gallery_deletion_schema_status(),
         'gallery.trash_restore_cleanup',
         'Restoring a gallery requires the current deletion dependency schema. Run pending migrations first.',
-        'Restoring a gallery is temporarily unavailable because rollback safety could not be verified.'
+        'Restoring a gallery is temporarily unavailable because rollback safety could not be verified.',
     );
 
     // $entry stores the trash row selected for restoration.
@@ -1472,12 +1837,19 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
     if (!$entry) {
         throw new RuntimeException('Trash entry was not found.');
     }
-    if ((string) $entry['status'] !== 'trashed' || !gallery_trash_claim_entry($trashToken, 'restoring')) {
-        throw new RuntimeException('This trash entry is already being changed or is no longer restorable.');
+    if (
+        (string) $entry['status'] !== 'trashed'
+        || !gallery_trash_claim_entry($trashToken, 'restoring')
+    ) {
+        throw new RuntimeException(
+            'This trash entry is already being changed or is no longer restorable.',
+        );
     }
 
     // $folderPath stores the original root folder path being reclaimed.
-    $folderPath = normalize_relative_path((string) $entry['original_folder_path']);
+    $folderPath = normalize_relative_path(
+        (string) $entry['original_folder_path'],
+    );
     // $payloadPath stores the moved gallery folder inside the trash store.
     $payloadPath = gallery_trash_payload_path($trashToken, $folderPath);
     // $targetPath stores the absolute destination inside galleries_root().
@@ -1499,21 +1871,41 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
         // $snapshot stores the decoded and version-normalized restore document.
         $snapshot = json_decode((string) ($entry['snapshot_json'] ?? ''), true);
         if (!is_array($snapshot) || !is_array($snapshot['galleries'] ?? null)) {
-            gallery_trash_mark_broken($trashToken, 'restoring', 'snapshot_unreadable');
-            throw new RuntimeException('The restore snapshot for this entry is unreadable.');
+            gallery_trash_mark_broken(
+                $trashToken,
+                'restoring',
+                'snapshot_unreadable',
+            );
+            throw new RuntimeException(
+                'The restore snapshot for this entry is unreadable.',
+            );
         }
         $snapshot = gallery_trash_snapshot_upgrade($snapshot);
         // $payloadPresent stores whether the entry originally contained physical media.
         $payloadPresent = !empty($snapshot['payload_present']);
         if ($payloadPresent && !is_dir($payloadPath)) {
-            gallery_trash_mark_broken($trashToken, 'restoring', 'payload_missing');
-            throw new RuntimeException('The trashed files for this entry are missing.');
+            gallery_trash_mark_broken(
+                $trashToken,
+                'restoring',
+                'payload_missing',
+            );
+            throw new RuntimeException(
+                'The trashed files for this entry are missing.',
+            );
         }
 
         // $collision stores the first blocking reason found before anything is moved.
-        $collision = gallery_trash_restore_collision($trashToken, $folderPath, $snapshot);
+        $collision = gallery_trash_restore_collision(
+            $trashToken,
+            $folderPath,
+            $snapshot,
+        );
         if ($collision !== null) {
-            gallery_trash_release_claim($trashToken, 'restoring', 'restore_collision');
+            gallery_trash_release_claim(
+                $trashToken,
+                'restoring',
+                'restore_collision',
+            );
             throw new RuntimeException($collision);
         }
 
@@ -1521,7 +1913,10 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
         $parentDirectory = dirname($targetPath);
         // Record only directories that do not exist yet so a failed restore can remove empty shells safely.
         $directoryCursor = $parentDirectory;
-        while ($directoryCursor !== galleries_root() && !is_dir($directoryCursor)) {
+        while (
+            $directoryCursor !== galleries_root()
+            && !is_dir($directoryCursor)
+        ) {
             $createdParentDirectories[] = $directoryCursor;
             $nextDirectory = dirname($directoryCursor);
             if ($nextDirectory === $directoryCursor) {
@@ -1529,19 +1924,33 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
             }
             $directoryCursor = $nextDirectory;
         }
-        if (!is_dir($parentDirectory) && !@mkdir($parentDirectory, 0775, true) && !is_dir($parentDirectory)) {
-            throw new RuntimeException('Could not recreate the parent folder for this gallery.');
+        if (
+            !is_dir($parentDirectory)
+            && !@mkdir($parentDirectory, 0775, true)
+            && !is_dir($parentDirectory)
+        ) {
+            throw new RuntimeException(
+                'Could not recreate the parent folder for this gallery.',
+            );
         }
         if (!gallery_filesystem_path_inside_root($targetPath)) {
-            throw new RuntimeException('Refusing to restore a gallery outside the gallery root.');
+            throw new RuntimeException(
+                'Refusing to restore a gallery outside the gallery root.',
+            );
         }
 
         if ($payloadPresent) {
-            gallery_trash_move_directory($payloadPath, $targetPath, gallery_trash_entry_storage_root($trashToken));
+            gallery_trash_move_directory(
+                $payloadPath,
+                $targetPath,
+                gallery_trash_entry_storage_root($trashToken),
+            );
             $payloadMoved = true;
         } else {
             if (!@mkdir($targetPath, 0775, true) && !is_dir($targetPath)) {
-                throw new RuntimeException('Could not recreate the metadata-only gallery folder.');
+                throw new RuntimeException(
+                    'Could not recreate the metadata-only gallery folder.',
+                );
             }
             $metadataOnlyTargetCreated = true;
         }
@@ -1552,7 +1961,8 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
         $galleryIdsByPath = [];
         // $galleryRecords stores snapshot gallery records ordered parent-first.
         $galleryRecords = $snapshot['galleries'];
-        usort($galleryRecords,
+        usort(
+            $galleryRecords,
             /**
              * Restore shorter ancestor paths before their descendant rows.
              * @param array{folder_path:string} $left First snapshotted gallery record.
@@ -1560,33 +1970,57 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
              * @return int Negative/zero/positive comparison of path lengths.
              * @author Rudolf Klusal
              */
-            static fn (array $left, array $right): int => strlen((string) $left['folder_path']) <=> strlen((string) $right['folder_path']));
+            static fn(array $left, array $right): int => (
+                strlen((string) $left['folder_path']) <=> strlen(
+                    (string) $right['folder_path'],
+                )
+            ),
+        );
 
         // Recreate only ancestors that are neither live nor represented by another active trash entry.
         $ancestorShellIds = ensure_gallery_ancestors_for_path($folderPath);
 
         foreach ($galleryRecords as $record) {
             // $recordPath stores the folder path of one restored gallery.
-            $recordPath = normalize_relative_path((string) ($record['folder_path'] ?? ''));
+            $recordPath = normalize_relative_path(
+                (string) ($record['folder_path'] ?? ''),
+            );
             if ($recordPath === '') {
-                throw new RuntimeException('Restore snapshot contains an invalid gallery path.');
+                throw new RuntimeException(
+                    'Restore snapshot contains an invalid gallery path.',
+                );
             }
             // Metadata-only stale rows may need their empty subtree folders reconstructed.
             $recordAbsolutePath = gallery_trash_gallery_path($recordPath);
-            if (!$payloadPresent && !is_dir($recordAbsolutePath) && !@mkdir($recordAbsolutePath, 0775, true) && !is_dir($recordAbsolutePath)) {
-                throw new RuntimeException('Could not recreate a metadata-only subgallery folder.');
+            if (
+                !$payloadPresent
+                && !is_dir($recordAbsolutePath)
+                && !@mkdir($recordAbsolutePath, 0775, true)
+                && !is_dir($recordAbsolutePath)
+            ) {
+                throw new RuntimeException(
+                    'Could not recreate a metadata-only subgallery folder.',
+                );
             }
             if (!is_dir($recordAbsolutePath)) {
-                throw new RuntimeException('A gallery folder expected by the restore snapshot is missing.');
+                throw new RuntimeException(
+                    'A gallery folder expected by the restore snapshot is missing.',
+                );
             }
 
             // $created stores the gallery row rebuilt from the restored folder.
             if (find_gallery_by_folder_path($recordPath, true)) {
-                throw new RuntimeException('A gallery record appeared at ' . $recordPath . ' while the restore was running.');
+                throw new RuntimeException(
+                    'A gallery record appeared at '
+                        . $recordPath
+                        . ' while the restore was running.',
+                );
             }
             $created = create_gallery_row_for_folder($recordPath);
             if (!$created) {
-                throw new RuntimeException('Could not recreate a gallery database row during restore.');
+                throw new RuntimeException(
+                    'Could not recreate a gallery database row during restore.',
+                );
             }
             $createdGalleryIds[(int) $created['id']] = (int) $created['id'];
             $galleryIdsByPath[$recordPath] = (int) $created['id'];
@@ -1596,8 +2030,14 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
             gallery_trash_apply_gallery_snapshot((int) $created['id'], $record);
         }
 
-        if ($rootGalleryId <= 0 || count($galleryIdsByPath) !== (int) ($snapshot['gallery_count'] ?? count($galleryRecords))) {
-            throw new RuntimeException('Gallery restore did not rebuild the complete gallery hierarchy.');
+        if (
+            $rootGalleryId <= 0
+            || count($galleryIdsByPath)
+                !== (int) ($snapshot['gallery_count'] ?? count($galleryRecords))
+        ) {
+            throw new RuntimeException(
+                'Gallery restore did not rebuild the complete gallery hierarchy.',
+            );
         }
 
         sync_gallery_parent_ids();
@@ -1611,8 +2051,16 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
             foreach ($galleryIdsByPath as $galleryId) {
                 $imageCount += scan_gallery_images($galleryId);
             }
-            gallery_trash_apply_image_snapshot($galleryIdsByPath, is_array($snapshot['images'] ?? null) ? $snapshot['images'] : []);
-            gallery_trash_apply_cover_images($galleryIdsByPath, $galleryRecords);
+            gallery_trash_apply_image_snapshot(
+                $galleryIdsByPath,
+                is_array($snapshot['images'] ?? null)
+                    ? $snapshot['images']
+                    : [],
+            );
+            gallery_trash_apply_cover_images(
+                $galleryIdsByPath,
+                $galleryRecords,
+            );
         }
 
         thumbnail_maintenance_summary_cache_clear();
@@ -1632,7 +2080,7 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
                 'restored',
                 true,
                 null,
-                now_sql()
+                now_sql(),
             );
         } catch (GalleryTrashCommitOutcomeUnknownException $exception) {
             // Never compensate a restore whose final COMMIT may already have succeeded.
@@ -1681,7 +2129,11 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
         // potentially incomplete payload as safely restorable. Preserve both copies and make
         // the problem visible to an administrator instead.
         if ($payloadPresent && !$payloadMoved && is_dir($targetPath)) {
-            gallery_trash_mark_broken($trashToken, 'restoring', 'restore_move_ambiguous');
+            gallery_trash_mark_broken(
+                $trashToken,
+                'restoring',
+                'restore_move_ambiguous',
+            );
             throw $exception;
         }
 
@@ -1689,7 +2141,10 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
         // Path-wide deletion would risk destroying an unrelated row created concurrently.
         $cleanupSucceeded = true;
         try {
-            $cleanupIds = array_values(array_unique(array_merge(array_values($createdGalleryIds), array_values($ancestorShellIds))));
+            $cleanupIds = array_values(array_unique(array_merge(
+                array_values($createdGalleryIds),
+                array_values($ancestorShellIds),
+            )));
             if ($cleanupIds) {
                 gallery_delete_database_subtree_rows($cleanupIds);
             }
@@ -1697,14 +2152,27 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
             $cleanupSucceeded = false;
         }
 
-        if ($cleanupSucceeded && $payloadMoved && is_dir($targetPath) && !is_dir($payloadPath)) {
+        if (
+            $cleanupSucceeded
+            && $payloadMoved
+            && is_dir($targetPath)
+            && !is_dir($payloadPath)
+        ) {
             try {
-                gallery_trash_move_directory($targetPath, $payloadPath, galleries_root());
+                gallery_trash_move_directory(
+                    $targetPath,
+                    $payloadPath,
+                    galleries_root(),
+                );
                 $payloadMoved = false;
             } catch (Throwable) {
                 $cleanupSucceeded = false;
             }
-        } elseif ($cleanupSucceeded && $metadataOnlyTargetCreated && is_dir($targetPath)) {
+        } elseif (
+            $cleanupSucceeded
+            && $metadataOnlyTargetCreated
+            && is_dir($targetPath)
+        ) {
             try {
                 delete_directory_tree($targetPath, galleries_root());
                 $metadataOnlyTargetCreated = false;
@@ -1716,7 +2184,10 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
         if ($cleanupSucceeded) {
             // Remove only empty ancestor directories that this restore created. Existing ancestors are never touched.
             foreach ($createdParentDirectories as $createdDirectory) {
-                if (is_dir($createdDirectory) && gallery_filesystem_path_inside_root($createdDirectory)) {
+                if (
+                    is_dir($createdDirectory)
+                    && gallery_filesystem_path_inside_root($createdDirectory)
+                ) {
                     @rmdir($createdDirectory);
                 }
             }
@@ -1724,7 +2195,11 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
             if (public_path_schema_ready()) {
                 refresh_gallery_public_paths();
             }
-            gallery_trash_release_claim($trashToken, 'restoring', 'restore_failed');
+            gallery_trash_release_claim(
+                $trashToken,
+                'restoring',
+                'restore_failed',
+            );
         }
         // Otherwise leave RESTORING with operation_started_at intact for reconciliation.
         throw $exception;
@@ -1739,8 +2214,11 @@ function restore_gallery_trash_entry_owned(string $trashToken, array $options = 
  * @param array<string,mixed> $snapshot Restore snapshot document.
  * @return ?string Safe caller-facing reason, or null when the restore may proceed.
  */
-function gallery_trash_restore_collision(string $trashToken, string $folderPath, array $snapshot): ?string
-{
+function gallery_trash_restore_collision(
+    string $trashToken,
+    string $folderPath,
+    array $snapshot,
+): ?string {
     if (is_dir(gallery_trash_gallery_path($folderPath))) {
         return 'A folder already exists at ' . $folderPath . '.';
     }
@@ -1752,21 +2230,44 @@ function gallery_trash_restore_collision(string $trashToken, string $folderPath,
     // that later blocks restoring the real parent. Require the ancestor to be restored first.
     $ancestor = gallery_trash_active_ancestor_entry($folderPath, $trashToken);
     if ($ancestor !== null) {
-        return 'The original parent gallery "' . (string) ($ancestor['title'] ?? $ancestor['original_folder_path']) . '" is also in the trash. Restore that parent first.';
+        return (
+            'The original parent gallery "'
+                . (string) (
+                    $ancestor['title'] ?? $ancestor['original_folder_path']
+                )
+                . '" is also in the trash. Restore that parent first.'
+        );
     }
 
     foreach ((array) ($snapshot['galleries'] ?? []) as $record) {
         // $recordPath stores one snapshot gallery folder path.
-        $recordPath = normalize_relative_path((string) ($record['folder_path'] ?? ''));
-        if ($recordPath !== '' && find_gallery_by_folder_path($recordPath, true)) {
+        $recordPath = normalize_relative_path(
+            (string) ($record['folder_path'] ?? ''),
+        );
+        if (
+            $recordPath !== ''
+            && find_gallery_by_folder_path($recordPath, true)
+        ) {
             return 'A gallery record already occupies ' . $recordPath . '.';
         }
         // Preserve stable public slugs instead of silently accepting a new unique_slug() value.
         $slug = trim((string) ($record['slug'] ?? ''));
-        if ($slug !== '' && schema_inspection_is_available(schema_inspection_column('galleries', 'slug'))) {
+        if (
+            $slug !== ''
+            && schema_inspection_is_available(schema_inspection_column(
+                'galleries',
+                'slug',
+            ))
+        ) {
             $takenPath = gallery_trash_model_folder_path_by_slug($slug);
             if ($takenPath !== null) {
-                return 'The gallery URL slug "' . $slug . '" is already used by ' . $takenPath . '.';
+                return (
+                    'The gallery URL slug "'
+                        . $slug
+                        . '" is already used by '
+                        . $takenPath
+                        . '.'
+                );
             }
         }
     }
@@ -1781,14 +2282,19 @@ function gallery_trash_restore_collision(string $trashToken, string $folderPath,
  * @param string $excludeToken Entry currently being restored.
  * @return ?array<string,mixed> Blocking ancestor entry, or null.
  */
-function gallery_trash_active_ancestor_entry(string $folderPath, string $excludeToken): ?array
-{
+function gallery_trash_active_ancestor_entry(
+    string $folderPath,
+    string $excludeToken,
+): ?array {
     // $segments stores target path components used to build proper ancestors only.
     $segments = explode('/', normalize_relative_path($folderPath));
     array_pop($segments);
     while ($segments) {
         $ancestorPath = implode('/', $segments);
-        $entry = gallery_trash_model_active_entry_for_path($ancestorPath, $excludeToken);
+        $entry = gallery_trash_model_active_entry_for_path(
+            $ancestorPath,
+            $excludeToken,
+        );
         if ($entry !== null) {
             return $entry;
         }
@@ -1843,7 +2349,9 @@ function gallery_trash_entry_can_purge(array $entry): bool
     }
 
     try {
-        $folderPath = normalize_relative_path((string) ($entry['original_folder_path'] ?? ''));
+        $folderPath = normalize_relative_path(
+            (string) ($entry['original_folder_path'] ?? ''),
+        );
         if ($folderPath === '') {
             return false;
         }
@@ -1863,27 +2371,56 @@ function gallery_trash_entry_can_purge(array $entry): bool
  * @param array<string,mixed> $record Snapshot gallery fields keyed by storage field name.
  * @return void Reapplies the stored gallery settings and supported localized metadata.
  */
-function gallery_trash_apply_gallery_snapshot(int $galleryId, array $record): void
-{
+function gallery_trash_apply_gallery_snapshot(
+    int $galleryId,
+    array $record,
+): void {
     // $columns stores the restorable columns this database really provides.
-    $columns = gallery_trash_existing_columns('galleries', gallery_trash_restorable_gallery_columns());
-    gallery_trash_model_update_gallery_metadata($galleryId, $record, $columns, now_sql());
+    $columns = gallery_trash_existing_columns(
+        'galleries',
+        gallery_trash_restorable_gallery_columns(),
+    );
+    gallery_trash_model_update_gallery_metadata(
+        $galleryId,
+        $record,
+        $columns,
+        now_sql(),
+    );
     gallery_breadcrumb_style_save(
         $galleryId,
-        breadcrumb_style_normalize($record['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT, true)
+        breadcrumb_style_normalize(
+            $record['breadcrumb_style'] ?? BREADCRUMB_STYLE_INHERIT,
+            true,
+        ),
     );
 
     if (isset($record['tags']) && is_string($record['tags'])) {
         sync_entity_tags('gallery', $galleryId, $record['tags']);
     }
-    if (content_localization_schema_ready('gallery')
-        && (array_key_exists('content_language', $record) || array_key_exists('translations', $record))) {
-        content_save_localizations('gallery', $galleryId, $record['content_language'] ?? null, $record['translations'] ?? []);
+    if (
+        content_localization_schema_ready('gallery')
+        && (
+            array_key_exists('content_language', $record)
+            || array_key_exists('translations', $record)
+        )
+    ) {
+        content_save_localizations(
+            'gallery',
+            $galleryId,
+            $record['content_language'] ?? null,
+            $record['translations'] ?? [],
+        );
     }
-    if (isset($record['flight_map'])
+    if (
+        isset($record['flight_map'])
         && is_array($record['flight_map'])
-        && function_exists('Gallery\Services\gallery_migration_apply_flight_map')) {
-        gallery_migration_apply_flight_map($galleryId, ['flight_map' => $record['flight_map']]);
+        && function_exists(
+            'Gallery\Services\gallery_migration_apply_flight_map',
+        )
+    ) {
+        gallery_migration_apply_flight_map($galleryId, [
+            'flight_map' => $record['flight_map'],
+        ]);
     }
 }
 
@@ -1898,24 +2435,33 @@ function gallery_trash_apply_gallery_snapshot(int $galleryId, array $record): vo
  * @param array<int,array<string,mixed>> $images Snapshot image records.
  * @return int Number of image rows updated.
  */
-function gallery_trash_apply_image_snapshot(array $galleryIdsByPath, array $images): int
-{
+function gallery_trash_apply_image_snapshot(
+    array $galleryIdsByPath,
+    array $images,
+): int {
     if (!$images) {
         return 0;
     }
 
     // $columns stores the restorable image columns this database really provides.
-    $columns = gallery_trash_existing_columns('images', gallery_trash_restorable_image_columns());
+    $columns = gallery_trash_existing_columns(
+        'images',
+        gallery_trash_restorable_image_columns(),
+    );
     // $updated stores how many image rows received their stored metadata back.
     $updated = 0;
 
     foreach ($images as $record) {
         // $galleryPath stores the folder path that owned this image.
-        $galleryPath = normalize_relative_path((string) ($record['gallery_folder_path'] ?? ''));
+        $galleryPath = normalize_relative_path(
+            (string) ($record['gallery_folder_path'] ?? ''),
+        );
         // $galleryId stores the recreated owner gallery identifier.
         $galleryId = (int) ($galleryIdsByPath[$galleryPath] ?? 0);
         // $relativePath stores the stored image path inside its gallery.
-        $relativePath = normalize_relative_path((string) ($record['relative_path'] ?? ''));
+        $relativePath = normalize_relative_path(
+            (string) ($record['relative_path'] ?? ''),
+        );
         if ($galleryId <= 0 || $relativePath === '') {
             continue;
         }
@@ -1927,18 +2473,36 @@ function gallery_trash_apply_image_snapshot(array $galleryIdsByPath, array $imag
         }
 
         // $metadataValues stores only snapshot fields that map to confirmed restorable columns.
-        $metadataValues = array_intersect_key($record, array_fill_keys($columns, true));
+        $metadataValues = array_intersect_key($record, array_fill_keys(
+            $columns,
+            true,
+        ));
         if ($metadataValues) {
-            gallery_trash_model_update_image_metadata((int) $image['id'], $record, $columns, now_sql());
+            gallery_trash_model_update_image_metadata(
+                (int) $image['id'],
+                $record,
+                $columns,
+                now_sql(),
+            );
             $updated++;
         }
 
         if (isset($record['tags']) && is_string($record['tags'])) {
             sync_entity_tags('image', (int) $image['id'], $record['tags']);
         }
-        if (content_localization_schema_ready('image')
-            && (array_key_exists('content_language', $record) || array_key_exists('translations', $record))) {
-            content_save_localizations('image', (int) $image['id'], $record['content_language'] ?? null, $record['translations'] ?? []);
+        if (
+            content_localization_schema_ready('image')
+            && (
+                array_key_exists('content_language', $record)
+                || array_key_exists('translations', $record)
+            )
+        ) {
+            content_save_localizations(
+                'image',
+                (int) $image['id'],
+                $record['content_language'] ?? null,
+                $record['translations'] ?? [],
+            );
         }
     }
 
@@ -1950,14 +2514,19 @@ function gallery_trash_apply_image_snapshot(array $galleryIdsByPath, array $imag
  *
  * @param array<string,int> $galleryIdsByPath Recreated gallery ids keyed by folder path.
  * @param array<int,array<string,mixed>> $galleryRecords Snapshot gallery records.
+ * @return void Re-links title-cover images using recreated gallery IDs and stored relative paths.
  */
-function gallery_trash_apply_cover_images(array $galleryIdsByPath, array $galleryRecords): void
-{
+function gallery_trash_apply_cover_images(
+    array $galleryIdsByPath,
+    array $galleryRecords,
+): void {
     foreach ($galleryRecords as $record) {
         // $coverPath stores the stored title picture path, when the gallery had one.
         $coverPath = (string) ($record['cover_image_relative_path'] ?? '');
         // $galleryPath stores the folder path of this snapshot gallery.
-        $galleryPath = normalize_relative_path((string) ($record['folder_path'] ?? ''));
+        $galleryPath = normalize_relative_path(
+            (string) ($record['folder_path'] ?? ''),
+        );
         // $galleryId stores the recreated gallery identifier.
         $galleryId = (int) ($galleryIdsByPath[$galleryPath] ?? 0);
         if ($coverPath === '' || $galleryId <= 0) {
@@ -1965,11 +2534,18 @@ function gallery_trash_apply_cover_images(array $galleryIdsByPath, array $galler
         }
 
         // $image stores the rescanned row matching the stored title picture path.
-        $image = find_image_by_path($galleryId, normalize_relative_path($coverPath));
+        $image = find_image_by_path(
+            $galleryId,
+            normalize_relative_path($coverPath),
+        );
         if (!$image) {
             continue;
         }
-        gallery_trash_model_set_cover_image($galleryId, (int) $image['id'], now_sql());
+        gallery_trash_model_set_cover_image(
+            $galleryId,
+            (int) $image['id'],
+            now_sql(),
+        );
     }
 }
 
@@ -1995,11 +2571,17 @@ function purge_gallery_trash_entry(string $trashToken): array
     // explicitly discard their isolated trash payload. The purge path never deletes live gallery data.
     $sourceStatus = (string) ($entry['status'] ?? '');
     if ($sourceStatus === 'broken' && !gallery_trash_entry_can_purge($entry)) {
-        throw new RuntimeException('This problem trash entry overlaps live gallery data and cannot be purged automatically.');
+        throw new RuntimeException(
+            'This problem trash entry overlaps live gallery data and cannot be purged automatically.',
+        );
     }
-    if (!in_array($sourceStatus, ['trashed', 'broken'], true)
-        || !gallery_trash_claim_entry($trashToken, 'purging', $sourceStatus)) {
-        throw new RuntimeException('This trash entry is already being changed or cannot be purged.');
+    if (
+        !in_array($sourceStatus, ['trashed', 'broken'], true)
+        || !gallery_trash_claim_entry($trashToken, 'purging', $sourceStatus)
+    ) {
+        throw new RuntimeException(
+            'This trash entry is already being changed or cannot be purged.',
+        );
     }
 
     try {
@@ -2008,13 +2590,24 @@ function purge_gallery_trash_entry(string $trashToken): array
         // Permanent deletion is irreversible after the claim. A recursive filesystem delete
         // may already have removed part of the payload before throwing, so never advertise the
         // entry as safely restorable again. Keep PURGING for bounded maintenance reconciliation.
-        gallery_trash_model_set_purge_error($trashToken, 'purge_files_failed', now_sql());
+        gallery_trash_model_set_purge_error(
+            $trashToken,
+            'purge_files_failed',
+            now_sql(),
+        );
         throw $exception;
     }
 
     // Files are already gone at this point. If this final DB transition fails, keep PURGING so
     // reconciliation completes it instead of falsely presenting the entry as restorable.
-    gallery_trash_model_transition($trashToken, 'purging', 'purged', true, null, now_sql());
+    gallery_trash_model_transition(
+        $trashToken,
+        'purging',
+        'purged',
+        true,
+        null,
+        now_sql(),
+    );
 
     return ['purged' => true, 'title' => (string) $entry['title']];
 }
@@ -2033,7 +2626,9 @@ function empty_gallery_trash(array $options = []): array
     gallery_trash_assert_available('gallery.trash_empty');
 
     // $limit stores how many entries this invocation may destroy.
-    $limit = gallery_trash_normalize_purge_batch_size((int) ($options['limit'] ?? gallery_trash_purge_batch_size()));
+    $limit = gallery_trash_normalize_purge_batch_size(
+        (int) ($options['limit'] ?? gallery_trash_purge_batch_size()),
+    );
     // Empty Trash handles only normal recoverable entries. BROKEN rows require explicit
     // per-entry handling because some can overlap a partially restored live gallery.
     $tokens = gallery_trash_model_tokens_by_status('trashed', $limit);
@@ -2053,7 +2648,11 @@ function empty_gallery_trash(array $options = []): array
     }
 
     $remaining = gallery_trash_model_count_by_status('trashed');
-    return ['purged' => $purged, 'failed' => $failed, 'remaining' => $remaining];
+    return [
+        'purged' => $purged,
+        'failed' => $failed,
+        'remaining' => $remaining,
+    ];
 }
 
 /**
@@ -2075,7 +2674,9 @@ function purge_expired_gallery_trash(?int $limit = null): array
     }
 
     // $batchSize stores the bounded number of entries this slice may destroy.
-    $batchSize = gallery_trash_normalize_purge_batch_size($limit ?? gallery_trash_purge_batch_size());
+    $batchSize = gallery_trash_normalize_purge_batch_size(
+        $limit ?? gallery_trash_purge_batch_size(),
+    );
     // $tokens stores entries whose retention window has elapsed.
     $tokens = gallery_trash_model_expired_tokens(now_sql(), $batchSize);
 
@@ -2090,10 +2691,19 @@ function purge_expired_gallery_trash(?int $limit = null): array
             if ($purgeResult['purged']) {
                 $purged++;
                 try {
-                    admin_log_event('warning', 'gallery.trash_auto_purged', 'Scheduled maintenance permanently deleted an expired gallery trash entry.', [
-                        'trash_token' => (string) $token,
-                        'title' => substr((string) ($purgeResult['title'] ?? ''), 0, 255),
-                    ]);
+                    admin_log_event(
+                        'warning',
+                        'gallery.trash_auto_purged',
+                        'Scheduled maintenance permanently deleted an expired gallery trash entry.',
+                        [
+                            'trash_token' => (string) $token,
+                            'title' => substr(
+                                (string) ($purgeResult['title'] ?? ''),
+                                0,
+                                255,
+                            ),
+                        ],
+                    );
                 } catch (Throwable) {
                     // The irreversible purge already committed; audit logging failure must not make maintenance retry it.
                 }
@@ -2110,6 +2720,7 @@ function purge_expired_gallery_trash(?int $limit = null): array
  * Remove the stored directory that belongs to one trash entry.
  *
  * @param string $trashToken Trash entry token.
+ * @return void Removes the entry directory when present.
  */
 function gallery_trash_remove_entry_directory(string $trashToken): void
 {
@@ -2120,7 +2731,10 @@ function gallery_trash_remove_entry_directory(string $trashToken): void
     }
     // The allowed root guard keeps deletion inside either the current persistent store
     // or the first development implementation's legacy cache-backed store.
-    delete_directory_tree($directory, gallery_trash_entry_storage_root($trashToken));
+    delete_directory_tree(
+        $directory,
+        gallery_trash_entry_storage_root($trashToken),
+    );
 }
 
 /**
@@ -2137,16 +2751,31 @@ function gallery_trash_remove_entry_directory(string $trashToken): void
 function reconcile_gallery_trash_transitional_entries(int $limit = 10): array
 {
     if (!schema_inspection_is_available(gallery_trash_schema_status())) {
-        return ['recovered' => 0, 'finalized' => 0, 'broken' => 0, 'failed' => 0, 'skipped' => true];
+        return [
+            'recovered' => 0,
+            'finalized' => 0,
+            'broken' => 0,
+            'failed' => 0,
+            'skipped' => true,
+        ];
     }
 
     // $limit stores the bounded maintenance slice size.
     $limit = max(1, min(100, $limit));
     // $cutoff stores the oldest operation timestamp still considered active.
-    $cutoff = date('Y-m-d H:i:s', time() - GALLERY_TRASH_STALE_OPERATION_SECONDS);
+    $cutoff = date(
+        'Y-m-d H:i:s',
+        time() - GALLERY_TRASH_STALE_OPERATION_SECONDS,
+    );
     $entries = gallery_trash_model_stale_transitional_entries($cutoff, $limit);
 
-    $result = ['recovered' => 0, 'finalized' => 0, 'broken' => 0, 'failed' => 0, 'skipped' => false];
+    $result = [
+        'recovered' => 0,
+        'finalized' => 0,
+        'broken' => 0,
+        'failed' => 0,
+        'skipped' => false,
+    ];
     foreach ($entries as $entry) {
         try {
             $outcome = gallery_trash_reconcile_entry($entry);
@@ -2191,8 +2820,14 @@ function gallery_trash_reconcile_entry_owned(array $entry): string
     // Maintenance selected this candidate before acquiring ownership. Never act
     // on its old lifecycle state after a restore, purge or another recovery.
     $currentEntry = gallery_trash_entry((string) ($entry['trash_token'] ?? ''));
-    if (!$currentEntry || (string) ($currentEntry['status'] ?? '') !== (string) ($entry['status'] ?? '')) {
-        throw new RuntimeException('This trash entry changed before reconciliation. Retry maintenance.');
+    if (
+        !$currentEntry
+        || (string) ($currentEntry['status'] ?? '')
+            !== (string) ($entry['status'] ?? '')
+    ) {
+        throw new RuntimeException(
+            'This trash entry changed before reconciliation. Retry maintenance.',
+        );
     }
     $entry = $currentEntry;
     // $token stores the validated filesystem/DB identity.
@@ -2201,19 +2836,31 @@ function gallery_trash_reconcile_entry_owned(array $entry): string
     // $status stores the transitional lifecycle state being reconciled.
     $status = (string) ($entry['status'] ?? '');
     // $folderPath stores the stable original live path.
-    $folderPath = normalize_relative_path((string) ($entry['original_folder_path'] ?? ''));
+    $folderPath = normalize_relative_path(
+        (string) ($entry['original_folder_path'] ?? ''),
+    );
     // $targetPath stores the live filesystem location.
     $targetPath = gallery_trash_gallery_path($folderPath);
     // $payloadPath stores the trash payload location.
     $payloadPath = gallery_trash_payload_path($token, $folderPath);
     // $snapshot stores enough information to distinguish metadata-only trash entries.
     $snapshot = json_decode((string) ($entry['snapshot_json'] ?? ''), true);
-    $payloadExpected = !is_array($snapshot) || !array_key_exists('payload_present', $snapshot) || !empty($snapshot['payload_present']);
+    $payloadExpected =
+        !is_array($snapshot)
+        || !array_key_exists('payload_present', $snapshot)
+        || !empty($snapshot['payload_present']);
 
     if ($status === 'purging') {
         // Purge intent is irreversible. Once claimed, reconciliation finishes deletion rather than reviving it.
         gallery_trash_remove_entry_directory($token);
-        gallery_trash_model_transition($token, 'purging', 'purged', true, null, now_sql());
+        gallery_trash_model_transition(
+            $token,
+            'purging',
+            'purged',
+            true,
+            null,
+            now_sql(),
+        );
         return 'finalized';
     }
 
@@ -2230,24 +2877,51 @@ function gallery_trash_reconcile_entry_owned(array $entry): string
                 return 'recovered';
             }
             // A live folder without its live rows is not a state the normal protocol can prove safe.
-            gallery_trash_mark_broken($token, 'preparing', 'reconcile_preparing_live_without_rows');
+            gallery_trash_mark_broken(
+                $token,
+                'preparing',
+                'reconcile_preparing_live_without_rows',
+            );
             return 'broken';
         }
         if (!$liveExists && $payloadExists) {
             if ($liveRows) {
                 // DB delete did not commit; move files back to match the still-live rows.
-                gallery_trash_move_directory($payloadPath, $targetPath, gallery_trash_entry_storage_root($token));
+                gallery_trash_move_directory(
+                    $payloadPath,
+                    $targetPath,
+                    gallery_trash_entry_storage_root($token),
+                );
                 gallery_trash_delete_preparing_entry($token);
                 gallery_trash_remove_entry_directory($token);
                 return 'recovered';
             }
             // Files are already out of live root and rows are gone. Effective trash succeeded; finalize its state.
-            gallery_trash_model_transition($token, 'preparing', 'trashed', false, null, now_sql());
+            gallery_trash_model_transition(
+                $token,
+                'preparing',
+                'trashed',
+                false,
+                null,
+                now_sql(),
+            );
             return 'finalized';
         }
-        if (!$payloadExpected && !$liveExists && !$payloadExists && !$liveRows) {
+        if (
+            !$payloadExpected
+            && !$liveExists
+            && !$payloadExists
+            && !$liveRows
+        ) {
             // Metadata-only deletion reached the effective trashed state before its status update committed.
-            gallery_trash_model_transition($token, 'preparing', 'trashed', false, null, now_sql());
+            gallery_trash_model_transition(
+                $token,
+                'preparing',
+                'trashed',
+                false,
+                null,
+                now_sql(),
+            );
             return 'finalized';
         }
         if (!$payloadExpected && !$liveExists && !$payloadExists && $liveRows) {
@@ -2256,13 +2930,21 @@ function gallery_trash_reconcile_entry_owned(array $entry): string
             gallery_trash_remove_entry_directory($token);
             return 'recovered';
         }
-        gallery_trash_mark_broken($token, 'preparing', 'reconcile_preparing_ambiguous');
+        gallery_trash_mark_broken(
+            $token,
+            'preparing',
+            'reconcile_preparing_ambiguous',
+        );
         return 'broken';
     }
 
     if ($status === 'restoring') {
         if (!$liveExists && $payloadExists) {
-            gallery_trash_release_claim($token, 'restoring', 'reconciled_restore_claim');
+            gallery_trash_release_claim(
+                $token,
+                'restoring',
+                'reconciled_restore_claim',
+            );
             return 'recovered';
         }
         if ($liveExists && !$payloadExists) {
@@ -2270,14 +2952,26 @@ function gallery_trash_reconcile_entry_owned(array $entry): string
             // status commit never happened. Reconciliation cannot prove which metadata writes
             // completed, so never delete or move the live copy speculatively. Preserve both the
             // live data and the restore snapshot for explicit administrator recovery.
-            gallery_trash_mark_broken($token, 'restoring', 'reconcile_restoring_live_ambiguous');
+            gallery_trash_mark_broken(
+                $token,
+                'restoring',
+                'reconcile_restoring_live_ambiguous',
+            );
             return 'broken';
         }
         if (!$payloadExpected && !$liveExists && !$payloadExists) {
-            gallery_trash_release_claim($token, 'restoring', 'reconciled_restore_claim');
+            gallery_trash_release_claim(
+                $token,
+                'restoring',
+                'reconciled_restore_claim',
+            );
             return 'recovered';
         }
-        gallery_trash_mark_broken($token, 'restoring', 'reconcile_restoring_ambiguous');
+        gallery_trash_mark_broken(
+            $token,
+            'restoring',
+            'reconcile_restoring_ambiguous',
+        );
         return 'broken';
     }
 
@@ -2310,7 +3004,11 @@ function gallery_trash_entries(array $filters = []): array
 
     // $status stores the requested lifecycle status filter.
     $status = (string) ($filters['status'] ?? 'trashed');
-    if (!in_array($status, ['trashed', 'restored', 'purged', 'broken', 'active', 'all'], true)) {
+    if (!in_array(
+        $status,
+        ['trashed', 'restored', 'purged', 'broken', 'active', 'all'],
+        true,
+    )) {
         $status = 'trashed';
     }
     // $limit stores the bounded number of rows returned to the view.
@@ -2331,8 +3029,10 @@ function gallery_trash_admin_entries(array $filters = []): array
 {
     $entries = gallery_trash_entries($filters);
     foreach ($entries as $index => $entry) {
-        $entries[$index]['view_days_remaining'] = gallery_trash_days_remaining($entry);
-        $entries[$index]['view_can_purge'] = gallery_trash_entry_can_purge($entry);
+        $entries[$index]['view_days_remaining'] =
+            gallery_trash_days_remaining($entry);
+        $entries[$index]['view_can_purge'] =
+            gallery_trash_entry_can_purge($entry);
     }
     return $entries;
 }
@@ -2392,7 +3092,9 @@ function gallery_trash_summary(): array
         'active_count' => (int) ($row['active_count'] ?? 0),
         'bytes' => (int) ($row['total_bytes'] ?? 0),
         'expired' => $autoPurgeActive ? (int) ($row['expired_count'] ?? 0) : 0,
-        'next_purge_at' => $autoPurgeActive ? (string) ($row['next_purge_at'] ?? '') : '',
+        'next_purge_at' => $autoPurgeActive
+            ? (string) ($row['next_purge_at'] ?? '')
+            : '',
     ];
 }
 

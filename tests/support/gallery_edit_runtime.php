@@ -20,7 +20,9 @@ namespace Gallery\Core {
      */
     function db(): \PDO
     {
-        return $GLOBALS['gallery_edit_fixture_connection'] ?? throw new \RuntimeException('Fixture database unavailable.');
+        return $GLOBALS['gallery_edit_fixture_connection'] ?? throw new \RuntimeException(
+            'Fixture database unavailable.',
+        );
     }
 
     /**
@@ -30,7 +32,11 @@ namespace Gallery\Core {
      */
     function e(mixed $value): string
     {
-        return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return htmlspecialchars(
+            (string) $value,
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
     }
 
     /**
@@ -52,8 +58,11 @@ namespace Gallery\Services {
      * @param array<string,mixed> $parameters Unused placeholder values.
      * @return string Stable bounded fixture message.
      */
-    function t(string $key, mixed $default = null, array $parameters = []): string
-    {
+    function t(
+        string $key,
+        mixed $default = null,
+        array $parameters = [],
+    ): string {
         return is_string($default) ? $default : $key;
     }
 }
@@ -61,5 +70,6 @@ namespace Gallery\Services {
 namespace {
     require_once dirname(__DIR__, 2) . '/app/models/schema_inspection.php';
     require_once dirname(__DIR__, 2) . '/app/services/schema_inspection.php';
-    require_once dirname(__DIR__, 2) . '/app/services/gallery_edit_concurrency.php';
+    require_once
+        dirname(__DIR__, 2) . '/app/services/gallery_edit_concurrency.php';
 }

@@ -25,7 +25,6 @@ require_once __DIR__ . '/../runtime/storage_observer.php';
 
 use function Gallery\Core\storage_observer_call;
 use function Gallery\Core\storage_observer_add;
-
 use RuntimeException;
 
 require_once __DIR__ . '/gallery_pdf_settings.php';
@@ -45,22 +44,30 @@ require_once __DIR__ . '/gallery_pdf_settings.php';
  * @return array{pdf_count:int,pdf_bytes:int,music_count:int,music_bytes:int,
  *     errors:int} Known confined originals and partial-accounting warnings.
  */
-function gallery_attachment_storage_summary(array $gallery, ?string $onlyKind = null): array
-{
-    $summary = ['pdf_count' => 0, 'pdf_bytes' => 0,
-        'music_count' => 0, 'music_bytes' => 0, 'errors' => 0];
+function gallery_attachment_storage_summary(
+    array $gallery,
+    ?string $onlyKind = null,
+): array {
+    $summary = [
+        'pdf_count' => 0,
+        'pdf_bytes' => 0,
+        'music_count' => 0,
+        'music_bytes' => 0,
+        'errors' => 0,
+    ];
     $root = gallery_pdf_documents_gallery_directory($gallery);
     if ($root === null) {
         $summary['errors']++;
         return $summary;
     }
     foreach (['pdf', 'music'] as $kind) {
-        if ($onlyKind !== null && $onlyKind !== $kind) continue;
+        if ($onlyKind !== null && $onlyKind !== $kind)
+            continue;
         try {
             $entries = $kind === 'pdf'
                 ? gallery_pdf_documents_read_index($root)
                 : \Gallery\Models\gallery_music_model_read(
-                    $root . '/.gallery-music'
+                    $root . '/.gallery-music',
                 )['tracks'];
         } catch (RuntimeException) {
             $summary['errors']++;
@@ -76,16 +83,19 @@ function gallery_attachment_storage_summary(array $gallery, ?string $onlyKind = 
                 $summary['errors']++;
                 continue;
             }
-            if ($bytes !== $entry['size']) $summary['errors']++;
+            if ($bytes !== $entry['size'])
+                $summary['errors']++;
             $summary[$kind . '_count']++;
             $summary[$kind . '_bytes'] += $bytes;
         }
     }
-    if ($onlyKind !== null && $onlyKind !== 'ofp') return $summary;
+    if ($onlyKind !== null && $onlyKind !== 'ofp')
+        return $summary;
     $ofp = simbrief_ofp_local_pdf_path($gallery);
     if ($ofp !== null) {
         $bytes = gallery_attachment_storage_file_size(
-            $root, '/simbrief-ofp.pdf'
+            $root,
+            '/simbrief-ofp.pdf',
         );
         if ($bytes === null) {
             $summary['errors']++;
@@ -93,8 +103,12 @@ function gallery_attachment_storage_summary(array $gallery, ?string $onlyKind = 
             $summary['pdf_count']++;
             $summary['pdf_bytes'] += $bytes;
         }
-    } elseif (storage_observer_call('fs.file_exists', static fn(): bool => file_exists($root . '/simbrief-ofp.pdf'))
-        || storage_observer_call('fs.is_link', static fn(): bool => is_link($root . '/simbrief-ofp.pdf'))) {
+    } elseif (
+        storage_observer_call('fs.file_exists', static fn(): bool => file_exists($root
+            . '/simbrief-ofp.pdf'))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link($root
+            . '/simbrief-ofp.pdf'))
+    ) {
         $summary['errors']++;
     }
     return $summary;
@@ -109,18 +123,31 @@ function gallery_attachment_storage_summary(array $gallery, ?string $onlyKind = 
  */
 function gallery_attachment_storage_file_size(
     string $root,
-    string $relative
+    string $relative,
 ): ?int {
     $candidate = $root . $relative;
-    $resolved = storage_observer_call('fs.realpath', static fn(): string|false => realpath($candidate));
-    if ($resolved === false
-        || storage_observer_call('fs.is_link', static fn(): bool => is_link($candidate))
-        || storage_observer_call('fs.is_link', static fn(): bool => is_link(dirname($candidate)))
-        || !storage_observer_call('fs.is_file', static fn(): bool => is_file($resolved))
-        || !\Gallery\Core\path_inside($root, $resolved)) {
+    $resolved = storage_observer_call('fs.realpath', static fn(): string|false => realpath(
+        $candidate,
+    ));
+    if (
+        $resolved === false
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link(
+            $candidate,
+        ))
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link(dirname(
+            $candidate,
+        )))
+        || !storage_observer_call('fs.is_file', static fn(): bool => is_file(
+            $resolved,
+        ))
+        || !\Gallery\Core\path_inside($root, $resolved)
+    ) {
         return null;
     }
-    $bytes = storage_observer_call('fs.filesize', static fn(): int|false => @filesize($resolved));
+    $bytes = storage_observer_call(
+        'fs.filesize',
+        static fn(): int|false => @filesize($resolved),
+    );
     return $bytes === false ? null : max(0, $bytes);
 }
 
@@ -142,8 +169,12 @@ const GALLERY_PDF_DOCUMENT_MAX_BYTES = 26214400;
  */
 function gallery_pdf_documents_gallery_directory(array $gallery): ?string
 {
-    if ((int) ($gallery['id'] ?? 0) < 1 || !function_exists(__NAMESPACE__ . '\\gallery_abs_path')
-        || !function_exists(__NAMESPACE__ . '\\galleries_root') || !function_exists('Gallery\\Core\\path_inside')) {
+    if (
+        (int) ($gallery['id'] ?? 0) < 1
+        || !function_exists(__NAMESPACE__ . '\\gallery_abs_path')
+        || !function_exists(__NAMESPACE__ . '\\galleries_root')
+        || !function_exists('Gallery\\Core\\path_inside')
+    ) {
         return null;
     }
     $relative = trim((string) ($gallery['folder_path'] ?? ''));
@@ -151,10 +182,20 @@ function gallery_pdf_documents_gallery_directory(array $gallery): ?string
         return null;
     }
     $candidate = gallery_abs_path($relative);
-    $resolved = storage_observer_call('fs.realpath', static fn(): string|false => realpath($candidate));
-    $base = storage_observer_call('fs.realpath', static fn(): string|false => realpath(galleries_root()));
-    if ($resolved === false || $base === false || storage_observer_call('fs.is_link', static fn(): bool => is_link($candidate))
-        || !\Gallery\Core\path_inside($base, $resolved)) {
+    $resolved = storage_observer_call('fs.realpath', static fn(): string|false => realpath(
+        $candidate,
+    ));
+    $base = storage_observer_call('fs.realpath', static fn(): string|false => realpath(
+        galleries_root(),
+    ));
+    if (
+        $resolved === false
+        || $base === false
+        || storage_observer_call('fs.is_link', static fn(): bool => is_link(
+            $candidate,
+        ))
+        || !\Gallery\Core\path_inside($base, $resolved)
+    ) {
         return null;
     }
     return $resolved;
@@ -173,8 +214,14 @@ function gallery_pdf_documents_validate_pdf_source(string $source): array
         throw new RuntimeException('Select a readable PDF file.');
     }
     $size = @filesize($source);
-    if ($size === false || $size < 16 || $size > GALLERY_PDF_DOCUMENT_MAX_BYTES) {
-        throw new RuntimeException('The PDF must be between 16 bytes and 25 MiB.');
+    if (
+        $size === false
+        || $size < 16
+        || $size > GALLERY_PDF_DOCUMENT_MAX_BYTES
+    ) {
+        throw new RuntimeException(
+            'The PDF must be between 16 bytes and 25 MiB.',
+        );
     }
     $handle = @fopen($source, 'rb');
     if ($handle === false) {
@@ -189,9 +236,18 @@ function gallery_pdf_documents_validate_pdf_source(string $source): array
     } finally {
         fclose($handle);
     }
-    $mime = function_exists('finfo_open') ? (new \finfo(FILEINFO_MIME_TYPE))->file($source) : null;
-    if ($magic !== '%PDF-' || !is_string($tail) || !str_contains($tail, '%%EOF')
-        || ($mime !== null && !in_array($mime, ['application/pdf', 'application/x-pdf'], true))) {
+    $mime = function_exists('finfo_open')
+        ? (new \finfo(FILEINFO_MIME_TYPE))->file($source)
+        : null;
+    if (
+        $magic !== '%PDF-'
+        || !is_string($tail)
+        || !str_contains($tail, '%%EOF')
+        || (
+            $mime !== null
+            && !in_array($mime, ['application/pdf', 'application/x-pdf'], true)
+        )
+    ) {
         throw new RuntimeException('The file is not a valid PDF document.');
     }
     $digest = hash_file('sha256', $source);
@@ -211,44 +267,88 @@ function gallery_pdf_documents_validate_pdf_source(string $source): array
 function gallery_pdf_documents_read_index_state(string $root): array
 {
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
-    if (storage_observer_call('fs.is_link', static fn(): bool => is_link($directory))) {
+    if (storage_observer_call('fs.is_link', static fn(): bool => is_link(
+        $directory,
+    ))) {
         throw new RuntimeException('PDF document storage is unsafe.');
     }
-    if (!storage_observer_call('fs.is_dir', static fn(): bool => is_dir($directory))) {
+    if (!storage_observer_call('fs.is_dir', static fn(): bool => is_dir(
+        $directory,
+    ))) {
         return ['documents' => [], 'ofp_hidden' => false];
     }
     $indexPath = $directory . DIRECTORY_SEPARATOR . 'index.json';
-    if (storage_observer_call('fs.is_link', static fn(): bool => is_link($indexPath))) {
+    if (storage_observer_call('fs.is_link', static fn(): bool => is_link(
+        $indexPath,
+    ))) {
         throw new RuntimeException('PDF document index is unsafe.');
     }
-    if (!storage_observer_call('fs.is_file', static fn(): bool => is_file($indexPath))) {
+    if (!storage_observer_call('fs.is_file', static fn(): bool => is_file(
+        $indexPath,
+    ))) {
         return ['documents' => [], 'ofp_hidden' => false];
     }
-    if ((int) storage_observer_call('fs.filesize', static fn(): int|false => @filesize($indexPath)) > 262144) {
-        throw new RuntimeException('PDF document index exceeds its storage limit.');
+    if (
+        (int) storage_observer_call(
+            'fs.filesize',
+            static fn(): int|false => @filesize($indexPath),
+        ) > 262144
+    ) {
+        throw new RuntimeException(
+            'PDF document index exceeds its storage limit.',
+        );
     }
-    $decoded = json_decode((string) storage_observer_call('fs.read.pdf_index',
-        static fn(): string|false => @file_get_contents($indexPath)), true);
-    if (!is_array($decoded) || ($decoded['format'] ?? '') !== 'php_gallery_pdf_documents_v1'
+    $decoded = json_decode(
+        (string) storage_observer_call(
+            'fs.read.pdf_index',
+            static fn(): string|false => @file_get_contents($indexPath),
+        ),
+        true,
+    );
+    if (
+        !is_array($decoded)
+        || ($decoded['format'] ?? '') !== 'php_gallery_pdf_documents_v1'
         || !is_array($decoded['documents'] ?? null)
-        || (array_key_exists('ofp_hidden', $decoded) && !is_bool($decoded['ofp_hidden']))) {
-        throw new RuntimeException('PDF document index is invalid and was preserved.');
+        || (
+            array_key_exists('ofp_hidden', $decoded)
+            && !is_bool($decoded['ofp_hidden'])
+        )
+    ) {
+        throw new RuntimeException(
+            'PDF document index is invalid and was preserved.',
+        );
     }
     $documents = [];
     foreach ($decoded['documents'] as $id => $entry) {
-        if (!is_string($id) || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1 || !is_array($entry)
-            || ($entry['id'] ?? null) !== $id || !is_int($entry['size'] ?? null)
-            || !is_string($entry['sha256'] ?? null) || preg_match('/^[a-f0-9]{64}$/D', $entry['sha256']) !== 1
-            || !is_string($entry['filename'] ?? null) || !is_string($entry['title'] ?? null)
-            || !is_string($entry['provenance'] ?? null) || !is_string($entry['created_at'] ?? null)
+        if (
+            !is_string($id)
+            || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1
+            || !is_array($entry)
+            || ($entry['id'] ?? null) !== $id
+            || !is_int($entry['size'] ?? null)
+            || !is_string($entry['sha256'] ?? null)
+            || preg_match('/^[a-f0-9]{64}$/D', $entry['sha256']) !== 1
+            || !is_string($entry['filename'] ?? null)
+            || !is_string($entry['title'] ?? null)
+            || !is_string($entry['provenance'] ?? null)
+            || !is_string($entry['created_at'] ?? null)
             || !is_string($entry['updated_at'] ?? null)
-            || (array_key_exists('hidden', $entry) && !is_bool($entry['hidden']))) {
-            throw new RuntimeException('PDF document index contains an invalid record and was preserved.');
+            || (
+                array_key_exists('hidden', $entry)
+                && !is_bool($entry['hidden'])
+            )
+        ) {
+            throw new RuntimeException(
+                'PDF document index contains an invalid record and was preserved.',
+            );
         }
         $entry['hidden'] = $entry['hidden'] ?? false;
         $documents[$id] = $entry;
     }
-    return ['documents' => $documents, 'ofp_hidden' => (bool) ($decoded['ofp_hidden'] ?? false)];
+    return [
+        'documents' => $documents,
+        'ofp_hidden' => (bool) ($decoded['ofp_hidden'] ?? false),
+    ];
 }
 
 /**
@@ -277,9 +377,22 @@ function gallery_pdf_documents_list(array $gallery): array
     $documents = gallery_pdf_documents_read_index($root);
     $result = [];
     foreach ($documents as $id => $metadata) {
-        $path = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents' . DIRECTORY_SEPARATOR . $id . '.pdf';
-        if (is_link($path) || !is_file($path) || (int) @filesize($path) !== $metadata['size']
-            || !hash_equals($metadata['sha256'], (string) @hash_file('sha256', $path))) {
+        $path =
+            $root
+            . DIRECTORY_SEPARATOR
+            . '.gallery-pdf-documents'
+            . DIRECTORY_SEPARATOR
+            . $id
+            . '.pdf';
+        if (
+            is_link($path)
+            || !is_file($path)
+            || (int) @filesize($path) !== $metadata['size']
+            || !hash_equals(
+                $metadata['sha256'],
+                (string) @hash_file('sha256', $path),
+            )
+        ) {
             continue;
         }
         $result[] = $metadata;
@@ -307,27 +420,50 @@ function gallery_pdf_documents_attach(
     string $title,
     string $provenance,
     ?string $replaceId = null,
-    bool $confirmed = false
+    bool $confirmed = false,
 ): array {
     $root = gallery_pdf_documents_gallery_directory($gallery);
     if ($root === null) {
-        throw new RuntimeException('The selected gallery folder is unavailable.');
+        throw new RuntimeException(
+            'The selected gallery folder is unavailable.',
+        );
     }
     $validated = gallery_pdf_documents_validate_pdf_source($source);
     $filename = basename(str_replace('\\', '/', trim($filename)));
     $filename = preg_replace('/[\x00-\x1F\x7F]/u', '', $filename) ?? '';
     $filename = trim(substr($filename, 0, 240));
     $title = trim(preg_replace('/[\x00-\x1F\x7F]/u', '', $title) ?? '');
-    $provenance = trim(preg_replace('/[\x00-\x1F\x7F]/u', '', $provenance) ?? '');
-    if ($filename === '' || $title === '' || strlen($title) > 240 || $provenance === '' || strlen($provenance) > 80) {
-        throw new RuntimeException('Provide a filename, a title and a short document origin.');
+    $provenance = trim(
+        preg_replace('/[\x00-\x1F\x7F]/u', '', $provenance) ?? '',
+    );
+    if (
+        $filename === ''
+        || $title === ''
+        || strlen($title) > 240
+        || $provenance === ''
+        || strlen($provenance) > 80
+    ) {
+        throw new RuntimeException(
+            'Provide a filename, a title and a short document origin.',
+        );
     }
-    if ($replaceId !== null && preg_match('/^[a-f0-9]{32}$/D', $replaceId) !== 1) {
+    if (
+        $replaceId !== null
+        && preg_match('/^[a-f0-9]{32}$/D', $replaceId) !== 1
+    ) {
         throw new RuntimeException('The selected PDF document id is invalid.');
     }
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
-    if (is_link($directory) || (!is_dir($directory) && !@mkdir($directory, 0700))) {
-        throw new RuntimeException('PDF document storage is unavailable or unsafe.');
+    if (
+        is_link($directory)
+        || (
+            !is_dir($directory)
+            && !@mkdir($directory, 0700)
+        )
+    ) {
+        throw new RuntimeException(
+            'PDF document storage is unavailable or unsafe.',
+        );
     }
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
     if (is_link($lockPath)) {
@@ -351,14 +487,21 @@ function gallery_pdf_documents_attach(
         $indexState = gallery_pdf_documents_read_index_state($root);
         $documents = $indexState['documents'];
         if ($replaceId !== null && !isset($documents[$replaceId])) {
-            throw new RuntimeException('The PDF document no longer exists. Reload the gallery editor.');
+            throw new RuntimeException(
+                'The PDF document no longer exists. Reload the gallery editor.',
+            );
         }
         if ($replaceId !== null && !$confirmed) {
-            throw new RuntimeException('Replacing an existing PDF requires explicit confirmation.');
+            throw new RuntimeException(
+                'Replacing an existing PDF requires explicit confirmation.',
+            );
         }
         if ($replaceId === null) {
             $id = bin2hex(random_bytes(16));
-            while (isset($documents[$id]) || file_exists($directory . DIRECTORY_SEPARATOR . $id . '.pdf')) {
+            while (
+                isset($documents[$id])
+                || file_exists($directory . DIRECTORY_SEPARATOR . $id . '.pdf')
+            ) {
                 $id = bin2hex(random_bytes(16));
             }
         } else {
@@ -373,14 +516,25 @@ function gallery_pdf_documents_attach(
             'filename' => $filename,
             'title' => $title,
             'provenance' => $provenance,
-            'hidden' => is_array($old) ? (bool) ($old['hidden'] ?? false) : false,
+            'hidden' => is_array($old)
+                ? (bool) ($old['hidden'] ?? false)
+                : false,
             'created_at' => is_array($old) ? $old['created_at'] : $now,
             'updated_at' => $now,
         ];
         $documents[$id] = $entry;
-        $json = json_encode(['format' => 'php_gallery_pdf_documents_v1', 'documents' => $documents, 'ofp_hidden' => $indexState['ofp_hidden']], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode(
+            [
+                'format' => 'php_gallery_pdf_documents_v1',
+                'documents' => $documents,
+                'ofp_hidden' => $indexState['ofp_hidden'],
+            ],
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         if (!is_string($json) || strlen($json) > 262144) {
-            throw new RuntimeException('PDF document index cannot be stored safely.');
+            throw new RuntimeException(
+                'PDF document index cannot be stored safely.',
+            );
         }
         $suffix = bin2hex(random_bytes(12));
         $targetPdf = $directory . DIRECTORY_SEPARATOR . $id . '.pdf';
@@ -388,59 +542,98 @@ function gallery_pdf_documents_attach(
         if (is_link($targetPdf) || is_link($indexPath)) {
             throw new RuntimeException('PDF document storage is unsafe.');
         }
-        $stagePdf = $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.pdf.tmp';
-        $stageIndex = $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.index.tmp';
-        if (!gallery_pdf_documents_copy_source($source, $stagePdf, $validated['size'])
-            || !hash_equals($validated['sha256'], (string) @hash_file('sha256', $stagePdf))
-            || @file_put_contents($stageIndex, $json . "\n", LOCK_EX) !== strlen($json) + 1) {
-            throw new RuntimeException('The PDF document could not be staged completely.');
+        $stagePdf =
+            $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.pdf.tmp';
+        $stageIndex =
+            $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.index.tmp';
+        if (
+            !gallery_pdf_documents_copy_source(
+                $source,
+                $stagePdf,
+                $validated['size'],
+            )
+            || !hash_equals(
+                $validated['sha256'],
+                (string) @hash_file('sha256', $stagePdf),
+            )
+            || @file_put_contents($stageIndex, $json . "\n", LOCK_EX)
+                !== (strlen($json) + 1)
+        ) {
+            throw new RuntimeException(
+                'The PDF document could not be staged completely.',
+            );
         }
         @chmod($stageIndex, 0600);
         if (is_file($targetPdf)) {
-            $backupPdf = $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.pdf.bak';
+            $backupPdf =
+                $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.pdf.bak';
             if (!@rename($targetPdf, $backupPdf)) {
-                throw new RuntimeException('The existing PDF could not be protected for replacement.');
+                throw new RuntimeException(
+                    'The existing PDF could not be protected for replacement.',
+                );
             }
             $restoreTarget = $targetPdf;
         }
         if (is_file($indexPath)) {
-            $backupIndex = $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.index.bak';
+            $backupIndex =
+                $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.index.bak';
             if (!@copy($indexPath, $backupIndex)) {
-                if ($backupPdf !== '') @rename($backupPdf, $targetPdf);
+                if ($backupPdf !== '')
+                    @rename($backupPdf, $targetPdf);
                 $backupPdf = '';
-                throw new RuntimeException('The existing PDF index could not be backed up.');
+                throw new RuntimeException(
+                    'The existing PDF index could not be backed up.',
+                );
             }
             @chmod($backupIndex, 0600);
         }
         if (!@rename($stagePdf, $targetPdf)) {
-            throw new RuntimeException('The PDF document could not be installed.');
+            throw new RuntimeException(
+                'The PDF document could not be installed.',
+            );
         }
         $stagePdf = '';
         if (!@rename($stageIndex, $indexPath)) {
             @unlink($targetPdf);
-            if ($backupPdf !== '') @rename($backupPdf, $targetPdf);
-            if ($backupIndex !== '') @unlink($backupIndex);
+            if ($backupPdf !== '')
+                @rename($backupPdf, $targetPdf);
+            if ($backupIndex !== '')
+                @unlink($backupIndex);
             $backupPdf = '';
             $backupIndex = '';
-            throw new RuntimeException('The PDF index could not be installed; the prior document was restored.');
+            throw new RuntimeException(
+                'The PDF index could not be installed; the prior document was restored.',
+            );
         }
         $stageIndex = '';
         foreach ([$backupPdf, $backupIndex] as $backup) {
-            if ($backup !== '') @unlink($backup);
+            if ($backup !== '')
+                @unlink($backup);
         }
         $backupPdf = '';
         $backupIndex = '';
         $committed = true;
-        gallery_attachment_storage_record((int) $gallery['id'], 'pdf', $documents);
+        gallery_attachment_storage_record(
+            (int) $gallery['id'],
+            'pdf',
+            $documents,
+        );
         return $entry;
     } finally {
         if (!$committed && $backupPdf !== '' && $restoreTarget !== '') {
-            if (is_file($restoreTarget)) @unlink($restoreTarget);
+            if (is_file($restoreTarget))
+                @unlink($restoreTarget);
             @rename($backupPdf, $restoreTarget);
             $backupPdf = '';
         }
-        foreach ([$stagePdf, $stageIndex, $backupPdf, $backupIndex] as $temporary) {
-            if ($temporary !== '' && is_file($temporary)) @unlink($temporary);
+        foreach ([
+            $stagePdf,
+            $stageIndex,
+            $backupPdf,
+            $backupIndex,
+        ] as $temporary) {
+            if ($temporary !== '' && is_file($temporary))
+                @unlink($temporary);
         }
         flock($lock, LOCK_UN);
         fclose($lock);
@@ -455,13 +648,18 @@ function gallery_pdf_documents_attach(
  * @param int $expectedSize Expected source byte count from validation.
  * @return bool True when the exact expected number of bytes was copied.
  */
-function gallery_pdf_documents_copy_source(string $source, string $destination, int $expectedSize): bool
-{
+function gallery_pdf_documents_copy_source(
+    string $source,
+    string $destination,
+    int $expectedSize,
+): bool {
     $input = @fopen($source, 'rb');
     $output = @fopen($destination, 'xb');
     if ($input === false || $output === false) {
-        if (is_resource($input)) fclose($input);
-        if (is_resource($output)) fclose($output);
+        if (is_resource($input))
+            fclose($input);
+        if (is_resource($output))
+            fclose($output);
         return false;
     }
     @chmod($destination, 0600);
@@ -469,9 +667,14 @@ function gallery_pdf_documents_copy_source(string $source, string $destination, 
     try {
         while (!feof($input)) {
             $chunk = fread($input, 65536);
-            if (!is_string($chunk) || ($chunk === '' && !feof($input))) return false;
+            if (!is_string($chunk) || ($chunk === '' && !feof($input)))
+                return false;
             $copied += strlen($chunk);
-            if ($copied > $expectedSize || fwrite($output, $chunk) !== strlen($chunk)) return false;
+            if (
+                $copied > $expectedSize
+                || fwrite($output, $chunk) !== strlen($chunk)
+            )
+                return false;
         }
         return fflush($output) && $copied === $expectedSize;
     } finally {
@@ -505,11 +708,20 @@ function gallery_pdf_documents_read(array $gallery, string $id): ?array
     $path = $directory . DIRECTORY_SEPARATOR . $id . '.pdf';
     $resolvedDirectory = realpath($directory);
     $resolved = realpath($path);
-    if ($resolvedDirectory === false || $resolved === false || is_link($directory) || is_link($path)
+    if (
+        $resolvedDirectory === false
+        || $resolved === false
+        || is_link($directory)
+        || is_link($path)
         || !\Gallery\Core\path_inside($root, $resolvedDirectory)
         || !\Gallery\Core\path_inside($resolvedDirectory, $resolved)
-        || !is_file($resolved) || (int) @filesize($resolved) !== $metadata['size']
-        || !hash_equals($metadata['sha256'], (string) @hash_file('sha256', $resolved))) {
+        || !is_file($resolved)
+        || (int) @filesize($resolved) !== $metadata['size']
+        || !hash_equals(
+            $metadata['sha256'],
+            (string) @hash_file('sha256', $resolved),
+        )
+    ) {
         return null;
     }
     return ['path' => $resolved, 'metadata' => $metadata];
@@ -523,36 +735,71 @@ function gallery_pdf_documents_read(array $gallery, string $id): ?array
  * @return bool True when the stored visibility changed; false when the document is absent.
  * @throws RuntimeException When the storage cannot be safely locked or atomically updated.
  */
-function gallery_pdf_documents_set_hidden(array $gallery, string $id, bool $hidden): bool
-{
+function gallery_pdf_documents_set_hidden(
+    array $gallery,
+    string $id,
+    bool $hidden,
+): bool {
     $root = gallery_pdf_documents_gallery_directory($gallery);
-    if ($root === null || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1) return false;
+    if ($root === null || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1)
+        return false;
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
-    if (is_link($directory) || !is_dir($directory)) return false;
+    if (is_link($directory) || !is_dir($directory))
+        return false;
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
-    if (is_link($lockPath)) throw new RuntimeException('PDF document storage is unsafe.');
+    if (is_link($lockPath))
+        throw new RuntimeException('PDF document storage is unsafe.');
     $lock = @fopen($lockPath, 'c');
-    if ($lock === false) throw new RuntimeException('PDF document storage cannot be locked.');
+    if ($lock === false)
+        throw new RuntimeException('PDF document storage cannot be locked.');
     $stage = '';
     try {
-        if (!flock($lock, LOCK_EX)) throw new RuntimeException('PDF document storage is busy.');
+        if (!flock($lock, LOCK_EX))
+            throw new RuntimeException('PDF document storage is busy.');
         $indexState = gallery_pdf_documents_read_index_state($root);
         $documents = $indexState['documents'];
-        if (!isset($documents[$id])) return false;
+        if (!isset($documents[$id]))
+            return false;
         $documents[$id]['hidden'] = $hidden;
         $documents[$id]['updated_at'] = gmdate('Y-m-d\\TH:i:s\\Z');
-        $json = json_encode(['format' => 'php_gallery_pdf_documents_v1', 'documents' => $documents, 'ofp_hidden' => $indexState['ofp_hidden']], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if (!is_string($json) || strlen($json) > 262144) throw new RuntimeException('PDF document index cannot be stored safely.');
+        $json = json_encode(
+            [
+                'format' => 'php_gallery_pdf_documents_v1',
+                'documents' => $documents,
+                'ofp_hidden' => $indexState['ofp_hidden'],
+            ],
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
+        if (!is_string($json) || strlen($json) > 262144)
+            throw new RuntimeException(
+                'PDF document index cannot be stored safely.',
+            );
         $indexPath = $directory . DIRECTORY_SEPARATOR . 'index.json';
-        if (is_link($indexPath)) throw new RuntimeException('PDF document index is unsafe.');
-        $stage = $directory . DIRECTORY_SEPARATOR . '.' . bin2hex(random_bytes(12)) . '.index.tmp';
-        if (@file_put_contents($stage, $json . "\n", LOCK_EX) !== strlen($json) + 1) throw new RuntimeException('Updated PDF visibility could not be staged.');
+        if (is_link($indexPath))
+            throw new RuntimeException('PDF document index is unsafe.');
+        $stage =
+            $directory
+            . DIRECTORY_SEPARATOR
+            . '.'
+            . bin2hex(random_bytes(12))
+            . '.index.tmp';
+        if (
+            @file_put_contents($stage, $json . "\n", LOCK_EX)
+            !== (strlen($json) + 1)
+        )
+            throw new RuntimeException(
+                'Updated PDF visibility could not be staged.',
+            );
         @chmod($stage, 0600);
-        if (!@rename($stage, $indexPath)) throw new RuntimeException('Updated PDF visibility could not be installed.');
+        if (!@rename($stage, $indexPath))
+            throw new RuntimeException(
+                'Updated PDF visibility could not be installed.',
+            );
         $stage = '';
         return true;
     } finally {
-        if ($stage !== '' && is_file($stage)) @unlink($stage);
+        if ($stage !== '' && is_file($stage))
+            @unlink($stage);
         flock($lock, LOCK_UN);
         fclose($lock);
     }
@@ -567,13 +814,15 @@ function gallery_pdf_documents_set_hidden(array $gallery, string $id, bool $hidd
 function gallery_pdf_documents_hidden(array $gallery, string $id): bool
 {
     $root = gallery_pdf_documents_gallery_directory($gallery);
-    if ($root === null) return false;
+    if ($root === null)
+        return false;
     try {
         $state = gallery_pdf_documents_read_index_state($root);
     } catch (\Throwable) {
         return true;
     }
-    if ($id === 'ofp') return $state['ofp_hidden'];
+    if ($id === 'ofp')
+        return $state['ofp_hidden'];
     return (bool) ($state['documents'][$id]['hidden'] ?? false);
 }
 
@@ -584,32 +833,72 @@ function gallery_pdf_documents_hidden(array $gallery, string $id): bool
  * @return bool True when the visibility marker was atomically stored.
  * @throws RuntimeException When the gallery storage cannot be safely locked or updated.
  */
-function gallery_pdf_documents_set_ofp_hidden(array $gallery, bool $hidden): bool
-{
+function gallery_pdf_documents_set_ofp_hidden(
+    array $gallery,
+    bool $hidden,
+): bool {
     $root = gallery_pdf_documents_gallery_directory($gallery);
-    if ($root === null) throw new RuntimeException('The selected gallery folder is unavailable.');
+    if ($root === null)
+        throw new RuntimeException(
+            'The selected gallery folder is unavailable.',
+        );
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
-    if (is_link($directory) || (!is_dir($directory) && !@mkdir($directory, 0700))) throw new RuntimeException('PDF document storage is unavailable or unsafe.');
+    if (
+        is_link($directory)
+        || (
+            !is_dir($directory)
+            && !@mkdir($directory, 0700)
+        )
+    )
+        throw new RuntimeException(
+            'PDF document storage is unavailable or unsafe.',
+        );
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
-    if (is_link($lockPath)) throw new RuntimeException('PDF document storage is unsafe.');
+    if (is_link($lockPath))
+        throw new RuntimeException('PDF document storage is unsafe.');
     $lock = @fopen($lockPath, 'c');
-    if ($lock === false) throw new RuntimeException('PDF document storage cannot be locked.');
+    if ($lock === false)
+        throw new RuntimeException('PDF document storage cannot be locked.');
     $stage = '';
     try {
-        if (!flock($lock, LOCK_EX)) throw new RuntimeException('PDF document storage is busy.');
+        if (!flock($lock, LOCK_EX))
+            throw new RuntimeException('PDF document storage is busy.');
         $indexPath = $directory . DIRECTORY_SEPARATOR . 'index.json';
-        if (is_link($indexPath)) throw new RuntimeException('PDF document index is unsafe.');
+        if (is_link($indexPath))
+            throw new RuntimeException('PDF document index is unsafe.');
         $indexState = gallery_pdf_documents_read_index_state($root);
         $indexState['ofp_hidden'] = $hidden;
-        $stage = $directory . DIRECTORY_SEPARATOR . '.' . bin2hex(random_bytes(12)) . '.index.tmp';
-        $json = json_encode(['format' => 'php_gallery_pdf_documents_v1', 'documents' => $indexState['documents'], 'ofp_hidden' => $hidden], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if (!is_string($json) || strlen($json) > 262144 || @file_put_contents($stage, $json . "\n", LOCK_EX) !== strlen($json) + 1) throw new RuntimeException('OFP visibility could not be staged.');
+        $stage =
+            $directory
+            . DIRECTORY_SEPARATOR
+            . '.'
+            . bin2hex(random_bytes(12))
+            . '.index.tmp';
+        $json = json_encode(
+            [
+                'format' => 'php_gallery_pdf_documents_v1',
+                'documents' => $indexState['documents'],
+                'ofp_hidden' => $hidden,
+            ],
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
+        if (
+            !is_string($json)
+            || strlen($json) > 262144
+            || @file_put_contents($stage, $json . "\n", LOCK_EX)
+                !== (strlen($json) + 1)
+        )
+            throw new RuntimeException('OFP visibility could not be staged.');
         @chmod($stage, 0600);
-        if (!@rename($stage, $indexPath)) throw new RuntimeException('OFP visibility could not be installed.');
+        if (!@rename($stage, $indexPath))
+            throw new RuntimeException(
+                'OFP visibility could not be installed.',
+            );
         $stage = '';
         return true;
     } finally {
-        if ($stage !== '' && is_file($stage)) @unlink($stage);
+        if ($stage !== '' && is_file($stage))
+            @unlink($stage);
         flock($lock, LOCK_UN);
         fclose($lock);
     }
@@ -624,57 +913,96 @@ function gallery_pdf_documents_set_ofp_hidden(array $gallery, bool $hidden): boo
  * @return bool True when the document was deleted; false when it no longer exists.
  * @throws RuntimeException When confirmation is missing or safe atomic deletion fails.
  */
-function gallery_pdf_documents_delete(array $gallery, string $id, bool $confirmed = false): bool
-{
+function gallery_pdf_documents_delete(
+    array $gallery,
+    string $id,
+    bool $confirmed = false,
+): bool {
     $root = gallery_pdf_documents_gallery_directory($gallery);
     if ($root === null || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1) {
         return false;
     }
     if (!$confirmed) {
-        throw new RuntimeException('Deleting a PDF document requires explicit confirmation.');
+        throw new RuntimeException(
+            'Deleting a PDF document requires explicit confirmation.',
+        );
     }
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
-    if (is_link($directory) || !is_dir($directory)) return false;
+    if (is_link($directory) || !is_dir($directory))
+        return false;
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
-    if (is_link($lockPath)) throw new RuntimeException('PDF document storage is unsafe.');
+    if (is_link($lockPath))
+        throw new RuntimeException('PDF document storage is unsafe.');
     $lock = @fopen($lockPath, 'c');
-    if ($lock === false) throw new RuntimeException('PDF document storage cannot be locked.');
+    if ($lock === false)
+        throw new RuntimeException('PDF document storage cannot be locked.');
     $backupPdf = '';
     $stageIndex = '';
     try {
-        if (!flock($lock, LOCK_EX)) throw new RuntimeException('PDF document storage is busy.');
+        if (!flock($lock, LOCK_EX))
+            throw new RuntimeException('PDF document storage is busy.');
         $indexState = gallery_pdf_documents_read_index_state($root);
         $documents = $indexState['documents'];
-        if (!isset($documents[$id])) return false;
+        if (!isset($documents[$id]))
+            return false;
         $path = $directory . DIRECTORY_SEPARATOR . $id . '.pdf';
         $indexPath = $directory . DIRECTORY_SEPARATOR . 'index.json';
         if (is_link($path) || is_link($indexPath) || !is_file($path)) {
-            throw new RuntimeException('PDF document storage is unsafe or incomplete.');
+            throw new RuntimeException(
+                'PDF document storage is unsafe or incomplete.',
+            );
         }
         unset($documents[$id]);
-        $json = json_encode(['format' => 'php_gallery_pdf_documents_v1', 'documents' => $documents, 'ofp_hidden' => $indexState['ofp_hidden']], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if (!is_string($json)) throw new RuntimeException('PDF document index cannot be stored safely.');
+        $json = json_encode(
+            [
+                'format' => 'php_gallery_pdf_documents_v1',
+                'documents' => $documents,
+                'ofp_hidden' => $indexState['ofp_hidden'],
+            ],
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
+        if (!is_string($json))
+            throw new RuntimeException(
+                'PDF document index cannot be stored safely.',
+            );
         $suffix = bin2hex(random_bytes(12));
-        $backupPdf = $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.pdf.bak';
-        $stageIndex = $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.index.tmp';
-        if (@file_put_contents($stageIndex, $json . "\n", LOCK_EX) !== strlen($json) + 1) {
-            throw new RuntimeException('Updated PDF document index could not be staged.');
+        $backupPdf =
+            $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.pdf.bak';
+        $stageIndex =
+            $directory . DIRECTORY_SEPARATOR . '.' . $suffix . '.index.tmp';
+        if (
+            @file_put_contents($stageIndex, $json . "\n", LOCK_EX)
+            !== (strlen($json) + 1)
+        ) {
+            throw new RuntimeException(
+                'Updated PDF document index could not be staged.',
+            );
         }
         @chmod($stageIndex, 0600);
-        if (!@rename($path, $backupPdf)) throw new RuntimeException('The original PDF could not be protected for deletion.');
+        if (!@rename($path, $backupPdf))
+            throw new RuntimeException(
+                'The original PDF could not be protected for deletion.',
+            );
         if (!@rename($stageIndex, $indexPath)) {
             @rename($backupPdf, $path);
             $backupPdf = '';
-            throw new RuntimeException('The updated PDF index could not be installed; the original was restored.');
+            throw new RuntimeException(
+                'The updated PDF index could not be installed; the original was restored.',
+            );
         }
         $stageIndex = '';
         @unlink($backupPdf);
         $backupPdf = '';
-        gallery_attachment_storage_record((int) $gallery['id'], 'pdf', $documents);
+        gallery_attachment_storage_record(
+            (int) $gallery['id'],
+            'pdf',
+            $documents,
+        );
         return true;
     } finally {
         foreach ([$backupPdf, $stageIndex] as $temporary) {
-            if ($temporary !== '' && is_file($temporary)) @unlink($temporary);
+            if ($temporary !== '' && is_file($temporary))
+                @unlink($temporary);
         }
         flock($lock, LOCK_UN);
         fclose($lock);

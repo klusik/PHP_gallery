@@ -33,5 +33,5 @@
  */
 
 return [
-    "ALTER TABLE user_openai_text_settings ADD COLUMN allow_image_input TINYINT(1) NOT NULL DEFAULT 0 AFTER model",
+    'ALTER TABLE user_openai_text_settings ADD COLUMN allow_image_input TINYINT(1) NOT NULL DEFAULT 0 AFTER model',
 ];

@@ -120,25 +120,53 @@ function cms_admin(): void
     admin_render_profile_start('admin_dashboard');
     // Explicit maintenance deep links render their target during the main request so the requested tool is
     // immediately usable and does not depend on a second deferred AJAX request succeeding.
-    $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
-    $maintenanceDeepLink = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true);
+    $requestedMaintenanceTab = strtolower(trim(
+        (string) ($_GET['maintenance_tab'] ?? ''),
+    ));
+    $maintenanceDeepLink = in_array(
+        $requestedMaintenanceTab,
+        ['content', 'media', 'navigation', 'system', 'trash'],
+        true,
+    );
     $requestedTab = (string) ($_GET['dashboard_tab'] ?? '');
-    $activeTab = $maintenanceDeepLink || $requestedTab === 'maintenance' ? 'maintenance'
+    $activeTab = $maintenanceDeepLink || $requestedTab === 'maintenance'
+        ? 'maintenance'
         : ($requestedTab === 'galleries' ? 'galleries' : 'overview');
     $maintenanceLoaded = $maintenanceDeepLink || $activeTab === 'maintenance';
     // Explicit URLs also serve no-JavaScript navigation; ordinary Overview paints before totals are read.
-    $surface = $activeTab === 'galleries' ? 'galleries' : ($requestedTab === 'overview' ? 'overview' : 'shell');
-    $dashboardModel = admin_dashboard_prepare_gallery_controls(admin_dashboard_view_model($maintenanceLoaded, $surface));
+    $surface = $activeTab === 'galleries'
+        ? 'galleries'
+        : ($requestedTab === 'overview' ? 'overview' : 'shell');
+    $dashboardModel = admin_dashboard_prepare_gallery_controls(admin_dashboard_view_model(
+        $maintenanceLoaded,
+        $surface,
+    ));
     $dashboardModel['active_tab'] = $activeTab;
     $dashboardUser = current_user();
-    $dashboardActorId = is_array($dashboardUser) ? max(0, (int) ($dashboardUser['id'] ?? 0)) : 0;
-    $dashboardModel['maintenance_center_status'] = maintenance_center_dashboard_status($dashboardActorId > 0 ? $dashboardActorId : null);
+    $dashboardActorId = is_array($dashboardUser)
+        ? max(0, (int) ($dashboardUser['id'] ?? 0))
+        : 0;
+    $dashboardModel['maintenance_center_status'] = maintenance_center_dashboard_status(
+        $dashboardActorId > 0 ? $dashboardActorId : null,
+    );
     $dashboardModel['maintenance_loaded'] = $maintenanceLoaded;
     $dashboardModel['requested_maintenance_tab'] = $requestedMaintenanceTab;
-    $dashboardModel['notices'] = admin_dashboard_notice_messages($_GET, (string) flash_message('admin_notice'));
-    admin_render_profile_span('render_dashboard', static function () use ($dashboardModel): void { view_render_admin_dashboard($dashboardModel); });
-    view_render_admin_render_profile_panel(admin_render_profile_panel_model(), false);
-    admin_render_profile_span('render_footer', static function (): void { render_footer(); });
+    $dashboardModel['notices'] = admin_dashboard_notice_messages(
+        $_GET,
+        (string) flash_message('admin_notice'),
+    );
+    admin_render_profile_span('render_dashboard', static function () use (
+        $dashboardModel,
+    ): void {
+        view_render_admin_dashboard($dashboardModel);
+    });
+    view_render_admin_render_profile_panel(
+        admin_render_profile_panel_model(),
+        false,
+    );
+    admin_render_profile_span('render_footer', static function (): void {
+        render_footer();
+    });
 }
 
 /**
@@ -174,12 +202,25 @@ function cms_admin_dashboard_fragment(): void
             // This surface reads persisted evidence only; it cannot admit a worker.
             $status = \Gallery\Services\cache_lifecycle_status();
             ob_start();
-            \Gallery\Views\view_render_admin_dashboard_cache_lifecycle_card($status);
-            echo json_encode(['ok'=>true,'html'=>(string) ob_get_clean(),'cache_lifecycle'=>$status],
-                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            \Gallery\Views\view_render_admin_dashboard_cache_lifecycle_card(
+                $status,
+            );
+            echo json_encode(
+                [
+                    'ok' => true,
+                    'html' => (string) ob_get_clean(),
+                    'cache_lifecycle' => $status,
+                ],
+                JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES
+                    | JSON_THROW_ON_ERROR,
+            );
             return;
         }
-        $model = admin_dashboard_prepare_gallery_controls(admin_dashboard_view_model(false, $surface));
+        $model = admin_dashboard_prepare_gallery_controls(admin_dashboard_view_model(
+            false,
+            $surface,
+        ));
         ob_start();
         if ($surface === 'galleries') {
             view_render_admin_dashboard_galleries_panel($model);
@@ -187,17 +228,38 @@ function cms_admin_dashboard_fragment(): void
             view_render_admin_dashboard_summary($model);
         }
         $html = (string) ob_get_clean();
-        echo json_encode(['ok' => true, 'html' => $html, 'total_galleries' => $model['total_galleries']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        echo json_encode(
+            [
+                'ok' => true,
+                'html' => $html,
+                'total_galleries' => $model['total_galleries'],
+            ],
+            JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_SLASHES
+                | JSON_THROW_ON_ERROR,
+        );
     } catch (Throwable $exception) {
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
         }
         http_response_code(503);
-        admin_log_event('warning', 'admin.dashboard_fragment_failed', 'Dashboard summary or gallery list is temporarily unavailable.', [
-            'surface' => $surface,
-            'exception_class' => $exception::class,
-        ], ['category' => 'admin', 'severity' => 'warning']);
-        echo json_encode(['ok' => false, 'error' => t('admin.dashboard.load_failed', 'Could not load this section. Try again.')], JSON_UNESCAPED_UNICODE);
+        admin_log_event(
+            'warning',
+            'admin.dashboard_fragment_failed',
+            'Dashboard summary or gallery list is temporarily unavailable.',
+            [
+                'surface' => $surface,
+                'exception_class' => $exception::class,
+            ],
+            ['category' => 'admin', 'severity' => 'warning'],
+        );
+        echo json_encode([
+            'ok' => false,
+            'error' => t(
+                'admin.dashboard.load_failed',
+                'Could not load this section. Try again.',
+            ),
+        ], JSON_UNESCAPED_UNICODE);
     }
 }
 
@@ -250,32 +312,58 @@ function cms_admin_dashboard_maintenance(): void
     $bufferLevel = ob_get_level();
     try {
         $model = admin_dashboard_view_model(true, 'shell');
-        $requestedMaintenanceTab = strtolower(trim((string) ($_GET['maintenance_tab'] ?? '')));
-        $model['requested_maintenance_tab'] = in_array($requestedMaintenanceTab, ['content', 'media', 'navigation', 'system', 'trash'], true) ? $requestedMaintenanceTab : '';
+        $requestedMaintenanceTab = strtolower(trim(
+            (string) ($_GET['maintenance_tab'] ?? ''),
+        ));
+        $model['requested_maintenance_tab'] = in_array(
+            $requestedMaintenanceTab,
+            ['content', 'media', 'navigation', 'system', 'trash'],
+            true,
+        )
+            ? $requestedMaintenanceTab
+            : '';
         ob_start();
         view_render_admin_dashboard_maintenance_panel($model);
         $html = (string) ob_get_clean();
-        echo json_encode(['ok' => true, 'html' => $html], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        echo json_encode(
+            ['ok' => true, 'html' => $html],
+            JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_SLASHES
+                | JSON_THROW_ON_ERROR,
+        );
     } catch (Throwable $exception) {
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
         }
         http_response_code(500);
         $diagnosticId = bin2hex(random_bytes(6));
-        admin_log_event('warning', 'admin.dashboard_maintenance_load_failed', 'Admin dashboard maintenance panel failed to render.', [
+        admin_log_event(
+            'warning',
+            'admin.dashboard_maintenance_load_failed',
+            'Admin dashboard maintenance panel failed to render.',
+            [
+                'diagnostic_id' => $diagnosticId,
+                'exception_class' => $exception::class,
+                'error' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'maintenance_tab' => (string) ($_GET['maintenance_tab'] ?? ''),
+            ],
+            ['category' => 'admin', 'severity' => 'warning'],
+        );
+        echo json_encode([
+            'ok' => false,
+            'error' => 'Maintenance rendering failed.',
             'diagnostic_id' => $diagnosticId,
-            'exception_class' => $exception::class,
-            'error' => $exception->getMessage(),
-            'file' => $exception->getFile(),
-            'line' => $exception->getLine(),
-            'maintenance_tab' => (string) ($_GET['maintenance_tab'] ?? ''),
-        ], ['category' => 'admin', 'severity' => 'warning']);
-        echo json_encode(['ok' => false, 'error' => 'Maintenance rendering failed.', 'diagnostic_id' => $diagnosticId], JSON_UNESCAPED_SLASHES);
+        ], JSON_UNESCAPED_SLASHES);
     }
 }
 
 /**
  * Record browser-observed failures from the deferred Admin maintenance request.
+ *
+ * @return void Records a bounded diagnostic event and emits a JSON success
+ *     response; non-POST requests receive HTTP 405 without a body.
  */
 function cms_admin_dashboard_maintenance_client_log(): void
 {
@@ -288,16 +376,33 @@ function cms_admin_dashboard_maintenance_client_log(): void
     $context = [
         'endpoint' => substr((string) ($_POST['endpoint'] ?? ''), 0, 1000),
         'http_status' => (int) ($_POST['http_status'] ?? 0),
-        'content_type' => substr((string) ($_POST['content_type'] ?? ''), 0, 200),
-        'browser_error' => substr((string) ($_POST['browser_error'] ?? ''), 0, 1000),
-        'response_snippet' => substr((string) ($_POST['response_snippet'] ?? ''), 0, 2000),
+        'content_type' => substr(
+            (string) ($_POST['content_type'] ?? ''),
+            0,
+            200,
+        ),
+        'browser_error' => substr(
+            (string) ($_POST['browser_error'] ?? ''),
+            0,
+            1000,
+        ),
+        'response_snippet' => substr(
+            (string) ($_POST['response_snippet'] ?? ''),
+            0,
+            2000,
+        ),
         'page_url' => substr((string) ($_POST['page_url'] ?? ''), 0, 1000),
     ];
-    admin_log_event('warning', 'admin.dashboard_maintenance_browser_failed', 'Browser could not load the Admin dashboard maintenance panel.', $context, ['category' => 'admin', 'severity' => 'warning']);
+    admin_log_event(
+        'warning',
+        'admin.dashboard_maintenance_browser_failed',
+        'Browser could not load the Admin dashboard maintenance panel.',
+        $context,
+        ['category' => 'admin', 'severity' => 'warning'],
+    );
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['ok' => true], JSON_UNESCAPED_SLASHES);
 }
-
 
 /**
  * Render the dedicated Admin storage statistics view.
@@ -312,26 +417,36 @@ function cms_admin_storage_statistics(): void
         $activeTab = 'files';
     }
     $statistics = $activeTab === 'files'
-        && function_exists('Gallery\\Services\\admin_storage_statistics_cached_snapshot')
+    && function_exists(
+        'Gallery\\Services\\admin_storage_statistics_cached_snapshot',
+    )
         ? admin_storage_statistics_cached_snapshot(true)
         : null;
     $databaseUsage = $activeTab === 'database'
-        && function_exists('Gallery\\Services\\admin_database_usage_summary')
+    && function_exists('Gallery\\Services\\admin_database_usage_summary')
         ? admin_database_usage_summary()
         : null;
     $databaseMaintenance = [];
     if ($activeTab === 'maintenance') {
         $databaseMaintenance = [
-            'report' => function_exists('Gallery\\Services\\database_maintenance_load_report')
+            'report' => function_exists(
+                'Gallery\\Services\\database_maintenance_load_report',
+            )
                 ? database_maintenance_load_report()
                 : null,
-            'cleanup_state' => function_exists('Gallery\\Services\\database_maintenance_cleanup_state')
+            'cleanup_state' => function_exists(
+                'Gallery\\Services\\database_maintenance_cleanup_state',
+            )
                 ? database_maintenance_cleanup_state()
                 : [],
-            'repair_readiness' => function_exists('Gallery\\Services\\database_maintenance_schema_repair_readiness')
+            'repair_readiness' => function_exists(
+                'Gallery\\Services\\database_maintenance_schema_repair_readiness',
+            )
                 ? database_maintenance_schema_repair_readiness()
                 : [],
-            'mutations_enabled' => feature_capability_effective_enabled('advanced_database_maintenance'),
+            'mutations_enabled' => feature_capability_effective_enabled(
+                'advanced_database_maintenance',
+            ),
         ];
     }
     $notice = (string) flash_message('admin_notice');
@@ -340,7 +455,7 @@ function cms_admin_storage_statistics(): void
         $databaseUsage,
         $activeTab,
         $notice,
-        $databaseMaintenance
+        $databaseMaintenance,
     );
 }
 
@@ -363,15 +478,28 @@ function cms_admin_storage_statistics_update(): void
     try {
         verify_csrf();
         if ($action === 'all_start') {
-            $payload = admin_storage_refresh_all_start((int) (current_user()['id'] ?? 0));
+            $payload = admin_storage_refresh_all_start(
+                (int) (current_user()['id'] ?? 0),
+            );
         } elseif ($action === 'all_step') {
-            $workflowId = strtolower(trim((string) ($_POST['workflow_id'] ?? '')));
-            $payload = admin_storage_refresh_all_step($workflowId, (int) (current_user()['id'] ?? 0));
+            $workflowId = strtolower(trim(
+                (string) ($_POST['workflow_id'] ?? ''),
+            ));
+            $payload = admin_storage_refresh_all_step(
+                $workflowId,
+                (int) (current_user()['id'] ?? 0),
+            );
         } elseif ($action === 'start') {
             $state = admin_storage_statistics_start_job();
             $payload = admin_storage_statistics_controller_payload($state);
         } else {
-            $batchSize = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, (int) ($_POST['batch_size'] ?? ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE)));
+            $batchSize = max(1, min(
+                ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE,
+                (int) (
+                    $_POST['batch_size']
+                    ?? ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE
+                ),
+            ));
             $state = admin_storage_statistics_process_job($batchSize);
             $payload = admin_storage_statistics_controller_payload($state);
         }
@@ -386,17 +514,28 @@ function cms_admin_storage_statistics_update(): void
         }
         if (in_array($action, ['all_start', 'all_step'], true)) {
             $diagnosticId = bin2hex(random_bytes(6));
-            admin_log_event('error', 'storage.refresh_all_request_failed', 'Admin storage refresh could not continue.', [
-                'action' => $action,
-                'exception_class' => $exception::class,
-                'diagnostic_id' => $diagnosticId,
-            ], ['category' => 'database', 'severity' => 'error']);
+            admin_log_event(
+                'error',
+                'storage.refresh_all_request_failed',
+                'Admin storage refresh could not continue.',
+                [
+                    'action' => $action,
+                    'exception_class' => $exception::class,
+                    'diagnostic_id' => $diagnosticId,
+                ],
+                ['category' => 'database', 'severity' => 'error'],
+            );
             $payload = admin_storage_refresh_error_payload();
             $payload['diagnostic_id'] = $diagnosticId;
             admin_storage_statistics_json_response($payload);
             return;
         }
-        admin_log_event('error', 'storage_statistics.update_failed', 'Admin storage statistics update failed.', ['exception' => $exception->getMessage()]);
+        admin_log_event(
+            'error',
+            'storage_statistics.update_failed',
+            'Admin storage statistics update failed.',
+            ['exception' => $exception->getMessage()],
+        );
         admin_storage_statistics_json_response([
             'ok' => false,
             'status' => 'error',
@@ -407,6 +546,9 @@ function cms_admin_storage_statistics_update(): void
 
 /**
  * Process an explicit database table statistics recompute request.
+ *
+ * @return void Recomputes database usage statistics and redirects to the
+ *     database statistics tab with a flash notice.
  */
 function cms_admin_database_usage_recompute(): void
 {
@@ -418,20 +560,50 @@ function cms_admin_database_usage_recompute(): void
 
     verify_csrf();
     try {
-        $report = function_exists('Gallery\\Services\\admin_database_usage_recompute_statistics') ? admin_database_usage_recompute_statistics() : ['ok' => false, 'error' => 'Database usage service is not available.'];
+        $report = function_exists(
+            'Gallery\\Services\\admin_database_usage_recompute_statistics',
+        )
+            ? admin_database_usage_recompute_statistics()
+            : [
+                'ok' => false,
+                'error' => 'Database usage service is not available.',
+            ];
         if (!empty($report['ok'])) {
-            flash_message('admin_notice', t('admin.database_usage.recompute_done', 'Database statistics recomputed. Analyzed {tables} table(s) in {seconds} second(s).', [
-                'tables' => (string) (int) ($report['table_count'] ?? 0),
-                'seconds' => number_format((float) ($report['duration_seconds'] ?? 0.0), 3),
-            ]));
+            flash_message('admin_notice', t(
+                'admin.database_usage.recompute_done',
+                'Database statistics recomputed. Analyzed {tables} table(s) in {seconds} second(s).',
+                [
+                    'tables' => (string) (int) ($report['table_count'] ?? 0),
+                    'seconds' => number_format(
+                        (float) ($report['duration_seconds'] ?? 0.0),
+                        3,
+                    ),
+                ],
+            ));
         } else {
-            flash_message('admin_notice', t('admin.database_usage.recompute_partial', 'Database statistics recompute finished with {failed} failed table(s). Check Admin logs for details.', [
-                'failed' => (string) (int) ($report['failed_table_count'] ?? 0),
-            ]));
+            flash_message('admin_notice', t(
+                'admin.database_usage.recompute_partial',
+                'Database statistics recompute finished with {failed} failed table(s). Check Admin logs for details.',
+                [
+                    'failed' => (string) (int) (
+                        $report['failed_table_count'] ?? 0
+                    ),
+                ],
+            ));
         }
     } catch (Throwable $exception) {
-        admin_log_event('error', 'database_usage.recompute_failed', 'Admin database statistics recompute failed.', ['exception' => $exception->getMessage()], ['category' => 'database', 'severity' => 'error']);
-        flash_message('admin_notice', t('admin.database_usage.recompute_failed', 'Database statistics recompute failed: {error}', ['error' => $exception->getMessage()]));
+        admin_log_event(
+            'error',
+            'database_usage.recompute_failed',
+            'Admin database statistics recompute failed.',
+            ['exception' => $exception->getMessage()],
+            ['category' => 'database', 'severity' => 'error'],
+        );
+        flash_message('admin_notice', t(
+            'admin.database_usage.recompute_failed',
+            'Database statistics recompute failed: {error}',
+            ['error' => $exception->getMessage()],
+        ));
     }
 
     redirect_to(url_for('admin_storage_statistics', ['tab' => 'database']));
@@ -440,17 +612,24 @@ function cms_admin_database_usage_recompute(): void
 /**
  * Build the JSON payload for a storage statistics Ajax response.
  *
- * @param array $state State value.
- * @return array<string mixed>.
+ * @param array<string,mixed> $state Storage job state fields used to prepare
+ *     the progress response and optional rendered snapshot.
+ * @return array{ok:bool,status:string,processed:int,total:int,percent:float,message:string,html?:string,status_text?:string} Progress fields and, when a snapshot exists, its rendered panel.
  */
 function admin_storage_statistics_controller_payload(array $state): array
 {
     $status = (string) ($state['status'] ?? 'running');
     $message = (string) ($state['message'] ?? '');
     if ($message === '' && $status === 'missing') {
-        $message = t('admin.storage.progress_missing_job', 'No running storage statistics job was found.');
+        $message = t(
+            'admin.storage.progress_missing_job',
+            'No running storage statistics job was found.',
+        );
     } elseif ($status === 'stale') {
-        $message = t('admin.storage.progress_stale', 'Gallery data changed while statistics were being calculated. Start a new update.');
+        $message = t(
+            'admin.storage.progress_stale',
+            'Gallery data changed while statistics were being calculated. Start a new update.',
+        );
     }
 
     $payload = [
@@ -466,7 +645,9 @@ function admin_storage_statistics_controller_payload(array $state): array
         ob_start();
         view_render_admin_storage_statistics_panel($state['snapshot']);
         $payload['html'] = (string) ob_get_clean();
-        $payload['status_text'] = view_admin_storage_snapshot_status($state['snapshot']);
+        $payload['status_text'] = view_admin_storage_snapshot_status(
+            $state['snapshot'],
+        );
     }
 
     return $payload;
@@ -487,20 +668,28 @@ function admin_storage_statistics_json_response(array $payload): void
 
 /**
  * Backward-compatible wrapper for older controller/view code.
+ *
+ * @return void Emits the URL rewrite warning markup through the view helper.
  */
 function render_admin_url_rewrite_warning(): void
 {
-    view_render_admin_url_rewrite_warning(['url_rewrite_compatibility' => url_rewrite_compatibility()]);
+    view_render_admin_url_rewrite_warning([
+        'url_rewrite_compatibility' => url_rewrite_compatibility(),
+    ]);
 }
 
 /**
  * Backward-compatible wrapper for older controller/view code.
  *
  * @param string $className Class name value.
+ * @return void Emits the URL rewrite card markup through the view helper.
  */
 function render_admin_url_rewrite_card(string $className): void
 {
-    view_render_admin_url_rewrite_card($className, ['url_rewrite_enabled' => url_rewrite_enabled(), 'url_rewrite_compatibility' => url_rewrite_compatibility()]);
+    view_render_admin_url_rewrite_card($className, [
+        'url_rewrite_enabled' => url_rewrite_enabled(),
+        'url_rewrite_compatibility' => url_rewrite_compatibility(),
+    ]);
 }
 
 /**
@@ -511,9 +700,14 @@ function render_admin_url_rewrite_card(string $className): void
  */
 function admin_dashboard_content_return_url(string $fallbackUrl): string
 {
-    return ($_POST['maintenance_return'] ?? '') === 'content'
-        ? url_for('admin', ['dashboard_tab' => 'maintenance', 'maintenance_tab' => 'content'])
-        : $fallbackUrl;
+    return (
+        ($_POST['maintenance_return'] ?? '') === 'content'
+            ? url_for('admin', [
+                'dashboard_tab' => 'maintenance',
+                'maintenance_tab' => 'content',
+            ])
+            : $fallbackUrl
+    );
 }
 
 /**
@@ -530,10 +724,19 @@ function cms_admin_url_rewrite(): void
     }
     verify_csrf();
     set_url_rewrite_enabled(isset($_POST['url_rewrite_enabled']));
-    flash_message('admin_notice', '' . t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.') . '');
-    redirect_to(admin_dashboard_content_return_url(url_for('admin', ['url_rewrite_saved' => 1])));
+    flash_message(
+        'admin_notice',
+        ''
+            . t(
+                'admin.dashboard.notice_url_rewrite_saved',
+                'URL rewrite setting saved.',
+            )
+            . '',
+    );
+    redirect_to(admin_dashboard_content_return_url(url_for('admin', [
+        'url_rewrite_saved' => 1,
+    ])));
 }
-
 
 /**
  * Persist the optional public search setting and retain the selected maintenance group.
@@ -548,18 +751,33 @@ function cms_admin_public_search_settings(): void
         return;
     }
     verify_csrf();
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('public_search')) {
-        flash_message('admin_notice', t('admin.dashboard.notice_public_search_disabled', 'Public search is disabled in Admin > Features.'));
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('public_search')
+    ) {
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_public_search_disabled',
+            'Public search is disabled in Admin > Features.',
+        ));
         redirect_to(admin_dashboard_content_return_url(url_for('admin')));
     }
     set_public_home_search_enabled(isset($_POST['public_home_search_enabled']));
-    admin_log_event('info', 'settings.public_search_updated', 'Admin updated the public home search setting.', [
-        'enabled' => public_home_search_enabled(),
-    ]);
-    flash_message('admin_notice', t('admin.dashboard.notice_public_search_saved', 'Public search setting saved.'));
+    admin_log_event(
+        'info',
+        'settings.public_search_updated',
+        'Admin updated the public home search setting.',
+        [
+            'enabled' => public_home_search_enabled(),
+        ],
+    );
+    flash_message('admin_notice', t(
+        'admin.dashboard.notice_public_search_saved',
+        'Public search setting saved.',
+    ));
     redirect_to(admin_dashboard_content_return_url(url_for('admin')));
 }
-
 
 /**
  * Persist the GPS map default or reset gallery overrides without changing that default.
@@ -577,10 +795,19 @@ function cms_admin_exif_gps_settings(): void
     $schemaStatus = presentation_gps_override_schema_status();
     if (!schema_inspection_is_available($schemaStatus)) {
         if (schema_inspection_is_unknown($schemaStatus)) {
-            presentation_schema_log_degraded($schemaStatus, 'gps_default_setting_save');
-            flash_message('admin_notice', t('admin.dashboard.exif_gps_schema_unknown', 'EXIF/GPS defaults were not changed because the gallery override schema could not be verified. Check System Health.'));
+            presentation_schema_log_degraded(
+                $schemaStatus,
+                'gps_default_setting_save',
+            );
+            flash_message('admin_notice', t(
+                'admin.dashboard.exif_gps_schema_unknown',
+                'EXIF/GPS defaults were not changed because the gallery override schema could not be verified. Check System Health.',
+            ));
         } else {
-            flash_message('admin_notice', t('admin.dashboard.exif_gps_requires_migration', 'EXIF/GPS default controls will be available after the database migration is applied.'));
+            flash_message('admin_notice', t(
+                'admin.dashboard.exif_gps_requires_migration',
+                'EXIF/GPS default controls will be available after the database migration is applied.',
+            ));
         }
         redirect_to(admin_dashboard_content_return_url(url_for('admin')));
     }
@@ -588,21 +815,41 @@ function cms_admin_exif_gps_settings(): void
     // The dedicated bulk reset must not infer an unchecked default from its absent checkbox.
     $resetOnly = ($_POST['reset_gallery_overrides_only'] ?? '') === '1';
     if (!$resetOnly) {
-        set_exif_gps_default_enabled(!empty($_POST['exif_gps_default_enabled']));
+        set_exif_gps_default_enabled(
+            !empty($_POST['exif_gps_default_enabled']),
+        );
     }
     // $resetCount stores how many explicit gallery overrides were removed.
-    $resetCount = !empty($_POST['reset_gallery_overrides']) ? reset_all_gallery_gps_map_overrides() : 0;
-    admin_log_event('info', 'settings.exif_gps_updated', 'Admin updated EXIF/GPS display defaults.', [
-        'default_enabled' => exif_gps_default_enabled(),
-        'reset_gallery_overrides' => $resetCount,
-    ]);
+    $resetCount = !empty($_POST['reset_gallery_overrides'])
+        ? reset_all_gallery_gps_map_overrides()
+        : 0;
+    admin_log_event(
+        'info',
+        'settings.exif_gps_updated',
+        'Admin updated EXIF/GPS display defaults.',
+        [
+            'default_enabled' => exif_gps_default_enabled(),
+            'reset_gallery_overrides' => $resetCount,
+        ],
+    );
 
     if ($resetOnly) {
-        flash_message('admin_notice', t('admin.dashboard.content_gps_reset_done', 'Reset {count} gallery GPS override(s). The global default was kept.', ['count' => (string) $resetCount]));
+        flash_message('admin_notice', t(
+            'admin.dashboard.content_gps_reset_done',
+            'Reset {count} gallery GPS override(s). The global default was kept.',
+            ['count' => (string) $resetCount],
+        ));
     } elseif ($resetCount > 0) {
-        flash_message('admin_notice', t('admin.dashboard.notice_exif_gps_saved_with_reset', 'EXIF/GPS defaults saved. Reset {count} gallery override(s).', ['count' => (string) $resetCount]));
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_exif_gps_saved_with_reset',
+            'EXIF/GPS defaults saved. Reset {count} gallery override(s).',
+            ['count' => (string) $resetCount],
+        ));
     } else {
-        flash_message('admin_notice', t('admin.dashboard.notice_exif_gps_saved', 'EXIF/GPS defaults saved.'));
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_exif_gps_saved',
+            'EXIF/GPS defaults saved.',
+        ));
     }
     redirect_to(admin_dashboard_content_return_url(url_for('admin')));
 }
@@ -622,25 +869,45 @@ function cms_admin_seo_guard_settings(): void
     verify_csrf();
 
     set_seo_request_guard_enabled(!empty($_POST['seo_request_guard_enabled']));
-    set_seo_request_guard_logging_enabled(!empty($_POST['seo_request_guard_logging_enabled']));
-    admin_log_event('info', 'settings.seo_request_guard_updated', 'Admin updated SEO request guard settings.', [
-        'enabled' => seo_request_guard_enabled(),
-        'logging_enabled' => seo_request_guard_logging_enabled(),
-    ], ['category' => 'security', 'severity' => 'info']);
+    set_seo_request_guard_logging_enabled(
+        !empty($_POST['seo_request_guard_logging_enabled']),
+    );
+    admin_log_event(
+        'info',
+        'settings.seo_request_guard_updated',
+        'Admin updated SEO request guard settings.',
+        [
+            'enabled' => seo_request_guard_enabled(),
+            'logging_enabled' => seo_request_guard_logging_enabled(),
+        ],
+        ['category' => 'security', 'severity' => 'info'],
+    );
 
-    flash_message('admin_notice', t('admin.dashboard.notice_seo_guard_saved', 'SEO request guard setting saved.'));
-    redirect_to(admin_dashboard_content_return_url(url_for('admin') . '#admin-tab-maintenance'));
+    flash_message('admin_notice', t(
+        'admin.dashboard.notice_seo_guard_saved',
+        'SEO request guard setting saved.',
+    ));
+    redirect_to(admin_dashboard_content_return_url(
+        url_for('admin') . '#admin-tab-maintenance',
+    ));
 }
 
 /**
  * Backward-compatible wrapper for older controller/view code.
  *
  * @param bool $flightNavdataReady Flight navdata ready value.
- * @param array $flightNavdataStatus Flight navdata status value.
+ * @param array<string,mixed> $flightNavdataStatus Flight navdata status fields
+ *     consumed by the view helper.
+ * @return void Emits the navigation data maintenance card markup.
  */
-function render_admin_navdata_maintenance_card(bool $flightNavdataReady, array $flightNavdataStatus): void
-{
-    view_render_admin_navdata_maintenance_card($flightNavdataReady, $flightNavdataStatus);
+function render_admin_navdata_maintenance_card(
+    bool $flightNavdataReady,
+    array $flightNavdataStatus,
+): void {
+    view_render_admin_navdata_maintenance_card(
+        $flightNavdataReady,
+        $flightNavdataStatus,
+    );
 }
 
 /**
@@ -658,7 +925,9 @@ function cms_admin_update_navdata(): void
     verify_csrf();
 
     // Accept only the two owned surfaces, including the non-JavaScript return path.
-    $returnPage = ($_POST['navdata_return_page'] ?? '') === 'admin_navdata' ? 'admin_navdata' : 'admin';
+    $returnPage = ($_POST['navdata_return_page'] ?? '') === 'admin_navdata'
+        ? 'admin_navdata'
+        : 'admin';
     try {
         $async = admin_wants_json();
         if ($async) {
@@ -666,47 +935,109 @@ function cms_admin_update_navdata(): void
             session_write_close();
             ignore_user_abort(true);
         }
-        $outcome = flight_map_navdata_refresh(!empty($_POST['navdata_check_due']));
+        $outcome = flight_map_navdata_refresh(
+            !empty($_POST['navdata_check_due']),
+        );
         $result = (array) $outcome['result'];
         if ($async) {
             if ($outcome['state'] === 'updated') {
-                admin_log_event('info', 'flight_map.navdata_updated', 'Admin updated flight-map navdata from OurAirports.', $result);
+                admin_log_event(
+                    'info',
+                    'flight_map.navdata_updated',
+                    'Admin updated flight-map navdata from OurAirports.',
+                    $result,
+                );
             }
             $message = $outcome['state'] === 'updated'
-                ? t('admin.dashboard.notice_navdata_updated', ['airports' => (int) ($result['airports'] ?? 0), 'navaids' => (int) ($result['navaids'] ?? 0), 'skipped' => (int) ($result['skipped'] ?? 0), 'deleted' => (int) ($result['deleted'] ?? 0)])
-                : t($outcome['state'] === 'busy' ? 'admin.dashboard.navdata_busy' : 'admin.dashboard.navdata_current');
-            $payload = admin_mutation_success_envelope($message,
-                admin_mutation_descriptor('navigation_data.refresh', 'navigation_data', 'refresh'),
-                admin_mutation_panel_metadata('navigation_data'), [], ['redirect_url' => url_for($returnPage)]);
+                ? t('admin.dashboard.notice_navdata_updated', [
+                    'airports' => (int) ($result['airports'] ?? 0),
+                    'navaids' => (int) ($result['navaids'] ?? 0),
+                    'skipped' => (int) ($result['skipped'] ?? 0),
+                    'deleted' => (int) ($result['deleted'] ?? 0),
+                ])
+                : t(
+                    $outcome['state'] === 'busy'
+                        ? 'admin.dashboard.navdata_busy'
+                        : 'admin.dashboard.navdata_current',
+                );
+            $payload = admin_mutation_success_envelope(
+                $message,
+                admin_mutation_descriptor(
+                    'navigation_data.refresh',
+                    'navigation_data',
+                    'refresh',
+                ),
+                admin_mutation_panel_metadata('navigation_data'),
+                [],
+                ['redirect_url' => url_for($returnPage)],
+            );
             $status = flight_map_navdata_status();
             ob_start();
-            view_render_admin_navdata_maintenance_card(!empty($status['ready']), $status, $returnPage);
+            view_render_admin_navdata_maintenance_card(
+                !empty($status['ready']),
+                $status,
+                $returnPage,
+            );
             $payload['html'] = (string) ob_get_clean();
             $payload['state'] = $outcome['state'];
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: no-store, private');
-            echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            echo json_encode(
+                $payload,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+            );
             return;
         }
-        admin_log_event('info', 'flight_map.navdata_updated', 'Admin updated flight-map navdata from OurAirports.', $result);
-        flash_message('admin_notice', t('admin.dashboard.notice_navdata_updated', 'Updated flight-map navdata. Imported {airports} airport identifier(s), {navaids} navaid(s), skipped {skipped} row(s), removed {deleted} stale row(s).', [
-            'airports' => (int) ($result['airports'] ?? 0),
-            'navaids' => (int) ($result['navaids'] ?? 0),
-            'skipped' => (int) ($result['skipped'] ?? 0),
-            'deleted' => (int) ($result['deleted'] ?? 0),
-        ]));
+        admin_log_event(
+            'info',
+            'flight_map.navdata_updated',
+            'Admin updated flight-map navdata from OurAirports.',
+            $result,
+        );
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navdata_updated',
+            'Updated flight-map navdata. Imported {airports} airport identifier(s), {navaids} navaid(s), skipped {skipped} row(s), removed {deleted} stale row(s).',
+            [
+                'airports' => (int) ($result['airports'] ?? 0),
+                'navaids' => (int) ($result['navaids'] ?? 0),
+                'skipped' => (int) ($result['skipped'] ?? 0),
+                'deleted' => (int) ($result['deleted'] ?? 0),
+            ],
+        ));
     } catch (Throwable $exception) {
         if (admin_wants_json()) {
             $reference = bin2hex(random_bytes(6));
-            admin_log_event('error', 'flight_map.navdata_failed', 'Navigation data refresh failed.', ['reference' => $reference, 'exception_class' => $exception::class]);
+            admin_log_event(
+                'error',
+                'flight_map.navdata_failed',
+                'Navigation data refresh failed.',
+                [
+                    'reference' => $reference,
+                    'exception_class' => $exception::class,
+                ],
+            );
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: no-store, private');
             http_response_code(503);
-            echo json_encode(['ok' => false, 'message' => t('admin.dashboard.notice_navdata_failed', ['error' => 'Reference: ' . $reference])], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            echo json_encode([
+                'ok' => false,
+                'message' => t('admin.dashboard.notice_navdata_failed', [
+                    'error' => 'Reference: ' . $reference,
+                ]),
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
-        admin_log_event('error', 'flight_map.navdata_failed', 'Admin flight-map navdata update failed.', ['exception' => $exception->getMessage()]);
-        flash_message('admin_notice', t('admin.dashboard.notice_navdata_failed', 'Flight-map navdata update failed: {error}', ['error' => $exception->getMessage()]));
+        admin_log_event(
+            'error',
+            'flight_map.navdata_failed',
+            'Admin flight-map navdata update failed.',
+            ['exception' => $exception->getMessage()],
+        );
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navdata_failed',
+            'Flight-map navdata update failed: {error}',
+            ['error' => $exception->getMessage()],
+        ));
     }
 
     redirect_to(url_for($returnPage));
@@ -722,6 +1053,8 @@ function render_admin_devmode_panel(): void
 
 /**
  * Persist the admin dev mode setting.
+ *
+ * @return void Saves the authenticated preference and redirects to Admin.
  */
 function cms_admin_devmode(): void
 {
@@ -732,7 +1065,15 @@ function cms_admin_devmode(): void
     }
     verify_csrf();
     set_dev_mode_enabled(isset($_POST['dev_mode_enabled']));
-    flash_message('admin_notice', '' . e(t('admin.dashboard.notice_devmode_saved', 'Dev mode setting saved.')) . '');
+    flash_message(
+        'admin_notice',
+        ''
+            . e(t(
+                'admin.dashboard.notice_devmode_saved',
+                'Dev mode setting saved.',
+            ))
+            . '',
+    );
     redirect_to(url_for('admin'));
 }
 
@@ -759,16 +1100,54 @@ function cms_admin_run_migrations(): void
         // $ran stores an intermediate value used by the surrounding gallery workflow.
         $ran = run_migrations();
         if ($ran) {
-            admin_log_event('info', 'migrations.ran', 'Admin ran pending migrations.', ['versions' => $ran]);
-            flash_message('admin_notice', '' . e(t('admin.dashboard.notice_migrations_applied', 'Applied migrations:')) . ' ' . implode(', ', $ran) . '.');
+            admin_log_event(
+                'info',
+                'migrations.ran',
+                'Admin ran pending migrations.',
+                ['versions' => $ran],
+            );
+            flash_message(
+                'admin_notice',
+                ''
+                    . e(t(
+                        'admin.dashboard.notice_migrations_applied',
+                        'Applied migrations:',
+                    ))
+                    . ' '
+                    . implode(', ', $ran)
+                    . '.',
+            );
             redirect_to(url_for('admin'));
         }
-        admin_log_event('info', 'migrations.current', 'Admin checked migrations and database was already current.');
-        flash_message('admin_notice', '' . e(t('admin.dashboard.notice_database_current', 'Database is already current.')) . '');
+        admin_log_event(
+            'info',
+            'migrations.current',
+            'Admin checked migrations and database was already current.',
+        );
+        flash_message(
+            'admin_notice',
+            ''
+                . e(t(
+                    'admin.dashboard.notice_database_current',
+                    'Database is already current.',
+                ))
+                . '',
+        );
         redirect_to(url_for('admin'));
     } catch (Throwable $exception) {
-        admin_log_event('error', 'migrations.failed', 'Admin migration run failed.', ['exception_type' => get_debug_type($exception)]);
-        flash_message('admin_notice', e(t('admin.dashboard.notice_migration_failed', 'Database migration could not be completed. Retry from this page; if it still fails, review Runtime diagnostics.')));
+        admin_log_event(
+            'error',
+            'migrations.failed',
+            'Admin migration run failed.',
+            ['exception_type' => get_debug_type($exception)],
+        );
+        flash_message(
+            'admin_notice',
+            e(t(
+                'admin.dashboard.notice_migration_failed',
+                'Database migration could not be completed. Retry from this page; if it still fails, review Runtime diagnostics.',
+            )),
+        );
         redirect_to(url_for('admin'));
     }
 }

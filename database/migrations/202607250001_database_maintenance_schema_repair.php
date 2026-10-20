@@ -37,8 +37,11 @@
 
 declare(strict_types=1);
 
-use function Gallery\Core\database_maintenance_schema_repair_migration_definition;
+use function Gallery\Core\database_maintenance_schema_repair_migration_definition
+;
 
 require_once dirname(__DIR__, 2) . '/app/migration_repairs.php';
 
-return database_maintenance_schema_repair_migration_definition(isset($pdo) && $pdo instanceof PDO ? $pdo : null);
+return database_maintenance_schema_repair_migration_definition(
+    isset($pdo) && $pdo instanceof PDO ? $pdo : null,
+);

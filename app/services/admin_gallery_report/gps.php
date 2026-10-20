@@ -36,10 +36,10 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+
 use const Gallery\Core\ADMIN_GALLERY_REPORT_MAX_GPS_CLUSTERS;
 use const Gallery\Core\ADMIN_GALLERY_REPORT_GPS_AREA_KM;
 use const Gallery\Core\ADMIN_GALLERY_REPORT_PLACE_MATCH_DEFAULT_RADIUS_KM;
-
 use Throwable;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
@@ -48,17 +48,34 @@ use function Gallery\Core\db;
 /**
  * Return whether the image GPS point is probably from a simulator or game capture.
  *
- * @param array $row Image row.
+ * @param array<string,mixed> $row Image row with path/name, MIME, and available camera or exposure metadata.
  * @return bool True when the GPS point should not be used for real-world place clustering.
  */
 function admin_gallery_report_is_probable_game_gps(array $row): bool
 {
-    $filename = strtolower((string) ($row['filename'] ?? $row['relative_path'] ?? ''));
+    $filename = strtolower(
+        (string) ($row['filename'] ?? $row['relative_path'] ?? ''),
+    );
     $extension = admin_gallery_report_file_extension($filename);
     $mime = strtolower((string) ($row['mime_type'] ?? ''));
-    $camera = trim((string) ($row['exif_camera_make'] ?? '') . ' ' . (string) ($row['exif_camera_model'] ?? '') . ' ' . (string) ($row['exif_lens_model'] ?? ''));
-    $hasCameraExif = $camera !== '' || trim((string) ($row['exif_focal_length'] ?? '')) !== '' || trim((string) ($row['exif_aperture'] ?? '')) !== '' || trim((string) ($row['exif_exposure_time'] ?? '')) !== '' || (int) ($row['exif_iso'] ?? 0) > 0;
-    $nameLooksLikeCapture = preg_match('/(msfs|flight[ _-]?sim|simconnect|xplane|x-plane|dcs|elite[ _-]?dangerous|screenshot|screen[ _-]?shot|steam|geforce|nvidia|2537590_[0-9]{14})/i', $filename) === 1;
+    $camera = trim(
+        (string) ($row['exif_camera_make'] ?? '')
+            . ' '
+            . (string) ($row['exif_camera_model'] ?? '')
+            . ' '
+            . (string) ($row['exif_lens_model'] ?? ''),
+    );
+    $hasCameraExif =
+        $camera !== ''
+        || trim((string) ($row['exif_focal_length'] ?? '')) !== ''
+        || trim((string) ($row['exif_aperture'] ?? '')) !== ''
+        || trim((string) ($row['exif_exposure_time'] ?? '')) !== ''
+        || (int) ($row['exif_iso'] ?? 0) > 0;
+    $nameLooksLikeCapture =
+        preg_match(
+            '/(msfs|flight[ _-]?sim|simconnect|xplane|x-plane|dcs|elite[ _-]?dangerous|screenshot|screen[ _-]?shot|steam|geforce|nvidia|2537590_[0-9]{14})/i',
+            $filename,
+        ) === 1;
     if ($nameLooksLikeCapture) {
         return true;
     }
@@ -74,13 +91,18 @@ function admin_gallery_report_is_probable_game_gps(array $row): bool
 /**
  * Add a GPS point to an approximate 20 km area cluster.
  *
- * @param array $clusters Cluster accumulator.
- * @param array $row Image row.
+ * @param array<string,array{count:int,lat_sum:float,lng_sum:float,lat_min:float,lat_max:float,lng_min:float,lng_max:float,gallery_ids:array<int,true>,gallery_labels:array<string,true>,first_date:?string,last_date:?string,sample_images:list<string>}> $clusters Cluster accumulator, updated in place.
+ * @param array<string,mixed> $row Image row with gallery identity/labels, capture date, and image path fields.
  * @param float $lat Latitude.
  * @param float $lng Longitude.
+ * @return void Adds valid coordinates and bounded sample/gallery metadata to a nearby cluster, or leaves the accumulator unchanged when invalid or full.
  */
-function admin_gallery_report_accumulate_gps_cluster(array &$clusters, array $row, float $lat, float $lng): void
-{
+function admin_gallery_report_accumulate_gps_cluster(
+    array &$clusters,
+    array $row,
+    float $lat,
+    float $lng,
+): void {
     if ($lat < -90.0 || $lat > 90.0 || $lng < -180.0 || $lng > 180.0) {
         return;
     }
@@ -117,23 +139,35 @@ function admin_gallery_report_accumulate_gps_cluster(array &$clusters, array $ro
     }
     $date = (string) ($row['exif_taken_at'] ?? '');
     if (admin_gallery_report_valid_datetime($date)) {
-        admin_gallery_report_update_date_range($cluster, 'first_date', 'last_date', $date);
+        admin_gallery_report_update_date_range(
+            $cluster,
+            'first_date',
+            'last_date',
+            $date,
+        );
     }
     if (count($cluster['sample_images']) < 6) {
-        $cluster['sample_images'][] = (string) ($row['relative_path'] ?? $row['filename'] ?? '');
+        $cluster['sample_images'][] = (string) (
+            $row['relative_path']
+            ?? $row['filename']
+            ?? ''
+        );
     }
 }
 
 /**
  * Find an existing GPS cluster whose centroid is close enough for city-scale grouping.
  *
- * @param array $clusters Cluster accumulator.
+ * @param array<string,array<string,mixed>> $clusters Cluster accumulator keyed by cluster id.
  * @param float $lat Latitude.
  * @param float $lng Longitude.
- * @return string Existing cluster key or empty string.
+ * @return string Existing cluster key, or an empty string when no cluster is close enough.
  */
-function admin_gallery_report_find_gps_cluster_key(array $clusters, float $lat, float $lng): string
-{
+function admin_gallery_report_find_gps_cluster_key(
+    array $clusters,
+    float $lat,
+    float $lng,
+): string {
     $bestKey = '';
     $bestDistance = ADMIN_GALLERY_REPORT_GPS_AREA_KM;
     foreach ($clusters as $key => $cluster) {
@@ -143,8 +177,16 @@ function admin_gallery_report_find_gps_cluster_key(array $clusters, float $lat, 
         $count = max(1, (int) ($cluster['count'] ?? 0));
         $clusterLat = (float) ($cluster['lat_sum'] ?? 0.0) / $count;
         $clusterLng = (float) ($cluster['lng_sum'] ?? 0.0) / $count;
-        $distance = admin_gallery_report_haversine_km($lat, $lng, $clusterLat, $clusterLng);
-        if ($distance <= ADMIN_GALLERY_REPORT_GPS_AREA_KM && $distance <= $bestDistance) {
+        $distance = admin_gallery_report_haversine_km(
+            $lat,
+            $lng,
+            $clusterLat,
+            $clusterLng,
+        );
+        if (
+            $distance <= ADMIN_GALLERY_REPORT_GPS_AREA_KM
+            && $distance <= $bestDistance
+        ) {
             $bestKey = (string) $key;
             $bestDistance = $distance;
         }
@@ -155,7 +197,7 @@ function admin_gallery_report_find_gps_cluster_key(array $clusters, float $lat, 
 /**
  * Return a new GPS cluster key.
  *
- * @param array $clusters Cluster accumulator.
+ * @param array<string,array<string,mixed>> $clusters Cluster accumulator keyed by cluster id.
  * @return string New cluster key.
  */
 function admin_gallery_report_new_gps_cluster_key(array $clusters): string
@@ -168,7 +210,7 @@ function admin_gallery_report_new_gps_cluster_key(array $clusters): string
  *
  * @param float $lat Initial latitude.
  * @param float $lng Initial longitude.
- * @return array<string, mixed> Cluster accumulator.
+ * @return array{count:int,lat_sum:float,lng_sum:float,lat_min:float,lat_max:float,lng_min:float,lng_max:float,gallery_ids:array<int,true>,gallery_labels:array<string,true>,first_date:?string,last_date:?string,sample_images:list<string>} Empty cluster accumulator initialized from the supplied coordinate.
  */
 function admin_gallery_report_empty_gps_cluster(float $lat, float $lng): array
 {
@@ -191,8 +233,8 @@ function admin_gallery_report_empty_gps_cluster(float $lat, float $lng): array
 /**
  * Return finalized GPS cluster rows.
  *
- * @param array $clusters Cluster accumulator.
- * @return array<int, array<string, mixed>> Cluster rows.
+ * @param array<string,array<string,mixed>> $clusters Cluster accumulator keyed by cluster id.
+ * @return list<array<string,mixed>> Finalized cluster rows, sorted by descending image count and limited to 120 entries.
  */
 function admin_gallery_report_finalize_gps_clusters(array $clusters): array
 {
@@ -221,22 +263,25 @@ function admin_gallery_report_finalize_gps_clusters(array $clusters): array
             'gallery_count' => count(
                 is_array($cluster['gallery_ids'] ?? null)
                     ? $cluster['gallery_ids']
-                    : []
+                    : [],
             ),
             'gallery_labels' => array_keys(
                 is_array($cluster['gallery_labels'] ?? null)
                     ? $cluster['gallery_labels']
-                    : []
+                    : [],
             ),
             'first_date' => $cluster['first_date'] ?? '',
             'last_date' => $cluster['last_date'] ?? '',
-            'sample_images' => is_array($cluster['sample_images'] ?? null) ? $cluster['sample_images'] : [],
+            'sample_images' => is_array($cluster['sample_images'] ?? null)
+                ? $cluster['sample_images']
+                : [],
         ];
     }
     usort(
         $rows,
-        static fn (array $a, array $b): int =>
-            ((int) ($b['count'] ?? 0)) <=> ((int) ($a['count'] ?? 0))
+        static fn(array $a, array $b): int => (
+            (int) ($b['count'] ?? 0) <=> (int) ($a['count'] ?? 0)
+        ),
     );
     return array_slice($rows, 0, 120);
 }
@@ -258,7 +303,7 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
             $lat,
             $lng,
             (float) $place['lat'],
-            (float) $place['lng']
+            (float) $place['lng'],
         );
         $candidate = [
             'name' => (string) $place['name'],
@@ -272,7 +317,10 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
             $nearest = $candidate;
         }
 
-        $radius = (float) ($place['radius_km'] ?? ADMIN_GALLERY_REPORT_PLACE_MATCH_DEFAULT_RADIUS_KM);
+        $radius = (float) (
+            $place['radius_km']
+            ?? ADMIN_GALLERY_REPORT_PLACE_MATCH_DEFAULT_RADIUS_KM
+        );
         if ($distance > $radius) {
             continue;
         }
@@ -287,7 +335,10 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
             'label' => (string) $best['label'],
             'nearest_reference' => (string) $best['name'],
             'place_kind' => (string) $best['kind'],
-            'place_match' => t('admin.gallery_report.export.within_radius', 'within radius'),
+            'place_match' => t(
+                'admin.gallery_report.export.within_radius',
+                'within radius',
+            ),
             'distance_km' => round((float) $best['distance_km'], 1),
         ];
     }
@@ -297,11 +348,14 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
             'label' => t(
                 'admin.gallery_report.export.closest_known_area',
                 'Closest known area: {area}',
-                ['area' => (string) $nearest['label']]
+                ['area' => (string) $nearest['label']],
             ),
             'nearest_reference' => (string) $nearest['name'],
             'place_kind' => (string) $nearest['kind'],
-            'place_match' => t('admin.gallery_report.export.nearest_fallback', 'nearest fallback'),
+            'place_match' => t(
+                'admin.gallery_report.export.nearest_fallback',
+                'nearest fallback',
+            ),
             'distance_km' => round((float) $nearest['distance_km'], 1),
         ];
     }
@@ -313,11 +367,14 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
             [
                 'lat' => number_format($lat, 3, '.', ''),
                 'lng' => number_format($lng, 3, '.', ''),
-            ]
+            ],
         ),
         'nearest_reference' => '',
         'place_kind' => 'coordinate fallback',
-        'place_match' => t('admin.gallery_report.export.coordinate_fallback', 'coordinate fallback'),
+        'place_match' => t(
+            'admin.gallery_report.export.coordinate_fallback',
+            'coordinate fallback',
+        ),
         'distance_km' => null,
     ];
 }
@@ -325,7 +382,7 @@ function admin_gallery_report_nearest_known_place(float $lat, float $lng): array
 /**
  * Return the public label for an offline place reference.
  *
- * @param array $place Place definition.
+ * @param array<string,mixed> $place Offline place definition with optional label/name.
  * @return string Human-readable place label.
  */
 function admin_gallery_report_place_display_label(array $place): string
@@ -336,9 +393,14 @@ function admin_gallery_report_place_display_label(array $place): string
     }
     $name = trim((string) ($place['name'] ?? ''));
     if ($name !== '') {
-        return t('admin.gallery_report.export.named_area', '{name} area', ['name' => $name]);
+        return t('admin.gallery_report.export.named_area', '{name} area', [
+            'name' => $name,
+        ]);
     }
-    return t('admin.gallery_report.export.known_place_area', 'Known place area');
+    return t(
+        'admin.gallery_report.export.known_place_area',
+        'Known place area',
+    );
 }
 
 /**
@@ -349,96 +411,624 @@ function admin_gallery_report_place_display_label(array $place): string
 function admin_gallery_report_known_places(): array
 {
     return [
-        ['name' => 'Friedrichshafen', 'label' => t('admin.gallery_report.export.place_friedrichshafen_bodensee', 'Friedrichshafen / Bodensee area'), 'lat' => 47.6505, 'lng' => 9.4790, 'radius_km' => 45.0, 'kind' => 'regional area', 'priority' => 4.0],
-        ['name' => 'Konstanz', 'label' => t('admin.gallery_report.export.place_konstanz_bodensee', 'Konstanz / Bodensee area'), 'lat' => 47.6779, 'lng' => 9.1732, 'radius_km' => 38.0, 'kind' => 'regional area', 'priority' => 3.0],
-        ['name' => 'Lindau', 'label' => t('admin.gallery_report.export.place_lindau_bodensee', 'Lindau / Bodensee area'), 'lat' => 47.5460, 'lng' => 9.6830, 'radius_km' => 24.0, 'kind' => 'regional area', 'priority' => 2.0],
-        ['name' => 'Ravensburg', 'label' => t('admin.gallery_report.export.place_ravensburg_upper_swabia', 'Ravensburg / Upper Swabia area'), 'lat' => 47.7819, 'lng' => 9.6106, 'radius_km' => 28.0, 'kind' => 'regional area'],
-        ['name' => 'Zurich', 'lat' => 47.3769, 'lng' => 8.5417, 'radius_km' => 35.0, 'kind' => 'city'],
-        ['name' => 'St. Gallen', 'lat' => 47.4245, 'lng' => 9.3767, 'radius_km' => 25.0, 'kind' => 'city'],
+        [
+            'name' => 'Friedrichshafen',
+            'label' => t(
+                'admin.gallery_report.export.place_friedrichshafen_bodensee',
+                'Friedrichshafen / Bodensee area',
+            ),
+            'lat' => 47.6505,
+            'lng' => 9.4790,
+            'radius_km' => 45.0,
+            'kind' => 'regional area',
+            'priority' => 4.0,
+        ],
+        [
+            'name' => 'Konstanz',
+            'label' => t(
+                'admin.gallery_report.export.place_konstanz_bodensee',
+                'Konstanz / Bodensee area',
+            ),
+            'lat' => 47.6779,
+            'lng' => 9.1732,
+            'radius_km' => 38.0,
+            'kind' => 'regional area',
+            'priority' => 3.0,
+        ],
+        [
+            'name' => 'Lindau',
+            'label' => t(
+                'admin.gallery_report.export.place_lindau_bodensee',
+                'Lindau / Bodensee area',
+            ),
+            'lat' => 47.5460,
+            'lng' => 9.6830,
+            'radius_km' => 24.0,
+            'kind' => 'regional area',
+            'priority' => 2.0,
+        ],
+        [
+            'name' => 'Ravensburg',
+            'label' => t(
+                'admin.gallery_report.export.place_ravensburg_upper_swabia',
+                'Ravensburg / Upper Swabia area',
+            ),
+            'lat' => 47.7819,
+            'lng' => 9.6106,
+            'radius_km' => 28.0,
+            'kind' => 'regional area',
+        ],
+        [
+            'name' => 'Zurich',
+            'lat' => 47.3769,
+            'lng' => 8.5417,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'St. Gallen',
+            'lat' => 47.4245,
+            'lng' => 9.3767,
+            'radius_km' => 25.0,
+            'kind' => 'city',
+        ],
 
-        ['name' => 'Prague', 'lat' => 50.0755, 'lng' => 14.4378, 'radius_km' => 40.0, 'kind' => 'city'],
-        ['name' => 'Pilsen', 'lat' => 49.7384, 'lng' => 13.3736, 'radius_km' => 42.0, 'kind' => 'city'],
-        ['name' => 'Plasy', 'label' => t('admin.gallery_report.export.place_plasy_lkps', 'Plasy / LKPS area'), 'lat' => 49.9346, 'lng' => 13.3906, 'radius_km' => 16.0, 'kind' => 'local area', 'priority' => 5.0],
-        ['name' => 'Klatovy', 'lat' => 49.3956, 'lng' => 13.2951, 'radius_km' => 24.0, 'kind' => 'town'],
-        ['name' => 'Domažlice', 'lat' => 49.4405, 'lng' => 12.9298, 'radius_km' => 24.0, 'kind' => 'town'],
-        ['name' => 'Rokycany', 'lat' => 49.7427, 'lng' => 13.5946, 'radius_km' => 20.0, 'kind' => 'town'],
-        ['name' => 'Karlovy Vary', 'lat' => 50.2319, 'lng' => 12.8710, 'radius_km' => 28.0, 'kind' => 'city'],
-        ['name' => 'Mariánské Lázně', 'lat' => 49.9646, 'lng' => 12.7012, 'radius_km' => 22.0, 'kind' => 'town'],
-        ['name' => 'České Budějovice', 'lat' => 48.9745, 'lng' => 14.4743, 'radius_km' => 30.0, 'kind' => 'city'],
-        ['name' => 'Český Krumlov', 'lat' => 48.8127, 'lng' => 14.3175, 'radius_km' => 18.0, 'kind' => 'town'],
-        ['name' => 'Brno', 'lat' => 49.1951, 'lng' => 16.6068, 'radius_km' => 35.0, 'kind' => 'city'],
-        ['name' => 'Ostrava', 'lat' => 49.8209, 'lng' => 18.2625, 'radius_km' => 35.0, 'kind' => 'city'],
-        ['name' => 'Olomouc', 'lat' => 49.5938, 'lng' => 17.2509, 'radius_km' => 30.0, 'kind' => 'city'],
-        ['name' => 'Liberec', 'lat' => 50.7663, 'lng' => 15.0543, 'radius_km' => 28.0, 'kind' => 'city'],
-        ['name' => 'Hradec Králové', 'lat' => 50.2092, 'lng' => 15.8328, 'radius_km' => 28.0, 'kind' => 'city'],
-        ['name' => 'Pardubice', 'lat' => 50.0343, 'lng' => 15.7812, 'radius_km' => 28.0, 'kind' => 'city'],
-        ['name' => 'Ústí nad Labem', 'lat' => 50.6611, 'lng' => 14.0326, 'radius_km' => 26.0, 'kind' => 'city'],
-        ['name' => 'Jihlava', 'lat' => 49.3961, 'lng' => 15.5903, 'radius_km' => 26.0, 'kind' => 'city'],
-        ['name' => 'Zlín', 'lat' => 49.2244, 'lng' => 17.6628, 'radius_km' => 26.0, 'kind' => 'city'],
-        ['name' => 'Teplice', 'lat' => 50.6404, 'lng' => 13.8245, 'radius_km' => 22.0, 'kind' => 'city'],
+        [
+            'name' => 'Prague',
+            'lat' => 50.0755,
+            'lng' => 14.4378,
+            'radius_km' => 40.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Pilsen',
+            'lat' => 49.7384,
+            'lng' => 13.3736,
+            'radius_km' => 42.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Plasy',
+            'label' => t(
+                'admin.gallery_report.export.place_plasy_lkps',
+                'Plasy / LKPS area',
+            ),
+            'lat' => 49.9346,
+            'lng' => 13.3906,
+            'radius_km' => 16.0,
+            'kind' => 'local area',
+            'priority' => 5.0,
+        ],
+        [
+            'name' => 'Klatovy',
+            'lat' => 49.3956,
+            'lng' => 13.2951,
+            'radius_km' => 24.0,
+            'kind' => 'town',
+        ],
+        [
+            'name' => 'Domažlice',
+            'lat' => 49.4405,
+            'lng' => 12.9298,
+            'radius_km' => 24.0,
+            'kind' => 'town',
+        ],
+        [
+            'name' => 'Rokycany',
+            'lat' => 49.7427,
+            'lng' => 13.5946,
+            'radius_km' => 20.0,
+            'kind' => 'town',
+        ],
+        [
+            'name' => 'Karlovy Vary',
+            'lat' => 50.2319,
+            'lng' => 12.8710,
+            'radius_km' => 28.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Mariánské Lázně',
+            'lat' => 49.9646,
+            'lng' => 12.7012,
+            'radius_km' => 22.0,
+            'kind' => 'town',
+        ],
+        [
+            'name' => 'České Budějovice',
+            'lat' => 48.9745,
+            'lng' => 14.4743,
+            'radius_km' => 30.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Český Krumlov',
+            'lat' => 48.8127,
+            'lng' => 14.3175,
+            'radius_km' => 18.0,
+            'kind' => 'town',
+        ],
+        [
+            'name' => 'Brno',
+            'lat' => 49.1951,
+            'lng' => 16.6068,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Ostrava',
+            'lat' => 49.8209,
+            'lng' => 18.2625,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Olomouc',
+            'lat' => 49.5938,
+            'lng' => 17.2509,
+            'radius_km' => 30.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Liberec',
+            'lat' => 50.7663,
+            'lng' => 15.0543,
+            'radius_km' => 28.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Hradec Králové',
+            'lat' => 50.2092,
+            'lng' => 15.8328,
+            'radius_km' => 28.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Pardubice',
+            'lat' => 50.0343,
+            'lng' => 15.7812,
+            'radius_km' => 28.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Ústí nad Labem',
+            'lat' => 50.6611,
+            'lng' => 14.0326,
+            'radius_km' => 26.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Jihlava',
+            'lat' => 49.3961,
+            'lng' => 15.5903,
+            'radius_km' => 26.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Zlín',
+            'lat' => 49.2244,
+            'lng' => 17.6628,
+            'radius_km' => 26.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Teplice',
+            'lat' => 50.6404,
+            'lng' => 13.8245,
+            'radius_km' => 22.0,
+            'kind' => 'city',
+        ],
 
-        ['name' => 'Berlin', 'lat' => 52.5200, 'lng' => 13.4050, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Munich', 'lat' => 48.1351, 'lng' => 11.5820, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Stuttgart', 'lat' => 48.7758, 'lng' => 9.1829, 'radius_km' => 38.0, 'kind' => 'city'],
-        ['name' => 'Ulm', 'lat' => 48.4011, 'lng' => 9.9876, 'radius_km' => 28.0, 'kind' => 'city'],
-        ['name' => 'Augsburg', 'lat' => 48.3705, 'lng' => 10.8978, 'radius_km' => 28.0, 'kind' => 'city'],
-        ['name' => 'Memmingen', 'lat' => 47.9838, 'lng' => 10.1819, 'radius_km' => 24.0, 'kind' => 'city'],
-        ['name' => 'Nuremberg', 'lat' => 49.4521, 'lng' => 11.0767, 'radius_km' => 35.0, 'kind' => 'city'],
-        ['name' => 'Frankfurt', 'lat' => 50.1109, 'lng' => 8.6821, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Dresden', 'lat' => 51.0504, 'lng' => 13.7373, 'radius_km' => 32.0, 'kind' => 'city'],
-        ['name' => 'Leipzig', 'lat' => 51.3397, 'lng' => 12.3731, 'radius_km' => 32.0, 'kind' => 'city'],
-        ['name' => 'Hamburg', 'lat' => 53.5511, 'lng' => 9.9937, 'radius_km' => 42.0, 'kind' => 'city'],
-        ['name' => 'Cologne', 'lat' => 50.9375, 'lng' => 6.9603, 'radius_km' => 35.0, 'kind' => 'city'],
-        ['name' => 'Düsseldorf', 'lat' => 51.2277, 'lng' => 6.7735, 'radius_km' => 32.0, 'kind' => 'city'],
+        [
+            'name' => 'Berlin',
+            'lat' => 52.5200,
+            'lng' => 13.4050,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Munich',
+            'lat' => 48.1351,
+            'lng' => 11.5820,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Stuttgart',
+            'lat' => 48.7758,
+            'lng' => 9.1829,
+            'radius_km' => 38.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Ulm',
+            'lat' => 48.4011,
+            'lng' => 9.9876,
+            'radius_km' => 28.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Augsburg',
+            'lat' => 48.3705,
+            'lng' => 10.8978,
+            'radius_km' => 28.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Memmingen',
+            'lat' => 47.9838,
+            'lng' => 10.1819,
+            'radius_km' => 24.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Nuremberg',
+            'lat' => 49.4521,
+            'lng' => 11.0767,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Frankfurt',
+            'lat' => 50.1109,
+            'lng' => 8.6821,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Dresden',
+            'lat' => 51.0504,
+            'lng' => 13.7373,
+            'radius_km' => 32.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Leipzig',
+            'lat' => 51.3397,
+            'lng' => 12.3731,
+            'radius_km' => 32.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Hamburg',
+            'lat' => 53.5511,
+            'lng' => 9.9937,
+            'radius_km' => 42.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Cologne',
+            'lat' => 50.9375,
+            'lng' => 6.9603,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Düsseldorf',
+            'lat' => 51.2277,
+            'lng' => 6.7735,
+            'radius_km' => 32.0,
+            'kind' => 'city',
+        ],
 
-        ['name' => 'Vienna', 'lat' => 48.2082, 'lng' => 16.3738, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Salzburg', 'lat' => 47.8095, 'lng' => 13.0550, 'radius_km' => 30.0, 'kind' => 'city'],
-        ['name' => 'Innsbruck', 'lat' => 47.2692, 'lng' => 11.4041, 'radius_km' => 28.0, 'kind' => 'city'],
-        ['name' => 'Linz', 'lat' => 48.3069, 'lng' => 14.2858, 'radius_km' => 30.0, 'kind' => 'city'],
-        ['name' => 'Graz', 'lat' => 47.0707, 'lng' => 15.4395, 'radius_km' => 30.0, 'kind' => 'city'],
-        ['name' => 'Bratislava', 'lat' => 48.1486, 'lng' => 17.1077, 'radius_km' => 35.0, 'kind' => 'city'],
-        ['name' => 'Kraków', 'lat' => 50.0647, 'lng' => 19.9450, 'radius_km' => 35.0, 'kind' => 'city'],
-        ['name' => 'Warsaw', 'lat' => 52.2297, 'lng' => 21.0122, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Budapest', 'lat' => 47.4979, 'lng' => 19.0402, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Ljubljana', 'lat' => 46.0569, 'lng' => 14.5058, 'radius_km' => 32.0, 'kind' => 'city'],
-        ['name' => 'Zagreb', 'lat' => 45.8150, 'lng' => 15.9819, 'radius_km' => 35.0, 'kind' => 'city'],
+        [
+            'name' => 'Vienna',
+            'lat' => 48.2082,
+            'lng' => 16.3738,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Salzburg',
+            'lat' => 47.8095,
+            'lng' => 13.0550,
+            'radius_km' => 30.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Innsbruck',
+            'lat' => 47.2692,
+            'lng' => 11.4041,
+            'radius_km' => 28.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Linz',
+            'lat' => 48.3069,
+            'lng' => 14.2858,
+            'radius_km' => 30.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Graz',
+            'lat' => 47.0707,
+            'lng' => 15.4395,
+            'radius_km' => 30.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Bratislava',
+            'lat' => 48.1486,
+            'lng' => 17.1077,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Kraków',
+            'lat' => 50.0647,
+            'lng' => 19.9450,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Warsaw',
+            'lat' => 52.2297,
+            'lng' => 21.0122,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Budapest',
+            'lat' => 47.4979,
+            'lng' => 19.0402,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Ljubljana',
+            'lat' => 46.0569,
+            'lng' => 14.5058,
+            'radius_km' => 32.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Zagreb',
+            'lat' => 45.8150,
+            'lng' => 15.9819,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
 
-        ['name' => 'Stockholm', 'lat' => 59.3293, 'lng' => 18.0686, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Gothenburg', 'lat' => 57.7089, 'lng' => 11.9746, 'radius_km' => 38.0, 'kind' => 'city'],
-        ['name' => 'Malmö', 'lat' => 55.6050, 'lng' => 13.0038, 'radius_km' => 32.0, 'kind' => 'city'],
-        ['name' => 'Copenhagen', 'lat' => 55.6761, 'lng' => 12.5683, 'radius_km' => 40.0, 'kind' => 'city'],
-        ['name' => 'Oslo', 'lat' => 59.9139, 'lng' => 10.7522, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Helsinki', 'lat' => 60.1699, 'lng' => 24.9384, 'radius_km' => 42.0, 'kind' => 'city'],
+        [
+            'name' => 'Stockholm',
+            'lat' => 59.3293,
+            'lng' => 18.0686,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Gothenburg',
+            'lat' => 57.7089,
+            'lng' => 11.9746,
+            'radius_km' => 38.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Malmö',
+            'lat' => 55.6050,
+            'lng' => 13.0038,
+            'radius_km' => 32.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Copenhagen',
+            'lat' => 55.6761,
+            'lng' => 12.5683,
+            'radius_km' => 40.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Oslo',
+            'lat' => 59.9139,
+            'lng' => 10.7522,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Helsinki',
+            'lat' => 60.1699,
+            'lng' => 24.9384,
+            'radius_km' => 42.0,
+            'kind' => 'city',
+        ],
 
-        ['name' => 'London', 'lat' => 51.5072, 'lng' => -0.1276, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'Bristol', 'lat' => 51.4545, 'lng' => -2.5879, 'radius_km' => 32.0, 'kind' => 'city'],
-        ['name' => 'Manchester', 'lat' => 53.4808, 'lng' => -2.2426, 'radius_km' => 40.0, 'kind' => 'city'],
-        ['name' => 'Edinburgh', 'lat' => 55.9533, 'lng' => -3.1883, 'radius_km' => 35.0, 'kind' => 'city'],
-        ['name' => 'Paris', 'lat' => 48.8566, 'lng' => 2.3522, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'Marseille', 'lat' => 43.2965, 'lng' => 5.3698, 'radius_km' => 36.0, 'kind' => 'city'],
-        ['name' => 'Lyon', 'lat' => 45.7640, 'lng' => 4.8357, 'radius_km' => 36.0, 'kind' => 'city'],
-        ['name' => 'Nice', 'lat' => 43.7102, 'lng' => 7.2620, 'radius_km' => 32.0, 'kind' => 'city'],
-        ['name' => 'Amsterdam', 'lat' => 52.3676, 'lng' => 4.9041, 'radius_km' => 42.0, 'kind' => 'city'],
-        ['name' => 'Brussels', 'lat' => 50.8503, 'lng' => 4.3517, 'radius_km' => 38.0, 'kind' => 'city'],
-        ['name' => 'Milan', 'lat' => 45.4642, 'lng' => 9.1900, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Rome', 'lat' => 41.9028, 'lng' => 12.4964, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'Barcelona', 'lat' => 41.3874, 'lng' => 2.1686, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Madrid', 'lat' => 40.4168, 'lng' => -3.7038, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'Lisbon', 'lat' => 38.7223, 'lng' => -9.1393, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Athens', 'lat' => 37.9838, 'lng' => 23.7275, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Istanbul', 'lat' => 41.0082, 'lng' => 28.9784, 'radius_km' => 55.0, 'kind' => 'city'],
+        [
+            'name' => 'London',
+            'lat' => 51.5072,
+            'lng' => -0.1276,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Bristol',
+            'lat' => 51.4545,
+            'lng' => -2.5879,
+            'radius_km' => 32.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Manchester',
+            'lat' => 53.4808,
+            'lng' => -2.2426,
+            'radius_km' => 40.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Edinburgh',
+            'lat' => 55.9533,
+            'lng' => -3.1883,
+            'radius_km' => 35.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Paris',
+            'lat' => 48.8566,
+            'lng' => 2.3522,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Marseille',
+            'lat' => 43.2965,
+            'lng' => 5.3698,
+            'radius_km' => 36.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Lyon',
+            'lat' => 45.7640,
+            'lng' => 4.8357,
+            'radius_km' => 36.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Nice',
+            'lat' => 43.7102,
+            'lng' => 7.2620,
+            'radius_km' => 32.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Amsterdam',
+            'lat' => 52.3676,
+            'lng' => 4.9041,
+            'radius_km' => 42.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Brussels',
+            'lat' => 50.8503,
+            'lng' => 4.3517,
+            'radius_km' => 38.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Milan',
+            'lat' => 45.4642,
+            'lng' => 9.1900,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Rome',
+            'lat' => 41.9028,
+            'lng' => 12.4964,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Barcelona',
+            'lat' => 41.3874,
+            'lng' => 2.1686,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Madrid',
+            'lat' => 40.4168,
+            'lng' => -3.7038,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Lisbon',
+            'lat' => 38.7223,
+            'lng' => -9.1393,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Athens',
+            'lat' => 37.9838,
+            'lng' => 23.7275,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Istanbul',
+            'lat' => 41.0082,
+            'lng' => 28.9784,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
 
-        ['name' => 'Chicago', 'lat' => 41.8781, 'lng' => -87.6298, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'New York', 'lat' => 40.7128, 'lng' => -74.0060, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'Los Angeles', 'lat' => 34.0522, 'lng' => -118.2437, 'radius_km' => 70.0, 'kind' => 'city'],
-        ['name' => 'San Francisco', 'lat' => 37.7749, 'lng' => -122.4194, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'Miami', 'lat' => 25.7617, 'lng' => -80.1918, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'Toronto', 'lat' => 43.6532, 'lng' => -79.3832, 'radius_km' => 50.0, 'kind' => 'city'],
-        ['name' => 'Dubai', 'lat' => 25.2048, 'lng' => 55.2708, 'radius_km' => 55.0, 'kind' => 'city'],
-        ['name' => 'Singapore', 'lat' => 1.3521, 'lng' => 103.8198, 'radius_km' => 45.0, 'kind' => 'city'],
-        ['name' => 'Tokyo', 'lat' => 35.6762, 'lng' => 139.6503, 'radius_km' => 65.0, 'kind' => 'city'],
-        ['name' => 'Sydney', 'lat' => -33.8688, 'lng' => 151.2093, 'radius_km' => 60.0, 'kind' => 'city'],
-        ['name' => 'Melbourne', 'lat' => -37.8136, 'lng' => 144.9631, 'radius_km' => 60.0, 'kind' => 'city'],
+        [
+            'name' => 'Chicago',
+            'lat' => 41.8781,
+            'lng' => -87.6298,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'New York',
+            'lat' => 40.7128,
+            'lng' => -74.0060,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Los Angeles',
+            'lat' => 34.0522,
+            'lng' => -118.2437,
+            'radius_km' => 70.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'San Francisco',
+            'lat' => 37.7749,
+            'lng' => -122.4194,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Miami',
+            'lat' => 25.7617,
+            'lng' => -80.1918,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Toronto',
+            'lat' => 43.6532,
+            'lng' => -79.3832,
+            'radius_km' => 50.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Dubai',
+            'lat' => 25.2048,
+            'lng' => 55.2708,
+            'radius_km' => 55.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Singapore',
+            'lat' => 1.3521,
+            'lng' => 103.8198,
+            'radius_km' => 45.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Tokyo',
+            'lat' => 35.6762,
+            'lng' => 139.6503,
+            'radius_km' => 65.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Sydney',
+            'lat' => -33.8688,
+            'lng' => 151.2093,
+            'radius_km' => 60.0,
+            'kind' => 'city',
+        ],
+        [
+            'name' => 'Melbourne',
+            'lat' => -37.8136,
+            'lng' => 144.9631,
+            'radius_km' => 60.0,
+            'kind' => 'city',
+        ],
     ];
 }
 
@@ -451,11 +1041,17 @@ function admin_gallery_report_known_places(): array
  * @param float $lng2 Second longitude.
  * @return float Distance in kilometers.
  */
-function admin_gallery_report_haversine_km(float $lat1, float $lng1, float $lat2, float $lng2): float
-{
+function admin_gallery_report_haversine_km(
+    float $lat1,
+    float $lng1,
+    float $lat2,
+    float $lng2,
+): float {
     $earthKm = 6371.0;
     $dLat = deg2rad($lat2 - $lat1);
     $dLng = deg2rad($lng2 - $lng1);
-    $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+    $a =
+        sin($dLat / 2) ** 2
+        + (cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * (sin($dLng / 2) ** 2));
     return $earthKm * 2 * atan2(sqrt($a), sqrt(max(0.0, 1.0 - $a)));
 }

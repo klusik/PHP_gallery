@@ -35,17 +35,28 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
-    /** @return array<string,mixed> Deterministic authentication fixture configuration. */
+    /**
+     * Return deterministic authentication fixture configuration.
+     *
+     * @return array<string,mixed> Fixture configuration values.
+     */
     function cms_config(): array
     {
         return $GLOBALS['auth_schema_fixture_config'] ?? [];
     }
 
-    /** @return never Database access is forbidden in this schema-policy unit test. */
+    /**
+     * Database access is forbidden in this schema-policy unit test.
+     *
+     * @return never Always throws if the fixture reaches the database boundary.
+     */
     function db(): never
     {
-        $GLOBALS['auth_schema_fixture_db_touches'] = ($GLOBALS['auth_schema_fixture_db_touches'] ?? 0) + 1;
-        throw new \RuntimeException('Fixture database access was not expected.');
+        $GLOBALS['auth_schema_fixture_db_touches'] =
+            ($GLOBALS['auth_schema_fixture_db_touches'] ?? 0) + 1;
+        throw new \RuntimeException(
+            'Fixture database access was not expected.',
+        );
     }
 
     /** @return string Deterministic SQL timestamp. */
@@ -78,9 +89,17 @@ namespace Gallery\Core {
         return null;
     }
 
-    /** @param string $target Candidate return target. @param string $fallback Safe fallback. @return string Safe fixture target. */
-    function sanitize_login_return_target(string $target, string $fallback): string
-    {
+    /**
+     * Preserve the candidate or safe fallback as the fixture return target.
+     *
+     * @param string $target Candidate return target.
+     * @param string $fallback Safe fallback target.
+     * @return string Selected fixture target.
+     */
+    function sanitize_login_return_target(
+        string $target,
+        string $fallback,
+    ): string {
         return $target !== '' ? $target : $fallback;
     }
 }
@@ -100,11 +119,21 @@ namespace Gallery\Services {
      * @param string $level Event level.
      * @param string $eventKey Event key.
      * @param string $message Safe message.
-     * @param array $context Bounded context.
+     * @param array<string,mixed> $context Bounded schema and capability context.
+     * @return void Appends the event to the in-memory fixture log.
      */
-    function admin_log_event(string $level, string $eventKey, string $message, array $context = []): void
-    {
-        $GLOBALS['auth_schema_fixture_logs'][] = compact('level', 'eventKey', 'message', 'context');
+    function admin_log_event(
+        string $level,
+        string $eventKey,
+        string $message,
+        array $context = [],
+    ): void {
+        $GLOBALS['auth_schema_fixture_logs'][] = compact(
+            'level',
+            'eventKey',
+            'message',
+            'context',
+        );
     }
 }
 
@@ -122,19 +151,29 @@ namespace {
     use function Gallery\Services\google_auth_configuration_ready;
     use function Gallery\Services\google_auth_schema_operation_available;
     use function Gallery\Services\google_auth_schema_status;
-    use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
+    use function Gallery\Services\schema_inspection_set_query_executor_for_tests
+    ;
 
     /**
      * Assert strict equality for one authentication schema-policy expectation.
      *
-     * @param mixed $expected Expected value.
-     * @param mixed $actual Actual value.
+     * @template TExpected
+     * @template TActual
+     * @param TExpected $expected Expected value, including its collection shape when applicable.
+     * @param TActual $actual Actual value, including its collection shape when applicable.
      * @param string $label Assertion label.
+     * @return void Throws when strict comparison fails.
      */
-    function auth_schema_policy_assert_same(mixed $expected, mixed $actual, string $label): void
-    {
+    function auth_schema_policy_assert_same(
+        mixed $expected,
+        mixed $actual,
+        string $label,
+    ): void {
         if ($expected !== $actual) {
-            throw new \RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+            throw new \RuntimeException(
+                $label . ' expected ' . var_export($expected, true) . ', got '
+                    . var_export($actual, true),
+            );
         }
     }
 
@@ -144,16 +183,27 @@ namespace {
      * @param callable $callback Callback expected to throw.
      * @param string $exceptionClass Expected exception class.
      * @param string $label Assertion label.
+     * @return void Throws when the callback does not throw the expected class.
      */
-    function auth_schema_policy_assert_throws(callable $callback, string $exceptionClass, string $label): void
-    {
+    function auth_schema_policy_assert_throws(
+        callable $callback,
+        string $exceptionClass,
+        string $label,
+    ): void {
         try {
             $callback();
         } catch (\Throwable $exception) {
             if ($exception instanceof $exceptionClass) {
                 return;
             }
-            throw new \RuntimeException($label . ' threw ' . $exception::class . ' instead of ' . $exceptionClass . '.');
+            throw new \RuntimeException(
+                $label
+                    . ' threw '
+                    . $exception::class
+                    . ' instead of '
+                    . $exceptionClass
+                    . '.',
+            );
         }
         throw new \RuntimeException($label . ' did not throw.');
     }
@@ -178,93 +228,258 @@ namespace {
 
     // Verified schema keeps all DB-backed authentication capabilities available.
     $queryCounts = [];
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object) use (&$queryCounts): bool {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+    ) use (&$queryCounts): bool {
         $key = $objectType . ':' . $table . ':' . $object;
         $queryCounts[$key] = ($queryCounts[$key] ?? 0) + 1;
         return true;
     });
-    auth_schema_policy_assert_same('available', auth_persistent_login_schema_status()['state'], 'persistent login available');
-    auth_schema_policy_assert_same('available', auth_user_email_schema_status()['state'], 'user email available');
-    auth_schema_policy_assert_same('available', auth_password_reset_schema_status()['state'], 'password reset available');
-    auth_schema_policy_assert_same('available', google_auth_schema_status()['state'], 'external identity available');
-    auth_schema_policy_assert_same(true, auth_persistent_login_ready(), 'persistent login ready');
-    auth_schema_policy_assert_same(true, google_auth_configuration_ready(), 'Google config ready');
-    auth_schema_policy_assert_same(1, $queryCounts['column:users:email'] ?? 0, 'shared users.email metadata query count');
-    auth_schema_policy_assert_same(1, $queryCounts['table:admin_remember_tokens:admin_remember_tokens'] ?? 0, 'remember-token metadata query count');
-    auth_schema_policy_assert_same(1, $queryCounts['table:password_reset_tokens:password_reset_tokens'] ?? 0, 'password-reset metadata query count');
-    auth_schema_policy_assert_same(1, $queryCounts['table:user_google_accounts:user_google_accounts'] ?? 0, 'Google-link metadata query count');
+    auth_schema_policy_assert_same(
+        'available',
+        auth_persistent_login_schema_status()['state'],
+        'persistent login available',
+    );
+    auth_schema_policy_assert_same(
+        'available',
+        auth_user_email_schema_status()['state'],
+        'user email available',
+    );
+    auth_schema_policy_assert_same(
+        'available',
+        auth_password_reset_schema_status()['state'],
+        'password reset available',
+    );
+    auth_schema_policy_assert_same(
+        'available',
+        google_auth_schema_status()['state'],
+        'external identity available',
+    );
+    auth_schema_policy_assert_same(
+        true,
+        auth_persistent_login_ready(),
+        'persistent login ready',
+    );
+    auth_schema_policy_assert_same(
+        true,
+        google_auth_configuration_ready(),
+        'Google config ready',
+    );
+    auth_schema_policy_assert_same(
+        1,
+        $queryCounts['column:users:email'] ?? 0,
+        'shared users.email metadata query count',
+    );
+    auth_schema_policy_assert_same(
+        1,
+        $queryCounts['table:admin_remember_tokens:admin_remember_tokens'] ?? 0,
+        'remember-token metadata query count',
+    );
+    auth_schema_policy_assert_same(
+        1,
+        $queryCounts['table:password_reset_tokens:password_reset_tokens'] ?? 0,
+        'password-reset metadata query count',
+    );
+    auth_schema_policy_assert_same(
+        1,
+        $queryCounts['table:user_google_accounts:user_google_accounts'] ?? 0,
+        'Google-link metadata query count',
+    );
 
     // Confirmed missing optional authentication storage preserves only explicit compatibility behavior.
-    schema_inspection_set_query_executor_for_tests(static fn (): bool => false);
-    auth_schema_policy_assert_same('missing', auth_persistent_login_schema_status()['state'], 'persistent login missing');
-    auth_schema_policy_assert_same('missing', auth_user_email_schema_status()['state'], 'user email missing');
-    auth_schema_policy_assert_same('missing', auth_password_reset_schema_status()['state'], 'password reset missing');
-    auth_schema_policy_assert_same('missing', google_auth_schema_status()['state'], 'external identity missing');
-    auth_schema_policy_assert_same(false, auth_persistent_login_operation_available('issue'), 'missing persistent login degrades to session-only');
-    auth_schema_policy_assert_same(false, google_auth_schema_operation_available('lookup', true), 'missing Google link read compatibility');
-    auth_schema_policy_assert_throws(static fn () => google_auth_schema_operation_available('link', false), \RuntimeException::class, 'missing Google link mutation migration requirement');
+    schema_inspection_set_query_executor_for_tests(static fn(): bool => false);
+    auth_schema_policy_assert_same(
+        'missing',
+        auth_persistent_login_schema_status()['state'],
+        'persistent login missing',
+    );
+    auth_schema_policy_assert_same(
+        'missing',
+        auth_user_email_schema_status()['state'],
+        'user email missing',
+    );
+    auth_schema_policy_assert_same(
+        'missing',
+        auth_password_reset_schema_status()['state'],
+        'password reset missing',
+    );
+    auth_schema_policy_assert_same(
+        'missing',
+        google_auth_schema_status()['state'],
+        'external identity missing',
+    );
+    auth_schema_policy_assert_same(
+        false,
+        auth_persistent_login_operation_available('issue'),
+        'missing persistent login degrades to session-only',
+    );
+    auth_schema_policy_assert_same(
+        false,
+        google_auth_schema_operation_available('lookup', true),
+        'missing Google link read compatibility',
+    );
+    auth_schema_policy_assert_throws(
+        static fn() => google_auth_schema_operation_available('link', false),
+        \RuntimeException::class,
+        'missing Google link mutation migration requirement',
+    );
 
     // Password reset is incomplete when either its table or users.email is confirmed missing.
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object): bool {
-        if ($objectType === 'column' && $table === 'users' && $object === 'email') {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+    ): bool {
+        if (
+            $objectType === 'column'
+            && $table === 'users'
+            && $object === 'email'
+        ) {
             return false;
         }
         return true;
     });
-    auth_schema_policy_assert_same('missing', auth_password_reset_schema_status()['state'], 'partial password reset state');
+    auth_schema_policy_assert_same(
+        'missing',
+        auth_password_reset_schema_status()['state'],
+        'partial password reset state',
+    );
 
     // Unknown persistent-login metadata is not the same as feature absence and must refuse token issuance.
     $GLOBALS['auth_schema_fixture_logs'] = [];
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object): bool {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+    ): bool {
         if ($objectType === 'table' && $table === 'admin_remember_tokens') {
-            throw new \RuntimeException('fixture-secret cookie=remember-token SELECT * FROM admin_remember_tokens');
+            throw new \RuntimeException(
+                'fixture-secret cookie=remember-token SELECT * FROM admin_remember_tokens',
+            );
         }
         return true;
     });
-    auth_schema_policy_assert_same('unknown', auth_persistent_login_schema_status()['state'], 'persistent login unknown');
-    auth_schema_policy_assert_throws(static fn () => auth_persistent_login_operation_available('issue'), AuthenticationSchemaUnavailableException::class, 'persistent login unknown issue');
+    auth_schema_policy_assert_same(
+        'unknown',
+        auth_persistent_login_schema_status()['state'],
+        'persistent login unknown',
+    );
+    auth_schema_policy_assert_throws(
+        static fn() => auth_persistent_login_operation_available('issue'),
+        AuthenticationSchemaUnavailableException::class,
+        'persistent login unknown issue',
+    );
     $logJson = (string) json_encode($GLOBALS['auth_schema_fixture_logs']);
-    auth_schema_policy_assert_same(true, str_contains($logJson, 'auth_persistent_login'), 'persistent login bounded log feature');
+    auth_schema_policy_assert_same(
+        true,
+        str_contains($logJson, 'auth_persistent_login'),
+        'persistent login bounded log feature',
+    );
     foreach (['fixture-secret', 'remember-token', 'SELECT *'] as $forbidden) {
-        auth_schema_policy_assert_same(false, str_contains($logJson, $forbidden), 'persistent login log redaction ' . $forbidden);
+        auth_schema_policy_assert_same(
+            false,
+            str_contains($logJson, $forbidden),
+            'persistent login log redaction ' . $forbidden,
+        );
     }
 
     // Unknown users.email metadata remains unknown and cannot be reclassified as legacy username-only schema.
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object): bool {
-        if ($objectType === 'column' && $table === 'users' && $object === 'email') {
-            throw new \RuntimeException('fixture-secret users.email inspection failed');
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+    ): bool {
+        if (
+            $objectType === 'column'
+            && $table === 'users'
+            && $object === 'email'
+        ) {
+            throw new \RuntimeException(
+                'fixture-secret users.email inspection failed',
+            );
         }
         return true;
     });
-    auth_schema_policy_assert_same('unknown', auth_user_email_schema_status()['state'], 'user email unknown');
-    auth_schema_policy_assert_same('unknown', auth_password_reset_schema_status()['state'], 'password reset unknown through email dependency');
+    auth_schema_policy_assert_same(
+        'unknown',
+        auth_user_email_schema_status()['state'],
+        'user email unknown',
+    );
+    auth_schema_policy_assert_same(
+        'unknown',
+        auth_password_reset_schema_status()['state'],
+        'password reset unknown through email dependency',
+    );
 
     // Unknown external identity metadata refuses both read and write policy helpers.
     $GLOBALS['auth_schema_fixture_logs'] = [];
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table): bool {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+    ): bool {
         if ($objectType === 'table' && $table === 'user_google_accounts') {
-            throw new \RuntimeException('fixture-secret client_secret=do-not-log');
+            throw new \RuntimeException(
+                'fixture-secret client_secret=do-not-log',
+            );
         }
         return true;
     });
-    auth_schema_policy_assert_same('unknown', google_auth_schema_status()['state'], 'Google identity unknown');
-    auth_schema_policy_assert_throws(static fn () => google_auth_schema_operation_available('lookup', true), AuthenticationSchemaUnavailableException::class, 'Google unknown read');
-    auth_schema_policy_assert_throws(static fn () => google_auth_schema_operation_available('link', false), AuthenticationSchemaUnavailableException::class, 'Google unknown mutation');
+    auth_schema_policy_assert_same(
+        'unknown',
+        google_auth_schema_status()['state'],
+        'Google identity unknown',
+    );
+    auth_schema_policy_assert_throws(
+        static fn() => google_auth_schema_operation_available('lookup', true),
+        AuthenticationSchemaUnavailableException::class,
+        'Google unknown read',
+    );
+    auth_schema_policy_assert_throws(
+        static fn() => google_auth_schema_operation_available('link', false),
+        AuthenticationSchemaUnavailableException::class,
+        'Google unknown mutation',
+    );
     $googleLogJson = (string) json_encode($GLOBALS['auth_schema_fixture_logs']);
-    auth_schema_policy_assert_same(true, str_contains($googleLogJson, 'auth_external_identity'), 'Google bounded log feature');
-    auth_schema_policy_assert_same(false, str_contains($googleLogJson, 'client_secret=do-not-log'), 'Google log secret redaction');
+    auth_schema_policy_assert_same(
+        true,
+        str_contains($googleLogJson, 'auth_external_identity'),
+        'Google bounded log feature',
+    );
+    auth_schema_policy_assert_same(
+        false,
+        str_contains($googleLogJson, 'client_secret=do-not-log'),
+        'Google log secret redaction',
+    );
 
     // Configuration-disabled persistent login short-circuits before schema inspection.
     $GLOBALS['auth_schema_fixture_config']['auth']['persistent_login_enabled'] = false;
     $disabledQueries = 0;
-    schema_inspection_set_query_executor_for_tests(static function () use (&$disabledQueries): bool {
+    schema_inspection_set_query_executor_for_tests(static function () use (
+        &$disabledQueries,
+    ): bool {
         $disabledQueries++;
-        throw new \RuntimeException('disabled persistent login should not inspect schema');
+        throw new \RuntimeException(
+            'disabled persistent login should not inspect schema',
+        );
     });
-    auth_schema_policy_assert_same(false, auth_persistent_login_operation_available('issue'), 'disabled persistent login operation');
-    auth_schema_policy_assert_same(0, $disabledQueries, 'disabled persistent login query count');
+    auth_schema_policy_assert_same(
+        false,
+        auth_persistent_login_operation_available('issue'),
+        'disabled persistent login operation',
+    );
+    auth_schema_policy_assert_same(
+        0,
+        $disabledQueries,
+        'disabled persistent login query count',
+    );
 
-    auth_schema_policy_assert_same(0, $GLOBALS['auth_schema_fixture_db_touches'], 'no database operations during schema policy tests');
+    auth_schema_policy_assert_same(
+        0,
+        $GLOBALS['auth_schema_fixture_db_touches'],
+        'no database operations during schema policy tests',
+    );
     schema_inspection_set_query_executor_for_tests(null);
     echo "Authentication schema policy checks passed.\n";
 }

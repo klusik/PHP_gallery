@@ -49,23 +49,33 @@ namespace {
      * @param string $label Rejection case.
      * @return void Raises if the image path was admitted.
      */
-    function image_path_containment_refused(array $image, array $gallery, string $label): void
-    {
+    function image_path_containment_refused(
+        array $image,
+        array $gallery,
+        string $label,
+    ): void {
         try {
             \Gallery\Services\image_abs_path($image, $gallery);
         } catch (\RuntimeException) {
             return;
         }
-        throw new \RuntimeException($label . ': unsafe image path was allowed.');
+        throw new \RuntimeException($label
+            . ': unsafe image path was allowed.');
     }
 
     // Compare native physical paths exactly while keeping relative-path/traversal cases unchanged.
-    $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'gallery-image-path-' . bin2hex(random_bytes(8));
+    $root =
+        sys_get_temp_dir()
+        . DIRECTORY_SEPARATOR
+        . 'gallery-image-path-'
+        . bin2hex(random_bytes(8));
     $galleryStorage = $root . DIRECTORY_SEPARATOR . 'galleries';
     $galleryDir = $galleryStorage . DIRECTORY_SEPARATOR . 'album';
     $outsideDir = $root . DIRECTORY_SEPARATOR . 'outside';
     if (!mkdir($galleryDir, 0700, true) || !mkdir($outsideDir, 0700, true)) {
-        throw new \RuntimeException('Could not prepare isolated image storage.');
+        throw new \RuntimeException(
+            'Could not prepare isolated image storage.',
+        );
     }
     $GLOBALS['image_path_containment_root'] = $galleryStorage;
     $gallery = ['folder_path' => 'album'];
@@ -77,21 +87,45 @@ namespace {
         file_put_contents($valid, 'ordinary gallery image');
         file_put_contents($outside, 'outside gallery fixture');
         image_path_containment_assert(
-            \Gallery\Services\image_abs_path(['relative_path' => 'photo.jpg'], $gallery) === $valid,
-            'Existing ordinary image must resolve.'
+            \Gallery\Services\image_abs_path([
+                'relative_path' => 'photo.jpg',
+            ], $gallery) === $valid,
+            'Existing ordinary image must resolve.',
         );
         image_path_containment_assert(
-            \Gallery\Services\image_abs_path(['relative_path' => 'future.jpg'], $gallery) === $galleryDir . DIRECTORY_SEPARATOR . 'future.jpg',
-            'Missing target for a safe upload must still resolve.'
+            \Gallery\Services\image_abs_path([
+                'relative_path' => 'future.jpg',
+            ], $gallery)
+                === $galleryDir . DIRECTORY_SEPARATOR . 'future.jpg',
+            'Missing target for a safe upload must still resolve.',
         );
-        image_path_containment_refused(['relative_path' => '../outside/other.jpg'], $gallery, 'Dot-dot traversal');
+        image_path_containment_refused(
+            ['relative_path' => '../outside/other.jpg'],
+            $gallery,
+            'Dot-dot traversal',
+        );
 
         if (function_exists('symlink') && @symlink($outside, $fileLink)) {
-            image_path_containment_refused(['relative_path' => 'escape.jpg'], $gallery, 'Escaping file symlink');
+            image_path_containment_refused(
+                ['relative_path' => 'escape.jpg'],
+                $gallery,
+                'Escaping file symlink',
+            );
         }
-        if (function_exists('symlink') && @symlink($outsideDir, $directoryLink)) {
-            image_path_containment_refused(['relative_path' => 'redirected/other.jpg'], $gallery, 'Escaping parent symlink');
-            image_path_containment_refused(['relative_path' => 'redirected/future.jpg'], $gallery, 'Escaping future target parent');
+        if (
+            function_exists('symlink')
+            && @symlink($outsideDir, $directoryLink)
+        ) {
+            image_path_containment_refused(
+                ['relative_path' => 'redirected/other.jpg'],
+                $gallery,
+                'Escaping parent symlink',
+            );
+            image_path_containment_refused(
+                ['relative_path' => 'redirected/future.jpg'],
+                $gallery,
+                'Escaping future target parent',
+            );
         }
 
         echo "Gallery image path symlink containment passed.\n";

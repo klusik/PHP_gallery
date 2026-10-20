@@ -80,7 +80,8 @@ use function Gallery\Services\main_page_gallery_grid_settings;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\pagination_global_settings;
 use function Gallery\Services\public_thumbnail_rendering_mode;
-use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision;
+use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision
+;
 use function Gallery\Services\remove_stored_favicon;
 use function Gallery\Services\reset_all_gallery_grid_overrides;
 use function Gallery\Services\sanitize_hex_color;
@@ -160,103 +161,81 @@ use function Gallery\Views\view_render_public_language_selector_settings_panel;
  * Send validators for a streamed file and stop on a matching browser cache entry.
  */
 
-
-
 /**
  * Render the public scroll helper next to a listing without joining the listing grid.
  */
-
 
 /**
  * Public homepage showing top-level public galleries.
  */
 
-
 /**
  * Public gallery detail page with breadcrumbs, subgalleries, images, tags, and votes.
  */
-
 
 /**
  * Render gallery ancestor links for public navigation.
  */
 
-
 /**
  * Render the password prompt for a protected public gallery.
  */
-
 
 /**
  * Process a public protected-gallery password unlock.
  */
 
-
 /**
  * Resolve a share token and redirect to its protected gallery.
  */
-
 
 /**
  * Build the canonical copyable share URL for one gallery/token pair.
  */
 
-
 /**
  * Render one gallery card, including direct cover or child-cover collage.
  */
-
 
 /**
  * Render logged-in admin metadata controls directly on public gallery pages.
  */
 
-
 /**
  * Render logged-in admin metadata controls for a public image card.
  */
-
 
 /**
  * Render the lightbox shell used by public gallery JavaScript.
  */
 
-
 /**
  * Stream a generated thumbnail after the same visibility checks as originals.
  */
-
-
 
 /**
  * Stream a generated thumbnail addressed through the clean public image URL.
  */
 
-
 /**
  * Stream an original image addressed through the clean public image URL.
  */
-
 
 /**
  * Stream an uploaded gallery thumbnail asset.
  */
 
-
 /**
  * Stream a protected image file after checking gallery/image visibility.
  */
-
 
 /**
  * Serve robots.txt for search engines.
  */
 
-
 /**
  * Serve sitemap.xml for public gallery pages.
  */
-
 
 /**
  * Render and process the admin login form.
@@ -280,12 +259,16 @@ function render_admin_theme_language_tab(): void
          * @param array<string, mixed> $pack Detected catalog metadata.
          * @return bool Whether this catalog is selectable.
          */
-        static fn (array $pack): bool => in_array((string) ($pack['code'] ?? ''), $supportedLanguages, true)
+        static fn(array $pack): bool => in_array(
+            (string) ($pack['code'] ?? ''),
+            $supportedLanguages,
+            true,
+        ),
     ));
     // $adminLanguage stores the language selected for the admin interface.
     $adminLanguage = translation_admin_language(
         (string) ($_COOKIE[CMS_ADMIN_LANGUAGE_COOKIE] ?? ''),
-        (string) ($_COOKIE[CMS_LANGUAGE_COOKIE] ?? '')
+        (string) ($_COOKIE[CMS_LANGUAGE_COOKIE] ?? ''),
     );
     // $publicLanguage stores the saved default language for anonymous public visitors.
     $publicLanguage = translation_public_language();
@@ -296,8 +279,13 @@ function render_admin_theme_language_tab(): void
     // $missingTranslations stores missing translation diagnostics collected for the current admin session.
     $missingTranslations = translation_missing_diagnostics();
     // $languageEditCode stores which language pack is shown in the editor.
-    $languageEditCode = translation_normalize_language_code((string) ($_GET['edit_language'] ?? $activeLanguage));
-    if ($languageEditCode === '' || !translation_language_allowed($languageEditCode)) {
+    $languageEditCode = translation_normalize_language_code(
+        (string) ($_GET['edit_language'] ?? $activeLanguage),
+    );
+    if (
+        $languageEditCode === ''
+        || !translation_language_allowed($languageEditCode)
+    ) {
         $languageEditCode = $defaultLanguage;
     }
     // $languageEditorErrors stores validation errors from the last language editor submit.
@@ -307,13 +295,15 @@ function render_admin_theme_language_tab(): void
         $languageEditorErrors = [];
     }
     // $viewerSettingsErrors stores validation messages from the shared selector settings panel.
-    $viewerSettingsErrors = $_SESSION['cms_public_language_selector_errors'] ?? [];
+    $viewerSettingsErrors = $_SESSION['cms_public_language_selector_errors']
+    ?? [];
     unset($_SESSION['cms_public_language_selector_errors']);
     if (!is_array($viewerSettingsErrors)) {
         $viewerSettingsErrors = [];
     }
     // $viewerSettingsSubmitted preserves checkbox state after a rejected Theme save.
-    $viewerSettingsSubmitted = $_SESSION['cms_public_language_selector_submitted'] ?? [];
+    $viewerSettingsSubmitted = $_SESSION['cms_public_language_selector_submitted']
+    ?? [];
     unset($_SESSION['cms_public_language_selector_submitted']);
     if (!is_array($viewerSettingsSubmitted)) {
         $viewerSettingsSubmitted = [];
@@ -329,22 +319,45 @@ function render_admin_theme_language_tab(): void
         $hasPhp = !empty($languagePack['has_php']);
         $formatLabel = $hasJson && $hasPhp
             ? t('admin.theme.language.format_mixed', 'JSON + PHP fallback')
-            : ($hasJson ? t('admin.theme.language.format_json', 'JSON') : t('admin.theme.language.format_php', 'PHP fallback'));
+            : (
+                $hasJson
+                    ? t('admin.theme.language.format_json', 'JSON')
+                    : t('admin.theme.language.format_php', 'PHP fallback')
+            );
         if (empty($languagePack['loaded'])) {
-            $statusLabel = t('admin.theme.language.status_empty', 'Empty or invalid');
+            $statusLabel = t(
+                'admin.theme.language.status_empty',
+                'Empty or invalid',
+            );
         } elseif ($packCode === $defaultLanguage) {
-            $statusLabel = t('admin.theme.language.status_source', 'Source / default');
+            $statusLabel = t(
+                'admin.theme.language.status_source',
+                'Source / default',
+            );
         } elseif ((int) ($packCoverage['missing_count'] ?? 0) === 0) {
-            $statusLabel = t('admin.theme.language.status_complete', 'Complete');
+            $statusLabel = t(
+                'admin.theme.language.status_complete',
+                'Complete',
+            );
         } elseif ((int) ($packCoverage['translated_count'] ?? 0) === 0) {
-            $statusLabel = t('admin.theme.language.status_skeleton', 'Skeleton, fallback: {language}', ['language' => strtoupper($defaultLanguage)]);
+            $statusLabel = t(
+                'admin.theme.language.status_skeleton',
+                'Skeleton, fallback: {language}',
+                ['language' => strtoupper($defaultLanguage)],
+            );
         } else {
-            $statusLabel = t('admin.theme.language.status_partial', 'Partial, fallback: {language}', ['language' => strtoupper($defaultLanguage)]);
+            $statusLabel = t(
+                'admin.theme.language.status_partial',
+                'Partial, fallback: {language}',
+                ['language' => strtoupper($defaultLanguage)],
+            );
         }
         $languagePack['coverage'] = $packCoverage;
         $languagePack['format_label'] = $formatLabel;
         $languagePack['status_label'] = $statusLabel;
-        $languagePack['edit_url'] = url_for('admin_theme', ['edit_language' => $packCode]) . '#admin-theme-tab-language';
+        $languagePack['edit_url'] =
+            url_for('admin_theme', ['edit_language' => $packCode])
+            . '#admin-theme-tab-language';
         $presentedLanguagePacks[] = $languagePack;
     }
 
@@ -368,12 +381,25 @@ function render_admin_theme_language_tab(): void
 
     $activeSubtab = 'admin-theme-language-subtab-settings';
     $requestedSubtab = (string) ($_GET['language_subtab'] ?? '');
-    if (in_array($requestedSubtab, ['settings', 'design', 'editor', 'diagnostics'], true)) {
+    if (in_array(
+        $requestedSubtab,
+        ['settings', 'design', 'editor', 'diagnostics'],
+        true,
+    )) {
         $activeSubtab = 'admin-theme-language-subtab-' . $requestedSubtab;
     }
-    $requestedEditLanguage = translation_normalize_language_code((string) ($_GET['edit_language'] ?? ''));
-    if (($requestedEditLanguage !== '' && translation_language_allowed($requestedEditLanguage))
-        || !empty($_GET['language_saved']) || !empty($_GET['language_imported']) || $languageEditorErrors !== []) {
+    $requestedEditLanguage = translation_normalize_language_code(
+        (string) ($_GET['edit_language'] ?? ''),
+    );
+    if (
+        (
+            $requestedEditLanguage !== ''
+            && translation_language_allowed($requestedEditLanguage)
+        )
+        || !empty($_GET['language_saved'])
+        || !empty($_GET['language_imported'])
+        || $languageEditorErrors !== []
+    ) {
         $activeSubtab = 'admin-theme-language-subtab-editor';
     }
 
@@ -387,11 +413,14 @@ function render_admin_theme_language_tab(): void
         'language_edit_code' => $languageEditCode,
         'language_editor_errors' => $languageEditorErrors,
         'language_coverage' => $languageCoverage,
-        'language_pack_json' => translation_language_pack_json_text($languageEditCode),
+        'language_pack_json' =>
+            translation_language_pack_json_text($languageEditCode),
         'selector_state' => $selectorState,
         'saved_notice' => !empty($_GET['language_saved']),
         'imported_notice' => !empty($_GET['language_imported']),
         'editor_base_url' => url_for('admin_theme'),
-        'export_url' => url_for('admin_theme', ['download_language_pack' => $languageEditCode]),
+        'export_url' => url_for('admin_theme', [
+            'download_language_pack' => $languageEditCode,
+        ]),
     ]);
 }

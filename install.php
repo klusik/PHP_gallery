@@ -62,8 +62,9 @@ $installationFinished = false;
 
 if (is_file($configFile) || is_file($installLockFile)) {
     http_response_code(403);
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Installer locked</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1f2937}code{background:#eef2f7;padding:2px 5px;border-radius:4px}</style></head><body><main><h1>Installer locked</h1><p>The installer is disabled because this gallery already has a configuration or installation lock. Remove <code>config.php</code> and <code>cache/installed.lock</code> manually only if you intentionally want to reinstall from scratch.</p></main></body></html>';
-    exit;
+    echo
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Installer locked</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1f2937}code{background:#eef2f7;padding:2px 5px;border-radius:4px}</style></head><body><main><h1>Installer locked</h1><p>The installer is disabled because this gallery already has a configuration or installation lock. Remove <code>config.php</code> and <code>cache/installed.lock</code> manually only if you intentionally want to reinstall from scratch.</p></main></body></html>';
+    exit();
 }
 
 /**
@@ -74,7 +75,11 @@ if (is_file($configFile) || is_file($installLockFile)) {
  */
 function installer_e(?string $value): string
 {
-    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    return htmlspecialchars(
+        (string) $value,
+        ENT_QUOTES | ENT_SUBSTITUTE,
+        'UTF-8',
+    );
 }
 
 /**
@@ -107,18 +112,26 @@ function installer_random_secret(): string
 function installer_default_base_url(): string
 {
     // Variable $forwardedProto stores this steps working value.
-    $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+    $forwardedProto = strtolower(trim(
+        explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0],
+    ));
     // Variable $https stores this steps working value.
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    $https =
+        (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
         || $forwardedProto === 'https'
-        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on';
+        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''))
+            === 'on';
     // Variable $scheme stores this steps working value.
     $scheme = $https ? 'https' : 'http';
     // Variable $host stores this steps working value.
     $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
     // Variable $script stores this steps working value.
-    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? '/install.php'));
+    $script = str_replace(
+        '\\',
+        '/',
+        (string) ($_SERVER['SCRIPT_NAME'] ?? '/install.php'),
+    );
     // Variable $dir stores this steps working value.
     $dir = rtrim(str_replace('/install.php', '', $script), '/');
     return rtrim($scheme . '://' . $host . $dir, '/');
@@ -132,8 +145,11 @@ function installer_default_base_url(): string
  * @param ?string $database Database value.
  * @return string Text result for the caller.
  */
-function installer_mysql_dsn(string $host, string $port = '', ?string $database = null): string
-{
+function installer_mysql_dsn(
+    string $host,
+    string $port = '',
+    ?string $database = null,
+): string {
     // Variable $normalizedHost stores this steps working value.
     $normalizedHost = $host !== '' ? $host : 'localhost';
     // Variable $dsn stores this steps working value.
@@ -150,27 +166,31 @@ function installer_mysql_dsn(string $host, string $port = '', ?string $database 
 /**
  * Connect to the existing application database.
  *
- * @param array $database Database value.
- * @return PDO Result value for the caller.
+ * @param array{host:string,port:string,name:string,user:string,password:string} $database Validated connection fields.
+ * @return PDO Connection to the configured application database.
  */
 function installer_connect_database(array $database): PDO
 {
     return new PDO(
-        installer_mysql_dsn((string) $database['host'], (string) $database['port'], (string) $database['name']),
+        installer_mysql_dsn(
+            (string) $database['host'],
+            (string) $database['port'],
+            (string) $database['name'],
+        ),
         (string) $database['user'],
         (string) $database['password'],
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]
+        ],
     );
 }
 
 /**
  * Validate and normalize the first installer step.
  *
- * @param array $defaults Defaults value.
- * @return array Structured result data for the caller.
+ * @param array{site_name:string,base_url:string,db_host:string,db_port:string,db_name:string,db_user:string} $defaults Initial values displayed by the first installer step.
+ * @return array{site_name:string,base_url:string,database:array{host:string,port:string,name:string,user:string,password:string,charset:string}} Validated site and database settings.
  */
 function installer_collect_database_step(array $defaults): array
 {
@@ -190,19 +210,36 @@ function installer_collect_database_step(array $defaults): array
     $dbPassword = (string) ($_POST['db_password'] ?? '');
 
     if ($siteName === '') {
-        throw new RuntimeException('Gallery name is required. You can change it later in Admin.');
+        throw new RuntimeException(
+            'Gallery name is required. You can change it later in Admin.',
+        );
     }
     if ($baseUrl === '') {
-        throw new RuntimeException('Domain is required. The detected value is usually correct.');
+        throw new RuntimeException(
+            'Domain is required. The detected value is usually correct.',
+        );
     }
     if ($dbName === '' || $dbUser === '' || $dbPassword === '') {
-        throw new RuntimeException('Database name, database user, and database password are required.');
+        throw new RuntimeException(
+            'Database name, database user, and database password are required.',
+        );
     }
-    if ($dbPort !== '' && (!ctype_digit($dbPort) || (int) $dbPort < 1 || (int) $dbPort > 65535)) {
-        throw new RuntimeException('Database port must be empty or a number between 1 and 65535.');
+    if (
+        $dbPort !== ''
+        && (
+            !ctype_digit($dbPort)
+            || (int) $dbPort < 1
+            || (int) $dbPort > 65535
+        )
+    ) {
+        throw new RuntimeException(
+            'Database port must be empty or a number between 1 and 65535.',
+        );
     }
     if (!filter_var($baseUrl, FILTER_VALIDATE_URL)) {
-        throw new RuntimeException('Domain must be a valid absolute URL, for example https://galerie.example.com.');
+        throw new RuntimeException(
+            'Domain must be a valid absolute URL, for example https://galerie.example.com.',
+        );
     }
 
     return [
@@ -224,21 +261,25 @@ function installer_collect_database_step(array $defaults): array
  *
  * @param PDO $pdo Database connection.
  * @param string $migrationPath Migration path filesystem path.
- * @return array Structured result data for the caller.
+ * @return list<string> Migration versions successfully applied in this run.
  */
 function installer_run_migrations(PDO $pdo, string $migrationPath): array
 {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS schema_migrations (
         version VARCHAR(64) NOT NULL PRIMARY KEY,
         applied_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    );
 
     // $appliedVersions stores the immutable audit rows already recorded by this database.
-    $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+    $appliedVersions = $pdo->query(
+        'SELECT version FROM schema_migrations',
+    )->fetchAll(PDO::FETCH_COLUMN);
     // $files stores only current migration files that have not yet been applied.
     $files = \Gallery\Core\pending_migration_files(
         \Gallery\Core\discover_migration_files($migrationPath),
-        $appliedVersions
+        $appliedVersions,
     );
     // $definitionsByFile validates the complete pending set before installation changes the database.
     $definitionsByFile = \Gallery\Core\load_migration_definitions($files);
@@ -257,7 +298,9 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
             $definition['after']($pdo);
         }
         // Variable $stmt stores this steps working value.
-        $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
+        $stmt = $pdo->prepare(
+            'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+        );
         $stmt->execute([$version, date('Y-m-d H:i:s')]);
         $ran[] = $version;
     }
@@ -298,25 +341,30 @@ function installer_duplicate_ddl_error(PDOException $exception): bool
 
     // Variable $message stores this steps working value.
     $message = $exception->getMessage();
-    return str_contains($message, 'already exists')
-        || str_contains($message, 'Duplicate column name')
-        || str_contains($message, 'Duplicate key name')
-        || str_contains($message, 'Duplicate foreign key constraint name')
-        || str_contains($message, 'errno: 121');
+    return (
+        str_contains($message, 'already exists')
+            || str_contains($message, 'Duplicate column name')
+            || str_contains($message, 'Duplicate key name')
+            || str_contains($message, 'Duplicate foreign key constraint name')
+            || str_contains($message, 'errno: 121')
+    );
 }
 
 /**
  * Write the final application config.php file.
  *
  * @param string $configFile Config file value.
- * @param array $config Configuration values.
+ * @param array{database:array{host:string,port:?int,name:string,user:string,password:string,charset:string},base_url:string,galleries_root:string,zip_cache_path:string,admin_session_name:string,visitor_vote_secret:string,setup_key:string} $config Final application settings and generated secrets.
+ * @return void Writes the generated PHP configuration file or throws on failure.
  */
 function installer_write_config(string $configFile, array $config): void
 {
     // Variable $php stores this steps working value.
     $php = "<?php\n\nreturn " . var_export($config, true) . ";\n";
     if (file_put_contents($configFile, $php, LOCK_EX) === false) {
-        throw new RuntimeException('Could not write config.php. Check folder permissions.');
+        throw new RuntimeException(
+            'Could not write config.php. Check folder permissions.',
+        );
     }
 }
 
@@ -332,7 +380,8 @@ function installer_prepare_writable_folders(array $paths): void
             throw new RuntimeException('Could not create folder: ' . $path);
         }
         if (!is_writable($path)) {
-            throw new RuntimeException('Folder is not writable by PHP: ' . $path);
+            throw new RuntimeException('Folder is not writable by PHP: '
+                . $path);
         }
     }
 }
@@ -343,12 +392,24 @@ function installer_prepare_writable_folders(array $paths): void
  * @param PDO $pdo Database connection.
  * @param string $username Username value.
  * @param string $password Password value.
+ * @return void Creates or updates the administrator account.
  */
-function installer_create_admin_user(PDO $pdo, string $username, string $password): void
-{
+function installer_create_admin_user(
+    PDO $pdo,
+    string $username,
+    string $password,
+): void {
     // Variable $stmt stores this steps working value.
-    $stmt = $pdo->prepare('INSERT INTO users (username, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), role = VALUES(role), updated_at = VALUES(updated_at)');
-    $stmt->execute([$username, password_hash($password, PASSWORD_DEFAULT), 'admin', date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+    $stmt = $pdo->prepare(
+        'INSERT INTO users (username, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), role = VALUES(role), updated_at = VALUES(updated_at)',
+    );
+    $stmt->execute([
+        $username,
+        password_hash($password, PASSWORD_DEFAULT),
+        'admin',
+        date('Y-m-d H:i:s'),
+        date('Y-m-d H:i:s'),
+    ]);
 }
 
 /**
@@ -356,11 +417,14 @@ function installer_create_admin_user(PDO $pdo, string $username, string $passwor
  *
  * @param PDO $pdo Database connection.
  * @param string $siteName Site name value.
+ * @return void Saves the public site name setting.
  */
 function installer_save_site_name(PDO $pdo, string $siteName): void
 {
     // Variable $stmt stores this steps working value.
-    $stmt = $pdo->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
+    $stmt = $pdo->prepare(
+        'INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)',
+    );
     $stmt->execute(['site_name', $siteName, date('Y-m-d H:i:s')]);
 }
 
@@ -376,7 +440,9 @@ function installer_build_config(array $setup, string $root): array
     return [
         'database' => [
             'host' => (string) $setup['database']['host'],
-            'port' => (string) $setup['database']['port'] === '' ? null : (int) $setup['database']['port'],
+            'port' => (string) $setup['database']['port'] === ''
+                ? null
+                : (int) $setup['database']['port'],
             'name' => (string) $setup['database']['name'],
             'user' => (string) $setup['database']['user'],
             'password' => (string) $setup['database']['password'],
@@ -411,8 +477,13 @@ $currentStep = isset($_SESSION['installer_setup']) ? 2 : 1;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        if (!hash_equals((string) $_SESSION['installer_token'], (string) ($_POST['token'] ?? ''))) {
-            throw new RuntimeException('Invalid installer token. Reload the installer and try again.');
+        if (!hash_equals(
+            (string) $_SESSION['installer_token'],
+            (string) ($_POST['token'] ?? ''),
+        )) {
+            throw new RuntimeException(
+                'Invalid installer token. Reload the installer and try again.',
+            );
         }
 
         // Variable $action stores this steps working value.
@@ -434,24 +505,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // $currentStep stores an intermediate value used by the surrounding gallery workflow.
             $currentStep = 2;
         } elseif ($action === 'admin_step') {
-            if (empty($_SESSION['installer_setup']) || !is_array($_SESSION['installer_setup'])) {
-                throw new RuntimeException('Database setup was not verified yet. Start with the first step.');
+            if (
+                empty($_SESSION['installer_setup'])
+                || !is_array($_SESSION['installer_setup'])
+            ) {
+                throw new RuntimeException(
+                    'Database setup was not verified yet. Start with the first step.',
+                );
             }
 
             // Variable $setup stores this steps working value.
             $setup = $_SESSION['installer_setup'];
             // Variable $adminUser stores this steps working value.
-            $adminUser = installer_post('admin_username', $defaults['admin_username']);
+            $adminUser = installer_post(
+                'admin_username',
+                $defaults['admin_username'],
+            );
             // Variable $adminPassword stores this steps working value.
             $adminPassword = (string) ($_POST['admin_password'] ?? '');
             // Variable $adminPasswordConfirm stores this steps working value.
-            $adminPasswordConfirm = (string) ($_POST['admin_password_confirm'] ?? '');
+            $adminPasswordConfirm = (string) (
+                $_POST['admin_password_confirm'] ?? ''
+            );
 
             if ($adminUser === '' || $adminPassword === '') {
-                throw new RuntimeException('Admin username and password are required.');
+                throw new RuntimeException(
+                    'Admin username and password are required.',
+                );
             }
             if (strlen($adminPassword) < 8) {
-                throw new RuntimeException('Admin password must be at least 8 characters.');
+                throw new RuntimeException(
+                    'Admin password must be at least 8 characters.',
+                );
             }
             if ($adminPassword !== $adminPasswordConfirm) {
                 throw new RuntimeException('Admin passwords do not match.');
@@ -469,17 +554,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ran = installer_run_migrations($pdo, $migrationPath);
             installer_create_admin_user($pdo, $adminUser, $adminPassword);
             installer_save_site_name($pdo, (string) $setup['site_name']);
-            installer_write_config($configFile, installer_build_config($setup, $root));
+            installer_write_config($configFile, installer_build_config(
+                $setup,
+                $root,
+            ));
 
             if (!is_dir(dirname($installLockFile))) {
                 mkdir(dirname($installLockFile), 0775, true);
             }
-            file_put_contents($installLockFile, 'installed=' . gmdate('c') . PHP_EOL, LOCK_EX);
+            file_put_contents(
+                $installLockFile,
+                'installed=' . gmdate('c') . PHP_EOL,
+                LOCK_EX,
+            );
 
             unset($_SESSION['installer_setup']);
             $_SESSION['installer_token'] = bin2hex(random_bytes(16));
             $messages[] = 'Installation finished.';
-            $messages[] = $ran ? 'Applied migrations: ' . implode(', ', $ran) : 'No pending migrations.';
+            $messages[] = $ran
+                ? 'Applied migrations: ' . implode(', ', $ran)
+                : 'No pending migrations.';
             $messages[] = 'Admin user is ready.';
             $messages[] = 'The installer is now disabled for future requests.';
             // $installationFinished stores an intermediate value used by the surrounding gallery workflow.
@@ -495,7 +589,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Variable $setup stores this steps working value.
-$setup = (isset($_SESSION['installer_setup']) && is_array($_SESSION['installer_setup'])) ? $_SESSION['installer_setup'] : [];
+$setup = isset($_SESSION['installer_setup'])
+&& is_array($_SESSION['installer_setup'])
+    ? $_SESSION['installer_setup']
+    : [];
 
 // Variable $value stores this steps working value.
 $value = static function (string $name) use ($defaults, $setup): string {
@@ -520,7 +617,9 @@ $adminUrl = 'index.php?page=admin_login';
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <?php if ($installationFinished): ?>
-        <meta http-equiv="refresh" content="5;url=<?php echo installer_e($adminUrl); ?>">
+        <meta http-equiv="refresh" content="5;url=<?php echo installer_e(
+            $adminUrl,
+        ); ?>">
     <?php endif; ?>
     <title>Gallery Installer</title>
     <style>
@@ -603,9 +702,18 @@ $adminUrl = 'index.php?page=admin_login';
     </section>
 
     <div class="steps" aria-label="Installation steps">
-        <div class="step-pill<?php echo $currentStep === 1 ? ' is-active' : ($currentStep > 1 ? ' is-done' : ''); ?>">1. Gallery and database</div>
-        <div class="step-pill<?php echo $currentStep === 2 ? ' is-active' : ($currentStep > 2 ? ' is-done' : ''); ?>">2. Web admin</div>
-        <div class="step-pill<?php echo $currentStep === 3 ? ' is-active' : ''; ?>">3. Finished</div>
+        <div class="step-pill<?php echo
+            $currentStep === 1
+                ? ' is-active'
+                : (
+                    $currentStep > 1 ? ' is-done' : ''
+                ); ?>">1. Gallery and database</div>
+        <div class="step-pill<?php echo
+            $currentStep === 2
+                ? ' is-active'
+                : ($currentStep > 2 ? ' is-done' : ''); ?>">2. Web admin</div>
+        <div class="step-pill<?php echo
+            $currentStep === 3 ? ' is-active' : ''; ?>">3. Finished</div>
     </div>
 
     <?php foreach ($errors as $error): ?>
@@ -624,12 +732,16 @@ $adminUrl = 'index.php?page=admin_login';
         <section class="panel success">
             <h2>Your gallery is ready.</h2>
             <p>You will be redirected to the admin login in 5 seconds.</p>
-            <p><a class="button-link" href="<?php echo installer_e($adminUrl); ?>">Open admin login now</a></p>
+            <p><a class="button-link" href="<?php echo installer_e(
+                $adminUrl,
+            ); ?>">Open admin login now</a></p>
             <p>Keep <code>cache/installed.lock</code> in place. You can delete <code>install.php</code> after confirming the site works.</p>
         </section>
     <?php elseif ($currentStep === 1): ?>
         <form method="post" class="panel">
-            <input type="hidden" name="token" value="<?php echo installer_e((string) $_SESSION['installer_token']); ?>">
+            <input type="hidden" name="token" value="<?php echo installer_e(
+                (string) $_SESSION['installer_token'],
+            ); ?>">
             <input type="hidden" name="installer_action" value="database_step">
 
             <div class="panel-header">
@@ -641,31 +753,43 @@ $adminUrl = 'index.php?page=admin_login';
 
             <div class="grid">
                 <label class="full">Gallery name
-                    <input name="site_name" value="<?php echo $value('site_name'); ?>" maxlength="120" autocomplete="organization" required>
+                    <input name="site_name" value="<?php echo $value(
+                        'site_name',
+                    ); ?>" maxlength="120" autocomplete="organization" required>
                     <span class="help">This is the public title shown in the header and browser title. You can change it later in Admin.</span>
                 </label>
 
                 <label class="full">Domain
-                    <input name="base_url" value="<?php echo $value('base_url'); ?>" inputmode="url" autocomplete="url" required>
+                    <input name="base_url" value="<?php echo $value(
+                        'base_url',
+                    ); ?>" inputmode="url" autocomplete="url" required>
                     <span class="help">The installer detected this from the current page. Confirm it, or adjust it if your public gallery uses a different domain such as <code>https://galerie.klusik.cz</code>.</span>
                 </label>
 
                 <label>Database server
-                    <input name="db_host" value="<?php echo $value('db_host'); ?>" autocomplete="off" placeholder="localhost">
+                    <input name="db_host" value="<?php echo $value(
+                        'db_host',
+                    ); ?>" autocomplete="off" placeholder="localhost">
                     <span class="help">Leave empty if your hosting does not show it. The installer will use <code>localhost</code>.</span>
                 </label>
 
                 <label>Database port
-                    <input name="db_port" value="<?php echo $value('db_port'); ?>" inputmode="numeric" autocomplete="off" placeholder="Leave empty">
+                    <input name="db_port" value="<?php echo $value(
+                        'db_port',
+                    ); ?>" inputmode="numeric" autocomplete="off" placeholder="Leave empty">
                     <span class="help">Leave empty unless your hosting explicitly gives you a port. MySQL normally uses its default port automatically.</span>
                 </label>
 
                 <label>Database name
-                    <input name="db_name" value="<?php echo $value('db_name'); ?>" autocomplete="off" required>
+                    <input name="db_name" value="<?php echo $value(
+                        'db_name',
+                    ); ?>" autocomplete="off" required>
                 </label>
 
                 <label>Database user
-                    <input name="db_user" value="<?php echo $value('db_user'); ?>" autocomplete="username" required>
+                    <input name="db_user" value="<?php echo $value(
+                        'db_user',
+                    ); ?>" autocomplete="username" required>
                 </label>
 
                 <label class="full">Database password
@@ -688,23 +812,35 @@ $adminUrl = 'index.php?page=admin_login';
                     <p>The installer can connect to your existing database.</p>
                 </div>
                 <form method="post">
-                    <input type="hidden" name="token" value="<?php echo installer_e((string) $_SESSION['installer_token']); ?>">
+                    <input type="hidden" name="token" value="<?php echo installer_e(
+                        (string) $_SESSION['installer_token'],
+                    ); ?>">
                     <input type="hidden" name="installer_action" value="reset_database_step">
                     <button class="secondary" type="submit">Change database</button>
                 </form>
             </div>
 
             <div class="summary-list">
-                <div class="summary-item"><span>Gallery</span><span><?php echo installer_e((string) ($setup['site_name'] ?? '')); ?></span></div>
-                <div class="summary-item"><span>Domain</span><span><?php echo installer_e((string) ($setup['base_url'] ?? '')); ?></span></div>
-                <div class="summary-item"><span>Database</span><span><?php echo installer_e((string) ($setup['database']['name'] ?? '')); ?></span></div>
-                <div class="summary-item"><span>Automatic galleries folder</span><span><?php echo installer_e($root . '/galleries'); ?></span></div>
-                <div class="summary-item"><span>Automatic ZIP cache folder</span><span><?php echo installer_e($root . '/cache/zips'); ?></span></div>
+                <div class="summary-item"><span>Gallery</span><span><?php echo installer_e(
+                    (string) ($setup['site_name'] ?? ''),
+                ); ?></span></div>
+                <div class="summary-item"><span>Domain</span><span><?php echo installer_e(
+                    (string) ($setup['base_url'] ?? ''),
+                ); ?></span></div>
+                <div class="summary-item"><span>Database</span><span><?php echo installer_e(
+                    (string) ($setup['database']['name'] ?? ''),
+                ); ?></span></div>
+                <div class="summary-item"><span>Automatic galleries folder</span><span><?php echo installer_e($root
+                    . '/galleries'); ?></span></div>
+                <div class="summary-item"><span>Automatic ZIP cache folder</span><span><?php echo installer_e($root
+                    . '/cache/zips'); ?></span></div>
             </div>
         </section>
 
         <form method="post" class="panel">
-            <input type="hidden" name="token" value="<?php echo installer_e((string) $_SESSION['installer_token']); ?>">
+            <input type="hidden" name="token" value="<?php echo installer_e(
+                (string) $_SESSION['installer_token'],
+            ); ?>">
             <input type="hidden" name="installer_action" value="admin_step">
 
             <div class="panel-header">
@@ -716,7 +852,12 @@ $adminUrl = 'index.php?page=admin_login';
 
             <div class="grid">
                 <label>Admin username
-                    <input name="admin_username" value="<?php echo installer_e((string) ($_POST['admin_username'] ?? $defaults['admin_username'])); ?>" autocomplete="username" required>
+                    <input name="admin_username" value="<?php echo installer_e(
+                        (string) (
+                            $_POST['admin_username']
+                            ?? $defaults['admin_username']
+                        ),
+                    ); ?>" autocomplete="username" required>
                 </label>
 
                 <label>Admin password

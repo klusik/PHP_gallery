@@ -30,15 +30,35 @@ declare(strict_types=1);
 namespace PhpGallery\ReleaseQualification;
 
 const SCHEMA_VERSION = 1;
+
 const SCOPE_VERSION = 1;
+
 const MANUAL_CHECKS = [
-    'pdf-title' => ['label' => 'PDF title, target version and edition date', 'phase' => 'pre-publication'],
-    'pdf-contents' => ['label' => 'PDF table of contents', 'phase' => 'pre-publication'],
+    'pdf-title' => [
+        'label' => 'PDF title, target version and edition date',
+        'phase' => 'pre-publication',
+    ],
+    'pdf-contents' => [
+        'label' => 'PDF table of contents',
+        'phase' => 'pre-publication',
+    ],
     'pdf-index' => ['label' => 'PDF index', 'phase' => 'pre-publication'],
-    'pdf-changed-pages' => ['label' => 'PDF changed feature sections', 'phase' => 'pre-publication'],
-    'pdf-links-layout' => ['label' => 'PDF bookmarks, internal links and page layout', 'phase' => 'pre-publication'],
-    'browser-smoke' => ['label' => 'Applicable browser smoke workflows', 'phase' => 'pre-publication'],
-    'post-publication-smoke' => ['label' => 'Published updater, migrations, login, gallery and integrity smoke', 'phase' => 'post-publication'],
+    'pdf-changed-pages' => [
+        'label' => 'PDF changed feature sections',
+        'phase' => 'pre-publication',
+    ],
+    'pdf-links-layout' => [
+        'label' => 'PDF bookmarks, internal links and page layout',
+        'phase' => 'pre-publication',
+    ],
+    'browser-smoke' => [
+        'label' => 'Applicable browser smoke workflows',
+        'phase' => 'pre-publication',
+    ],
+    'post-publication-smoke' => [
+        'label' => 'Published updater, migrations, login, gallery and integrity smoke',
+        'phase' => 'post-publication',
+    ],
 ];
 
 require_once __DIR__ . '/release_lib.php';

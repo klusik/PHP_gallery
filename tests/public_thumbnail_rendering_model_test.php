@@ -35,6 +35,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 use const Gallery\Services\PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE;
 use const Gallery\Services\PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE;
 use const Gallery\Services\PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY;
@@ -44,7 +46,8 @@ use function Gallery\Services\public_thumbnail_render_picture_html;
 use function Gallery\Services\public_thumbnail_rendering_mode;
 use function Gallery\Services\public_thumbnail_rendering_mode_normalize;
 use function Gallery\Services\public_thumbnail_rendering_mode_save;
-use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision;
+use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision
+;
 
 $GLOBALS['public_thumbnail_rendering_test_settings'] = [];
 
@@ -57,7 +60,10 @@ $GLOBALS['public_thumbnail_rendering_test_settings'] = [];
  */
 function app_setting(string $key, ?string $default = null): ?string
 {
-    return array_key_exists($key, $GLOBALS['public_thumbnail_rendering_test_settings'])
+    return array_key_exists(
+        $key,
+        $GLOBALS['public_thumbnail_rendering_test_settings'],
+    )
         ? (string) $GLOBALS['public_thumbnail_rendering_test_settings'][$key]
         : $default;
 }
@@ -76,35 +82,50 @@ function set_app_setting(string $key, string $value): void
 /**
  * Responsive picture helper shim used to verify strategy selection and attributes.
  *
- * @param array $image Image row.
+ * @param array{id:int} $image Minimal image row used by the dispatch fixture.
  * @param int $fallbackSize Preferred fallback size.
- * @param array $srcsetSizes Requested candidate sizes.
+ * @param list<int> $srcsetSizes Requested candidate widths in pixels.
  * @param string $sizes Sizes hint.
  * @param string $alt Alternative text.
  * @param string $extraAttributes Image attributes.
- * @param ?array $thumbnailBundle Thumbnail bundle.
+ * @param ?array{image:array{id:int}} $thumbnailBundle Minimal request-local bundle for the fixture.
  * @return string Observable test result.
  */
-function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $sizes, string $alt, string $extraAttributes = '', ?array $thumbnailBundle = null): string
-{
+function thumbnail_picture_html(
+    array $image,
+    int $fallbackSize,
+    array $srcsetSizes,
+    string $sizes,
+    string $alt,
+    string $extraAttributes = '',
+    ?array $thumbnailBundle = null,
+): string {
     return 'responsive|' . $extraAttributes;
 }
 
 /**
  * Progressive picture helper shim used to verify strategy selection and attributes.
  *
- * @param array $image Image row.
+ * @param array{id:int} $image Minimal image row used by the dispatch fixture.
  * @param int $fallbackSize Preferred fallback size.
- * @param array $srcsetSizes Requested candidate sizes.
+ * @param list<int> $srcsetSizes Requested candidate widths in pixels.
  * @param string $initialSizes Initial sizes hint.
  * @param string $finalSizes Final sizes hint.
  * @param string $alt Alternative text.
  * @param string $extraAttributes Image attributes.
- * @param ?array $thumbnailBundle Thumbnail bundle.
+ * @param ?array{image:array{id:int}} $thumbnailBundle Minimal request-local bundle for the fixture.
  * @return string Observable test result.
  */
-function thumbnail_progressive_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $initialSizes, string $finalSizes, string $alt, string $extraAttributes = '', ?array $thumbnailBundle = null): string
-{
+function thumbnail_progressive_picture_html(
+    array $image,
+    int $fallbackSize,
+    array $srcsetSizes,
+    string $initialSizes,
+    string $finalSizes,
+    string $alt,
+    string $extraAttributes = '',
+    ?array $thumbnailBundle = null,
+): string {
     return 'progressive|' . $extraAttributes;
 }
 
@@ -113,93 +134,258 @@ require_once __DIR__ . '/../app/services/public_thumbnail_rendering.php';
 /**
  * Throw when two renderer-model values are not identical.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @param bool|int|float|string|null|array<string,scalar|null|array<string,scalar|null>> $expected Expected scalar or renderer result row/list.
+ * @param bool|int|float|string|null|array<string,scalar|null|array<string,scalar|null>> $actual Actual scalar or renderer result row/list.
  * @param string $label Assertion label.
+ * @return void Throw when the actual value differs strictly from the expected value.
  */
-function assert_public_thumbnail_rendering_same(mixed $expected, mixed $actual, string $label): void
-{
+function assert_public_thumbnail_rendering_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode_normalize(null), 'missing mode normalizes to progressive');
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode_normalize(''), 'empty mode normalizes to progressive');
-assert_public_thumbnail_rendering_same('responsive', public_thumbnail_rendering_mode_normalize('responsive'), 'responsive mode is accepted');
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode_normalize('progressive'), 'progressive mode is accepted');
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode_normalize('obsolete'), 'unknown mode normalizes to progressive');
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode_normalize(['progressive']), 'malformed mode normalizes to progressive');
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode(), 'missing persisted setting resolves to progressive');
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode_normalize(null),
+    'missing mode normalizes to progressive',
+);
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode_normalize(''),
+    'empty mode normalizes to progressive',
+);
+assert_public_thumbnail_rendering_same(
+    'responsive',
+    public_thumbnail_rendering_mode_normalize('responsive'),
+    'responsive mode is accepted',
+);
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode_normalize('progressive'),
+    'progressive mode is accepted',
+);
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode_normalize('obsolete'),
+    'unknown mode normalizes to progressive',
+);
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode_normalize(['progressive']),
+    'malformed mode normalizes to progressive',
+);
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode(),
+    'missing persisted setting resolves to progressive',
+);
 
 public_thumbnail_rendering_mode_save('progressive');
-assert_public_thumbnail_rendering_same('progressive', $GLOBALS['public_thumbnail_rendering_test_settings'][PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY] ?? null, 'supported progressive value persists');
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode(), 'persisted progressive value resolves to progressive');
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    $GLOBALS['public_thumbnail_rendering_test_settings'][PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY]
+        ?? null,
+    'supported progressive value persists',
+);
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode(),
+    'persisted progressive value resolves to progressive',
+);
 
 public_thumbnail_rendering_mode_save('unsupported');
-assert_public_thumbnail_rendering_same('progressive', $GLOBALS['public_thumbnail_rendering_test_settings'][PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY] ?? null, 'unsupported submitted value persists only progressive fallback');
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode(), 'invalid saved submission resolves to progressive');
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    $GLOBALS['public_thumbnail_rendering_test_settings'][PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY]
+        ?? null,
+    'unsupported submitted value persists only progressive fallback',
+);
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode(),
+    'invalid saved submission resolves to progressive',
+);
 
 $GLOBALS['public_thumbnail_rendering_test_settings'] = [
     PUBLIC_THUMBNAIL_RENDERING_SETTING_KEY => 'responsive',
     'theme_public_content_revision' => '1',
 ];
 public_thumbnail_rendering_mode_save_with_revision('progressive');
-assert_public_thumbnail_rendering_same('progressive', public_thumbnail_rendering_mode(), 'revision-aware save persists the selected mode');
-$revision = $GLOBALS['public_thumbnail_rendering_test_settings']['theme_public_content_revision'] ?? null;
+assert_public_thumbnail_rendering_same(
+    'progressive',
+    public_thumbnail_rendering_mode(),
+    'revision-aware save persists the selected mode',
+);
+$revision =
+    $GLOBALS['public_thumbnail_rendering_test_settings']['theme_public_content_revision']
+    ?? null;
 if (!is_string($revision) || $revision === '' || $revision === '1') {
-    throw new RuntimeException('Revision-aware thumbnail save did not bump theme_public_content_revision when changing from legacy responsive to progressive.');
+    throw new RuntimeException(
+        'Revision-aware thumbnail save did not bump theme_public_content_revision when changing from legacy responsive to progressive.',
+    );
 }
 public_thumbnail_rendering_mode_save_with_revision('progressive');
-assert_public_thumbnail_rendering_same($revision, $GLOBALS['public_thumbnail_rendering_test_settings']['theme_public_content_revision'] ?? null, 'unchanged renderer does not bump content revision');
+assert_public_thumbnail_rendering_same(
+    $revision,
+    $GLOBALS['public_thumbnail_rendering_test_settings']['theme_public_content_revision']
+        ?? null,
+    'unchanged renderer does not bump content revision',
+);
 
-assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="high"', public_responsive_thumbnail_loading_attributes(0), 'responsive first card loading policy unchanged');
-assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="high"', public_responsive_thumbnail_loading_attributes(1), 'responsive second card loading policy unchanged');
-assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="auto"', public_responsive_thumbnail_loading_attributes(2), 'responsive middle eager policy unchanged');
-assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="auto"', public_responsive_thumbnail_loading_attributes(7), 'responsive eighth card remains eager');
-assert_public_thumbnail_rendering_same('loading="lazy" fetchpriority="low"', public_responsive_thumbnail_loading_attributes(8), 'responsive later cards remain lazy');
+assert_public_thumbnail_rendering_same(
+    'loading="eager" fetchpriority="high"',
+    public_responsive_thumbnail_loading_attributes(0),
+    'responsive first card loading policy unchanged',
+);
+assert_public_thumbnail_rendering_same(
+    'loading="eager" fetchpriority="high"',
+    public_responsive_thumbnail_loading_attributes(1),
+    'responsive second card loading policy unchanged',
+);
+assert_public_thumbnail_rendering_same(
+    'loading="eager" fetchpriority="auto"',
+    public_responsive_thumbnail_loading_attributes(2),
+    'responsive middle eager policy unchanged',
+);
+assert_public_thumbnail_rendering_same(
+    'loading="eager" fetchpriority="auto"',
+    public_responsive_thumbnail_loading_attributes(7),
+    'responsive eighth card remains eager',
+);
+assert_public_thumbnail_rendering_same(
+    'loading="lazy" fetchpriority="low"',
+    public_responsive_thumbnail_loading_attributes(8),
+    'responsive later cards remain lazy',
+);
 
-assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="high"', public_progressive_thumbnail_loading_attributes(0), 'progressive first small thumbnail is eager high priority');
-assert_public_thumbnail_rendering_same('loading="eager" fetchpriority="auto"', public_progressive_thumbnail_loading_attributes(1), 'progressive second small thumbnail is eager auto priority');
-assert_public_thumbnail_rendering_same('loading="lazy" fetchpriority="low"', public_progressive_thumbnail_loading_attributes(2), 'progressive remaining small thumbnails are native lazy low priority');
+assert_public_thumbnail_rendering_same(
+    'loading="eager" fetchpriority="high"',
+    public_progressive_thumbnail_loading_attributes(0),
+    'progressive first small thumbnail is eager high priority',
+);
+assert_public_thumbnail_rendering_same(
+    'loading="eager" fetchpriority="auto"',
+    public_progressive_thumbnail_loading_attributes(1),
+    'progressive second small thumbnail is eager auto priority',
+);
+assert_public_thumbnail_rendering_same(
+    'loading="lazy" fetchpriority="low"',
+    public_progressive_thumbnail_loading_attributes(2),
+    'progressive remaining small thumbnails are native lazy low priority',
+);
 
 $testImage = ['id' => 1];
 $testBundle = ['image' => $testImage];
 assert_public_thumbnail_rendering_same(
     'responsive|data-public-thumbnail-rendering-mode="responsive" data-public-thumbnail-card-index="0" loading="eager" fetchpriority="high"',
-    public_thumbnail_render_picture_html($testImage, 300, [300, 600], '50vw', 'Photo', 0, $testBundle, PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE),
-    'responsive renderer dispatches the responsive picture helper'
+    public_thumbnail_render_picture_html(
+        $testImage,
+        300,
+        [300, 600],
+        '50vw',
+        'Photo',
+        0,
+        $testBundle,
+        PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
+    ),
+    'responsive renderer dispatches the responsive picture helper',
 );
 assert_public_thumbnail_rendering_same(
     'progressive|data-public-thumbnail-rendering-mode="progressive" data-public-thumbnail-card-index="1" loading="eager" fetchpriority="auto"',
-    public_thumbnail_render_picture_html($testImage, 300, [300, 600], '50vw', 'Photo', 1, $testBundle, PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE),
-    'progressive renderer dispatches the progressive picture helper'
+    public_thumbnail_render_picture_html(
+        $testImage,
+        300,
+        [300, 600],
+        '50vw',
+        'Photo',
+        1,
+        $testBundle,
+        PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
+    ),
+    'progressive renderer dispatches the progressive picture helper',
 );
 assert_public_thumbnail_rendering_same(
     'progressive|data-public-thumbnail-rendering-mode="progressive" data-public-thumbnail-card-index="0" loading="eager" fetchpriority="high"',
-    public_thumbnail_render_picture_html($testImage, 300, [300, 600], '50vw', 'Photo', 0, $testBundle, 'invalid-mode'),
-    'renderer dispatch safely falls back to progressive for an unknown value'
+    public_thumbnail_render_picture_html(
+        $testImage,
+        300,
+        [300, 600],
+        '50vw',
+        'Photo',
+        0,
+        $testBundle,
+        'invalid-mode',
+    ),
+    'renderer dispatch safely falls back to progressive for an unknown value',
 );
 
 // Confirm the Admin controller routes posted values through the centralized validated persistence helper.
-$adminThemeSource = file_get_contents(__DIR__ . '/../app/controllers/admin_theme_actions.php');
-if (!is_string($adminThemeSource) || !str_contains($adminThemeSource, "public_thumbnail_rendering_mode_save_with_revision(\$_POST['public_thumbnail_rendering_mode'] ?? null)")) {
-    throw new RuntimeException('Admin Theme form does not persist the renderer through the shared revision-aware service helper.');
+$adminThemeSource = file_get_contents(__DIR__
+    . '/../app/controllers/admin_theme_actions.php');
+if (
+    !is_string($adminThemeSource)
+    || !php_source_contains(
+        $adminThemeSource,
+        "public_thumbnail_rendering_mode_save_with_revision(\$_POST['public_thumbnail_rendering_mode'] ?? null)",
+    )
+) {
+    throw new RuntimeException(
+        'Admin Theme form does not persist the renderer through the shared revision-aware service helper.',
+    );
 }
 
-$adminThemeLayoutSource = file_get_contents(__DIR__ . '/../app/controllers/admin_theme_layout.php');
-if (!is_string($adminThemeLayoutSource)
-    || !str_contains($adminThemeLayoutSource, 'Progressive thumbnail sharpening - Default')
-    || !str_contains($adminThemeLayoutSource, 'Responsive browser selection - Legacy')) {
-    throw new RuntimeException('Admin Theme renderer labels do not expose progressive as Default and responsive as Legacy.');
+$adminThemeLayoutSource = file_get_contents(__DIR__
+    . '/../app/controllers/admin_theme_layout.php');
+if (
+    !is_string($adminThemeLayoutSource)
+    || !str_contains(
+        $adminThemeLayoutSource,
+        'Progressive thumbnail sharpening - Default',
+    )
+    || !str_contains(
+        $adminThemeLayoutSource,
+        'Responsive browser selection - Legacy',
+    )
+) {
+    throw new RuntimeException(
+        'Admin Theme renderer labels do not expose progressive as Default and responsive as Legacy.',
+    );
 }
-$progressiveOptionPosition = strpos($adminThemeLayoutSource, 'PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE');
-$responsiveOptionPosition = strpos($adminThemeLayoutSource, 'PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE');
-if ($progressiveOptionPosition === false || $responsiveOptionPosition === false || $progressiveOptionPosition >= $responsiveOptionPosition) {
-    throw new RuntimeException('Admin Theme renderer options do not list the progressive default before the responsive legacy option.');
+$progressiveOptionPosition = strpos(
+    $adminThemeLayoutSource,
+    'PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE',
+);
+$responsiveOptionPosition = strpos(
+    $adminThemeLayoutSource,
+    'PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE',
+);
+if (
+    $progressiveOptionPosition === false
+    || $responsiveOptionPosition === false
+    || $progressiveOptionPosition >= $responsiveOptionPosition
+) {
+    throw new RuntimeException(
+        'Admin Theme renderer options do not list the progressive default before the responsive legacy option.',
+    );
 }
 
-assert_public_thumbnail_rendering_same(PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE, 'responsive', 'responsive machine value remains stable');
-assert_public_thumbnail_rendering_same(PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE, 'progressive', 'progressive machine value remains stable');
+assert_public_thumbnail_rendering_same(
+    PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE,
+    'responsive',
+    'responsive machine value remains stable',
+);
+assert_public_thumbnail_rendering_same(
+    PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE,
+    'progressive',
+    'progressive machine value remains stable',
+);
 
 echo "Public thumbnail rendering model tests passed.\n";

@@ -48,8 +48,11 @@ use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\path_inside;
 
 const LEGACY_DOWNLOAD_ARTIFACT_CACHE_FORMAT_VERSION = 1;
+
 const LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME = 'archive.zip';
+
 const LEGACY_DOWNLOAD_ARTIFACT_METADATA_NAME = 'metadata.json';
+
 const LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME = 'artifact.lock';
 
 /** Return the configured ZIP-cache path without creating or normalizing filesystem state. */
@@ -66,7 +69,8 @@ function legacy_download_artifact_configured_cache_path(): string
 /** Convert one cache-health reason into the bounded exception reason used by controllers and logs. */
 function legacy_download_artifact_health_exception_reason(string $reason): string
 {
-    $reason = preg_replace('/[^a-z0-9_]+/', '_', strtolower(trim($reason))) ?? '';
+    $reason =
+        preg_replace('/[^a-z0-9_]+/', '_', strtolower(trim($reason))) ?? '';
     $reason = trim($reason, '_');
     $candidate = 'legacy_cache_' . ($reason !== '' ? $reason : 'unavailable');
     return strlen($candidate) <= 48 ? $candidate : 'legacy_cache_unavailable';
@@ -74,21 +78,32 @@ function legacy_download_artifact_health_exception_reason(string $reason): strin
 
 /**
  * Probe one configured legacy cache path without exposing it outside authenticated Admin diagnostics.
- *
  * Missing directories are created when possible because the legacy fallback owns this private
  * storage subtree. The probe is deliberately warning-free and returns a stable machine-readable
  * reason instead of relying on PHP filesystem warnings.
  *
- * @param callable|null $freeSpaceProbe Optional test seam matching disk_free_space(string): int|float|false.
- * @return array<string,mixed> Structured legacy server ZIP capability state.
+ * @param string $configuredPath Configured ZIP-cache directory path to probe; an empty value reports an unconfigured cache.
+ * @param callable|null $freeSpaceProbe Optional disk-space probe accepting a path and returning int, float, or false.
+ *
+ * @return array{configured_path:string,path_configured:bool,exists:bool,is_directory:bool,readable:bool,writable:bool,artifact_root:string,artifact_root_exists:bool,artifact_root_readable:bool,artifact_root_writable:bool,state_dir:string,state_dir_exists:bool,state_dir_readable:bool,state_dir_writable:bool,coordination_dir:string,coordination_dir_exists:bool,coordination_dir_readable:bool,coordination_dir_writable:bool,free_space_known:bool,free_bytes:int|null,legacy_server_build_capable:bool,reason:string} Structured legacy server ZIP capability state.
  */
-function legacy_download_artifact_cache_status_for_path(string $configuredPath, ?callable $freeSpaceProbe = null): array
-{
+function legacy_download_artifact_cache_status_for_path(
+    string $configuredPath,
+    ?callable $freeSpaceProbe = null,
+): array {
     $configuredPath = trim($configuredPath);
-    $cachePath = $configuredPath !== '' ? rtrim($configuredPath, DIRECTORY_SEPARATOR) : '';
-    $artifactRoot = $cachePath !== '' ? $cachePath . DIRECTORY_SEPARATOR . 'legacy-artifacts' : '';
-    $stateDir = $artifactRoot !== '' ? $artifactRoot . DIRECTORY_SEPARATOR . '.state' : '';
-    $coordinationDir = $cachePath !== '' ? $cachePath . DIRECTORY_SEPARATOR . '.legacy-build-state' : '';
+    $cachePath = $configuredPath !== ''
+        ? rtrim($configuredPath, DIRECTORY_SEPARATOR)
+        : '';
+    $artifactRoot = $cachePath !== ''
+        ? $cachePath . DIRECTORY_SEPARATOR . 'legacy-artifacts'
+        : '';
+    $stateDir = $artifactRoot !== ''
+        ? $artifactRoot . DIRECTORY_SEPARATOR . '.state'
+        : '';
+    $coordinationDir = $cachePath !== ''
+        ? $cachePath . DIRECTORY_SEPARATOR . '.legacy-build-state'
+        : '';
 
     $status = [
         'configured_path' => $cachePath,
@@ -123,7 +138,11 @@ function legacy_download_artifact_cache_status_for_path(string $configuredPath, 
         $status['reason'] = 'configured_path_is_file';
         return $status;
     }
-    if (!is_dir($cachePath) && !@mkdir($cachePath, 0775, true) && !is_dir($cachePath)) {
+    if (
+        !is_dir($cachePath)
+        && !@mkdir($cachePath, 0775, true)
+        && !is_dir($cachePath)
+    ) {
         $status['reason'] = 'cache_dir_unavailable';
         return $status;
     }
@@ -141,25 +160,41 @@ function legacy_download_artifact_cache_status_for_path(string $configuredPath, 
         return $status;
     }
 
-    if (!is_dir($artifactRoot) && !@mkdir($artifactRoot, 0775, true) && !is_dir($artifactRoot)) {
+    if (
+        !is_dir($artifactRoot)
+        && !@mkdir($artifactRoot, 0775, true)
+        && !is_dir($artifactRoot)
+    ) {
         $status['reason'] = 'artifact_root_unavailable';
         return $status;
     }
     $status['artifact_root_exists'] = true;
     $status['artifact_root_readable'] = is_readable($artifactRoot);
     $status['artifact_root_writable'] = is_writable($artifactRoot);
-    if (!$status['artifact_root_readable'] || !$status['artifact_root_writable']) {
-        $status['reason'] = !$status['artifact_root_readable'] ? 'artifact_root_not_readable' : 'artifact_root_not_writable';
+    if (
+        !$status['artifact_root_readable']
+        || !$status['artifact_root_writable']
+    ) {
+        $status['reason'] = !$status['artifact_root_readable']
+            ? 'artifact_root_not_readable'
+            : 'artifact_root_not_writable';
         return $status;
     }
 
     $guardPath = $artifactRoot . DIRECTORY_SEPARATOR . '.htaccess';
-    if (!is_file($guardPath) && @file_put_contents($guardPath, "Require all denied\n") === false) {
+    if (
+        !is_file($guardPath)
+        && @file_put_contents($guardPath, "Require all denied\n") === false
+    ) {
         $status['reason'] = 'artifact_guard_unavailable';
         return $status;
     }
 
-    if (!is_dir($stateDir) && !@mkdir($stateDir, 0775, true) && !is_dir($stateDir)) {
+    if (
+        !is_dir($stateDir)
+        && !@mkdir($stateDir, 0775, true)
+        && !is_dir($stateDir)
+    ) {
         $status['reason'] = 'artifact_state_dir_unavailable';
         return $status;
     }
@@ -167,19 +202,30 @@ function legacy_download_artifact_cache_status_for_path(string $configuredPath, 
     $status['state_dir_readable'] = is_readable($stateDir);
     $status['state_dir_writable'] = is_writable($stateDir);
     if (!$status['state_dir_readable'] || !$status['state_dir_writable']) {
-        $status['reason'] = !$status['state_dir_readable'] ? 'artifact_state_not_readable' : 'artifact_state_not_writable';
+        $status['reason'] = !$status['state_dir_readable']
+            ? 'artifact_state_not_readable'
+            : 'artifact_state_not_writable';
         return $status;
     }
 
-    if (!is_dir($coordinationDir) && !@mkdir($coordinationDir, 0775, true) && !is_dir($coordinationDir)) {
+    if (
+        !is_dir($coordinationDir)
+        && !@mkdir($coordinationDir, 0775, true)
+        && !is_dir($coordinationDir)
+    ) {
         $status['reason'] = 'coordination_dir_unavailable';
         return $status;
     }
     $status['coordination_dir_exists'] = true;
     $status['coordination_dir_readable'] = is_readable($coordinationDir);
     $status['coordination_dir_writable'] = is_writable($coordinationDir);
-    if (!$status['coordination_dir_readable'] || !$status['coordination_dir_writable']) {
-        $status['reason'] = !$status['coordination_dir_readable'] ? 'coordination_not_readable' : 'coordination_not_writable';
+    if (
+        !$status['coordination_dir_readable']
+        || !$status['coordination_dir_writable']
+    ) {
+        $status['reason'] = !$status['coordination_dir_readable']
+            ? 'coordination_not_readable'
+            : 'coordination_not_writable';
         return $status;
     }
 
@@ -200,25 +246,35 @@ function legacy_download_artifact_cache_status_for_path(string $configuredPath, 
     }
 
     $status['legacy_server_build_capable'] = true;
-    $status['reason'] = !empty($status['free_space_known']) ? 'ok' : 'ok_free_space_unknown';
+    $status['reason'] = !empty($status['free_space_known'])
+        ? 'ok'
+        : 'ok_free_space_unknown';
     return $status;
 }
 
 /**
  * Return the current legacy server ZIP capability status for the configured cache path.
  *
- * @return array<string,mixed> Structured cache-health state.
+ * @param bool $refresh Whether to bypass the request-local cached capability status.
+ *
+ * @return array{configured_path:string,path_configured:bool,exists:bool,is_directory:bool,readable:bool,writable:bool,artifact_root:string,artifact_root_exists:bool,artifact_root_readable:bool,artifact_root_writable:bool,state_dir:string,state_dir_exists:bool,state_dir_readable:bool,state_dir_writable:bool,coordination_dir:string,coordination_dir_exists:bool,coordination_dir_readable:bool,coordination_dir_writable:bool,free_space_known:bool,free_bytes:int|null,legacy_server_build_capable:bool,reason:string} Structured cache-health state.
  */
 function legacy_download_artifact_cache_status(bool $refresh = false): array
 {
     static $cached = null;
     if ($refresh || !is_array($cached)) {
-        $cached = legacy_download_artifact_cache_status_for_path(legacy_download_artifact_configured_cache_path());
+        $cached = legacy_download_artifact_cache_status_for_path(
+            legacy_download_artifact_configured_cache_path(),
+        );
     }
     return $cached;
 }
 
-/** Fail before legacy manifest/build work when the server ZIP fallback cache is unavailable. */
+/**
+ * Fail before legacy manifest/build work when the server ZIP fallback cache is unavailable.
+ *
+ * @return void Returns normally when the managed cache can build artifacts; otherwise throws a stable build-unavailable exception.
+ */
 function legacy_download_artifact_require_build_capability(): void
 {
     $status = legacy_download_artifact_cache_status(true);
@@ -226,44 +282,70 @@ function legacy_download_artifact_require_build_capability(): void
         return;
     }
     throw new LegacyDownloadBuildUnavailableException(
-        legacy_download_artifact_health_exception_reason((string) ($status['reason'] ?? 'unavailable')),
-        t('download.progress.legacy_unavailable', 'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.')
+        legacy_download_artifact_health_exception_reason(
+            (string) ($status['reason'] ?? 'unavailable'),
+        ),
+        t(
+            'download.progress.legacy_unavailable',
+            'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.',
+        ),
     );
 }
 
 /**
  * Return the private managed root for immutable legacy download artifacts.
- *
  * The configured ZIP cache is already protected by cache/.htaccess on standard
  * installations. Keeping this subtree below it preserves that protection without
  * introducing a public route or predictable filesystem-backed URL.
+ *
+ * @return string Canonical private root directory for completed legacy download artifacts.
  */
 function legacy_download_artifact_cache_root(): string
 {
     $status = legacy_download_artifact_cache_status();
     if (empty($status['legacy_server_build_capable'])) {
         throw new LegacyDownloadBuildUnavailableException(
-            legacy_download_artifact_health_exception_reason((string) ($status['reason'] ?? 'unavailable')),
-            t('download.progress.legacy_unavailable', 'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.')
+            legacy_download_artifact_health_exception_reason(
+                (string) ($status['reason'] ?? 'unavailable'),
+            ),
+            t(
+                'download.progress.legacy_unavailable',
+                'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
     return (string) $status['artifact_root'];
 }
 
-/** Return the private internal-state directory used for cache reservations and capacity locking. */
+/**
+ * Return the private internal-state directory used for cache reservations and capacity locking.
+ *
+ * @return string Canonical private coordination-state directory for reservations and capacity locking.
+ */
 function legacy_download_artifact_state_dir(): string
 {
     $status = legacy_download_artifact_cache_status();
     if (empty($status['legacy_server_build_capable'])) {
         throw new LegacyDownloadBuildUnavailableException(
-            legacy_download_artifact_health_exception_reason((string) ($status['reason'] ?? 'unavailable')),
-            t('download.progress.legacy_unavailable', 'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.')
+            legacy_download_artifact_health_exception_reason(
+                (string) ($status['reason'] ?? 'unavailable'),
+            ),
+            t(
+                'download.progress.legacy_unavailable',
+                'The server ZIP fallback is unavailable. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
     return (string) $status['state_dir'];
 }
 
-/** Ensure one managed cache directory exists or fail with a stable build error. */
+/**
+ * Ensure one managed cache directory exists or fail with a stable build error.
+ *
+ * @param string $path Managed directory path to ensure exists.
+ *
+ * @return void Returns normally when the directory exists or is created; otherwise throws a stable build exception.
+ */
 function legacy_download_artifact_ensure_directory(string $path): void
 {
     if (is_dir($path)) {
@@ -272,32 +354,54 @@ function legacy_download_artifact_ensure_directory(string $path): void
     if (!@mkdir($path, 0775, true) && !is_dir($path)) {
         throw new LegacyDownloadBuildException(
             'artifact_cache_dir_unavailable',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
 }
 
-/** Normalize and validate the resource types allowed to create managed public legacy artifacts. */
+/**
+ * Normalize and validate the resource types allowed to create managed public legacy artifacts.
+ *
+ * @param string $resourceType Candidate artifact resource type; only gallery and smart_gallery are accepted.
+ *
+ * @return string Validated resource type, either gallery or smart_gallery.
+ */
 function legacy_download_artifact_resource_type(string $resourceType): string
 {
     $resourceType = trim($resourceType);
     if (!in_array($resourceType, ['gallery', 'smart_gallery'], true)) {
         throw new LegacyDownloadBuildException(
             'artifact_resource_invalid',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
     return $resourceType;
 }
 
-/** Validate one canonical SHA-256 identity field used in managed artifact paths. */
+/**
+ * Validate one canonical SHA-256 identity field used in managed artifact paths.
+ *
+ * @param string $value Candidate identity string expected to contain a 64-character SHA-256 hexadecimal digest.
+ * @param string $reason Stable failure reason code associated with an invalid digest.
+ *
+ * @return string Normalized lowercase 64-character hexadecimal identity value.
+ */
 function legacy_download_artifact_sha256(string $value, string $reason): string
 {
     $value = strtolower(trim($value));
     if (preg_match('/^[a-f0-9]{64}$/D', $value) !== 1) {
         throw new LegacyDownloadBuildException(
             $reason,
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
     return $value;
@@ -306,75 +410,157 @@ function legacy_download_artifact_sha256(string $value, string $reason): string
 /**
  * Return canonical filesystem paths for one immutable artifact identity.
  *
- * @return array{directory:string,archive:string,metadata:string,lease:string,parent:string}
+ * @param string $resourceType Artifact resource type, either gallery or smart_gallery.
+ * @param int $resourceId Positive gallery or Smart Gallery identifier.
+ * @param string $resourceRevision SHA-256 digest identifying the resource revision.
+ * @param string $buildKey SHA-256 digest identifying the normalized artifact build.
+ *
+ * @return array{directory:string,archive:string,metadata:string,lease:string,parent:string} Canonical paths for the artifact directory, ZIP, metadata, lease, and parent.
  */
-function legacy_download_artifact_paths(string $resourceType, int $resourceId, string $resourceRevision, string $buildKey): array
-{
+function legacy_download_artifact_paths(
+    string $resourceType,
+    int $resourceId,
+    string $resourceRevision,
+    string $buildKey,
+): array {
     $resourceType = legacy_download_artifact_resource_type($resourceType);
-    $resourceRevision = legacy_download_artifact_sha256($resourceRevision, 'artifact_revision_invalid');
+    $resourceRevision = legacy_download_artifact_sha256(
+        $resourceRevision,
+        'artifact_revision_invalid',
+    );
     $buildKey = legacy_download_artifact_sha256($buildKey, 'build_key_invalid');
     if ($resourceId <= 0) {
         throw new LegacyDownloadBuildException(
             'artifact_resource_invalid',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
 
-    $parent = legacy_download_artifact_cache_root()
-        . DIRECTORY_SEPARATOR . $resourceType
-        . DIRECTORY_SEPARATOR . (string) $resourceId
-        . DIRECTORY_SEPARATOR . $resourceRevision;
+    $parent =
+        legacy_download_artifact_cache_root()
+        . DIRECTORY_SEPARATOR
+        . $resourceType
+        . DIRECTORY_SEPARATOR
+        . (string) $resourceId
+        . DIRECTORY_SEPARATOR
+        . $resourceRevision;
     $directory = $parent . DIRECTORY_SEPARATOR . $buildKey;
 
     return [
         'directory' => $directory,
-        'archive' => $directory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME,
-        'metadata' => $directory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_METADATA_NAME,
-        'lease' => $directory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME,
+        'archive' =>
+            $directory
+                . DIRECTORY_SEPARATOR
+                . LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME,
+        'metadata' =>
+            $directory
+                . DIRECTORY_SEPARATOR
+                . LEGACY_DOWNLOAD_ARTIFACT_METADATA_NAME,
+        'lease' =>
+            $directory
+                . DIRECTORY_SEPARATOR
+                . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME,
         'parent' => $parent,
     ];
 }
 
-/** Return the configured retention age for completed physical-gallery legacy artifacts. */
+/**
+ * Return the configured retention age for completed physical-gallery legacy artifacts.
+ *
+ * @return int Minimum-one-hour retention age for physical-gallery artifacts, in seconds.
+ */
 function legacy_download_artifact_physical_retention_seconds(): int
 {
-    return max(3600, (int) cms_runtime_limit('download.legacy_artifact_physical_retention_seconds'));
+    return max(
+        3600,
+        (int) cms_runtime_limit(
+            'download.legacy_artifact_physical_retention_seconds',
+        ),
+    );
 }
 
-/** Return the configured retention age for result-fingerprinted Smart Gallery artifacts. */
+/**
+ * Return the configured retention age for result-fingerprinted Smart Gallery artifacts.
+ *
+ * @return int Minimum-one-hour retention age for Smart Gallery artifacts, in seconds.
+ */
 function legacy_download_artifact_smart_retention_seconds(): int
 {
-    return max(3600, (int) cms_runtime_limit('download.legacy_artifact_smart_retention_seconds'));
+    return max(
+        3600,
+        (int) cms_runtime_limit(
+            'download.legacy_artifact_smart_retention_seconds',
+        ),
+    );
 }
 
-/** Return the retention age for abandoned unpublished build directories. */
+/**
+ * Return the retention age for abandoned unpublished build directories.
+ *
+ * @return int Minimum-one-hour retention age for abandoned partial builds, in seconds.
+ */
 function legacy_download_artifact_partial_retention_seconds(): int
 {
-    return max(3600, (int) cms_runtime_limit('download.legacy_artifact_partial_retention_seconds'));
+    return max(
+        3600,
+        (int) cms_runtime_limit(
+            'download.legacy_artifact_partial_retention_seconds',
+        ),
+    );
 }
 
-/** Return the safe age after which inactive coordination files may be removed. */
+/**
+ * Return the safe age after which inactive coordination files may be removed.
+ *
+ * @return int Minimum-one-hour inactive-lock retention age, in seconds.
+ */
 function legacy_download_artifact_lock_retention_seconds(): int
 {
-    return max(3600, (int) cms_runtime_limit('download.legacy_artifact_lock_retention_seconds'));
+    return max(
+        3600,
+        (int) cms_runtime_limit(
+            'download.legacy_artifact_lock_retention_seconds',
+        ),
+    );
 }
 
-/** Return the maximum aggregate bytes allowed for managed completed artifacts and reservations. */
+/**
+ * Return the maximum aggregate bytes allowed for managed completed artifacts and reservations.
+ *
+ * @return int Maximum managed-artifact and active-reservation budget in bytes, with a 64 MiB minimum.
+ */
 function legacy_download_artifact_cache_max_bytes(): int
 {
-    return max(64 * 1024 * 1024, (int) cms_runtime_limit('download.legacy_artifact_cache_max_bytes'));
+    return max(
+        64 * 1024 * 1024,
+        (int) cms_runtime_limit('download.legacy_artifact_cache_max_bytes'),
+    );
 }
 
-/** Return the configured filesystem free-space floor preserved before a new legacy build starts. */
+/**
+ * Return the configured filesystem free-space floor preserved before a new legacy build starts.
+ *
+ * @return int Filesystem free-space margin in bytes, with a 16 MiB minimum.
+ */
 function legacy_download_artifact_free_space_margin_bytes(): int
 {
-    return max(16 * 1024 * 1024, (int) cms_runtime_limit('download.legacy_artifact_free_space_margin_bytes'));
+    return max(
+        16 * 1024 * 1024,
+        (int) cms_runtime_limit(
+            'download.legacy_artifact_free_space_margin_bytes',
+        ),
+    );
 }
 
 /**
  * Return bounded metadata for a completed managed artifact, or null if any invariant fails.
  *
- * @return array<string,mixed>|null
+ * @param array{archive:string,metadata:string} $paths Canonical archive and metadata file paths; callers may provide additional path-map entries.
+ *
+ * @return array{format_version:int,build_key:string,resource_type:string,resource_id:int,resource_revision:string,created_at:int,archive_size:int,expected_file_count:int}|null Validated bounded metadata for a completed archive, or null when an invariant fails.
  */
 function legacy_download_artifact_metadata_read(array $paths): ?array
 {
@@ -403,24 +589,55 @@ function legacy_download_artifact_metadata_read(array $paths): ?array
         return null;
     }
 
-    if ((int) ($metadata['format_version'] ?? 0) !== LEGACY_DOWNLOAD_ARTIFACT_CACHE_FORMAT_VERSION
-        || preg_match('/^[a-f0-9]{64}$/D', (string) ($metadata['build_key'] ?? '')) !== 1
-        || !in_array((string) ($metadata['resource_type'] ?? ''), ['gallery', 'smart_gallery'], true)
+    if (
+        (int) ($metadata['format_version'] ?? 0)
+            !== LEGACY_DOWNLOAD_ARTIFACT_CACHE_FORMAT_VERSION
+        || preg_match(
+            '/^[a-f0-9]{64}$/D',
+            (string) ($metadata['build_key'] ?? ''),
+        ) !== 1
+        || !in_array(
+            (string) ($metadata['resource_type'] ?? ''),
+            ['gallery', 'smart_gallery'],
+            true,
+        )
         || (int) ($metadata['resource_id'] ?? 0) <= 0
-        || preg_match('/^[a-f0-9]{64}$/D', (string) ($metadata['resource_revision'] ?? '')) !== 1
+        || preg_match(
+            '/^[a-f0-9]{64}$/D',
+            (string) ($metadata['resource_revision'] ?? ''),
+        ) !== 1
         || (int) ($metadata['created_at'] ?? 0) <= 0
         || (int) ($metadata['archive_size'] ?? 0) !== (int) $archiveSize
-        || (int) ($metadata['expected_file_count'] ?? -1) < 0) {
+        || (int) ($metadata['expected_file_count'] ?? -1) < 0
+    ) {
         return null;
     }
 
     return $metadata;
 }
 
-/** Return true only when the exact canonical identity has a fully published reusable artifact. */
-function legacy_download_artifact_is_reusable(string $resourceType, int $resourceId, string $resourceRevision, string $buildKey): bool
-{
-    $paths = legacy_download_artifact_paths($resourceType, $resourceId, $resourceRevision, $buildKey);
+/**
+ * Return true only when the exact canonical identity has a fully published reusable artifact.
+ *
+ * @param string $resourceType Artifact resource type, either gallery or smart_gallery.
+ * @param int $resourceId Positive gallery or Smart Gallery identifier.
+ * @param string $resourceRevision SHA-256 digest identifying the resource revision.
+ * @param string $buildKey SHA-256 digest identifying the normalized artifact build.
+ *
+ * @return bool Whether the exact artifact identity has valid metadata and remains inside its retention window.
+ */
+function legacy_download_artifact_is_reusable(
+    string $resourceType,
+    int $resourceId,
+    string $resourceRevision,
+    string $buildKey,
+): bool {
+    $paths = legacy_download_artifact_paths(
+        $resourceType,
+        $resourceId,
+        $resourceRevision,
+        $buildKey,
+    );
     $metadata = legacy_download_artifact_metadata_read($paths);
     if ($metadata === null) {
         return false;
@@ -429,23 +646,51 @@ function legacy_download_artifact_is_reusable(string $resourceType, int $resourc
     $retention = (string) $metadata['resource_type'] === 'smart_gallery'
         ? legacy_download_artifact_smart_retention_seconds()
         : legacy_download_artifact_physical_retention_seconds();
-    if ((int) $metadata['created_at'] < time() - $retention) {
+    if ((int) $metadata['created_at'] < (time() - $retention)) {
         return false;
     }
 
-    return hash_equals($buildKey, (string) $metadata['build_key'])
-        && hash_equals($resourceRevision, (string) $metadata['resource_revision'])
-        && $resourceType === (string) $metadata['resource_type']
-        && $resourceId === (int) $metadata['resource_id'];
+    return (
+        hash_equals($buildKey, (string) $metadata['build_key'])
+            && hash_equals(
+                $resourceRevision,
+                (string) $metadata['resource_revision'],
+            )
+            && $resourceType === (string) $metadata['resource_type']
+            && $resourceId === (int) $metadata['resource_id']
+    );
 }
 
-/** Return the completed archive path for an exact reusable identity, otherwise null. */
-function legacy_download_artifact_find(string $resourceType, int $resourceId, string $resourceRevision, string $buildKey): ?string
-{
-    if (!legacy_download_artifact_is_reusable($resourceType, $resourceId, $resourceRevision, $buildKey)) {
+/**
+ * Return the completed archive path for an exact reusable identity, otherwise null.
+ *
+ * @param string $resourceType Artifact resource type, either gallery or smart_gallery.
+ * @param int $resourceId Positive gallery or Smart Gallery identifier.
+ * @param string $resourceRevision SHA-256 digest identifying the resource revision.
+ * @param string $buildKey SHA-256 digest identifying the normalized artifact build.
+ *
+ * @return ?string Completed archive path for the exact reusable identity, or null when no reusable artifact exists.
+ */
+function legacy_download_artifact_find(
+    string $resourceType,
+    int $resourceId,
+    string $resourceRevision,
+    string $buildKey,
+): ?string {
+    if (!legacy_download_artifact_is_reusable(
+        $resourceType,
+        $resourceId,
+        $resourceRevision,
+        $buildKey,
+    )) {
         return null;
     }
-    return legacy_download_artifact_paths($resourceType, $resourceId, $resourceRevision, $buildKey)['archive'];
+    return legacy_download_artifact_paths(
+        $resourceType,
+        $resourceId,
+        $resourceRevision,
+        $buildKey,
+    )['archive'];
 }
 
 /** Return the number of ZIP entries expected from the normalized build-entry list. */
@@ -472,21 +717,33 @@ function legacy_download_artifact_expected_entry_count(array $entries): int
     return $count;
 }
 
-/** Verify the just-created ZIP has the exact expected entry count before publication. */
-function legacy_download_artifact_verify_archive(string $archivePath, int $expectedEntryCount): int
-{
+/**
+ * Verify the just-created ZIP has the exact expected entry count before publication.
+ *
+ * @param string $archivePath Filesystem path of the ZIP archive to verify.
+ * @param int $expectedEntryCount Number of entries expected in the completed ZIP archive.
+ *
+ * @return int Verified archive size in bytes after the ZIP entry count matches.
+ */
+function legacy_download_artifact_verify_archive(
+    string $archivePath,
+    int $expectedEntryCount,
+): int {
     $archiveSize = is_file($archivePath) ? filesize($archivePath) : false;
     if ($archiveSize === false || $archiveSize <= 0) {
         throw new LegacyDownloadBuildException(
             'artifact_archive_invalid',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
 
     if (!class_exists(ZipArchive::class)) {
         throw new LegacyDownloadBuildException(
             'zip_unavailable',
-            t('download.error.zip_unavailable', 'ZipArchive is not available.')
+            t('download.error.zip_unavailable', 'ZipArchive is not available.'),
         );
     }
 
@@ -494,14 +751,20 @@ function legacy_download_artifact_verify_archive(string $archivePath, int $expec
     if ($zip->open($archivePath, ZipArchive::RDONLY) !== true) {
         throw new LegacyDownloadBuildException(
             'artifact_archive_invalid',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
     try {
         if ($zip->numFiles !== $expectedEntryCount) {
             throw new LegacyDownloadBuildException(
                 'artifact_entry_count_mismatch',
-                t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+                t(
+                    'download.progress.legacy_failed',
+                    'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
     } finally {
@@ -511,43 +774,69 @@ function legacy_download_artifact_verify_archive(string $archivePath, int $expec
     return (int) $archiveSize;
 }
 
-/** Return a conservative reservation size for a store-only ZIP before it is created. */
-function legacy_download_artifact_reservation_bytes(int $sourceBytes, int $fileCount): int
-{
+/**
+ * Return a conservative reservation size for a store-only ZIP before it is created.
+ *
+ * @param int $sourceBytes Total source-file bytes used to estimate required capacity.
+ * @param int $fileCount Number of source files used to estimate ZIP overhead.
+ *
+ * @return int Conservative bounded byte reservation for source files and ZIP overhead.
+ */
+function legacy_download_artifact_reservation_bytes(
+    int $sourceBytes,
+    int $fileCount,
+): int {
     $sourceBytes = max(0, $sourceBytes);
     $fileCount = max(0, $fileCount);
-    $overhead = 1024 * 1024 + min(64 * 1024 * 1024, $fileCount * 1024);
-    if ($sourceBytes > PHP_INT_MAX - $overhead) {
+    $overhead = (1024 * 1024) + min(64 * 1024 * 1024, $fileCount * 1024);
+    if ($sourceBytes > (PHP_INT_MAX - $overhead)) {
         return PHP_INT_MAX;
     }
     return max(1, $sourceBytes + $overhead);
 }
 
-/** Return a saturating integer sum for cache-byte accounting. */
+/**
+ * Return a saturating integer sum for cache-byte accounting.
+ *
+ * @param int $left Left non-negative byte-count operand.
+ * @param int $right Right non-negative byte-count operand.
+ *
+ * @return int Non-negative sum capped at PHP_INT_MAX.
+ */
 function legacy_download_artifact_saturating_add(int $left, int $right): int
 {
     $left = max(0, $left);
     $right = max(0, $right);
-    if ($right > PHP_INT_MAX - $left) {
+    if ($right > (PHP_INT_MAX - $left)) {
         return PHP_INT_MAX;
     }
     return $left + $right;
 }
 
-/** Return aggregate completed archive bytes under the managed artifact root. */
+/**
+ * Return aggregate completed archive bytes under the managed artifact root.
+ *
+ * @return int Aggregate bytes of managed completed archive files, capped at PHP_INT_MAX.
+ */
 function legacy_download_artifact_completed_bytes(): int
 {
     $root = legacy_download_artifact_cache_root();
     $bytes = 0;
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS)
+        new RecursiveDirectoryIterator(
+            $root,
+            RecursiveDirectoryIterator::SKIP_DOTS,
+        ),
     );
     foreach ($iterator as $entry) {
-        if (!$entry->isFile() || $entry->getFilename() !== LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME) {
+        if (
+            !$entry->isFile()
+            || $entry->getFilename() !== LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME
+        ) {
             continue;
         }
         $size = $entry->getSize();
-        if ($size > PHP_INT_MAX - $bytes) {
+        if ($size > (PHP_INT_MAX - $bytes)) {
             return PHP_INT_MAX;
         }
         $bytes += $size;
@@ -555,23 +844,41 @@ function legacy_download_artifact_completed_bytes(): int
     return $bytes;
 }
 
-/** Return aggregate active reservation bytes recorded by build owners. */
+/**
+ * Return aggregate active reservation bytes recorded by build owners.
+ *
+ * @param ?string $excludeBuildKey Optional build identity excluded from the reservation total.
+ *
+ * @return int Total active reservation bytes excluding the optional build key.
+ */
 function legacy_download_artifact_reserved_bytes(?string $excludeBuildKey = null): int
 {
     $stateDir = legacy_download_artifact_state_dir();
     $bytes = 0;
-    foreach (glob($stateDir . DIRECTORY_SEPARATOR . 'reservation-*.json') ?: [] as $path) {
+    foreach (glob($stateDir . DIRECTORY_SEPARATOR . 'reservation-*.json')
+        ?: [] as $path) {
         $basename = basename($path);
-        if (preg_match('/^reservation-([a-f0-9]{64})\.json$/D', $basename, $match) !== 1) {
+        if (
+            preg_match(
+                '/^reservation-([a-f0-9]{64})\.json$/D',
+                $basename,
+                $match,
+            ) !== 1
+        ) {
             continue;
         }
-        if ($excludeBuildKey !== null && hash_equals($excludeBuildKey, $match[1])) {
+        if (
+            $excludeBuildKey !== null
+            && hash_equals($excludeBuildKey, $match[1])
+        ) {
             continue;
         }
         $raw = @file_get_contents($path);
         $data = is_string($raw) ? json_decode($raw, true) : null;
-        $reserved = is_array($data) ? max(0, (int) ($data['reserved_bytes'] ?? 0)) : 0;
-        if ($reserved > PHP_INT_MAX - $bytes) {
+        $reserved = is_array($data)
+            ? max(0, (int) ($data['reserved_bytes'] ?? 0))
+            : 0;
+        if ($reserved > (PHP_INT_MAX - $bytes)) {
             return PHP_INT_MAX;
         }
         $bytes += $reserved;
@@ -579,47 +886,90 @@ function legacy_download_artifact_reserved_bytes(?string $excludeBuildKey = null
     return $bytes;
 }
 
-/** Record one distinct operational capacity-refusal event without exposing cache paths. */
-function legacy_download_artifact_log_capacity_refusal(string $resourceType, int $resourceId, string $reason, int $reservedBytes, int $managedBytes, int $budgetBytes, ?int $freeBytes): void
-{
+/**
+ * Record one distinct operational capacity-refusal event without exposing cache paths.
+ *
+ * @param string $resourceType Artifact resource type, either gallery or smart_gallery.
+ * @param int $resourceId Positive gallery or Smart Gallery identifier.
+ * @param string $reason Stable capacity-refusal reason code.
+ * @param int $reservedBytes Bytes requested by the new build reservation.
+ * @param int $managedBytes Current completed and reserved managed-cache bytes.
+ * @param int $budgetBytes Configured maximum managed-cache bytes.
+ * @param ?int $freeBytes Known filesystem free bytes, or null when the probe is unavailable.
+ *
+ * @return void Records one capacity-refusal event without filesystem paths.
+ */
+function legacy_download_artifact_log_capacity_refusal(
+    string $resourceType,
+    int $resourceId,
+    string $reason,
+    int $reservedBytes,
+    int $managedBytes,
+    int $budgetBytes,
+    ?int $freeBytes,
+): void {
     if (!function_exists(__NAMESPACE__ . '\\admin_log_event')) {
         return;
     }
 
-    admin_log_event('warning', 'download.legacy_cache_capacity_refused', 'Legacy download artifact build was refused by cache capacity policy.', [
-        'resource_type' => $resourceType,
-        'resource_id' => $resourceId,
-        'reason' => $reason,
-        'requested_reservation_bytes' => $reservedBytes,
-        'managed_cache_bytes' => $managedBytes,
-        'cache_budget_bytes' => $budgetBytes,
-        'filesystem_free_bytes' => $freeBytes,
-        'free_space_margin_bytes' => legacy_download_artifact_free_space_margin_bytes(),
-    ], [
-        'category' => 'security',
-        'severity' => 'warning',
-        'subject_type' => $resourceType,
-        'subject_id' => $resourceId,
-    ]);
+    admin_log_event(
+        'warning',
+        'download.legacy_cache_capacity_refused',
+        'Legacy download artifact build was refused by cache capacity policy.',
+        [
+            'resource_type' => $resourceType,
+            'resource_id' => $resourceId,
+            'reason' => $reason,
+            'requested_reservation_bytes' => $reservedBytes,
+            'managed_cache_bytes' => $managedBytes,
+            'cache_budget_bytes' => $budgetBytes,
+            'filesystem_free_bytes' => $freeBytes,
+            'free_space_margin_bytes' =>
+                legacy_download_artifact_free_space_margin_bytes(),
+        ],
+        [
+            'category' => 'security',
+            'severity' => 'warning',
+            'subject_type' => $resourceType,
+            'subject_id' => $resourceId,
+        ],
+    );
 }
 
 /**
  * Reserve bounded managed-cache capacity before an expensive artifact build starts.
  *
+ * @param string $resourceType Artifact resource type, either gallery or smart_gallery.
+ * @param int $resourceId Positive gallery or Smart Gallery identifier.
+ * @param string $buildKey SHA-256 digest identifying the normalized artifact build.
+ * @param int $sourceBytes Total source-file bytes used to estimate required capacity.
+ * @param int $fileCount Number of source files used to estimate ZIP overhead.
+ *
  * @return string Absolute reservation-file path owned by this build.
  */
-function legacy_download_artifact_capacity_reserve(string $resourceType, int $resourceId, string $buildKey, int $sourceBytes, int $fileCount): string
-{
+function legacy_download_artifact_capacity_reserve(
+    string $resourceType,
+    int $resourceId,
+    string $buildKey,
+    int $sourceBytes,
+    int $fileCount,
+): string {
     $resourceType = legacy_download_artifact_resource_type($resourceType);
     $buildKey = legacy_download_artifact_sha256($buildKey, 'build_key_invalid');
-    $reservedBytes = legacy_download_artifact_reservation_bytes($sourceBytes, $fileCount);
+    $reservedBytes = legacy_download_artifact_reservation_bytes(
+        $sourceBytes,
+        $fileCount,
+    );
     $stateDir = legacy_download_artifact_state_dir();
     $capacityLockPath = $stateDir . DIRECTORY_SEPARATOR . 'capacity.lock';
     $capacityHandle = @fopen($capacityLockPath, 'c');
     if ($capacityHandle === false) {
         throw new LegacyDownloadBuildException(
             'artifact_capacity_lock_failed',
-            t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+            t(
+                'download.progress.legacy_failed',
+                'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+            ),
         );
     }
 
@@ -627,33 +977,77 @@ function legacy_download_artifact_capacity_reserve(string $resourceType, int $re
         if (!@flock($capacityHandle, LOCK_EX | LOCK_NB)) {
             throw new LegacyDownloadBuildBusyException(
                 'artifact_capacity_check_busy',
-                t('download.progress.legacy_busy', 'Download preparation is temporarily busy. Please retry in a few seconds.'),
-                legacy_download_busy_retry_after_seconds()
+                t(
+                    'download.progress.legacy_busy',
+                    'Download preparation is temporarily busy. Please retry in a few seconds.',
+                ),
+                legacy_download_busy_retry_after_seconds(),
             );
         }
 
-        $managedBytes = legacy_download_artifact_saturating_add(legacy_download_artifact_completed_bytes(), legacy_download_artifact_reserved_bytes($buildKey));
+        $managedBytes = legacy_download_artifact_saturating_add(
+            legacy_download_artifact_completed_bytes(),
+            legacy_download_artifact_reserved_bytes($buildKey),
+        );
         $budgetBytes = legacy_download_artifact_cache_max_bytes();
-        if ($reservedBytes > $budgetBytes || $managedBytes > $budgetBytes - $reservedBytes) {
-            legacy_download_artifact_log_capacity_refusal($resourceType, $resourceId, 'cache_budget_exceeded', $reservedBytes, $managedBytes, $budgetBytes, null);
+        if (
+            $reservedBytes > $budgetBytes
+            || $managedBytes > ($budgetBytes - $reservedBytes)
+        ) {
+            legacy_download_artifact_log_capacity_refusal(
+                $resourceType,
+                $resourceId,
+                'cache_budget_exceeded',
+                $reservedBytes,
+                $managedBytes,
+                $budgetBytes,
+                null,
+            );
             throw new LegacyDownloadBuildCapacityException(
                 'artifact_cache_budget_exceeded',
-                t('download.progress.legacy_capacity', 'The server download cache is temporarily full. Please retry later or use the browser download method.')
+                t(
+                    'download.progress.legacy_capacity',
+                    'The server download cache is temporarily full. Please retry later or use the browser download method.',
+                ),
             );
         }
 
         $freeRaw = @disk_free_space(legacy_download_artifact_cache_root());
-        $freeBytes = is_float($freeRaw) || is_int($freeRaw) ? max(0, (int) $freeRaw) : null;
+        $freeBytes = is_float($freeRaw) || is_int($freeRaw)
+            ? max(0, (int) $freeRaw)
+            : null;
         $marginBytes = legacy_download_artifact_free_space_margin_bytes();
-        if ($freeBytes !== null && ($reservedBytes > $freeBytes || $marginBytes > $freeBytes - $reservedBytes)) {
-            legacy_download_artifact_log_capacity_refusal($resourceType, $resourceId, 'free_space_margin', $reservedBytes, $managedBytes, $budgetBytes, $freeBytes);
+        if (
+            $freeBytes !== null
+            && (
+                $reservedBytes > $freeBytes
+                || $marginBytes > ($freeBytes - $reservedBytes)
+            )
+        ) {
+            legacy_download_artifact_log_capacity_refusal(
+                $resourceType,
+                $resourceId,
+                'free_space_margin',
+                $reservedBytes,
+                $managedBytes,
+                $budgetBytes,
+                $freeBytes,
+            );
             throw new LegacyDownloadBuildCapacityException(
                 'artifact_free_space_margin',
-                t('download.progress.legacy_capacity', 'The server download cache is temporarily full. Please retry later or use the browser download method.')
+                t(
+                    'download.progress.legacy_capacity',
+                    'The server download cache is temporarily full. Please retry later or use the browser download method.',
+                ),
             );
         }
 
-        $reservationPath = $stateDir . DIRECTORY_SEPARATOR . 'reservation-' . $buildKey . '.json';
+        $reservationPath =
+            $stateDir
+            . DIRECTORY_SEPARATOR
+            . 'reservation-'
+            . $buildKey
+            . '.json';
         $payload = json_encode([
             'build_key' => $buildKey,
             'reserved_bytes' => $reservedBytes,
@@ -662,7 +1056,10 @@ function legacy_download_artifact_capacity_reserve(string $resourceType, int $re
         if (@file_put_contents($reservationPath, $payload, LOCK_EX) === false) {
             throw new LegacyDownloadBuildException(
                 'artifact_reservation_write_failed',
-                t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+                t(
+                    'download.progress.legacy_failed',
+                    'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
         return $reservationPath;
@@ -675,7 +1072,11 @@ function legacy_download_artifact_capacity_reserve(string $resourceType, int $re
 /** Release one owned cache-capacity reservation. */
 function legacy_download_artifact_capacity_release(?string $reservationPath): void
 {
-    if (!is_string($reservationPath) || $reservationPath === '' || !is_file($reservationPath)) {
+    if (
+        !is_string($reservationPath)
+        || $reservationPath === ''
+        || !is_file($reservationPath)
+    ) {
         return;
     }
     if (path_inside(legacy_download_artifact_state_dir(), $reservationPath)) {
@@ -683,7 +1084,13 @@ function legacy_download_artifact_capacity_release(?string $reservationPath): vo
     }
 }
 
-/** Remove a managed directory tree only after confirming it resolves below the artifact root. */
+/**
+ * Remove a managed directory tree only after confirming it resolves below the artifact root.
+ *
+ * @param string $directory Managed artifact directory to remove after confirming it is below the private artifact root.
+ *
+ * @return bool Whether the managed directory tree was removed successfully.
+ */
 function legacy_download_artifact_remove_tree(string $directory): bool
 {
     $root = legacy_download_artifact_cache_root();
@@ -692,8 +1099,11 @@ function legacy_download_artifact_remove_tree(string $directory): bool
     }
 
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $directory,
+            RecursiveDirectoryIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $entry) {
         $path = $entry->getPathname();
@@ -706,7 +1116,13 @@ function legacy_download_artifact_remove_tree(string $directory): bool
     return @rmdir($directory);
 }
 
-/** Acquire a non-blocking exclusive artifact lease so an invalid old destination can be replaced safely. */
+/**
+ * Acquire a non-blocking exclusive artifact lease so an invalid old destination can be replaced safely.
+ *
+ * @param array{directory:string,archive:string,metadata:string,lease:string,parent:string} $paths Canonical artifact path map returned by legacy_download_artifact_paths().
+ *
+ * @return void Returns normally when no invalid destination exists or it is removed; otherwise throws a busy/build exception.
+ */
 function legacy_download_artifact_remove_invalid_destination(array $paths): void
 {
     $directory = (string) ($paths['directory'] ?? '');
@@ -722,17 +1138,29 @@ function legacy_download_artifact_remove_invalid_destination(array $paths): void
         }
         throw new LegacyDownloadBuildBusyException(
             'artifact_in_use',
-            t('download.progress.legacy_busy', 'Download preparation is temporarily busy. Please retry in a few seconds.'),
-            legacy_download_busy_retry_after_seconds()
+            t(
+                'download.progress.legacy_busy',
+                'Download preparation is temporarily busy. Please retry in a few seconds.',
+            ),
+            legacy_download_busy_retry_after_seconds(),
         );
     }
 
-    $tombstone = dirname($directory) . DIRECTORY_SEPARATOR . '.stale-' . basename($directory) . '-' . bin2hex(random_bytes(6));
+    $tombstone =
+        dirname($directory)
+        . DIRECTORY_SEPARATOR
+        . '.stale-'
+        . basename($directory)
+        . '-'
+        . bin2hex(random_bytes(6));
     try {
         if (!@rename($directory, $tombstone)) {
             throw new LegacyDownloadBuildException(
                 'artifact_invalid_remove_failed',
-                t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+                t(
+                    'download.progress.legacy_failed',
+                    'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
     } finally {
@@ -747,9 +1175,18 @@ function legacy_download_artifact_remove_invalid_destination(array $paths): void
 
 /**
  * Build and atomically publish one immutable legacy artifact plus metadata.
- *
  * Publication renames a complete sibling directory only after create_zip() has
  * closed the archive, archive sanity succeeds, and bounded metadata is durable.
+ *
+ * @param string $resourceType Artifact resource type, either gallery or smart_gallery.
+ * @param int $resourceId Positive gallery or Smart Gallery identifier.
+ * @param string $resourceRevision SHA-256 digest identifying the resource revision.
+ * @param string $buildKey SHA-256 digest identifying the normalized artifact build.
+ * @param list<array{zip_path:string,type?:'file'|'directory',absolute?:string}> $entries Normalized ZIP entries; file entries provide an absolute source path, while directory entries may omit it.
+ * @param int $sourceBytes Total source-file bytes used to estimate required cache capacity.
+ * @param int $expectedFileCount Number of source files expected in the archive.
+ *
+ * @return string Published immutable ZIP archive path for the exact resource/build identity.
  */
 function legacy_download_artifact_build(
     string $resourceType,
@@ -758,10 +1195,20 @@ function legacy_download_artifact_build(
     string $buildKey,
     array $entries,
     int $sourceBytes,
-    int $expectedFileCount
+    int $expectedFileCount,
 ): string {
-    $paths = legacy_download_artifact_paths($resourceType, $resourceId, $resourceRevision, $buildKey);
-    $existing = legacy_download_artifact_find($resourceType, $resourceId, $resourceRevision, $buildKey);
+    $paths = legacy_download_artifact_paths(
+        $resourceType,
+        $resourceId,
+        $resourceRevision,
+        $buildKey,
+    );
+    $existing = legacy_download_artifact_find(
+        $resourceType,
+        $resourceId,
+        $resourceRevision,
+        $buildKey,
+    );
     if ($existing !== null) {
         return $existing;
     }
@@ -772,22 +1219,50 @@ function legacy_download_artifact_build(
     }
 
     $reservationPath = null;
-    $partialDirectory = $paths['parent'] . DIRECTORY_SEPARATOR . '.' . $buildKey . '.partial-' . bin2hex(random_bytes(8));
+    $partialDirectory =
+        $paths['parent']
+        . DIRECTORY_SEPARATOR
+        . '.'
+        . $buildKey
+        . '.partial-'
+        . bin2hex(random_bytes(8));
     legacy_download_artifact_ensure_directory($partialDirectory);
-    $partialArchive = $partialDirectory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME;
-    $partialMetadata = $partialDirectory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_METADATA_NAME;
-    $partialLease = $partialDirectory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME;
+    $partialArchive =
+        $partialDirectory
+        . DIRECTORY_SEPARATOR
+        . LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME;
+    $partialMetadata =
+        $partialDirectory
+        . DIRECTORY_SEPARATOR
+        . LEGACY_DOWNLOAD_ARTIFACT_METADATA_NAME;
+    $partialLease =
+        $partialDirectory
+        . DIRECTORY_SEPARATOR
+        . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME;
 
     try {
-        $reservationPath = legacy_download_artifact_capacity_reserve($resourceType, $resourceId, $buildKey, $sourceBytes, $expectedFileCount);
-        $expectedEntryCount = legacy_download_artifact_expected_entry_count($entries);
+        $reservationPath = legacy_download_artifact_capacity_reserve(
+            $resourceType,
+            $resourceId,
+            $buildKey,
+            $sourceBytes,
+            $expectedFileCount,
+        );
+        $expectedEntryCount =
+            legacy_download_artifact_expected_entry_count($entries);
         create_zip($partialArchive, $entries);
-        $archiveSize = legacy_download_artifact_verify_archive($partialArchive, $expectedEntryCount);
+        $archiveSize = legacy_download_artifact_verify_archive(
+            $partialArchive,
+            $expectedEntryCount,
+        );
 
         if (@file_put_contents($partialLease, '') === false) {
             throw new LegacyDownloadBuildException(
                 'artifact_lease_create_failed',
-                t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+                t(
+                    'download.progress.legacy_failed',
+                    'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
 
@@ -801,13 +1276,25 @@ function legacy_download_artifact_build(
             'archive_size' => $archiveSize,
             'expected_file_count' => max(0, $expectedFileCount),
         ];
-        $metadataJson = json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+        $metadataJson =
+            json_encode(
+                $metadata,
+                JSON_PRETTY_PRINT
+                    | JSON_UNESCAPED_SLASHES
+                    | JSON_THROW_ON_ERROR,
+            ) . "\n";
         $metadataTemp = $partialMetadata . '.tmp';
-        if (@file_put_contents($metadataTemp, $metadataJson, LOCK_EX) === false || !@rename($metadataTemp, $partialMetadata)) {
+        if (
+            @file_put_contents($metadataTemp, $metadataJson, LOCK_EX) === false
+            || !@rename($metadataTemp, $partialMetadata)
+        ) {
             @unlink($metadataTemp);
             throw new LegacyDownloadBuildException(
                 'artifact_metadata_write_failed',
-                t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+                t(
+                    'download.progress.legacy_failed',
+                    'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
 
@@ -818,27 +1305,46 @@ function legacy_download_artifact_build(
         if (legacy_download_artifact_metadata_read($partialPaths) === null) {
             throw new LegacyDownloadBuildException(
                 'artifact_metadata_invalid',
-                t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+                t(
+                    'download.progress.legacy_failed',
+                    'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
 
         if (!@rename($partialDirectory, $paths['directory'])) {
-            $winner = legacy_download_artifact_find($resourceType, $resourceId, $resourceRevision, $buildKey);
+            $winner = legacy_download_artifact_find(
+                $resourceType,
+                $resourceId,
+                $resourceRevision,
+                $buildKey,
+            );
             if ($winner !== null) {
                 return $winner;
             }
             throw new LegacyDownloadBuildException(
                 'artifact_publish_failed',
-                t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+                t(
+                    'download.progress.legacy_failed',
+                    'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
         $partialDirectory = '';
 
-        $published = legacy_download_artifact_find($resourceType, $resourceId, $resourceRevision, $buildKey);
+        $published = legacy_download_artifact_find(
+            $resourceType,
+            $resourceId,
+            $resourceRevision,
+            $buildKey,
+        );
         if ($published === null) {
             throw new LegacyDownloadBuildException(
                 'artifact_publish_validation_failed',
-                t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.')
+                t(
+                    'download.progress.legacy_failed',
+                    'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+                ),
             );
         }
         return $published;
@@ -852,17 +1358,25 @@ function legacy_download_artifact_build(
 
 /**
  * Prepare one managed artifact stream while holding a shared lease against maintenance deletion.
- *
  * Authorization has already happened in the controller before this function is
  * called. The lease controls only cache lifecycle, never access authorization.
  * The returned lease handle must be released with legacy_download_artifact_stream_release().
  *
- * @return array{status:int,path:string,filename:string,mime:string,length:int,cache_control:string,retry_after:int,message:string,lease_handle:mixed}
+ * @param string $filePath Canonical managed ZIP archive path to stream.
+ * @param string $downloadName Filename to present in the download response.
+ *
+ * @return array{status:200|404|503,path:string,filename:string,mime:string,length:int,cache_control:string,retry_after:int,message:string,lease_handle:resource|null} Stream response metadata; a status-200 result carries the shared lease resource to release after streaming.
  */
-function legacy_download_artifact_stream_descriptor(string $filePath, string $downloadName): array
-{
+function legacy_download_artifact_stream_descriptor(
+    string $filePath,
+    string $downloadName,
+): array {
     $root = legacy_download_artifact_cache_root();
-    if (!is_file($filePath) || basename($filePath) !== LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME || !path_inside($root, $filePath)) {
+    if (
+        !is_file($filePath)
+        || basename($filePath) !== LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME
+        || !path_inside($root, $filePath)
+    ) {
         return [
             'status' => 404,
             'path' => '',
@@ -876,7 +1390,10 @@ function legacy_download_artifact_stream_descriptor(string $filePath, string $do
         ];
     }
 
-    $leasePath = dirname($filePath) . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME;
+    $leasePath =
+        dirname($filePath)
+        . DIRECTORY_SEPARATOR
+        . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME;
     $leaseHandle = @fopen($leasePath, 'c');
     if ($leaseHandle === false || !@flock($leaseHandle, LOCK_SH)) {
         if (is_resource($leaseHandle)) {
@@ -890,7 +1407,10 @@ function legacy_download_artifact_stream_descriptor(string $filePath, string $do
             'length' => 0,
             'cache_control' => 'private, no-store',
             'retry_after' => legacy_download_busy_retry_after_seconds(),
-            'message' => t('download.progress.legacy_busy', 'Download preparation is temporarily busy. Please retry in a few seconds.'),
+            'message' => t(
+                'download.progress.legacy_busy',
+                'Download preparation is temporarily busy. Please retry in a few seconds.',
+            ),
             'lease_handle' => null,
         ];
     }
@@ -935,13 +1455,32 @@ function legacy_download_artifact_stream_release(mixed $leaseHandle): void
     fclose($leaseHandle);
 }
 
-/** Try to remove one expired completed artifact only if no request is serving it. */
-function legacy_download_artifact_cleanup_completed_directory(string $directory, int $cutoff): bool
-{
-    $metadataPath = $directory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_METADATA_NAME;
-    $archivePath = $directory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME;
-    $leasePath = $directory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME;
-    $metadata = legacy_download_artifact_metadata_read(['archive' => $archivePath, 'metadata' => $metadataPath]);
+/**
+ * Try to remove one expired completed artifact only if no request is serving it.
+ *
+ * @param string $directory Managed completed-artifact directory considered for expiration.
+ * @param int $cutoff Exclusive Unix timestamp cutoff; artifacts at or newer than this timestamp are retained.
+ *
+ * @return bool Whether the expired completed directory was renamed and removed.
+ */
+function legacy_download_artifact_cleanup_completed_directory(
+    string $directory,
+    int $cutoff,
+): bool {
+    $metadataPath =
+        $directory
+        . DIRECTORY_SEPARATOR
+        . LEGACY_DOWNLOAD_ARTIFACT_METADATA_NAME;
+    $archivePath =
+        $directory
+        . DIRECTORY_SEPARATOR
+        . LEGACY_DOWNLOAD_ARTIFACT_ARCHIVE_NAME;
+    $leasePath =
+        $directory . DIRECTORY_SEPARATOR . LEGACY_DOWNLOAD_ARTIFACT_LEASE_NAME;
+    $metadata = legacy_download_artifact_metadata_read([
+        'archive' => $archivePath,
+        'metadata' => $metadataPath,
+    ]);
     $createdAt = is_array($metadata) ? (int) ($metadata['created_at'] ?? 0) : 0;
     $mtime = @filemtime($directory) ?: 0;
     $ageAnchor = $createdAt > 0 ? $createdAt : $mtime;
@@ -957,7 +1496,13 @@ function legacy_download_artifact_cleanup_completed_directory(string $directory,
         return false;
     }
 
-    $tombstone = dirname($directory) . DIRECTORY_SEPARATOR . '.expired-' . basename($directory) . '-' . bin2hex(random_bytes(6));
+    $tombstone =
+        dirname($directory)
+        . DIRECTORY_SEPARATOR
+        . '.expired-'
+        . basename($directory)
+        . '-'
+        . bin2hex(random_bytes(6));
     $renamed = false;
     try {
         $renamed = @rename($directory, $tombstone);
@@ -975,7 +1520,13 @@ function legacy_download_artifact_cleanup_completed_directory(string $directory,
     return true;
 }
 
-/** Remove empty resource/revision parent directories left after eligible artifact cleanup. */
+/**
+ * Remove empty resource/revision parent directories left after eligible artifact cleanup.
+ *
+ * @param string $root Private managed artifact root whose empty parent directories may be removed.
+ *
+ * @return void Returns after attempting removal of empty resource, revision, and resource-type directories.
+ */
 function legacy_download_artifact_cleanup_empty_parents(string $root): void
 {
     foreach (['gallery', 'smart_gallery'] as $resourceType) {
@@ -983,9 +1534,13 @@ function legacy_download_artifact_cleanup_empty_parents(string $root): void
         if (!is_dir($typeDir)) {
             continue;
         }
-        $resourceDirs = glob($typeDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [];
+        $resourceDirs = glob($typeDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR)
+        ?: [];
         foreach ($resourceDirs as $resourceDir) {
-            $revisionDirs = glob($resourceDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [];
+            $revisionDirs = glob(
+                $resourceDir . DIRECTORY_SEPARATOR . '*',
+                GLOB_ONLYDIR,
+            ) ?: [];
             foreach ($revisionDirs as $revisionDir) {
                 $entries = @scandir($revisionDir);
                 if (is_array($entries) && count($entries) === 2) {
@@ -1006,11 +1561,12 @@ function legacy_download_artifact_cleanup_empty_parents(string $root): void
 
 /**
  * Run bounded-safe cleanup for managed legacy download artifacts and coordination state.
- *
  * Only known files below legacy-artifacts/ and inactive Stage 5 build-lock files are
  * considered. Active serving leases, active build locks, and active reservations are skipped.
  *
- * @return array<string,int>
+ * @param ?int $now Optional current Unix timestamp used for retention and stale-state age comparisons; defaults to the current time.
+ *
+ * @return array{deleted_artifacts:int,deleted_partials:int,deleted_reservations:int,deleted_build_locks:int} Counts of completed artifacts, partial builds, reservations, and inactive build locks deleted.
  */
 function cleanup_legacy_download_artifact_cache(?int $now = null): array
 {
@@ -1021,38 +1577,69 @@ function cleanup_legacy_download_artifact_cache(?int $now = null): array
     $deletedReservations = 0;
     $deletedBuildLocks = 0;
 
-    foreach (['gallery' => legacy_download_artifact_physical_retention_seconds(), 'smart_gallery' => legacy_download_artifact_smart_retention_seconds()] as $resourceType => $retention) {
+    foreach ([
+        'gallery' => legacy_download_artifact_physical_retention_seconds(),
+        'smart_gallery' => legacy_download_artifact_smart_retention_seconds(),
+    ] as $resourceType => $retention) {
         $typeDir = $root . DIRECTORY_SEPARATOR . $resourceType;
         if (!is_dir($typeDir)) {
             continue;
         }
-        $resourceDirs = glob($typeDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [];
+        $resourceDirs = glob($typeDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR)
+        ?: [];
         foreach ($resourceDirs as $resourceDir) {
-            $revisionDirs = glob($resourceDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [];
+            $revisionDirs = glob(
+                $resourceDir . DIRECTORY_SEPARATOR . '*',
+                GLOB_ONLYDIR,
+            ) ?: [];
             foreach ($revisionDirs as $revisionDir) {
-                $children = glob($revisionDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [];
+                $children = glob(
+                    $revisionDir . DIRECTORY_SEPARATOR . '*',
+                    GLOB_ONLYDIR,
+                ) ?: [];
                 foreach ($children as $artifactDir) {
                     $basename = basename($artifactDir);
                     if (preg_match('/^[a-f0-9]{64}$/D', $basename) !== 1) {
                         continue;
                     }
-                    if (legacy_download_artifact_cleanup_completed_directory($artifactDir, $now - $retention)) {
+                    if (legacy_download_artifact_cleanup_completed_directory(
+                        $artifactDir,
+                        $now - $retention,
+                    )) {
                         $deletedArtifacts++;
                     }
                 }
 
-                foreach (glob($revisionDir . DIRECTORY_SEPARATOR . '.*.partial-*', GLOB_ONLYDIR) ?: [] as $partialDir) {
+                foreach (glob(
+                    $revisionDir . DIRECTORY_SEPARATOR . '.*.partial-*',
+                    GLOB_ONLYDIR,
+                ) ?: [] as $partialDir) {
                     $basename = basename($partialDir);
-                    if (preg_match('/^\.([a-f0-9]{64})\.partial-[a-f0-9]+$/D', $basename, $match) !== 1) {
+                    if (
+                        preg_match(
+                            '/^\.([a-f0-9]{64})\.partial-[a-f0-9]+$/D',
+                            $basename,
+                            $match,
+                        ) !== 1
+                    ) {
                         continue;
                     }
                     $mtime = @filemtime($partialDir) ?: 0;
-                    if ($mtime <= 0 || $mtime >= $now - legacy_download_artifact_partial_retention_seconds()) {
+                    if (
+                        $mtime <= 0
+                        || $mtime
+                            >= (
+                                $now
+                                - legacy_download_artifact_partial_retention_seconds()
+                            )
+                    ) {
                         continue;
                     }
                     $buildHandle = null;
                     try {
-                        $buildHandle = legacy_download_build_lock_acquire($match[1]);
+                        $buildHandle = legacy_download_build_lock_acquire(
+                            $match[1],
+                        );
                     } catch (LegacyDownloadBuildBusyException) {
                         continue;
                     } catch (Throwable) {
@@ -1071,12 +1658,25 @@ function cleanup_legacy_download_artifact_cache(?int $now = null): array
                 // detached an invalid/expired final directory. Retry deletion later if the
                 // original request could not remove every file immediately.
                 $tombstones = array_merge(
-                    glob($revisionDir . DIRECTORY_SEPARATOR . '.expired-*', GLOB_ONLYDIR) ?: [],
-                    glob($revisionDir . DIRECTORY_SEPARATOR . '.stale-*', GLOB_ONLYDIR) ?: []
+                    glob(
+                        $revisionDir . DIRECTORY_SEPARATOR . '.expired-*',
+                        GLOB_ONLYDIR,
+                    ) ?: [],
+                    glob(
+                        $revisionDir . DIRECTORY_SEPARATOR . '.stale-*',
+                        GLOB_ONLYDIR,
+                    ) ?: [],
                 );
                 foreach ($tombstones as $tombstone) {
                     $mtime = @filemtime($tombstone) ?: 0;
-                    if ($mtime > 0 && $mtime < $now - legacy_download_artifact_partial_retention_seconds()) {
+                    if (
+                        $mtime > 0
+                        && $mtime
+                            < (
+                                $now
+                                - legacy_download_artifact_partial_retention_seconds()
+                            )
+                    ) {
                         legacy_download_artifact_remove_tree($tombstone);
                     }
                 }
@@ -1085,12 +1685,23 @@ function cleanup_legacy_download_artifact_cache(?int $now = null): array
     }
 
     $stateDir = legacy_download_artifact_state_dir();
-    foreach (glob($stateDir . DIRECTORY_SEPARATOR . 'reservation-*.json') ?: [] as $reservationPath) {
-        if (preg_match('/^reservation-([a-f0-9]{64})\.json$/D', basename($reservationPath), $match) !== 1) {
+    foreach (glob($stateDir . DIRECTORY_SEPARATOR . 'reservation-*.json')
+        ?: [] as $reservationPath) {
+        if (
+            preg_match(
+                '/^reservation-([a-f0-9]{64})\.json$/D',
+                basename($reservationPath),
+                $match,
+            ) !== 1
+        ) {
             continue;
         }
         $mtime = @filemtime($reservationPath) ?: 0;
-        if ($mtime <= 0 || $mtime >= $now - legacy_download_artifact_lock_retention_seconds()) {
+        if (
+            $mtime <= 0
+            || $mtime
+                >= ($now - legacy_download_artifact_lock_retention_seconds())
+        ) {
             continue;
         }
         $buildHandle = null;
@@ -1111,12 +1722,23 @@ function cleanup_legacy_download_artifact_cache(?int $now = null): array
     }
 
     $buildStateDir = legacy_download_build_state_dir();
-    foreach (glob($buildStateDir . DIRECTORY_SEPARATOR . 'build-*.lock') ?: [] as $lockPath) {
-        if (preg_match('/^build-([a-f0-9]{64})\.lock$/D', basename($lockPath), $match) !== 1) {
+    foreach (glob($buildStateDir . DIRECTORY_SEPARATOR . 'build-*.lock')
+        ?: [] as $lockPath) {
+        if (
+            preg_match(
+                '/^build-([a-f0-9]{64})\.lock$/D',
+                basename($lockPath),
+                $match,
+            ) !== 1
+        ) {
             continue;
         }
         $mtime = @filemtime($lockPath) ?: 0;
-        if ($mtime <= 0 || $mtime >= $now - legacy_download_artifact_lock_retention_seconds()) {
+        if (
+            $mtime <= 0
+            || $mtime
+                >= ($now - legacy_download_artifact_lock_retention_seconds())
+        ) {
             continue;
         }
         $handle = @fopen($lockPath, 'c');

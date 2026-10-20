@@ -21,6 +21,7 @@ namespace Gallery\Services;
  * Rationale: Unsupported formats must not reinterpret previously approved authority.
  */
 const COOPERATIVE_PROTOCOL_VERSION = 1;
+
 /**
  * Bound the fully connected collaboration membership.
  * Type: int. Units: installations per group. Scope: cooperative domain.
@@ -28,6 +29,7 @@ const COOPERATIVE_PROTOCOL_VERSION = 1;
  * Rationale: 32 members bound the clique to 496 pairs and keep proposal work finite.
  */
 const COOPERATIVE_MAX_MEMBERS = 32;
+
 /**
  * Limit how long an unactivated membership proposal may collect consent.
  * Type: int. Units: seconds. Scope: cooperative domain.
@@ -40,17 +42,21 @@ const COOPERATIVE_MAX_PROPOSAL_LIFETIME = 604800;
 final class CooperativeException extends \RuntimeException
 {
     /** Construct an error with a stable reason suitable for orchestration.
- *
- * @param string $reason Stable bounded refusal reason without user data or secrets.
- * @return void No return value; failure raises an exception.
- */
-    public function __construct(public readonly string $reason)
-    {
-        parent::__construct('Cooperative gallery operation refused: ' . $reason . '.');
+     *
+     * @param string $reason Stable bounded refusal reason without user data or secrets.
+     * @return void No return value; failure raises an exception.
+     */
+    public function __construct(
+        public readonly string $reason,
+    ) {
+        parent::__construct(
+            'Cooperative gallery operation refused: ' . $reason . '.',
+        );
     }
 }
 
 require_once __DIR__ . '/cooperative_galleries/validation.php';
 require_once __DIR__ . '/cooperative_galleries/credentials.php';
 require_once __DIR__ . '/cooperative_galleries/proposals.php';
-require_once __DIR__ . '/cooperative_galleries/storage.php';require_once __DIR__ . '/cooperative_galleries/sources.php';
+require_once __DIR__ . '/cooperative_galleries/storage.php';
+require_once __DIR__ . '/cooperative_galleries/sources.php';

@@ -44,19 +44,28 @@ use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
 use function Gallery\Models\link_favicons_model_existing_row;
 use function Gallery\Models\link_favicons_model_gallery_description;
-use function Gallery\Models\link_favicons_model_gallery_translation_descriptions;
+use function Gallery\Models\link_favicons_model_gallery_translation_descriptions
+;
 use function Gallery\Models\link_favicons_model_public_file;
 use function Gallery\Models\link_favicons_model_refresh_state;
 use function Gallery\Models\link_favicons_model_upsert;
 
 const LINK_FAVICON_CACHE_TABLE = 'link_favicon_cache';
+
 const LINK_FAVICON_INTERNAL_DIRECTORY = '_php-gallery-internal/link-favicons';
+
 const LINK_FAVICON_MAX_HTML_BYTES = 131072;
+
 const LINK_FAVICON_MAX_IMAGE_BYTES = 524288;
+
 const LINK_FAVICON_MAX_REDIRECTS = 3;
+
 const LINK_FAVICON_MAX_NEW_HOSTS_PER_SAVE = 5;
+
 const LINK_FAVICON_CONNECT_TIMEOUT_SECONDS = 2;
+
 const LINK_FAVICON_REQUEST_TIMEOUT_SECONDS = 4;
+
 const LINK_FAVICON_SAVE_NETWORK_BUDGET_SECONDS = 8.0;
 
 /**
@@ -170,8 +179,16 @@ function link_favicon_cache_schema_status(): array
 {
     return presentation_schema_tables_status('presentation.link_favicon_cache', [
         LINK_FAVICON_CACHE_TABLE => [
-            'hostname', 'status', 'icon_file', 'mime_type', 'source_url',
-            'content_sha256', 'fetched_at', 'last_attempt_at', 'retry_after', 'updated_at',
+            'hostname',
+            'status',
+            'icon_file',
+            'mime_type',
+            'source_url',
+            'content_sha256',
+            'fetched_at',
+            'last_attempt_at',
+            'retry_after',
+            'updated_at',
         ],
     ]);
 }
@@ -182,10 +199,16 @@ function link_favicon_cache_schema_status(): array
  * Confirmed missing schema preserves the documented no-icon compatibility
  * path. Unknown inspection state also omits the cosmetic operation, records
  * bounded diagnostics, and is never treated as proof that storage is absent.
+ *
+ * @param string $operation Stable presentation-schema operation identifier.
+ * @return bool True when schema inspection permits the cache operation.
  */
 function link_favicon_cache_schema_ready(string $operation = 'link_favicon_cache_read'): bool
 {
-    return presentation_schema_render_available(link_favicon_cache_schema_status(), $operation);
+    return presentation_schema_render_available(
+        link_favicon_cache_schema_status(),
+        $operation,
+    );
 }
 
 /**
@@ -198,29 +221,60 @@ function link_favicon_extract_description_urls(string $description): array
 {
     $matchesByOffset = [];
 
-    if (preg_match_all('/\[(link|url)=([^\]\r\n]{1,2048})\][^\r\n]*?\[\/\1\]/iu', $description, $matches, PREG_OFFSET_CAPTURE)) {
+    if (preg_match_all(
+        '/\[(link|url)=([^\]\r\n]{1,2048})\][^\r\n]*?\[\/\1\]/iu',
+        $description,
+        $matches,
+        PREG_OFFSET_CAPTURE,
+    )) {
         foreach ($matches[2] as $index => $candidate) {
             $offset = (int) ($matches[0][$index][1] ?? 0);
-            $matchesByOffset[] = ['offset' => $offset, 'url' => (string) $candidate[0]];
+            $matchesByOffset[] = [
+                'offset' => $offset,
+                'url' => (string) $candidate[0],
+            ];
         }
     }
-    if (preg_match_all('/\[(link|url)\]([^\[\]\r\n]{1,2048})\[\/\1\]/iu', $description, $matches, PREG_OFFSET_CAPTURE)) {
+    if (preg_match_all(
+        '/\[(link|url)\]([^\[\]\r\n]{1,2048})\[\/\1\]/iu',
+        $description,
+        $matches,
+        PREG_OFFSET_CAPTURE,
+    )) {
         foreach ($matches[2] as $index => $candidate) {
             $offset = (int) ($matches[0][$index][1] ?? 0);
-            $matchesByOffset[] = ['offset' => $offset, 'url' => trim((string) $candidate[0])];
+            $matchesByOffset[] = [
+                'offset' => $offset,
+                'url' => trim((string) $candidate[0]),
+            ];
         }
     }
-    if (preg_match_all('/\[[^\]\r\n]{1,160}\]\((https?:\/\/[^\s<>")]+)\)/iu', $description, $matches, PREG_OFFSET_CAPTURE)) {
+    if (preg_match_all(
+        '/\[[^\]\r\n]{1,160}\]\((https?:\/\/[^\s<>")]+)\)/iu',
+        $description,
+        $matches,
+        PREG_OFFSET_CAPTURE,
+    )) {
         foreach ($matches[1] as $index => $candidate) {
             $offset = (int) ($matches[0][$index][1] ?? 0);
-            $matchesByOffset[] = ['offset' => $offset, 'url' => (string) $candidate[0]];
+            $matchesByOffset[] = [
+                'offset' => $offset,
+                'url' => (string) $candidate[0],
+            ];
         }
     }
 
-    usort($matchesByOffset, static fn (array $left, array $right): int => $left['offset'] <=> $right['offset']);
+    usort(
+        $matchesByOffset,
+        static fn(array $left, array $right): int => (
+            $left['offset'] <=> $right['offset']
+        ),
+    );
     $urls = [];
     foreach ($matchesByOffset as $match) {
-        $normalized = link_favicon_normalize_url((string) ($match['url'] ?? ''));
+        $normalized = link_favicon_normalize_url(
+            (string) ($match['url'] ?? ''),
+        );
         if ($normalized === null) {
             continue;
         }
@@ -247,7 +301,12 @@ function link_favicon_gallery_descriptions(int $galleryId): array
     try {
         $descriptions = [link_favicons_model_gallery_description($galleryId)];
         if (content_localization_schema_ready('gallery')) {
-            array_push($descriptions, ...link_favicons_model_gallery_translation_descriptions($galleryId));
+            array_push(
+                $descriptions,
+                ...link_favicons_model_gallery_translation_descriptions(
+                    $galleryId,
+                ),
+            );
         }
         return $descriptions;
     } catch (Throwable) {
@@ -266,12 +325,24 @@ function link_favicon_gallery_descriptions(int $galleryId): array
  */
 function link_favicon_refresh_gallery(int $galleryId): array
 {
-    $result = ['candidates' => 0, 'attempted' => 0, 'stored' => 0, 'skipped' => 0];
-    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('remote_favicon_discovery')) {
+    $result = [
+        'candidates' => 0,
+        'attempted' => 0,
+        'stored' => 0,
+        'skipped' => 0,
+    ];
+    if (
+        function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('remote_favicon_discovery')
+    ) {
         return $result;
     }
-    $networkDeadline = microtime(true) + LINK_FAVICON_SAVE_NETWORK_BUDGET_SECONDS;
-    if ($galleryId < 1 || !link_favicon_cache_schema_ready('link_favicon_gallery_refresh')) {
+    $networkDeadline =
+        microtime(true) + LINK_FAVICON_SAVE_NETWORK_BUDGET_SECONDS;
+    if (
+        $galleryId < 1
+        || !link_favicon_cache_schema_ready('link_favicon_gallery_refresh')
+    ) {
         return $result;
     }
 
@@ -325,7 +396,10 @@ function link_favicon_refresh_gallery(int $galleryId): array
 }
 
 /**
- * Return whether one hostname is absent, expired, or missing its cached file.
+ * Return whether a hostname needs another favicon lookup.
+ *
+ * @param string $host Normalized lowercase hostname.
+ * @return bool True when no usable cache entry exists or its retry time has passed.
  */
 function link_favicon_host_needs_refresh(string $host): bool
 {
@@ -336,8 +410,17 @@ function link_favicon_host_needs_refresh(string $host): bool
         }
 
         if ((string) ($row['status'] ?? '') === 'ok') {
-            $file = link_favicon_valid_file_name((string) ($row['icon_file'] ?? ''));
-            if ($file === null || !is_file(link_favicon_cache_directory() . DIRECTORY_SEPARATOR . $file)) {
+            $file = link_favicon_valid_file_name(
+                (string) ($row['icon_file'] ?? ''),
+            );
+            if (
+                $file === null
+                || !is_file(
+                    link_favicon_cache_directory()
+                        . DIRECTORY_SEPARATOR
+                        . $file,
+                )
+            ) {
                 return true;
             }
         }
@@ -353,7 +436,8 @@ function link_favicon_host_needs_refresh(string $host): bool
  * Persist a completed favicon fetch attempt and atomically replace old content.
  *
  * @param string $host Normalized hostname.
- * @param array<string,mixed> $fetch Fetch result.
+ * @param array{status?:string,body?:string|null,extension?:string|null,mime_type?:string|null,source_url?:string|null} $fetch Fetch status and optional validated image bytes and metadata.
+ * @return void Persists the bounded fetch result and atomically replaces stale cache content.
  */
 function link_favicon_store_fetch_result(string $host, array $fetch): void
 {
@@ -361,7 +445,11 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
         return;
     }
 
-    $status = in_array((string) ($fetch['status'] ?? ''), ['ok', 'missing', 'failed', 'blocked'], true)
+    $status = in_array(
+        (string) ($fetch['status'] ?? ''),
+        ['ok', 'missing', 'failed', 'blocked'],
+        true,
+    )
         ? (string) $fetch['status']
         : 'failed';
     $retryBasis = $status;
@@ -369,7 +457,11 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
     $oldFile = null;
     try {
         $oldRow = link_favicons_model_existing_row($host);
-        $oldFile = $oldRow !== null ? link_favicon_valid_file_name((string) ($oldRow['icon_file'] ?? '')) : null;
+        $oldFile = $oldRow !== null
+            ? link_favicon_valid_file_name(
+                (string) ($oldRow['icon_file'] ?? ''),
+            )
+            : null;
     } catch (Throwable) {
         $oldRow = null;
         $oldFile = null;
@@ -380,7 +472,9 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
     $contentHash = null;
     $fetchedAt = null;
     if ($status === 'ok') {
-        $body = is_string($fetch['body'] ?? null) ? (string) $fetch['body'] : '';
+        $body = is_string($fetch['body'] ?? null)
+            ? (string) $fetch['body']
+            : '';
         $extension = (string) ($fetch['extension'] ?? '');
         $mimeType = (string) ($fetch['mime_type'] ?? '');
         if ($body === '' || $extension === '' || $mimeType === '') {
@@ -388,9 +482,18 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
             $retryBasis = 'failed';
         } else {
             $contentHash = hash('sha256', $body);
-            $iconFile = substr(hash('sha256', $host), 0, 24) . '-' . substr($contentHash, 0, 16) . '.' . $extension;
+            $iconFile =
+                substr(hash('sha256', $host), 0, 24)
+                . '-'
+                . substr($contentHash, 0, 16)
+                . '.'
+                . $extension;
             $directory = link_favicon_cache_directory();
-            if (!is_dir($directory) && !@mkdir($directory, 0755, true) && !is_dir($directory)) {
+            if (
+                !is_dir($directory)
+                && !@mkdir($directory, 0755, true)
+                && !is_dir($directory)
+            ) {
                 $status = 'failed';
                 $retryBasis = 'failed';
                 $iconFile = null;
@@ -398,7 +501,16 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
                 $contentHash = null;
             } else {
                 $tmp = tempnam($directory, '.favicon-');
-                if ($tmp === false || @file_put_contents($tmp, $body, LOCK_EX) !== strlen($body) || !@rename($tmp, $directory . DIRECTORY_SEPARATOR . $iconFile)) {
+                if (
+                    $tmp === false
+                    || @file_put_contents($tmp, $body, LOCK_EX) !== strlen(
+                        $body,
+                    )
+                    || !@rename(
+                        $tmp,
+                        $directory . DIRECTORY_SEPARATOR . $iconFile,
+                    )
+                ) {
                     if (is_string($tmp) && is_file($tmp)) {
                         @unlink($tmp);
                     }
@@ -417,12 +529,23 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
         }
     }
 
-    $sourceUrl = is_string($fetch['source_url'] ?? null) ? link_favicon_limit_text((string) $fetch['source_url'], 2048) : null;
-    $oldFileExists = $oldFile !== null && is_file(link_favicon_cache_directory() . DIRECTORY_SEPARATOR . $oldFile);
-    if (($status === 'failed' || $status === 'blocked')
+    $sourceUrl = is_string($fetch['source_url'] ?? null)
+        ? link_favicon_limit_text((string) $fetch['source_url'], 2048)
+        : null;
+    $oldFileExists =
+        $oldFile !== null
+        && is_file(
+            link_favicon_cache_directory() . DIRECTORY_SEPARATOR . $oldFile,
+        );
+    if (
+        (
+            $status === 'failed'
+            || $status === 'blocked'
+        )
         && $oldRow !== null
         && (string) ($oldRow['status'] ?? '') === 'ok'
-        && $oldFileExists) {
+        && $oldFileExists
+    ) {
         // Keep the last known-good favicon visible during temporary network or
         // DNS failures. retry_after still uses the failed/blocked attempt class.
         $status = 'ok';
@@ -438,9 +561,9 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
 
     $now = now_sql();
     $retryAfter = match ($retryBasis) {
-        'ok' => date('Y-m-d H:i:s', time() + 90 * 86400),
-        'missing' => date('Y-m-d H:i:s', time() + 7 * 86400),
-        'blocked' => date('Y-m-d H:i:s', time() + 30 * 86400),
+        'ok' => date('Y-m-d H:i:s', time() + (90 * 86400)),
+        'missing' => date('Y-m-d H:i:s', time() + (7 * 86400)),
+        'blocked' => date('Y-m-d H:i:s', time() + (30 * 86400)),
         default => date('Y-m-d H:i:s', time() + 86400),
     };
 
@@ -458,7 +581,11 @@ function link_favicon_store_fetch_result(string $host, array $fetch): void
         ]);
     } catch (Throwable) {
         if ($iconFile !== null && $iconFile !== $oldFile) {
-            @unlink(link_favicon_cache_directory() . DIRECTORY_SEPARATOR . $iconFile);
+            @unlink(
+                link_favicon_cache_directory()
+                    . DIRECTORY_SEPARATOR
+                    . $iconFile,
+            );
         }
     }
 }
@@ -488,7 +615,10 @@ function link_favicon_limit_text(string $value, int $limit): string
  */
 function link_favicon_cached_public_url(string $url): ?string
 {
-    if (link_favicon_known_icon_id($url) !== null || !link_favicon_cache_schema_ready('link_favicon_public_render')) {
+    if (
+        link_favicon_known_icon_id($url) !== null
+        || !link_favicon_cache_schema_ready('link_favicon_public_render')
+    ) {
         return null;
     }
     $host = link_favicon_url_hostname($url);
@@ -502,8 +632,15 @@ function link_favicon_cached_public_url(string $url): ?string
     }
 
     try {
-        $file = link_favicon_valid_file_name((string) (link_favicons_model_public_file($host) ?? ''));
-        if ($file === null || !is_file(link_favicon_cache_directory() . DIRECTORY_SEPARATOR . $file)) {
+        $file = link_favicon_valid_file_name(
+            (string) (link_favicons_model_public_file($host) ?? ''),
+        );
+        if (
+            $file === null
+            || !is_file(
+                link_favicon_cache_directory() . DIRECTORY_SEPARATOR . $file,
+            )
+        ) {
             return $cache[$host] = null;
         }
         return $cache[$host] = link_favicon_public_file_url($file);
@@ -514,19 +651,35 @@ function link_favicon_cached_public_url(string $url): ?string
 
 /**
  * Return the persistent filesystem directory for cached link favicons.
+ *
+ * @return string Absolute filesystem directory for private favicon cache files.
  */
 function link_favicon_cache_directory(): string
 {
-    return galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, LINK_FAVICON_INTERNAL_DIRECTORY);
+    return galleries_root()
+        . DIRECTORY_SEPARATOR
+        . str_replace(
+            '/',
+            DIRECTORY_SEPARATOR,
+            LINK_FAVICON_INTERNAL_DIRECTORY,
+        );
 }
 
 /**
  * Validate one generated favicon cache filename.
+ *
+ * @param string $file Candidate stored filename.
+ * @return ?string Validated cache filename, or null when it does not match the owned-file format.
  */
 function link_favicon_valid_file_name(string $file): ?string
 {
     $file = trim($file);
-    return preg_match('/^[a-f0-9]{24}-[a-f0-9]{16}\.(?:png|jpg|gif|webp|ico)$/', $file) === 1 ? $file : null;
+    return preg_match(
+        '/^[a-f0-9]{24}-[a-f0-9]{16}\.(?:png|jpg|gif|webp|ico)$/',
+        $file,
+    ) === 1
+        ? $file
+        : null;
 }
 
 /**
@@ -577,12 +730,18 @@ function link_favicon_public_asset(string $file): ?array
 /**
  * Fetch and validate the best favicon for one unknown website.
  *
- * @param string $pageUrl Gallery-description target.
- * @return array<string,mixed> Fetch result suitable for persistence.
+ * @param string $pageUrl HTTP(S) page URL referenced by a gallery description.
+ * @param ?float $deadline Optional absolute microtime deadline for network work.
+ * @return array{status:string,reason?:string,source_url?:string|null,mime_type?:string|null,extension?:string|null,body?:string|null} Validated image fetch result or a bounded missing, blocked or failed status.
  */
-function link_favicon_fetch_site_icon(string $pageUrl, ?float $deadline = null): array
-{
-    if (function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled') && !feature_capability_effective_enabled('remote_favicon_discovery')) {
+function link_favicon_fetch_site_icon(
+    string $pageUrl,
+    ?float $deadline = null,
+): array {
+    if (
+        function_exists(__NAMESPACE__ . '\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('remote_favicon_discovery')
+    ) {
         return ['status' => 'blocked', 'reason' => 'remote_discovery_disabled'];
     }
     $pageUrl = link_favicon_normalize_url($pageUrl);
@@ -594,7 +753,12 @@ function link_favicon_fetch_site_icon(string $pageUrl, ?float $deadline = null):
         return ['status' => 'blocked'];
     }
 
-    $page = link_favicon_http_fetch($pageUrl, LINK_FAVICON_MAX_HTML_BYTES, 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.2', $deadline);
+    $page = link_favicon_http_fetch(
+        $pageUrl,
+        LINK_FAVICON_MAX_HTML_BYTES,
+        'text/html,application/xhtml+xml;q=0.9,*/*;q=0.2',
+        $deadline,
+    );
     if (!empty($page['blocked'])) {
         return ['status' => 'blocked'];
     }
@@ -602,9 +766,18 @@ function link_favicon_fetch_site_icon(string $pageUrl, ?float $deadline = null):
     $baseUrl = (string) ($page['final_url'] ?? $pageUrl);
     $iconUrls = [];
     if (!empty($page['ok'])) {
-        $contentType = strtolower((string) (($page['headers']['content-type'] ?? '')));
-        if ($contentType === '' || str_contains($contentType, 'text/html') || str_contains($contentType, 'application/xhtml+xml')) {
-            $iconUrls = link_favicon_html_icon_urls((string) ($page['body'] ?? ''), $baseUrl);
+        $contentType = strtolower(
+            (string) ($page['headers']['content-type'] ?? ''),
+        );
+        if (
+            $contentType === ''
+            || str_contains($contentType, 'text/html')
+            || str_contains($contentType, 'application/xhtml+xml')
+        ) {
+            $iconUrls = link_favicon_html_icon_urls(
+                (string) ($page['body'] ?? ''),
+                $baseUrl,
+            );
         }
     }
 
@@ -633,7 +806,12 @@ function link_favicon_fetch_site_icon(string $pageUrl, ?float $deadline = null):
             break;
         }
 
-        $response = link_favicon_http_fetch($iconUrl, LINK_FAVICON_MAX_IMAGE_BYTES, 'image/avif,image/webp,image/png,image/jpeg,image/gif,image/x-icon,image/vnd.microsoft.icon,*/*;q=0.1', $deadline);
+        $response = link_favicon_http_fetch(
+            $iconUrl,
+            LINK_FAVICON_MAX_IMAGE_BYTES,
+            'image/avif,image/webp,image/png,image/jpeg,image/gif,image/x-icon,image/vnd.microsoft.icon,*/*;q=0.1',
+            $deadline,
+        );
         if (!empty($response['blocked'])) {
             continue;
         }
@@ -644,7 +822,9 @@ function link_favicon_fetch_site_icon(string $pageUrl, ?float $deadline = null):
             }
             continue;
         }
-        $validated = link_favicon_validate_image((string) ($response['body'] ?? ''));
+        $validated = link_favicon_validate_image(
+            (string) ($response['body'] ?? ''),
+        );
         if ($validated === null) {
             continue;
         }
@@ -669,13 +849,18 @@ function link_favicon_fetch_site_icon(string $pageUrl, ?float $deadline = null):
 /**
  * Fetch one URL with bounded redirects while validating every destination.
  *
- * @param string $url URL to fetch.
- * @param int $maxBytes Maximum accepted response body.
- * @param string $accept Accept header.
- * @return array<string,mixed> HTTP result.
+ * @param string $url HTTP(S) URL to fetch.
+ * @param int $maxBytes Maximum accepted response body size in bytes.
+ * @param string $accept Accept request header value.
+ * @param ?float $deadline Optional absolute microtime deadline for the redirect sequence.
+ * @return array{ok:bool,blocked?:bool,error?:string,status?:int,final_url?:string,headers?:array<string,string>,body?:string} One bounded HTTP response or a safe failure result.
  */
-function link_favicon_http_fetch(string $url, int $maxBytes, string $accept, ?float $deadline = null): array
-{
+function link_favicon_http_fetch(
+    string $url,
+    int $maxBytes,
+    string $accept,
+    ?float $deadline = null,
+): array {
     $current = link_favicon_normalize_url($url);
     if ($current === null) {
         return ['ok' => false, 'blocked' => true, 'error' => 'invalid_url'];
@@ -683,27 +868,48 @@ function link_favicon_http_fetch(string $url, int $maxBytes, string $accept, ?fl
 
     for ($redirect = 0; $redirect <= LINK_FAVICON_MAX_REDIRECTS; $redirect++) {
         if ($deadline !== null && microtime(true) >= $deadline) {
-            return ['ok' => false, 'blocked' => false, 'error' => 'budget_exhausted', 'final_url' => $current];
+            return [
+                'ok' => false,
+                'blocked' => false,
+                'error' => 'budget_exhausted',
+                'final_url' => $current,
+            ];
         }
-        $response = link_favicon_http_request_once($current, $maxBytes, $accept);
+        $response = link_favicon_http_request_once(
+            $current,
+            $maxBytes,
+            $accept,
+        );
         if (!empty($response['blocked'])) {
             return $response + ['final_url' => $current];
         }
         $status = (int) ($response['status'] ?? 0);
         if ($status >= 300 && $status < 400) {
-            $location = trim((string) (($response['headers']['location'] ?? '')));
+            $location = trim((string) ($response['headers']['location'] ?? ''));
             if ($location === '' || $redirect >= LINK_FAVICON_MAX_REDIRECTS) {
-                return ['ok' => false, 'blocked' => false, 'status' => $status, 'final_url' => $current, 'headers' => $response['headers'] ?? []];
+                return [
+                    'ok' => false,
+                    'blocked' => false,
+                    'status' => $status,
+                    'final_url' => $current,
+                    'headers' => $response['headers'] ?? [],
+                ];
             }
             $next = link_favicon_resolve_relative_url($current, $location);
             if ($next === null) {
-                return ['ok' => false, 'blocked' => true, 'status' => $status, 'final_url' => $current];
+                return [
+                    'ok' => false,
+                    'blocked' => true,
+                    'status' => $status,
+                    'final_url' => $current,
+                ];
             }
             $current = $next;
             continue;
         }
         $response['final_url'] = $current;
-        $response['ok'] = $status >= 200 && $status < 300 && empty($response['error']);
+        $response['ok'] =
+            $status >= 200 && $status < 300 && empty($response['error']);
         return $response;
     }
 
@@ -718,19 +924,41 @@ function link_favicon_http_fetch(string $url, int $maxBytes, string $accept, ?fl
  * @param string $accept Accept header.
  * @return array<string,mixed> One-response result.
  */
-function link_favicon_http_request_once(string $url, int $maxBytes, string $accept): array
-{
+function link_favicon_http_request_once(
+    string $url,
+    int $maxBytes,
+    string $accept,
+): array {
     $parts = parse_url($url);
     if (!is_array($parts)) {
         return ['ok' => false, 'blocked' => true, 'error' => 'invalid_url'];
     }
     $scheme = strtolower((string) ($parts['scheme'] ?? ''));
     $host = strtolower(rtrim((string) ($parts['host'] ?? ''), '.'));
-    if (($scheme !== 'http' && $scheme !== 'https') || $host === '' || isset($parts['user']) || isset($parts['pass'])) {
+    if (
+        (
+            $scheme !== 'http'
+            && $scheme !== 'https'
+        )
+        || $host === ''
+        || isset($parts['user'])
+        || isset($parts['pass'])
+    ) {
         return ['ok' => false, 'blocked' => true, 'error' => 'blocked_url'];
     }
-    $port = isset($parts['port']) ? (int) $parts['port'] : ($scheme === 'https' ? 443 : 80);
-    if (($scheme === 'https' && $port !== 443) || ($scheme === 'http' && $port !== 80)) {
+    $port = isset($parts['port'])
+        ? (int) $parts['port']
+        : ($scheme === 'https' ? 443 : 80);
+    if (
+        (
+            $scheme === 'https'
+            && $port !== 443
+        )
+        || (
+            $scheme === 'http'
+            && $port !== 80
+        )
+    ) {
         return ['ok' => false, 'blocked' => true, 'error' => 'blocked_port'];
     }
 
@@ -740,9 +968,23 @@ function link_favicon_http_request_once(string $url, int $maxBytes, string $acce
     }
 
     if (function_exists('curl_init')) {
-        return link_favicon_http_request_curl($url, $host, $port, $resolved, $maxBytes, $accept);
+        return link_favicon_http_request_curl(
+            $url,
+            $host,
+            $port,
+            $resolved,
+            $maxBytes,
+            $accept,
+        );
     }
-    return link_favicon_http_request_socket($url, $host, $port, $resolved, $maxBytes, $accept);
+    return link_favicon_http_request_socket(
+        $url,
+        $host,
+        $port,
+        $resolved,
+        $maxBytes,
+        $accept,
+    );
 }
 
 /**
@@ -762,10 +1004,22 @@ function link_favicon_resolve_public_ipv4(string $host): ?string
 /**
  * Execute one pinned HTTP request with cURL when the extension is available.
  *
- * @return array<string,mixed> One-response result.
+ * @param string $url Normalized URL for this request.
+ * @param string $host Validated hostname used for TLS and Host routing.
+ * @param int $port Validated destination port.
+ * @param string $ip Public IPv4 address pinned for this connection.
+ * @param int $maxBytes Maximum response body size in bytes.
+ * @param string $accept Accept request header value.
+ * @return array{ok:bool,blocked?:bool,error?:string,status?:int,headers?:array<string,string>,body?:string} One-response result with bounded headers and body.
  */
-function link_favicon_http_request_curl(string $url, string $host, int $port, string $ip, int $maxBytes, string $accept): array
-{
+function link_favicon_http_request_curl(
+    string $url,
+    string $host,
+    int $port,
+    string $ip,
+    int $maxBytes,
+    string $accept,
+): array {
     $handle = curl_init($url);
     if ($handle === false) {
         return ['ok' => false, 'blocked' => false, 'error' => 'curl_init'];
@@ -788,7 +1042,10 @@ function link_favicon_http_request_curl(string $url, string $host, int $port, st
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
         CURLOPT_RESOLVE => [$host . ':' . $port . ':' . $ip],
-        CURLOPT_HEADERFUNCTION => static function ($curlHandle, string $line) use (&$headers): int {
+        CURLOPT_HEADERFUNCTION => static function (
+            \CurlHandle $curlHandle,
+            string $line,
+        ) use (&$headers): int {
             $length = strlen($line);
             $trimmed = trim($line);
             if ($trimmed === '' || str_starts_with($trimmed, 'HTTP/')) {
@@ -803,8 +1060,11 @@ function link_favicon_http_request_curl(string $url, string $host, int $port, st
             }
             return $length;
         },
-        CURLOPT_WRITEFUNCTION => static function ($curlHandle, string $chunk) use (&$body, &$tooLarge, $maxBytes): int {
-            if (strlen($body) + strlen($chunk) > $maxBytes) {
+        CURLOPT_WRITEFUNCTION => static function (
+            \CurlHandle $curlHandle,
+            string $chunk,
+        ) use (&$body, &$tooLarge, $maxBytes): int {
+            if ((strlen($body) + strlen($chunk)) > $maxBytes) {
                 $tooLarge = true;
                 return 0;
             }
@@ -812,7 +1072,11 @@ function link_favicon_http_request_curl(string $url, string $host, int $port, st
             return strlen($chunk);
         },
     ];
-    if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
+    if (
+        defined('CURLOPT_PROTOCOLS')
+        && defined('CURLPROTO_HTTP')
+        && defined('CURLPROTO_HTTPS')
+    ) {
         $options[CURLOPT_PROTOCOLS] = CURLPROTO_HTTP | CURLPROTO_HTTPS;
     }
     curl_setopt_array($handle, $options);
@@ -822,21 +1086,51 @@ function link_favicon_http_request_curl(string $url, string $host, int $port, st
     curl_close($handle);
 
     if ($tooLarge) {
-        return ['ok' => false, 'blocked' => false, 'status' => $status, 'headers' => $headers, 'error' => 'body_too_large'];
+        return [
+            'ok' => false,
+            'blocked' => false,
+            'status' => $status,
+            'headers' => $headers,
+            'error' => 'body_too_large',
+        ];
     }
     if ($executed === false && $status === 0) {
-        return ['ok' => false, 'blocked' => false, 'status' => 0, 'headers' => $headers, 'error' => $error !== '' ? $error : 'curl_failed'];
+        return [
+            'ok' => false,
+            'blocked' => false,
+            'status' => 0,
+            'headers' => $headers,
+            'error' => $error !== '' ? $error : 'curl_failed',
+        ];
     }
-    return ['ok' => false, 'blocked' => false, 'status' => $status, 'headers' => $headers, 'body' => $body];
+    return [
+        'ok' => false,
+        'blocked' => false,
+        'status' => $status,
+        'headers' => $headers,
+        'body' => $body,
+    ];
 }
 
 /**
  * Execute one pinned HTTP/1.1 request without cURL.
  *
- * @return array<string,mixed> One-response result.
+ * @param string $url Normalized URL for this request.
+ * @param string $host Validated hostname used for TLS and Host routing.
+ * @param int $port Validated destination port.
+ * @param string $ip Public IPv4 address pinned for this connection.
+ * @param int $maxBytes Maximum response body size in bytes.
+ * @param string $accept Accept request header value.
+ * @return array{ok:bool,blocked?:bool,error?:string,status?:int,headers?:array<string,string>,body?:string} One-response result with bounded headers and body.
  */
-function link_favicon_http_request_socket(string $url, string $host, int $port, string $ip, int $maxBytes, string $accept): array
-{
+function link_favicon_http_request_socket(
+    string $url,
+    string $host,
+    int $port,
+    string $ip,
+    int $maxBytes,
+    string $accept,
+): array {
     $parts = parse_url($url);
     if (!is_array($parts)) {
         return ['ok' => false, 'blocked' => true, 'error' => 'invalid_url'];
@@ -863,10 +1157,14 @@ function link_favicon_http_request_socket(string $url, string $host, int $port, 
         $errstr,
         LINK_FAVICON_CONNECT_TIMEOUT_SECONDS,
         STREAM_CLIENT_CONNECT,
-        $context
+        $context,
     );
     if (!is_resource($socket)) {
-        return ['ok' => false, 'blocked' => false, 'error' => $errstr !== '' ? $errstr : 'connect_failed'];
+        return [
+            'ok' => false,
+            'blocked' => false,
+            'error' => $errstr !== '' ? $errstr : 'connect_failed',
+        ];
     }
 
     stream_set_timeout($socket, LINK_FAVICON_REQUEST_TIMEOUT_SECONDS);
@@ -877,10 +1175,17 @@ function link_favicon_http_request_socket(string $url, string $host, int $port, 
     if (isset($parts['query']) && (string) $parts['query'] !== '') {
         $path .= '?' . (string) $parts['query'];
     }
-    $request = "GET " . $path . " HTTP/1.1\r\n"
-        . "Host: " . $host . "\r\n"
+    $request =
+        'GET '
+        . $path
+        . " HTTP/1.1\r\n"
+        . 'Host: '
+        . $host
+        . "\r\n"
         . "User-Agent: PHP-Gallery-Link-Favicon\r\n"
-        . "Accept: " . $accept . "\r\n"
+        . 'Accept: '
+        . $accept
+        . "\r\n"
         . "Accept-Encoding: identity\r\n"
         . "Connection: close\r\n\r\n";
     if (@fwrite($socket, $request) === false) {
@@ -889,9 +1194,17 @@ function link_favicon_http_request_socket(string $url, string $host, int $port, 
     }
 
     $statusLine = fgets($socket, 4096);
-    if (!is_string($statusLine) || preg_match('/^HTTP\/\S+\s+(\d{3})/', trim($statusLine), $statusMatch) !== 1) {
+    if (
+        !is_string($statusLine)
+        || preg_match('/^HTTP\/\S+\s+(\d{3})/', trim($statusLine), $statusMatch)
+            !== 1
+    ) {
         fclose($socket);
-        return ['ok' => false, 'blocked' => false, 'error' => 'invalid_response'];
+        return [
+            'ok' => false,
+            'blocked' => false,
+            'error' => 'invalid_response',
+        ];
     }
     $status = (int) $statusMatch[1];
     $headers = [];
@@ -900,7 +1213,12 @@ function link_favicon_http_request_socket(string $url, string $host, int $port, 
         $headerBytes += strlen($line);
         if ($headerBytes > 65536) {
             fclose($socket);
-            return ['ok' => false, 'blocked' => false, 'status' => $status, 'error' => 'headers_too_large'];
+            return [
+                'ok' => false,
+                'blocked' => false,
+                'status' => $status,
+                'error' => 'headers_too_large',
+            ];
         }
         if ($line === "\r\n" || $line === "\n") {
             break;
@@ -911,13 +1229,24 @@ function link_favicon_http_request_socket(string $url, string $host, int $port, 
         }
     }
 
-    if (isset($headers['content-length']) && (int) $headers['content-length'] > $maxBytes) {
+    if (
+        isset($headers['content-length'])
+        && (int) $headers['content-length'] > $maxBytes
+    ) {
         fclose($socket);
-        return ['ok' => false, 'blocked' => false, 'status' => $status, 'headers' => $headers, 'error' => 'body_too_large'];
+        return [
+            'ok' => false,
+            'blocked' => false,
+            'status' => $status,
+            'headers' => $headers,
+            'error' => 'body_too_large',
+        ];
     }
 
     $body = '';
-    $transferEncoding = strtolower((string) ($headers['transfer-encoding'] ?? ''));
+    $transferEncoding = strtolower(
+        (string) ($headers['transfer-encoding'] ?? ''),
+    );
     if (str_contains($transferEncoding, 'chunked')) {
         while (!feof($socket)) {
             $sizeLine = fgets($socket, 4096);
@@ -927,17 +1256,33 @@ function link_favicon_http_request_socket(string $url, string $host, int $port, 
             $hex = trim(explode(';', trim($sizeLine), 2)[0]);
             if ($hex === '' || preg_match('/^[0-9a-fA-F]+$/', $hex) !== 1) {
                 fclose($socket);
-                return ['ok' => false, 'blocked' => false, 'status' => $status, 'headers' => $headers, 'error' => 'invalid_chunk'];
+                return [
+                    'ok' => false,
+                    'blocked' => false,
+                    'status' => $status,
+                    'headers' => $headers,
+                    'error' => 'invalid_chunk',
+                ];
             }
             $size = hexdec($hex);
             if ($size === 0) {
-                while (($trailer = fgets($socket, 4096)) !== false && $trailer !== "\r\n" && $trailer !== "\n") {
+                while (
+                    ($trailer = fgets($socket, 4096)) !== false
+                    && $trailer !== "\r\n"
+                    && $trailer !== "\n"
+                ) {
                 }
                 break;
             }
-            if (strlen($body) + $size > $maxBytes) {
+            if ((strlen($body) + $size) > $maxBytes) {
                 fclose($socket);
-                return ['ok' => false, 'blocked' => false, 'status' => $status, 'headers' => $headers, 'error' => 'body_too_large'];
+                return [
+                    'ok' => false,
+                    'blocked' => false,
+                    'status' => $status,
+                    'headers' => $headers,
+                    'error' => 'body_too_large',
+                ];
             }
             $remaining = $size;
             while ($remaining > 0 && !feof($socket)) {
@@ -956,9 +1301,15 @@ function link_favicon_http_request_socket(string $url, string $host, int $port, 
             if (!is_string($chunk) || $chunk === '') {
                 break;
             }
-            if (strlen($body) + strlen($chunk) > $maxBytes) {
+            if ((strlen($body) + strlen($chunk)) > $maxBytes) {
                 fclose($socket);
-                return ['ok' => false, 'blocked' => false, 'status' => $status, 'headers' => $headers, 'error' => 'body_too_large'];
+                return [
+                    'ok' => false,
+                    'blocked' => false,
+                    'status' => $status,
+                    'headers' => $headers,
+                    'error' => 'body_too_large',
+                ];
             }
             $body .= $chunk;
         }
@@ -966,9 +1317,21 @@ function link_favicon_http_request_socket(string $url, string $host, int $port, 
     $meta = stream_get_meta_data($socket);
     fclose($socket);
     if (!empty($meta['timed_out'])) {
-        return ['ok' => false, 'blocked' => false, 'status' => $status, 'headers' => $headers, 'error' => 'timeout'];
+        return [
+            'ok' => false,
+            'blocked' => false,
+            'status' => $status,
+            'headers' => $headers,
+            'error' => 'timeout',
+        ];
     }
-    return ['ok' => false, 'blocked' => false, 'status' => $status, 'headers' => $headers, 'body' => $body];
+    return [
+        'ok' => false,
+        'blocked' => false,
+        'status' => $status,
+        'headers' => $headers,
+        'body' => $body,
+    ];
 }
 
 /**
@@ -983,23 +1346,36 @@ function link_favicon_html_icon_urls(string $html, string $baseUrl): array
     $groups = [[], [], []];
     if (preg_match_all('/<link\b[^>]*>/iu', $html, $matches)) {
         foreach ($matches[0] as $tag) {
-            $rel = strtolower(link_favicon_html_attribute((string) $tag, 'rel') ?? '');
+            $rel = strtolower(
+                link_favicon_html_attribute((string) $tag, 'rel') ?? '',
+            );
             $href = link_favicon_html_attribute((string) $tag, 'href');
             if ($rel === '' || $href === null || $href === '') {
                 continue;
             }
             $relTokens = preg_split('/\s+/u', trim($rel)) ?: [];
             $isIcon = in_array('icon', $relTokens, true);
-            $isApple = in_array('apple-touch-icon', $relTokens, true) || in_array('apple-touch-icon-precomposed', $relTokens, true);
+            $isApple =
+                in_array('apple-touch-icon', $relTokens, true)
+                || in_array('apple-touch-icon-precomposed', $relTokens, true);
             if (!$isIcon && !$isApple) {
                 continue;
             }
-            $absolute = link_favicon_resolve_relative_url($baseUrl, html_entity_decode($href, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $absolute = link_favicon_resolve_relative_url($baseUrl, html_entity_decode(
+                $href,
+                ENT_QUOTES | ENT_HTML5,
+                'UTF-8',
+            ));
             if ($absolute === null) {
                 continue;
             }
-            $type = strtolower(link_favicon_html_attribute((string) $tag, 'type') ?? '');
-            if ($type === 'image/svg+xml' || preg_match('/\.svg(?:$|[?#])/i', $absolute) === 1) {
+            $type = strtolower(
+                link_favicon_html_attribute((string) $tag, 'type') ?? '',
+            );
+            if (
+                $type === 'image/svg+xml'
+                || preg_match('/\.svg(?:$|[?#])/i', $absolute) === 1
+            ) {
                 continue;
             }
             if ($isIcon && !in_array('shortcut', $relTokens, true)) {
@@ -1026,14 +1402,30 @@ function link_favicon_html_icon_urls(string $html, string $baseUrl): array
 
 /**
  * Read one quoted or unquoted HTML attribute from a LINK tag.
+ *
+ * @param string $tag One HTML tag's source text.
+ * @param string $name Attribute name to find.
+ * @return ?string Trimmed attribute value, or null when absent.
  */
 function link_favicon_html_attribute(string $tag, string $name): ?string
 {
     $quotedName = preg_quote($name, '/');
-    if (preg_match('/\b' . $quotedName . '\s*=\s*(["\'])(.*?)\1/isu', $tag, $match) === 1) {
+    if (
+        preg_match(
+            '/\b' . $quotedName . '\s*=\s*(["\'])(.*?)\1/isu',
+            $tag,
+            $match,
+        ) === 1
+    ) {
         return trim((string) $match[2]);
     }
-    if (preg_match('/\b' . $quotedName . '\s*=\s*([^\s>"\']+)/isu', $tag, $match) === 1) {
+    if (
+        preg_match(
+            '/\b' . $quotedName . '\s*=\s*([^\s>"\']+)/isu',
+            $tag,
+            $match,
+        ) === 1
+    ) {
         return trim((string) $match[1]);
     }
     return null;
@@ -1041,9 +1433,15 @@ function link_favicon_html_attribute(string $tag, string $name): ?string
 
 /**
  * Resolve an HTTP(S) relative URL without allowing a scheme downgrade bypass.
+ *
+ * @param string $baseUrl Validated base page URL.
+ * @param string $reference Relative or absolute link reference.
+ * @return ?string Normalized HTTP(S) URL, or null when unsafe or invalid.
  */
-function link_favicon_resolve_relative_url(string $baseUrl, string $reference): ?string
-{
+function link_favicon_resolve_relative_url(
+    string $baseUrl,
+    string $reference,
+): ?string {
     $reference = trim($reference);
     if ($reference === '') {
         return null;
@@ -1082,7 +1480,9 @@ function link_favicon_resolve_relative_url(string $baseUrl, string $reference): 
 
     if (str_starts_with($reference, '?')) {
         $path = (string) ($base['path'] ?? '/');
-        return link_favicon_normalize_url($origin . ($path !== '' ? $path : '/') . $reference);
+        return link_favicon_normalize_url(
+            $origin . ($path !== '' ? $path : '/') . $reference,
+        );
     }
 
     $query = '';
@@ -1127,7 +1527,10 @@ function link_favicon_origin_url(string $url): ?string
     if (!is_array($parts)) {
         return null;
     }
-    $origin = strtolower((string) ($parts['scheme'] ?? '')) . '://' . (string) ($parts['host'] ?? '');
+    $origin =
+        strtolower((string) ($parts['scheme'] ?? ''))
+        . '://'
+        . (string) ($parts['host'] ?? '');
     if (!empty($parts['port'])) {
         $origin .= ':' . (int) $parts['port'];
     }
@@ -1137,7 +1540,8 @@ function link_favicon_origin_url(string $url): ?string
 /**
  * Validate downloaded favicon bytes by signature rather than remote MIME claims.
  *
- * @return ?array{mime_type:string,extension:string} Accepted image metadata.
+ * @param string $body Downloaded response bytes.
+ * @return ?array{mime_type:string,extension:string} Detected image MIME and filename extension, or null when signature/size validation fails.
  */
 function link_favicon_validate_image(string $body): ?array
 {
@@ -1151,9 +1555,16 @@ function link_favicon_validate_image(string $body): ?array
         $detected = ['mime_type' => 'image/png', 'extension' => 'png'];
     } elseif (substr($body, 0, 3) === "\xFF\xD8\xFF") {
         $detected = ['mime_type' => 'image/jpeg', 'extension' => 'jpg'];
-    } elseif (str_starts_with($body, 'GIF87a') || str_starts_with($body, 'GIF89a')) {
+    } elseif (
+        str_starts_with($body, 'GIF87a')
+        || str_starts_with($body, 'GIF89a')
+    ) {
         $detected = ['mime_type' => 'image/gif', 'extension' => 'gif'];
-    } elseif ($length >= 12 && substr($body, 0, 4) === 'RIFF' && substr($body, 8, 4) === 'WEBP') {
+    } elseif (
+        $length >= 12
+        && substr($body, 0, 4) === 'RIFF'
+        && substr($body, 8, 4) === 'WEBP'
+    ) {
         $detected = ['mime_type' => 'image/webp', 'extension' => 'webp'];
     } elseif (substr($body, 0, 4) === "\x00\x00\x01\x00") {
         $detected = ['mime_type' => 'image/x-icon', 'extension' => 'ico'];
@@ -1168,11 +1579,15 @@ function link_favicon_validate_image(string $body): ?array
         }
         $count = unpack('vcount', substr($body, 4, 2));
         $entryCount = (int) ($count['count'] ?? 0);
-        if ($entryCount < 1 || $entryCount > 64 || $length < 6 + 16 * $entryCount) {
+        if (
+            $entryCount < 1
+            || $entryCount > 64
+            || $length < (6 + (16 * $entryCount))
+        ) {
             return null;
         }
         for ($index = 0; $index < $entryCount; $index++) {
-            $offset = 6 + 16 * $index;
+            $offset = 6 + (16 * $index);
             $width = ord($body[$offset]);
             $height = ord($body[$offset + 1]);
             $width = $width === 0 ? 256 : $width;

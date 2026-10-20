@@ -29,8 +29,11 @@ namespace PhpGallery\SourceContracts;
  * @param int|null $consumed Receives the byte count consumed from this source fragment.
  * @return list<array{id:int,text:string,line:int,offset:int}> Tokens with PHP-compatible comment/identifier categories.
  */
-function javascript_tokens(string $source, bool $expressionOnly = false, ?int &$consumed = null): array
-{
+function javascript_tokens(
+    string $source,
+    bool $expressionOnly = false,
+    ?int &$consumed = null,
+): array {
     $tokens = [];
     $length = strlen($source);
     $offset = 0;
@@ -52,8 +55,16 @@ function javascript_tokens(string $source, bool $expressionOnly = false, ?int &$
         if (substr($source, $offset, 2) === '/*') {
             $end = strpos($source, '*/', $offset + 2);
             $offset = $end === false ? $length : $end + 2;
-            $id = substr($source, $start, 3) === '/**' ? T_DOC_COMMENT : T_COMMENT;
-        } elseif (substr($source, $offset, 2) === '//' || ($offset === 0 && substr($source, $offset, 2) === '#!')) {
+            $id = substr($source, $start, 3) === '/**'
+                ? T_DOC_COMMENT
+                : T_COMMENT;
+        } elseif (
+            substr($source, $offset, 2) === '//'
+            || (
+                $offset === 0
+                && substr($source, $offset, 2) === '#!'
+            )
+        ) {
             $end = strpos($source, "\n", $offset);
             $offset = $end === false ? $length : $end;
             $id = T_COMMENT;
@@ -71,22 +82,52 @@ function javascript_tokens(string $source, bool $expressionOnly = false, ?int &$
                     break;
                 }
                 if (substr($source, $offset, 2) === '$' . '{') {
-                    $literal = substr($source, $literalStart, $offset - $literalStart);
-                    $tokens[] = ['id' => T_CONSTANT_ENCAPSED_STRING, 'text' => $literal, 'line' => $literalLine, 'offset' => $literalStart];
+                    $literal = substr(
+                        $source,
+                        $literalStart,
+                        $offset - $literalStart,
+                    );
+                    $tokens[] = [
+                        'id' => T_CONSTANT_ENCAPSED_STRING,
+                        'text' => $literal,
+                        'line' => $literalLine,
+                        'offset' => $literalStart,
+                    ];
                     $line += substr_count($literal, "\n");
-                    $tokens[] = ['id' => 0, 'text' => '{', 'line' => $line, 'offset' => $offset + 1];
+                    $tokens[] = [
+                        'id' => 0,
+                        'text' => '{',
+                        'line' => $line,
+                        'offset' => $offset + 1,
+                    ];
                     $expressionStart = $offset + 2;
                     $expressionLength = null;
-                    $expression = javascript_tokens(substr($source, $expressionStart), true, $expressionLength);
+                    $expression = javascript_tokens(
+                        substr($source, $expressionStart),
+                        true,
+                        $expressionLength,
+                    );
                     foreach ($expression as $part) {
                         $part['line'] += $line - 1;
                         $part['offset'] += $expressionStart;
                         $tokens[] = $part;
                     }
-                    $line += substr_count(substr($source, $expressionStart, $expressionLength ?? 0), "\n");
+                    $line += substr_count(
+                        substr(
+                            $source,
+                            $expressionStart,
+                            $expressionLength ?? 0,
+                        ),
+                        "\n",
+                    );
                     $offset = $expressionStart + ($expressionLength ?? 0);
                     if (($source[$offset] ?? '') === '}') {
-                        $tokens[] = ['id' => 0, 'text' => '}', 'line' => $line, 'offset' => $offset++];
+                        $tokens[] = [
+                            'id' => 0,
+                            'text' => '}',
+                            'line' => $line,
+                            'offset' => $offset++,
+                        ];
                     }
                     $literalStart = $offset;
                     $literalLine = $line;
@@ -95,12 +136,40 @@ function javascript_tokens(string $source, bool $expressionOnly = false, ?int &$
                 $offset++;
             }
             $literal = substr($source, $literalStart, $offset - $literalStart);
-            $tokens[] = ['id' => T_CONSTANT_ENCAPSED_STRING, 'text' => $literal, 'line' => $literalLine, 'offset' => $literalStart];
+            $tokens[] = [
+                'id' => T_CONSTANT_ENCAPSED_STRING,
+                'text' => $literal,
+                'line' => $literalLine,
+                'offset' => $literalStart,
+            ];
             $line += substr_count($literal, "\n");
             $previous = 'template';
             continue;
-        } elseif ($char === "'" || $char === '"'
-            || ($char === '/' && in_array($previous, ['', '=', '(', '[', ',', ':', '!', 'return', '=>', '&&', '||', '?'], true))) {
+        } elseif (
+            $char === "'"
+            || $char === '"'
+            || (
+                $char === '/'
+                && in_array(
+                    $previous,
+                    [
+                        '',
+                        '=',
+                        '(',
+                        '[',
+                        ',',
+                        ':',
+                        '!',
+                        'return',
+                        '=>',
+                        '&&',
+                        '||',
+                        '?',
+                    ],
+                    true,
+                )
+            )
+        ) {
             $quote = $char;
             $inClass = false;
             $offset++;
@@ -127,13 +196,37 @@ function javascript_tokens(string $source, bool $expressionOnly = false, ?int &$
                 }
             }
             $id = T_CONSTANT_ENCAPSED_STRING;
-        } elseif (preg_match('/\G[A-Za-z_$][A-Za-z0-9_$]*/A', $source, $match, 0, $offset) === 1) {
+        } elseif (
+            preg_match(
+                '/\G[A-Za-z_$][A-Za-z0-9_$]*/A',
+                $source,
+                $match,
+                0,
+                $offset,
+            ) === 1
+        ) {
             $offset += strlen($match[0]);
             $id = T_STRING;
-        } elseif (preg_match('/\G(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/A', $source, $match, 0, $offset) === 1) {
+        } elseif (
+            preg_match(
+                '/\G(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/A',
+                $source,
+                $match,
+                0,
+                $offset,
+            ) === 1
+        ) {
             $offset += strlen($match[0]);
             $id = T_LNUMBER;
-        } elseif (preg_match('/\G(?:=>|\.\.\.|\?\.|===|!==|==|!=|&&|\|\||\?\?|\+\+|--)/A', $source, $match, 0, $offset) === 1) {
+        } elseif (
+            preg_match(
+                '/\G(?:=>|\.\.\.|\?\.|===|!==|==|!=|&&|\|\||\?\?|\+\+|--)/A',
+                $source,
+                $match,
+                0,
+                $offset,
+            ) === 1
+        ) {
             $offset += strlen($match[0]);
         } else {
             $offset++;
@@ -142,7 +235,12 @@ function javascript_tokens(string $source, bool $expressionOnly = false, ?int &$
         if ($id === 0) {
             $braceDepth += $text === '{' ? 1 : ($text === '}' ? -1 : 0);
         }
-        $tokens[] = ['id' => $id, 'text' => $text, 'line' => $line, 'offset' => $start];
+        $tokens[] = [
+            'id' => $id,
+            'text' => $text,
+            'line' => $line,
+            'offset' => $start,
+        ];
         $line += substr_count($text, "\n");
         if (!in_array($id, [T_COMMENT, T_DOC_COMMENT], true)) {
             $previous = $text;
@@ -164,7 +262,11 @@ function javascript_declarations(string $source): array
     $records = [];
     $claimed = [];
     foreach ($tokens as $index => $token) {
-        if (in_array($token['id'], [T_COMMENT, T_DOC_COMMENT, T_CONSTANT_ENCAPSED_STRING], true)) {
+        if (in_array(
+            $token['id'],
+            [T_COMMENT, T_DOC_COMMENT, T_CONSTANT_ENCAPSED_STRING],
+            true,
+        )) {
             continue;
         }
         $text = $token['text'];
@@ -173,12 +275,17 @@ function javascript_declarations(string $source): array
         $kind = 'callable';
         $open = null;
         if ($text === 'class') {
-            $name = ($tokens[$index + 1]['id'] ?? 0) === T_STRING ? $tokens[$index + 1]['text'] : '(anonymous class)';
+            $name = ($tokens[$index + 1]['id'] ?? 0) === T_STRING
+                ? $tokens[$index + 1]['text']
+                : '(anonymous class)';
             $kind = 'class';
-        } elseif ($text === '[' && isset($pairs[$index])
+        } elseif (
+            $text === '['
+            && isset($pairs[$index])
             && ($tokens[$pairs[$index] + 1]['text'] ?? '') === '('
             && isset($pairs[$pairs[$index] + 1])
-            && ($tokens[$pairs[$pairs[$index] + 1] + 1]['text'] ?? '') === '{') {
+            && ($tokens[$pairs[$pairs[$index] + 1] + 1]['text'] ?? '') === '{'
+        ) {
             $name = '(computed method)';
             $open = $pairs[$index] + 1;
         } elseif ($text === 'function') {
@@ -198,7 +305,10 @@ function javascript_declarations(string $source): array
             $kind = 'callback';
             $name = '(anonymous)';
             $previous = $index - 1;
-            if (($tokens[$previous]['text'] ?? '') === ')' && isset($pairs[$previous])) {
+            if (
+                ($tokens[$previous]['text'] ?? '') === ')'
+                && isset($pairs[$previous])
+            ) {
                 $open = $pairs[$previous];
                 $start = $open;
             } elseif (($tokens[$previous]['id'] ?? 0) === T_STRING) {
@@ -206,11 +316,23 @@ function javascript_declarations(string $source): array
             } else {
                 continue;
             }
-        } elseif ($token['id'] === T_STRING && ($tokens[$index + 1]['text'] ?? '') === '('
-            && !isset($claimed[$index + 1]) && isset($pairs[$index + 1])
+        } elseif (
+            $token['id'] === T_STRING
+            && ($tokens[$index + 1]['text'] ?? '') === '('
+            && !isset($claimed[$index + 1])
+            && isset($pairs[$index + 1])
             && ($tokens[$pairs[$index + 1] + 1]['text'] ?? '') === '{'
-            && !in_array($text, ['if', 'for', 'while', 'switch', 'catch', 'with', 'function'], true)
-            && !in_array($tokens[$index - 1]['text'] ?? '', ['.', '?.', 'new', 'function'], true)) {
+            && !in_array(
+                $text,
+                ['if', 'for', 'while', 'switch', 'catch', 'with', 'function'],
+                true,
+            )
+            && !in_array(
+                $tokens[$index - 1]['text'] ?? '',
+                ['.', '?.', 'new', 'function'],
+                true,
+            )
+        ) {
             $name = $text;
             $open = $index + 1;
         } else {
@@ -220,16 +342,24 @@ function javascript_declarations(string $source): array
             if (($tokens[$start - 1]['text'] ?? '') === 'async') {
                 $start--;
             }
-            if (in_array($tokens[$start - 1]['text'] ?? '', ['=', ':'], true)
-                && ($tokens[$start - 2]['id'] ?? 0) === T_STRING) {
+            if (
+                in_array($tokens[$start - 1]['text'] ?? '', ['=', ':'], true)
+                && ($tokens[$start - 2]['id'] ?? 0) === T_STRING
+            ) {
                 $start -= 2;
                 $name = $tokens[$start]['text'];
                 $kind = 'bound_callback';
-                while (($tokens[$start - 1]['text'] ?? '') === '.'
-                    && ($tokens[$start - 2]['id'] ?? 0) === T_STRING) {
+                while (
+                    ($tokens[$start - 1]['text'] ?? '') === '.'
+                    && ($tokens[$start - 2]['id'] ?? 0) === T_STRING
+                ) {
                     $start -= 2;
                 }
-                if (in_array($tokens[$start - 1]['text'] ?? '', ['const', 'let', 'var'], true)) {
+                if (in_array(
+                    $tokens[$start - 1]['text'] ?? '',
+                    ['const', 'let', 'var'],
+                    true,
+                )) {
                     $start--;
                 }
             }
@@ -241,26 +371,46 @@ function javascript_declarations(string $source): array
                 if (($first['text'] ?? '') === '...') {
                     $first = $segment[1] ?? [];
                 }
-                $parameter = ['name' => ($first['id'] ?? 0) === T_STRING ? $first['text'] : '(pattern)', 'type' => ''];
+                $parameter = [
+                    'name' => ($first['id'] ?? 0) === T_STRING
+                        ? $first['text']
+                        : '(pattern)',
+                    'type' => '',
+                ];
                 $tupleArity = javascript_flat_tuple_arity($segment);
                 if ($tupleArity !== null) {
                     $parameter['tuple_arity'] = $tupleArity;
                 }
                 $params[] = $parameter;
             }
-        } elseif ($text === '=>' && ($tokens[$index - 1]['id'] ?? 0) === T_STRING) {
+        } elseif (
+            $text === '=>'
+            && ($tokens[$index - 1]['id'] ?? 0) === T_STRING
+        ) {
             $params[] = ['name' => $tokens[$index - 1]['text'], 'type' => ''];
         }
-        $bodyStart = $text === '=>' ? $index + 1 : (($pairs[$open ?? -1] ?? $index) + 1);
+        $bodyStart = $text === '=>'
+            ? $index + 1
+            : ($pairs[$open ?? -1] ?? $index) + 1;
         if ($kind === 'class') {
-            while ($bodyStart < count($tokens) && $tokens[$bodyStart]['text'] !== '{') {
+            while (
+                $bodyStart < count($tokens)
+                && $tokens[$bodyStart]['text'] !== '{'
+            ) {
                 $bodyStart++;
             }
         }
-        $records[] = ['kind' => $kind, 'language' => 'javascript', 'name' => $name, 'line' => $token['line'],
-            'params' => $params, 'return_type' => '', 'doc' => attached_doc($tokens, $start, $pairs),
+        $records[] = [
+            'kind' => $kind,
+            'language' => 'javascript',
+            'name' => $name,
+            'line' => $token['line'],
+            'params' => $params,
+            'return_type' => '',
+            'doc' => attached_doc($tokens, $start, $pairs),
             'start_token' => declaration_start($tokens, $start, $pairs),
-            'end_token' => declaration_end($tokens, $bodyStart, $pairs)];
+            'end_token' => declaration_end($tokens, $bodyStart, $pairs),
+        ];
     }
     return $records;
 }
@@ -272,7 +422,10 @@ function javascript_declarations(string $source): array
  */
 function javascript_flat_tuple_arity(array $segment): ?int
 {
-    if (($segment[0]['text'] ?? '') !== '[' || ($segment[count($segment) - 1]['text'] ?? '') !== ']') {
+    if (
+        ($segment[0]['text'] ?? '') !== '['
+        || ($segment[count($segment) - 1]['text'] ?? '') !== ']'
+    ) {
         return null;
     }
     $expectName = true;

@@ -62,33 +62,64 @@ use function Gallery\Views\view_render_admin_gallery_image_rows;
  * @param bool $deferred Whether thumbnail requests are reserved for the preload queue.
  * @return void Render prepared compact image rows and their panel actions.
  */
-function admin_edit_gallery_render_images_tab(array $gallery, array $images, string $activeEditTab, bool $rowsOnly = false, bool $deferred = false): void
-{
+function admin_edit_gallery_render_images_tab(
+    array $gallery,
+    array $images,
+    string $activeEditTab,
+    bool $rowsOnly = false,
+    bool $deferred = false,
+): void {
     $actions = [
         [
-            'label' => t('admin.gallery_editor.upload_photos_here', 'Upload photos here'),
+            'label' => t(
+                'admin.gallery_editor.upload_photos_here',
+                'Upload photos here',
+            ),
             'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
             'class' => 'button',
             'attributes' => [
                 'data-gallery-side-panel-link' => true,
                 'data-admin-side-panel-workflow' => 'upload',
-                'data-admin-side-panel-kicker' => t('admin.gallery_editor.upload_workflow', 'Upload workflow'),
-                'data-admin-side-panel-title' => t('admin.gallery_editor.upload_photos', 'Upload photos'),
-                'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+                'data-admin-side-panel-kicker' => t(
+                    'admin.gallery_editor.upload_workflow',
+                    'Upload workflow',
+                ),
+                'data-admin-side-panel-title' => t(
+                    'admin.gallery_editor.upload_photos',
+                    'Upload photos',
+                ),
+                'data-gallery-side-panel-url' => url_for('admin_upload', [
+                    'gallery_id' => $gallery['id'],
+                    'panel' => 1,
+                ]),
             ],
         ],
     ];
     if (feature_capability_effective_enabled('duplicate_photo_detector')) {
         $actions[] = [
-            'label' => t('admin.duplicate_photos.action_label', 'Find duplicate photos'),
-            'url' => url_for('admin_duplicate_photos', ['gallery_id' => $gallery['id']]),
+            'label' => t(
+                'admin.duplicate_photos.action_label',
+                'Find duplicate photos',
+            ),
+            'url' => url_for('admin_duplicate_photos', [
+                'gallery_id' => $gallery['id'],
+            ]),
             'class' => 'button secondary',
             'attributes' => [
                 'data-gallery-side-panel-link' => true,
                 'data-admin-side-panel-workflow' => 'duplicate-detector',
-                'data-admin-side-panel-kicker' => t('admin.duplicate_photos.kicker', 'Gallery tools'),
-                'data-admin-side-panel-title' => t('admin.duplicate_photos.page_title', 'Duplicate Photo Detector'),
-                'data-gallery-side-panel-url' => url_for('admin_duplicate_photos', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+                'data-admin-side-panel-kicker' => t(
+                    'admin.duplicate_photos.kicker',
+                    'Gallery tools',
+                ),
+                'data-admin-side-panel-title' => t(
+                    'admin.duplicate_photos.page_title',
+                    'Duplicate Photo Detector',
+                ),
+                'data-gallery-side-panel-url' => url_for('admin_duplicate_photos', [
+                    'gallery_id' => $gallery['id'],
+                    'panel' => 1,
+                ]),
             ],
         ];
     }
@@ -101,31 +132,53 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
 
     $coverMode = gallery_cover_selection_mode($gallery);
     $coverMultiSupported = gallery_cover_selection_schema_ready();
-    $coverSelectionIds = $coverMode === 'multi' ? gallery_cover_selection_ids($gallery) : [];
+    $coverSelectionIds = $coverMode === 'multi'
+        ? gallery_cover_selection_ids($gallery)
+        : [];
     $imageRows = [];
     foreach ($images as $image) {
         $imageId = (int) $image['id'];
         $relativePath = (string) $image['relative_path'];
-        $coverState = $coverMode === 'multi' && in_array($imageId, $coverSelectionIds, true)
+        $coverState = $coverMode === 'multi'
+        && in_array($imageId, $coverSelectionIds, true)
             ? 'multi'
-            : ($coverMode !== 'multi' && $coverMode !== 'automatic'
-                && (int) ($gallery['cover_image_id'] ?? 0) === $imageId ? 'single' : 'off');
+            : (
+                $coverMode !== 'multi'
+                    && $coverMode !== 'automatic'
+                    && (int) ($gallery['cover_image_id'] ?? 0) === $imageId
+                        ? 'single'
+                        : 'off'
+            );
         $imageRows[] = [
             'id' => $imageId,
             'relative_path' => $relativePath,
-            'visibility' => normalize_gallery_visibility((string) $image['visibility']),
-            'thumbnail_url' => $deferred ? thumbnail_editor_preload_url($image) : thumbnail_url($image, 300),
-            'preview_url' => $deferred ? thumbnail_editor_preview_url($image, $gallery) : thumbnail_url($image, 900),
+            'visibility' => normalize_gallery_visibility(
+                (string) $image['visibility'],
+            ),
+            'thumbnail_url' => $deferred
+                ? thumbnail_editor_preload_url($image)
+                : thumbnail_url($image, 300),
+            'preview_url' => $deferred
+                ? thumbnail_editor_preview_url($image, $gallery)
+                : thumbnail_url($image, 900),
             'capture_date' => (string) ($image['exif_taken_at'] ?? ''),
-            'move_aria' => t('admin.image_order.move_aria', 'Move {file}', ['file' => $relativePath]),
+            'move_aria' => t('admin.image_order.move_aria', 'Move {file}', [
+                'file' => $relativePath,
+            ]),
             'cover_state' => $coverState,
             'cover_mode' => $coverMode,
             'cover_multi_supported' => $coverMultiSupported,
             'cover_label' => $coverState !== 'off'
-                ? t('admin.gallery_editor.title_picture_current', 'Title picture')
+                ? t(
+                    'admin.gallery_editor.title_picture_current',
+                    'Title picture',
+                )
                 : '',
             'edit_url' => url_for('admin_edit_image', ['id' => $imageId]),
-            'panel_url' => url_for('admin_edit_image', ['id' => $imageId, 'panel' => 1]),
+            'panel_url' => url_for('admin_edit_image', [
+                'id' => $imageId,
+                'panel' => 1,
+            ]),
         ];
     }
 
@@ -139,51 +192,120 @@ function admin_edit_gallery_render_images_tab(array $gallery, array $images, str
         'bulk_toolbar_html' => $bulkToolbarHtml,
         'scan_action' => [
             'url' => url_for('admin_scan_images'),
-            'label' => t('admin.gallery_editor.scan_import_images', 'Scan/import images'),
+            'label' => t(
+                'admin.gallery_editor.scan_import_images',
+                'Scan/import images',
+            ),
         ],
         'intro' => [
             'kicker' => t('admin.gallery_editor.tab_images', 'Images'),
-            'title' => t('admin.gallery_editor.images_title', 'Photos and ordering'),
+            'title' => t(
+                'admin.gallery_editor.images_title',
+                'Photos and ordering',
+            ),
             'actions' => $actions,
         ],
         'images' => $imageRows,
         'cover_selection_mode' => $coverMode,
-        'cover_selection_revision' => gallery_cover_selection_revision($gallery),
+        'cover_selection_revision' =>
+            gallery_cover_selection_revision($gallery),
         'cover_multi_supported' => $coverMultiSupported,
         'labels' => [
-            'drag_help' => t('admin.gallery_editor.drag_photos_help', 'Drag to reorder, or sort by filename or EXIF capture date. Photos without a capture date stay last. Each change is saved immediately.'),
-            'order_unchanged' => t('admin.gallery_editor.order_unchanged', 'Order unchanged.'),
+            'drag_help' => t(
+                'admin.gallery_editor.drag_photos_help',
+                'Drag to reorder, or sort by filename or EXIF capture date. Photos without a capture date stay last. Each change is saved immediately.',
+            ),
+            'order_unchanged' => t(
+                'admin.gallery_editor.order_unchanged',
+                'Order unchanged.',
+            ),
             'move' => t('admin.gallery_editor.move', 'Move'),
             'select' => t('admin.gallery_editor.select', 'Select'),
             'preview' => t('admin.gallery_editor.preview', 'Preview'),
-            'sort_a_z' => t('admin.gallery_editor.sort_photos_a_z', 'Sort photos by name from A to Z'),
+            'sort_a_z' => t(
+                'admin.gallery_editor.sort_photos_a_z',
+                'Sort photos by name from A to Z',
+            ),
             'name' => t('admin.gallery_editor.name', 'Name'),
-            'file_names_shown' => t('admin.gallery_editor.file_names_shown', 'File names shown'),
+            'file_names_shown' => t(
+                'admin.gallery_editor.file_names_shown',
+                'File names shown',
+            ),
             'status' => t('admin.gallery_editor.status', 'Status'),
             'cover' => t('admin.gallery_editor.cover', 'Cover'),
             'actions' => t('admin.gallery_editor.actions', 'Actions'),
-            'drag_title' => t('admin.image_order.drag_title', 'Drag to reorder'),
-            'photo_editor' => t('admin.gallery_editor.photo_editor', 'Photo editor'),
+            'drag_title' => t(
+                'admin.image_order.drag_title',
+                'Drag to reorder',
+            ),
+            'photo_editor' => t(
+                'admin.gallery_editor.photo_editor',
+                'Photo editor',
+            ),
             'edit_photo' => t('admin.gallery_editor.edit_photo', 'Edit photo'),
             'edit' => t('admin.gallery_editor.edit', 'Edit'),
             'delete' => t('admin.gallery_editor.delete', 'Delete'),
-            'show_names' => t('admin.gallery_editor.images_show_names', 'Show filenames'),
-            'save_names_default' => t('admin.gallery_editor.images_save_names_default', 'Use as default'),
-            'names_default_saved' => t('admin.gallery_editor.images_names_default_saved', 'Default saved for other gallery editors.'),
-            'names_unavailable' => t('admin.gallery_editor.images_names_unavailable', 'Browser storage is unavailable; this choice applies only to this editor session.'),
-            'capture_date' => t('admin.gallery_editor.images_capture_date', 'Date taken'),
-            'sort_capture_date' => t('admin.image_order.sort_capture_date_asc_aria', 'Sort photos by capture date from oldest to newest'),
-            'set_cover' => t('admin.gallery_editor.set_as_title_picture', 'Set as title picture'),
-            'cover_arm' => t('admin.gallery_editor.cover_arm', 'Also select other photos'),
-            'cover_add' => t('admin.gallery_editor.cover_add', 'Add to title pictures'),
-            'cover_reset' => t('admin.gallery_editor.cover_reset', 'Use only this photo'),
-            'cover_limit' => t('admin.gallery_editor.cover_selection_limit', 'Choose at most four title-picture photos.'),
-            'cover_multi_label' => t('admin.gallery_editor.cover_multi_selected', '{count} selected photos (blue stars)', ['count' => '{count}']),
-            'close_preview' => t('admin.gallery_editor.images_close_preview', 'Close preview'),
+            'show_names' => t(
+                'admin.gallery_editor.images_show_names',
+                'Show filenames',
+            ),
+            'save_names_default' => t(
+                'admin.gallery_editor.images_save_names_default',
+                'Use as default',
+            ),
+            'names_default_saved' => t(
+                'admin.gallery_editor.images_names_default_saved',
+                'Default saved for other gallery editors.',
+            ),
+            'names_unavailable' => t(
+                'admin.gallery_editor.images_names_unavailable',
+                'Browser storage is unavailable; this choice applies only to this editor session.',
+            ),
+            'capture_date' => t(
+                'admin.gallery_editor.images_capture_date',
+                'Date taken',
+            ),
+            'sort_capture_date' => t(
+                'admin.image_order.sort_capture_date_asc_aria',
+                'Sort photos by capture date from oldest to newest',
+            ),
+            'set_cover' => t(
+                'admin.gallery_editor.set_as_title_picture',
+                'Set as title picture',
+            ),
+            'cover_arm' => t(
+                'admin.gallery_editor.cover_arm',
+                'Also select other photos',
+            ),
+            'cover_add' => t(
+                'admin.gallery_editor.cover_add',
+                'Add to title pictures',
+            ),
+            'cover_reset' => t(
+                'admin.gallery_editor.cover_reset',
+                'Use only this photo',
+            ),
+            'cover_limit' => t(
+                'admin.gallery_editor.cover_selection_limit',
+                'Choose at most four title-picture photos.',
+            ),
+            'cover_multi_label' => t(
+                'admin.gallery_editor.cover_multi_selected',
+                '{count} selected photos (blue stars)',
+                ['count' => '{count}'],
+            ),
+            'close_preview' => t(
+                'admin.gallery_editor.images_close_preview',
+                'Close preview',
+            ),
         ],
     ];
     if ($rowsOnly) {
-        view_render_admin_gallery_image_rows($imageRows, $viewModel['labels'], $deferred);
+        view_render_admin_gallery_image_rows(
+            $imageRows,
+            $viewModel['labels'],
+            $deferred,
+        );
         return;
     }
     view_render_admin_gallery_images_tab($viewModel);

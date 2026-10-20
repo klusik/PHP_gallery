@@ -15,13 +15,20 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/app/models/gallery_description_layout_migration.php';
-require_once dirname(__DIR__, 2) . '/app/services/gallery_description_layout_compatibility.php';
+require_once
+    dirname(__DIR__, 2)
+        . '/app/models/gallery_description_layout_migration.php';
+require_once
+    dirname(__DIR__, 2)
+        . '/app/services/gallery_description_layout_compatibility.php';
 
-return ['statements' => [], 'after' => /**
- * Apply the one-time domain conversion before recording the migration version.
- * @param PDO $pdo Canonical migration connection.
- * @return void Preserves appearance or refuses the migration without a completion marker.
- */ static function (PDO $pdo): void {
-    \Gallery\Services\gallery_description_layout_migrate_legacy($pdo);
-}];
+return [
+    'statements' => [],
+    'after' => /**
+     * Apply the one-time domain conversion before recording the migration version.
+     * @param PDO $pdo Canonical migration connection.
+     * @return void Preserves appearance or refuses the migration without a completion marker.
+     */ static function (PDO $pdo): void {
+        \Gallery\Services\gallery_description_layout_migrate_legacy($pdo);
+    },
+];

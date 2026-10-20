@@ -34,8 +34,8 @@
  */
 
 return [
-    "ALTER TABLE galleries ADD COLUMN nsfw_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER grid_use_for_subgalleries",
-    "ALTER TABLE galleries ADD KEY galleries_nsfw_parent_index (parent_id, nsfw_enabled)",
-    "ALTER TABLE images ADD COLUMN nsfw_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility",
-    "ALTER TABLE images ADD KEY images_gallery_nsfw_visibility_index (gallery_id, nsfw_enabled, visibility, sort_order, filename)",
+    'ALTER TABLE galleries ADD COLUMN nsfw_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER grid_use_for_subgalleries',
+    'ALTER TABLE galleries ADD KEY galleries_nsfw_parent_index (parent_id, nsfw_enabled)',
+    'ALTER TABLE images ADD COLUMN nsfw_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility',
+    'ALTER TABLE images ADD KEY images_gallery_nsfw_visibility_index (gallery_id, nsfw_enabled, visibility, sort_order, filename)',
 ];

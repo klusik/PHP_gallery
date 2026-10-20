@@ -29,6 +29,7 @@
 declare(strict_types=1);
 
 namespace Gallery\Services {
+    require_once __DIR__ . '/support/php_source.php';
     /**
      * Test-only pagination fallback column count.
      *
@@ -39,6 +40,7 @@ namespace Gallery\Services {
      * Rationale: Provides a deterministic fallback without loading runtime modules.
      */
     const CMS_PAGINATION_DEFAULT_COLUMNS = 4;
+
     /**
      * Test-only pagination fallback row count.
      *
@@ -49,6 +51,7 @@ namespace Gallery\Services {
      * Rationale: Provides a deterministic fallback without loading runtime modules.
      */
     const CMS_PAGINATION_DEFAULT_ROWS = 5;
+
     /**
      * Test-only pagination maximum column count.
      *
@@ -59,6 +62,7 @@ namespace Gallery\Services {
      * Rationale: Keeps fixture normalization within a predictable bound.
      */
     const CMS_PAGINATION_MAX_COLUMNS = 12;
+
     /**
      * Test-only pagination maximum row count.
      *
@@ -305,81 +309,223 @@ namespace Gallery\Tests\BreadcrumbThemeSettings {
         }
     }
 
-    $GLOBALS['breadcrumb_theme_test_values'] = ['theme_breadcrumb_style' => 'unsupported'];
+    $GLOBALS['breadcrumb_theme_test_values'] = [
+        'theme_breadcrumb_style' => 'unsupported',
+    ];
     $GLOBALS['breadcrumb_theme_test_writes'] = [];
 
-    $expectedIds = ['minimal', 'chevron', 'pills', 'surface', 'ribbon', 'nodes', 'tabs', 'tiles', 'gradient'];
+    $expectedIds = [
+        'minimal',
+        'chevron',
+        'pills',
+        'surface',
+        'ribbon',
+        'nodes',
+        'tabs',
+        'tiles',
+        'gradient',
+    ];
     $registry = breadcrumb_style_registry();
-    assert_true(array_keys($registry) === $expectedIds, 'Breadcrumb style IDs or their stable order changed.');
+    assert_true(
+        array_keys($registry) === $expectedIds,
+        'Breadcrumb style IDs or their stable order changed.',
+    );
     foreach ($registry as $styleId => $definition) {
-        assert_true(is_string($definition['label'] ?? null) && is_string($definition['class'] ?? null), 'Registry entries must expose label and class metadata.');
-        assert_true(breadcrumb_style_normalize($styleId) === $styleId, 'A registered style ID did not normalize to itself.');
-        assert_true(theme_layout_safe_normalize('theme_breadcrumb_style', $styleId) === $styleId, 'A registered Theme style was rejected.');
+        assert_true(
+            is_string($definition['label'] ?? null)
+                && is_string($definition['class'] ?? null),
+            'Registry entries must expose label and class metadata.',
+        );
+        assert_true(
+            breadcrumb_style_normalize($styleId) === $styleId,
+            'A registered style ID did not normalize to itself.',
+        );
+        assert_true(
+            theme_layout_safe_normalize('theme_breadcrumb_style', $styleId)
+                === $styleId,
+            'A registered Theme style was rejected.',
+        );
     }
 
     // Compare the documented accepted values with the real registry, not a second fixture list.
-    $settingsInventory = file_get_contents(__DIR__ . '/../docs/ADMIN_SETTINGS_INVENTORY.md');
-    assert_true(is_string($settingsInventory), 'Could not read the Admin settings inventory.');
-    assert_true(preg_match('/^\| `theme_breadcrumb_style` \|[^\r\n]+/m', $settingsInventory, $themeInventoryMatch) === 1,
-        'The inventory must contain the Theme breadcrumb setting row.');
-    $themeInventoryColumns = array_map('trim', explode('|', trim($themeInventoryMatch[0], "| \t\r\n")));
-    preg_match_all('/`([^`]+)`/', $themeInventoryColumns[2], $documentedThemeStyles);
-    assert_true($documentedThemeStyles[1] === array_keys($registry),
-        'The inventory Theme enum must list every registered visual style exactly once, without inherit.');
-    preg_match_all('/`([^`]+)`/', $themeInventoryColumns[3], $documentedThemeFallbacks);
-    assert_true(array_values(array_unique($documentedThemeFallbacks[1])) === [\Gallery\Services\BREADCRUMB_STYLE_DEFAULT],
-        'The inventory Theme fallback must match the shared breadcrumb default.');
+    $settingsInventory = file_get_contents(__DIR__
+        . '/../docs/ADMIN_SETTINGS_INVENTORY.md');
+    assert_true(
+        is_string($settingsInventory),
+        'Could not read the Admin settings inventory.',
+    );
+    assert_true(
+        preg_match(
+            '/^\| `theme_breadcrumb_style` \|[^\r\n]+/m',
+            $settingsInventory,
+            $themeInventoryMatch,
+        ) === 1,
+        'The inventory must contain the Theme breadcrumb setting row.',
+    );
+    $themeInventoryColumns = array_map('trim', explode('|', trim(
+        $themeInventoryMatch[0],
+        "| \t\r\n",
+    )));
+    preg_match_all(
+        '/`([^`]+)`/',
+        $themeInventoryColumns[2],
+        $documentedThemeStyles,
+    );
+    assert_true(
+        $documentedThemeStyles[1] === array_keys($registry),
+        'The inventory Theme enum must list every registered visual style exactly once, without inherit.',
+    );
+    preg_match_all(
+        '/`([^`]+)`/',
+        $themeInventoryColumns[3],
+        $documentedThemeFallbacks,
+    );
+    assert_true(
+        array_values(array_unique($documentedThemeFallbacks[1])) === [
+            \Gallery\Services\BREADCRUMB_STYLE_DEFAULT,
+        ],
+        'The inventory Theme fallback must match the shared breadcrumb default.',
+    );
 
-    assert_true(preg_match('/^\d+\. `gallery_breadcrumb_style\.<gallery-id>` accepts ([^.]+)\.((?:[^\r\n]|\r?\n[ \t]+)+)/m',
-        $settingsInventory, $galleryInventoryMatch) === 1,
-        'The inventory must document the physical-gallery breadcrumb override.');
-    preg_match_all('/`([^`]+)`/', $galleryInventoryMatch[1], $documentedGalleryStyles);
-    assert_true($documentedGalleryStyles[1] === [...array_keys($registry), \Gallery\Services\BREADCRUMB_STYLE_INHERIT],
-        'The inventory gallery values must list every registered style and the gallery-only inherit sentinel.');
+    assert_true(
+        preg_match(
+            '/^\d+\. `gallery_breadcrumb_style\.<gallery-id>` accepts ([^.]+)\.((?:[^\r\n]|\r?\n[ \t]+)+)/m',
+            $settingsInventory,
+            $galleryInventoryMatch,
+        ) === 1,
+        'The inventory must document the physical-gallery breadcrumb override.',
+    );
+    preg_match_all(
+        '/`([^`]+)`/',
+        $galleryInventoryMatch[1],
+        $documentedGalleryStyles,
+    );
+    assert_true(
+        $documentedGalleryStyles[1] === [
+            ...array_keys($registry),
+            \Gallery\Services\BREADCRUMB_STYLE_INHERIT,
+        ],
+        'The inventory gallery values must list every registered style and the gallery-only inherit sentinel.',
+    );
     // Markdown continuation lines retain the same paragraph and fallback order.
-    $galleryInventoryMatch[2] = preg_replace('/\s+/', ' ', $galleryInventoryMatch[2]);
-    assert_true(preg_match('/Missing or invalid gallery values inherit `([^`]+)`; missing or invalid Theme values fall back to `([^`]+)`/',
-        $galleryInventoryMatch[2], $documentedGalleryFallbacks) === 1,
-        'The inventory must document the gallery-to-Theme fallback order.');
-    assert_true($documentedGalleryFallbacks[1] === 'theme_breadcrumb_style'
-        && $documentedGalleryFallbacks[2] === \Gallery\Services\BREADCRUMB_STYLE_DEFAULT,
-        'The inventory gallery fallback must inherit Theme before using the shared default.');
+    $galleryInventoryMatch[2] = preg_replace(
+        '/\s+/',
+        ' ',
+        $galleryInventoryMatch[2],
+    );
+    assert_true(
+        preg_match(
+            '/Missing or invalid gallery values inherit `([^`]+)`; missing or invalid Theme values fall back to `([^`]+)`/',
+            $galleryInventoryMatch[2],
+            $documentedGalleryFallbacks,
+        ) === 1,
+        'The inventory must document the gallery-to-Theme fallback order.',
+    );
+    assert_true(
+        $documentedGalleryFallbacks[1] === 'theme_breadcrumb_style'
+            && $documentedGalleryFallbacks[2]
+                === \Gallery\Services\BREADCRUMB_STYLE_DEFAULT,
+        'The inventory gallery fallback must inherit Theme before using the shared default.',
+    );
 
-    assert_true(breadcrumb_style_normalize('invalid') === 'chevron', 'Invalid global breadcrumb styles must fall back to chevron.');
-    assert_true(theme_breadcrumb_style() === 'chevron', 'Theme getter did not normalize an invalid saved style.');
-    assert_true(theme_layout_safe_settings()['theme_breadcrumb_style'] === 'chevron', 'Theme layout settings did not expose the normalized global value.');
-    assert_true(theme_layout_safe_normalize('theme_breadcrumb_style', ['invalid']) === 'chevron', 'Malformed Theme values must use the safe style fallback.');
+    assert_true(
+        breadcrumb_style_normalize('invalid') === 'chevron',
+        'Invalid global breadcrumb styles must fall back to chevron.',
+    );
+    assert_true(
+        theme_breadcrumb_style() === 'chevron',
+        'Theme getter did not normalize an invalid saved style.',
+    );
+    assert_true(
+        theme_layout_safe_settings()['theme_breadcrumb_style'] === 'chevron',
+        'Theme layout settings did not expose the normalized global value.',
+    );
+    assert_true(
+        theme_layout_safe_normalize('theme_breadcrumb_style', ['invalid'])
+            === 'chevron',
+        'Malformed Theme values must use the safe style fallback.',
+    );
 
     foreach ($expectedIds as $styleId) {
         $GLOBALS['breadcrumb_theme_test_writes'] = [];
         theme_layout_safe_save('theme_breadcrumb_style', $styleId);
-        assert_true(($GLOBALS['breadcrumb_theme_test_values']['theme_breadcrumb_style'] ?? '') === $styleId, 'A registered style ID was not saved.');
-        assert_true(($GLOBALS['breadcrumb_theme_test_writes'][0] ?? null) === ['theme_breadcrumb_style', $styleId], 'Theme style save did not use the canonical setting key.');
-        assert_true(($GLOBALS['breadcrumb_theme_test_writes'][1][0] ?? '') === 'theme_public_content_revision', 'A changed breadcrumb style did not bump the public-content revision.');
-        assert_true(is_numeric($GLOBALS['breadcrumb_theme_test_writes'][1][1] ?? null), 'Public-content revision value was not a timestamp.');
+        assert_true(
+            (
+                $GLOBALS['breadcrumb_theme_test_values']['theme_breadcrumb_style']
+                ?? ''
+            ) === $styleId,
+            'A registered style ID was not saved.',
+        );
+        assert_true(
+            ($GLOBALS['breadcrumb_theme_test_writes'][0] ?? null) === [
+                'theme_breadcrumb_style',
+                $styleId,
+            ],
+            'Theme style save did not use the canonical setting key.',
+        );
+        assert_true(
+            ($GLOBALS['breadcrumb_theme_test_writes'][1][0] ?? '')
+                === 'theme_public_content_revision',
+            'A changed breadcrumb style did not bump the public-content revision.',
+        );
+        assert_true(
+            is_numeric($GLOBALS['breadcrumb_theme_test_writes'][1][1] ?? null),
+            'Public-content revision value was not a timestamp.',
+        );
     }
 
     $lastSavedStyle = $expectedIds[array_key_last($expectedIds)];
     $GLOBALS['breadcrumb_theme_test_writes'] = [];
     theme_layout_safe_save('theme_breadcrumb_style', $lastSavedStyle);
-    assert_true($GLOBALS['breadcrumb_theme_test_writes'] === [['theme_breadcrumb_style', $lastSavedStyle]], 'Saving the same style must not bump the public-content revision.');
-
-    $themeController = file_get_contents(__DIR__ . '/../app/controllers/admin_theme_actions.php');
-    assert_true(is_string($themeController), 'Could not read the Theme controller source.');
     assert_true(
-        preg_match('/if\s*\(\s*array_key_exists\(\s*[\'\"]theme_breadcrumb_style[\'\"]\s*,\s*\$_POST\s*\)\s*\)\s*\{\s*theme_layout_safe_save\(\s*[\'\"]theme_breadcrumb_style[\'\"]\s*,/s', $themeController) === 1,
-        'Theme POST must save this setting only when the field is present, preserving omitted-field values.'
+        $GLOBALS['breadcrumb_theme_test_writes'] === [[
+            'theme_breadcrumb_style',
+            $lastSavedStyle,
+        ]],
+        'Saving the same style must not bump the public-content revision.',
     );
-    $themeLayoutView = file_get_contents(__DIR__ . '/../app/views/admin_theme.php');
-    assert_true(is_string($themeLayoutView)
-        && str_contains($themeLayoutView, "view_render_breadcrumb_style_picker((array) (\$viewModel['breadcrumb_style_picker'] ?? []))")
-        && !str_contains($themeLayoutView, '<select name="theme_breadcrumb_style"'),
-        'Theme layout must render the prepared shared radio-card picker instead of a select.');
-    $themeLayoutController = file_get_contents(__DIR__ . '/../app/controllers/admin_theme_layout.php');
-    assert_true(is_string($themeLayoutController)
-        && str_contains($themeLayoutController, "'field_name' => 'theme_breadcrumb_style'")
-        && str_contains($themeLayoutController, 'breadcrumb_style_picker_options()'),
-        'Theme controller must prepare the shared picker with its canonical persistence name.');
+
+    $themeController = file_get_contents(__DIR__
+        . '/../app/controllers/admin_theme_actions.php');
+    assert_true(
+        is_string($themeController),
+        'Could not read the Theme controller source.',
+    );
+    assert_true(
+        preg_match(
+            '/if\s*\(\s*array_key_exists\(\s*[\'\"]theme_breadcrumb_style[\'\"]\s*,\s*\$_POST\s*\)\s*\)\s*\{\s*theme_layout_safe_save\(\s*[\'\"]theme_breadcrumb_style[\'\"]\s*,/s',
+            $themeController,
+        ) === 1,
+        'Theme POST must save this setting only when the field is present, preserving omitted-field values.',
+    );
+    $themeLayoutView = file_get_contents(__DIR__
+        . '/../app/views/admin_theme.php');
+    assert_true(
+        is_string($themeLayoutView)
+            && php_source_contains(
+                $themeLayoutView,
+                "view_render_breadcrumb_style_picker((array) (\$viewModel['breadcrumb_style_picker'] ?? []))",
+            )
+            && !php_source_contains(
+                $themeLayoutView,
+                '<select name="theme_breadcrumb_style"',
+            ),
+        'Theme layout must render the prepared shared radio-card picker instead of a select.',
+    );
+    $themeLayoutController = file_get_contents(__DIR__
+        . '/../app/controllers/admin_theme_layout.php');
+    assert_true(
+        is_string($themeLayoutController)
+            && php_source_contains(
+                $themeLayoutController,
+                "'field_name' => 'theme_breadcrumb_style'",
+            )
+            && php_source_contains(
+                $themeLayoutController,
+                'breadcrumb_style_picker_options()',
+            ),
+        'Theme controller must prepare the shared picker with its canonical persistence name.',
+    );
 
     echo "breadcrumb_theme_settings_test: PASS\n";
 }

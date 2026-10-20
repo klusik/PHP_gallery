@@ -49,8 +49,10 @@ function viewer_invitation_admin_assert(bool $condition, string $label): void
  * @param string $functionName Function name.
  * @return string Function source including declaration and body.
  */
-function viewer_invitation_admin_function_source(string $source, string $functionName): string
-{
+function viewer_invitation_admin_function_source(
+    string $source,
+    string $functionName,
+): string {
     $needle = 'function ' . $functionName . '(';
     $start = strpos($source, $needle);
     if ($start === false) {
@@ -76,36 +78,121 @@ function viewer_invitation_admin_function_source(string $source, string $functio
 }
 
 $root = dirname(__DIR__);
-$service = (string) file_get_contents($root . '/app/services/viewer_registration.php');
-$model = (string) file_get_contents($root . '/app/models/viewer_registration.php');
-$controller = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
-$viewerView = (string) file_get_contents($root . '/app/views/viewer_accounts.php');
-$migration = (string) file_get_contents($root . '/database/migrations/202608180005_viewer_invitation_admin_management.php');
+$service = (string) file_get_contents($root
+    . '/app/services/viewer_registration.php');
+$model = (string) file_get_contents($root
+    . '/app/models/viewer_registration.php');
+$controller = (string) file_get_contents($root
+    . '/app/controllers/viewer_accounts.php');
+$viewerView = (string) file_get_contents($root
+    . '/app/views/viewer_accounts.php');
+$migration = (string) file_get_contents(
+    $root
+        . '/database/migrations/202608180005_viewer_invitation_admin_management.php',
+);
 
-viewer_invitation_admin_assert(str_contains($migration, 'ADD COLUMN target_email VARCHAR(190) NULL'), 'Migration must add the administrator-visible intended email column.');
-viewer_invitation_admin_assert(str_contains($service, "schema_inspection_column('viewer_invitations', 'target_email')"), 'Registration storage must fail closed until the invitation email column exists.');
-viewer_invitation_admin_assert(str_contains($service, 'viewer_registration_model_invitation_insert(') && str_contains($model, '(token_hash, target_email, target_email_fingerprint,'), 'Invitation issuance must persist both display email and authorization fingerprint.');
-viewer_invitation_admin_assert(str_contains($service, 'viewer_registration_model_invitation_list(') && str_contains($model, 'SELECT vi.id, vi.target_email,'), 'Administrator invitation list must load the intended email.');
-viewer_invitation_admin_assert(!str_contains(viewer_invitation_admin_function_source($service, 'viewer_invitation_list_for_admin'), 'vi.token_hash'), 'Administrator invitation list must never expose invitation token hashes.');
+viewer_invitation_admin_assert(
+    str_contains($migration, 'ADD COLUMN target_email VARCHAR(190) NULL'),
+    'Migration must add the administrator-visible intended email column.',
+);
+viewer_invitation_admin_assert(
+    str_contains(
+        $service,
+        "schema_inspection_column('viewer_invitations', 'target_email')",
+    ),
+    'Registration storage must fail closed until the invitation email column exists.',
+);
+viewer_invitation_admin_assert(
+    str_contains($service, 'viewer_registration_model_invitation_insert(')
+        && str_contains(
+            $model,
+            '(token_hash, target_email, target_email_fingerprint,',
+        ),
+    'Invitation issuance must persist both display email and authorization fingerprint.',
+);
+viewer_invitation_admin_assert(
+    str_contains($service, 'viewer_registration_model_invitation_list(')
+        && str_contains($model, 'SELECT vi.id, vi.target_email,'),
+    'Administrator invitation list must load the intended email.',
+);
+viewer_invitation_admin_assert(
+    !str_contains(
+        viewer_invitation_admin_function_source(
+            $service,
+            'viewer_invitation_list_for_admin',
+        ),
+        'vi.token_hash',
+    ),
+    'Administrator invitation list must never expose invitation token hashes.',
+);
 
-$deleteService = viewer_invitation_admin_function_source($service, 'viewer_invitation_delete');
-$revokePosition = strpos($deleteService, 'viewer_invitation_revoke($invitationId);');
-$deletePosition = strpos($deleteService, 'viewer_registration_model_invitation_delete($invitationId)');
-viewer_invitation_admin_assert($revokePosition !== false && $deletePosition !== false && $revokePosition < $deletePosition && str_contains($model, 'DELETE FROM viewer_invitations WHERE id = ?'), 'Deletion must revoke staged authority before deleting the invitation row.');
-viewer_invitation_admin_assert(!str_contains($deleteService, 'DELETE FROM viewer_accounts') && !str_contains($deleteService, 'session_destroy()'), 'Invitation deletion must not delete viewer accounts or destroy shared sessions.');
+$deleteService = viewer_invitation_admin_function_source(
+    $service,
+    'viewer_invitation_delete',
+);
+$revokePosition = strpos(
+    $deleteService,
+    'viewer_invitation_revoke($invitationId);',
+);
+$deletePosition = strpos(
+    $deleteService,
+    'viewer_registration_model_invitation_delete($invitationId)',
+);
+viewer_invitation_admin_assert(
+    $revokePosition !== false
+        && $deletePosition !== false
+        && $revokePosition < $deletePosition
+        && str_contains($model, 'DELETE FROM viewer_invitations WHERE id = ?'),
+    'Deletion must revoke staged authority before deleting the invitation row.',
+);
+viewer_invitation_admin_assert(
+    !str_contains($deleteService, 'DELETE FROM viewer_accounts')
+        && !str_contains($deleteService, 'session_destroy()'),
+    'Invitation deletion must not delete viewer accounts or destroy shared sessions.',
+);
 
-$adminController = viewer_invitation_admin_function_source($controller, 'cms_admin_viewer_invitations');
-$adminView = viewer_invitation_admin_function_source($viewerView, 'view_render_admin_viewer_accounts');
-viewer_invitation_admin_assert(str_contains($adminController, "elseif (\$action === 'delete')"), 'Admin invitation page must handle the delete action.');
-viewer_invitation_admin_assert(str_contains($adminController, 'viewer_invitation_delete($invitationId)'), 'Controller must delegate deletion to the invitation service.');
-viewer_invitation_admin_assert(str_contains($adminController, 'verify_csrf();'), 'Invitation deletion must remain protected by Admin CSRF.');
-viewer_invitation_admin_assert(str_contains($adminView, 'viewer.admin.invites.email'), 'Invitation view must render an Email column.');
-viewer_invitation_admin_assert(str_contains($adminView, 'viewer.admin.invites.delete_button'), 'Invitation view must render a Delete action.');
-viewer_invitation_admin_assert(!str_contains($adminController, 'DELETE FROM viewer_invitations'), 'Controller must not duplicate invitation deletion SQL.');
+$adminController = viewer_invitation_admin_function_source(
+    $controller,
+    'cms_admin_viewer_invitations',
+);
+$adminView = viewer_invitation_admin_function_source(
+    $viewerView,
+    'view_render_admin_viewer_accounts',
+);
+viewer_invitation_admin_assert(
+    str_contains($adminController, "elseif (\$action === 'delete')"),
+    'Admin invitation page must handle the delete action.',
+);
+viewer_invitation_admin_assert(
+    str_contains($adminController, 'viewer_invitation_delete($invitationId)'),
+    'Controller must delegate deletion to the invitation service.',
+);
+viewer_invitation_admin_assert(
+    str_contains($adminController, 'verify_csrf();'),
+    'Invitation deletion must remain protected by Admin CSRF.',
+);
+viewer_invitation_admin_assert(
+    str_contains($adminView, 'viewer.admin.invites.email'),
+    'Invitation view must render an Email column.',
+);
+viewer_invitation_admin_assert(
+    str_contains($adminView, 'viewer.admin.invites.delete_button'),
+    'Invitation view must render a Delete action.',
+);
+viewer_invitation_admin_assert(
+    !str_contains($adminController, 'DELETE FROM viewer_invitations'),
+    'Controller must not duplicate invitation deletion SQL.',
+);
 
 foreach (['en', 'cs', 'de', 'sv'] as $language) {
-    $catalog = json_decode((string) file_get_contents($root . '/app/lang/' . $language . '.json'), true);
-    viewer_invitation_admin_assert(is_array($catalog), 'Translation catalog failed to decode: ' . $language);
+    $catalog = json_decode(
+        (string) file_get_contents($root . '/app/lang/' . $language . '.json'),
+        true,
+    );
+    viewer_invitation_admin_assert(
+        is_array($catalog),
+        'Translation catalog failed to decode: ' . $language,
+    );
     foreach ([
         'viewer.admin.invites.email',
         'viewer.admin.invites.email_any',
@@ -114,7 +201,16 @@ foreach (['en', 'cs', 'de', 'sv'] as $language) {
         'viewer.admin.invites.deleted',
         'viewer.admin.invites.delete_failed',
     ] as $key) {
-        viewer_invitation_admin_assert(isset($catalog[$key]) && is_string($catalog[$key]) && $catalog[$key] !== '', 'Missing invitation management translation ' . $key . ' in ' . $language . '.');
+        viewer_invitation_admin_assert(
+            isset($catalog[$key])
+                && is_string($catalog[$key])
+                && $catalog[$key] !== '',
+            'Missing invitation management translation '
+                . $key
+                . ' in '
+                . $language
+                . '.',
+        );
     }
 }
 

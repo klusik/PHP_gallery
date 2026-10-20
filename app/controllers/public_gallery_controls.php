@@ -97,7 +97,8 @@ use function Gallery\Services\gallery_effective_visibility;
 use function Gallery\Services\gallery_has_map_payload;
 use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
 use function Gallery\Services\gallery_sort_row_has_start_date;
-use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions;
+use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions
+;
 use function Gallery\Services\gallery_lightbox_excludes_restricted_nsfw;
 use function Gallery\Services\gallery_lightbox_fetch_images;
 use function Gallery\Services\gallery_lightbox_image_position;
@@ -170,7 +171,9 @@ use function Gallery\Services\admin_log_event;
 function public_subgallery_date_sort_mode(): string
 {
     // $mode stores the raw query value accepted from the public gallery URL.
-    $mode = strtolower(trim((string) ($_GET[PUBLIC_SUBGALLERY_DATE_SORT_PARAM] ?? '')));
+    $mode = strtolower(trim(
+        (string) ($_GET[PUBLIC_SUBGALLERY_DATE_SORT_PARAM] ?? ''),
+    ));
     return in_array($mode, ['asc', 'desc'], true) ? $mode : '';
 }
 
@@ -203,19 +206,22 @@ function public_count_dated_subgalleries(array $children): int
  * their current visible positions remain stable, while dated rows occupy only
  * the positions that already belonged to dated rows.
  *
- * @param array $children Direct child gallery rows in default order.
+ * @param list<array<string,mixed>> $children Direct child gallery rows in default order.
  * @param string $mode Sort mode: asc or desc.
- * @return array Direct child gallery rows with dated rows sorted.
+ * @return list<array<string,mixed>> Direct child gallery rows with dated rows sorted.
  */
 function public_sort_subgalleries_by_date(array $children, string $mode): array
 {
-    return gallery_sort_rows_by_date_preserving_undated_positions($children, $mode);
+    return gallery_sort_rows_by_date_preserving_undated_positions(
+        $children,
+        $mode,
+    );
 }
 
 /**
  * Build a public gallery URL for changing the preview subgallery date sort.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,slug?:string,folder_path?:string,title?:string} $gallery Gallery row used to build its canonical public URL.
  * @param string $mode Sort mode: asc, desc, or an empty string for default order.
  * @return string Public gallery URL with the requested sort state.
  */
@@ -223,7 +229,15 @@ function public_subgallery_date_sort_url(array $gallery, string $mode): string
 {
     // $query stores non-routing query parameters that should survive the view switch.
     $query = $_GET;
-    foreach (['page', 'public_path', 'gallery_path', 'slug', 'gallery_page', 'list_page', PUBLIC_SUBGALLERY_DATE_SORT_PARAM] as $name) {
+    foreach ([
+        'page',
+        'public_path',
+        'gallery_path',
+        'slug',
+        'gallery_page',
+        'list_page',
+        PUBLIC_SUBGALLERY_DATE_SORT_PARAM,
+    ] as $name) {
         unset($query[$name]);
     }
 
@@ -242,14 +256,25 @@ function public_subgallery_date_sort_url(array $gallery, string $mode): string
 /**
  * Render the admin-only subgallery date sort preview and save toolbar.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string,slug?:string,folder_path?:string,title?:string} $gallery Gallery row used by the toolbar.
  * @param string $activeMode Active sort mode: asc, desc, or an empty string.
  * @param int $datedCount Number of child galleries with a filled start date.
  * @param int $totalCount Total number of visible direct child galleries.
+ * @return void Renders the toolbar when the user and gallery state allow it.
  */
-function render_public_subgallery_date_sort_toolbar(array $gallery, string $activeMode, int $datedCount, int $totalCount): void
-{
-    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration') || $datedCount < 2 || $totalCount < 2) {
+function render_public_subgallery_date_sort_toolbar(
+    array $gallery,
+    string $activeMode,
+    int $datedCount,
+    int $totalCount,
+): void {
+    if (
+        !current_user()
+        || admin_anonymous_preview_active()
+        || !feature_capability_effective_enabled('inline_administration')
+        || $datedCount < 2
+        || $totalCount < 2
+    ) {
         return;
     }
 
@@ -275,20 +300,33 @@ function render_public_subgallery_date_sort_toolbar(array $gallery, string $acti
  * any sort_order values.
  *
  * @param string $kind Kind value.
- * @param array $gallery Gallery row or gallery data.
- * @param array $pagination Pagination value.
+ * @param array{id:int|string} $gallery Gallery whose visible items are reordered.
+ * @param array{offset?:int|string} $pagination Pagination data containing the visible-page offset.
  * @param int $visibleCount Visible count value.
  * @param int $totalCount Total count value.
+ * @return void Renders the toolbar when inline administration is available.
  */
-function render_public_page_reorder_toolbar(string $kind, array $gallery, array $pagination, int $visibleCount, int $totalCount): void
-{
-    if (!current_user() || admin_anonymous_preview_active() || !feature_capability_effective_enabled('inline_administration') || $visibleCount < 2) {
+function render_public_page_reorder_toolbar(
+    string $kind,
+    array $gallery,
+    array $pagination,
+    int $visibleCount,
+    int $totalCount,
+): void {
+    if (
+        !current_user()
+        || admin_anonymous_preview_active()
+        || !feature_capability_effective_enabled('inline_administration')
+        || $visibleCount < 2
+    ) {
         return;
     }
 
     \Gallery\Views\view_render_public_page_reorder_toolbar([
         'kind' => $kind,
-        'endpoint' => $kind === 'gallery' ? url_for('admin_reorder_public_galleries') : url_for('admin_reorder_images'),
+        'endpoint' => $kind === 'gallery'
+            ? url_for('admin_reorder_public_galleries')
+            : url_for('admin_reorder_images'),
         'gallery_id' => (int) $gallery['id'],
         'offset' => (int) ($pagination['offset'] ?? 0),
         'visible_count' => $visibleCount,
@@ -304,11 +342,14 @@ function render_public_page_reorder_toolbar(string $kind, array $gallery, array 
  * modifier-key gestures. It intentionally stays on the public gallery page and
  * posts to small JSON endpoints that delegate mutation work to services.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery row used to prepare manager controls.
  * @param bool $hasVisibleDropTargets Has visible drop targets flag.
+ * @return void Renders the picture manager toolbar.
  */
-function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTargets): void
-{
+function render_picture_manager_toolbar(
+    array $gallery,
+    bool $hasVisibleDropTargets,
+): void {
     if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
@@ -316,18 +357,28 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
     // $galleryId stores the source gallery ID for all manager actions.
     $galleryId = (int) $gallery['id'];
     // $suggestedDestinationId stores the most likely child gallery destination for typeahead prefill.
-    $suggestedDestinationId = function_exists('Gallery\\Services\\likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
+    $suggestedDestinationId = function_exists(
+        'Gallery\\Services\\likely_gallery_destination_id',
+    )
+        ? likely_gallery_destination_id($galleryId)
+        : 0;
     // $destinationPickerHtml reuses the established gallery picker rather than duplicating its data/presentation contract.
     $destinationPickerHtml = render_gallery_search_picker('', 0, $galleryId, [
         'id' => 'picture-manager-destination-' . $galleryId,
-        'placeholder' => t('picture_manager.search_destination', 'Search target gallery'),
+        'placeholder' => t(
+            'picture_manager.search_destination',
+            'Search target gallery',
+        ),
         'prefill_gallery_id' => $suggestedDestinationId,
         'hidden_attributes' => ['data-picture-manager-destination' => ''],
     ]);
     // $newParentPickerHtml commits the current gallery as the default parent while still allowing any physical gallery to be selected.
     $newParentPickerHtml = render_gallery_search_picker('', $galleryId, 0, [
         'id' => 'picture-manager-new-parent-' . $galleryId,
-        'placeholder' => t('picture_manager.search_parent', 'Search parent gallery'),
+        'placeholder' => t(
+            'picture_manager.search_parent',
+            'Search parent gallery',
+        ),
         'disable_prefill' => true,
         'hidden_attributes' => ['data-picture-manager-new-parent' => ''],
     ]);
@@ -353,16 +404,23 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
  * receiving mobile application show meaningful media labels without exposing
  * internal gallery paths.
  *
- * @param array $image Image row or image data.
+ * @param array{filename?:string} $image Image row containing the source filename.
  * @param string $displayTitle Display title value.
- * @return string Text result for the caller.
+ * @return string Filesystem-safe browser filename with a supported image extension.
  */
-function picture_manager_share_filename(array $image, string $displayTitle): string
-{
+function picture_manager_share_filename(
+    array $image,
+    string $displayTitle,
+): string {
     // $sourceName stores the most readable source label available for this image.
-    $sourceName = trim($displayTitle) !== '' ? $displayTitle : (string) ($image['filename'] ?? 'photo');
+    $sourceName = trim($displayTitle) !== ''
+        ? $displayTitle
+        : (string) ($image['filename'] ?? 'photo');
     // $extension stores the original extension when the source was already browser friendly.
-    $extension = strtolower(pathinfo((string) ($image['filename'] ?? ''), PATHINFO_EXTENSION));
+    $extension = strtolower(pathinfo(
+        (string) ($image['filename'] ?? ''),
+        PATHINFO_EXTENSION,
+    ));
     if (!in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
         $extension = 'jpg';
     }
@@ -410,14 +468,18 @@ function render_public_gallery_preview_toolbar(array $gallery): void
  * @param bool $download Whether to request attachment disposition.
  * @return string Root-relative URL for the dedicated OFP content route.
  */
-function public_gallery_ofp_document_url(int $galleryId, bool $download = false): string
-{
+function public_gallery_ofp_document_url(
+    int $galleryId,
+    bool $download = false,
+): string {
     $base = rtrim(\Gallery\Core\request_script_base_path(), '/');
     $query = ['page' => 'gallery_ofp_pdf', 'id' => $galleryId];
     if ($download) {
         $query['download'] = 1;
     }
-    return $base . '/index.php?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    return $base
+        . '/index.php?'
+        . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
 }
 
 /**
@@ -437,34 +499,46 @@ function render_public_gallery_branding_header(
     array $gallery,
     array $seo,
     bool $publicOnly,
-    bool $hasPhotos = false
-): string
-{
+    bool $hasPhotos = false,
+): string {
     // $brandingSchemaReady avoids repeated schema-policy inspection for the optional assets.
     $brandingSchemaReady = gallery_branding_schema_ready();
     // $dateHtml preserves the established gallery-date renderer while moving page markup into the view layer.
     ob_start();
-    view_render_gallery_date(gallery_date_view_model($gallery), 'hero-gallery-date');
+    view_render_gallery_date(
+        gallery_date_view_model($gallery),
+        'hero-gallery-date',
+    );
     $dateHtml = (string) ob_get_clean();
 
     $pdfHtml = '';
     $hasMusic = false;
     // Only attachment galleries load document presentation; the prepared HTML
     // joins the description in the view without moving unrelated hero controls.
-    if (\Gallery\Services\feature_capability_effective_enabled(
-        'gallery_pdf_documents'
-    ) && \Gallery\Services\gallery_pdf_documents_present($gallery)) {
+    if (
+        \Gallery\Services\feature_capability_effective_enabled(
+            'gallery_pdf_documents',
+        )
+        && \Gallery\Services\gallery_pdf_documents_present($gallery)
+    ) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         ob_start();
-        \Gallery\Views\view_render_gallery_pdf_documents(gallery_pdf_documents_view_model($gallery));
+        \Gallery\Views\view_render_gallery_pdf_documents(gallery_pdf_documents_view_model(
+            $gallery,
+        ));
         $pdfHtml = (string) ob_get_clean();
     }
     // Music presentation is deferred until a physical gallery has a playlist.
     // Keep its index/controller/view closure out of ordinary gallery requests.
-    if (\Gallery\Services\feature_capability_effective_enabled('gallery_music')
-        && is_file(\Gallery\Services\gallery_abs_path(
-            (string) $gallery['folder_path']
-        ) . '/.gallery-music/index.json')) {
+    if (
+        \Gallery\Services\feature_capability_effective_enabled('gallery_music')
+        && is_file(
+            \Gallery\Services\gallery_abs_path(
+                (string) $gallery['folder_path'],
+            )
+                . '/.gallery-music/index.json',
+        )
+    ) {
         \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         ob_start();
         $musicModel = gallery_music_view_model($gallery);
@@ -476,10 +550,14 @@ function render_public_gallery_branding_header(
     // The view consumes the final URL without reading locale/session policy.
     $presentationUrl = '';
     $presentation = \Gallery\Services\gallery_presentation_settings($gallery);
-    if ($hasPhotos && $presentation['enabled']
-        && feature_capability_effective_enabled('lightbox_modes')) {
+    if (
+        $hasPhotos
+        && $presentation['enabled']
+        && feature_capability_effective_enabled('lightbox_modes')
+    ) {
         $presentationUrl = gallery_public_url($gallery);
-        $presentationUrl .= (str_contains($presentationUrl, '?') ? '&' : '?')
+        $presentationUrl .=
+            (str_contains($presentationUrl, '?') ? '&' : '?')
             . http_build_query([
                 'lang' => \Gallery\Services\translation_active_language(),
             ] + \Gallery\Services\gallery_presentation_query($presentation));
@@ -487,9 +565,15 @@ function render_public_gallery_branding_header(
     $viewModel = [
         'title' => (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery'),
         'description' => (string) ($gallery['description'] ?? ''),
-        'description_links' => public_gallery_description_link_models((string) ($gallery['description'] ?? '')),
-        'banner_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '',
-        'logo_url' => $brandingSchemaReady ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '',
+        'description_links' => public_gallery_description_link_models(
+            (string) ($gallery['description'] ?? ''),
+        ),
+        'banner_url' => $brandingSchemaReady
+            ? gallery_branding_asset_url($gallery, 'banner', $publicOnly)
+            : '',
+        'logo_url' => $brandingSchemaReady
+            ? gallery_branding_asset_url($gallery, 'logo', $publicOnly)
+            : '',
         'date_html' => $dateHtml,
         'pdf_html' => $pdfHtml,
         // A launch URL carries presentation intent only; ordinary access
@@ -497,7 +581,10 @@ function render_public_gallery_branding_header(
         'presentation_url' => $presentationUrl,
         'presentation_music' => $hasMusic && $presentation['music'],
     ];
-    \Gallery\Views\view_render_public_gallery_branding_header($viewModel, false);
+    \Gallery\Views\view_render_public_gallery_branding_header(
+        $viewModel,
+        false,
+    );
     ob_start();
     \Gallery\Views\view_render_public_gallery_description_documents($viewModel);
     return (string) ob_get_clean();
@@ -506,16 +593,23 @@ function render_public_gallery_branding_header(
 /**
  * Render the optional horizontal branding separator below the gallery title area.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $gallery Gallery row used to resolve its separator asset.
  * @param bool $publicOnly Public only value.
+ * @return void Renders the separator when a gallery-specific asset is available.
  */
-function render_public_gallery_branding_separator(array $gallery, bool $publicOnly): void
-{
+function render_public_gallery_branding_separator(
+    array $gallery,
+    bool $publicOnly,
+): void {
     if (!gallery_branding_schema_ready()) {
         return;
     }
     // $separatorUrl stores only the per-gallery divider image. Theme fallback separators belong to the shared site header.
-    $separatorUrl = gallery_branding_asset_url($gallery, 'separator', $publicOnly);
+    $separatorUrl = gallery_branding_asset_url(
+        $gallery,
+        'separator',
+        $publicOnly,
+    );
     if ($separatorUrl === '') {
         return;
     }
@@ -533,34 +627,48 @@ function render_public_gallery_branding_separator(array $gallery, bool $publicOn
  */
 function public_gallery_breadcrumbs_view_model(?array $gallery = null): array
 {
-    $items = [['label' => t('public.galleries', 'Galleries'), 'url' => url_for('home')]];
+    $items = [[
+        'label' => t('public.galleries', 'Galleries'),
+        'url' => url_for('home'),
+    ]];
     if ($gallery) {
-        $gallery = \Gallery\Services\content_localize_entity('gallery', $gallery);
-        foreach (\Gallery\Services\content_localize_entities('gallery', gallery_breadcrumb_ancestors($gallery)) as $ancestor) {
+        $gallery = \Gallery\Services\content_localize_entity(
+            'gallery',
+            $gallery,
+        );
+        foreach (\Gallery\Services\content_localize_entities(
+            'gallery',
+            gallery_breadcrumb_ancestors($gallery),
+        ) as $ancestor) {
             $items[] = [
                 'label' => (string) ($ancestor['title'] ?? ''),
                 'url' => gallery_public_url($ancestor),
             ];
         }
-        $items[] = ['label' => (string) ($gallery['title'] ?? ''), 'current' => true];
+        $items[] = [
+            'label' => (string) ($gallery['title'] ?? ''),
+            'current' => true,
+        ];
     }
 
     return \Gallery\Services\breadcrumb_view_model(
         $items,
         \Gallery\Services\gallery_breadcrumb_style($gallery),
-        t('public.breadcrumbs', 'Breadcrumbs')
+        t('public.breadcrumbs', 'Breadcrumbs'),
     );
 }
 
 /**
- * Handles render breadcrumbs logic for the gallery application.
+ * Render the public gallery breadcrumb navigation.
  *
- * @param mixed $gallery Input used by this operation.
- * @return void
+ * @param ?array{id?:int|string,title?:string,slug?:string,folder_path?:string} $gallery Current gallery row, or null for the root index.
+ * @return void Renders the prepared breadcrumb model.
  */
 function render_breadcrumbs(?array $gallery = null): void
 {
-    \Gallery\Views\view_render_public_gallery_breadcrumbs(public_gallery_breadcrumbs_view_model($gallery));
+    \Gallery\Views\view_render_public_gallery_breadcrumbs(public_gallery_breadcrumbs_view_model(
+        $gallery,
+    ));
 }
 
 /**
@@ -571,12 +679,20 @@ function render_breadcrumbs(?array $gallery = null): void
  * @param ?array<string,mixed> $image Optional protected photo context.
  * @return void Renders the existing access gate with a localized title and no protected description.
  */
-function render_gallery_access_gate(array $gallery, string $error = '', ?array $image = null): void
-{
+function render_gallery_access_gate(
+    array $gallery,
+    string $error = '',
+    ?array $image = null,
+): void {
     // $requirement stores an intermediate value used by the surrounding gallery workflow.
     $requirement = gallery_access_requirement($gallery) ?: $gallery;
     // $nsfwRequirement stores the inherited NSFW source, or the current gallery for per-image NSFW.
-    $nsfwRequirement = gallery_nsfw_requirement($gallery) ?: ($image !== null && image_nsfw_restricted($image, $gallery) ? $gallery : null);
+    $nsfwRequirement = gallery_nsfw_requirement($gallery)
+    ?: (
+        $image !== null && image_nsfw_restricted($image, $gallery)
+            ? $gallery
+            : null
+    );
     // $state selects one presentation branch after all access-policy checks have been resolved in the controller.
     $state = 'share_only';
     if ($nsfwRequirement !== null && !visitor_can_access_nsfw_content()) {
@@ -586,7 +702,10 @@ function render_gallery_access_gate(array $gallery, string $error = '', ?array $
     }
 
     \Gallery\Views\view_render_gallery_access_gate([
-        'title' => (string) \Gallery\Services\content_localize_entity('gallery', $gallery)['title'],
+        'title' => (string) \Gallery\Services\content_localize_entity(
+            'gallery',
+            $gallery,
+        )['title'],
         'breadcrumbs' => public_gallery_breadcrumbs_view_model($gallery),
         'error' => $error,
         'state' => $state,
@@ -600,7 +719,9 @@ function render_gallery_access_gate(array $gallery, string $error = '', ?array $
 }
 
 /**
- * Handles cms gallery access logic for the gallery application.
+ * Handle gallery password and age-gate access submissions.
+ *
+ * @return void Validates access and completes the request with a redirect or not-found response.
  */
 function cms_gallery_access(): void
 {
@@ -611,7 +732,13 @@ function cms_gallery_access(): void
     verify_csrf();
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
-    if (!$gallery || (!gallery_allows_direct_public_request($gallery) && !current_user())) {
+    if (
+        !$gallery
+        || (
+            !gallery_allows_direct_public_request($gallery)
+            && !current_user()
+        )
+    ) {
         cms_not_found();
         return;
     }
@@ -624,26 +751,53 @@ function cms_gallery_access(): void
     $accessAction = (string) ($_POST['access_action'] ?? 'password');
     if ($accessAction === 'confirm_nsfw_age') {
         if (current_user_is_known_under_18()) {
-            render_gallery_access_gate($gallery, t('gallery.access.nsfw_account_ineligible', 'This account is not eligible to access 18+ content.'), $image);
+            render_gallery_access_gate(
+                $gallery,
+                t(
+                    'gallery.access.nsfw_account_ineligible',
+                    'This account is not eligible to access 18+ content.',
+                ),
+                $image,
+            );
             return;
         }
         if (empty($_POST['adult_confirmed'])) {
-            render_gallery_access_gate($gallery, t('gallery.access.nsfw_confirm_required', 'You must confirm that you are at least 18 years old.'), $image);
+            render_gallery_access_gate(
+                $gallery,
+                t(
+                    'gallery.access.nsfw_confirm_required',
+                    'You must confirm that you are at least 18 years old.',
+                ),
+                $image,
+            );
             return;
         }
         grant_nsfw_guard_access();
-        redirect_to($image ? image_public_url($image, $gallery) : gallery_public_url($gallery));
+        redirect_to(
+            $image
+                ? image_public_url($image, $gallery)
+                : gallery_public_url($gallery),
+        );
     }
     // $requirement stores an intermediate value used by the surrounding gallery workflow.
     $requirement = gallery_access_requirement($gallery);
     if (!$requirement || empty($requirement['access_password_hash'])) {
-        render_gallery_access_gate($gallery, t('gallery.access.password_not_configured', 'This gallery does not have a password login configured.'));
+        render_gallery_access_gate($gallery, t(
+            'gallery.access.password_not_configured',
+            'This gallery does not have a password login configured.',
+        ));
         return;
     }
     // $password stores an intermediate value used by the surrounding gallery workflow.
     $password = (string) ($_POST['gallery_password'] ?? '');
-    if (!password_verify($password, (string) $requirement['access_password_hash'])) {
-        render_gallery_access_gate($gallery, t('gallery.access.password_incorrect', 'The password is incorrect.'));
+    if (!password_verify(
+        $password,
+        (string) $requirement['access_password_hash'],
+    )) {
+        render_gallery_access_gate($gallery, t(
+            'gallery.access.password_incorrect',
+            'The password is incorrect.',
+        ));
         return;
     }
     grant_gallery_public_access((int) $requirement['id']);
@@ -666,7 +820,10 @@ function cms_share(): void
     if (schema_inspection_is_unknown($shareSchemaStatus)) {
         throw new \Gallery\Services\GalleryShareTokenSchemaUnavailableException();
     }
-    if (!gallery_access_schema_ready() || !schema_inspection_is_available($shareSchemaStatus)) {
+    if (
+        !gallery_access_schema_ready()
+        || !schema_inspection_is_available($shareSchemaStatus)
+    ) {
         cms_not_found();
         return;
     }
@@ -674,7 +831,13 @@ function cms_share(): void
     $galleryId = (int) ($_GET['id'] ?? 0);
     // $gallery stores the gallery resolved through the access-token persistence boundary.
     $gallery = gallery_access_find_by_token($token, $galleryId);
-    if (!$gallery || (!empty($gallery['access_token_expires_at']) && strtotime((string) $gallery['access_token_expires_at']) < time())) {
+    if (
+        !$gallery
+        || (
+            !empty($gallery['access_token_expires_at'])
+            && strtotime((string) $gallery['access_token_expires_at']) < time()
+        )
+    ) {
         cms_not_found();
         return;
     }

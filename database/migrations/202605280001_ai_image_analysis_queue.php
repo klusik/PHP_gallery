@@ -33,7 +33,7 @@
  */
 
 return [
-    "CREATE TABLE IF NOT EXISTS image_ai_metadata (
+    'CREATE TABLE IF NOT EXISTS image_ai_metadata (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         image_id BIGINT UNSIGNED NOT NULL,
         model_name VARCHAR(120) NOT NULL,
@@ -50,7 +50,7 @@ return [
         KEY image_ai_metadata_model_index (model_name, model_version, generated_at),
         KEY image_ai_metadata_source_index (image_id, source_checksum_sha256, source_file_size, source_modified_at),
         CONSTRAINT image_ai_metadata_image_id_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
     "CREATE TABLE IF NOT EXISTS image_ai_analysis_jobs (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         gallery_id BIGINT UNSIGNED NOT NULL,

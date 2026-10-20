@@ -47,8 +47,10 @@ function production_file_policy_assert(bool $condition, string $message): void
  * @param string $message Explanation if the operation incorrectly succeeds.
  * @return void Throws when the unsafe operation was accepted.
  */
-function production_file_policy_expect_refusal(callable $operation, string $message): void
-{
+function production_file_policy_expect_refusal(
+    callable $operation,
+    string $message,
+): void {
     try {
         $operation();
     } catch (RuntimeException) {
@@ -66,7 +68,9 @@ function production_file_policy_expect_refusal(callable $operation, string $mess
 function production_file_policy_mkdir(string $path): void
 {
     if (!is_dir($path) && !mkdir($path, 0777, true) && !is_dir($path)) {
-        throw new RuntimeException('Could not create policy fixture directory.');
+        throw new RuntimeException(
+            'Could not create policy fixture directory.',
+        );
     }
 }
 
@@ -87,24 +91,40 @@ function production_file_policy_remove_tree(string $path): void
     }
     foreach (scandir($path) ?: [] as $entry) {
         if ($entry !== '.' && $entry !== '..') {
-            production_file_policy_remove_tree($path . DIRECTORY_SEPARATOR . $entry);
+            production_file_policy_remove_tree(
+                $path . DIRECTORY_SEPARATOR . $entry,
+            );
         }
     }
     rmdir($path);
 }
 
-$fixture = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-production-policy-' . bin2hex(random_bytes(5));
+$fixture =
+    sys_get_temp_dir()
+    . DIRECTORY_SEPARATOR
+    . 'php-gallery-production-policy-'
+    . bin2hex(random_bytes(5));
 $source = $fixture . DIRECTORY_SEPARATOR . 'source';
 $stage = $fixture . DIRECTORY_SEPARATOR . 'stage';
 try {
     $generatedInventory = "{\n    \"production_files\": [\n        \"app/example.php\"\n    ]\n}\n";
     production_file_policy_assert(
-        production_files_inventory_content_matches(str_replace("\n", "\r\n", $generatedInventory), $generatedInventory),
-        'Windows CRLF checkout changed otherwise canonical production inventory data.'
+        production_files_inventory_content_matches(
+            str_replace("\n", "\r\n", $generatedInventory),
+            $generatedInventory,
+        ),
+        'Windows CRLF checkout changed otherwise canonical production inventory data.',
     );
     production_file_policy_assert(
-        !production_files_inventory_content_matches(str_replace('app/example.php', 'app/other.php', $generatedInventory), $generatedInventory),
-        'Production inventory comparison accepted changed membership after EOL normalization.'
+        !production_files_inventory_content_matches(
+            str_replace(
+                'app/example.php',
+                'app/other.php',
+                $generatedInventory,
+            ),
+            $generatedInventory,
+        ),
+        'Production inventory comparison accepted changed membership after EOL normalization.',
     );
 
     $production = [
@@ -121,7 +141,13 @@ try {
         'winapp/gallery_watch_upload.pyw',
         'winapp/uploader/media.py',
     ];
-    $updater = ['app/.htaccess', 'app/example.php', 'app/production-files.json', 'public/assets/styles.css', 'tests/.htaccess'];
+    $updater = [
+        'app/.htaccess',
+        'app/example.php',
+        'app/production-files.json',
+        'public/assets/styles.css',
+        'tests/.htaccess',
+    ];
     $resources = [
         'winapp/uploader/resources/DejaVuSans.ttf',
         'winapp/uploader/resources/LICENSE_DEJAVU',
@@ -130,47 +156,109 @@ try {
     $packagePaths = array_merge($production, $companion, $resources);
     sort($packagePaths, SORT_STRING);
     foreach (array_merge($packagePaths, $sourceReview) as $relative) {
-        production_file_policy_mkdir(dirname($source . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative)));
-        file_put_contents($source . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative), "fixture\n");
+        production_file_policy_mkdir(dirname(
+            $source . DIRECTORY_SEPARATOR
+                . str_replace('/', DIRECTORY_SEPARATOR, $relative),
+        ));
+        file_put_contents(
+            $source . DIRECTORY_SEPARATOR
+                . str_replace('/', DIRECTORY_SEPARATOR, $relative),
+            "fixture\n",
+        );
     }
     production_file_policy_mkdir($source . DIRECTORY_SEPARATOR . 'app');
-    file_put_contents($source . DIRECTORY_SEPARATOR . 'app/production-files.json', json_encode([
+    file_put_contents($source
+        . DIRECTORY_SEPARATOR
+        . 'app/production-files.json', json_encode([
         'schema_version' => 1,
         'production_files' => $production,
         'companion_files' => $companion,
         'companion_resource_files' => $resources,
         'updater_files' => $updater,
         'source_review_files' => $sourceReview,
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+        . "\n");
 
-    production_file_policy_assert(release_file_policy_paths($source) === $packagePaths, 'Production profile omitted canonical CMS or companion inventory.');
-    production_file_policy_assert(release_file_policy_read($source)['source_review_files'] === $sourceReview,
-        'Schema-1 source-review metadata is no longer readable by compatible installed updater clients.');
+    production_file_policy_assert(
+        release_file_policy_paths($source) === $packagePaths,
+        'Production profile omitted canonical CMS or companion inventory.',
+    );
+    production_file_policy_assert(
+        release_file_policy_read($source)['source_review_files']
+            === $sourceReview,
+        'Schema-1 source-review metadata is no longer readable by compatible installed updater clients.',
+    );
     production_file_policy_assert(
         release_file_policy_read($source)['companion_resource_files']
             === $resources,
-        'The additive resource inventory lost exact font/license membership.'
+        'The additive resource inventory lost exact font/license membership.',
     );
     foreach ($resources as $resource) {
-        production_file_policy_assert(!\Gallery\Core\release_file_policy_is_updater_path($resource),
-            'Companion resources entered CMS replacement or deletion ownership.');
+        production_file_policy_assert(
+            !\Gallery\Core\release_file_policy_is_updater_path($resource),
+            'Companion resources entered CMS replacement or deletion ownership.',
+        );
     }
-    production_file_policy_expect_refusal(static function () use ($source): void {
+    production_file_policy_expect_refusal(static function () use (
+        $source,
+    ): void {
         release_file_policy_paths($source, 'source-review');
     }, 'The retired deploy-only source-review packaging profile remained active.');
-    production_file_policy_assert(release_file_policy_is_integrity_path('app/example.json'), 'Integrity selector rejected an application JSON file.');
-    production_file_policy_assert(!release_file_policy_is_integrity_path('docs/manual.pdf'), 'Integrity selector accepted a distribution PDF.');
-    production_file_policy_assert(!release_file_policy_is_integrity_path('custom_css/preset.css'), 'Integrity selector accepted a user CSS preset.');
-    production_file_policy_assert(!\Gallery\Core\release_file_policy_is_updater_path('winapp/uploader/media.py'), 'CMS updater claimed independently owned WinApp sources.');
-    production_file_policy_assert(!release_file_policy_is_safe_relative_path('app/CON.txt'), 'Windows device path was accepted.');
-    production_file_policy_assert(!release_file_policy_is_safe_relative_path('app/unsafe. '), 'Trailing-dot/space alias was accepted.');
-    foreach (['app/../config.php', '/etc/passwd', 'app\\file.php', 'app/a:b.php', 'app/a?b.php', 'app/a*b.php',
-        'app/a|b.php', 'app/<bad>.php', 'app/CONIN$', 'app/LPT¹.log', "app/line\nbreak.php", 'app//file.php'] as $unsafe) {
-        production_file_policy_assert(!release_file_policy_is_safe_relative_path($unsafe), 'Unsafe portable path was accepted: ' . $unsafe);
+    production_file_policy_assert(
+        release_file_policy_is_integrity_path('app/example.json'),
+        'Integrity selector rejected an application JSON file.',
+    );
+    production_file_policy_assert(
+        !release_file_policy_is_integrity_path('docs/manual.pdf'),
+        'Integrity selector accepted a distribution PDF.',
+    );
+    production_file_policy_assert(
+        !release_file_policy_is_integrity_path('custom_css/preset.css'),
+        'Integrity selector accepted a user CSS preset.',
+    );
+    production_file_policy_assert(
+        !\Gallery\Core\release_file_policy_is_updater_path(
+            'winapp/uploader/media.py',
+        ),
+        'CMS updater claimed independently owned WinApp sources.',
+    );
+    production_file_policy_assert(
+        !release_file_policy_is_safe_relative_path('app/CON.txt'),
+        'Windows device path was accepted.',
+    );
+    production_file_policy_assert(
+        !release_file_policy_is_safe_relative_path('app/unsafe. '),
+        'Trailing-dot/space alias was accepted.',
+    );
+    foreach ([
+        'app/../config.php',
+        '/etc/passwd',
+        'app\\file.php',
+        'app/a:b.php',
+        'app/a?b.php',
+        'app/a*b.php',
+        'app/a|b.php',
+        'app/<bad>.php',
+        'app/CONIN$',
+        'app/LPT¹.log',
+        "app/line\nbreak.php",
+        'app//file.php',
+    ] as $unsafe) {
+        production_file_policy_assert(
+            !release_file_policy_is_safe_relative_path($unsafe),
+            'Unsafe portable path was accepted: ' . $unsafe,
+        );
     }
-    foreach ([['app/A.php', 'app/a.php'], ['app/Dir/a.php', 'app/dir/b.php'], ['app/file.php', 'app/file.php/child'],
-        ['app/a.php', 'app/a.php'], ['app/z.php', 'app/a.php']] as $invalidPaths) {
-        production_file_policy_expect_refusal(static function () use ($invalidPaths): void {
+    foreach ([
+        ['app/A.php', 'app/a.php'],
+        ['app/Dir/a.php', 'app/dir/b.php'],
+        ['app/file.php', 'app/file.php/child'],
+        ['app/a.php', 'app/a.php'],
+        ['app/z.php', 'app/a.php'],
+    ] as $invalidPaths) {
+        production_file_policy_expect_refusal(static function () use (
+            $invalidPaths,
+        ): void {
             release_file_policy_validate_path_list($invalidPaths);
         }, 'Invalid portable inventory collision or ordering was accepted.');
     }
@@ -181,132 +269,263 @@ try {
     } catch (RuntimeException) {
         $unicodeCollisionRejected = true;
     }
-    production_file_policy_assert($unicodeCollisionRejected, 'Unicode Windows case aliases were accepted.');
+    production_file_policy_assert(
+        $unicodeCollisionRejected,
+        'Unicode Windows case aliases were accepted.',
+    );
 
     // A source archive may contain development files, but its activation set is exact.
     production_file_policy_mkdir($source . '/.agent-local');
-    file_put_contents($source . '/.agent-local/private.txt', "private fixture\n");
+    file_put_contents(
+        $source . '/.agent-local/private.txt',
+        "private fixture\n",
+    );
     file_put_contents($source . '/TEMP_local-plan.md', "local fixture\n");
     file_put_contents($source . '/tests/source-only.php', "source fixture\n");
     $archive = release_file_policy_archive_updater_paths($source);
-    production_file_policy_assert($archive === ['files' => $updater, 'legacy' => false],
-        'Source-only archive entries changed the exact activation set.');
+    production_file_policy_assert(
+        $archive === ['files' => $updater, 'legacy' => false],
+        'Source-only archive entries changed the exact activation set.',
+    );
     file_put_contents($source . '/app/unlisted.php', "unexpected fixture\n");
-    production_file_policy_expect_refusal(static function () use ($source): void {
+    production_file_policy_expect_refusal(static function () use (
+        $source,
+    ): void {
         release_file_policy_archive_updater_paths($source);
     }, 'An unlisted application file was admitted from a current archive.');
-    production_file_policy_assert(!in_array('app/unlisted.php', release_file_policy_prior_updater_paths($source), true),
-        'An unknown installation file became obsolete-deletion ownership.');
+    production_file_policy_assert(
+        !in_array(
+            'app/unlisted.php',
+            release_file_policy_prior_updater_paths($source),
+            true,
+        ),
+        'An unknown installation file became obsolete-deletion ownership.',
+    );
     unlink($source . '/app/unlisted.php');
 
     $inventoryPath = $source . '/app/production-files.json';
     $inventoryBytes = file_get_contents($inventoryPath);
-    production_file_policy_assert(is_string($inventoryBytes), 'Fixture inventory bytes are unavailable.');
+    production_file_policy_assert(
+        is_string($inventoryBytes),
+        'Fixture inventory bytes are unavailable.',
+    );
     $original = json_decode($inventoryBytes, true, 512, JSON_THROW_ON_ERROR);
     // Retired updater-owned wrappers are removed only when the installed positive ownership list proves them.
     // The historical root deploy.sh was distributed but never updater-owned and must remain user-preserved.
     $retired = $original;
-    $retired['production_files'] = array_merge($retired['production_files'],
-        ['deploy.bat', 'deploy.sh', 'deploy/.htaccess', 'scripts/deploy.ps1', 'scripts/deploy.sh']);
-    $retired['updater_files'] = array_merge($retired['updater_files'],
-        ['deploy.bat', 'deploy/.htaccess', 'scripts/deploy.ps1', 'scripts/deploy.sh']);
+    $retired['production_files'] = array_merge($retired['production_files'], [
+        'deploy.bat',
+        'deploy.sh',
+        'deploy/.htaccess',
+        'scripts/deploy.ps1',
+        'scripts/deploy.sh',
+    ]);
+    $retired['updater_files'] = array_merge($retired['updater_files'], [
+        'deploy.bat',
+        'deploy/.htaccess',
+        'scripts/deploy.ps1',
+        'scripts/deploy.sh',
+    ]);
     sort($retired['production_files'], SORT_STRING);
     sort($retired['updater_files'], SORT_STRING);
-    file_put_contents($inventoryPath, json_encode($retired, JSON_THROW_ON_ERROR));
+    file_put_contents($inventoryPath, json_encode(
+        $retired,
+        JSON_THROW_ON_ERROR,
+    ));
     $previousOwned = release_file_policy_prior_updater_paths($source);
-    foreach (['deploy.bat', 'scripts/deploy.ps1', 'scripts/deploy.sh', 'deploy/.htaccess'] as $owned) {
-        production_file_policy_assert(in_array($owned, $previousOwned, true), 'Installed positive wrapper/server-guard ownership was lost: ' . $owned);
+    foreach ([
+        'deploy.bat',
+        'scripts/deploy.ps1',
+        'scripts/deploy.sh',
+        'deploy/.htaccess',
+    ] as $owned) {
+        production_file_policy_assert(
+            in_array($owned, $previousOwned, true),
+            'Installed positive wrapper/server-guard ownership was lost: '
+                . $owned,
+        );
     }
-    production_file_policy_assert(!in_array('deploy.sh', $previousOwned, true), 'Historical name alone promoted an unowned root wrapper into deletion ownership.');
+    production_file_policy_assert(
+        !in_array('deploy.sh', $previousOwned, true),
+        'Historical name alone promoted an unowned root wrapper into deletion ownership.',
+    );
     file_put_contents($inventoryPath, $inventoryBytes);
     $oldInventory = $original;
-    unset($oldInventory['companion_files'], $oldInventory['companion_resource_files']);
+    unset(
+        $oldInventory['companion_files'],
+        $oldInventory['companion_resource_files'],
+    );
     $oldInventory['production_files'] = $packagePaths;
-    file_put_contents($inventoryPath, json_encode($oldInventory, JSON_THROW_ON_ERROR));
-    production_file_policy_assert(release_file_policy_read($source)['companion_files'] === [],
-        'An already-published schema-1 inventory without companion_files was refused.');
-    production_file_policy_assert(release_file_policy_paths($source) === $packagePaths,
-        'Already-published WinApp membership was lost when reading an older sidecar.');
+    file_put_contents($inventoryPath, json_encode(
+        $oldInventory,
+        JSON_THROW_ON_ERROR,
+    ));
+    production_file_policy_assert(
+        release_file_policy_read($source)['companion_files'] === [],
+        'An already-published schema-1 inventory without companion_files was refused.',
+    );
+    production_file_policy_assert(
+        release_file_policy_paths($source) === $packagePaths,
+        'Already-published WinApp membership was lost when reading an older sidecar.',
+    );
     $publishedResources = $original;
-    $publishedResources['companion_files'] = array_merge($companion, $resources);
+    $publishedResources['companion_files'] = array_merge(
+        $companion,
+        $resources,
+    );
     sort($publishedResources['companion_files'], SORT_STRING);
     unset($publishedResources['companion_resource_files']);
-    file_put_contents($inventoryPath, json_encode($publishedResources, JSON_THROW_ON_ERROR));
-    production_file_policy_assert(release_file_policy_paths($source) === $packagePaths,
-        'The published 0.136 companion-list shape became unreadable.');
-    foreach ([null, 'winapp/uploader/resources/DejaVuSans.ttf', false,
-        [$resources[1], $resources[0]], [$resources[0], $resources[0]],
-        ['app/example.php'], ['tests/policy_fixture.php'], ['winapp/uploader/media.py'],
-        ['winapp/uploader/resources/unknown.ttf'], ['winapp/uploader/resources/../private.php'],
-        ['winapp/settings.json']] as $invalidResources) {
+    file_put_contents($inventoryPath, json_encode(
+        $publishedResources,
+        JSON_THROW_ON_ERROR,
+    ));
+    production_file_policy_assert(
+        release_file_policy_paths($source) === $packagePaths,
+        'The published 0.136 companion-list shape became unreadable.',
+    );
+    foreach ([
+        null,
+        'winapp/uploader/resources/DejaVuSans.ttf',
+        false,
+        [$resources[1], $resources[0]],
+        [$resources[0], $resources[0]],
+        ['app/example.php'],
+        ['tests/policy_fixture.php'],
+        ['winapp/uploader/media.py'],
+        ['winapp/uploader/resources/unknown.ttf'],
+        ['winapp/uploader/resources/../private.php'],
+        ['winapp/settings.json'],
+    ] as $invalidResources) {
         $tampered = $original;
         $tampered['companion_resource_files'] = $invalidResources;
-        file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
-        production_file_policy_expect_refusal(static function () use ($source): void {
+        file_put_contents($inventoryPath, json_encode(
+            $tampered,
+            JSON_THROW_ON_ERROR,
+        ));
+        production_file_policy_expect_refusal(static function () use (
+            $source,
+        ): void {
             release_file_policy_read($source);
         }, 'A malformed, unapproved or unordered resource inventory was accepted.');
     }
     $tampered = $original;
     $tampered['companion_files'][] = $resources[0];
     sort($tampered['companion_files'], SORT_STRING);
-    file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
-    production_file_policy_expect_refusal(static function () use ($source): void {
+    file_put_contents($inventoryPath, json_encode(
+        $tampered,
+        JSON_THROW_ON_ERROR,
+    ));
+    production_file_policy_expect_refusal(static function () use (
+        $source,
+    ): void {
         release_file_policy_read($source);
     }, 'The same font entered both companion inventory fields.');
     $tampered = $original;
     $tampered['updater_files'][] = $resources[0];
     sort($tampered['updater_files'], SORT_STRING);
-    file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
-    production_file_policy_expect_refusal(static function () use ($source): void {
+    file_put_contents($inventoryPath, json_encode(
+        $tampered,
+        JSON_THROW_ON_ERROR,
+    ));
+    production_file_policy_expect_refusal(static function () use (
+        $source,
+    ): void {
         release_file_policy_read($source);
     }, 'A resource field expanded CMS activation ownership.');
     foreach ([null, 'winapp/SimConnect.dll', false] as $invalidList) {
         $tampered = $original;
         $tampered['companion_files'] = $invalidList;
-        file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
-        production_file_policy_expect_refusal(static function () use ($source): void {
+        file_put_contents($inventoryPath, json_encode(
+            $tampered,
+            JSON_THROW_ON_ERROR,
+        ));
+        production_file_policy_expect_refusal(static function () use (
+            $source,
+        ): void {
             release_file_policy_read($source);
         }, 'A malformed present companion list silently behaved as an absent optional field.');
     }
-    foreach (['app/example.php', 'tests/policy_fixture.php', 'winapp/SimConnect.dll', 'WINAPP/SimConnect.dll',
-        'winapp/../config.php', 'winapp/settings.json', 'winapp/build/generated.py',
-        'winapp/uploader/.private.py', 'winapp/uploader/.state/private.py',
-        'winapp/dist/0.3.2/Setup.exe', 'winapp/tests/local_test.py'] as $invalidCompanion) {
+    foreach ([
+        'app/example.php',
+        'tests/policy_fixture.php',
+        'winapp/SimConnect.dll',
+        'WINAPP/SimConnect.dll',
+        'winapp/../config.php',
+        'winapp/settings.json',
+        'winapp/build/generated.py',
+        'winapp/uploader/.private.py',
+        'winapp/uploader/.state/private.py',
+        'winapp/dist/0.3.2/Setup.exe',
+        'winapp/tests/local_test.py',
+    ] as $invalidCompanion) {
         $tampered = $original;
         $tampered['companion_files'][] = $invalidCompanion;
         sort($tampered['companion_files'], SORT_STRING);
-        file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
-        production_file_policy_expect_refusal(static function () use ($source): void {
+        file_put_contents($inventoryPath, json_encode(
+            $tampered,
+            JSON_THROW_ON_ERROR,
+        ));
+        production_file_policy_expect_refusal(static function () use (
+            $source,
+        ): void {
             release_file_policy_read($source);
         }, 'A companion inventory could claim private state or colliding membership: ' . $invalidCompanion);
     }
     $tampered = $original;
     $tampered['updater_files'][] = $companion[0];
     sort($tampered['updater_files'], SORT_STRING);
-    file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
-    production_file_policy_expect_refusal(static function () use ($source): void {
+    file_put_contents($inventoryPath, json_encode(
+        $tampered,
+        JSON_THROW_ON_ERROR,
+    ));
+    production_file_policy_expect_refusal(static function () use (
+        $source,
+    ): void {
         release_file_policy_read($source);
     }, 'A companion path entered CMS replacement or obsolete-deletion ownership.');
-    foreach (['config.php', 'public/assets/custom.css', 'cache/private.txt', 'data/private.txt', 'app/_for_codex/private.txt',
-        'winapp/dist/0.3.2/Setup.exe', 'winapp/build/generated.py', 'winapp/settings.json',
-        'winapp/tests/local_test.py', 'winapp/http_monitor_logs/private.txt'] as $protected) {
-        $tampered = json_decode($inventoryBytes, true, 512, JSON_THROW_ON_ERROR);
+    foreach ([
+        'config.php',
+        'public/assets/custom.css',
+        'cache/private.txt',
+        'data/private.txt',
+        'app/_for_codex/private.txt',
+        'winapp/dist/0.3.2/Setup.exe',
+        'winapp/build/generated.py',
+        'winapp/settings.json',
+        'winapp/tests/local_test.py',
+        'winapp/http_monitor_logs/private.txt',
+    ] as $protected) {
+        $tampered = json_decode(
+            $inventoryBytes,
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
         $tampered['production_files'][] = $protected;
         $tampered['updater_files'][] = $protected;
         sort($tampered['production_files'], SORT_STRING);
         sort($tampered['updater_files'], SORT_STRING);
-        file_put_contents($inventoryPath, json_encode($tampered, JSON_THROW_ON_ERROR));
-        production_file_policy_expect_refusal(static function () use ($source): void {
+        file_put_contents($inventoryPath, json_encode(
+            $tampered,
+            JSON_THROW_ON_ERROR,
+        ));
+        production_file_policy_expect_refusal(static function () use (
+            $source,
+        ): void {
             release_file_policy_read($source);
         }, 'A supplied inventory could claim protected installation state: ' . $protected);
     }
     file_put_contents($inventoryPath, '{malformed');
     file_put_contents($source . '/app/core-manifest.json', '{"files":{}}');
-    production_file_policy_expect_refusal(static function () use ($source): void {
+    production_file_policy_expect_refusal(static function () use (
+        $source,
+    ): void {
         release_file_policy_archive_updater_paths($source);
     }, 'A malformed present sidecar silently fell back to legacy membership.');
-    production_file_policy_assert(release_file_policy_prior_updater_paths($source) === [],
-        'An invalid prior sidecar invented installation ownership.');
+    production_file_policy_assert(
+        release_file_policy_prior_updater_paths($source) === [],
+        'An invalid prior sidecar invented installation ownership.',
+    );
     file_put_contents($inventoryPath, $inventoryBytes);
     unlink($source . '/app/core-manifest.json');
 
@@ -318,11 +537,21 @@ try {
     file_put_contents($legacy . '/app/core-manifest.json', json_encode([
         'files' => ['app/old.php' => hash('sha256', "legacy fixture\n")],
     ], JSON_THROW_ON_ERROR));
-    production_file_policy_assert(release_file_policy_archive_updater_paths($legacy) === [
-        'files' => ['app/core-manifest.json', 'app/old.php'], 'legacy' => true,
-    ], 'Legacy archive activation did not stay within positive manifest ownership.');
-    production_file_policy_assert(!in_array('app/not-owned.php', release_file_policy_prior_updater_paths($legacy), true),
-        'Legacy obsolete ownership admitted an unknown application file.');
+    production_file_policy_assert(
+        release_file_policy_archive_updater_paths($legacy) === [
+            'files' => ['app/core-manifest.json', 'app/old.php'],
+            'legacy' => true,
+        ],
+        'Legacy archive activation did not stay within positive manifest ownership.',
+    );
+    production_file_policy_assert(
+        !in_array(
+            'app/not-owned.php',
+            release_file_policy_prior_updater_paths($legacy),
+            true,
+        ),
+        'Legacy obsolete ownership admitted an unknown application file.',
+    );
 
     // A server-written clean-reinstall backup may own an otherwise unowned local file.
     $snapshot = $fixture . '/rollback';
@@ -330,42 +559,92 @@ try {
     file_put_contents($snapshot . '/app/current.php', "previous application\n");
     file_put_contents($snapshot . '/notes.txt', "previous local file\n");
     $rollbackIndex = ['app/current.php', 'notes.txt'];
-    production_file_policy_assert(release_file_policy_rollback_snapshot_paths($snapshot, $rollbackIndex) === $rollbackIndex,
-        'A trusted partial clean-reinstall backup could not restore its removed local file.');
+    production_file_policy_assert(
+        release_file_policy_rollback_snapshot_paths($snapshot, $rollbackIndex)
+            === $rollbackIndex,
+        'A trusted partial clean-reinstall backup could not restore its removed local file.',
+    );
     file_put_contents($snapshot . '/rogue.txt', "unindexed\n");
-    production_file_policy_expect_refusal(static function () use ($snapshot, $rollbackIndex): void {
+    production_file_policy_expect_refusal(static function () use (
+        $snapshot,
+        $rollbackIndex,
+    ): void {
         release_file_policy_rollback_snapshot_paths($snapshot, $rollbackIndex);
     }, 'Rollback admitted a file absent from the trusted server-written backup index.');
     unlink($snapshot . '/rogue.txt');
     production_file_policy_mkdir($snapshot . '/removed-directory/nested');
-    file_put_contents($snapshot . '/removed-directory/nested/notes.txt', "indexed directory backup\n");
+    file_put_contents(
+        $snapshot . '/removed-directory/nested/notes.txt',
+        "indexed directory backup\n",
+    );
     $rollbackIndex[] = 'removed-directory';
-    production_file_policy_assert(release_file_policy_rollback_snapshot_paths($snapshot, $rollbackIndex) ===
-        ['app/current.php', 'notes.txt', 'removed-directory/nested/notes.txt'],
-        'A trusted removed-directory checkpoint could not restore its backed-up descendants.');
-    foreach (['config.php', 'CONFIG.php', 'app/bootstrap/config.php', 'APP/BOOTSTRAP/CONFIG.php',
-        'data/private.json', 'DATA/private.json', 'cache/private.txt', 'galleries/photo.jpg',
-        'logs/private.log', 'tmp/private.txt', 'public/assets/custom.css'] as $protected) {
-        production_file_policy_expect_refusal(static function () use ($snapshot, $rollbackIndex, $protected): void {
-            release_file_policy_rollback_snapshot_paths($snapshot, array_merge($rollbackIndex, [$protected]));
+    production_file_policy_assert(
+        release_file_policy_rollback_snapshot_paths($snapshot, $rollbackIndex)
+        === [
+            'app/current.php',
+            'notes.txt',
+            'removed-directory/nested/notes.txt',
+        ],
+        'A trusted removed-directory checkpoint could not restore its backed-up descendants.',
+    );
+    foreach ([
+        'config.php',
+        'CONFIG.php',
+        'app/bootstrap/config.php',
+        'APP/BOOTSTRAP/CONFIG.php',
+        'data/private.json',
+        'DATA/private.json',
+        'cache/private.txt',
+        'galleries/photo.jpg',
+        'logs/private.log',
+        'tmp/private.txt',
+        'public/assets/custom.css',
+    ] as $protected) {
+        production_file_policy_expect_refusal(static function () use (
+            $snapshot,
+            $rollbackIndex,
+            $protected,
+        ): void {
+            release_file_policy_rollback_snapshot_paths($snapshot, array_merge($rollbackIndex, [
+                $protected,
+            ]));
         }, 'Rollback metadata could claim protected installation state: ' . $protected);
     }
 
     foreach ($packagePaths as $relative) {
-        $destination = $stage . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $destination =
+            $stage
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         production_file_policy_mkdir(dirname($destination));
-        copy($source . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative), $destination);
+        copy(
+            $source . DIRECTORY_SEPARATOR
+                . str_replace('/', DIRECTORY_SEPARATOR, $relative),
+            $destination,
+        );
     }
     $valid = release_file_policy_verify_tree($stage, $source);
-    production_file_policy_assert($valid['unexpected'] === [] && $valid['missing'] === [], 'Exact staged package was rejected.');
+    production_file_policy_assert(
+        $valid['unexpected'] === [] && $valid['missing'] === [],
+        'Exact staged package was rejected.',
+    );
 
-    file_put_contents($stage . DIRECTORY_SEPARATOR . 'unexpected.txt', "unexpected\n");
+    file_put_contents(
+        $stage . DIRECTORY_SEPARATOR . 'unexpected.txt',
+        "unexpected\n",
+    );
     $extra = release_file_policy_verify_tree($stage, $source);
-    production_file_policy_assert($extra['unexpected'] === ['unexpected.txt'], 'Unexpected staged package file was not detected.');
+    production_file_policy_assert(
+        $extra['unexpected'] === ['unexpected.txt'],
+        'Unexpected staged package file was not detected.',
+    );
     unlink($stage . DIRECTORY_SEPARATOR . 'unexpected.txt');
     unlink($stage . DIRECTORY_SEPARATOR . 'docs/manual.pdf');
     $missing = release_file_policy_verify_tree($stage, $source);
-    production_file_policy_assert($missing['missing'] === ['docs/manual.pdf'], 'Missing staged production file was not detected.');
+    production_file_policy_assert(
+        $missing['missing'] === ['docs/manual.pdf'],
+        'Missing staged production file was not detected.',
+    );
 
     echo "Production file policy checks passed.\n";
 } finally {

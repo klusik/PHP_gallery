@@ -12,7 +12,6 @@
 declare(strict_types=1);
 namespace Gallery\Controllers;
 
-
 use Gallery\Core as Core;
 use Gallery\Services as Service;
 
@@ -27,16 +26,36 @@ const COOPERATIVE_QUERY_ID_BYTES = 32;
  */
 function cms_cooperative_content_api(): void
 {
-    if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     if (Core\request_method() !== 'POST') {
         header('Allow: POST');
-        cooperative_pairing_json(['ok' => false, 'error_code' => 'method_not_allowed'], 405);
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'method_not_allowed',
+        ], 405);
         return;
     }
     $bearer = cooperative_pairing_bearer();
-    if ($bearer === '') { cooperative_pairing_json(['ok' => false, 'error_code' => 'content_unauthorized'], 403); return; }
-    try { cooperative_pairing_json(Service\cooperative_content_export(cooperative_pairing_request_body(), $bearer)); }
-    catch (\Throwable) { cooperative_pairing_json(['ok' => false, 'error_code' => 'content_unavailable'], 403); }
+    if ($bearer === '') {
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'content_unauthorized',
+        ], 403);
+        return;
+    }
+    try {
+        cooperative_pairing_json(Service\cooperative_content_export(
+            cooperative_pairing_request_body(),
+            $bearer,
+        ));
+    } catch (\Throwable) {
+        cooperative_pairing_json([
+            'ok' => false,
+            'error_code' => 'content_unavailable',
+        ], 403);
+    }
 }
 
 /** Read one bounded scalar query value without implicit array casts.
@@ -46,10 +65,14 @@ function cms_cooperative_content_api(): void
  * @param int $limit Byte bound for the field.
  * @return string Submitted scalar, or a domain refusal.
  */
-function cooperative_content_query(string $key, int $limit = COOPERATIVE_QUERY_ID_BYTES): string
-{
+function cooperative_content_query(
+    string $key,
+    int $limit = COOPERATIVE_QUERY_ID_BYTES,
+): string {
     $value = $_GET[$key] ?? '';
-    if (!is_string($value) || strlen($value) > $limit) { throw new Service\CooperativeException('invalid_input'); }
+    if (!is_string($value) || strlen($value) > $limit) {
+        throw new Service\CooperativeException('invalid_input');
+    }
     return $value;
 }
 
@@ -59,12 +82,19 @@ function cooperative_content_query(string $key, int $limit = COOPERATIVE_QUERY_I
 function cooperative_content_labels(): array
 {
     $labels = [];
-    foreach (['title' => 'Shared trip', 'source' => 'Photographs from', 'local' => 'This gallery',
-        'load' => 'Load photographs', 'more' => 'More photographs', 'retry' => 'Retry',
+    foreach ([
+        'title' => 'Shared trip',
+        'source' => 'Photographs from',
+        'local' => 'This gallery',
+        'load' => 'Load photographs',
+        'more' => 'More photographs',
+        'retry' => 'Retry',
         'pending' => 'Verifying participants. Please try again shortly.',
         'unavailable' => 'This source is temporarily unavailable or no longer shared.',
-        'empty' => 'No shared photographs on this page.', 'open' => 'Open photo preview',
-        'back' => 'All participants'] as $key => $fallback) {
+        'empty' => 'No shared photographs on this page.',
+        'open' => 'Open photo preview',
+        'back' => 'All participants',
+    ] as $key => $fallback) {
         $labels[$key] = Service\t('cooperative.public.' . $key, $fallback);
     }
     return $labels;
@@ -77,23 +107,48 @@ function cooperative_content_labels(): array
  * @param array<string,string> $labels Prepared localized text.
  * @return array<string,mixed> Presentation-only source page.
  */
-function cooperative_content_catalog_model(array $result, string $groupId, string $source, array $labels): array
-{
-    if ($result['pending']) { return ['pending' => true, 'labels' => $labels]; }
+function cooperative_content_catalog_model(
+    array $result,
+    string $groupId,
+    string $source,
+    array $labels,
+): array {
+    if ($result['pending']) {
+        return ['pending' => true, 'labels' => $labels];
+    }
     $catalog = $result['catalog'];
     $photos = [];
     foreach ($catalog['photos'] as $photo) {
         $params = ['ticket' => $photo['ticket'], 'scope' => 'thumbnail'];
-        $url = $result['base'] !== '' ? $result['base'] . '/index.php?' . http_build_query(['page' => 'cooperative_media'] + $params)
+        $url = $result['base'] !== ''
+            ? $result['base'] . '/index.php?' . http_build_query([
+                'page' => 'cooperative_media',
+            ] + $params)
             : Core\url_for('cooperative_media', $params);
         $params['scope'] = 'preview';
-        $preview = $result['base'] !== '' ? $result['base'] . '/index.php?' . http_build_query(['page' => 'cooperative_media'] + $params)
+        $preview = $result['base'] !== ''
+            ? $result['base'] . '/index.php?' . http_build_query([
+                'page' => 'cooperative_media',
+            ] + $params)
             : Core\url_for('cooperative_media', $params);
-        $photos[] = ['src' => $url, 'href' => $photo['preview'] ? $preview : $url, 'alt' => $photo['alt']];
+        $photos[] = [
+            'src' => $url,
+            'href' => $photo['preview'] ? $preview : $url,
+            'alt' => $photo['alt'],
+        ];
     }
-    return ['pending' => false, 'labels' => $labels, 'title' => $catalog['title'], 'photos' => $photos,
-        'next' => $catalog['next_cursor'] !== null ? Core\url_for('cooperative_gallery',
-            ['group_id' => $groupId, 'source' => $source, 'cursor' => $catalog['next_cursor']]) : ''];
+    return [
+        'pending' => false,
+        'labels' => $labels,
+        'title' => $catalog['title'],
+        'photos' => $photos,
+        'next' => $catalog['next_cursor'] !== null
+            ? Core\url_for('cooperative_gallery', [
+                'group_id' => $groupId,
+                'source' => $source,
+                'cursor' => $catalog['next_cursor'],
+            ]) : '',
+    ];
 }
 
 /** Render the shared gallery or one server-rendered source fragment.
@@ -101,13 +156,17 @@ function cooperative_content_catalog_model(array $result, string $groupId, strin
  */
 function cms_cooperative_gallery(): void
 {
-    if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     header('Cache-Control: private, no-store, max-age=0');
     header('X-Robots-Tag: noindex, nofollow');
     header('Referrer-Policy: no-referrer');
     $labels = cooperative_content_labels();
     try {
-        if (Core\request_method() !== 'GET') { throw new Service\CooperativeException('invalid_method'); }
+        if (Core\request_method() !== 'GET') {
+            throw new Service\CooperativeException('invalid_method');
+        }
         $id = cooperative_content_query('group_id');
         $source = cooperative_content_query('source');
         $cursor = cooperative_content_query('cursor', 1600);
@@ -115,35 +174,73 @@ function cms_cooperative_gallery(): void
         if ($source !== '' && ($_GET['fragment'] ?? '') === '1') {
             $result = Service\cooperative_content_read($id, $source, $cursor);
             ob_start();
-            \Gallery\Views\view_cooperative_source(cooperative_content_catalog_model($result, $id, $source, $labels));
+            \Gallery\Views\view_cooperative_source(cooperative_content_catalog_model(
+                $result,
+                $id,
+                $source,
+                $labels,
+            ));
             $html = (string) ob_get_clean();
-            cooperative_pairing_json(['ok' => true, 'pending' => $result['pending'], 'html' => $html]);
+            cooperative_pairing_json([
+                'ok' => true,
+                'pending' => $result['pending'],
+                'html' => $html,
+            ]);
             return;
         }
         $sources = [];
         foreach ($page['sources'] as $item) {
-            $item['label'] = $item['local'] ? $labels['local'] : $item['origin'];
-            $item['url'] = Core\url_for('cooperative_gallery', ['group_id' => $id, 'source' => $item['instance_id']]);
+            $item['label'] = $item['local']
+                ? $labels['local']
+                : $item['origin'];
+            $item['url'] = Core\url_for('cooperative_gallery', [
+                'group_id' => $id,
+                'source' => $item['instance_id'],
+            ]);
             $item['catalog'] = null;
             if ($source === $item['instance_id']) {
                 try {
-                    $item['catalog'] = cooperative_content_catalog_model(Service\cooperative_content_read($id, $source, $cursor), $id, $source, $labels);
-                } catch (\Throwable) { $item['catalog'] = ['unavailable' => true, 'labels' => $labels]; }
+                    $item['catalog'] = cooperative_content_catalog_model(
+                        Service\cooperative_content_read($id, $source, $cursor),
+                        $id,
+                        $source,
+                        $labels,
+                    );
+                } catch (\Throwable) {
+                    $item['catalog'] = [
+                        'unavailable' => true,
+                        'labels' => $labels,
+                    ];
+                }
             }
             $sources[] = $item;
         }
         Core\render_header($page['title']);
-        \Gallery\Views\view_cooperative_gallery(['title' => $page['title'], 'labels' => $labels, 'sources' => $sources,
-            'script_url' => Core\asset_url('assets/cooperative-gallery.js?v=20260927-photos-v1'),
-            'style_url' => Core\asset_url('assets/cooperative-gallery.css?v=20260927-photos-v1')]);
+        \Gallery\Views\view_cooperative_gallery([
+            'title' => $page['title'],
+            'labels' => $labels,
+            'sources' => $sources,
+            'script_url' => Core\asset_url(
+                'assets/cooperative-gallery.js?v=20260927-photos-v1',
+            ),
+            'style_url' => Core\asset_url(
+                'assets/cooperative-gallery.css?v=20260927-photos-v1',
+            ),
+        ]);
         Core\render_footer();
     } catch (\Throwable) {
         http_response_code(503);
         if (($_GET['fragment'] ?? '') === '1') {
-            cooperative_pairing_json(['ok' => false, 'message' => $labels['unavailable']], 503);
+            cooperative_pairing_json([
+                'ok' => false,
+                'message' => $labels['unavailable'],
+            ], 503);
         } else {
             Core\render_header($labels['title']);
-            \Gallery\Views\view_cooperative_source(['unavailable' => true, 'labels' => $labels]);
+            \Gallery\Views\view_cooperative_source([
+                'unavailable' => true,
+                'labels' => $labels,
+            ]);
             Core\render_footer();
         }
     }
@@ -154,14 +251,21 @@ function cms_cooperative_gallery(): void
  */
 function cms_cooperative_media(): void
 {
-    if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     header('Cache-Control: private, no-store, max-age=0');
     header('X-Robots-Tag: noindex, nofollow');
     header('Referrer-Policy: no-referrer');
     header('X-Content-Type-Options: nosniff');
     try {
-        if (Core\request_method() !== 'GET') { throw new Service\CooperativeException('invalid_method'); }
-        $file = Service\cooperative_content_media(cooperative_content_query('ticket', 1600), cooperative_content_query('scope', 16));
+        if (Core\request_method() !== 'GET') {
+            throw new Service\CooperativeException('invalid_method');
+        }
+        $file = Service\cooperative_content_media(
+            cooperative_content_query('ticket', 1600),
+            cooperative_content_query('scope', 16),
+        );
         header('Content-Type: ' . $file['mime']);
         echo $file['bytes'];
     } catch (\Throwable) {

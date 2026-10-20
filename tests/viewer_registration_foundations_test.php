@@ -16,10 +16,10 @@
  *   - Verify three-state schema inspection fails closed
  *   - Protect the no-account-creation boundary and later HTTP reuse of the same service
  *   - Protect schema uniqueness, expiry, and bounded-capacity constraints
-  *
+ *
  * Author:
  *   Rudolf Klusal
-*/
+ */
 
 declare(strict_types=1);
 
@@ -51,12 +51,16 @@ namespace Gallery\Core {
      */
     function db(): \PDO
     {
-        throw new \RuntimeException('Database access is not expected in viewer_registration_foundations_test.php.');
+        throw new \RuntimeException(
+            'Database access is not expected in viewer_registration_foundations_test.php.',
+        );
     }
 }
 
 namespace {
-    use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
+    require_once __DIR__ . '/support/php_source.php';
+    use function Gallery\Services\schema_inspection_set_query_executor_for_tests
+    ;
     use function Gallery\Services\viewer_accounts_enabled;
     use function Gallery\Services\viewer_email_fingerprint;
     use function Gallery\Services\viewer_invitation_row_is_usable;
@@ -104,14 +108,37 @@ namespace {
         }
     }
 
-    viewer_registration_assert(!viewer_accounts_enabled(), 'Viewer feature must remain disabled by default.');
-    viewer_registration_assert(!viewer_registration_requests_enabled(), 'Pending registration must remain unavailable while the viewer feature is disabled.');
-    viewer_registration_assert(viewer_registration_request_cap() === 250, 'Pending registration row cap must have a conservative configurable default.');
-    viewer_registration_assert(viewer_registration_public_result_code() === 'request_received', 'Anonymous registration should have one generic external result code.');
+    viewer_registration_assert(
+        !viewer_accounts_enabled(),
+        'Viewer feature must remain disabled by default.',
+    );
+    viewer_registration_assert(
+        !viewer_registration_requests_enabled(),
+        'Pending registration must remain unavailable while the viewer feature is disabled.',
+    );
+    viewer_registration_assert(
+        viewer_registration_request_cap() === 250,
+        'Pending registration row cap must have a conservative configurable default.',
+    );
+    viewer_registration_assert(
+        viewer_registration_public_result_code() === 'request_received',
+        'Anonymous registration should have one generic external result code.',
+    );
 
-    $disabled = viewer_registration_request_begin('person@example.com', 'unused', '192.0.2.10');
-    viewer_registration_assert(!$disabled['accepted'] && $disabled['reason'] === 'registration_disabled', 'Disabled registration must fail closed before database access.');
-    viewer_registration_assert($disabled['public_result'] === viewer_registration_public_result_code(), 'Disabled registration must retain the same generic external result.');
+    $disabled = viewer_registration_request_begin(
+        'person@example.com',
+        'unused',
+        '192.0.2.10',
+    );
+    viewer_registration_assert(
+        !$disabled['accepted']
+            && $disabled['reason'] === 'registration_disabled',
+        'Disabled registration must fail closed before database access.',
+    );
+    viewer_registration_assert(
+        $disabled['public_result'] === viewer_registration_public_result_code(),
+        'Disabled registration must retain the same generic external result.',
+    );
 
     $boundEmail = 'Person@example.com';
     $boundFingerprint = viewer_email_fingerprint($boundEmail);
@@ -122,14 +149,42 @@ namespace {
         'revoked_at' => null,
     ];
     $fixedNow = strtotime('2026-08-18 13:30:00');
-    viewer_registration_assert(viewer_invitation_row_is_usable($usableInvitation, $boundEmail, $fixedNow), 'Fresh invitation must accept its bound normalized email.');
-    viewer_registration_assert(!viewer_invitation_row_is_usable($usableInvitation, 'Other@example.com', $fixedNow), 'Email-bound invitation must reject another identity.');
+    viewer_registration_assert(
+        viewer_invitation_row_is_usable(
+            $usableInvitation,
+            $boundEmail,
+            $fixedNow,
+        ),
+        'Fresh invitation must accept its bound normalized email.',
+    );
+    viewer_registration_assert(
+        !viewer_invitation_row_is_usable(
+            $usableInvitation,
+            'Other@example.com',
+            $fixedNow,
+        ),
+        'Email-bound invitation must reject another identity.',
+    );
     $claimedInvitation = $usableInvitation;
     $claimedInvitation['claimed_at'] = '2026-08-18 13:20:00';
-    viewer_registration_assert(!viewer_invitation_row_is_usable($claimedInvitation, $boundEmail, $fixedNow), 'Claimed invitation must not be reusable as a fresh capability.');
+    viewer_registration_assert(
+        !viewer_invitation_row_is_usable(
+            $claimedInvitation,
+            $boundEmail,
+            $fixedNow,
+        ),
+        'Claimed invitation must not be reusable as a fresh capability.',
+    );
     $expiredInvitation = $usableInvitation;
     $expiredInvitation['expires_at'] = '2026-08-18 13:29:59';
-    viewer_registration_assert(!viewer_invitation_row_is_usable($expiredInvitation, $boundEmail, $fixedNow), 'Expired invitation must be rejected.');
+    viewer_registration_assert(
+        !viewer_invitation_row_is_usable(
+            $expiredInvitation,
+            $boundEmail,
+            $fixedNow,
+        ),
+        'Expired invitation must be rejected.',
+    );
 
     $pendingRow = [
         'status' => 'pending_verification',
@@ -138,68 +193,257 @@ namespace {
         'expires_at' => '2026-08-18 14:30:00',
         'verification_token_expires_at' => '2026-08-18 14:00:00',
     ];
-    viewer_registration_assert(viewer_registration_request_row_is_verifiable($pendingRow, $fixedNow), 'Unexpired pending verification row must be valid for scanner-safe inspection.');
+    viewer_registration_assert(
+        viewer_registration_request_row_is_verifiable($pendingRow, $fixedNow),
+        'Unexpired pending verification row must be valid for scanner-safe inspection.',
+    );
     $consumedRow = $pendingRow;
     $consumedRow['verification_token_consumed_at'] = '2026-08-18 13:25:00';
-    viewer_registration_assert(!viewer_registration_request_row_is_verifiable($consumedRow, $fixedNow), 'Consumed verification row must reject replay.');
+    viewer_registration_assert(
+        !viewer_registration_request_row_is_verifiable($consumedRow, $fixedNow),
+        'Consumed verification row must reject replay.',
+    );
     $verifiedRow = $pendingRow;
     $verifiedRow['status'] = 'email_verified';
-    viewer_registration_assert(!viewer_registration_request_row_is_verifiable($verifiedRow, $fixedNow), 'Already verified staging row must not accept another verification transition.');
+    viewer_registration_assert(
+        !viewer_registration_request_row_is_verifiable($verifiedRow, $fixedNow),
+        'Already verified staging row must not accept another verification transition.',
+    );
 
-    schema_inspection_set_query_executor_for_tests(static fn (...$args): bool => true);
-    viewer_registration_assert(viewer_registration_storage_available(), 'Registration storage must be available only when every required table is confirmed.');
+    schema_inspection_set_query_executor_for_tests(
+        static fn(...$args): bool => true,
+    );
+    viewer_registration_assert(
+        viewer_registration_storage_available(),
+        'Registration storage must be available only when every required table is confirmed.',
+    );
 
-    schema_inspection_set_query_executor_for_tests(static fn (...$args): bool => false);
-    viewer_registration_assert(!viewer_registration_storage_available(), 'Confirmed missing registration schema must fail closed.');
+    schema_inspection_set_query_executor_for_tests(
+        static fn(...$args): bool => false,
+    );
+    viewer_registration_assert(
+        !viewer_registration_storage_available(),
+        'Confirmed missing registration schema must fail closed.',
+    );
 
     schema_inspection_set_query_executor_for_tests(static function (...$args): bool {
         throw new RuntimeException('fixture inspection failure');
     });
-    viewer_registration_assert(!viewer_registration_storage_available(), 'Unknown registration schema state must fail closed.');
+    viewer_registration_assert(
+        !viewer_registration_storage_available(),
+        'Unknown registration schema state must fail closed.',
+    );
     schema_inspection_set_query_executor_for_tests(null);
 
     $root = dirname(__DIR__);
-    $migration = (string) file_get_contents($root . '/database/migrations/202608180002_viewer_registration_foundations.php');
-    viewer_registration_assert(str_contains($migration, 'CREATE TABLE IF NOT EXISTS viewer_invitations'), 'Phase 0.5 migration must create invitation storage.');
-    viewer_registration_assert(str_contains($migration, 'CREATE TABLE IF NOT EXISTS viewer_registration_requests'), 'Phase 0.5 migration must create ephemeral pending-registration storage.');
-    viewer_registration_assert(str_contains($migration, 'CREATE TABLE IF NOT EXISTS viewer_registration_state'), 'Phase 0.5 migration must create a locked capacity counter.');
-    viewer_registration_assert(str_contains($migration, 'UNIQUE KEY viewer_registration_normalized_email_unique (normalized_email)'), 'Pending requests must deduplicate at database level by canonical email.');
-    viewer_registration_assert(str_contains($migration, 'UNIQUE KEY viewer_registration_verification_hash_unique (verification_token_hash)'), 'Verification token hashes must be unique at database level.');
-    viewer_registration_assert(str_contains($migration, 'UNIQUE KEY viewer_registration_invitation_unique (viewer_invitation_id)'), 'One invitation must not bind multiple pending requests.');
-    viewer_registration_assert(str_contains($migration, 'KEY viewer_registration_expiry_index (expires_at)'), 'Pending request cleanup must be indexed by expiry.');
-    viewer_registration_assert(str_contains($migration, 'token_hash CHAR(64) NOT NULL'), 'Invitation authority must be stored as a one-way hash.');
-    viewer_registration_assert(stripos($migration, 'password') === false, 'Pending-registration schema must not store password material.');
+    $migration = (string) file_get_contents($root
+        . '/database/migrations/202608180002_viewer_registration_foundations.php');
+    viewer_registration_assert(
+        php_source_contains(
+            $migration,
+            'CREATE TABLE IF NOT EXISTS viewer_invitations',
+        ),
+        'Phase 0.5 migration must create invitation storage.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $migration,
+            'CREATE TABLE IF NOT EXISTS viewer_registration_requests',
+        ),
+        'Phase 0.5 migration must create ephemeral pending-registration storage.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $migration,
+            'CREATE TABLE IF NOT EXISTS viewer_registration_state',
+        ),
+        'Phase 0.5 migration must create a locked capacity counter.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $migration,
+            'UNIQUE KEY viewer_registration_normalized_email_unique (normalized_email)',
+        ),
+        'Pending requests must deduplicate at database level by canonical email.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $migration,
+            'UNIQUE KEY viewer_registration_verification_hash_unique (verification_token_hash)',
+        ),
+        'Verification token hashes must be unique at database level.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $migration,
+            'UNIQUE KEY viewer_registration_invitation_unique (viewer_invitation_id)',
+        ),
+        'One invitation must not bind multiple pending requests.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $migration,
+            'KEY viewer_registration_expiry_index (expires_at)',
+        ),
+        'Pending request cleanup must be indexed by expiry.',
+    );
+    viewer_registration_assert(
+        php_source_contains($migration, 'token_hash CHAR(64) NOT NULL'),
+        'Invitation authority must be stored as a one-way hash.',
+    );
+    viewer_registration_assert(
+        stripos($migration, 'password') === false,
+        'Pending-registration schema must not store password material.',
+    );
 
-    $registrationService = (string) file_get_contents($root . '/app/services/viewer_registration.php');
-    $registrationModel = (string) file_get_contents($root . '/app/models/viewer_registration.php');
-    viewer_registration_assert(stripos($registrationService, "prepare('INSERT INTO viewer_accounts") === false && stripos($registrationService, 'prepare("INSERT INTO viewer_accounts') === false, 'Phase 0.5 registration service must not create durable viewer accounts.');
-    viewer_registration_assert(str_contains($registrationService, 'viewer_registration_verification_validate') && str_contains($registrationService, 'viewer_registration_verification_confirm'), 'Verification inspection and irreversible confirmation must remain separate operations.');
-    viewer_registration_assert(str_contains($registrationService, 'viewer_registration_model_transaction(') && str_contains($registrationModel, 'FOR UPDATE'), 'Single-use invitation/verification transitions must use transactional row locking.');
-    viewer_registration_assert(str_contains($registrationService, 'viewer_registration_capacity_lock'), 'Pending registration admission must serialize against a hard row cap.');
-    viewer_registration_assert(str_contains($registrationService, 'viewer_invitation_registration_preflight'), 'Invite-only registration must have a non-consuming preflight that supports idempotent retries.');
-    viewer_registration_assert(str_contains($registrationService, 'The earlier preflight is') && str_contains($registrationService, '$invitationStateValid'), 'Invitation authority must be re-validated under the transactional row lock rather than trusting preflight state.');
-    $preflightPosition = strpos($registrationService, 'viewer_invitation_registration_preflight((string) $invitationToken');
-    $identityBudgetPosition = strpos($registrationService, 'viewer_registration_request_authorize_identity($normalized)');
-    viewer_registration_assert(is_int($preflightPosition) && is_int($identityBudgetPosition) && $preflightPosition < $identityBudgetPosition, 'Invalid invite guesses must not consume the installation-wide registration budget.');
-    viewer_registration_assert(str_contains($registrationService, 'viewer_registration_model_cancel_for_invitation(') && str_contains($registrationService, 'viewer_invitation_revoke') && str_contains($registrationModel, "SET status = ?, cancelled_at = ?, updated_at = ?"), 'Revoking a claimed invitation must also cancel its staged registration state.');
-    viewer_registration_assert(!str_contains($registrationService, 'if (!viewer_registration_requests_enabled() || $invitationId <= 0'), 'Invitation revocation must remain available while registration admission is disabled.');
+    $registrationService = (string) file_get_contents($root
+        . '/app/services/viewer_registration.php');
+    $registrationModel = (string) file_get_contents($root
+        . '/app/models/viewer_registration.php');
+    viewer_registration_assert(
+        stripos($registrationService, "prepare('INSERT INTO viewer_accounts")
+            === false
+            && stripos(
+                $registrationService,
+                'prepare("INSERT INTO viewer_accounts',
+            ) === false,
+        'Phase 0.5 registration service must not create durable viewer accounts.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $registrationService,
+            'viewer_registration_verification_validate',
+        )
+            && php_source_contains(
+                $registrationService,
+                'viewer_registration_verification_confirm',
+            ),
+        'Verification inspection and irreversible confirmation must remain separate operations.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $registrationService,
+            'viewer_registration_model_transaction(',
+        )
+            && php_source_contains($registrationModel, 'FOR UPDATE'),
+        'Single-use invitation/verification transitions must use transactional row locking.',
+    );
+    viewer_registration_assert(
+        php_source_contains($registrationService, 'viewer_registration_capacity_lock'),
+        'Pending registration admission must serialize against a hard row cap.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $registrationService,
+            'viewer_invitation_registration_preflight',
+        ),
+        'Invite-only registration must have a non-consuming preflight that supports idempotent retries.',
+    );
+    viewer_registration_assert(
+        php_source_contains($registrationService, 'The earlier preflight is')
+            && php_source_contains($registrationService, '$invitationStateValid'),
+        'Invitation authority must be re-validated under the transactional row lock rather than trusting preflight state.',
+    );
+    $preflightMatch = [];
+    $preflightPosition = preg_match(
+        '/viewer_invitation_registration_preflight\s*\(\s*\(string\)\s*\$invitationToken/',
+        $registrationService,
+        $preflightMatch,
+        PREG_OFFSET_CAPTURE,
+    ) === 1
+        ? $preflightMatch[0][1]
+        : false;
+    $identityBudgetMatch = [];
+    $identityBudgetPosition = preg_match(
+        '/viewer_registration_request_authorize_identity\s*\(\s*\$normalized\s*\)/',
+        $registrationService,
+        $identityBudgetMatch,
+        PREG_OFFSET_CAPTURE,
+    ) === 1
+        ? $identityBudgetMatch[0][1]
+        : false;
+    viewer_registration_assert(
+        is_int($preflightPosition)
+            && is_int($identityBudgetPosition)
+            && $preflightPosition < $identityBudgetPosition,
+        'Invalid invite guesses must not consume the installation-wide registration budget.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $registrationService,
+            'viewer_registration_model_cancel_for_invitation(',
+        )
+            && php_source_contains($registrationService, 'viewer_invitation_revoke')
+            && php_source_contains(
+                $registrationModel,
+                'SET status = ?, cancelled_at = ?, updated_at = ?',
+            ),
+        'Revoking a claimed invitation must also cancel its staged registration state.',
+    );
+    viewer_registration_assert(
+        !php_source_contains(
+            $registrationService,
+            'if (!viewer_registration_requests_enabled() || $invitationId <= 0',
+        ),
+        'Invitation revocation must remain available while registration admission is disabled.',
+    );
 
     $services = (string) file_get_contents($root . '/app/services.php');
-    viewer_registration_assert(str_contains($services, 'viewer_registration.php') && str_contains($services, 'viewer_mail.php'), 'Phase 0.5 services must be loaded only through the shared service bootstrap.');
+    viewer_registration_assert(
+        php_source_contains($services, 'viewer_registration.php')
+            && php_source_contains($services, 'viewer_mail.php'),
+        'Phase 0.5 services must be loaded only through the shared service bootstrap.',
+    );
 
     $migrationFiles = glob($root . '/database/migrations/*.php') ?: [];
     sort($migrationFiles, SORT_STRING);
-    $phase0Migration = array_search($root . '/database/migrations/202608180001_viewer_security_foundations.php', $migrationFiles, true);
-    $phase05Migration = array_search($root . '/database/migrations/202608180002_viewer_registration_foundations.php', $migrationFiles, true);
-    viewer_registration_assert(is_int($phase0Migration) && is_int($phase05Migration) && $phase05Migration > $phase0Migration, 'Phase 0.5 migration must follow the Phase 0 schema in deterministic fresh-install/upgrade order.');
+    $phase0Migration = array_search(
+        $root
+            . '/database/migrations/202608180001_viewer_security_foundations.php',
+        $migrationFiles,
+        true,
+    );
+    $phase05Migration = array_search(
+        $root
+            . '/database/migrations/202608180002_viewer_registration_foundations.php',
+        $migrationFiles,
+        true,
+    );
+    viewer_registration_assert(
+        is_int($phase0Migration)
+            && is_int($phase05Migration)
+            && $phase05Migration > $phase0Migration,
+        'Phase 0.5 migration must follow the Phase 0 schema in deterministic fresh-install/upgrade order.',
+    );
 
-    $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
-    $viewerController = (string) file_get_contents($root . '/app/controllers/viewer_accounts.php');
-    viewer_registration_assert(str_contains($dispatch, "'viewer_register' =>") && !str_contains($dispatch, "'viewer_signup' =>"), 'Phase 4.1 must expose only the intended generic viewer_register route, not a parallel signup subsystem.');
-    viewer_registration_assert(str_contains($viewerController, 'viewer_registration_request_begin($email, null, request_client_ip())') && str_contains($viewerController, 'viewer_registration_activate_verified('), 'Phase 4.1 must reuse the established staged-registration and activation foundation instead of replacing it.');
+    $dispatch = (string) file_get_contents($root
+        . '/app/bootstrap/dispatch.php');
+    $viewerController = (string) file_get_contents($root
+        . '/app/controllers/viewer_accounts.php');
+    viewer_registration_assert(
+        php_source_contains($dispatch, "'viewer_register' =>")
+            && !php_source_contains($dispatch, "'viewer_signup' =>"),
+        'Phase 4.1 must expose only the intended generic viewer_register route, not a parallel signup subsystem.',
+    );
+    viewer_registration_assert(
+        php_source_contains(
+            $viewerController,
+            'viewer_registration_request_begin($email, null, request_client_ip())',
+        )
+            && php_source_contains(
+                $viewerController,
+                'viewer_registration_activate_verified(',
+            ),
+        'Phase 4.1 must reuse the established staged-registration and activation foundation instead of replacing it.',
+    );
 
-    $adminAuth = (string) file_get_contents($root . '/app/controllers/admin_auth.php');
-    viewer_registration_assert(stripos($adminAuth, 'viewer_registration') === false && stripos($adminAuth, 'viewer_mail') === false, 'Existing administrator authentication/mail behavior must remain unaware of Phase 0.5.');
+    $adminAuth = (string) file_get_contents($root
+        . '/app/controllers/admin_auth.php');
+    viewer_registration_assert(
+        stripos($adminAuth, 'viewer_registration') === false
+            && stripos($adminAuth, 'viewer_mail') === false,
+        'Existing administrator authentication/mail behavior must remain unaware of Phase 0.5.',
+    );
 
     echo "Viewer registration foundation tests passed.\n";
 }

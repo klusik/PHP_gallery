@@ -35,5 +35,5 @@
 declare(strict_types=1);
 
 return [
-    "ALTER TABLE viewer_invitations ADD COLUMN target_email VARCHAR(190) NULL AFTER token_hash",
+    'ALTER TABLE viewer_invitations ADD COLUMN target_email VARCHAR(190) NULL AFTER token_hash',
 ];

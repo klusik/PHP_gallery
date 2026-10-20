@@ -55,14 +55,32 @@ function view_vote_form_html(array $viewModel): string
     $score = (int) ($viewModel['score'] ?? 0);
     $currentVote = (int) ($viewModel['current_vote'] ?? 0);
 
-    return '<form class="vote-row image-vote-overlay" method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-vote-form>'
-        . '<input type="hidden" name="image_id" value="' . $imageId . '">'
-        . csrf_field()
-        . '<span class="vote-score-badge" aria-label="' . e((string) ($viewModel['likes_label'] ?? '')) . '"><span aria-hidden="true">&#9650;</span><strong data-score-for="' . $imageId . '">' . $score . '</strong></span>'
-        . '<span class="vote-action-group">'
-        . '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="' . e((string) ($viewModel['up_label'] ?? '')) . '">&#9650;</button>'
-        . '</span>'
-        . '</form>';
+    return (
+        '<form class="vote-row image-vote-overlay" method="post" action="'
+            . e((string) ($viewModel['action_url'] ?? ''))
+            . '" data-vote-form>'
+            . '<input type="hidden" name="image_id" value="'
+            . $imageId
+            . '">'
+            . csrf_field()
+            . '<span class="vote-score-badge" aria-label="'
+            . e((string) ($viewModel['likes_label'] ?? ''))
+            . '"><span aria-hidden="true">&#9650;</span><strong data-score-for="'
+            . $imageId
+            . '">'
+            . $score
+            . '</strong></span>'
+            . '<span class="vote-action-group">'
+            . '<button type="submit" name="vote" value="1" class="'
+            . ($currentVote === 1 ? 'is-active' : '')
+            . '" aria-pressed="'
+            . ($currentVote === 1 ? 'true' : 'false')
+            . '" aria-label="'
+            . e((string) ($viewModel['up_label'] ?? ''))
+            . '">&#9650;</button>'
+            . '</span>'
+            . '</form>'
+    );
 }
 
 /**

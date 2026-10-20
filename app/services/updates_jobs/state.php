@@ -76,8 +76,10 @@ function application_update_job_stages(): array
  * @param string $to Requested next stage.
  * @return bool True for a valid state-machine transition.
  */
-function application_update_job_transition_allowed(string $from, string $to): bool
-{
+function application_update_job_transition_allowed(
+    string $from,
+    string $to,
+): bool {
     if ($from === $to) {
         return true;
     }
@@ -88,7 +90,9 @@ function application_update_job_transition_allowed(string $from, string $to): bo
     $stages = application_update_job_stages();
     $fromIndex = array_search($from, $stages, true);
     $toIndex = array_search($to, $stages, true);
-    return is_int($fromIndex) && is_int($toIndex) && $toIndex === $fromIndex + 1;
+    return (
+        is_int($fromIndex) && is_int($toIndex) && $toIndex === ($fromIndex + 1)
+    );
 }
 
 /**
@@ -98,10 +102,15 @@ function application_update_job_transition_allowed(string $from, string $to): bo
  * @param array<string,mixed> $payload State payload.
  * @return void Commits the state or refuses without removing the previous checkpoint.
  */
-function application_update_write_json_atomic(string $path, array $payload): void
-{
+function application_update_write_json_atomic(
+    string $path,
+    array $payload,
+): void {
     application_update_ensure_dir(dirname($path));
-    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $json = json_encode(
+        $payload,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    );
     if ($json === false) {
         throw new RuntimeException('Could not encode update job state.');
     }
@@ -112,12 +121,14 @@ function application_update_write_json_atomic(string $path, array $payload): voi
     }
     // Windows readers may briefly deny replacement. Retry the same complete file;
     // never unlink the previous checkpoint to make a commit succeed.
-    $attempts = PHP_OS_FAMILY === 'Windows' ? APPLICATION_UPDATE_STATE_RENAME_ATTEMPTS : 1;
+    $attempts = PHP_OS_FAMILY === 'Windows'
+        ? APPLICATION_UPDATE_STATE_RENAME_ATTEMPTS
+        : 1;
     for ($attempt = 0; $attempt < $attempts; $attempt++) {
         if (@rename($temporary, $path)) {
             return;
         }
-        if ($attempt + 1 < $attempts) {
+        if (($attempt + 1) < $attempts) {
             usleep(APPLICATION_UPDATE_STATE_RENAME_DELAY_US);
         }
     }
@@ -128,7 +139,8 @@ function application_update_write_json_atomic(string $path, array $payload): voi
 /**
  * Persist a durable update job checkpoint.
  *
- * @param array $job Job state.
+ * @param array{id:string,stage:string,...<string,mixed>} $job Durable update job checkpoint.
+ * @return void Atomically persists the job state with an updated timestamp.
  */
 function application_update_save_job(array $job): void
 {
@@ -137,7 +149,10 @@ function application_update_save_job(array $job): void
         throw new RuntimeException('Update job identifier is missing.');
     }
     $job['updated_at'] = time();
-    application_update_write_json_atomic(application_update_job_state_path($jobId), $job);
+    application_update_write_json_atomic(
+        application_update_job_state_path($jobId),
+        $job,
+    );
 }
 
 /**
@@ -147,7 +162,8 @@ function application_update_save_job(array $job): void
  */
 function application_update_set_last_job(string $jobId): void
 {
-    application_update_write_json_atomic(application_update_jobs_root() . '/last-job.json', [
+    application_update_write_json_atomic(application_update_jobs_root()
+        . '/last-job.json', [
         'job_id' => $jobId,
         'updated_at' => time(),
     ]);
@@ -157,6 +173,7 @@ function application_update_set_last_job(string $jobId): void
  * Persist or clear the active-job pointer.
  *
  * @param ?string $jobId Job identifier or null to clear.
+ * @return void Persists or removes the active-job pointer.
  */
 function application_update_set_active_job(?string $jobId): void
 {
@@ -165,7 +182,10 @@ function application_update_set_active_job(?string $jobId): void
         @unlink($path);
         return;
     }
-    application_update_write_json_atomic($path, ['job_id' => $jobId, 'updated_at' => time()]);
+    application_update_write_json_atomic($path, [
+        'job_id' => $jobId,
+        'updated_at' => time(),
+    ]);
 }
 
 /**
@@ -176,10 +196,14 @@ function application_update_set_active_job(?string $jobId): void
  * a new update, and then have the old worker unlink the new active-job pointer.
  *
  * @param string $jobId Job that believes it is releasing active ownership.
+ * @return void Clears the active pointer only when it still identifies this job.
  */
 function application_update_clear_active_job_if(string $jobId): void
 {
-    $lock = application_update_acquire_lock(application_update_jobs_root() . '/start.lock', 15);
+    $lock = application_update_acquire_lock(
+        application_update_jobs_root() . '/start.lock',
+        15,
+    );
     if ($lock === null) {
         // Leaving a terminal pointer in place is safe because active_job() removes
         // terminal pointers on the next serialized start/status pass.
@@ -247,26 +271,42 @@ function application_update_release_lock($handle): void
 /**
  * Return a public/Admin-safe update job projection.
  *
- * @param array $job Private durable job state.
- * @return array<string,mixed> Safe state for JSON/UI/logging.
+ * @param array{id?:string,operation?:string,trigger?:string,status?:string,stage?:string,progress?:array<string,int|string|float|bool|null>,created_at?:int,updated_at?:int,started_at?:int,finished_at?:int,attempts?:int,error?:array{message?:string,reference?:string,retryable?:bool}|null,result?:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,checkpoints?:array<string,bool>,runtime_limits?:array<string,int|string|bool>} $job Private durable job state fields used in the public projection.
+ * @return array{id:string,operation:string,trigger:string,status:string,stage:string,stage_percent:int,progress:array<string,int|string|float|bool|null>,created_at:int,updated_at:int,started_at:int,finished_at:int,attempts:int,error:?array{message?:string,reference?:string,retryable?:bool},result:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,can_resume:bool,can_cancel:bool,can_rollback:bool,background:bool,runtime_limits:array<string,int|string|bool>} Public-safe job state for JSON, UI, and logging.
  */
 function application_update_job_public_state(array $job): array
 {
     $stage = (string) ($job['stage'] ?? '');
     $stages = application_update_job_stages();
     $index = array_search($stage, $stages, true);
-    $stagePercent = is_int($index) && count($stages) > 1 ? (int) floor(($index / (count($stages) - 1)) * 100) : 0;
+    $stagePercent = is_int($index) && count($stages) > 1
+        ? (int) floor(($index / (count($stages) - 1)) * 100)
+        : 0;
 
     $progress = (array) ($job['progress'] ?? []);
-    if (isset($progress['current'], $progress['total']) && (int) $progress['total'] > 0) {
-        $progress['percent'] = min(100, (int) floor(((int) $progress['current'] / (int) $progress['total']) * 100));
+    if (
+        isset($progress['current'], $progress['total'])
+        && (int) $progress['total'] > 0
+    ) {
+        $progress['percent'] = min(
+            100,
+            (int) floor(
+                ((int) $progress['current'] / (int) $progress['total']) * 100,
+            ),
+        );
     }
 
     // $publicError upgrades pre-fix persisted manifest failures to the current
     // bounded guidance without needing the original private exception text.
-    $publicError = isset($job['error']) && is_array($job['error']) ? $job['error'] : null;
-    if ($publicError !== null && !application_update_job_error_retryable($job)) {
-        $publicError['message'] = application_update_manifest_mismatch_message();
+    $publicError = isset($job['error']) && is_array($job['error'])
+        ? $job['error']
+        : null;
+    if (
+        $publicError !== null
+        && !application_update_job_error_retryable($job)
+    ) {
+        $publicError['message'] =
+            application_update_manifest_mismatch_message();
         $publicError['retryable'] = false;
     }
 
@@ -284,16 +324,43 @@ function application_update_job_public_state(array $job): array
         'finished_at' => (int) ($job['finished_at'] ?? 0),
         'attempts' => (int) ($job['attempts'] ?? 0),
         'error' => $publicError,
-        'result' => isset($job['result']) && is_array($job['result']) ? $job['result'] : [],
-        'can_resume' => (string) ($job['status'] ?? '') === 'running'
-            || ((string) ($job['status'] ?? '') === 'failed' && application_update_job_error_retryable($job)),
-        'can_cancel' => in_array((string) ($job['status'] ?? ''), ['running', 'failed'], true)
-            && empty($job['checkpoints']['activation_complete'])
-            && (!is_int($index) || $index < (int) array_search('activate', $stages, true)),
-        'can_rollback' => (string) ($job['operation'] ?? '') !== 'rollback'
-            && !empty($job['checkpoints']['backup_complete'])
-            && (in_array((string) ($job['stage'] ?? ''), ['activate', 'migrate', 'finalize', 'cleanup', 'completed'], true)
-                || !empty($job['checkpoints']['activation_complete'])),
+        'result' => isset($job['result']) && is_array($job['result'])
+            ? $job['result']
+            : [],
+        'can_resume' =>
+            (string) ($job['status'] ?? '') === 'running'
+                || (
+                    (string) ($job['status'] ?? '') === 'failed'
+                    && application_update_job_error_retryable($job)
+                ),
+        'can_cancel' =>
+            in_array(
+                (string) ($job['status'] ?? ''),
+                ['running', 'failed'],
+                true,
+            )
+                && empty($job['checkpoints']['activation_complete'])
+                && (
+                    !is_int($index)
+                    || $index < (int) array_search('activate', $stages, true)
+                ),
+        'can_rollback' =>
+            (string) ($job['operation'] ?? '') !== 'rollback'
+                && !empty($job['checkpoints']['backup_complete'])
+                && (
+                    in_array(
+                        (string) ($job['stage'] ?? ''),
+                        [
+                            'activate',
+                            'migrate',
+                            'finalize',
+                            'cleanup',
+                            'completed',
+                        ],
+                        true,
+                    )
+                    || !empty($job['checkpoints']['activation_complete'])
+                ),
         'background' => (string) ($job['trigger'] ?? '') === 'background',
         'runtime_limits' => (array) ($job['runtime_limits'] ?? []),
     ];

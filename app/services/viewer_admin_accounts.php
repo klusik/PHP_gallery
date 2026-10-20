@@ -82,7 +82,9 @@ function viewer_admin_account_deletion_storage_available(): bool
     if (!viewer_admin_account_storage_available()) {
         return false;
     }
-    return schema_inspection_is_available(viewer_account_deletion_schema_status());
+    return schema_inspection_is_available(
+        viewer_account_deletion_schema_status(),
+    );
 }
 
 /**
@@ -101,7 +103,9 @@ function viewer_admin_account_generate_temporary_password(): string
             return $password;
         }
     }
-    throw new RuntimeException('A temporary viewer password could not be generated safely.');
+    throw new RuntimeException(
+        'A temporary viewer password could not be generated safely.',
+    );
 }
 
 /**
@@ -116,7 +120,9 @@ function viewer_admin_account_generate_temporary_password(): string
 function viewer_admin_account_list(int $limit = 250): array
 {
     if (!viewer_admin_account_storage_available()) {
-        throw new RuntimeException('Viewer account management storage is unavailable.');
+        throw new RuntimeException(
+            'Viewer account management storage is unavailable.',
+        );
     }
     return viewer_account_model_admin_list($limit);
 }
@@ -132,12 +138,17 @@ function viewer_admin_account_list(int $limit = 250): array
  * @param int $adminUserId Authenticated administrator user id used only for audit context.
  * @param string $email Viewer login/recovery email.
  * @param ?string $temporaryPassword Optional administrator-supplied temporary password; null/blank generates one.
- * @return array{created:bool,reason:string,account_id:?int,email:?string,temporary_password:?string,password_generated:bool}
+ * @return array{created:bool,reason:string,account_id:?int,email:?string,temporary_password:?string,password_generated:bool} Creation outcome, including one-time plaintext delivery data when generated.
  */
-function viewer_admin_account_create(int $adminUserId, string $email, ?string $temporaryPassword = null): array
-{
+function viewer_admin_account_create(
+    int $adminUserId,
+    string $email,
+    ?string $temporaryPassword = null,
+): array {
     if ($adminUserId <= 0) {
-        throw new InvalidArgumentException('Administrator identity is required for viewer provisioning.');
+        throw new InvalidArgumentException(
+            'Administrator identity is required for viewer provisioning.',
+        );
     }
     if (!viewer_admin_account_storage_available()) {
         return [
@@ -165,7 +176,9 @@ function viewer_admin_account_create(int $adminUserId, string $email, ?string $t
 
     $providedPassword = $temporaryPassword ?? '';
     $passwordGenerated = $providedPassword === '';
-    $password = $passwordGenerated ? viewer_admin_account_generate_temporary_password() : $providedPassword;
+    $password = $passwordGenerated
+        ? viewer_admin_account_generate_temporary_password()
+        : $providedPassword;
     if (!viewer_password_input_is_acceptable($password)) {
         return [
             'created' => false,
@@ -185,11 +198,15 @@ function viewer_admin_account_create(int $adminUserId, string $email, ?string $t
             VIEWER_ACCOUNT_STATUS_ACTIVE,
             viewer_account_cap(),
             VIEWER_ACCOUNT_CAPACITY_STATE_KEY,
-            now_sql()
+            now_sql(),
         );
     } catch (Throwable $exception) {
         if ((string) $exception->getCode() === '23000') {
-            $result = ['created' => false, 'reason' => 'account_exists', 'account_id' => null];
+            $result = [
+                'created' => false,
+                'reason' => 'account_exists',
+                'account_id' => null,
+            ];
         } else {
             throw $exception;
         }
@@ -207,10 +224,15 @@ function viewer_admin_account_create(int $adminUserId, string $email, ?string $t
     }
 
     $accountId = (int) ($result['account_id'] ?? 0);
-    viewer_security_event_record_best_effort('viewer.account_admin_created', $accountId, 'success', [
-        'admin_user_id' => $adminUserId,
-        'must_change_password' => true,
-    ]);
+    viewer_security_event_record_best_effort(
+        'viewer.account_admin_created',
+        $accountId,
+        'success',
+        [
+            'admin_user_id' => $adminUserId,
+            'must_change_password' => true,
+        ],
+    );
     return [
         'created' => true,
         'reason' => 'created',
@@ -230,12 +252,16 @@ function viewer_admin_account_create(int $adminUserId, string $email, ?string $t
  *
  * @param int $adminUserId Authenticated administrator user id used only for audit context.
  * @param int $viewerAccountId Viewer account id to delete.
- * @return array{deleted:bool,reason:string}
+ * @return array{deleted:bool,reason:string} Whether the selected viewer account was deleted and the bounded outcome reason.
  */
-function viewer_admin_account_delete(int $adminUserId, int $viewerAccountId): array
-{
+function viewer_admin_account_delete(
+    int $adminUserId,
+    int $viewerAccountId,
+): array {
     if ($adminUserId <= 0 || $viewerAccountId <= 0) {
-        throw new InvalidArgumentException('Administrator and viewer account identifiers must be positive integers.');
+        throw new InvalidArgumentException(
+            'Administrator and viewer account identifiers must be positive integers.',
+        );
     }
     if (!viewer_admin_account_deletion_storage_available()) {
         return ['deleted' => false, 'reason' => 'storage_unavailable'];
@@ -244,16 +270,24 @@ function viewer_admin_account_delete(int $adminUserId, int $viewerAccountId): ar
     $result = viewer_account_model_admin_delete(
         $viewerAccountId,
         VIEWER_ACCOUNT_CAPACITY_STATE_KEY,
-        now_sql()
+        now_sql(),
     );
     if (empty($result['deleted'])) {
-        return ['deleted' => false, 'reason' => (string) ($result['reason'] ?? 'not_found')];
+        return [
+            'deleted' => false,
+            'reason' => (string) ($result['reason'] ?? 'not_found'),
+        ];
     }
 
-    viewer_security_event_record_best_effort('viewer.account_admin_deleted', null, 'success', [
-        'admin_user_id' => $adminUserId,
-        'deleted_viewer_account_id' => $viewerAccountId,
-        'security_version' => (int) ($result['security_version'] ?? 0),
-    ]);
+    viewer_security_event_record_best_effort(
+        'viewer.account_admin_deleted',
+        null,
+        'success',
+        [
+            'admin_user_id' => $adminUserId,
+            'deleted_viewer_account_id' => $viewerAccountId,
+            'security_version' => (int) ($result['security_version'] ?? 0),
+        ],
+    );
     return ['deleted' => true, 'reason' => 'account_deleted'];
 }

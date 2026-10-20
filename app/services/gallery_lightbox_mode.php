@@ -49,16 +49,24 @@ namespace Gallery\Services;
  */
 function gallery_presentation_normalize(array|string|null $value): array
 {
-    $defaults = ['version' => 1, 'enabled' => true, 'autoplay' => true, 'music' => true,
-        'interval' => 'medium', 'transition' => 'medium'];
-    if (is_string($value)) $value = json_decode($value, true);
+    $defaults = [
+        'version' => 1,
+        'enabled' => true,
+        'autoplay' => true,
+        'music' => true,
+        'interval' => 'medium',
+        'transition' => 'medium',
+    ];
+    if (is_string($value))
+        $value = json_decode($value, true);
     if (!is_array($value) || ($value['version'] ?? null) !== 1) {
         // Permanent pre-settings/unknown-version compatibility. This owner
         // preserves the established launcher, music and medium timings.
         return $defaults;
     }
     foreach (['enabled', 'autoplay', 'music'] as $key) {
-        if (is_bool($value[$key] ?? null)) $defaults[$key] = $value[$key];
+        if (is_bool($value[$key] ?? null))
+            $defaults[$key] = $value[$key];
     }
     foreach (['interval', 'transition'] as $key) {
         if (in_array($value[$key] ?? null, ['slow', 'medium', 'fast'], true)) {
@@ -76,7 +84,9 @@ function gallery_presentation_normalize(array|string|null $value): array
  */
 function gallery_presentation_settings(array $gallery): array
 {
-    return gallery_presentation_normalize($gallery['presentation_json'] ?? null);
+    return gallery_presentation_normalize(
+        $gallery['presentation_json'] ?? null,
+    );
 }
 
 /**
@@ -108,7 +118,7 @@ function gallery_presentation_schema_ready(): bool
 {
     return presentation_schema_render_available(
         presentation_gallery_settings_schema_status(),
-        'gallery_presentation_render'
+        'gallery_presentation_render',
     );
 }
 
@@ -123,7 +133,7 @@ function gallery_presentation_assert_writable(string $operation): void
     presentation_schema_assert_write_available(
         presentation_gallery_settings_schema_status(),
         $operation,
-        t('presentation.migration')
+        t('presentation.migration'),
     );
 }
 
@@ -138,7 +148,10 @@ function gallery_presentation_assert_writable(string $operation): void
  */
 function gallery_lightbox_browsing_mode_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_lightbox_override_schema_status(), 'lightbox_override_render');
+    return presentation_schema_render_available(
+        presentation_lightbox_override_schema_status(),
+        'lightbox_override_render',
+    );
 }
 
 /**
@@ -147,11 +160,16 @@ function gallery_lightbox_browsing_mode_schema_ready(): bool
  * The values are persisted and emitted as data-lightbox-browsing-mode. Keep them
  * short, stable, and independent from translated labels.
  *
- * @return array Structured result data for the caller.
+ * @return list<'single'|'picture_strip'|'3d_carousel'> Supported mode identifiers; capability disablement limits the list to single.
  */
 function gallery_lightbox_browsing_mode_options(): array
 {
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('lightbox_modes')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('lightbox_modes')
+    ) {
         return ['single'];
     }
     return ['single', 'picture_strip', '3d_carousel'];
@@ -160,12 +178,14 @@ function gallery_lightbox_browsing_mode_options(): array
 /**
  * Normalize a submitted, stored, or sidecar lightbox browsing-mode value.
  *
- * @param mixed $value Value to process.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Stored, sidecar, or form value cast and lowercased; unsupported text uses the normalized fallback, and legacy 'strip' maps to 'picture_strip'.
  * @param string $fallback Fallback value.
- * @return string Text result for the caller.
+ * @return string Normalized mode, either 'single', 'picture_strip', or '3d_carousel'; legacy 'strip' is normalized to 'picture_strip' and invalid input uses the supported fallback or 'single'.
  */
-function gallery_lightbox_browsing_mode_normalize(mixed $value, string $fallback = 'single'): string
-{
+function gallery_lightbox_browsing_mode_normalize(
+    mixed $value,
+    string $fallback = 'single',
+): string {
     // $mode stores the lowercase database, sidecar, or form value before validation.
     $mode = strtolower(trim((string) $value));
     // Earlier builds stored the picture-strip mode as strip. Accept it for settings, sidecars, and existing rows.
@@ -180,7 +200,13 @@ function gallery_lightbox_browsing_mode_normalize(mixed $value, string $fallback
     if ($fallbackMode === 'strip') {
         $fallbackMode = 'picture_strip';
     }
-    return in_array($fallbackMode, gallery_lightbox_browsing_mode_options(), true) ? $fallbackMode : 'single';
+    return in_array(
+        $fallbackMode,
+        gallery_lightbox_browsing_mode_options(),
+        true,
+    )
+        ? $fallbackMode
+        : 'single';
 }
 
 /**
@@ -190,10 +216,18 @@ function gallery_lightbox_browsing_mode_normalize(mixed $value, string $fallback
  */
 function theme_lightbox_browsing_mode(): string
 {
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('lightbox_modes')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('lightbox_modes')
+    ) {
         return 'single';
     }
-    return gallery_lightbox_browsing_mode_normalize(app_setting('theme_lightbox_browsing_mode', 'single'), 'single');
+    return gallery_lightbox_browsing_mode_normalize(
+        app_setting('theme_lightbox_browsing_mode', 'single'),
+        'single',
+    );
 }
 
 /**
@@ -217,7 +251,9 @@ function gallery_lightbox_browsing_mode_storage_value(mixed $value): ?string
     if ($mode === 'strip') {
         return 'picture_strip';
     }
-    return in_array($mode, gallery_lightbox_browsing_mode_options(), true) ? $mode : null;
+    return in_array($mode, gallery_lightbox_browsing_mode_options(), true)
+        ? $mode
+        : null;
 }
 
 /**
@@ -228,17 +264,24 @@ function gallery_lightbox_browsing_mode_storage_value(mixed $value): ?string
  * 2. The global Theme default stored in app_settings.
  * 3. The legacy single-image mode as a hard fallback.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{lightbox_browsing_mode?:string|null} $gallery Gallery row with its optional mode override.
+ * @return 'single'|'picture_strip'|'3d_carousel' Effective mode, or single when the capability is disabled.
  */
 function gallery_effective_lightbox_browsing_mode(array $gallery): string
 {
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('lightbox_modes')) {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('lightbox_modes')
+    ) {
         return 'single';
     }
     if (gallery_lightbox_browsing_mode_schema_ready()) {
         // $storedMode stores the optional gallery-level override. NULL means inherit.
-        $storedMode = gallery_lightbox_browsing_mode_storage_value($gallery['lightbox_browsing_mode'] ?? null);
+        $storedMode = gallery_lightbox_browsing_mode_storage_value(
+            $gallery['lightbox_browsing_mode'] ?? null,
+        );
         if ($storedMode !== null) {
             return $storedMode;
         }
@@ -255,7 +298,10 @@ function gallery_effective_lightbox_browsing_mode(array $gallery): string
 function gallery_lightbox_browsing_mode_label(string $mode): string
 {
     return match (gallery_lightbox_browsing_mode_normalize($mode)) {
-        'picture_strip' => t('gallery.lightbox_mode.picture_strip', 'Picture strip'),
+        'picture_strip' => t(
+            'gallery.lightbox_mode.picture_strip',
+            'Picture strip',
+        ),
         '3d_carousel' => t('gallery.lightbox_mode.3d_carousel', '3D carousel'),
         default => t('gallery.lightbox_mode.single', 'Single image'),
     };
@@ -278,13 +324,24 @@ function gallery_lightbox_browsing_mode_override_label(string $value): string
 /**
  * Return a readable summary of the current lightbox mode source for Admin forms.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{lightbox_browsing_mode?:string|null} $gallery Gallery row with its optional mode override.
+ * @return string Translated label identifying the gallery override or Theme default.
  */
 function gallery_lightbox_browsing_mode_source_label(array $gallery): string
 {
-    if (gallery_lightbox_browsing_mode_schema_ready() && gallery_lightbox_browsing_mode_storage_value($gallery['lightbox_browsing_mode'] ?? null) !== null) {
-        return t('admin.gallery_editor.lightbox_mode_source_gallery', 'gallery override');
+    if (
+        gallery_lightbox_browsing_mode_schema_ready()
+        && gallery_lightbox_browsing_mode_storage_value(
+            $gallery['lightbox_browsing_mode'] ?? null,
+        ) !== null
+    ) {
+        return t(
+            'admin.gallery_editor.lightbox_mode_source_gallery',
+            'gallery override',
+        );
     }
-    return t('admin.gallery_editor.lightbox_mode_source_theme', 'Theme default');
+    return t(
+        'admin.gallery_editor.lightbox_mode_source_theme',
+        'Theme default',
+    );
 }

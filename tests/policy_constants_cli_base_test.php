@@ -21,7 +21,8 @@ namespace PhpGallery\SourceContracts;
 require_once dirname(__DIR__) . '/scripts/check_policy_constants.php';
 
 $previousBase = getenv('PHP_GALLERY_SOURCE_BASE');
-$root = sys_get_temp_dir() . '/gallery-policy-cli-base-' . bin2hex(random_bytes(8));
+$root =
+    sys_get_temp_dir() . '/gallery-policy-cli-base-' . bin2hex(random_bytes(8));
 $repository = $root . '/repo';
 $directory = $repository . '/app';
 mkdir($root);
@@ -37,11 +38,15 @@ $assert = static function (bool $condition, string $message): void {
 $runGit = static function (array $arguments) use ($repository): string {
     $command = array_merge(['git', '-C', $repository], $arguments);
     $pipes = [];
-    $process = proc_open($command, [
-        0 => ['pipe', 'r'],
-        1 => ['pipe', 'w'],
-        2 => ['pipe', 'w'],
-    ], $pipes);
+    $process = proc_open(
+        $command,
+        [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ],
+        $pipes,
+    );
     if (!is_resource($process)) {
         throw new \RuntimeException('Could not start disposable Git fixture.');
     }
@@ -74,15 +79,26 @@ try {
     $runGit(['add', 'app/policy_fixture.php']);
     $runGit(['commit', '-q', '-m', 'baseline without new policy site']);
 
-    file_put_contents($path, "<?php\nconst EXISTING_SETTING = 1;\nconst WORKER_LIMIT = 4;\n");
+    file_put_contents(
+        $path,
+        "<?php\nconst EXISTING_SETTING = 1;\nconst WORKER_LIMIT = 4;\n",
+    );
     $runGit(['add', 'app/policy_fixture.php']);
     $runGit(['commit', '-q', '-m', 'add an unexplained runtime policy site']);
 
     putenv('PHP_GALLERY_SOURCE_BASE=HEAD^');
-    $environmentBase = $runPolicy(['check_policy_constants.php', '--changed', '--json', '--root=' . $repository]);
-    $assert($environmentBase['exit'] === 1 && $environmentBase['report']['status'] === 'FAIL'
-        && $environmentBase['report']['summary']['base'] === 'HEAD^',
-        'The policy CLI must apply the environment-selected earlier base.');
+    $environmentBase = $runPolicy([
+        'check_policy_constants.php',
+        '--changed',
+        '--json',
+        '--root=' . $repository,
+    ]);
+    $assert(
+        $environmentBase['exit'] === 1
+            && $environmentBase['report']['status'] === 'FAIL'
+            && $environmentBase['report']['summary']['base'] === 'HEAD^',
+        'The policy CLI must apply the environment-selected earlier base.',
+    );
 
     $explicitBase = $runPolicy([
         'check_policy_constants.php',
@@ -91,9 +107,12 @@ try {
         '--root=' . $repository,
         '--base=HEAD',
     ]);
-    $assert($explicitBase['exit'] === 0 && $explicitBase['report']['status'] === 'PASS'
-        && $explicitBase['report']['summary']['base'] === 'HEAD',
-        'An explicit --base must override PHP_GALLERY_SOURCE_BASE.');
+    $assert(
+        $explicitBase['exit'] === 0
+            && $explicitBase['report']['status'] === 'PASS'
+            && $explicitBase['report']['summary']['base'] === 'HEAD',
+        'An explicit --base must override PHP_GALLERY_SOURCE_BASE.',
+    );
 } finally {
     if ($previousBase === false) {
         putenv('PHP_GALLERY_SOURCE_BASE');
@@ -102,8 +121,11 @@ try {
     }
     if (is_dir($repository)) {
         $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($repository, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
+            new \RecursiveDirectoryIterator(
+                $repository,
+                \FilesystemIterator::SKIP_DOTS,
+            ),
+            \RecursiveIteratorIterator::CHILD_FIRST,
         );
         foreach ($iterator as $entry) {
             $path = $entry->getPathname();
@@ -123,4 +145,5 @@ try {
     }
 }
 
-echo "PASS policy_constants_cli_base: environment and explicit Git comparison bases.\n";
+echo
+    "PASS policy_constants_cli_base: environment and explicit Git comparison bases.\n";

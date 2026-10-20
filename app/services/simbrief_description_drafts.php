@@ -40,6 +40,7 @@ use RuntimeException;
  * Rationale: short expiry limits retained personal flight data.
  */
 const SIMBRIEF_CREATE_DRAFT_TTL = 1800;
+
 /**
  * Bound the JSON document written to the private draft cache.
  * Type: int.
@@ -69,17 +70,29 @@ function simbrief_description_draft_directory(): string
  * @param array<string,mixed> $details Extracted flight details.
  * @return string Opaque draft reference.
  */
-function simbrief_description_draft_create(int $userId, array $payload, array $identifier, array $details): string
-{
+function simbrief_description_draft_create(
+    int $userId,
+    array $payload,
+    array $identifier,
+    array $details,
+): string {
     if ($userId < 1) {
-        throw new RuntimeException('Administrator identity is required for a SimBrief draft.');
+        throw new RuntimeException(
+            'Administrator identity is required for a SimBrief draft.',
+        );
     }
     $sessionId = session_id();
     if ($sessionId === '') {
-        throw new RuntimeException('An active administrator session is required for a SimBrief draft.');
+        throw new RuntimeException(
+            'An active administrator session is required for a SimBrief draft.',
+        );
     }
     $directory = simbrief_description_draft_directory();
-    if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
+    if (
+        !is_dir($directory)
+        && !mkdir($directory, 0700, true)
+        && !is_dir($directory)
+    ) {
         throw new RuntimeException('SimBrief draft storage is unavailable.');
     }
     $token = bin2hex(random_bytes(24));
@@ -91,7 +104,10 @@ function simbrief_description_draft_create(int $userId, array $payload, array $i
         'identifier' => $identifier,
         'details' => $details,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($document) || strlen($document) > SIMBRIEF_CREATE_DRAFT_MAX_BYTES) {
+    if (
+        !is_string($document)
+        || strlen($document) > SIMBRIEF_CREATE_DRAFT_MAX_BYTES
+    ) {
         throw new RuntimeException('The SimBrief OFP is too large to preview.');
     }
     $path = $directory . '/' . $token . '.json';
@@ -113,19 +129,34 @@ function simbrief_description_draft_create(int $userId, array $payload, array $i
 function simbrief_description_draft_read(int $userId, string $token): array
 {
     if ($userId < 1 || !preg_match('/\A[a-f0-9]{48}\z/D', $token)) {
-        throw new RuntimeException('This SimBrief draft is invalid. Import the flight again.');
+        throw new RuntimeException(
+            'This SimBrief draft is invalid. Import the flight again.',
+        );
     }
     $path = simbrief_description_draft_directory() . '/' . $token . '.json';
     if (!is_file($path) || filesize($path) > SIMBRIEF_CREATE_DRAFT_MAX_BYTES) {
-        throw new RuntimeException('This SimBrief draft has expired. Import the flight again.');
+        throw new RuntimeException(
+            'This SimBrief draft has expired. Import the flight again.',
+        );
     }
     $document = file_get_contents($path);
     $draft = is_string($document) ? json_decode($document, true) : null;
-    if (!is_array($draft) || (int) ($draft['user_id'] ?? 0) !== $userId
-        || session_id() === '' || !hash_equals((string) ($draft['session_hash'] ?? ''), hash('sha256', session_id()))
+    if (
+        !is_array($draft)
+        || (int) ($draft['user_id'] ?? 0) !== $userId
+        || session_id() === ''
+        || !hash_equals((string) ($draft['session_hash'] ?? ''), hash(
+            'sha256',
+            session_id(),
+        ))
         || (int) ($draft['expires_at'] ?? 0) < time()
-        || !is_array($draft['payload'] ?? null) || !is_array($draft['identifier'] ?? null) || !is_array($draft['details'] ?? null)) {
-        throw new RuntimeException('This SimBrief draft is unavailable. Import the flight again.');
+        || !is_array($draft['payload'] ?? null)
+        || !is_array($draft['identifier'] ?? null)
+        || !is_array($draft['details'] ?? null)
+    ) {
+        throw new RuntimeException(
+            'This SimBrief draft is unavailable. Import the flight again.',
+        );
     }
     return $draft;
 }
@@ -143,10 +174,13 @@ function simbrief_description_draft_prune(string $directory): void
         if ($checked++ >= 32) {
             break;
         }
-        if (!$entry->isFile() || !preg_match('/\A[a-f0-9]{48}\.json\z/D', $entry->getFilename())) {
+        if (
+            !$entry->isFile()
+            || !preg_match('/\A[a-f0-9]{48}\.json\z/D', $entry->getFilename())
+        ) {
             continue;
         }
-        if ($entry->getMTime() < time() - SIMBRIEF_CREATE_DRAFT_TTL - 60) {
+        if ($entry->getMTime() < (time() - SIMBRIEF_CREATE_DRAFT_TTL - 60)) {
             @unlink($entry->getPathname());
         }
     }
@@ -163,7 +197,17 @@ function simbrief_description_draft_attach(array $gallery, array $draft): array
 {
     $payload = (array) $draft['payload'];
     $details = (array) $draft['details'];
-    $route = simbrief_description_save_route_map_from_ofp((int) $gallery['id'], $payload, $details);
-    $ofp = simbrief_description_save_ofp_for_gallery($gallery, $payload, (array) $draft['identifier'], $details, $route);
+    $route = simbrief_description_save_route_map_from_ofp(
+        (int) $gallery['id'],
+        $payload,
+        $details,
+    );
+    $ofp = simbrief_description_save_ofp_for_gallery(
+        $gallery,
+        $payload,
+        (array) $draft['identifier'],
+        $details,
+        $route,
+    );
     return ['route' => $route, 'ofp' => $ofp];
 }

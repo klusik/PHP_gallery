@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
-
 require_once __DIR__ . '/public_gallery_home.php';
 require_once __DIR__ . '/public_gallery_page.php';
 require_once __DIR__ . '/public_gallery_controls.php';

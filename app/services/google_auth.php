@@ -65,7 +65,9 @@ function google_auth_config(): array
     // $config stores the installed configuration array.
     $config = cms_config();
     // $google stores optional Google sign-in settings from config.php.
-    $google = is_array($config['google_login'] ?? null) ? $config['google_login'] : [];
+    $google = is_array($config['google_login'] ?? null)
+        ? $config['google_login']
+        : [];
     // $redirectUri stores the configured callback URL or the automatic front-controller URL.
     $redirectUri = trim((string) ($google['redirect_uri'] ?? ''));
     if ($redirectUri === '') {
@@ -73,7 +75,9 @@ function google_auth_config(): array
     }
 
     return [
-        'enabled' => array_key_exists('enabled', $google) ? (bool) $google['enabled'] : false,
+        'enabled' => array_key_exists('enabled', $google)
+            ? (bool) $google['enabled']
+            : false,
         'client_id' => trim((string) ($google['client_id'] ?? '')),
         'client_secret' => (string) ($google['client_secret'] ?? ''),
         'redirect_uri' => $redirectUri,
@@ -90,8 +94,10 @@ function google_auth_ready(): bool
 {
     // $config stores normalized Google auth settings.
     $config = google_auth_config();
-    return google_auth_configuration_ready($config)
-        && schema_inspection_is_available(google_auth_schema_status());
+    return (
+        google_auth_configuration_ready($config)
+            && schema_inspection_is_available(google_auth_schema_status())
+    );
 }
 
 /**
@@ -103,9 +109,11 @@ function google_auth_ready(): bool
 function google_auth_configuration_ready(?array $config = null): bool
 {
     $config ??= google_auth_config();
-    return (bool) ($config['enabled'] ?? false)
-        && trim((string) ($config['client_id'] ?? '')) !== ''
-        && (string) ($config['client_secret'] ?? '') !== '';
+    return (
+        (bool) ($config['enabled'] ?? false)
+            && trim((string) ($config['client_id'] ?? '')) !== ''
+            && (string) ($config['client_secret'] ?? '') !== ''
+    );
 }
 
 /**
@@ -140,18 +148,24 @@ function google_auth_schema_ready(): bool
  * @param bool $missingAllowed Whether confirmed pre-migration absence may degrade safely.
  * @return bool True when identity-link storage is available.
  */
-function google_auth_schema_operation_available(string $operation, bool $missingAllowed = false): bool
-{
+function google_auth_schema_operation_available(
+    string $operation,
+    bool $missingAllowed = false,
+): bool {
     $status = google_auth_schema_status();
     if (schema_inspection_is_unknown($status)) {
         auth_log_schema_unavailable('auth_external_identity', $operation);
-        throw new AuthenticationSchemaUnavailableException('auth_external_identity');
+        throw new AuthenticationSchemaUnavailableException(
+            'auth_external_identity',
+        );
     }
     if (schema_inspection_is_missing($status)) {
         if ($missingAllowed) {
             return false;
         }
-        throw new RuntimeException('Google login migration has not been applied.');
+        throw new RuntimeException(
+            'Google login migration has not been applied.',
+        );
     }
     return true;
 }
@@ -165,8 +179,12 @@ function google_auth_schema_operation_available(string $operation, bool $missing
  * @param ?int $userId Current Admin identity supplied by the controller, or null for an anonymous login.
  * @return string Provider authorization URL; no credential, session ID or client secret is included.
  */
-function google_auth_authorization_url(string $mode, string $returnTarget, array &$states, ?int $userId): string
-{
+function google_auth_authorization_url(
+    string $mode,
+    string $returnTarget,
+    array &$states,
+    ?int $userId,
+): string {
     // $config stores normalized Google auth settings.
     $config = google_auth_config();
     // $state stores the CSRF value returned by Google.
@@ -174,7 +192,11 @@ function google_auth_authorization_url(string $mode, string $returnTarget, array
     // $states contains only pending OAuth entries supplied by the HTTP owner.
 
     foreach ($states as $key => $entry) {
-        if (!is_array($entry) || (time() - (int) ($entry['created_at'] ?? 0)) > GOOGLE_AUTH_STATE_TTL_SECONDS) {
+        if (
+            !is_array($entry)
+            || (time() - (int) ($entry['created_at'] ?? 0))
+                > GOOGLE_AUTH_STATE_TTL_SECONDS
+        ) {
             unset($states[$key]);
         }
     }
@@ -220,7 +242,10 @@ function google_auth_consume_state(string $state, array &$states): ?array
     $entry = $states[$state];
     unset($states[$state]);
 
-    if ((time() - (int) ($entry['created_at'] ?? 0)) > GOOGLE_AUTH_STATE_TTL_SECONDS) {
+    if (
+        (time() - (int) ($entry['created_at'] ?? 0))
+        > GOOGLE_AUTH_STATE_TTL_SECONDS
+    ) {
         return null;
     }
 
@@ -231,8 +256,8 @@ function google_auth_consume_state(string $state, array &$states): ?array
  * Send an HTTPS form POST and decode the returned JSON document.
  *
  * @param string $url URL used by this workflow.
- * @param array $fields Fields value.
- * @return array Structured result data for the caller.
+ * @param array<string,string> $fields Form fields sent to Google's token endpoint.
+ * @return array{access_token?:string,expires_in?:int,token_type?:string,scope?:string,id_token?:string,error?:string,error_description?:string} Decoded token response; throws RuntimeException for transport, HTTP, or JSON failures.
  */
 function google_auth_http_post_json(string $url, array $fields): array
 {
@@ -261,7 +286,10 @@ function google_auth_http_post_json(string $url, array $fields): array
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         if ($raw === false || $status < 200 || $status >= 300) {
-            throw new RuntimeException('Google token request failed: ' . ($error !== '' ? $error : 'HTTP ' . $status));
+            throw new RuntimeException(
+                'Google token request failed: '
+                    . ($error !== '' ? $error : 'HTTP ' . $status),
+            );
         }
     } else {
         // $context stores the stream wrapper request options.
@@ -292,7 +320,7 @@ function google_auth_http_post_json(string $url, array $fields): array
  * Send an HTTPS GET and decode the returned JSON document.
  *
  * @param string $url URL used by this workflow.
- * @return array Structured result data for the caller.
+ * @return array{keys?:list<array{kid?:string,kty:string,n:string,e:string,alg?:string,use?:string}>} Decoded Google signing-key set; throws RuntimeException for transport, HTTP, or JSON failures.
  */
 function google_auth_http_get_json(string $url): array
 {
@@ -313,11 +341,17 @@ function google_auth_http_get_json(string $url): array
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         if ($raw === false || $status < 200 || $status >= 300) {
-            throw new RuntimeException('Google metadata request failed: ' . ($error !== '' ? $error : 'HTTP ' . $status));
+            throw new RuntimeException(
+                'Google metadata request failed: '
+                    . ($error !== '' ? $error : 'HTTP ' . $status),
+            );
         }
     } else {
         // $context stores the stream wrapper request options.
-        $context = stream_context_create(['http' => ['method' => 'GET', 'timeout' => 20]]);
+        $context = stream_context_create(['http' => [
+            'method' => 'GET',
+            'timeout' => 20,
+        ]]);
         // $raw stores the HTTP response body.
         $raw = @file_get_contents($url, false, $context);
         if ($raw === false) {
@@ -343,7 +377,7 @@ function google_auth_base64url_decode(string $value): string
 {
     // $padded stores the value padded to a base64 length.
     $padded = strtr($value, '-_', '+/');
-    $padded .= str_repeat('=', (4 - strlen($padded) % 4) % 4);
+    $padded .= str_repeat('=', (4 - (strlen($padded) % 4)) % 4);
     // $decoded stores the decoded binary data.
     $decoded = base64_decode($padded, true);
     if ($decoded === false) {
@@ -438,8 +472,8 @@ function google_auth_asn1_oid(string $oid): string
 /**
  * Convert an RSA JWK public key to PEM.
  *
- * @param array $jwk Jwk value.
- * @return string Text result for the caller.
+ * @param array{kty:string,n:string,e:string} $jwk RSA public key fields from a Google JWK.
+ * @return string PEM-encoded RSA public key; throws RuntimeException for unsupported keys.
  */
 function google_auth_jwk_to_pem(array $jwk): string
 {
@@ -452,21 +486,33 @@ function google_auth_jwk_to_pem(array $jwk): string
     // $exponent stores the RSA public exponent bytes.
     $exponent = google_auth_base64url_decode((string) $jwk['e']);
     // $rsaPublicKey stores the DER RSAPublicKey sequence.
-    $rsaPublicKey = google_auth_asn1_tag(0x30, google_auth_asn1_integer($modulus) . google_auth_asn1_integer($exponent));
+    $rsaPublicKey = google_auth_asn1_tag(
+        0x30,
+        google_auth_asn1_integer($modulus)
+            . google_auth_asn1_integer($exponent),
+    );
     // $algorithm stores the DER AlgorithmIdentifier for rsaEncryption.
-    $algorithm = google_auth_asn1_tag(0x30, google_auth_asn1_oid('1.2.840.113549.1.1.1') . google_auth_asn1_tag(0x05, ''));
+    $algorithm = google_auth_asn1_tag(
+        0x30,
+        google_auth_asn1_oid('1.2.840.113549.1.1.1')
+            . google_auth_asn1_tag(0x05, ''),
+    );
     // $subjectPublicKey stores the DER BIT STRING wrapping the RSA key.
     $subjectPublicKey = google_auth_asn1_tag(0x03, "\x00" . $rsaPublicKey);
     // $spki stores the DER SubjectPublicKeyInfo sequence.
     $spki = google_auth_asn1_tag(0x30, $algorithm . $subjectPublicKey);
 
-    return "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($spki), 64, "\n") . "-----END PUBLIC KEY-----\n";
+    return (
+        "-----BEGIN PUBLIC KEY-----\n"
+            . chunk_split(base64_encode($spki), 64, "\n")
+            . "-----END PUBLIC KEY-----\n"
+    );
 }
 
 /**
  * Return cached Google public keys, refreshing them when the local cache expires.
  *
- * @return array Structured result data for the caller.
+ * @return array{keys:list<array{kid?:string,kty:string,n:string,e:string,alg?:string,use?:string}>} Cached or freshly fetched Google signing keys.
  */
 function google_auth_jwks(): array
 {
@@ -483,12 +529,18 @@ function google_auth_jwks(): array
     // $jwks stores the fetched Google public key set.
     $jwks = google_auth_http_get_json(CMS_GOOGLE_JWKS_ENDPOINT);
     if (!is_array($jwks['keys'] ?? null)) {
-        throw new RuntimeException('Google key set did not contain public keys.');
+        throw new RuntimeException(
+            'Google key set did not contain public keys.',
+        );
     }
     if (!is_dir(dirname($cachePath))) {
         mkdir(dirname($cachePath), 0775, true);
     }
-    file_put_contents($cachePath, json_encode($jwks, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    file_put_contents(
+        $cachePath,
+        json_encode($jwks, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+        LOCK_EX,
+    );
     return $jwks;
 }
 
@@ -496,7 +548,7 @@ function google_auth_jwks(): array
  * Verify a Google ID token and return its claims.
  *
  * @param string $idToken Id token value.
- * @return array Structured result data for the caller.
+ * @return array{iss:string,aud:string,exp:int|string,sub:string,email_verified:bool|string,email?:string,name?:string,picture?:string,...<string,mixed>} Verified claims from a signed Google ID token.
  */
 function google_auth_verify_id_token(string $idToken): array
 {
@@ -511,10 +563,14 @@ function google_auth_verify_id_token(string $idToken): array
     // $claims stores decoded JWT claims.
     $claims = json_decode(google_auth_base64url_decode($parts[1]), true);
     if (!is_array($header) || !is_array($claims)) {
-        throw new RuntimeException('Google ID token JSON could not be decoded.');
+        throw new RuntimeException(
+            'Google ID token JSON could not be decoded.',
+        );
     }
     if (($header['alg'] ?? '') !== 'RS256' || empty($header['kid'])) {
-        throw new RuntimeException('Google ID token uses an unexpected signing header.');
+        throw new RuntimeException(
+            'Google ID token uses an unexpected signing header.',
+        );
     }
 
     // $jwks stores current Google signing keys.
@@ -522,7 +578,10 @@ function google_auth_verify_id_token(string $idToken): array
     // $matchingKey stores the public key matching the JWT kid.
     $matchingKey = null;
     foreach ((array) $jwks['keys'] as $key) {
-        if (is_array($key) && (string) ($key['kid'] ?? '') === (string) $header['kid']) {
+        if (
+            is_array($key)
+            && (string) ($key['kid'] ?? '') === (string) $header['kid']
+        ) {
             $matchingKey = $key;
             break;
         }
@@ -532,7 +591,9 @@ function google_auth_verify_id_token(string $idToken): array
     }
 
     if (!function_exists('openssl_verify')) {
-        throw new RuntimeException('The PHP OpenSSL extension is required for Google ID token verification.');
+        throw new RuntimeException(
+            'The PHP OpenSSL extension is required for Google ID token verification.',
+        );
     }
 
     // $pem stores the PEM public key used to verify the signature.
@@ -542,26 +603,44 @@ function google_auth_verify_id_token(string $idToken): array
     // $signedPayload stores the signed header and claims bytes.
     $signedPayload = $parts[0] . '.' . $parts[1];
     // $verified stores the OpenSSL signature verification result.
-    $verified = openssl_verify($signedPayload, $signature, $pem, OPENSSL_ALGO_SHA256);
+    $verified = openssl_verify(
+        $signedPayload,
+        $signature,
+        $pem,
+        OPENSSL_ALGO_SHA256,
+    );
     if ($verified !== 1) {
-        throw new RuntimeException('Google ID token signature verification failed.');
+        throw new RuntimeException(
+            'Google ID token signature verification failed.',
+        );
     }
 
     // $config stores normalized Google auth settings.
     $config = google_auth_config();
     if ((string) ($claims['aud'] ?? '') !== $config['client_id']) {
-        throw new RuntimeException('Google ID token audience does not match this site.');
+        throw new RuntimeException(
+            'Google ID token audience does not match this site.',
+        );
     }
-    if (!in_array((string) ($claims['iss'] ?? ''), ['accounts.google.com', 'https://accounts.google.com'], true)) {
+    if (!in_array(
+        (string) ($claims['iss'] ?? ''),
+        ['accounts.google.com', 'https://accounts.google.com'],
+        true,
+    )) {
         throw new RuntimeException('Google ID token issuer is invalid.');
     }
     if ((int) ($claims['exp'] ?? 0) < time()) {
         throw new RuntimeException('Google ID token has expired.');
     }
     if ((string) ($claims['sub'] ?? '') === '') {
-        throw new RuntimeException('Google ID token does not contain a stable account id.');
+        throw new RuntimeException(
+            'Google ID token does not contain a stable account id.',
+        );
     }
-    if (($claims['email_verified'] ?? false) !== true && (string) ($claims['email_verified'] ?? '') !== 'true') {
+    if (
+        ($claims['email_verified'] ?? false) !== true
+        && (string) ($claims['email_verified'] ?? '') !== 'true'
+    ) {
         throw new RuntimeException('Google account email is not verified.');
     }
 
@@ -633,7 +712,8 @@ function google_auth_user_by_subject(string $subject): ?array
  * Link or refresh one Google identity for an existing admin account.
  *
  * @param int $userId User id identifier.
- * @param array $claims Claims value.
+ * @param array{sub:string,email_verified?:bool|string,email?:string,name?:string,picture?:string,...<string,mixed>} $claims Verified Google ID token claims for the account to link.
+ * @return void Links or refreshes the Google identity; throws RuntimeException when claims are invalid or already linked elsewhere.
  */
 function google_auth_link_account(int $userId, array $claims): void
 {
@@ -648,7 +728,9 @@ function google_auth_link_account(int $userId, array $claims): void
     // $existingUser stores any account already linked to the same Google subject.
     $existingUser = google_auth_user_by_subject($subject);
     if ($existingUser && (int) $existingUser['id'] !== $userId) {
-        throw new RuntimeException('This Google account is already linked to another admin profile.');
+        throw new RuntimeException(
+            'This Google account is already linked to another admin profile.',
+        );
     }
 
     // $email stores the verified Google account email.
@@ -658,15 +740,23 @@ function google_auth_link_account(int $userId, array $claims): void
     // $pictureUrl stores the optional Google profile picture URL.
     $pictureUrl = trim((string) ($claims['picture'] ?? ''));
     // $emailVerified stores whether Google reported the email as verified.
-    $emailVerified = (($claims['email_verified'] ?? false) === true || (string) ($claims['email_verified'] ?? '') === 'true') ? 1 : 0;
+    $emailVerified =
+        ($claims['email_verified'] ?? false) === true
+        || (string) ($claims['email_verified'] ?? '') === 'true'
+            ? 1
+            : 0;
 
-    google_auth_model_link_account($userId, [
-        'subject' => $subject,
-        'email' => $email !== '' ? $email : null,
-        'email_verified' => $emailVerified,
-        'name' => $name !== '' ? $name : null,
-        'picture_url' => $pictureUrl !== '' ? $pictureUrl : null,
-    ], now_sql());
+    google_auth_model_link_account(
+        $userId,
+        [
+            'subject' => $subject,
+            'email' => $email !== '' ? $email : null,
+            'email_verified' => $emailVerified,
+            'name' => $name !== '' ? $name : null,
+            'picture_url' => $pictureUrl !== '' ? $pictureUrl : null,
+        ],
+        now_sql(),
+    );
 }
 
 /**

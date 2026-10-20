@@ -43,9 +43,13 @@ use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_runtime_limit;
 
 const DOWNLOAD_CAPABILITY_FORMAT_VERSION = 1;
+
 const DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE = 'progressive';
+
 const DOWNLOAD_CAPABILITY_SCOPE_LEGACY = 'legacy';
+
 const DOWNLOAD_CAPABILITY_RESOURCE_GALLERY = 'gallery';
+
 const DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY = 'smart_gallery';
 
 /** Stable capability-validation failure with a machine-readable reason. */
@@ -58,11 +62,16 @@ final class DownloadCapabilityException extends RuntimeException
      *
      * @param string $reason Stable validation reason.
      * @param string $message Visitor-safe exception message.
+     * @return void Initializes the exception message and normalized reason.
      */
-    public function __construct(string $reason, string $message = 'Invalid download capability.')
-    {
+    public function __construct(
+        string $reason,
+        string $message = 'Invalid download capability.',
+    ) {
         parent::__construct($message);
-        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1 ? $reason : 'invalid_capability';
+        $this->reason = preg_match('/^[a-z_]{1,48}$/D', $reason) === 1
+            ? $reason
+            : 'invalid_capability';
     }
 
     /** Return the stable validation reason. */
@@ -95,17 +104,31 @@ function download_capability_base64url_decode(string $value): ?string
         return null;
     }
     $padding = (4 - (strlen($value) % 4)) % 4;
-    $decoded = base64_decode(strtr($value . str_repeat('=', $padding), '-_', '+/'), true);
+    $decoded = base64_decode(
+        strtr($value . str_repeat('=', $padding), '-_', '+/'),
+        true,
+    );
     return is_string($decoded) ? $decoded : null;
 }
 
-/** Return the HMAC key dedicated to public download capabilities. */
+/**
+ * Return the HMAC key dedicated to public download capabilities.
+ *
+ * @return string Binary SHA-256 HMAC key derived with download-capability domain separation.
+ */
 function download_capability_signing_key(): string
 {
     $config = cms_config();
-    $dedicated = trim((string) (($config['download_security']['capability_secret'] ?? '')));
+    $dedicated = trim(
+        (string) ($config['download_security']['capability_secret'] ?? ''),
+    );
     if ($dedicated !== '') {
-        return hash_hmac('sha256', 'php-gallery:download-capability:dedicated:v1', $dedicated, true);
+        return hash_hmac(
+            'sha256',
+            'php-gallery:download-capability:dedicated:v1',
+            $dedicated,
+            true,
+        );
     }
 
     $root = trim((string) ($config['visitor_vote_secret'] ?? ''));
@@ -113,11 +136,18 @@ function download_capability_signing_key(): string
         $root = trim((string) ($config['setup_key'] ?? ''));
     }
     if ($root === '') {
-        throw new RuntimeException('No stable application secret is available for download capabilities.');
+        throw new RuntimeException(
+            'No stable application secret is available for download capabilities.',
+        );
     }
 
     // Domain separation prevents capability HMAC material from reusing the root secret directly.
-    return hash_hmac('sha256', 'php-gallery:download-capability:key:v1', $root, true);
+    return hash_hmac(
+        'sha256',
+        'php-gallery:download-capability:key:v1',
+        $root,
+        true,
+    );
 }
 
 /**
@@ -126,16 +156,34 @@ function download_capability_signing_key(): string
  * @param string $resourceType Stable resource type.
  * @param int $resourceId Positive resource identifier.
  * @param string $scope Stable capability scope.
+ * @return void Accepts only registered resource/scope combinations and a positive identifier; otherwise throws a stable validation exception.
  */
-function download_capability_assert_contract(string $resourceType, int $resourceId, string $scope): void
-{
-    if (!in_array($resourceType, [DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY], true)) {
+function download_capability_assert_contract(
+    string $resourceType,
+    int $resourceId,
+    string $scope,
+): void {
+    if (!in_array(
+        $resourceType,
+        [
+            DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
+            DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
+        ],
+        true,
+    )) {
         throw new DownloadCapabilityException('wrong_resource_type');
     }
     if ($resourceId <= 0) {
         throw new DownloadCapabilityException('wrong_resource_id');
     }
-    if (!in_array($scope, [DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE, DOWNLOAD_CAPABILITY_SCOPE_LEGACY], true)) {
+    if (!in_array(
+        $scope,
+        [
+            DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE,
+            DOWNLOAD_CAPABILITY_SCOPE_LEGACY,
+        ],
+        true,
+    )) {
         throw new DownloadCapabilityException('wrong_scope');
     }
 }
@@ -153,12 +201,19 @@ function download_capability_assert_contract(string $resourceType, int $resource
  * @param int|null $now Optional deterministic issue timestamp for tests.
  * @return string Signed capability token.
  */
-function download_capability_issue(string $resourceType, int $resourceId, string $scope, ?int $now = null): string
-{
+function download_capability_issue(
+    string $resourceType,
+    int $resourceId,
+    string $scope,
+    ?int $now = null,
+): string {
     download_capability_assert_contract($resourceType, $resourceId, $scope);
     $issuedAt = $now ?? time();
     $ttl = max(60, (int) cms_runtime_limit('download.capability_ttl_seconds'));
-    $nonceBytes = max(8, min(32, (int) cms_runtime_limit('download.capability_nonce_bytes')));
+    $nonceBytes = max(8, min(
+        32,
+        (int) cms_runtime_limit('download.capability_nonce_bytes'),
+    ));
     $claims = [
         'v' => DOWNLOAD_CAPABILITY_FORMAT_VERSION,
         'rt' => $resourceType,
@@ -171,11 +226,23 @@ function download_capability_issue(string $resourceType, int $resourceId, string
     $json = json_encode($claims, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     $payload = download_capability_base64url_encode($json);
     $prefix = 'v1.' . $payload;
-    $signature = download_capability_base64url_encode(hash_hmac('sha256', $prefix, download_capability_signing_key(), true));
+    $signature = download_capability_base64url_encode(hash_hmac(
+        'sha256',
+        $prefix,
+        download_capability_signing_key(),
+        true,
+    ));
     $token = $prefix . '.' . $signature;
 
-    if (strlen($token) > max(128, (int) cms_runtime_limit('download.capability_max_token_length'))) {
-        throw new RuntimeException('Generated download capability exceeds configured token length.');
+    if (
+        strlen($token) > max(
+            128,
+            (int) cms_runtime_limit('download.capability_max_token_length'),
+        )
+    ) {
+        throw new RuntimeException(
+            'Generated download capability exceeds configured token length.',
+        );
     }
     return $token;
 }
@@ -188,12 +255,20 @@ function download_capability_issue(string $resourceType, int $resourceId, string
  * @param int $resourceId Expected positive resource identifier.
  * @param string $scope Expected capability scope.
  * @param int|null $now Optional deterministic validation timestamp for tests.
- * @return array{v:int,rt:string,rid:int,sc:string,iat:int,exp:int,n:string}
+ * @return array{v:int,rt:string,rid:int,sc:string,iat:int,exp:int,n:string} Verified normalized claims for the requested resource and scope.
  */
-function download_capability_validate(string $token, string $resourceType, int $resourceId, string $scope, ?int $now = null): array
-{
+function download_capability_validate(
+    string $token,
+    string $resourceType,
+    int $resourceId,
+    string $scope,
+    ?int $now = null,
+): array {
     download_capability_assert_contract($resourceType, $resourceId, $scope);
-    $maxLength = max(128, (int) cms_runtime_limit('download.capability_max_token_length'));
+    $maxLength = max(
+        128,
+        (int) cms_runtime_limit('download.capability_max_token_length'),
+    );
     if ($token === '' || strlen($token) > $maxLength) {
         throw new DownloadCapabilityException('malformed');
     }
@@ -205,11 +280,20 @@ function download_capability_validate(string $token, string $resourceType, int $
     [$format, $payloadPart, $signaturePart] = $parts;
     $payloadJson = download_capability_base64url_decode($payloadPart);
     $signature = download_capability_base64url_decode($signaturePart);
-    if ($payloadJson === null || $signature === null || strlen($signature) !== 32) {
+    if (
+        $payloadJson === null
+        || $signature === null
+        || strlen($signature) !== 32
+    ) {
         throw new DownloadCapabilityException('malformed');
     }
 
-    $expected = hash_hmac('sha256', $format . '.' . $payloadPart, download_capability_signing_key(), true);
+    $expected = hash_hmac(
+        'sha256',
+        $format . '.' . $payloadPart,
+        download_capability_signing_key(),
+        true,
+    );
     if (!hash_equals($expected, $signature)) {
         throw new DownloadCapabilityException('signature');
     }
@@ -219,14 +303,16 @@ function download_capability_validate(string $token, string $resourceType, int $
     } catch (\JsonException) {
         throw new DownloadCapabilityException('malformed');
     }
-    if (!is_array($claims)
+    if (
+        !is_array($claims)
         || (int) ($claims['v'] ?? 0) !== DOWNLOAD_CAPABILITY_FORMAT_VERSION
         || !is_string($claims['rt'] ?? null)
         || !is_string($claims['sc'] ?? null)
         || !is_string($claims['n'] ?? null)
         || !is_int($claims['rid'] ?? null)
         || !is_int($claims['iat'] ?? null)
-        || !is_int($claims['exp'] ?? null)) {
+        || !is_int($claims['exp'] ?? null)
+    ) {
         throw new DownloadCapabilityException('malformed');
     }
 
@@ -246,11 +332,17 @@ function download_capability_validate(string $token, string $resourceType, int $
     }
 
     $current = $now ?? time();
-    $skew = max(0, min(300, (int) cms_runtime_limit('download.capability_clock_skew_seconds')));
-    if ($claims['iat'] > $current + $skew) {
+    $skew = max(0, min(
+        300,
+        (int) cms_runtime_limit('download.capability_clock_skew_seconds'),
+    ));
+    if ($claims['iat'] > ($current + $skew)) {
         throw new DownloadCapabilityException('issued_in_future');
     }
-    if ($claims['exp'] < $claims['iat'] || $claims['exp'] < $current - $skew) {
+    if (
+        $claims['exp'] < $claims['iat']
+        || $claims['exp'] < ($current - $skew)
+    ) {
         throw new DownloadCapabilityException('expired');
     }
 

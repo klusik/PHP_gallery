@@ -59,7 +59,13 @@ function cms_gallery_map_data(): void
 {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
-    if (!$gallery || (!visitor_can_access_gallery($gallery) && !current_user())) {
+    if (
+        !$gallery
+        || (
+            !visitor_can_access_gallery($gallery)
+            && !current_user()
+        )
+    ) {
         cms_not_found();
         return;
     }

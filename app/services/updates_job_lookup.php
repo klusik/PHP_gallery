@@ -84,7 +84,9 @@ function application_update_job_state_path(string $jobId): string
  */
 function application_update_load_job(string $jobId): array
 {
-    $job = application_update_read_json(application_update_job_state_path($jobId));
+    $job = application_update_read_json(application_update_job_state_path(
+        $jobId,
+    ));
     if ($job === [] || (string) ($job['id'] ?? '') !== $jobId) {
         throw new RuntimeException('Update job state was not found.');
     }
@@ -99,7 +101,11 @@ function application_update_load_job(string $jobId): array
  */
 function application_update_job_terminal(array $job): bool
 {
-    return in_array((string) ($job['status'] ?? ''), ['completed', 'cancelled'], true);
+    return in_array(
+        (string) ($job['status'] ?? ''),
+        ['completed', 'cancelled'],
+        true,
+    );
 }
 
 /**
@@ -138,10 +144,12 @@ function application_update_active_job(): ?array
 function application_update_background_chain_pending(string $jobId): bool
 {
     $record = application_update_read_json(
-        application_update_jobs_root() . '/background-chain.json'
+        application_update_jobs_root() . '/background-chain.json',
     );
-    return ($record['job_id'] ?? '') === $jobId
-        && (int) ($record['queued_until'] ?? 0) > time();
+    return (
+        ($record['job_id'] ?? '') === $jobId
+            && (int) ($record['queued_until'] ?? 0) > time()
+    );
 }
 
 /**

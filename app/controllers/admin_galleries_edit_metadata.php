@@ -172,38 +172,60 @@ use function Gallery\Services\admin_log_event;
 /**
  * Apply the current gallery branch EXIF date suggestion directly from the gallery editor.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery row being edited.
+ * @return void Delegates the gallery date suggestion workflow.
  */
 function admin_apply_gallery_date_exif_suggestion(array $gallery): void
 {
     // $galleryId stores the gallery whose own images and descendants drive the suggestion.
     $galleryId = (int) ($gallery['id'] ?? 0);
-    admin_gallery_date_suggestion_handle_apply($galleryId, admin_edit_gallery_tab_url($galleryId, 'admin-edit-identity'));
+    admin_gallery_date_suggestion_handle_apply($galleryId, admin_edit_gallery_tab_url(
+        $galleryId,
+        'admin-edit-identity',
+    ));
 }
 
 /**
  * Apply a confirmed metadata-organizer date plan from the gallery editor.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery row being edited.
  * @param string $returnTab Return tab value.
+ * @return void Applies the plan or reports failure, then redirects.
  */
-function admin_apply_gallery_metadata_organizer_date_plan(array $gallery, string $returnTab): void
-{
+function admin_apply_gallery_metadata_organizer_date_plan(
+    array $gallery,
+    string $returnTab,
+): void {
     // $galleryId stores the gallery whose direct images should be organized.
     $galleryId = (int) ($gallery['id'] ?? 0);
     if (empty($_POST['confirm_metadata_organizer'])) {
-        flash_message('admin_notice', t('admin.metadata_organizer.confirm_required', 'Confirm that you reviewed the organizer draft before moving files.'));
-        redirect_to(admin_edit_gallery_tab_url($galleryId, 'admin-edit-organizer'));
+        flash_message('admin_notice', t(
+            'admin.metadata_organizer.confirm_required',
+            'Confirm that you reviewed the organizer draft before moving files.',
+        ));
+        redirect_to(admin_edit_gallery_tab_url(
+            $galleryId,
+            'admin-edit-organizer',
+        ));
     }
 
     try {
-        $result = gallery_metadata_organizer_apply_date_plan($galleryId, $_POST);
-        flash_message('admin_notice', gallery_metadata_organizer_apply_notice($result));
+        $result = gallery_metadata_organizer_apply_date_plan(
+            $galleryId,
+            $_POST,
+        );
+        flash_message(
+            'admin_notice',
+            gallery_metadata_organizer_apply_notice($result),
+        );
     } catch (Throwable $exception) {
         flash_message('admin_notice', $exception->getMessage());
     }
 
-    redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab !== '' ? $returnTab : 'admin-edit-organizer'));
+    redirect_to(admin_edit_gallery_tab_url(
+        $galleryId,
+        $returnTab !== '' ? $returnTab : 'admin-edit-organizer',
+    ));
 }
 
 /**
@@ -211,9 +233,12 @@ function admin_apply_gallery_metadata_organizer_date_plan(array $gallery, string
  *
  * @param array<string,mixed> $payload Response payload.
  * @param int $statusCode HTTP status code.
+ * @return void Emits the JSON response and HTTP status.
  */
-function admin_gallery_metadata_organizer_json_response(array $payload, int $statusCode = 200): void
-{
+function admin_gallery_metadata_organizer_json_response(
+    array $payload,
+    int $statusCode = 200,
+): void {
     http_response_code($statusCode);
     header('Content-Type: application/json');
     echo json_encode($payload);
@@ -233,7 +258,10 @@ function admin_gallery_metadata_organizer_require_admin_for_json(): bool
 
     admin_gallery_metadata_organizer_json_response([
         'ok' => false,
-        'error' => t('admin.metadata_organizer.auth_required', 'Admin session expired. Reload the admin page and sign in again.'),
+        'error' => t(
+            'admin.metadata_organizer.auth_required',
+            'Admin session expired. Reload the admin page and sign in again.',
+        ),
     ], 403);
     return false;
 }
@@ -247,17 +275,29 @@ function admin_gallery_metadata_organizer_verify_csrf_for_ajax(): bool
 {
     // $token stores the submitted CSRF token for the organizer batch request.
     $token = (string) ($_POST['csrf_token'] ?? '');
-    if ($token !== '' && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
+    if (
+        $token !== ''
+        && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)
+    ) {
         return true;
     }
 
-    admin_log_event('warning', 'metadata_organizer.csrf_failed', 'Metadata organizer AJAX request failed CSRF validation.', [
-        'gallery_id' => (int) ($_POST['id'] ?? $_GET['id'] ?? 0),
-        'action' => (string) ($_POST['action'] ?? $_GET['action'] ?? ''),
-    ], ['category' => 'security', 'severity' => 'warning']);
+    admin_log_event(
+        'warning',
+        'metadata_organizer.csrf_failed',
+        'Metadata organizer AJAX request failed CSRF validation.',
+        [
+            'gallery_id' => (int) ($_POST['id'] ?? $_GET['id'] ?? 0),
+            'action' => (string) ($_POST['action'] ?? $_GET['action'] ?? ''),
+        ],
+        ['category' => 'security', 'severity' => 'warning'],
+    );
     admin_gallery_metadata_organizer_json_response([
         'ok' => false,
-        'error' => t('admin.metadata_organizer.csrf_failed', 'Security token expired or invalid. Reload the admin page and try again.'),
+        'error' => t(
+            'admin.metadata_organizer.csrf_failed',
+            'Security token expired or invalid. Reload the admin page and try again.',
+        ),
     ], 400);
     return false;
 }
@@ -265,15 +305,20 @@ function admin_gallery_metadata_organizer_verify_csrf_for_ajax(): bool
 /**
  * Return the requested gallery for a dedicated metadata-organizer JSON route.
  *
- * @return array|null Gallery row when found.
+ * @return array{id:int|string}|null Gallery row, or null after a not-found response.
  */
 function admin_gallery_metadata_organizer_route_gallery(): ?array
 {
-    $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['id'] ?? $_POST['gallery_id'] ?? 0));
+    $gallery = find_gallery(
+        (int) ($_GET['id'] ?? $_POST['id'] ?? $_POST['gallery_id'] ?? 0),
+    );
     if (!$gallery) {
         admin_gallery_metadata_organizer_json_response([
             'ok' => false,
-            'error' => t('admin.metadata_organizer.gallery_missing', 'Gallery was not found.'),
+            'error' => t(
+                'admin.metadata_organizer.gallery_missing',
+                'Gallery was not found.',
+            ),
         ], 404);
         return null;
     }
@@ -322,7 +367,8 @@ function cms_admin_metadata_organizer_apply_date_plan_batch(): void
 /**
  * Return one AJAX preview batch for the metadata organizer.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery whose preview is requested.
+ * @return void Emits the preview plan or a JSON error response.
  */
 function admin_gallery_metadata_organizer_preview_batch_response(array $gallery): void
 {
@@ -330,7 +376,12 @@ function admin_gallery_metadata_organizer_preview_batch_response(array $gallery)
         $galleryId = (int) ($gallery['id'] ?? 0);
         $offset = max(0, (int) ($_GET['offset'] ?? 0));
         $limit = max(1, min(500, (int) ($_GET['limit'] ?? 200)));
-        $plan = gallery_metadata_organizer_build_date_plan($galleryId, $_GET, $offset, $limit);
+        $plan = gallery_metadata_organizer_build_date_plan(
+            $galleryId,
+            $_GET,
+            $offset,
+            $limit,
+        );
         admin_gallery_metadata_organizer_json_response([
             'ok' => true,
             'csrf_token' => csrf_token(),
@@ -347,7 +398,8 @@ function admin_gallery_metadata_organizer_preview_batch_response(array $gallery)
 /**
  * Apply one AJAX-sized metadata-organizer move batch.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery whose batch should be applied.
+ * @return void Applies one batch and emits its JSON result.
  */
 function admin_apply_gallery_metadata_organizer_date_plan_batch(array $gallery): void
 {
@@ -356,17 +408,27 @@ function admin_apply_gallery_metadata_organizer_date_plan_batch(array $gallery):
     if (empty($_POST['confirm_metadata_organizer'])) {
         admin_gallery_metadata_organizer_json_response([
             'ok' => false,
-            'error' => t('admin.metadata_organizer.confirm_required', 'Confirm that you reviewed the organizer draft before moving files.'),
+            'error' => t(
+                'admin.metadata_organizer.confirm_required',
+                'Confirm that you reviewed the organizer draft before moving files.',
+            ),
         ], 422);
         return;
     }
 
     try {
         $limit = max(1, min(10, (int) ($_POST['batch_limit'] ?? 1)));
-        $result = gallery_metadata_organizer_apply_date_plan_batch($galleryId, $_POST, $limit);
+        $result = gallery_metadata_organizer_apply_date_plan_batch(
+            $galleryId,
+            $_POST,
+            $limit,
+        );
         $ok = empty($result['failures']);
         $message = gallery_metadata_organizer_apply_notice($result);
-        $editUrl = admin_edit_gallery_tab_url($galleryId, 'admin-edit-organizer');
+        $editUrl = admin_edit_gallery_tab_url(
+            $galleryId,
+            'admin-edit-organizer',
+        );
         $sourceGallery = find_gallery($galleryId, true) ?: $gallery;
         $galleryUrl = gallery_public_url($sourceGallery);
         // $movedImageIds and $contexts describe every source/destination page touched by this batch.
@@ -376,8 +438,12 @@ function admin_apply_gallery_metadata_organizer_date_plan_batch(array $gallery):
             $galleryUrl,
             admin_mutation_postcondition('gallery_image_count', [
                 'gallery_id' => $galleryId,
-                'count' => gallery_lightbox_total_count($sourceGallery, false, false),
-            ])
+                'count' => gallery_lightbox_total_count(
+                    $sourceGallery,
+                    false,
+                    false,
+                ),
+            ]),
         )];
         $seenDestinationIds = [];
         foreach ((array) ($result['group_results'] ?? []) as $groupResult) {
@@ -387,8 +453,13 @@ function admin_apply_gallery_metadata_organizer_date_plan_batch(array $gallery):
                     $movedImageIds[] = $imageId;
                 }
             }
-            $destinationGalleryId = (int) ($groupResult['destination_gallery_id'] ?? 0);
-            if ($destinationGalleryId <= 0 || isset($seenDestinationIds[$destinationGalleryId])) {
+            $destinationGalleryId = (int) (
+                $groupResult['destination_gallery_id'] ?? 0
+            );
+            if (
+                $destinationGalleryId <= 0
+                || isset($seenDestinationIds[$destinationGalleryId])
+            ) {
                 continue;
             }
             $destinationGallery = find_gallery($destinationGalleryId, true);
@@ -401,24 +472,37 @@ function admin_apply_gallery_metadata_organizer_date_plan_batch(array $gallery):
                 gallery_public_url($destinationGallery),
                 admin_mutation_postcondition('gallery_image_count', [
                     'gallery_id' => $destinationGalleryId,
-                    'count' => gallery_lightbox_total_count($destinationGallery, false, false),
-                ])
+                    'count' => gallery_lightbox_total_count(
+                        $destinationGallery,
+                        false,
+                        false,
+                    ),
+                ]),
             );
         }
-        $payload = $ok ? admin_mutation_success_envelope(
-            $message,
-            admin_mutation_descriptor('image.metadata_organize', 'image', 'move', $movedImageIds),
-            admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
-            $contexts,
-            ['redirect_url' => $editUrl]
-        ) : ['ok' => false];
-        admin_gallery_metadata_organizer_json_response(array_merge($payload, [
-            'ok' => $ok,
-            'message' => $message,
-            'result' => $result,
-            'edit_url' => $editUrl,
-            'gallery_url' => $galleryUrl,
-        ]), $ok ? 200 : 422);
+        $payload = $ok
+            ? admin_mutation_success_envelope(
+                $message,
+                admin_mutation_descriptor(
+                    'image.metadata_organize',
+                    'image',
+                    'move',
+                    $movedImageIds,
+                ),
+                admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+                $contexts,
+                ['redirect_url' => $editUrl],
+            ) : ['ok' => false];
+        admin_gallery_metadata_organizer_json_response(
+            array_merge($payload, [
+                'ok' => $ok,
+                'message' => $message,
+                'result' => $result,
+                'edit_url' => $editUrl,
+                'gallery_url' => $galleryUrl,
+            ]),
+            $ok ? 200 : 422,
+        );
     } catch (Throwable $exception) {
         admin_gallery_metadata_organizer_json_response([
             'ok' => false,
@@ -430,7 +514,7 @@ function admin_apply_gallery_metadata_organizer_date_plan_batch(array $gallery):
 /**
  * Return a short sample of filenames from one organizer group.
  *
- * @param array $group Organizer group value.
+ * @param array{images?:list<array{relative_path?:string,filename?:string}>,image_count?:int} $group Organizer preview group.
  * @return string Text result for the caller.
  */
 function admin_gallery_metadata_organizer_group_sample(array $group): string
@@ -438,7 +522,9 @@ function admin_gallery_metadata_organizer_group_sample(array $group): string
     // $names stores readable photo names shown in the preview table.
     $names = [];
     foreach (array_slice((array) ($group['images'] ?? []), 0, 5) as $image) {
-        $name = trim((string) ($image['relative_path'] ?? $image['filename'] ?? ''));
+        $name = trim(
+            (string) ($image['relative_path'] ?? $image['filename'] ?? ''),
+        );
         if ($name !== '') {
             $names[] = $name;
         }
@@ -447,7 +533,11 @@ function admin_gallery_metadata_organizer_group_sample(array $group): string
     $remaining = max(0, (int) ($group['image_count'] ?? 0) - count($names));
     $sample = implode(', ', $names);
     if ($remaining > 0) {
-        $sample .= ($sample !== '' ? ', ' : '') . t('admin.metadata_organizer.more_files', '+{count} more', ['count' => (string) $remaining]);
+        $sample .=
+            ($sample !== '' ? ', ' : '')
+            . t('admin.metadata_organizer.more_files', '+{count} more', [
+                'count' => (string) $remaining,
+            ]);
     }
     return $sample;
 }
@@ -455,12 +545,14 @@ function admin_gallery_metadata_organizer_group_sample(array $group): string
 /**
  * Render the metadata organizer panel inside the gallery editor.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int|string} $gallery Gallery rendered by the editor.
+ * @return void Renders the organizer panel HTML.
  */
 function render_admin_gallery_metadata_organizer_panel(array $gallery): void
 {
     $schemaReady = gallery_metadata_organizer_schema_ready();
-    $previewRequested = (string) ($_GET['metadata_organizer_preview'] ?? '') === '1';
+    $previewRequested =
+        (string) ($_GET['metadata_organizer_preview'] ?? '') === '1';
     $defaultMinDate = gallery_metadata_organizer_default_min_date();
     $defaultMaxDate = gallery_metadata_organizer_default_max_date();
     $plan = null;
@@ -474,15 +566,25 @@ function render_admin_gallery_metadata_organizer_panel(array $gallery): void
 
     if ($schemaReady) {
         try {
-            $options = gallery_metadata_organizer_options($_GET + [
-                'min_date' => $defaultMinDate,
-                'max_date' => $defaultMaxDate,
-            ]);
+            $options = gallery_metadata_organizer_options(
+                $_GET
+                    + [
+                        'min_date' => $defaultMinDate,
+                        'max_date' => $defaultMaxDate,
+                    ],
+            );
             if ($previewRequested) {
-                $plan = gallery_metadata_organizer_build_date_plan((int) $gallery['id'], $_GET);
-                $options = is_array($plan['options'] ?? null) ? $plan['options'] : $options;
+                $plan = gallery_metadata_organizer_build_date_plan(
+                    (int) $gallery['id'],
+                    $_GET,
+                );
+                $options = is_array($plan['options'] ?? null)
+                    ? $plan['options']
+                    : $options;
                 foreach ((array) ($plan['groups'] ?? []) as $index => $group) {
-                    $plan['groups'][$index]['sample'] = admin_gallery_metadata_organizer_group_sample((array) $group);
+                    $plan['groups'][$index]['sample'] = admin_gallery_metadata_organizer_group_sample(
+                        (array) $group,
+                    );
                 }
             }
         } catch (Throwable $exception) {
@@ -500,9 +602,15 @@ function render_admin_gallery_metadata_organizer_panel(array $gallery): void
         'default_min_date' => $defaultMinDate,
         'default_max_date' => $defaultMaxDate,
         'preview_action_url' => url_for('admin_edit_gallery'),
-        'preview_batch_url' => url_for('admin_metadata_organizer_preview_batch', ['id' => (int) $gallery['id']]),
-        'apply_batch_url' => url_for('admin_metadata_organizer_apply_date_plan_batch', ['id' => (int) $gallery['id']]),
-        'apply_action_url' => url_for('admin_edit_gallery', ['id' => (int) $gallery['id']]),
+        'preview_batch_url' => url_for('admin_metadata_organizer_preview_batch', [
+            'id' => (int) $gallery['id'],
+        ]),
+        'apply_batch_url' => url_for('admin_metadata_organizer_apply_date_plan_batch', [
+            'id' => (int) $gallery['id'],
+        ]),
+        'apply_action_url' => url_for('admin_edit_gallery', [
+            'id' => (int) $gallery['id'],
+        ]),
         'csrf_html' => csrf_field(),
     ]);
 }

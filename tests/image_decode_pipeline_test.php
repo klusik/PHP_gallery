@@ -54,7 +54,10 @@ namespace Gallery\Core {
     function cms_runtime_limit(string $key): int|float
     {
         $defaults = require __DIR__ . '/../app/configuration_defaults.php';
-        return $GLOBALS['image_decode_fixture_limits'][$key] ?? $defaults['runtime_limits'][$key];
+        return (
+            $GLOBALS['image_decode_fixture_limits'][$key]
+                ?? $defaults['runtime_limits'][$key]
+        );
     }
 }
 
@@ -64,7 +67,10 @@ namespace Gallery\Services {
      * @param array<string,mixed> $image Disposable source row.
      * @return bool True for this non-database decode fixture.
      */
-    function thumbnail_legacy_identity_owned(array $image): bool { return true; }
+    function thumbnail_legacy_identity_owned(array $image): bool
+    {
+        return true;
+    }
 
     /**
      * Accept isolated ownership before testing decoder admission.
@@ -72,6 +78,7 @@ namespace Gallery\Services {
      * @return void
      */
     function thumbnail_assert_source_identity_owned(array $image): void {}
+
     /**
      * Provide synthetic metadata only for explicitly selected disposable sources.
      *
@@ -80,7 +87,10 @@ namespace Gallery\Services {
      */
     function getimagesize(string $path): array|false
     {
-        if (array_key_exists($path, $GLOBALS['image_decode_fixture_metadata'] ?? [])) {
+        if (array_key_exists(
+            $path,
+            $GLOBALS['image_decode_fixture_metadata'] ?? [],
+        )) {
             return $GLOBALS['image_decode_fixture_metadata'][$path];
         }
         return \getimagesize($path);
@@ -96,10 +106,14 @@ namespace Gallery\Services {
     {
         $GLOBALS['image_decode_fixture_decoder_calls']++;
         if (!empty($GLOBALS['image_decode_fixture_forbid_decoder'])) {
-            throw new \RuntimeException('The metadata fixture must never enter a decoder.');
+            throw new \RuntimeException(
+                'The metadata fixture must never enter a decoder.',
+            );
         }
         if (($GLOBALS['image_decode_fixture_decoder_mode'] ?? '') === 'throw') {
-            throw new \RuntimeException('/private/source.png?token=fixture-secret');
+            throw new \RuntimeException(
+                '/private/source.png?token=fixture-secret',
+            );
         }
         if (($GLOBALS['image_decode_fixture_decoder_mode'] ?? '') === 'false') {
             return false;
@@ -165,8 +179,10 @@ namespace Gallery\Services {
      * @param string $mime Observed source format.
      * @return list<string> JPEG-only fixture targets.
      */
-    function thumbnail_target_formats_for_source(string $sourcePath, string $mime): array
-    {
+    function thumbnail_target_formats_for_source(
+        string $sourcePath,
+        string $mime,
+    ): array {
         return ['jpg'];
     }
 
@@ -187,8 +203,10 @@ namespace Gallery\Services {
      * @param string $mime Observed source format.
      * @return int No intentionally skipped WebP targets.
      */
-    function thumbnail_intentionally_skipped_webp_count(string $sourcePath, string $mime): int
-    {
+    function thumbnail_intentionally_skipped_webp_count(
+        string $sourcePath,
+        string $mime,
+    ): int {
         return 0;
     }
 
@@ -201,8 +219,12 @@ namespace Gallery\Services {
      * @param string $format Target format extension.
      * @return string Disposable thumbnail filename.
      */
-    function thumbnail_abs_path(array $image, array $gallery, int $size, string $format): string
-    {
+    function thumbnail_abs_path(
+        array $image,
+        array $gallery,
+        int $size,
+        string $format,
+    ): string {
         return gallery_thumbs_dir($gallery) . '/' . $size . '.' . $format;
     }
 }
@@ -224,19 +246,29 @@ namespace {
      * @param string $message Safe assertion description.
      * @return void
      */
-    function image_decode_pipeline_assert(bool $condition, string $message): void
-    {
+    function image_decode_pipeline_assert(
+        bool $condition,
+        string $message,
+    ): void {
         if (!$condition) {
             throw new RuntimeException($message);
         }
     }
 
-    if (!extension_loaded('gd') || !function_exists('imagejpeg') || !function_exists('imagepng')) {
-        echo "SKIP: Image decode pipeline fixture requires GD with JPEG/PNG support.\n";
+    if (
+        !extension_loaded('gd')
+        || !function_exists('imagejpeg')
+        || !function_exists('imagepng')
+    ) {
+        echo
+            "SKIP: Image decode pipeline fixture requires GD with JPEG/PNG support.\n";
         exit(0);
     }
 
-    $root = sys_get_temp_dir() . '/gallery-image-decode-' . bin2hex(random_bytes(8));
+    $root =
+        sys_get_temp_dir()
+        . '/gallery-image-decode-'
+        . bin2hex(random_bytes(8));
     mkdir($root);
     $GLOBALS['image_decode_fixture_root'] = $root;
     $GLOBALS['image_decode_fixture_source'] = $root . '/source.png';
@@ -247,7 +279,14 @@ namespace {
     $GLOBALS['image_decode_fixture_forbid_decoder'] = false;
     $sourcePath = $GLOBALS['image_decode_fixture_source'];
     $source = imagecreatetruecolor(64, 48);
-    imagefilledrectangle($source, 0, 0, 63, 47, imagecolorallocate($source, 30, 120, 180));
+    imagefilledrectangle(
+        $source,
+        0,
+        0,
+        63,
+        47,
+        imagecolorallocate($source, 30, 120, 180),
+    );
     imagepng($source, $sourcePath);
     imagedestroy($source);
     $sourceHash = hash_file('sha256', $sourcePath);
@@ -257,25 +296,71 @@ namespace {
     try {
         // Native decoding is forbidden even if an admission bug reaches this seam.
         $GLOBALS['image_decode_fixture_forbid_decoder'] = true;
-        $GLOBALS['image_decode_fixture_metadata'][$sourcePath] = [PHP_INT_MAX, PHP_INT_MAX, 'mime' => 'image/png'];
+        $GLOBALS['image_decode_fixture_metadata'][$sourcePath] = [
+            PHP_INT_MAX,
+            PHP_INT_MAX,
+            'mime' => 'image/png',
+        ];
         $extreme = image_decode_gd_path_result($sourcePath, 'image/png', 32);
-        image_decode_pipeline_assert(!$extreme['image'] && $extreme['status']['reason'] === 'dimension_limit', 'Extreme source headers must be refused.');
-        image_decode_pipeline_assert($GLOBALS['image_decode_fixture_decoder_calls'] === 0, 'Extreme dimensions reached the PNG decoder.');
-        image_decode_pipeline_assert(image_create_from_path($sourcePath, 'image/png') === false, 'Legacy decoder callers must share admission.');
-        $publicRepair = thumbnail_ensure_image_thumbnail_variant_file($image, $gallery, 32, 'jpg');
-        image_decode_pipeline_assert($publicRepair === null && $GLOBALS['image_decode_fixture_decoder_calls'] === 0, 'Public cache repair must refuse before native allocation.');
-        image_decode_pipeline_assert(!is_dir($root . '/thumbs'), 'Refused repair must not prepare new derivative storage.');
+        image_decode_pipeline_assert(
+            !$extreme['image']
+                && $extreme['status']['reason'] === 'dimension_limit',
+            'Extreme source headers must be refused.',
+        );
+        image_decode_pipeline_assert(
+            $GLOBALS['image_decode_fixture_decoder_calls'] === 0,
+            'Extreme dimensions reached the PNG decoder.',
+        );
+        image_decode_pipeline_assert(
+            image_create_from_path($sourcePath, 'image/png') === false,
+            'Legacy decoder callers must share admission.',
+        );
+        $publicRepair = thumbnail_ensure_image_thumbnail_variant_file(
+            $image,
+            $gallery,
+            32,
+            'jpg',
+        );
+        image_decode_pipeline_assert(
+            $publicRepair === null
+                && $GLOBALS['image_decode_fixture_decoder_calls'] === 0,
+            'Public cache repair must refuse before native allocation.',
+        );
+        image_decode_pipeline_assert(
+            !is_dir($root . '/thumbs'),
+            'Refused repair must not prepare new derivative storage.',
+        );
 
         $GLOBALS['image_decode_fixture_metadata'] = [];
-        $GLOBALS['image_decode_fixture_limits'] = ['image_decode.max_memory_bytes' => 1];
+        $GLOBALS['image_decode_fixture_limits'] = [
+            'image_decode.max_memory_bytes' => 1,
+        ];
         $lowMemory = create_image_thumbnails_result($image, $gallery);
-        image_decode_pipeline_assert($lowMemory['failed'] === 2 && $lowMemory['decode_status']['reason'] === 'memory_budget', 'Every requested variant must be counted on memory refusal.');
-        image_decode_pipeline_assert(str_contains($lowMemory['message'], 'translated:thumbnail.decode.memory_budget'), 'Decode refusal must use the translation boundary.');
-        image_decode_pipeline_assert($GLOBALS['image_decode_fixture_decoder_calls'] === 0, 'Low memory reached a native decoder.');
+        image_decode_pipeline_assert(
+            $lowMemory['failed'] === 2
+                && $lowMemory['decode_status']['reason'] === 'memory_budget',
+            'Every requested variant must be counted on memory refusal.',
+        );
+        image_decode_pipeline_assert(
+            str_contains(
+                $lowMemory['message'],
+                'translated:thumbnail.decode.memory_budget',
+            ),
+            'Decode refusal must use the translation boundary.',
+        );
+        image_decode_pipeline_assert(
+            $GLOBALS['image_decode_fixture_decoder_calls'] === 0,
+            'Low memory reached a native decoder.',
+        );
 
         $GLOBALS['image_decode_fixture_metadata'][$sourcePath] = false;
         $unknown = create_image_thumbnails_result($image, $gallery);
-        image_decode_pipeline_assert($unknown['failed'] > 0 && $unknown['decode_status']['reason'] === 'metadata_unavailable', 'Unreadable image metadata must not look like successful zero work.');
+        image_decode_pipeline_assert(
+            $unknown['failed'] > 0
+                && $unknown['decode_status']['reason']
+                    === 'metadata_unavailable',
+            'Unreadable image metadata must not look like successful zero work.',
+        );
         $GLOBALS['image_decode_fixture_metadata'] = [];
         $GLOBALS['image_decode_fixture_limits'] = [];
         $GLOBALS['image_decode_fixture_forbid_decoder'] = false;
@@ -283,23 +368,52 @@ namespace {
         foreach (['throw', 'false'] as $mode) {
             $GLOBALS['image_decode_fixture_decoder_mode'] = $mode;
             $failed = create_image_thumbnails_result($image, $gallery, [32]);
-            image_decode_pipeline_assert($failed['failed'] === 1 && $failed['decode_status']['reason'] === 'processing_failed', 'Recoverable decoder failures must have their own bounded status.');
-            image_decode_pipeline_assert($failed['errors'] === ['source_decode_failed'], 'Ordinary decode failure must retain its historical machine error.');
-            image_decode_pipeline_assert(!str_contains(json_encode($failed), 'fixture-secret') && !str_contains(json_encode($failed), '/private/'), 'Native exceptions must not leak into thumbnail diagnostics.');
+            image_decode_pipeline_assert(
+                $failed['failed'] === 1
+                    && $failed['decode_status']['reason']
+                        === 'processing_failed',
+                'Recoverable decoder failures must have their own bounded status.',
+            );
+            image_decode_pipeline_assert(
+                $failed['errors'] === ['source_decode_failed'],
+                'Ordinary decode failure must retain its historical machine error.',
+            );
+            image_decode_pipeline_assert(
+                !str_contains(json_encode($failed), 'fixture-secret')
+                    && !str_contains(json_encode($failed), '/private/'),
+                'Native exceptions must not leak into thumbnail diagnostics.',
+            );
         }
         $GLOBALS['image_decode_fixture_decoder_mode'] = '';
         $generated = create_image_thumbnails_result($image, $gallery, [32]);
-        image_decode_pipeline_assert($generated['created'] === 1 && $generated['failed'] === 0, 'A real small PNG must generate a JPEG thumbnail.');
+        image_decode_pipeline_assert(
+            $generated['created'] === 1 && $generated['failed'] === 0,
+            'A real small PNG must generate a JPEG thumbnail.',
+        );
         $target = $root . '/thumbs/32.jpg';
         $geometry = getimagesize($target);
-        image_decode_pipeline_assert($geometry[0] === 32 && $geometry[1] === 24, 'Admitted generation must retain source aspect ratio.');
-        image_decode_pipeline_assert($GLOBALS['image_decode_fixture_schema_calls'] !== [], 'Generation must preserve the existing schema preflight.');
+        image_decode_pipeline_assert(
+            $geometry[0] === 32 && $geometry[1] === 24,
+            'Admitted generation must retain source aspect ratio.',
+        );
+        image_decode_pipeline_assert(
+            $GLOBALS['image_decode_fixture_schema_calls'] !== [],
+            'Generation must preserve the existing schema preflight.',
+        );
 
         $callsBeforeHit = $GLOBALS['image_decode_fixture_decoder_calls'];
-        $GLOBALS['image_decode_fixture_limits'] = ['image_decode.max_memory_bytes' => 1];
+        $GLOBALS['image_decode_fixture_limits'] = [
+            'image_decode.max_memory_bytes' => 1,
+        ];
         $cached = create_image_thumbnails_result($image, $gallery, [32]);
-        image_decode_pipeline_assert($cached['skipped'] === 1 && $cached['failed'] === 0, 'A valid cached thumbnail must remain usable below the decode budget.');
-        image_decode_pipeline_assert($GLOBALS['image_decode_fixture_decoder_calls'] === $callsBeforeHit, 'A cache hit must not decode the original.');
+        image_decode_pipeline_assert(
+            $cached['skipped'] === 1 && $cached['failed'] === 0,
+            'A valid cached thumbnail must remain usable below the decode budget.',
+        );
+        image_decode_pipeline_assert(
+            $GLOBALS['image_decode_fixture_decoder_calls'] === $callsBeforeHit,
+            'A cache hit must not decode the original.',
+        );
 
         // Present an invalid-ratio cache file and ensure refusal cannot remove it.
         $square = imagecreatetruecolor(8, 8);
@@ -308,57 +422,113 @@ namespace {
         touch($target, (int) filemtime($sourcePath) + 10);
         $targetHash = hash_file('sha256', $target);
         $blockedRepair = create_image_thumbnails_result($image, $gallery, [32]);
-        image_decode_pipeline_assert($blockedRepair['failed'] === 1 && $blockedRepair['invalid_geometry_deleted'] === 0, 'Refused generation must defer invalid-geometry cleanup.');
-        image_decode_pipeline_assert(hash_file('sha256', $target) === $targetHash, 'Refusal altered an existing derivative.');
-        image_decode_pipeline_assert(hash_file('sha256', $sourcePath) === $sourceHash, 'Refusal or decode failure altered the accepted original.');
+        image_decode_pipeline_assert(
+            $blockedRepair['failed'] === 1
+                && $blockedRepair['invalid_geometry_deleted'] === 0,
+            'Refused generation must defer invalid-geometry cleanup.',
+        );
+        image_decode_pipeline_assert(
+            hash_file('sha256', $target) === $targetHash,
+            'Refusal altered an existing derivative.',
+        );
+        image_decode_pipeline_assert(
+            hash_file('sha256', $sourcePath) === $sourceHash,
+            'Refusal or decode failure altered the accepted original.',
+        );
         $GLOBALS['image_decode_fixture_limits'] = [];
         unlink($target);
-        $repaired = thumbnail_ensure_image_thumbnail_variant_file($image, $gallery, 32, 'jpg');
-        image_decode_pipeline_assert(is_array($repaired) && is_file($repaired['path']), 'Public repair should succeed again after memory policy admits it.');
+        $repaired = thumbnail_ensure_image_thumbnail_variant_file(
+            $image,
+            $gallery,
+            32,
+            'jpg',
+        );
+        image_decode_pipeline_assert(
+            is_array($repaired) && is_file($repaired['path']),
+            'Public repair should succeed again after memory policy admits it.',
+        );
 
         // Ordinary supported codecs are exercised with 64x48 disposable sources only.
         $smallSource = imagecreatetruecolor(64, 48);
-        foreach (['jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif', 'webp' => 'image/webp'] as $format => $mime) {
+        foreach ([
+            'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+        ] as $format => $mime) {
             $writer = 'image' . $format;
             $decoder = 'imagecreatefrom' . $format;
             if (!function_exists($writer) || !function_exists($decoder)) {
                 continue;
             }
             $path = $root . '/codec.' . $format;
-            image_decode_pipeline_assert($writer($smallSource, $path), 'Could not create small codec fixture.');
+            image_decode_pipeline_assert(
+                $writer($smallSource, $path),
+                'Could not create small codec fixture.',
+            );
             $decoded = image_create_from_path($path, $mime);
-            image_decode_pipeline_assert($decoded instanceof GdImage && imagesx($decoded) === 64 && imagesy($decoded) === 48, 'An admitted ordinary codec failed: ' . $format);
+            image_decode_pipeline_assert(
+                $decoded instanceof GdImage
+                    && imagesx($decoded) === 64
+                    && imagesy($decoded) === 48,
+                'An admitted ordinary codec failed: ' . $format,
+            );
             imagedestroy($decoded);
 
             $GLOBALS['image_decode_fixture_source'] = $path;
             $displayFile = image_public_display_file($image, $gallery);
-            image_decode_pipeline_assert(is_array($displayFile) && $displayFile['mime'] === $mime,
-                'The public display resolver must preserve the detected MIME for ' . $format . ' content.');
+            image_decode_pipeline_assert(
+                is_array($displayFile) && $displayFile['mime'] === $mime,
+                'The public display resolver must preserve the detected MIME for '
+                    . $format
+                    . ' content.',
+            );
         }
 
         $misleadingPath = $root . '/raster.txt';
-        image_decode_pipeline_assert(imagejpeg($smallSource, $misleadingPath), 'Could not create misleading-extension JPEG fixture.');
+        image_decode_pipeline_assert(
+            imagejpeg($smallSource, $misleadingPath),
+            'Could not create misleading-extension JPEG fixture.',
+        );
         $GLOBALS['image_decode_fixture_source'] = $misleadingPath;
         $misleadingDisplay = image_public_display_file($image, $gallery);
-        image_decode_pipeline_assert(is_array($misleadingDisplay) && $misleadingDisplay['mime'] === 'image/jpeg',
-            'The public display resolver must identify JPEG content independently of its filename extension.');
+        image_decode_pipeline_assert(
+            is_array($misleadingDisplay)
+                && $misleadingDisplay['mime'] === 'image/jpeg',
+            'The public display resolver must identify JPEG content independently of its filename extension.',
+        );
 
         if (function_exists('imagebmp')) {
             $bmpPath = $root . '/legacy-bitmap.bmp';
-            image_decode_pipeline_assert(imagebmp($smallSource, $bmpPath), 'Could not create BMP compatibility fixture.');
-            $legacyFinfoMime = (string) ((new \finfo(FILEINFO_MIME_TYPE))->file($bmpPath) ?: mime_content_type($bmpPath));
+            image_decode_pipeline_assert(
+                imagebmp($smallSource, $bmpPath),
+                'Could not create BMP compatibility fixture.',
+            );
+            $legacyFinfoMime = (string) (
+                (new \finfo(FILEINFO_MIME_TYPE))->file(
+                    $bmpPath,
+                ) ?: mime_content_type($bmpPath)
+            );
             $GLOBALS['image_decode_fixture_source'] = $bmpPath;
             $bmpDisplay = image_public_display_file($image, $gallery);
-            image_decode_pipeline_assert(is_array($bmpDisplay) && $bmpDisplay['mime'] === $legacyFinfoMime,
-                'Other raster formats must retain the historical fileinfo MIME identity.');
+            image_decode_pipeline_assert(
+                is_array($bmpDisplay)
+                    && $bmpDisplay['mime'] === $legacyFinfoMime,
+                'Other raster formats must retain the historical fileinfo MIME identity.',
+            );
         }
 
         $svgPath = $root . '/legacy-vector.svg';
-        file_put_contents($svgPath, '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>');
+        file_put_contents(
+            $svgPath,
+            '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
+        );
         $GLOBALS['image_decode_fixture_source'] = $svgPath;
         $svgDisplay = image_public_display_file($image, $gallery);
-        image_decode_pipeline_assert(is_array($svgDisplay) && $svgDisplay['mime'] === 'image/svg+xml',
-            'The fileinfo fallback must preserve legacy image/* sources not identified by GD headers.');
+        image_decode_pipeline_assert(
+            is_array($svgDisplay) && $svgDisplay['mime'] === 'image/svg+xml',
+            'The fileinfo fallback must preserve legacy image/* sources not identified by GD headers.',
+        );
 
         $textPath = $root . '/not-an-image.png';
         file_put_contents($textPath, 'not an image');
@@ -368,24 +538,58 @@ namespace {
             }
         }
         $GLOBALS['image_decode_fixture_source'] = $textPath;
-        image_decode_pipeline_assert(image_public_display_file($image, $gallery) === null,
-            'A non-image with an image-looking extension must remain unavailable for public display.');
+        image_decode_pipeline_assert(
+            image_public_display_file($image, $gallery) === null,
+            'A non-image with an image-looking extension must remain unavailable for public display.',
+        );
 
         imagedestroy($smallSource);
 
         // A real malformed, tiny PNG keeps metadata readable but fails normal decoding.
         $broken = $root . '/broken.png';
-        file_put_contents($broken, substr(file_get_contents($sourcePath), 0, 33));
-        $brokenResult = image_decode_gd_path_result($broken, 'image/png', 32, false);
-        image_decode_pipeline_assert($brokenResult['image'] === false && $brokenResult['status']['reason'] === 'processing_failed', 'Malformed image data must return a bounded processing failure.');
+        file_put_contents($broken, substr(
+            file_get_contents($sourcePath),
+            0,
+            33,
+        ));
+        $brokenResult = image_decode_gd_path_result(
+            $broken,
+            'image/png',
+            32,
+            false,
+        );
+        image_decode_pipeline_assert(
+            $brokenResult['image'] === false
+                && $brokenResult['status']['reason'] === 'processing_failed',
+            'Malformed image data must return a bounded processing failure.',
+        );
 
         // These are source call-chain checks, not HTTP/browser/database acceptance.
-        foreach (['admin_uploads.php', 'upload_automation.php'] as $controller) {
-            $controllerSource = file_get_contents(__DIR__ . '/../app/controllers/' . $controller);
-            image_decode_pipeline_assert(php_source_contains($controllerSource, 'create_image_thumbnails_result($image, $gallery)'), 'Upload fallback must retain the shared thumbnail boundary: ' . $controller);
-            image_decode_pipeline_assert(!preg_match('/imagecreatefrom(?:jpeg|png|gif|webp)\s*\(/', $controllerSource), 'An upload controller bypasses the shared decoder.');
+        foreach ([
+            'admin_uploads.php',
+            'upload_automation.php',
+        ] as $controller) {
+            $controllerSource = file_get_contents(
+                __DIR__ . '/../app/controllers/' . $controller,
+            );
+            image_decode_pipeline_assert(
+                php_source_contains(
+                    $controllerSource,
+                    'create_image_thumbnails_result($image, $gallery)',
+                ),
+                'Upload fallback must retain the shared thumbnail boundary: '
+                    . $controller,
+            );
+            image_decode_pipeline_assert(
+                !preg_match(
+                    '/imagecreatefrom(?:jpeg|png|gif|webp)\s*\(/',
+                    $controllerSource,
+                ),
+                'An upload controller bypasses the shared decoder.',
+            );
         }
-        echo "Image decode pipeline tests passed (small native GD fixtures, injected metadata, public repair, upload call-chain checks).\n";
+        echo
+            "Image decode pipeline tests passed (small native GD fixtures, injected metadata, public repair, upload call-chain checks).\n";
     } finally {
         // Only files created in this unique disposable directory can be removed.
         foreach ([$root . '/thumbs', $root] as $directory) {

@@ -43,7 +43,6 @@ use function Gallery\Models\gallery_model_set_show_filenames;
 use function Gallery\Models\gallery_model_set_visibility;
 use function Gallery\Models\gallery_model_set_voting_enabled;
 
-
 /**
  * Normalize gallery identifiers for model operations.
  *
@@ -52,7 +51,10 @@ use function Gallery\Models\gallery_model_set_voting_enabled;
  */
 function gallery_bulk_normalize_ids(array $galleryIds): array
 {
-    return array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
+    return array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $galleryId): bool => $galleryId > 0,
+    )));
 }
 
 /**
@@ -65,7 +67,10 @@ function gallery_bulk_expand_subtree_ids(array $galleryIds): array
 {
     $expandedIds = [];
     foreach (gallery_bulk_normalize_ids($galleryIds) as $galleryId) {
-        $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
+        $expandedIds = array_merge(
+            $expandedIds,
+            gallery_subtree_ids($galleryId),
+        );
     }
     return gallery_bulk_normalize_ids($expandedIds);
 }
@@ -75,9 +80,12 @@ function gallery_bulk_expand_subtree_ids(array $galleryIds): array
  *
  * @param array<int,int> $galleryIds Gallery identifiers.
  * @param bool $bypassCache Whether refreshed gallery rows must bypass lookup cache.
+ * @return void Rewrites sidecars for selected identifiers whose gallery rows exist.
  */
-function gallery_bulk_refresh_sidecars(array $galleryIds, bool $bypassCache = false): void
-{
+function gallery_bulk_refresh_sidecars(
+    array $galleryIds,
+    bool $bypassCache = false,
+): void {
     foreach ($galleryIds as $galleryId) {
         $gallery = find_gallery($galleryId, $bypassCache);
         if ($gallery) {
@@ -93,8 +101,10 @@ function gallery_bulk_refresh_sidecars(array $galleryIds, bool $bypassCache = fa
  * @param string $visibility Storage visibility value.
  * @return array<int,int> Normalized changed gallery identifiers.
  */
-function gallery_bulk_set_visibility(array $galleryIds, string $visibility): array
-{
+function gallery_bulk_set_visibility(
+    array $galleryIds,
+    string $visibility,
+): array {
     $ids = gallery_bulk_normalize_ids($galleryIds);
     if ($ids === []) {
         return [];
@@ -105,7 +115,10 @@ function gallery_bulk_set_visibility(array $galleryIds, string $visibility): arr
             $gallery = find_gallery($galleryId, true);
             if (is_array($gallery)) {
                 require_once __DIR__ . '/gallery_pdf_publication.php';
-                gallery_pdf_publication_assert_visibility_change($gallery, $visibility);
+                gallery_pdf_publication_assert_visibility_change(
+                    $gallery,
+                    $visibility,
+                );
             }
         }
         gallery_model_set_visibility($ids, $visibility, now_sql());
@@ -123,8 +136,10 @@ function gallery_bulk_set_visibility(array $galleryIds, string $visibility): arr
  * @param ?bool $enabled True/false for explicit state, null for inheritance.
  * @return array<int,int> Expanded changed gallery identifiers.
  */
-function gallery_bulk_set_gps_map_enabled(array $galleryIds, ?bool $enabled): array
-{
+function gallery_bulk_set_gps_map_enabled(
+    array $galleryIds,
+    ?bool $enabled,
+): array {
     $ids = gallery_bulk_expand_subtree_ids($galleryIds);
     if ($ids === []) {
         return [];
@@ -143,8 +158,10 @@ function gallery_bulk_set_gps_map_enabled(array $galleryIds, ?bool $enabled): ar
  * @param bool $enabled Whether image voting is enabled.
  * @return array<int,int> Expanded changed gallery identifiers.
  */
-function gallery_bulk_set_voting_enabled(array $galleryIds, bool $enabled): array
-{
+function gallery_bulk_set_voting_enabled(
+    array $galleryIds,
+    bool $enabled,
+): array {
     $ids = gallery_bulk_expand_subtree_ids($galleryIds);
     if ($ids === []) {
         return [];
@@ -164,8 +181,10 @@ function gallery_bulk_set_voting_enabled(array $galleryIds, bool $enabled): arra
  * @param bool $enabled Whether filenames are displayed.
  * @return array<int,int> Expanded changed gallery identifiers.
  */
-function gallery_bulk_set_show_filenames(array $galleryIds, bool $enabled): array
-{
+function gallery_bulk_set_show_filenames(
+    array $galleryIds,
+    bool $enabled,
+): array {
     $ids = gallery_bulk_expand_subtree_ids($galleryIds);
     if ($ids === []) {
         return [];
@@ -184,8 +203,10 @@ function gallery_bulk_set_show_filenames(array $galleryIds, bool $enabled): arra
  * @param bool $enabled Whether Picture Game is enabled.
  * @return array<int,int> Expanded changed gallery identifiers.
  */
-function gallery_bulk_set_picture_game_enabled(array $galleryIds, bool $enabled): array
-{
+function gallery_bulk_set_picture_game_enabled(
+    array $galleryIds,
+    bool $enabled,
+): array {
     $ids = gallery_bulk_expand_subtree_ids($galleryIds);
     if ($ids === []) {
         return [];

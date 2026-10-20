@@ -39,16 +39,34 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
-/** Return the number of galleries with an explicit GPS-map override. */
+/**
+ * Return the number of galleries with an explicit GPS-map override.
+ *
+ * @return int Count of galleries with an explicit GPS-map override.
+ */
 function exif_model_gallery_gps_override_count(): int
 {
-    return (int) db()->query('SELECT COUNT(*) FROM galleries WHERE gps_map_enabled IS NOT NULL')->fetchColumn();
+    return (int) db()
+        ->query(
+            'SELECT COUNT(*) FROM galleries WHERE gps_map_enabled IS NOT NULL',
+        )
+        ->fetchColumn();
 }
 
-/** @return array<int,array<string,mixed>> */
+/**
+ * Return gallery rows with an explicit GPS-map override.
+ *
+ * @return list<array<string,mixed>> Gallery rows ordered by folder path.
+ */
 function exif_model_gallery_gps_override_rows(): array
 {
-    return db()->query('SELECT * FROM galleries WHERE gps_map_enabled IS NOT NULL ORDER BY folder_path')->fetchAll() ?: [];
+    return (
+        db()
+            ->query(
+                'SELECT * FROM galleries WHERE gps_map_enabled IS NOT NULL ORDER BY folder_path',
+            )
+            ->fetchAll() ?: []
+    );
 }
 
 /**
@@ -59,7 +77,9 @@ function exif_model_gallery_gps_override_rows(): array
  */
 function exif_model_reset_gallery_gps_overrides(string $now): int
 {
-    $stmt = db()->prepare('UPDATE galleries SET gps_map_enabled = NULL, updated_at = ?, edit_revision = edit_revision + 1 WHERE gps_map_enabled IS NOT NULL');
+    $stmt = db()->prepare(
+        'UPDATE galleries SET gps_map_enabled = NULL, updated_at = ?, edit_revision = edit_revision + 1 WHERE gps_map_enabled IS NOT NULL',
+    );
     $stmt->execute([$now]);
     return $stmt->rowCount();
 }
@@ -67,14 +87,19 @@ function exif_model_reset_gallery_gps_overrides(string $now): int
 /**
  * Build one fixed map-query WHERE clause from semantic scope values.
  *
- * @return array{sql:string,params:array<int,mixed>}
+ * @param int $galleryId Gallery identifier for non-recursive queries.
+ * @param string $folderPath Gallery path for recursive queries.
+ * @param bool $publicOnly Whether to include only publicly visible gallery and image rows.
+ * @param bool $recursive Whether the scope includes the gallery's descendants.
+ * @param bool $requireListedAccess Whether public scope requires listed gallery access.
+ * @return array{sql:string,params:list<int|string>} SQL predicate and bound values for the selected map scope.
  */
 function exif_model_map_scope(
     int $galleryId,
     string $folderPath,
     bool $publicOnly,
     bool $recursive,
-    bool $requireListedAccess
+    bool $requireListedAccess,
 ): array {
     $conditions = ['i.gps_lat IS NOT NULL', 'i.gps_lng IS NOT NULL'];
     $params = [];
@@ -99,53 +124,98 @@ function exif_model_map_scope(
 /**
  * Return cheap aggregate metadata used for one map cache fingerprint.
  *
- * @return array<string,mixed>
+ * @param int $galleryId Gallery identifier for non-recursive queries.
+ * @param string $folderPath Gallery path for recursive queries.
+ * @param bool $publicOnly Whether to include only publicly visible gallery and image rows.
+ * @param bool $recursive Whether the scope includes the gallery's descendants.
+ * @param bool $requireListedAccess Whether public scope requires listed gallery access.
+ * @return array{point_count?:int|string,image_updated_at:?string,gps_extracted_at:?string,gallery_updated_at:?string} Aggregate values used for the map cache fingerprint.
  */
 function exif_model_map_fingerprint_row(
     int $galleryId,
     string $folderPath,
     bool $publicOnly,
     bool $recursive,
-    bool $requireListedAccess
+    bool $requireListedAccess,
 ): array {
-    $scope = exif_model_map_scope($galleryId, $folderPath, $publicOnly, $recursive, $requireListedAccess);
+    $scope = exif_model_map_scope(
+        $galleryId,
+        $folderPath,
+        $publicOnly,
+        $recursive,
+        $requireListedAccess,
+    );
     $stmt = db()->prepare(
         'SELECT COUNT(*) AS point_count, MAX(i.updated_at) AS image_updated_at, MAX(i.gps_extracted_at) AS gps_extracted_at, '
-        . 'MAX(g.updated_at) AS gallery_updated_at FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . $scope['sql']
+            . 'MAX(g.updated_at) AS gallery_updated_at FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE '
+            . $scope['sql'],
     );
     $stmt->execute($scope['params']);
     return $stmt->fetch() ?: [];
 }
 
-/** Return whether one semantic gallery-map scope has at least one GPS point. */
+/**
+ * Return whether one semantic gallery-map scope has at least one GPS point.
+ *
+ * @param int $galleryId Gallery identifier for non-recursive queries.
+ * @param string $folderPath Gallery path for recursive queries.
+ * @param bool $publicOnly Whether to include only publicly visible gallery and image rows.
+ * @param bool $recursive Whether the scope includes the gallery's descendants.
+ * @param bool $requireListedAccess Whether public scope requires listed gallery access.
+ * @return bool True when the selected scope contains at least one GPS point.
+ */
 function exif_model_has_map_points(
     int $galleryId,
     string $folderPath,
     bool $publicOnly,
     bool $recursive,
-    bool $requireListedAccess
+    bool $requireListedAccess,
 ): bool {
-    $scope = exif_model_map_scope($galleryId, $folderPath, $publicOnly, $recursive, $requireListedAccess);
+    $scope = exif_model_map_scope(
+        $galleryId,
+        $folderPath,
+        $publicOnly,
+        $recursive,
+        $requireListedAccess,
+    );
     $stmt = db()->prepare(
-        'SELECT 1 FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . $scope['sql'] . ' LIMIT 1'
+        'SELECT 1 FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE '
+            . $scope['sql']
+            . ' LIMIT 1',
     );
     $stmt->execute($scope['params']);
     return (bool) $stmt->fetchColumn();
 }
 
-/** @return array<int,array<string,mixed>> */
+/**
+ * Return image rows with GPS coordinates for one gallery-map scope.
+ *
+ * @param int $galleryId Gallery identifier for non-recursive queries.
+ * @param string $folderPath Gallery path for recursive queries.
+ * @param bool $publicOnly Whether to include only publicly visible gallery and image rows.
+ * @param bool $recursive Whether the scope includes the gallery's descendants.
+ * @param bool $requireListedAccess Whether public scope requires listed gallery access.
+ * @return list<array<string,mixed>> Image rows with gallery metadata, ordered by gallery and image.
+ */
 function exif_model_map_point_rows(
     int $galleryId,
     string $folderPath,
     bool $publicOnly,
     bool $recursive,
-    bool $requireListedAccess
+    bool $requireListedAccess,
 ): array {
-    $scope = exif_model_map_scope($galleryId, $folderPath, $publicOnly, $recursive, $requireListedAccess);
+    $scope = exif_model_map_scope(
+        $galleryId,
+        $folderPath,
+        $publicOnly,
+        $recursive,
+        $requireListedAccess,
+    );
     $stmt = db()->prepare(
         'SELECT i.*, g.title AS gallery_title, g.id AS gallery_id, g.folder_path AS gallery_folder_path '
-        . 'FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . $scope['sql']
-        . ' ORDER BY g.folder_path, i.sort_order, i.filename'
+            . 'FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE '
+            . $scope['sql']
+            . ' ORDER BY g.folder_path, i.sort_order, i.filename',
     );
     $stmt->execute($scope['params']);
     return $stmt->fetchAll() ?: [];

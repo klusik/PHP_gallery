@@ -41,60 +41,126 @@ function assert_contract(bool $condition, string $message): void
 $root = dirname(__DIR__);
 $target = $root . '/app/runtime/modules.php';
 $lineEndingFixture = "<?php\nreturn ['route' => 'module'];\n";
-assert_contract(runtime_module_source_is_current($lineEndingFixture, $lineEndingFixture),
-    'Canonical LF plan source must remain current.');
-assert_contract(runtime_module_source_is_current(str_replace("\n", "\r\n", $lineEndingFixture), $lineEndingFixture),
-    'A Git CRLF checkout must retain the exact canonical generated-plan contract.');
-assert_contract(!runtime_module_source_is_current(str_replace("\n", "\r", $lineEndingFixture), $lineEndingFixture),
-    'Unsupported bare-CR source must not become a fresh generated plan.');
-assert_contract(!runtime_module_source_is_current(str_replace('module', 'other-module', $lineEndingFixture), $lineEndingFixture),
-    'Real module content drift must remain stale independently from checkout line endings.');
-assert_contract(!runtime_module_source_is_current(null, $lineEndingFixture)
-    && !runtime_module_source_is_current(substr($lineEndingFixture, 0, -1), $lineEndingFixture),
-    'Missing or truncated generated source must remain stale.');
+assert_contract(
+    runtime_module_source_is_current($lineEndingFixture, $lineEndingFixture),
+    'Canonical LF plan source must remain current.',
+);
+assert_contract(
+    runtime_module_source_is_current(
+        str_replace("\n", "\r\n", $lineEndingFixture),
+        $lineEndingFixture,
+    ),
+    'A Git CRLF checkout must retain the exact canonical generated-plan contract.',
+);
+assert_contract(
+    !runtime_module_source_is_current(
+        str_replace("\n", "\r", $lineEndingFixture),
+        $lineEndingFixture,
+    ),
+    'Unsupported bare-CR source must not become a fresh generated plan.',
+);
+assert_contract(
+    !runtime_module_source_is_current(
+        str_replace('module', 'other-module', $lineEndingFixture),
+        $lineEndingFixture,
+    ),
+    'Real module content drift must remain stale independently from checkout line endings.',
+);
+assert_contract(
+    !runtime_module_source_is_current(null, $lineEndingFixture)
+        && !runtime_module_source_is_current(
+            substr($lineEndingFixture, 0, -1),
+            $lineEndingFixture,
+        ),
+    'Missing or truncated generated source must remain stale.',
+);
 $testStarted = hrtime(true);
 $plans = compile_runtime_modules($root);
 $rendered = render_runtime_modules($plans);
 $compileSeconds = (hrtime(true) - $testStarted) / 1e9;
 $checkedIn = file_get_contents($target);
-assert_contract(runtime_module_source_is_current(is_string($checkedIn) ? $checkedIn : null, $rendered),
-    'Checked-in runtime module plans must byte-match canonical compiler output after Git CRLF conversion only.');
-assert_contract(($plans['schema_version'] ?? null) === 2 && is_array($plans['file_order'] ?? null)
-    && array_is_list($plans['file_order']), 'Runtime module plan must use the validated composed schema.');
-assert_contract(count($plans['file_order']) === count(array_unique($plans['file_order'])),
-    'Global runtime file order must contain unique source paths.');
+assert_contract(
+    runtime_module_source_is_current(
+        is_string($checkedIn) ? $checkedIn : null,
+        $rendered,
+    ),
+    'Checked-in runtime module plans must byte-match canonical compiler output after Git CRLF conversion only.',
+);
+assert_contract(
+    ($plans['schema_version'] ?? null) === 2
+        && is_array($plans['file_order'] ?? null)
+        && array_is_list($plans['file_order']),
+    'Runtime module plan must use the validated composed schema.',
+);
+assert_contract(
+    count($plans['file_order']) === count(array_unique($plans['file_order'])),
+    'Global runtime file order must contain unique source paths.',
+);
 
 $routeModules = $plans['route_modules'];
 $bulkModule = (string) ($routeModules['admin_bulk_images'] ?? '');
-assert_contract($bulkModule === 'domain-admin-images-bulk',
-    'The image bulk route must preserve its dedicated authenticated module.');
-$bulkFiles = \Gallery\Tools\RuntimeModules\runtime_module_transitive_closure($plans, $bulkModule)['files'];
-assert_contract(in_array('app/services/gallery_covers.php', $bulkFiles, true),
-    'Image bulk routes must preload gallery_covers.php before invoking title-picture selection and refresh helpers.');
+assert_contract(
+    $bulkModule === 'domain-admin-images-bulk',
+    'The image bulk route must preserve its dedicated authenticated module.',
+);
+$bulkFiles = \Gallery\Tools\RuntimeModules\runtime_module_transitive_closure(
+    $plans,
+    $bulkModule,
+)['files'];
+assert_contract(
+    in_array('app/services/gallery_covers.php', $bulkFiles, true),
+    'Image bulk routes must preload gallery_covers.php before invoking title-picture selection and refresh helpers.',
+);
 
 $requestMaintenancePaths = $plans['modules']['request-maintenance']['files'];
-assert_contract(in_array('app/services/updates_job_lookup.php', $requestMaintenancePaths, true),
-    'Request maintenance must retain active-job lookup before eligibility gates.');
-assert_contract(!in_array('app/services/updates_jobs.php', $requestMaintenancePaths, true)
-    && !in_array('app/services/updates_install.php', $requestMaintenancePaths, true),
-    'Ineligible requests must not load updater worker or installation modules.');
+assert_contract(
+    in_array(
+        'app/services/updates_job_lookup.php',
+        $requestMaintenancePaths,
+        true,
+    ),
+    'Request maintenance must retain active-job lookup before eligibility gates.',
+);
+assert_contract(
+    !in_array('app/services/updates_jobs.php', $requestMaintenancePaths, true)
+        && !in_array(
+            'app/services/updates_install.php',
+            $requestMaintenancePaths,
+            true,
+        ),
+    'Ineligible requests must not load updater worker or installation modules.',
+);
 foreach ($plans['modules'] as $modulePlan) {
-    assert_contract(!in_array('app/diagnostics/admin_test_run_early.php', $modulePlan['files'], true),
-        'Optional early diagnostics remain owned by the front-controller transport.');
+    assert_contract(
+        !in_array(
+            'app/diagnostics/admin_test_run_early.php',
+            $modulePlan['files'],
+            true,
+        ),
+        'Optional early diagnostics remain owned by the front-controller transport.',
+    );
 }
 $modules = array_keys($plans['modules']);
 sort($modules, SORT_STRING);
 require_once $root . '/app/bootstrap.php';
-assert_contract(count($routeModules) === count(\Gallery\Core\cms_route_handlers()) + 1,
-    'Every canonical route plus the dedicated not-found fallback must have a module plan.');
-assert_contract(count($modules) > 0, 'At least one route-owned logical module must be compiled.');
+assert_contract(
+    count($routeModules) === (count(\Gallery\Core\cms_route_handlers()) + 1),
+    'Every canonical route plus the dedicated not-found fallback must have a module plan.',
+);
+assert_contract(
+    count($modules) > 0,
+    'At least one route-owned logical module must be compiled.',
+);
 
 $fixture = $root . '/tests/support/runtime_module_fixture.php';
 $jobs = [];
 $jobMap = [];
 foreach ($modules as $module) {
     foreach (['composed', 'legacy'] as $mode) {
-        $jobs[] = ['command' => [PHP_BINARY, $fixture, $module, $mode], 'timeout' => 180];
+        $jobs[] = [
+            'command' => [PHP_BINARY, $fixture, $module, $mode],
+            'timeout' => 180,
+        ];
         $jobMap[] = ['module' => $module, 'mode' => $mode];
     }
 }
@@ -105,57 +171,137 @@ $preparedRoutes = [];
 foreach ($results as $index => $result) {
     $module = $jobMap[$index]['module'];
     $mode = $jobMap[$index]['mode'];
-    assert_contract(!$result['timed_out'], 'Isolated module preparation timed out: ' . $module . ' / ' . $mode);
-    assert_contract($result['exit_code'] === 0, 'Isolated module preparation failed for ' . $module . ' / ' . $mode . ': ' . trim($result['stdout'] . ' ' . $result['stderr']));
+    assert_contract(
+        !$result['timed_out'],
+        'Isolated module preparation timed out: ' . $module . ' / ' . $mode,
+    );
+    assert_contract(
+        $result['exit_code'] === 0,
+        'Isolated module preparation failed for '
+            . $module
+            . ' / '
+            . $mode
+            . ': '
+            . trim($result['stdout'] . ' ' . $result['stderr']),
+    );
     $decoded = json_decode($result['stdout'], true);
-    assert_contract(is_array($decoded) && ($decoded['ok'] ?? false) === true, 'Fixture output was invalid for ' . $module . '.');
+    assert_contract(
+        is_array($decoded) && ($decoded['ok'] ?? false) === true,
+        'Fixture output was invalid for ' . $module . '.',
+    );
     $observed = $decoded['result'] ?? [];
-    assert_contract(($observed['module'] ?? null) === $module, 'Fixture prepared the wrong module: ' . $module . '.');
-    assert_contract(($observed['mode'] ?? null) === $mode, 'Fixture ran the wrong loader mode for ' . $module . '.');
-    assert_contract(($observed['side_effects'] ?? null) === ['output' => false, 'headers' => false, 'session' => false, 'umbrellas' => false],
-        'Bootstrap or route preparation caused an include-time side effect for ' . $module . '.');
-    foreach (($observed['routes'] ?? []) as $route) {
-        assert_contract(isset($routeModules[$route]) && $routeModules[$route] === $module, 'Fixture returned a route outside its module: ' . $route . '.');
+    assert_contract(
+        ($observed['module'] ?? null) === $module,
+        'Fixture prepared the wrong module: ' . $module . '.',
+    );
+    assert_contract(
+        ($observed['mode'] ?? null) === $mode,
+        'Fixture ran the wrong loader mode for ' . $module . '.',
+    );
+    assert_contract(
+        ($observed['side_effects'] ?? null) === [
+            'output' => false,
+            'headers' => false,
+            'session' => false,
+            'umbrellas' => false,
+        ],
+        'Bootstrap or route preparation caused an include-time side effect for '
+            . $module
+            . '.',
+    );
+    foreach ($observed['routes'] ?? [] as $route) {
+        assert_contract(
+            isset($routeModules[$route]) && $routeModules[$route] === $module,
+            'Fixture returned a route outside its module: ' . $route . '.',
+        );
         if ($mode === 'composed') {
-            assert_contract(!isset($preparedRoutes[$route]), 'Canonical route was prepared more than once: ' . $route . '.');
+            assert_contract(
+                !isset($preparedRoutes[$route]),
+                'Canonical route was prepared more than once: ' . $route . '.',
+            );
             $preparedRoutes[$route] = true;
         }
     }
-    $pairIndex = $index % 2 === 0 ? $index + 1 : $index - 1;
+    $pairIndex = ($index % 2) === 0 ? $index + 1 : $index - 1;
     $otherDecoded = json_decode($results[$pairIndex]['stdout'], true);
-    $other = is_array($otherDecoded) ? ($otherDecoded['result'] ?? []) : [];
+    $other = is_array($otherDecoded) ? $otherDecoded['result'] ?? [] : [];
     $composed = $mode === 'composed' ? $observed : $other;
     $legacy = $mode === 'legacy' ? $observed : $other;
-    assert_contract(($composed['included_app_order'] ?? null) === ($legacy['included_app_order'] ?? null),
-        'Composed loading must preserve actual PHP include order from the flattened legacy plan: ' . $module . '.');
-    assert_contract(($composed['routes'] ?? null) === ($legacy['routes'] ?? null),
-        'Composed and flattened loaders must prepare the same routes: ' . $module . '.');
+    assert_contract(
+        ($composed['included_app_order'] ?? null)
+            === ($legacy['included_app_order'] ?? null),
+        'Composed loading must preserve actual PHP include order from the flattened legacy plan: '
+            . $module
+            . '.',
+    );
+    assert_contract(
+        ($composed['routes'] ?? null) === ($legacy['routes'] ?? null),
+        'Composed and flattened loaders must prepare the same routes: '
+            . $module
+            . '.',
+    );
     if ($mode === 'composed') {
-        $expectedClosure = \Gallery\Tools\RuntimeModules\runtime_module_transitive_closure($plans, $module);
-        assert_contract(($observed['loaded_modules'] ?? null) === $expectedClosure['modules'],
-            'Composed module diagnostics must retain dependency-first module history: ' . $module . '.');
+        $expectedClosure = \Gallery\Tools\RuntimeModules\runtime_module_transitive_closure(
+            $plans,
+            $module,
+        );
+        assert_contract(
+            ($observed['loaded_modules'] ?? null)
+                === $expectedClosure['modules'],
+            'Composed module diagnostics must retain dependency-first module history: '
+                . $module
+                . '.',
+        );
     }
 }
-assert_contract(count($preparedRoutes) === count($routeModules), 'Prepared route count does not cover the complete canonical route map.');
+assert_contract(
+    count($preparedRoutes) === count($routeModules),
+    'Prepared route count does not cover the complete canonical route map.',
+);
 foreach ($routeModules as $route => $_module) {
-    assert_contract(isset($preparedRoutes[$route]), 'Canonical route handler was not prepared: ' . $route . '.');
+    assert_contract(
+        isset($preparedRoutes[$route]),
+        'Canonical route handler was not prepared: ' . $route . '.',
+    );
 }
 
 $unknownDynamic = \Gallery\Tools\RuntimeDynamicDependencies\runtime_dynamic_dependency_policy_drift([
-    ['caller' => 'Gallery\\Services\\new_unreviewed_callback', 'kind' => 'variable_callable',
-        'expression' => '$unreviewed()'],
+    [
+        'caller' => 'Gallery\\Services\\new_unreviewed_callback',
+        'kind' => 'variable_callable',
+        'expression' => '$unreviewed()',
+    ],
 ]);
-assert_contract(count($unknownDynamic['unexpected']) === 1, 'A new unresolved callback must require explicit review.');
+assert_contract(
+    count($unknownDynamic['unexpected']) === 1,
+    'A new unresolved callback must require explicit review.',
+);
 
-fwrite(STDOUT, 'PASS: runtime module plan byte freshness and ' . count($preparedRoutes)
-    . ' route handlers across ' . count($modules) . ' modules / ' . (count($modules) * 2) . " isolated comparison children\n");
+fwrite(
+    STDOUT,
+    'PASS: runtime module plan byte freshness and '
+        . count($preparedRoutes)
+        . ' route handlers across '
+        . count($modules)
+        . ' modules / '
+        . (count($modules) * 2)
+        . " isolated comparison children\n",
+);
 // Retained stdout separates source analysis from process startup/module loading;
 // no scenario is omitted or combined into a previously contaminated process.
-fwrite(STDOUT, 'AUDIT_METRICS ' . json_encode([
-    'compile_seconds' => round($compileSeconds, 4),
-    'isolated_children_wall_seconds' => round($childrenSeconds, 4),
-    'isolated_children_runner_seconds' => round(array_sum(array_column($results, 'duration')), 4),
-    'children' => count($results),
-    'workers' => 4,
-    'total_seconds' => round((hrtime(true) - $testStarted) / 1e9, 4),
-], JSON_THROW_ON_ERROR) . "\n");
+fwrite(
+    STDOUT,
+    'AUDIT_METRICS '
+        . json_encode([
+            'compile_seconds' => round($compileSeconds, 4),
+            'isolated_children_wall_seconds' => round($childrenSeconds, 4),
+            'isolated_children_runner_seconds' => round(
+                array_sum(array_column($results, 'duration')),
+                4,
+            ),
+            'children' => count($results),
+            'workers' => 4,
+            'total_seconds' => round((hrtime(true) - $testStarted) / 1e9, 4),
+        ], JSON_THROW_ON_ERROR)
+        . "\n",
+);

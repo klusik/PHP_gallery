@@ -105,11 +105,17 @@ function supported_image_extensions(): array
 {
     // $extensions stores an intermediate value used by the surrounding gallery workflow.
     $extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    if (function_exists('Gallery\\Services\\heic_conversion_supported') && heic_conversion_supported()) {
+    if (
+        function_exists('Gallery\\Services\\heic_conversion_supported')
+        && heic_conversion_supported()
+    ) {
         $extensions[] = 'heic';
         $extensions[] = 'heif';
     }
-    if (function_exists('Gallery\\Services\\dng_conversion_supported') && dng_conversion_supported()) {
+    if (
+        function_exists('Gallery\\Services\\dng_conversion_supported')
+        && dng_conversion_supported()
+    ) {
         $extensions[] = 'dng';
     }
     return $extensions;
@@ -125,10 +131,17 @@ function is_dng_image_path(string $path): bool
 
 /**
  * Check whether a path points to one of the supported image formats.
+ *
+ * @param string $path Filesystem path whose extension is checked.
+ * @return bool True when the extension is in the supported image-format list.
  */
 function is_supported_image_path(string $path): bool
 {
-    return in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), supported_image_extensions(), true);
+    return in_array(
+        strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+        supported_image_extensions(),
+        true,
+    );
 }
 
 /**
@@ -154,6 +167,10 @@ function normalize_relative_path(string $path): string
 
 /**
  * Verify that a resolved path stays inside a resolved root directory.
+ *
+ * @param string $root Filesystem root that bounds the allowed path.
+ * @param string $path Filesystem path to check.
+ * @return bool True when both paths resolve and the target is within the root.
  */
 function path_inside(string $root, string $path): bool
 {
@@ -164,19 +181,34 @@ function path_inside(string $root, string $path): bool
     if ($rootReal === false || $pathReal === false) {
         return false;
     }
-    return str_starts_with($pathReal, rtrim($rootReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR) || $pathReal === $rootReal;
+    return (
+        str_starts_with(
+            $pathReal,
+            rtrim($rootReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR,
+        )
+            || $pathReal === $rootReal
+    );
 }
 
 /**
  * Build a short cache key for the generated theme stylesheet URL.
+ *
+ * @param array<string,mixed> $theme Theme settings used to generate the stylesheet.
+ * @return string Twelve-character hexadecimal cache key.
  */
 function theme_cache_key(array $theme): string
 {
     // $assetRevision changes when the generated-theme controller changes, so immutable browser caches do not keep stale generated CSS.
-    $assetRevision = is_file(__DIR__ . '/controllers/theme_assets.php') ? (string) filemtime(__DIR__ . '/controllers/theme_assets.php') : '0';
+    $assetRevision = is_file(__DIR__ . '/controllers/theme_assets.php')
+        ? (string) filemtime(__DIR__ . '/controllers/theme_assets.php')
+        : '0';
     // $cachePayload combines user settings with the implementation revision that affects the emitted CSS rules.
     $cachePayload = ['theme' => $theme, 'asset_revision' => $assetRevision];
-    return substr(hash('sha256', json_encode($cachePayload, JSON_UNESCAPED_SLASHES)), 0, 12);
+    return substr(
+        hash('sha256', json_encode($cachePayload, JSON_UNESCAPED_SLASHES)),
+        0,
+        12,
+    );
 }
 
 /**

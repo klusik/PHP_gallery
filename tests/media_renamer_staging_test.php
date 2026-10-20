@@ -33,7 +33,10 @@ function media_staging_expect(bool $condition, string $message): void
 }
 
 $root = sys_get_temp_dir() . '/gallery-renamer-' . uniqid();
-media_staging_expect(mkdir($root), 'Could not create the owned test directory.');
+media_staging_expect(
+    mkdir($root),
+    'Could not create the owned test directory.',
+);
 $ownedPaths = [];
 
 try {
@@ -46,7 +49,7 @@ try {
         $ownedPaths[] = $source;
         media_staging_expect(
             file_put_contents($source, $payload) === strlen($payload),
-            'Could not write a boundary original.'
+            'Could not write a boundary original.',
         );
 
         $staging = media_renamer_staging_path($source);
@@ -55,20 +58,25 @@ try {
         media_staging_expect(
             dirname($staging) === dirname($source)
                 && strlen(basename($staging)) <= 255,
-            'Staging escaped the directory or exceeded the component limit.'
+            'Staging escaped the directory or exceeded the component limit.',
         );
         media_staging_expect(
-            $staging !== $other && !file_exists($staging)
-                && !file_exists($other) && is_file($source),
-            'Allocation reused a name or changed files before staging.'
+            $staging !== $other
+                && !file_exists($staging)
+                && !file_exists($other)
+                && is_file($source),
+            'Allocation reused a name or changed files before staging.',
         );
-        media_staging_expect(rename($source, $staging), 'Long-name staging failed.');
+        media_staging_expect(
+            rename($source, $staging),
+            'Long-name staging failed.',
+        );
         media_renamer_rollback_file_moves([], [
             ['from' => $source, 'staging' => $staging],
         ]);
         media_staging_expect(
             file_get_contents($source) === $payload && !file_exists($staging),
-            'Staged rollback did not preserve the original bytes.'
+            'Staged rollback did not preserve the original bytes.',
         );
 
         $final = $root . '/renamed_' . $nameBytes . '.png';
@@ -77,16 +85,17 @@ try {
         media_staging_expect(rename($staging, $final), 'Final rename failed.');
         media_staging_expect(
             file_get_contents($final) === $payload,
-            'The final rename changed original bytes.'
+            'The final rename changed original bytes.',
         );
         media_renamer_rollback_file_moves(
             [['from' => $source, 'to' => $final]],
-            [['from' => $source, 'staging' => $staging]]
+            [['from' => $source, 'staging' => $staging]],
         );
         media_staging_expect(
             file_get_contents($source) === $payload
-                && !file_exists($final) && !file_exists($staging),
-            'Finalized rollback did not restore the original filename and bytes.'
+                && !file_exists($final)
+                && !file_exists($staging),
+            'Finalized rollback did not restore the original filename and bytes.',
         );
     }
     echo "PASS media renamer long-name staging and physical rollback\n";

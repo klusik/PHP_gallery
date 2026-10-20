@@ -43,8 +43,10 @@ namespace Gallery\Services;
  */
 function application_update_beta_active(): bool
 {
-    return app_setting('application_update_channel', 'stable') === 'beta'
-        && app_setting('application_update_beta_commit', '') !== '';
+    return (
+        app_setting('application_update_channel', 'stable') === 'beta'
+            && app_setting('application_update_beta_commit', '') !== ''
+    );
 }
 
 /**
@@ -90,7 +92,12 @@ const APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS = 300;
  * Rationale: prevent unsupported sub-five-minute polling and preserve validated
  *   5, 15, 30 and 60 minute operator choices without a schema migration.
  */
-const APPLICATION_AUTOUPDATE_INTERVAL_OPTIONS = [300 => 5, 900 => 15, 1800 => 30, 3600 => 60];
+const APPLICATION_AUTOUPDATE_INTERVAL_OPTIONS = [
+    300 => 5,
+    900 => 15,
+    1800 => 30,
+    3600 => 60,
+];
 
 /**
  * Validate an interval without accepting numeric coercion, whitespace, or extra values.
@@ -117,8 +124,14 @@ function application_autoupdate_validate_interval_seconds(string $raw): ?int
  */
 function application_autoupdate_interval_seconds(): int
 {
-    $stored = (string) app_setting('application_autoupdate_interval_seconds', (string) APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS);
-    return application_autoupdate_validate_interval_seconds($stored) ?? APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS;
+    $stored = (string) app_setting(
+        'application_autoupdate_interval_seconds',
+        (string) APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS,
+    );
+    return (
+        application_autoupdate_validate_interval_seconds($stored)
+            ?? APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS
+    );
 }
 
 /**
@@ -131,7 +144,9 @@ function application_autoupdate_interval_seconds(): int
 function set_application_autoupdate_interval_seconds(string $seconds): void
 {
     if (application_autoupdate_validate_interval_seconds($seconds) === null) {
-        throw new \InvalidArgumentException('Invalid automatic update check interval.');
+        throw new \InvalidArgumentException(
+            'Invalid automatic update check interval.',
+        );
     }
     set_app_setting('application_autoupdate_interval_seconds', $seconds);
 }
@@ -146,7 +161,7 @@ function application_update_discovery_last_attempt_at(): int
     return max(
         0,
         (int) app_setting('application_autoupdate_last_checked_at', '0'),
-        (int) app_setting('application_update_check_cached_at', '0')
+        (int) app_setting('application_update_check_cached_at', '0'),
     );
 }
 
@@ -158,10 +173,13 @@ function application_update_discovery_last_attempt_at(): int
  * @param int|null $intervalSeconds Already-normalized interval, or null for saved preference.
  * @return bool Whether remote discovery is eligible at this instant.
  */
-function application_autoupdate_discovery_due(int $now, int $lastAttemptAt, ?int $intervalSeconds = null): bool
-{
+function application_autoupdate_discovery_due(
+    int $now,
+    int $lastAttemptAt,
+    ?int $intervalSeconds = null,
+): bool {
     $interval = $intervalSeconds ?? application_autoupdate_interval_seconds();
-    return $lastAttemptAt <= 0 || $now - $lastAttemptAt >= $interval;
+    return $lastAttemptAt <= 0 || ($now - $lastAttemptAt) >= $interval;
 }
 
 /**
@@ -181,10 +199,13 @@ function application_autoupdate_discovery_due(int $now, int $lastAttemptAt, ?int
 function application_autoupdate_maybe_run(
     int $ttlSeconds = APPLICATION_AUTOUPDATE_DEFAULT_INTERVAL_SECONDS,
     string $requestMethod = 'GET',
-    ?callable $loadDependencies = null
+    ?callable $loadDependencies = null,
 ): void {
-    if (function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
-        && !feature_capability_effective_enabled('built_in_update_installer')) {
+    if (
+        function_exists(__NAMESPACE__
+            . '\\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('built_in_update_installer')
+    ) {
         return;
     }
 
@@ -193,19 +214,33 @@ function application_autoupdate_maybe_run(
     if ($activeJob !== null) {
         // A live server chain already owns this job's next slice. Public visits
         // keep rendering; an expired/lost lease restores the legacy fallback.
-        if (($activeJob['trigger'] ?? '') === 'background'
-            && application_update_background_chain_pending((string) $activeJob['id'])) {
+        if (
+            ($activeJob['trigger'] ?? '') === 'background'
+            && application_update_background_chain_pending(
+                (string) $activeJob['id'],
+            )
+        ) {
             return;
         }
         if ($loadDependencies !== null) {
             $loadDependencies('updater-work');
         }
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('automatic_updater', 'active_job_continue_begin', ['budget_seconds' => 3.0]);
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event(
+                'automatic_updater',
+                'active_job_continue_begin',
+                ['budget_seconds' => 3.0],
+            );
         }
         application_update_continue_background_job(3.0);
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('automatic_updater', 'active_job_continue_end', ['budget_seconds' => 3.0]);
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event(
+                'automatic_updater',
+                'active_job_continue_end',
+                ['budget_seconds' => 3.0],
+            );
         }
         return;
     }
@@ -215,13 +250,20 @@ function application_autoupdate_maybe_run(
     $ttlSeconds = application_autoupdate_interval_seconds();
     // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
     $method = strtoupper(trim($requestMethod));
-    if (!in_array($method, ['GET', 'HEAD'], true) || !application_autoupdate_enabled()) {
+    if (
+        !in_array($method, ['GET', 'HEAD'], true)
+        || !application_autoupdate_enabled()
+    ) {
         return;
     }
 
     $now = time();
     $lastCheckedAt = application_update_discovery_last_attempt_at();
-    if (!application_autoupdate_discovery_due($now, $lastCheckedAt, $ttlSeconds)) {
+    if (!application_autoupdate_discovery_due(
+        $now,
+        $lastCheckedAt,
+        $ttlSeconds,
+    )) {
         return;
     }
     $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
@@ -234,21 +276,41 @@ function application_autoupdate_maybe_run(
     }
 
     if (application_update_beta_active()) {
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('automatic_updater', 'due_check_begin', ['mode' => 'beta_dry_run']);
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event(
+                'automatic_updater',
+                'due_check_begin',
+                ['mode' => 'beta_dry_run'],
+            );
         }
         application_autoupdate_dry_run(false, $now);
-        if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-            admin_test_run_record_maintenance_event('automatic_updater', 'due_check_end', ['mode' => 'beta_dry_run']);
+        if (function_exists(__NAMESPACE__
+            . '\\admin_test_run_record_maintenance_event')) {
+            admin_test_run_record_maintenance_event(
+                'automatic_updater',
+                'due_check_end',
+                ['mode' => 'beta_dry_run'],
+            );
         }
         return;
     }
 
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-        admin_test_run_record_maintenance_event('automatic_updater', 'due_check_begin', ['mode' => 'stable_installing_check']);
+    if (function_exists(__NAMESPACE__
+        . '\\admin_test_run_record_maintenance_event')) {
+        admin_test_run_record_maintenance_event(
+            'automatic_updater',
+            'due_check_begin',
+            ['mode' => 'stable_installing_check'],
+        );
     }
     application_autoupdate_run_installing_check(false, $now);
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_record_maintenance_event')) {
-        admin_test_run_record_maintenance_event('automatic_updater', 'due_check_end', ['mode' => 'stable_installing_check']);
+    if (function_exists(__NAMESPACE__
+        . '\\admin_test_run_record_maintenance_event')) {
+        admin_test_run_record_maintenance_event(
+            'automatic_updater',
+            'due_check_end',
+            ['mode' => 'stable_installing_check'],
+        );
     }
 }

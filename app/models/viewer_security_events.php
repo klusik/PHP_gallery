@@ -31,9 +31,43 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
-/** Persist one already-sanitized viewer security event. */
-function viewer_security_event_model_insert(?int $viewerAccountId, string $eventKey, ?string $outcome, ?string $ipHash, ?string $userAgentHash, ?string $requestId, ?string $contextJson, string $createdAt, string $retentionUntil): void
-{
-    $stmt = db()->prepare('INSERT INTO viewer_security_events (viewer_account_id, event_key, outcome, ip_hash, user_agent_hash, request_id, context_json, created_at, retention_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$viewerAccountId, $eventKey, $outcome, $ipHash, $userAgentHash, $requestId, $contextJson, $createdAt, $retentionUntil]);
+/**
+ * Persist one already-sanitized viewer security event.
+ *
+ * @param ?string $contextJson Context json used by this operation.
+ * @param string $createdAt Timestamp for the created at.
+ * @param string $eventKey Event key used by this operation.
+ * @param ?string $ipHash Precomputed hash for the ip.
+ * @param ?string $outcome Outcome used by this operation.
+ * @param ?string $requestId Identifier of the request.
+ * @param string $retentionUntil Retention until used by this operation.
+ * @param ?string $userAgentHash Precomputed hash for the user agent.
+ * @param ?int $viewerAccountId Identifier of the viewer account.
+ * @return void No value; performs the documented operation.
+ */
+function viewer_security_event_model_insert(
+    ?int $viewerAccountId,
+    string $eventKey,
+    ?string $outcome,
+    ?string $ipHash,
+    ?string $userAgentHash,
+    ?string $requestId,
+    ?string $contextJson,
+    string $createdAt,
+    string $retentionUntil,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO viewer_security_events (viewer_account_id, event_key, outcome, ip_hash, user_agent_hash, request_id, context_json, created_at, retention_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    $stmt->execute([
+        $viewerAccountId,
+        $eventKey,
+        $outcome,
+        $ipHash,
+        $userAgentHash,
+        $requestId,
+        $contextJson,
+        $createdAt,
+        $retentionUntil,
+    ]);
 }

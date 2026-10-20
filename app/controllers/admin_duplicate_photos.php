@@ -36,8 +36,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Controllers;
-use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE;
 
+use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE;
 use InvalidArgumentException;
 use Throwable;
 use function Gallery\Core\admin_mutation_descriptor;
@@ -87,7 +87,10 @@ use function Gallery\Views\view_render_admin_duplicate_photo_detector;
  */
 function &admin_duplicate_photos_job_store(): array
 {
-    if (!isset($_SESSION['admin_duplicate_photo_detector_jobs']) || !is_array($_SESSION['admin_duplicate_photo_detector_jobs'])) {
+    if (
+        !isset($_SESSION['admin_duplicate_photo_detector_jobs'])
+        || !is_array($_SESSION['admin_duplicate_photo_detector_jobs'])
+    ) {
         $_SESSION['admin_duplicate_photo_detector_jobs'] = [];
     }
     return $_SESSION['admin_duplicate_photo_detector_jobs'];
@@ -99,9 +102,14 @@ function &admin_duplicate_photos_job_store(): array
  * @param bool $ok Whether the request succeeded.
  * @param string $message Human-readable response message.
  * @param array<string,mixed> $payload Additional response values.
+ * @return void Emits a JSON response containing the status, message, and
+ *     additional payload fields.
  */
-function admin_duplicate_photos_json_response(bool $ok, string $message, array $payload = []): void
-{
+function admin_duplicate_photos_json_response(
+    bool $ok,
+    string $message,
+    array $payload = [],
+): void {
     if (!$ok && !array_key_exists('contexts', $payload)) {
         // Expected AJAX failures use the same canonical error shape as the
         // persistent mutation paths. Existing detector callers can continue to
@@ -111,9 +119,9 @@ function admin_duplicate_photos_json_response(bool $ok, string $message, array $
             admin_mutation_error_envelope(
                 $message,
                 'duplicate_photo_detector.request_failed',
-                admin_duplicate_photos_post_mutation_descriptor()
+                admin_duplicate_photos_post_mutation_descriptor(),
             ),
-            $payload
+            $payload,
         );
     }
     header('Content-Type: application/json');
@@ -132,16 +140,29 @@ function admin_duplicate_photos_json_response(bool $ok, string $message, array $
  * @param int $adminUserId Authenticated administrator id used for ledger filtering.
  * @return string Rendered detector fragment.
  */
-function admin_duplicate_photos_panel_html(array $gallery, ?array $job, int $page = 1, int $adminUserId = 0): string
-{
+function admin_duplicate_photos_panel_html(
+    array $gallery,
+    ?array $job,
+    int $page = 1,
+    int $adminUserId = 0,
+): string {
     $ledger = duplicate_photo_ledger_snapshot($adminUserId);
     $resultPage = null;
     if (is_array($job) && (string) ($job['status'] ?? '') === 'complete') {
-        $resultPage = admin_duplicate_photos_prepare_result_page(duplicate_photo_detector_result_page($job, $page, $ledger));
+        $resultPage = admin_duplicate_photos_prepare_result_page(duplicate_photo_detector_result_page(
+            $job,
+            $page,
+            $ledger,
+        ));
     }
 
     ob_start();
-    view_render_admin_duplicate_photo_detector($gallery, $job, $resultPage, $ledger);
+    view_render_admin_duplicate_photo_detector(
+        $gallery,
+        $job,
+        $resultPage,
+        $ledger,
+    );
     return (string) ob_get_clean();
 }
 
@@ -158,7 +179,10 @@ function admin_duplicate_photos_prepare_result_page(array $resultPage): array
             if (!is_array($image)) {
                 continue;
             }
-            $resultPage['groups'][$groupIndex]['images'][$imageIndex]['view_thumbnail_url'] = thumbnail_url($image, 300);
+            $resultPage['groups'][$groupIndex]['images'][$imageIndex]['view_thumbnail_url'] = thumbnail_url(
+                $image,
+                300,
+            );
         }
     }
     return $resultPage;
@@ -195,8 +219,11 @@ function admin_duplicate_photos_gallery_from_job(array $job): ?array
  * @param int $page Optional one-based result page.
  * @return string Relative application URL.
  */
-function admin_duplicate_photos_url(int $galleryId, string $jobToken = '', int $page = 1): string
-{
+function admin_duplicate_photos_url(
+    int $galleryId,
+    string $jobToken = '',
+    int $page = 1,
+): string {
     $parameters = ['gallery_id' => $galleryId];
     if ($jobToken !== '') {
         $parameters['job_token'] = $jobToken;
@@ -215,9 +242,13 @@ function admin_duplicate_photos_url(int $galleryId, string $jobToken = '', int $
  */
 function admin_duplicate_photos_missing_gallery_message(int $galleryId): string
 {
-    return t('admin.duplicate_photos.error_gallery_missing', 'Gallery #{id} no longer exists or is not available.', [
-        'id' => (string) max(0, $galleryId),
-    ]);
+    return t(
+        'admin.duplicate_photos.error_gallery_missing',
+        'Gallery #{id} no longer exists or is not available.',
+        [
+            'id' => (string) max(0, $galleryId),
+        ],
+    );
 }
 
 /**
@@ -227,7 +258,7 @@ function admin_duplicate_photos_missing_gallery_message(int $galleryId): string
  * intentionally return null. Ledger and delete requests describe the durable CMS
  * mutation without trusting a browser-supplied gallery id for ignore-gallery.
  *
- * @return array{type:string,entity:string,action:string,entity_ids:array<int,int>}|null
+ * @return array{type:string,entity:string,action:string,entity_ids:array<int,int>}|null Canonical persistent mutation descriptor, or null for session-only detector actions.
  */
 function admin_duplicate_photos_post_mutation_descriptor(): ?array
 {
@@ -237,7 +268,7 @@ function admin_duplicate_photos_post_mutation_descriptor(): ?array
             'image.duplicate_delete',
             'image',
             'delete',
-            [(int) ($_POST['image_id'] ?? 0)]
+            [(int) ($_POST['image_id'] ?? 0)],
         );
     }
     if ($action === 'ignore_pair') {
@@ -248,7 +279,7 @@ function admin_duplicate_photos_post_mutation_descriptor(): ?array
             [
                 (int) ($_POST['left_image_id'] ?? 0),
                 (int) ($_POST['right_image_id'] ?? 0),
-            ]
+            ],
         );
     }
     if ($action === 'clear_ledger') {
@@ -256,7 +287,7 @@ function admin_duplicate_photos_post_mutation_descriptor(): ?array
             'duplicate_photo_ledger.clear',
             'duplicate_photo_ledger',
             'clear',
-            []
+            [],
         );
     }
     if ($action === 'ignore_gallery') {
@@ -264,7 +295,7 @@ function admin_duplicate_photos_post_mutation_descriptor(): ?array
             'duplicate_photo_ledger.ignore_gallery',
             'gallery',
             'ignore_gallery',
-            []
+            [],
         );
     }
 
@@ -283,7 +314,8 @@ function admin_duplicate_photos_post_mutation_descriptor(): ?array
 function admin_duplicate_photos_csrf_valid(): bool
 {
     $token = (string) ($_POST['csrf_token'] ?? '');
-    return $token !== '' && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token);
+    return $token !== ''
+        && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token);
 }
 
 /**
@@ -301,9 +333,18 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
     $action = (string) ($_POST['action'] ?? 'start');
     $adminUserId = admin_duplicate_photos_current_admin_id();
 
-    if (in_array($action, ['ignore_pair', 'ignore_gallery', 'clear_ledger'], true)) {
+    if (in_array(
+        $action,
+        ['ignore_pair', 'ignore_gallery', 'clear_ledger'],
+        true,
+    )) {
         $token = (string) ($_POST['job_token'] ?? '');
-        $job = $token !== '' ? duplicate_photo_detector_read_job($token, admin_duplicate_photos_job_store()) : null;
+        $job = $token !== ''
+            ? duplicate_photo_detector_read_job(
+                $token,
+                admin_duplicate_photos_job_store(),
+            )
+            : null;
         $page = max(1, (int) ($_POST['results_page'] ?? 1));
         $galleryId = $job !== null
             ? (int) ($job['gallery_id'] ?? 0)
@@ -313,112 +354,235 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
             : ($galleryId > 0 ? find_gallery($galleryId, true) : null);
 
         if ($gallery === null) {
-            $message = admin_duplicate_photos_missing_gallery_message($galleryId);
+            $message =
+                admin_duplicate_photos_missing_gallery_message($galleryId);
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
             redirect_to(url_for('admin'));
         }
         if ($adminUserId <= 0) {
-            $message = t('admin.duplicate_photos.ledger_admin_required', 'The duplicate ledger requires an authenticated administrator.');
+            $message = t(
+                'admin.duplicate_photos.ledger_admin_required',
+                'The duplicate ledger requires an authenticated administrator.',
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
-            redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+            redirect_to(admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            ));
         }
         $ledgerSchemaStatus = duplicate_photo_ledger_schema_status();
         if (!duplicate_photo_ledger_schema_ready()) {
-            $ledgerSchemaUnknown = schema_inspection_is_unknown($ledgerSchemaStatus);
+            $ledgerSchemaUnknown =
+                schema_inspection_is_unknown($ledgerSchemaStatus);
             $message = $ledgerSchemaUnknown
-                ? t('admin.duplicate_photos.ledger_schema_unknown', 'The duplicate review ledger is temporarily unavailable because its database schema could not be verified. No ledger change was made.')
-                : t('admin.duplicate_photos.ledger_migration_required', 'Run database migrations before using the duplicate review ledger.');
+                ? t(
+                    'admin.duplicate_photos.ledger_schema_unknown',
+                    'The duplicate review ledger is temporarily unavailable because its database schema could not be verified. No ledger change was made.',
+                )
+                : t(
+                    'admin.duplicate_photos.ledger_migration_required',
+                    'Run database migrations before using the duplicate review ledger.',
+                );
             if ($wantsJson) {
                 http_response_code($ledgerSchemaUnknown ? 503 : 409);
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
-            redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+            redirect_to(admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            ));
         }
 
         try {
             if ($action === 'clear_ledger') {
                 $cleared = duplicate_photo_ledger_clear($adminUserId);
-                $message = t('admin.duplicate_photos.ledger_cleared', 'Duplicate review ledger cleared.');
-                admin_log_event('info', 'image.duplicate_detector_ledger_cleared', 'Admin cleared the Duplicate Photo Detector review ledger.', [
-                    'selected_gallery_id' => (int) ($gallery['id'] ?? 0),
-                    'pair_rules_deleted' => (int) ($cleared['pairs'] ?? 0),
-                    'gallery_rules_deleted' => (int) ($cleared['galleries'] ?? 0),
-                ], ['category' => 'other', 'severity' => 'notice']);
+                $message = t(
+                    'admin.duplicate_photos.ledger_cleared',
+                    'Duplicate review ledger cleared.',
+                );
+                admin_log_event(
+                    'info',
+                    'image.duplicate_detector_ledger_cleared',
+                    'Admin cleared the Duplicate Photo Detector review ledger.',
+                    [
+                        'selected_gallery_id' => (int) ($gallery['id'] ?? 0),
+                        'pair_rules_deleted' => (int) ($cleared['pairs'] ?? 0),
+                        'gallery_rules_deleted' => (int) (
+                            $cleared['galleries'] ?? 0
+                        ),
+                    ],
+                    ['category' => 'other', 'severity' => 'notice'],
+                );
             } elseif ($action === 'ignore_pair') {
-                if ($job === null || (string) ($job['status'] ?? '') !== 'complete') {
-                    throw new InvalidArgumentException(t('admin.duplicate_photos.ledger_pair_unavailable', 'This duplicate pair is no longer available. Start a new scan.'));
+                if (
+                    $job === null
+                    || (string) ($job['status'] ?? '') !== 'complete'
+                ) {
+                    throw new InvalidArgumentException(t(
+                        'admin.duplicate_photos.ledger_pair_unavailable',
+                        'This duplicate pair is no longer available. Start a new scan.',
+                    ));
                 }
                 $leftImageId = (int) ($_POST['left_image_id'] ?? 0);
                 $rightImageId = (int) ($_POST['right_image_id'] ?? 0);
-                if (!duplicate_photo_detector_job_contains_pair($job, $leftImageId, $rightImageId)) {
-                    throw new InvalidArgumentException(t('admin.duplicate_photos.ledger_pair_unavailable', 'This duplicate pair is no longer available. Start a new scan.'));
+                if (!duplicate_photo_detector_job_contains_pair(
+                    $job,
+                    $leftImageId,
+                    $rightImageId,
+                )) {
+                    throw new InvalidArgumentException(t(
+                        'admin.duplicate_photos.ledger_pair_unavailable',
+                        'This duplicate pair is no longer available. Start a new scan.',
+                    ));
                 }
 
                 $leftImage = find_image($leftImageId);
                 $rightImage = find_image($rightImageId);
                 if ($leftImage === null || $rightImage === null) {
-                    throw new InvalidArgumentException(t('admin.duplicate_photos.ledger_pair_unavailable', 'This duplicate pair is no longer available. Start a new scan.'));
+                    throw new InvalidArgumentException(t(
+                        'admin.duplicate_photos.ledger_pair_unavailable',
+                        'This duplicate pair is no longer available. Start a new scan.',
+                    ));
                 }
-                if (!duplicate_photo_detector_job_allows_gallery($job, (int) ($leftImage['gallery_id'] ?? 0))
-                    || !duplicate_photo_detector_job_allows_gallery($job, (int) ($rightImage['gallery_id'] ?? 0))) {
-                    throw new InvalidArgumentException(t('admin.duplicate_photos.ledger_scope_changed', 'This duplicate finding is no longer inside the detector scope. Start a new scan.'));
+                if (
+                    !duplicate_photo_detector_job_allows_gallery(
+                        $job,
+                        (int) ($leftImage['gallery_id'] ?? 0),
+                    )
+                    || !duplicate_photo_detector_job_allows_gallery(
+                        $job,
+                        (int) ($rightImage['gallery_id'] ?? 0),
+                    )
+                ) {
+                    throw new InvalidArgumentException(t(
+                        'admin.duplicate_photos.ledger_scope_changed',
+                        'This duplicate finding is no longer inside the detector scope. Start a new scan.',
+                    ));
                 }
 
-                duplicate_photo_ledger_add_pair($adminUserId, $leftImageId, $rightImageId);
-                $message = t('admin.duplicate_photos.ledger_pair_added', 'This pair will be ignored in future duplicate searches.');
-                admin_log_event('info', 'image.duplicate_detector_pair_ignored', 'Admin added a reviewed duplicate pair to the Duplicate Photo Detector ledger.', [
-                    'selected_gallery_id' => (int) ($gallery['id'] ?? 0),
-                    'left_image_id' => $leftImageId,
-                    'right_image_id' => $rightImageId,
-                ], ['category' => 'other', 'severity' => 'notice']);
+                duplicate_photo_ledger_add_pair(
+                    $adminUserId,
+                    $leftImageId,
+                    $rightImageId,
+                );
+                $message = t(
+                    'admin.duplicate_photos.ledger_pair_added',
+                    'This pair will be ignored in future duplicate searches.',
+                );
+                admin_log_event(
+                    'info',
+                    'image.duplicate_detector_pair_ignored',
+                    'Admin added a reviewed duplicate pair to the Duplicate Photo Detector ledger.',
+                    [
+                        'selected_gallery_id' => (int) ($gallery['id'] ?? 0),
+                        'left_image_id' => $leftImageId,
+                        'right_image_id' => $rightImageId,
+                    ],
+                    ['category' => 'other', 'severity' => 'notice'],
+                );
             } else {
-                if ($job === null || (string) ($job['status'] ?? '') !== 'complete') {
-                    throw new InvalidArgumentException(t('admin.duplicate_photos.ledger_gallery_unavailable', 'This gallery result is no longer available. Start a new scan.'));
+                if (
+                    $job === null
+                    || (string) ($job['status'] ?? '') !== 'complete'
+                ) {
+                    throw new InvalidArgumentException(t(
+                        'admin.duplicate_photos.ledger_gallery_unavailable',
+                        'This gallery result is no longer available. Start a new scan.',
+                    ));
                 }
                 $imageId = (int) ($_POST['image_id'] ?? 0);
-                if (!duplicate_photo_detector_job_contains_image($job, $imageId)) {
-                    throw new InvalidArgumentException(t('admin.duplicate_photos.ledger_gallery_unavailable', 'This gallery result is no longer available. Start a new scan.'));
+                if (!duplicate_photo_detector_job_contains_image(
+                    $job,
+                    $imageId,
+                )) {
+                    throw new InvalidArgumentException(t(
+                        'admin.duplicate_photos.ledger_gallery_unavailable',
+                        'This gallery result is no longer available. Start a new scan.',
+                    ));
                 }
 
                 $image = find_image($imageId);
                 if ($image === null) {
-                    throw new InvalidArgumentException(t('admin.duplicate_photos.ledger_gallery_unavailable', 'This gallery result is no longer available. Start a new scan.'));
+                    throw new InvalidArgumentException(t(
+                        'admin.duplicate_photos.ledger_gallery_unavailable',
+                        'This gallery result is no longer available. Start a new scan.',
+                    ));
                 }
                 $ignoredGalleryId = (int) ($image['gallery_id'] ?? 0);
-                if (!duplicate_photo_detector_job_allows_gallery($job, $ignoredGalleryId)) {
-                    throw new InvalidArgumentException(t('admin.duplicate_photos.ledger_scope_changed', 'This duplicate finding is no longer inside the detector scope. Start a new scan.'));
+                if (!duplicate_photo_detector_job_allows_gallery(
+                    $job,
+                    $ignoredGalleryId,
+                )) {
+                    throw new InvalidArgumentException(t(
+                        'admin.duplicate_photos.ledger_scope_changed',
+                        'This duplicate finding is no longer inside the detector scope. Start a new scan.',
+                    ));
                 }
 
-                duplicate_photo_ledger_add_gallery($adminUserId, $ignoredGalleryId);
-                $message = t('admin.duplicate_photos.ledger_gallery_added', 'This gallery will be ignored in future duplicate searches. Subgalleries remain independent.');
-                admin_log_event('info', 'image.duplicate_detector_gallery_ignored', 'Admin added one exact gallery to the Duplicate Photo Detector ledger.', [
-                    'selected_gallery_id' => (int) ($gallery['id'] ?? 0),
-                    'ignored_gallery_id' => $ignoredGalleryId,
-                    'source_image_id' => $imageId,
-                ], ['category' => 'other', 'severity' => 'notice']);
+                duplicate_photo_ledger_add_gallery(
+                    $adminUserId,
+                    $ignoredGalleryId,
+                );
+                $message = t(
+                    'admin.duplicate_photos.ledger_gallery_added',
+                    'This gallery will be ignored in future duplicate searches. Subgalleries remain independent.',
+                );
+                admin_log_event(
+                    'info',
+                    'image.duplicate_detector_gallery_ignored',
+                    'Admin added one exact gallery to the Duplicate Photo Detector ledger.',
+                    [
+                        'selected_gallery_id' => (int) ($gallery['id'] ?? 0),
+                        'ignored_gallery_id' => $ignoredGalleryId,
+                        'source_image_id' => $imageId,
+                    ],
+                    ['category' => 'other', 'severity' => 'notice'],
+                );
             }
         } catch (Throwable $exception) {
-            $message = t('admin.duplicate_photos.ledger_update_failed', 'Duplicate ledger update failed: {error}', ['error' => $exception->getMessage()]);
+            $message = t(
+                'admin.duplicate_photos.ledger_update_failed',
+                'Duplicate ledger update failed: {error}',
+                ['error' => $exception->getMessage()],
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
-            redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+            redirect_to(admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            ));
         }
 
         if ($wantsJson) {
-            $panelUrl = admin_duplicate_photos_url((int) $gallery['id'], $token, $page);
+            $panelUrl = admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            );
             if ($action === 'ignore_pair') {
                 $mutationDescriptor = admin_mutation_descriptor(
                     'duplicate_photo_ledger.ignore_pair',
@@ -427,48 +591,73 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
                     [
                         (int) ($_POST['left_image_id'] ?? 0),
                         (int) ($_POST['right_image_id'] ?? 0),
-                    ]
+                    ],
                 );
             } elseif ($action === 'ignore_gallery') {
                 $mutationDescriptor = admin_mutation_descriptor(
                     'duplicate_photo_ledger.ignore_gallery',
                     'gallery',
                     'ignore_gallery',
-                    [$ignoredGalleryId ?? 0]
+                    [$ignoredGalleryId ?? 0],
                 );
             } else {
                 $mutationDescriptor = admin_mutation_descriptor(
                     'duplicate_photo_ledger.clear',
                     'duplicate_photo_ledger',
                     'clear',
-                    []
+                    [],
                 );
             }
             $mutationEnvelope = admin_mutation_success_envelope(
                 $message,
                 $mutationDescriptor,
-                admin_mutation_panel_metadata('duplicate-photo-detector', $panelUrl, true),
+                admin_mutation_panel_metadata(
+                    'duplicate-photo-detector',
+                    $panelUrl,
+                    true,
+                ),
                 [],
-                ['redirect_url' => $panelUrl]
+                ['redirect_url' => $panelUrl],
             );
-            admin_duplicate_photos_json_response(true, $message, array_merge($mutationEnvelope, [
-                'job_token' => $token,
-                'panel_html' => admin_duplicate_photos_panel_html($gallery, $job, $page, $adminUserId),
-            ]));
+            admin_duplicate_photos_json_response(
+                true,
+                $message,
+                array_merge($mutationEnvelope, [
+                    'job_token' => $token,
+                    'panel_html' => admin_duplicate_photos_panel_html(
+                        $gallery,
+                        $job,
+                        $page,
+                        $adminUserId,
+                    ),
+                ]),
+            );
             return;
         }
 
         flash_message('admin_notice', $message);
-        redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+        redirect_to(admin_duplicate_photos_url(
+            (int) $gallery['id'],
+            $token,
+            $page,
+        ));
     }
 
     if ($action === 'delete') {
         $token = (string) ($_POST['job_token'] ?? '');
-        $job = duplicate_photo_detector_read_job($token, admin_duplicate_photos_job_store());
+        $job = duplicate_photo_detector_read_job(
+            $token,
+            admin_duplicate_photos_job_store(),
+        );
         if ($job === null) {
-            $message = t('admin.duplicate_photos.error_job_missing', 'The duplicate detector session expired. Start a new scan.');
+            $message = t(
+                'admin.duplicate_photos.error_job_missing',
+                'The duplicate detector session expired. Start a new scan.',
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
@@ -477,9 +666,13 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
         $gallery = admin_duplicate_photos_gallery_from_job($job);
         if ($gallery === null) {
-            $message = admin_duplicate_photos_missing_gallery_message((int) ($job['gallery_id'] ?? 0));
+            $message = admin_duplicate_photos_missing_gallery_message(
+                (int) ($job['gallery_id'] ?? 0),
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
@@ -488,114 +681,223 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
         $imageId = (int) ($_POST['image_id'] ?? 0);
         $page = max(1, (int) ($_POST['results_page'] ?? 1));
-        if ((string) ($job['status'] ?? '') !== 'complete' || !duplicate_photo_detector_job_contains_image($job, $imageId)) {
-            $message = t('admin.duplicate_photos.delete_unavailable', 'This photo is no longer available in the duplicate detector results.');
+        if (
+            (string) ($job['status'] ?? '') !== 'complete'
+            || !duplicate_photo_detector_job_contains_image($job, $imageId)
+        ) {
+            $message = t(
+                'admin.duplicate_photos.delete_unavailable',
+                'This photo is no longer available in the duplicate detector results.',
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
-            redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+            redirect_to(admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            ));
         }
 
         $image = find_image($imageId);
         if ($image === null) {
-            $updatedJob = duplicate_photo_detector_remove_image_from_job($token, $imageId, admin_duplicate_photos_job_store());
-            $message = t('admin.duplicate_photos.delete_already_removed', 'The photo was already removed. The duplicate results were refreshed.');
+            $updatedJob = duplicate_photo_detector_remove_image_from_job(
+                $token,
+                $imageId,
+                admin_duplicate_photos_job_store(),
+            );
+            $message = t(
+                'admin.duplicate_photos.delete_already_removed',
+                'The photo was already removed. The duplicate results were refreshed.',
+            );
             if ($wantsJson) {
                 admin_duplicate_photos_json_response(true, $message, [
                     'deleted_image_id' => $imageId,
                     'deleted_gallery_id' => 0,
                     'job_token' => $token,
-                    'panel_html' => admin_duplicate_photos_panel_html($gallery, $updatedJob, $page, $adminUserId),
+                    'panel_html' => admin_duplicate_photos_panel_html(
+                        $gallery,
+                        $updatedJob,
+                        $page,
+                        $adminUserId,
+                    ),
                 ]);
                 return;
             }
             flash_message('admin_notice', $message);
-            redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+            redirect_to(admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            ));
         }
 
         $imageGalleryId = (int) ($image['gallery_id'] ?? 0);
-        if (!duplicate_photo_detector_job_allows_gallery($job, $imageGalleryId)) {
-            $message = t('admin.duplicate_photos.delete_scope_changed', 'The photo is no longer inside this detector scope. Start a new scan before deleting it here.');
+        if (!duplicate_photo_detector_job_allows_gallery(
+            $job,
+            $imageGalleryId,
+        )) {
+            $message = t(
+                'admin.duplicate_photos.delete_scope_changed',
+                'The photo is no longer inside this detector scope. Start a new scan before deleting it here.',
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
-            redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+            redirect_to(admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            ));
         }
 
         try {
             $deleted = delete_gallery_images($imageGalleryId, [$imageId]);
             if ((int) ($deleted['deleted'] ?? 0) <= 0) {
-                throw new InvalidArgumentException(t('admin.duplicate_photos.delete_unavailable', 'This photo is no longer available in the duplicate detector results.'));
+                throw new InvalidArgumentException(t(
+                    'admin.duplicate_photos.delete_unavailable',
+                    'This photo is no longer available in the duplicate detector results.',
+                ));
             }
 
-            $updatedJob = duplicate_photo_detector_remove_image_from_job($token, $imageId, admin_duplicate_photos_job_store());
+            $updatedJob = duplicate_photo_detector_remove_image_from_job(
+                $token,
+                $imageId,
+                admin_duplicate_photos_job_store(),
+            );
             if ($updatedJob === null) {
                 $updatedJob = $job;
             }
 
-            $displayName = trim((string) ($image['filename'] ?? $image['relative_path'] ?? ''));
+            $displayName = trim(
+                (string) ($image['filename'] ?? $image['relative_path'] ?? ''),
+            );
             if ($displayName === '') {
                 $displayName = '#' . $imageId;
             }
-            $message = t('admin.duplicate_photos.delete_success', 'Deleted {file}.', ['file' => $displayName]);
-            admin_log_event('warning', 'image.duplicate_detector_deleted', 'Admin deleted an image from Duplicate Photo Detector results.', [
-                'selected_gallery_id' => (int) ($gallery['id'] ?? 0),
-                'image_gallery_id' => $imageGalleryId,
-                'image_id' => $imageId,
-                'requested' => (int) ($deleted['requested'] ?? 0),
-                'deleted' => (int) ($deleted['deleted'] ?? 0),
-                'files_deleted' => (int) ($deleted['files_deleted'] ?? 0),
-                'derivatives_deleted' => (int) ($deleted['derivatives_deleted'] ?? 0),
-                'missing_files' => (int) ($deleted['missing_files'] ?? 0),
-            ], ['category' => 'other', 'severity' => 'warning']);
+            $message = t(
+                'admin.duplicate_photos.delete_success',
+                'Deleted {file}.',
+                ['file' => $displayName],
+            );
+            admin_log_event(
+                'warning',
+                'image.duplicate_detector_deleted',
+                'Admin deleted an image from Duplicate Photo Detector results.',
+                [
+                    'selected_gallery_id' => (int) ($gallery['id'] ?? 0),
+                    'image_gallery_id' => $imageGalleryId,
+                    'image_id' => $imageId,
+                    'requested' => (int) ($deleted['requested'] ?? 0),
+                    'deleted' => (int) ($deleted['deleted'] ?? 0),
+                    'files_deleted' => (int) ($deleted['files_deleted'] ?? 0),
+                    'derivatives_deleted' => (int) (
+                        $deleted['derivatives_deleted'] ?? 0
+                    ),
+                    'missing_files' => (int) ($deleted['missing_files'] ?? 0),
+                ],
+                ['category' => 'other', 'severity' => 'warning'],
+            );
         } catch (Throwable $exception) {
-            $message = t('admin.duplicate_photos.delete_failed', 'Photo delete failed: {error}', ['error' => $exception->getMessage()]);
+            $message = t(
+                'admin.duplicate_photos.delete_failed',
+                'Photo delete failed: {error}',
+                ['error' => $exception->getMessage()],
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
-            redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+            redirect_to(admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            ));
         }
 
         if ($wantsJson) {
-            $panelUrl = admin_duplicate_photos_url((int) $gallery['id'], $token, $page);
+            $panelUrl = admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+                $page,
+            );
             $imageGallery = find_gallery($imageGalleryId, true);
             $mutationEnvelope = admin_mutation_success_envelope(
                 $message,
-                admin_mutation_descriptor('image.duplicate_delete', 'image', 'delete', [$imageId]),
-                admin_mutation_panel_metadata('duplicate-photo-detector', $panelUrl, true),
+                admin_mutation_descriptor(
+                    'image.duplicate_delete',
+                    'image',
+                    'delete',
+                    [$imageId],
+                ),
+                admin_mutation_panel_metadata(
+                    'duplicate-photo-detector',
+                    $panelUrl,
+                    true,
+                ),
                 [admin_mutation_public_gallery_context(
                     $imageGalleryId,
-                    gallery_public_url(is_array($imageGallery) ? $imageGallery : $gallery),
-                    admin_mutation_postcondition('image_absent', ['image_id' => $imageId])
+                    gallery_public_url(
+                        is_array($imageGallery) ? $imageGallery : $gallery,
+                    ),
+                    admin_mutation_postcondition('image_absent', [
+                        'image_id' => $imageId,
+                    ]),
                 )],
-                ['redirect_url' => $panelUrl]
+                ['redirect_url' => $panelUrl],
             );
-            admin_duplicate_photos_json_response(true, $message, array_merge($mutationEnvelope, [
-                'deleted_image_id' => $imageId,
-                'deleted_gallery_id' => $imageGalleryId,
-                'job_token' => $token,
-                'panel_html' => admin_duplicate_photos_panel_html($gallery, $updatedJob, $page, $adminUserId),
-            ]));
+            admin_duplicate_photos_json_response(
+                true,
+                $message,
+                array_merge($mutationEnvelope, [
+                    'deleted_image_id' => $imageId,
+                    'deleted_gallery_id' => $imageGalleryId,
+                    'job_token' => $token,
+                    'panel_html' => admin_duplicate_photos_panel_html(
+                        $gallery,
+                        $updatedJob,
+                        $page,
+                        $adminUserId,
+                    ),
+                ]),
+            );
             return;
         }
 
         flash_message('admin_notice', $message);
-        redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token, $page));
+        redirect_to(admin_duplicate_photos_url(
+            (int) $gallery['id'],
+            $token,
+            $page,
+        ));
     }
 
     if ($action === 'step') {
         $token = (string) ($_POST['job_token'] ?? '');
-        $job = duplicate_photo_detector_read_job($token, admin_duplicate_photos_job_store());
+        $job = duplicate_photo_detector_read_job(
+            $token,
+            admin_duplicate_photos_job_store(),
+        );
         if ($job === null) {
-            $message = t('admin.duplicate_photos.error_job_missing', 'The duplicate detector session expired. Start a new scan.');
+            $message = t(
+                'admin.duplicate_photos.error_job_missing',
+                'The duplicate detector session expired. Start a new scan.',
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
@@ -604,9 +906,13 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
         $gallery = admin_duplicate_photos_gallery_from_job($job);
         if ($gallery === null) {
-            $message = admin_duplicate_photos_missing_gallery_message((int) ($job['gallery_id'] ?? 0));
+            $message = admin_duplicate_photos_missing_gallery_message(
+                (int) ($job['gallery_id'] ?? 0),
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
@@ -615,34 +921,72 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
 
         $batchSize = (int) ($_POST['batch_size'] ?? 0);
         try {
-            $state = duplicate_photo_detector_process_job($token, admin_duplicate_photos_job_store(), $batchSize > 0 ? $batchSize : DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE);
+            $state = duplicate_photo_detector_process_job(
+                $token,
+                admin_duplicate_photos_job_store(),
+                $batchSize > 0
+                    ? $batchSize
+                    : DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE,
+            );
         } catch (Throwable $exception) {
-            $message = t('admin.duplicate_photos.error_scan_failed', 'Duplicate scan failed: {error}', ['error' => $exception->getMessage()]);
+            $message = t(
+                'admin.duplicate_photos.error_scan_failed',
+                'Duplicate scan failed: {error}',
+                ['error' => $exception->getMessage()],
+            );
             if ($wantsJson) {
-                admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+                admin_duplicate_photos_json_response(false, $message, [
+                    'error' => $message,
+                ]);
                 return;
             }
             flash_message('admin_notice', $message);
-            redirect_to(admin_duplicate_photos_url((int) $gallery['id'], $token));
+            redirect_to(admin_duplicate_photos_url(
+                (int) $gallery['id'],
+                $token,
+            ));
         }
 
         if ($wantsJson) {
             $payload = $state;
             if (!empty($state['done'])) {
-                $completedJob = duplicate_photo_detector_read_job((string) ($state['job_token'] ?? $token), admin_duplicate_photos_job_store());
-                $payload['panel_html'] = admin_duplicate_photos_panel_html($gallery, $completedJob, 1, $adminUserId);
+                $completedJob = duplicate_photo_detector_read_job(
+                    (string) ($state['job_token'] ?? $token),
+                    admin_duplicate_photos_job_store(),
+                );
+                $payload['panel_html'] = admin_duplicate_photos_panel_html(
+                    $gallery,
+                    $completedJob,
+                    1,
+                    $adminUserId,
+                );
             }
-            admin_duplicate_photos_json_response(true, t('admin.duplicate_photos.scan_progress_message', 'Duplicate scan progress updated.'), $payload);
+            admin_duplicate_photos_json_response(
+                true,
+                t(
+                    'admin.duplicate_photos.scan_progress_message',
+                    'Duplicate scan progress updated.',
+                ),
+                $payload,
+            );
             return;
         }
 
-        redirect_to(admin_duplicate_photos_url((int) $gallery['id'], (string) ($state['job_token'] ?? $token)));
+        redirect_to(admin_duplicate_photos_url(
+            (int) $gallery['id'],
+            (string) ($state['job_token'] ?? $token),
+        ));
     }
 
     if ($action !== 'start') {
-        $message = t('admin.duplicate_photos.error_invalid_action', 'Unknown duplicate detector action.');
+        $message = t(
+            'admin.duplicate_photos.error_invalid_action',
+            'Unknown duplicate detector action.',
+        );
         if ($wantsJson) {
-            admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+            admin_duplicate_photos_json_response(false, $message, [
+                'error' => $message,
+            ]);
             return;
         }
         flash_message('admin_notice', $message);
@@ -654,13 +998,16 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
     try {
         $scope = duplicate_photo_detector_resolve_scope(
             $gallery,
-            isset($_POST['search_all']) && (string) $_POST['search_all'] === '1',
-            true
+            isset($_POST['search_all'])
+                && (string) $_POST['search_all'] === '1',
+            true,
         );
     } catch (InvalidArgumentException) {
         $message = admin_duplicate_photos_missing_gallery_message($galleryId);
         if ($wantsJson) {
-            admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+            admin_duplicate_photos_json_response(false, $message, [
+                'error' => $message,
+            ]);
             return;
         }
         flash_message('admin_notice', $message);
@@ -668,11 +1015,20 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
     }
 
     try {
-        $state = duplicate_photo_detector_start_job($scope, admin_duplicate_photos_job_store());
+        $state = duplicate_photo_detector_start_job(
+            $scope,
+            admin_duplicate_photos_job_store(),
+        );
     } catch (Throwable $exception) {
-        $message = t('admin.duplicate_photos.error_scan_failed', 'Duplicate scan failed: {error}', ['error' => $exception->getMessage()]);
+        $message = t(
+            'admin.duplicate_photos.error_scan_failed',
+            'Duplicate scan failed: {error}',
+            ['error' => $exception->getMessage()],
+        );
         if ($wantsJson) {
-            admin_duplicate_photos_json_response(false, $message, ['error' => $message]);
+            admin_duplicate_photos_json_response(false, $message, [
+                'error' => $message,
+            ]);
             return;
         }
         flash_message('admin_notice', $message);
@@ -682,14 +1038,29 @@ function admin_duplicate_photos_handle_post(bool $csrfVerified = false): void
     if ($wantsJson) {
         $payload = $state;
         if (!empty($state['done']) && is_array($gallery)) {
-            $completedJob = duplicate_photo_detector_read_job((string) ($state['job_token'] ?? ''), admin_duplicate_photos_job_store());
-            $payload['panel_html'] = admin_duplicate_photos_panel_html($gallery, $completedJob, 1, $adminUserId);
+            $completedJob = duplicate_photo_detector_read_job(
+                (string) ($state['job_token'] ?? ''),
+                admin_duplicate_photos_job_store(),
+            );
+            $payload['panel_html'] = admin_duplicate_photos_panel_html(
+                $gallery,
+                $completedJob,
+                1,
+                $adminUserId,
+            );
         }
-        admin_duplicate_photos_json_response(true, t('admin.duplicate_photos.scan_started', 'Duplicate scan started.'), $payload);
+        admin_duplicate_photos_json_response(
+            true,
+            t('admin.duplicate_photos.scan_started', 'Duplicate scan started.'),
+            $payload,
+        );
         return;
     }
 
-    redirect_to(admin_duplicate_photos_url((int) $scope['gallery_id'], (string) ($state['job_token'] ?? '')));
+    redirect_to(admin_duplicate_photos_url(
+        (int) $scope['gallery_id'],
+        (string) ($state['job_token'] ?? ''),
+    ));
 }
 
 /**
@@ -701,25 +1072,34 @@ function cms_admin_duplicate_photos(): void
     // JSON POSTs validate authentication and CSRF without triggering the
     // classic login redirect or plain-text CSRF abort. This preserves the
     // detector's side-panel JSON contract even when the Admin session expires.
-    $isJsonPost = request_method() === 'POST' && \Gallery\Core\admin_wants_json();
+    $isJsonPost =
+        request_method() === 'POST' && \Gallery\Core\admin_wants_json();
     if ($isJsonPost) {
         $user = current_user();
         if (!$user || (string) ($user['role'] ?? '') !== 'admin') {
             http_response_code(403);
-            admin_duplicate_photos_json_response(false, t('auth.admin_required', 'Admin access is required.'), admin_mutation_error_envelope(
+            admin_duplicate_photos_json_response(
+                false,
                 t('auth.admin_required', 'Admin access is required.'),
-                'auth.admin_required',
-                admin_duplicate_photos_post_mutation_descriptor()
-            ));
+                admin_mutation_error_envelope(
+                    t('auth.admin_required', 'Admin access is required.'),
+                    'auth.admin_required',
+                    admin_duplicate_photos_post_mutation_descriptor(),
+                ),
+            );
             return;
         }
         if (!admin_duplicate_photos_csrf_valid()) {
             http_response_code(400);
-            admin_duplicate_photos_json_response(false, t('security.invalid_csrf', 'Invalid CSRF token.'), admin_mutation_error_envelope(
+            admin_duplicate_photos_json_response(
+                false,
                 t('security.invalid_csrf', 'Invalid CSRF token.'),
-                'security.invalid_csrf',
-                admin_duplicate_photos_post_mutation_descriptor()
-            ));
+                admin_mutation_error_envelope(
+                    t('security.invalid_csrf', 'Invalid CSRF token.'),
+                    'security.invalid_csrf',
+                    admin_duplicate_photos_post_mutation_descriptor(),
+                ),
+            );
             return;
         }
         admin_duplicate_photos_handle_post(true);
@@ -734,26 +1114,52 @@ function cms_admin_duplicate_photos(): void
     }
 
     $jobToken = (string) ($_GET['job_token'] ?? '');
-    $job = $jobToken !== '' ? duplicate_photo_detector_read_job($jobToken, admin_duplicate_photos_job_store()) : null;
-    $galleryId = $job !== null ? (int) ($job['gallery_id'] ?? 0) : (int) ($_GET['gallery_id'] ?? $_GET['id'] ?? 0);
+    $job = $jobToken !== ''
+        ? duplicate_photo_detector_read_job(
+            $jobToken,
+            admin_duplicate_photos_job_store(),
+        )
+        : null;
+    $galleryId = $job !== null
+        ? (int) ($job['gallery_id'] ?? 0)
+        : (int) ($_GET['gallery_id'] ?? $_GET['id'] ?? 0);
     $gallery = $galleryId > 0 ? find_gallery($galleryId, true) : null;
     if ($gallery === null) {
-        flash_message('admin_notice', admin_duplicate_photos_missing_gallery_message($galleryId));
+        flash_message(
+            'admin_notice',
+            admin_duplicate_photos_missing_gallery_message($galleryId),
+        );
         redirect_to(url_for('admin'));
     }
 
     if ($jobToken !== '' && $job === null) {
-        flash_message('admin_notice', t('admin.duplicate_photos.error_job_missing', 'The duplicate detector session expired. Start a new scan.'));
+        flash_message('admin_notice', t(
+            'admin.duplicate_photos.error_job_missing',
+            'The duplicate detector session expired. Start a new scan.',
+        ));
     }
 
     $page = max(1, (int) ($_GET['results_page'] ?? 1));
     $adminUserId = admin_duplicate_photos_current_admin_id();
     $ledger = duplicate_photo_ledger_snapshot($adminUserId);
-    $resultPage = $job !== null && (string) ($job['status'] ?? '') === 'complete'
-        ? admin_duplicate_photos_prepare_result_page(duplicate_photo_detector_result_page($job, $page, $ledger))
-        : null;
+    $resultPage =
+        $job !== null && (string) ($job['status'] ?? '') === 'complete'
+            ? admin_duplicate_photos_prepare_result_page(duplicate_photo_detector_result_page(
+                $job,
+                $page,
+                $ledger,
+            ))
+            : null;
 
-    render_header(t('admin.duplicate_photos.page_title', 'Duplicate Photo Detector'));
-    view_render_admin_duplicate_photo_detector($gallery, $job, $resultPage, $ledger);
+    render_header(t(
+        'admin.duplicate_photos.page_title',
+        'Duplicate Photo Detector',
+    ));
+    view_render_admin_duplicate_photo_detector(
+        $gallery,
+        $job,
+        $resultPage,
+        $ledger,
+    );
     render_footer();
 }

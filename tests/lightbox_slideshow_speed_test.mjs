@@ -509,8 +509,8 @@ test('HUD hides fully after inactivity despite focus/hover, but remains visible 
 
 test('markup and keyboard routing expose exactly two localized native ranges', () => {
     const view = readFileSync(new URL('../app/views/public_gallery_lightbox.php', import.meta.url), 'utf8');
-    assert.match(view, /\['value' => 'interval', 'label' =>/);
-    assert.match(view, /\['value' => 'transition', 'label' =>/);
+    assert.match(view, /\[\s*'value'\s*=>\s*'interval',\s*'label'\s*=>/);
+    assert.match(view, /\[\s*'value'\s*=>\s*'transition',\s*'label'\s*=>/);
     assert.match(view, /type="range" min="0" max="2" step="1" value="1"/);
     assert.match(view, /aria-valuetext=/);
     const css = readFileSync(new URL('../public/assets/styles/lightbox.css', import.meta.url), 'utf8');

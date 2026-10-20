@@ -50,13 +50,17 @@ const BROWSER_THUMBNAIL_SOURCE_ZIP_MAX_ENTRY_BYTES = 0xffffffff;
 /**
  * Clamp a large byte setting used for browser source-download chunks.
  *
- * @param mixed $value Value to process.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Requested byte count as numeric text or a number; other values use the fallback.
  * @param int $fallback Fallback value.
- * @return int Integer result for the caller.
+ * @return int Byte size clamped between the configured minimum and hard maximum.
  */
-function browser_thumbnail_rebuild_clamped_source_chunk_bytes(mixed $value, ?int $fallback = null): int
-{
-    $fallback ??= (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes');
+function browser_thumbnail_rebuild_clamped_source_chunk_bytes(
+    mixed $value,
+    ?int $fallback = null,
+): int {
+    $fallback ??= (int) cms_runtime_limit(
+        'browser_thumbnail_rebuild.default_chunk_bytes',
+    );
     if (is_string($value)) {
         $value = trim($value);
     }
@@ -65,19 +69,31 @@ function browser_thumbnail_rebuild_clamped_source_chunk_bytes(mixed $value, ?int
     } else {
         $bytes = (int) $value;
     }
-    return max((int) cms_runtime_limit('browser_thumbnail_rebuild.min_chunk_bytes'), min((int) cms_runtime_limit('browser_thumbnail_rebuild.hard_chunk_bytes'), $bytes));
+    return max(
+        (int) cms_runtime_limit('browser_thumbnail_rebuild.min_chunk_bytes'),
+        min(
+            (int) cms_runtime_limit(
+                'browser_thumbnail_rebuild.hard_chunk_bytes',
+            ),
+            $bytes,
+        ),
+    );
 }
 
 /**
  * Convert an administrator-entered megabyte value into a source chunk byte cap.
  *
- * @param mixed $value Value to process.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Requested megabyte count as numeric text or a number; other values use the fallback.
  * @param int $fallbackBytes Fallback bytes value.
- * @return int Integer result for the caller.
+ * @return int Positive byte limit converted from the megabyte value or fallback and clamped to policy bounds.
  */
-function browser_thumbnail_rebuild_megabytes_to_bytes(mixed $value, ?int $fallbackBytes = null): int
-{
-    $fallbackBytes ??= (int) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes');
+function browser_thumbnail_rebuild_megabytes_to_bytes(
+    mixed $value,
+    ?int $fallbackBytes = null,
+): int {
+    $fallbackBytes ??= (int) cms_runtime_limit(
+        'browser_thumbnail_rebuild.default_chunk_bytes',
+    );
     if (is_string($value)) {
         $value = trim($value);
     }
@@ -88,18 +104,26 @@ function browser_thumbnail_rebuild_megabytes_to_bytes(mixed $value, ?int $fallba
     if ($megabytes <= 0) {
         return $fallbackBytes;
     }
-    return browser_thumbnail_rebuild_clamped_source_chunk_bytes((int) floor($megabytes * 1024 * 1024), $fallbackBytes);
+    return browser_thumbnail_rebuild_clamped_source_chunk_bytes(
+        (int) floor($megabytes * 1024 * 1024),
+        $fallbackBytes,
+    );
 }
 
 /**
  * Return the configured maximum source ZIP chunk size for browser thumbnail rebuilds.
  *
- * @return int Integer result for the caller.
+ * @return int Configured source ZIP chunk size in bytes, clamped to policy bounds.
  */
 function browser_thumbnail_rebuild_source_chunk_bytes(): int
 {
     return browser_thumbnail_rebuild_clamped_source_chunk_bytes(
-        app_setting('browser_thumbnail_rebuild_source_chunk_bytes', (string) cms_runtime_limit('browser_thumbnail_rebuild.default_chunk_bytes'))
+        app_setting(
+            'browser_thumbnail_rebuild_source_chunk_bytes',
+            (string) cms_runtime_limit(
+                'browser_thumbnail_rebuild.default_chunk_bytes',
+            ),
+        ),
     );
 }
 
@@ -107,15 +131,19 @@ function browser_thumbnail_rebuild_source_chunk_bytes(): int
  * Persist the source-download chunk setting from the upload settings form.
  *
  * @param array<string,mixed> $input Browser rebuild request fields.
- * @return int Integer result for the caller.
+ * @return int Persisted source chunk limit in bytes.
  */
 function set_browser_thumbnail_rebuild_settings(array $input): int
 {
-    $bytes = browser_thumbnail_rebuild_megabytes_to_bytes($input['browser_thumbnail_rebuild_source_chunk_megabytes'] ?? null);
-    set_app_setting('browser_thumbnail_rebuild_source_chunk_bytes', (string) $bytes);
+    $bytes = browser_thumbnail_rebuild_megabytes_to_bytes(
+        $input['browser_thumbnail_rebuild_source_chunk_megabytes'] ?? null,
+    );
+    set_app_setting(
+        'browser_thumbnail_rebuild_source_chunk_bytes',
+        (string) $bytes,
+    );
     return $bytes;
 }
-
 
 /**
  * Return the maximum number of original images sent in one source ZIP chunk.
@@ -130,30 +158,47 @@ function set_browser_thumbnail_rebuild_settings(array $input): int
  */
 function browser_thumbnail_rebuild_source_chunk_item_cap(): int
 {
-    $configured = app_setting('browser_thumbnail_rebuild_source_chunk_item_cap', (string) cms_runtime_limit('browser_thumbnail_rebuild.default_max_items_per_chunk'));
+    $configured = app_setting(
+        'browser_thumbnail_rebuild_source_chunk_item_cap',
+        (string) cms_runtime_limit(
+            'browser_thumbnail_rebuild.default_max_items_per_chunk',
+        ),
+    );
     if (is_string($configured)) {
         $configured = trim($configured);
     }
     if ($configured === '' || !is_numeric($configured)) {
-        return (int) cms_runtime_limit('browser_thumbnail_rebuild.default_max_items_per_chunk');
+        return (int) cms_runtime_limit(
+            'browser_thumbnail_rebuild.default_max_items_per_chunk',
+        );
     }
-    return max(1, min((int) cms_runtime_limit('browser_thumbnail_rebuild.hard_max_items_per_chunk'), (int) $configured));
+    return max(1, min(
+        (int) cms_runtime_limit(
+            'browser_thumbnail_rebuild.hard_max_items_per_chunk',
+        ),
+        (int) $configured,
+    ));
 }
 
 /**
  * Normalize thumbnail format names for the browser rebuild pipeline.
  *
- * @param array $formats Formats value.
+ * @param array<int,string> $formats Requested derivative format names.
  * @param bool $fallbackToWebp Fallback to webp value.
- * @return array<int string>.
+ * @return list<'jpg'|'webp'> Unique supported derivative formats, using WebP fallback only when requested.
  */
-function browser_thumbnail_rebuild_normalized_formats(array $formats, bool $fallbackToWebp = true): array
-{
+function browser_thumbnail_rebuild_normalized_formats(
+    array $formats,
+    bool $fallbackToWebp = true,
+): array {
     // $normalized stores only derivative formats understood by the browser worker and PHP unpacker.
     $normalized = [];
     foreach ($formats as $format) {
         $format = strtolower(trim((string) $format));
-        if (!in_array($format, ['jpg', 'webp'], true) || in_array($format, $normalized, true)) {
+        if (
+            !in_array($format, ['jpg', 'webp'], true)
+            || in_array($format, $normalized, true)
+        ) {
             continue;
         }
         $normalized[] = $format;
@@ -175,74 +220,171 @@ function browser_thumbnail_rebuild_normalized_formats(array $formats, bool $fall
  * sync with the maintenance checker.
  *
  * @param string $sourcePath Source filesystem path.
- * @param array $image Image row or image data.
- * @return array<int string>.
+ * @param array<string,mixed> $image Image row or image data used for source format selection.
+ * @return list<'jpg'|'webp'> Supported target derivative formats for this source.
  */
-function browser_thumbnail_rebuild_target_formats_for_image(string $sourcePath, array $image): array
-{
-    $mime = function_exists('Gallery\\Services\\image_source_mime_for_derivatives') ? image_source_mime_for_derivatives($sourcePath, $image) : '';
-    if ($mime !== '' && function_exists('Gallery\\Services\\thumbnail_target_formats_for_source')) {
-        return browser_thumbnail_rebuild_normalized_formats(thumbnail_target_formats_for_source($sourcePath, $mime), false);
+function browser_thumbnail_rebuild_target_formats_for_image(
+    string $sourcePath,
+    array $image,
+): array {
+    $mime = function_exists(
+        'Gallery\\Services\\image_source_mime_for_derivatives',
+    )
+        ? image_source_mime_for_derivatives($sourcePath, $image)
+        : '';
+    if (
+        $mime !== ''
+        && function_exists(
+            'Gallery\\Services\\thumbnail_target_formats_for_source',
+        )
+    ) {
+        return browser_thumbnail_rebuild_normalized_formats(
+            thumbnail_target_formats_for_source($sourcePath, $mime),
+            false,
+        );
     }
 
-    return browser_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp']);
+    return browser_thumbnail_rebuild_normalized_formats(
+        function_exists('Gallery\\Services\\thumbnail_policy_requested_formats')
+            ? thumbnail_policy_requested_formats()
+            : ['webp'],
+    );
 }
 
 /**
  * Return the number of variants required for one thumbnail rebuild item.
  *
- * @param array $formats Formats value.
- * @return int Integer result for the caller.
+ * @param list<string> $formats Requested derivative formats.
+ * @return int Number of configured thumbnail sizes multiplied by supported requested formats.
  */
 function browser_thumbnail_rebuild_expected_variant_count(array $formats): int
 {
-    $sizes = function_exists('Gallery\\Services\\thumbnail_sizes') ? thumbnail_sizes() : [300, 600, 800, 960, 1280, 1600];
-    return count($sizes) * count(browser_thumbnail_rebuild_normalized_formats($formats, false));
+    $sizes = function_exists('Gallery\\Services\\thumbnail_sizes')
+        ? thumbnail_sizes()
+        : [300, 600, 800, 960, 1280, 1600];
+    return (
+        count($sizes)
+            * count(browser_thumbnail_rebuild_normalized_formats(
+                $formats,
+                false,
+            ))
+    );
 }
 
 /**
  * Return browser-facing endpoint and limit configuration for thumbnail rebuilds.
  *
- * @return array<string mixed>.
+ * @return array{enabled:bool,source_endpoint:string,upload_endpoint:string,worker_count:int,max_worker_count:int,hard_worker_cap:int,upload_limit_bytes:int,batch_target_bytes:int,max_items_per_batch:int,source_chunk_bytes:int,source_chunk_item_cap:int,thumbnail_sizes:list<int>,thumbnail_formats:list<'jpg'|'webp'>,jpeg_quality:int,webp_quality:int,supported_mime_types:list<string>} Browser endpoints, effective upload/rebuild limits, target formats, qualities, and supported source MIME types.
  */
 function browser_thumbnail_rebuild_browser_config(): array
 {
-    $settings = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : ['enabled' => false];
-    $uploadLimit = function_exists('Gallery\\Services\\browser_upload_server_upload_limit_bytes')
+    $settings = function_exists('Gallery\\Services\\browser_upload_settings')
+        ? browser_upload_settings()
+        : ['enabled' => false];
+    $uploadLimit = function_exists(
+        'Gallery\\Services\\browser_upload_server_upload_limit_bytes',
+    )
         ? browser_upload_server_upload_limit_bytes()
-        : max(1, (int) cms_runtime_limit('browser_upload.fallback_server_upload_limit_bytes'));
-    $formats = browser_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp']);
+        : max(
+            1,
+            (int) cms_runtime_limit(
+                'browser_upload.fallback_server_upload_limit_bytes',
+            ),
+        );
+    $formats = browser_thumbnail_rebuild_normalized_formats(
+        function_exists('Gallery\\Services\\thumbnail_policy_requested_formats')
+            ? thumbnail_policy_requested_formats()
+            : ['webp'],
+    );
 
     return [
         'enabled' => (bool) ($settings['enabled'] ?? false),
         'source_endpoint' => url_for('admin_thumbnail_browser_source_chunk'),
         'upload_endpoint' => url_for('admin_thumbnail_browser_upload_batch'),
-        'worker_count' => (int) ($settings['default_worker_count'] ?? cms_runtime_limit('browser_upload.default_worker_count')),
-        'max_worker_count' => (int) ($settings['max_worker_count'] ?? cms_runtime_limit('browser_upload.hard_worker_cap')),
-        'hard_worker_cap' => (int) ($settings['hard_worker_cap'] ?? cms_runtime_limit('browser_upload.hard_worker_cap')),
+        'worker_count' => (int) (
+            $settings['default_worker_count'] ?? cms_runtime_limit(
+                'browser_upload.default_worker_count',
+            )
+        ),
+        'max_worker_count' => (int) (
+            $settings['max_worker_count'] ?? cms_runtime_limit(
+                'browser_upload.hard_worker_cap',
+            )
+        ),
+        'hard_worker_cap' => (int) (
+            $settings['hard_worker_cap'] ?? cms_runtime_limit(
+                'browser_upload.hard_worker_cap',
+            )
+        ),
         'upload_limit_bytes' => $uploadLimit,
-        'batch_target_bytes' => function_exists('Gallery\\Services\\browser_upload_effective_batch_target_bytes') ? browser_upload_effective_batch_target_bytes($uploadLimit, (float) ($settings['zip_size_threshold_ratio'] ?? cms_runtime_limit('browser_upload.default_zip_ratio')), (int) ($settings['max_zip_batch_bytes'] ?? cms_runtime_limit('browser_upload.default_max_zip_batch_bytes'))) : (int) floor($uploadLimit * (float) cms_runtime_limit('browser_upload.default_zip_ratio')),
-        'max_items_per_batch' => (int) ($settings['max_items_per_batch'] ?? cms_runtime_limit('browser_upload.default_max_items_per_batch')),
+        'batch_target_bytes' => function_exists(
+            'Gallery\\Services\\browser_upload_effective_batch_target_bytes',
+        )
+            ? browser_upload_effective_batch_target_bytes(
+                $uploadLimit,
+                (float) (
+                    $settings['zip_size_threshold_ratio'] ?? cms_runtime_limit(
+                        'browser_upload.default_zip_ratio',
+                    )
+                ),
+                (int) (
+                    $settings['max_zip_batch_bytes'] ?? cms_runtime_limit(
+                        'browser_upload.default_max_zip_batch_bytes',
+                    )
+                ),
+            )
+            : (int) floor(
+                $uploadLimit
+                    * (float) cms_runtime_limit(
+                        'browser_upload.default_zip_ratio',
+                    ),
+            ),
+        'max_items_per_batch' => (int) (
+            $settings['max_items_per_batch'] ?? cms_runtime_limit(
+                'browser_upload.default_max_items_per_batch',
+            )
+        ),
         'source_chunk_bytes' => browser_thumbnail_rebuild_source_chunk_bytes(),
-        'source_chunk_item_cap' => browser_thumbnail_rebuild_source_chunk_item_cap(),
-        'thumbnail_sizes' => function_exists('Gallery\\Services\\thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
+        'source_chunk_item_cap' =>
+            browser_thumbnail_rebuild_source_chunk_item_cap(),
+        'thumbnail_sizes' => function_exists(
+            'Gallery\\Services\\thumbnail_sizes',
+        )
+            ? array_values(array_map('intval', thumbnail_sizes()))
+            : [300, 600, 800, 960, 1280, 1600],
         'thumbnail_formats' => $formats,
-        'jpeg_quality' => function_exists('Gallery\\Services\\thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
-        'webp_quality' => function_exists('Gallery\\Services\\thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
-        'supported_mime_types' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+        'jpeg_quality' => function_exists(
+            'Gallery\\Services\\thumbnail_jpeg_quality',
+        )
+            ? thumbnail_jpeg_quality()
+            : 82,
+        'webp_quality' => function_exists(
+            'Gallery\\Services\\thumbnail_webp_quality',
+        )
+            ? thumbnail_webp_quality()
+            : 82,
+        'supported_mime_types' => [
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'image/gif',
+        ],
     ];
 }
 
 /**
  * Return a safe source chunk size requested by the browser for one rebuild request.
  *
- * @param mixed $value Value to process.
- * @return int Integer result for the caller.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Browser-requested byte count as numeric text or a number; other values use the configured size.
+ * @return int Requested byte limit capped by the saved source chunk size.
  */
 function browser_thumbnail_rebuild_requested_chunk_bytes(mixed $value): int
 {
     $configured = browser_thumbnail_rebuild_source_chunk_bytes();
-    $requested = browser_thumbnail_rebuild_clamped_source_chunk_bytes($value, $configured);
+    $requested = browser_thumbnail_rebuild_clamped_source_chunk_bytes(
+        $value,
+        $configured,
+    );
     return min($configured, $requested);
 }
 
@@ -256,34 +398,61 @@ function browser_thumbnail_rebuild_request_image_ids(array $input): array
 {
     $scope = trim((string) ($input['scope'] ?? 'all'));
     if ((int) ($input['thumbnail_gallery_id'] ?? 0) > 0) {
-        return function_exists('Gallery\\Services\\thumbnail_image_ids_for_gallery_scope')
-            ? thumbnail_image_ids_for_gallery_scope((int) $input['thumbnail_gallery_id'], !empty($input['include_subgalleries']), $scope === 'missing')
-            : [];
+        return (
+            function_exists(
+                'Gallery\\Services\\thumbnail_image_ids_for_gallery_scope',
+            )
+                ? thumbnail_image_ids_for_gallery_scope(
+                    (int) $input['thumbnail_gallery_id'],
+                    !empty($input['include_subgalleries']),
+                    $scope === 'missing',
+                )
+                : []
+        );
     }
     if ($scope === 'missing') {
-        return function_exists('Gallery\\Services\\thumbnail_maintenance_image_ids') ? thumbnail_maintenance_image_ids(null, 0) : [];
+        return (
+            function_exists(
+                'Gallery\\Services\\thumbnail_maintenance_image_ids',
+            )
+                ? thumbnail_maintenance_image_ids(null, 0)
+                : []
+        );
     }
     if (!empty($input['image_ids']) && is_array($input['image_ids'])) {
-        return array_values(array_unique(array_filter(array_map('intval', $input['image_ids']), static fn (int $id): bool => $id > 0)));
+        return array_values(array_unique(array_filter(
+            array_map('intval', $input['image_ids']),
+            static fn(int $id): bool => $id > 0,
+        )));
     }
-    if (!empty($input['gallery_ids']) && is_array($input['gallery_ids']) && function_exists('Gallery\\Services\\image_ids_for_galleries')) {
+    if (
+        !empty($input['gallery_ids'])
+        && is_array($input['gallery_ids'])
+        && function_exists('Gallery\\Services\\image_ids_for_galleries')
+    ) {
         return image_ids_for_galleries($input['gallery_ids']);
     }
-    return function_exists('Gallery\\Services\\all_image_ids') ? all_image_ids() : [];
+    return (
+        function_exists('Gallery\\Services\\all_image_ids')
+            ? all_image_ids()
+            : []
+    );
 }
 
 /**
  * Build a source ZIP chunk plan for a browser thumbnail rebuild.
  *
- * @param array $input Input value.
- * @return array<string mixed>.
+ * @param array<string,mixed> $input Browser rebuild request fields selecting the image scope, offset, and byte cap.
+ * @return array{version:int,kind:string,offset:int,next_offset:int,total:int,processed:int,done:bool,source_chunk_bytes:int,source_payload_bytes:int,source_item_cap:int,items:list<array{image_id:int,gallery_id:int,filename:string,relative_path:string,entry_path:string,size:int,target_formats:list<'jpg'|'webp'>,expected_variants:int,source_path:string}>,skipped:list<array{image_id:int,reason:string}>} Bounded source-image ZIP manifest plan and skip reasons for unavailable or unsupported items.
  */
 function browser_thumbnail_rebuild_source_chunk_plan(array $input): array
 {
     $imageIds = browser_thumbnail_rebuild_request_image_ids($input);
     $total = count($imageIds);
     $offset = max(0, (int) ($input['offset'] ?? 0));
-    $maxBytes = browser_thumbnail_rebuild_requested_chunk_bytes($input['source_chunk_bytes'] ?? null);
+    $maxBytes = browser_thumbnail_rebuild_requested_chunk_bytes(
+        $input['source_chunk_bytes'] ?? null,
+    );
     $items = [];
     $skipped = [];
     $bytes = 0;
@@ -299,36 +468,65 @@ function browser_thumbnail_rebuild_source_chunk_plan(array $input): array
         $index++;
         $image = find_image($imageId);
         if (!$image) {
-            $skipped[] = ['image_id' => $imageId, 'reason' => 'missing_image_row'];
+            $skipped[] = [
+                'image_id' => $imageId,
+                'reason' => 'missing_image_row',
+            ];
             continue;
         }
         $galleryId = (int) ($image['gallery_id'] ?? 0);
         if (!array_key_exists($galleryId, $galleryCache)) {
-            $galleryCache[$galleryId] = $galleryId > 0 ? find_gallery($galleryId) : null;
+            $galleryCache[$galleryId] = $galleryId > 0
+                ? find_gallery($galleryId)
+                : null;
         }
         $gallery = $galleryCache[$galleryId];
         if (!$gallery) {
-            $skipped[] = ['image_id' => $imageId, 'reason' => 'missing_gallery_row'];
+            $skipped[] = [
+                'image_id' => $imageId,
+                'reason' => 'missing_gallery_row',
+            ];
             continue;
         }
         $sourcePath = image_abs_path($image, $gallery);
         if (!is_file($sourcePath) || !is_readable($sourcePath)) {
-            $skipped[] = ['image_id' => $imageId, 'reason' => 'source_file_unreadable'];
+            $skipped[] = [
+                'image_id' => $imageId,
+                'reason' => 'source_file_unreadable',
+            ];
             continue;
         }
         $extension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
-        if (is_dng_image_path($sourcePath) || in_array($extension, ['heic', 'heif'], true)) {
-            $skipped[] = ['image_id' => $imageId, 'reason' => 'browser_unsupported_source_format'];
+        if (
+            is_dng_image_path($sourcePath)
+            || in_array($extension, ['heic', 'heif'], true)
+        ) {
+            $skipped[] = [
+                'image_id' => $imageId,
+                'reason' => 'browser_unsupported_source_format',
+            ];
             continue;
         }
-        $targetFormats = browser_thumbnail_rebuild_target_formats_for_image($sourcePath, $image);
+        $targetFormats = browser_thumbnail_rebuild_target_formats_for_image(
+            $sourcePath,
+            $image,
+        );
         if ($targetFormats === []) {
-            $skipped[] = ['image_id' => $imageId, 'reason' => 'no_target_thumbnail_formats'];
+            $skipped[] = [
+                'image_id' => $imageId,
+                'reason' => 'no_target_thumbnail_formats',
+            ];
             continue;
         }
         $size = (int) (filesize($sourcePath) ?: 0);
-        if ($size <= 0 || $size > BROWSER_THUMBNAIL_SOURCE_ZIP_MAX_ENTRY_BYTES) {
-            $skipped[] = ['image_id' => $imageId, 'reason' => 'source_file_size_unsupported'];
+        if (
+            $size <= 0
+            || $size > BROWSER_THUMBNAIL_SOURCE_ZIP_MAX_ENTRY_BYTES
+        ) {
+            $skipped[] = [
+                'image_id' => $imageId,
+                'reason' => 'source_file_size_unsupported',
+            ];
             continue;
         }
         $zipOverhead = 256 + strlen((string) ($image['filename'] ?? 'image'));
@@ -337,11 +535,20 @@ function browser_thumbnail_rebuild_source_chunk_plan(array $input): array
             break;
         }
         if (!$items && ($size + $zipOverhead) > $maxBytes) {
-            $skipped[] = ['image_id' => $imageId, 'reason' => 'source_file_larger_than_chunk'];
+            $skipped[] = [
+                'image_id' => $imageId,
+                'reason' => 'source_file_larger_than_chunk',
+            ];
             continue;
         }
 
-        $entryPath = 'originals/' . $imageId . '/' . safe_uploaded_image_filename((string) ($image['filename'] ?? ('image-' . $imageId . '.jpg')));
+        $entryPath =
+            'originals/'
+            . $imageId
+            . '/'
+            . safe_uploaded_image_filename(
+                (string) ($image['filename'] ?? 'image-' . $imageId . '.jpg'),
+            );
         $items[] = [
             'image_id' => $imageId,
             'gallery_id' => $galleryId,
@@ -350,7 +557,10 @@ function browser_thumbnail_rebuild_source_chunk_plan(array $input): array
             'entry_path' => $entryPath,
             'size' => $size,
             'target_formats' => $targetFormats,
-            'expected_variants' => browser_thumbnail_rebuild_expected_variant_count($targetFormats),
+            'expected_variants' =>
+                browser_thumbnail_rebuild_expected_variant_count(
+                    $targetFormats,
+                ),
             'source_path' => $sourcePath,
         ];
         $bytes += $size + $zipOverhead;
@@ -405,7 +615,11 @@ function browser_thumbnail_rebuild_pack_uint32(int $value): string
  */
 function browser_thumbnail_rebuild_zip_dos_time(int $timestamp): int
 {
-    return ((int) gmdate('G', $timestamp) << 11) | ((int) gmdate('i', $timestamp) << 5) | ((int) floor((int) gmdate('s', $timestamp) / 2));
+    return (
+        ((int) gmdate('G', $timestamp) << 11)
+            | ((int) gmdate('i', $timestamp) << 5)
+            | (int) floor((int) gmdate('s', $timestamp) / 2)
+    );
 }
 
 /**
@@ -417,7 +631,11 @@ function browser_thumbnail_rebuild_zip_dos_time(int $timestamp): int
 function browser_thumbnail_rebuild_zip_dos_date(int $timestamp): int
 {
     $year = max(1980, (int) gmdate('Y', $timestamp));
-    return (($year - 1980) << 9) | ((int) gmdate('n', $timestamp) << 5) | (int) gmdate('j', $timestamp);
+    return (
+        (($year - 1980) << 9)
+            | ((int) gmdate('n', $timestamp) << 5)
+            | (int) gmdate('j', $timestamp)
+    );
 }
 
 /**
@@ -434,7 +652,7 @@ function browser_thumbnail_rebuild_crc32_data(string $data): int
 /**
  * Return a CRC32 integer for a file using the ZIP unsigned representation.
  *
- * @param string $path Filesystem path.
+ * @param string $path Filesystem path to checksum.
  * @return int Integer result for the caller.
  */
 function browser_thumbnail_rebuild_crc32_file(string $path): int
@@ -451,21 +669,31 @@ function browser_thumbnail_rebuild_crc32_file(string $path): int
  * @param int $timestamp Timestamp value.
  * @return string Text result for the caller.
  */
-function browser_thumbnail_rebuild_zip_local_header(string $entryName, int $crc, int $size, int $timestamp): string
-{
+function browser_thumbnail_rebuild_zip_local_header(
+    string $entryName,
+    int $crc,
+    int $size,
+    int $timestamp,
+): string {
     $name = $entryName;
-    return "\x50\x4b\x03\x04"
-        . browser_thumbnail_rebuild_pack_uint16(20)
-        . browser_thumbnail_rebuild_pack_uint16(0x0800)
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . browser_thumbnail_rebuild_pack_uint16(browser_thumbnail_rebuild_zip_dos_time($timestamp))
-        . browser_thumbnail_rebuild_pack_uint16(browser_thumbnail_rebuild_zip_dos_date($timestamp))
-        . browser_thumbnail_rebuild_pack_uint32($crc)
-        . browser_thumbnail_rebuild_pack_uint32($size)
-        . browser_thumbnail_rebuild_pack_uint32($size)
-        . browser_thumbnail_rebuild_pack_uint16(strlen($name))
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . $name;
+    return (
+        "\x50\x4b\x03\x04"
+            . browser_thumbnail_rebuild_pack_uint16(20)
+            . browser_thumbnail_rebuild_pack_uint16(0x0800)
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . browser_thumbnail_rebuild_pack_uint16(browser_thumbnail_rebuild_zip_dos_time(
+                $timestamp,
+            ))
+            . browser_thumbnail_rebuild_pack_uint16(browser_thumbnail_rebuild_zip_dos_date(
+                $timestamp,
+            ))
+            . browser_thumbnail_rebuild_pack_uint32($crc)
+            . browser_thumbnail_rebuild_pack_uint32($size)
+            . browser_thumbnail_rebuild_pack_uint32($size)
+            . browser_thumbnail_rebuild_pack_uint16(strlen($name))
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . $name
+    );
 }
 
 /**
@@ -478,45 +706,66 @@ function browser_thumbnail_rebuild_zip_local_header(string $entryName, int $crc,
  * @param int $offset Starting offset.
  * @return string Text result for the caller.
  */
-function browser_thumbnail_rebuild_zip_central_header(string $entryName, int $crc, int $size, int $timestamp, int $offset): string
-{
+function browser_thumbnail_rebuild_zip_central_header(
+    string $entryName,
+    int $crc,
+    int $size,
+    int $timestamp,
+    int $offset,
+): string {
     $name = $entryName;
-    return "\x50\x4b\x01\x02"
-        . browser_thumbnail_rebuild_pack_uint16(20)
-        . browser_thumbnail_rebuild_pack_uint16(20)
-        . browser_thumbnail_rebuild_pack_uint16(0x0800)
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . browser_thumbnail_rebuild_pack_uint16(browser_thumbnail_rebuild_zip_dos_time($timestamp))
-        . browser_thumbnail_rebuild_pack_uint16(browser_thumbnail_rebuild_zip_dos_date($timestamp))
-        . browser_thumbnail_rebuild_pack_uint32($crc)
-        . browser_thumbnail_rebuild_pack_uint32($size)
-        . browser_thumbnail_rebuild_pack_uint32($size)
-        . browser_thumbnail_rebuild_pack_uint16(strlen($name))
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . browser_thumbnail_rebuild_pack_uint32(0)
-        . browser_thumbnail_rebuild_pack_uint32($offset)
-        . $name;
+    return (
+        "\x50\x4b\x01\x02"
+            . browser_thumbnail_rebuild_pack_uint16(20)
+            . browser_thumbnail_rebuild_pack_uint16(20)
+            . browser_thumbnail_rebuild_pack_uint16(0x0800)
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . browser_thumbnail_rebuild_pack_uint16(browser_thumbnail_rebuild_zip_dos_time(
+                $timestamp,
+            ))
+            . browser_thumbnail_rebuild_pack_uint16(browser_thumbnail_rebuild_zip_dos_date(
+                $timestamp,
+            ))
+            . browser_thumbnail_rebuild_pack_uint32($crc)
+            . browser_thumbnail_rebuild_pack_uint32($size)
+            . browser_thumbnail_rebuild_pack_uint32($size)
+            . browser_thumbnail_rebuild_pack_uint16(strlen($name))
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . browser_thumbnail_rebuild_pack_uint32(0)
+            . browser_thumbnail_rebuild_pack_uint32($offset)
+            . $name
+    );
 }
 
 /**
  * Stream one file payload into the response body.
  *
- * @param string $path Filesystem path.
+ * @param string $path Readable original source image path.
+ * @param callable(string):void $emit Response-body chunk writer.
+ * @return void Streams file bytes in bounded chunks; throws RuntimeException when opening or reading fails.
  */
-function browser_thumbnail_rebuild_stream_file_payload(string $path, callable $emit): void
-{
+function browser_thumbnail_rebuild_stream_file_payload(
+    string $path,
+    callable $emit,
+): void {
     $handle = @fopen($path, 'rb');
     if (!is_resource($handle)) {
-        throw new RuntimeException(t('browser_thumbnail_rebuild.error_source_open', 'Could not open one original image for download.'));
+        throw new RuntimeException(t(
+            'browser_thumbnail_rebuild.error_source_open',
+            'Could not open one original image for download.',
+        ));
     }
     try {
         while (!feof($handle)) {
             $chunk = fread($handle, 1024 * 1024);
             if ($chunk === false) {
-                throw new RuntimeException(t('browser_thumbnail_rebuild.error_source_read', 'Could not read one original image for download.'));
+                throw new RuntimeException(t(
+                    'browser_thumbnail_rebuild.error_source_read',
+                    'Could not read one original image for download.',
+                ));
             }
             $emit($chunk);
         }
@@ -528,11 +777,20 @@ function browser_thumbnail_rebuild_stream_file_payload(string $path, callable $e
 /**
  * Stream a source chunk plan as a store-only ZIP file.
  *
- * @param array $plan Plan value.
+ * @param array{version:int,kind:string,offset:int,next_offset:int,total:int,processed:int,done:bool,source_chunk_bytes:int,source_payload_bytes:int,source_item_cap:int,items:list<array{image_id:int,gallery_id:int,filename:string,relative_path:string,entry_path:string,size:int,target_formats:list<'jpg'|'webp'>,expected_variants:int,source_path:string}>,skipped:list<array{image_id:int,reason:string}>} $plan Source chunk plan returned by browser_thumbnail_rebuild_source_chunk_plan.
+ * @param callable(string):void $emit Response-body chunk writer.
+ * @return void Streams a store-only ZIP containing manifest.json and readable source entries.
  */
-function browser_thumbnail_rebuild_stream_source_zip(array $plan, callable $emit): void
-{
-    @set_time_limit(max(1, (int) cms_runtime_limit('browser_thumbnail_rebuild.request_time_limit_seconds')));
+function browser_thumbnail_rebuild_stream_source_zip(
+    array $plan,
+    callable $emit,
+): void {
+    @set_time_limit(max(
+        1,
+        (int) cms_runtime_limit(
+            'browser_thumbnail_rebuild.request_time_limit_seconds',
+        ),
+    ));
     $timestamp = time();
     $manifestItems = [];
     $entries = [];
@@ -547,32 +805,63 @@ function browser_thumbnail_rebuild_stream_source_zip(array $plan, callable $emit
             'relative_path' => (string) ($item['relative_path'] ?? ''),
             'entry_path' => (string) ($item['entry_path'] ?? ''),
             'size' => (int) ($item['size'] ?? 0),
-            'target_formats' => browser_thumbnail_rebuild_normalized_formats((array) ($item['target_formats'] ?? [])),
-            'expected_variants' => (int) ($item['expected_variants'] ?? browser_thumbnail_rebuild_expected_variant_count((array) ($item['target_formats'] ?? []))),
+            'target_formats' => browser_thumbnail_rebuild_normalized_formats(
+                (array) ($item['target_formats'] ?? []),
+            ),
+            'expected_variants' => (int) (
+                $item['expected_variants'] ?? browser_thumbnail_rebuild_expected_variant_count(
+                    (array) ($item['target_formats'] ?? []),
+                )
+            ),
         ];
         $entries[] = $item;
     }
 
     $manifest = $plan;
     $manifest['items'] = $manifestItems;
-    $manifestJson = json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $manifestJson = json_encode(
+        $manifest,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if (!is_string($manifestJson)) {
-        throw new RuntimeException(t('browser_thumbnail_rebuild.error_manifest_encode', 'Could not encode the thumbnail rebuild manifest.'));
+        throw new RuntimeException(t(
+            'browser_thumbnail_rebuild.error_manifest_encode',
+            'Could not encode the thumbnail rebuild manifest.',
+        ));
     }
 
     $central = [];
     $offset = 0;
-    $writeEntry = static function (string $entryName, string $payload, ?string $filePath = null) use (&$central, &$offset, $timestamp, $emit): void {
-        $size = $filePath === null ? strlen($payload) : (int) (filesize($filePath) ?: 0);
-        $crc = $filePath === null ? browser_thumbnail_rebuild_crc32_data($payload) : browser_thumbnail_rebuild_crc32_file($filePath);
-        $localHeader = browser_thumbnail_rebuild_zip_local_header($entryName, $crc, $size, $timestamp);
+    $writeEntry = static function (
+        string $entryName,
+        string $payload,
+        ?string $filePath = null,
+    ) use (&$central, &$offset, $timestamp, $emit): void {
+        $size = $filePath === null
+            ? strlen($payload)
+            : (int) (filesize($filePath) ?: 0);
+        $crc = $filePath === null
+            ? browser_thumbnail_rebuild_crc32_data($payload)
+            : browser_thumbnail_rebuild_crc32_file($filePath);
+        $localHeader = browser_thumbnail_rebuild_zip_local_header(
+            $entryName,
+            $crc,
+            $size,
+            $timestamp,
+        );
         $emit($localHeader);
         if ($filePath === null) {
             $emit($payload);
         } else {
             browser_thumbnail_rebuild_stream_file_payload($filePath, $emit);
         }
-        $central[] = browser_thumbnail_rebuild_zip_central_header($entryName, $crc, $size, $timestamp, $offset);
+        $central[] = browser_thumbnail_rebuild_zip_central_header(
+            $entryName,
+            $crc,
+            $size,
+            $timestamp,
+            $offset,
+        );
         $offset += strlen($localHeader) + $size;
     };
 
@@ -581,7 +870,9 @@ function browser_thumbnail_rebuild_stream_source_zip(array $plan, callable $emit
         if (!is_array($entry)) {
             continue;
         }
-        $entryName = normalize_relative_path((string) ($entry['entry_path'] ?? ''));
+        $entryName = normalize_relative_path(
+            (string) ($entry['entry_path'] ?? ''),
+        );
         $sourcePath = (string) ($entry['source_path'] ?? '');
         if ($entryName === '' || !is_file($sourcePath)) {
             continue;
@@ -592,31 +883,39 @@ function browser_thumbnail_rebuild_stream_source_zip(array $plan, callable $emit
     $centralOffset = $offset;
     $centralBlob = implode('', $central);
     $emit($centralBlob);
-    $emit("\x50\x4b\x05\x06"
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . browser_thumbnail_rebuild_pack_uint16(0)
-        . browser_thumbnail_rebuild_pack_uint16(count($central))
-        . browser_thumbnail_rebuild_pack_uint16(count($central))
-        . browser_thumbnail_rebuild_pack_uint32(strlen($centralBlob))
-        . browser_thumbnail_rebuild_pack_uint32($centralOffset)
-        . browser_thumbnail_rebuild_pack_uint16(0));
+    $emit(
+        "\x50\x4b\x05\x06"
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . browser_thumbnail_rebuild_pack_uint16(0)
+            . browser_thumbnail_rebuild_pack_uint16(count($central))
+            . browser_thumbnail_rebuild_pack_uint16(count($central))
+            . browser_thumbnail_rebuild_pack_uint32(strlen($centralBlob))
+            . browser_thumbnail_rebuild_pack_uint32($centralOffset)
+            . browser_thumbnail_rebuild_pack_uint16(0),
+    );
 }
 
 /**
  * Decode and validate a browser-prepared thumbnail rebuild manifest.
  *
- * @param array $entries Entries value.
- * @return array<string mixed>.
+ * @param array<string,string> $entries ZIP entry paths mapped to entry contents.
+ * @return array{version?:int,kind?:string,items:list<array<string,mixed>>,...<string,mixed>} Decoded source manifest with image entries, or an exception when missing/invalid.
  */
 function browser_thumbnail_rebuild_manifest_from_entries(array $entries): array
 {
     $manifestJson = (string) ($entries['manifest.json'] ?? '');
     if ($manifestJson === '') {
-        throw new RuntimeException(t('browser_thumbnail_rebuild.error_manifest_missing', 'The prepared thumbnail package is missing its manifest.'));
+        throw new RuntimeException(t(
+            'browser_thumbnail_rebuild.error_manifest_missing',
+            'The prepared thumbnail package is missing its manifest.',
+        ));
     }
     $manifest = json_decode($manifestJson, true);
     if (!is_array($manifest) || !is_array($manifest['items'] ?? null)) {
-        throw new RuntimeException(t('browser_thumbnail_rebuild.error_manifest_invalid', 'The prepared thumbnail package manifest is invalid.'));
+        throw new RuntimeException(t(
+            'browser_thumbnail_rebuild.error_manifest_invalid',
+            'The prepared thumbnail package manifest is invalid.',
+        ));
     }
     return $manifest;
 }
@@ -624,33 +923,52 @@ function browser_thumbnail_rebuild_manifest_from_entries(array $entries): array
 /**
  * Store one browser-prepared thumbnail ZIP batch.
  *
- * @param array $uploadedZip Uploaded zip value.
+ * @param array<string,mixed> $uploadedZip PHP uploaded-file record for the prepared ZIP.
  * @param string $sessionId Session id identifier.
  * @param int $batchIndex Batch index value.
- * @return array<string mixed>.
+ * @return array{ok:bool,created:int,skipped:int,failed:int,errors:list<string>,error:?string,image_ids:list<int>,cached?:bool} Batch outcome, deduplicated diagnostic messages, affected image identifiers, and optional cache marker.
  */
-function browser_thumbnail_rebuild_store_prepared_zip_batch(array $uploadedZip, string $sessionId, int $batchIndex): array
-{
-    if (($cached = browser_upload_cached_batch_response(0, 'thumb-' . $sessionId, $batchIndex)) !== null) {
+function browser_thumbnail_rebuild_store_prepared_zip_batch(
+    array $uploadedZip,
+    string $sessionId,
+    int $batchIndex,
+): array {
+    if (
+        ($cached = browser_upload_cached_batch_response(
+            0,
+            'thumb-' . $sessionId,
+            $batchIndex,
+        )) !== null
+    ) {
         $cached['cached'] = true;
         return $cached;
     }
 
     $error = (int) ($uploadedZip['error'] ?? UPLOAD_ERR_NO_FILE);
     if ($error === UPLOAD_ERR_NO_FILE) {
-        throw new RuntimeException(t('browser_thumbnail_rebuild.error_choose_zip', 'Choose a prepared thumbnail package.'));
+        throw new RuntimeException(t(
+            'browser_thumbnail_rebuild.error_choose_zip',
+            'Choose a prepared thumbnail package.',
+        ));
     }
     if ($error !== UPLOAD_ERR_OK) {
         throw new RuntimeException(upload_error_message($error));
     }
     $tmpName = (string) ($uploadedZip['tmp_name'] ?? '');
     if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-        throw new RuntimeException(t('upload.error.file_unavailable', 'Uploaded file is not available.'));
+        throw new RuntimeException(t(
+            'upload.error.file_unavailable',
+            'Uploaded file is not available.',
+        ));
     }
 
     $uploadLimit = browser_upload_server_upload_limit_bytes();
     $settings = browser_upload_settings();
-    $maxBatchBytes = browser_upload_effective_batch_target_bytes($uploadLimit, (float) $settings['zip_size_threshold_ratio'], (int) $settings['max_zip_batch_bytes']);
+    $maxBatchBytes = browser_upload_effective_batch_target_bytes(
+        $uploadLimit,
+        (float) $settings['zip_size_threshold_ratio'],
+        (int) $settings['max_zip_batch_bytes'],
+    );
     $entries = browser_upload_parse_store_zip($tmpName, $maxBatchBytes);
     $manifest = browser_thumbnail_rebuild_manifest_from_entries($entries);
     $items = array_values((array) ($manifest['items'] ?? []));
@@ -675,7 +993,9 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(array $uploadedZip, 
         }
         $galleryId = (int) ($image['gallery_id'] ?? 0);
         if (!array_key_exists($galleryId, $galleryCache)) {
-            $galleryCache[$galleryId] = $galleryId > 0 ? find_gallery($galleryId) : null;
+            $galleryCache[$galleryId] = $galleryId > 0
+                ? find_gallery($galleryId)
+                : null;
         }
         $gallery = $galleryCache[$galleryId];
         if (!$gallery) {
@@ -684,7 +1004,12 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(array $uploadedZip, 
             continue;
         }
         $sourcePath = image_abs_path($image, $gallery);
-        $targetFormats = is_file($sourcePath) ? browser_thumbnail_rebuild_target_formats_for_image($sourcePath, $image) : [];
+        $targetFormats = is_file($sourcePath)
+            ? browser_thumbnail_rebuild_target_formats_for_image(
+                $sourcePath,
+                $image,
+            )
+            : [];
         if ($targetFormats === []) {
             $skipped++;
             $errors[] = 'No target thumbnail formats for image: ' . $imageId;
@@ -699,8 +1024,14 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(array $uploadedZip, 
             }
             $size = (int) ($variant['size'] ?? 0);
             $format = strtolower((string) ($variant['format'] ?? ''));
-            $zipPath = normalize_relative_path((string) ($variant['path'] ?? ''));
-            if (!in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true) || $zipPath === '') {
+            $zipPath = normalize_relative_path(
+                (string) ($variant['path'] ?? ''),
+            );
+            if (
+                !in_array($size, thumbnail_sizes(), true)
+                || !in_array($format, ['jpg', 'webp'], true)
+                || $zipPath === ''
+            ) {
                 $skipped++;
                 continue;
             }
@@ -714,23 +1045,57 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(array $uploadedZip, 
                 continue;
             }
             try {
-                browser_upload_validate_thumbnail_payload($format, $entries[$zipPath]);
-                $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
+                browser_upload_validate_thumbnail_payload(
+                    $format,
+                    $entries[$zipPath],
+                );
+                $targetPath = thumbnail_abs_path(
+                    $image,
+                    $gallery,
+                    $size,
+                    $format,
+                );
                 $targetDir = dirname($targetPath);
                 if (!is_dir($targetDir)) {
                     @mkdir($targetDir, 0775, true);
                 }
-                if (@file_put_contents($targetPath, $entries[$zipPath], LOCK_EX) === false) {
-                    throw new RuntimeException(t('browser_thumbnail_rebuild.error_thumbnail_store_failed', 'Could not store a browser-prepared thumbnail.'));
+                if (
+                    @file_put_contents($targetPath, $entries[$zipPath], LOCK_EX)
+                    === false
+                ) {
+                    throw new RuntimeException(t(
+                        'browser_thumbnail_rebuild.error_thumbnail_store_failed',
+                        'Could not store a browser-prepared thumbnail.',
+                    ));
                 }
-                if (function_exists('Gallery\\Services\\thumbnail_touch_generated_file_for_source')) {
-                    thumbnail_touch_generated_file_for_source($targetPath, $sourcePath);
+                if (function_exists(
+                    'Gallery\\Services\\thumbnail_touch_generated_file_for_source',
+                )) {
+                    thumbnail_touch_generated_file_for_source(
+                        $targetPath,
+                        $sourcePath,
+                    );
                 }
-                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
-                    $metadata = thumbnail_metadata_record_file($image, $gallery, $size, $format, $targetPath, $sourcePath, true);
+                if (
+                    function_exists(
+                        'Gallery\\Services\\thumbnail_metadata_record_file',
+                    )
+                    && thumbnail_metadata_schema_ready()
+                ) {
+                    $metadata = thumbnail_metadata_record_file(
+                        $image,
+                        $gallery,
+                        $size,
+                        $format,
+                        $targetPath,
+                        $sourcePath,
+                        true,
+                    );
                     if (empty($metadata['valid'])) {
                         $failed++;
-                        $errors[] = 'Invalid prepared thumbnail geometry: ' . basename($targetPath);
+                        $errors[] =
+                            'Invalid prepared thumbnail geometry: '
+                            . basename($targetPath);
                         continue;
                     }
                 }
@@ -748,7 +1113,13 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(array $uploadedZip, 
                     continue;
                 }
                 $failed++;
-                $errors[] = 'Prepared package did not include required thumbnail variant for image ' . $imageId . ': ' . (int) $requiredSize . ' ' . $requiredFormat;
+                $errors[] =
+                    'Prepared package did not include required thumbnail variant for image '
+                    . $imageId
+                    . ': '
+                    . (int) $requiredSize
+                    . ' '
+                    . $requiredFormat;
             }
         }
     }
@@ -763,19 +1134,34 @@ function browser_thumbnail_rebuild_store_prepared_zip_batch(array $uploadedZip, 
         'skipped' => $skipped,
         'failed' => $failed,
         'errors' => array_values(array_unique(array_filter($errors))),
-        'error' => $failed > 0 ? t('browser_thumbnail_rebuild.error_batch_incomplete', 'One or more browser-prepared thumbnail variants were rejected. The batch was not fully accepted.') : null,
+        'error' => $failed > 0
+            ? t(
+                'browser_thumbnail_rebuild.error_batch_incomplete',
+                'One or more browser-prepared thumbnail variants were rejected. The batch was not fully accepted.',
+            )
+            : null,
         'image_ids' => array_values(array_unique($imageIds)),
     ];
     if ($failed === 0) {
-        browser_upload_store_cached_batch_response(0, 'thumb-' . $sessionId, $batchIndex, $response);
+        browser_upload_store_cached_batch_response(
+            0,
+            'thumb-' . $sessionId,
+            $batchIndex,
+            $response,
+        );
     }
-    admin_log_event($failed > 0 ? 'warning' : 'info', 'thumbnail.browser_rebuild_batch', 'Admin uploaded a browser-prepared thumbnail rebuild ZIP batch.', [
-        'created' => $created,
-        'skipped' => $skipped,
-        'failed' => $failed,
-        'batch_index' => $batchIndex,
-        'image_count' => count(array_unique($imageIds)),
-    ]);
+    admin_log_event(
+        $failed > 0 ? 'warning' : 'info',
+        'thumbnail.browser_rebuild_batch',
+        'Admin uploaded a browser-prepared thumbnail rebuild ZIP batch.',
+        [
+            'created' => $created,
+            'skipped' => $skipped,
+            'failed' => $failed,
+            'batch_index' => $batchIndex,
+            'image_count' => count(array_unique($imageIds)),
+        ],
+    );
 
     return $response;
 }

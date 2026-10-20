@@ -49,10 +49,20 @@ function feature_capability_registry_revision(): string
         $shape[$key] = [
             'editable' => !empty($definition['editable_on_features']),
             'source' => $definition['source'] ?? null,
-            'dependencies' => array_values((array) ($definition['dependencies'] ?? [])),
+            'dependencies' => array_values(
+                (array) ($definition['dependencies'] ?? []),
+            ),
         ];
     }
-    return substr(hash('sha256', json_encode($shape, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: ''), 0, 20);
+    return substr(
+        hash(
+            'sha256',
+            json_encode($shape, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                ?: '',
+        ),
+        0,
+        20,
+    );
 }
 
 /**
@@ -71,7 +81,10 @@ function feature_capability_effective_blockers(string $key): array
     $blocked = [];
     foreach ((array) ($definition['dependencies'] ?? []) as $dependency) {
         $dependencyKey = feature_flag_normalize_key((string) $dependency);
-        if ($dependencyKey !== '' && !feature_capability_effective_enabled($dependencyKey)) {
+        if (
+            $dependencyKey !== ''
+            && !feature_capability_effective_enabled($dependencyKey)
+        ) {
             $blocked[] = $dependencyKey;
         }
     }
@@ -90,15 +103,42 @@ function feature_capability_effective_blockers(string $key): array
 function feature_capability_admin_context_hint(string $key): ?string
 {
     return match (feature_flag_normalize_key($key)) {
-        'public_search' => function_exists(__NAMESPACE__ . '\\public_home_search_enabled')
-            ? (public_home_search_enabled() ? t('admin.features.context.site_enabled', 'Site setting: Enabled') : t('admin.features.context.site_disabled', 'Site setting: Disabled'))
-            : null,
-        'telemetry' => function_exists(__NAMESPACE__ . '\\telemetry_setting_enabled')
-            ? (telemetry_setting_enabled('telemetry_enabled', '0') ? t('admin.features.context.collection_enabled', 'Collection: Enabled') : t('admin.features.context.collection_disabled', 'Collection: Disabled'))
-            : null,
-        'viewer_accounts' => function_exists(__NAMESPACE__ . '\\viewer_registration_mode')
-            ? t('admin.features.context.viewer_mode', 'Viewer mode: {mode}', ['mode' => (string) viewer_registration_mode()])
-            : null,
+        'public_search' => function_exists(__NAMESPACE__
+            . '\\public_home_search_enabled')
+                ? (
+                    public_home_search_enabled()
+                        ? t(
+                            'admin.features.context.site_enabled',
+                            'Site setting: Enabled',
+                        )
+                        : t(
+                            'admin.features.context.site_disabled',
+                            'Site setting: Disabled',
+                        )
+                )
+                : null,
+        'telemetry' => function_exists(__NAMESPACE__
+            . '\\telemetry_setting_enabled')
+                ? (
+                    telemetry_setting_enabled('telemetry_enabled', '0')
+                        ? t(
+                            'admin.features.context.collection_enabled',
+                            'Collection: Enabled',
+                        )
+                        : t(
+                            'admin.features.context.collection_disabled',
+                            'Collection: Disabled',
+                        )
+                )
+                : null,
+        'viewer_accounts' => function_exists(__NAMESPACE__
+            . '\\viewer_registration_mode')
+                ? t(
+                    'admin.features.context.viewer_mode',
+                    'Viewer mode: {mode}',
+                    ['mode' => (string) viewer_registration_mode()],
+                )
+                : null,
         default => null,
     };
 }
@@ -125,35 +165,64 @@ function feature_capability_admin_health_snapshot(?array $schemaStatesByCapabili
     foreach (feature_capability_definitions() as $key => $definition) {
         $configured = feature_capability_configured_enabled($key);
         $effective = feature_capability_effective_enabled($key);
-        $source = is_array($definition['source'] ?? null) ? $definition['source'] : [];
+        $source = is_array($definition['source'] ?? null)
+            ? $definition['source']
+            : [];
         $sourceType = (string) ($source['type'] ?? 'unknown');
-        if (!in_array($sourceType, ['feature_flag', 'app_setting', 'domain_adapter', 'derived'], true)) {
+        if (!in_array(
+            $sourceType,
+            ['feature_flag', 'app_setting', 'domain_adapter', 'derived'],
+            true,
+        )) {
             $sourceType = 'unknown';
         }
 
         $schemaState = null;
-        if ($effective && is_array($schemaStatesByCapability) && array_key_exists($key, $schemaStatesByCapability)) {
+        if (
+            $effective
+            && is_array($schemaStatesByCapability)
+            && array_key_exists($key, $schemaStatesByCapability)
+        ) {
             $rawSchema = $schemaStatesByCapability[$key];
-            $candidate = is_array($rawSchema) ? (string) ($rawSchema['state'] ?? '') : (string) $rawSchema;
+            $candidate = is_array($rawSchema)
+                ? (string) ($rawSchema['state'] ?? '')
+                : (string) $rawSchema;
             if (in_array($candidate, $allowedSchemaStates, true)) {
                 $schemaState = $candidate;
             }
         }
 
         $settingsRoute = trim((string) ($definition['settings_route'] ?? ''));
-        if ($settingsRoute !== '' && preg_match('/^[a-z0-9_]+$/D', $settingsRoute) !== 1) {
+        if (
+            $settingsRoute !== ''
+            && preg_match('/^[a-z0-9_]+$/D', $settingsRoute) !== 1
+        ) {
             $settingsRoute = '';
         }
         $settingsParams = [];
-        foreach (array_slice((array) ($definition['settings_params'] ?? []), 0, 8, true) as $paramKey => $paramValue) {
+        foreach (array_slice(
+            (array) ($definition['settings_params'] ?? []),
+            0,
+            8,
+            true,
+        ) as $paramKey => $paramValue) {
             $safeKey = trim((string) $paramKey);
-            if ($safeKey === '' || preg_match('/^[a-z0-9_]+$/D', $safeKey) !== 1 || !is_scalar($paramValue)) {
+            if (
+                $safeKey === ''
+                || preg_match('/^[a-z0-9_]+$/D', $safeKey) !== 1
+                || !is_scalar($paramValue)
+            ) {
                 continue;
             }
             $settingsParams[$safeKey] = (string) $paramValue;
         }
-        $settingsFragment = trim((string) ($definition['settings_fragment'] ?? ''));
-        if ($settingsFragment !== '' && preg_match('/^[a-zA-Z0-9_-]+$/D', $settingsFragment) !== 1) {
+        $settingsFragment = trim(
+            (string) ($definition['settings_fragment'] ?? ''),
+        );
+        if (
+            $settingsFragment !== ''
+            && preg_match('/^[a-zA-Z0-9_-]+$/D', $settingsFragment) !== 1
+        ) {
             $settingsFragment = '';
         }
 
@@ -198,14 +267,25 @@ function feature_flag_summary_counts(): array
 /**
  * Save all feature switches from the Admin form payload.
  *
- * @param array $post Submitted Admin form values.
+ * @param array{feature_registry_revision?:string,enabled_features?:list<string>} $post Submitted feature form revision and selected canonical capability keys.
  * @return array{enabled:int,disabled:int,total:int,changed_count:int,changes:list<array<string,mixed>>,registry_revision:string} Save summary.
  */
 function save_feature_flags_from_post(array $post): array
 {
-    $submittedRevision = trim((string) ($post['feature_registry_revision'] ?? ''));
-    if ($submittedRevision === '' || !hash_equals(feature_capability_registry_revision(), $submittedRevision)) {
-        throw new \RuntimeException(t('admin.features.error.stale_form', 'The feature registry changed while this form was open. Reload the page and review the current capabilities before saving.'));
+    $submittedRevision = trim(
+        (string) ($post['feature_registry_revision'] ?? ''),
+    );
+    if (
+        $submittedRevision === ''
+        || !hash_equals(
+            feature_capability_registry_revision(),
+            $submittedRevision,
+        )
+    ) {
+        throw new \RuntimeException(t(
+            'admin.features.error.stale_form',
+            'The feature registry changed while this form was open. Reload the page and review the current capabilities before saving.',
+        ));
     }
 
     $enabledKeys = [];
@@ -227,7 +307,10 @@ function save_feature_flags_from_post(array $post): array
             continue;
         }
         if (!set_feature_capability_enabled($key, $newConfigured)) {
-            throw new \RuntimeException(t('admin.features.error.save_failed', 'Feature settings could not be saved. Reload the page and try again.'));
+            throw new \RuntimeException(t(
+                'admin.features.error.save_failed',
+                'Feature settings could not be saved. Reload the page and try again.',
+            ));
         }
         $changes[] = [
             'key' => $key,
@@ -238,12 +321,14 @@ function save_feature_flags_from_post(array $post): array
         ];
     }
 
-    return feature_flag_summary_counts() + [
-        'changed_count' => count($changes),
-        'changes' => array_slice($changes, 0, 50),
-        'registry_revision' => feature_capability_registry_revision(),
-    ];
+    return feature_flag_summary_counts()
+        + [
+            'changed_count' => count($changes),
+            'changes' => array_slice($changes, 0, 50),
+            'registry_revision' => feature_capability_registry_revision(),
+        ];
 }
+
 /**
  * Return feature definitions grouped for the Admin feature settings page.
  *
@@ -273,5 +358,8 @@ function grouped_feature_flag_definitions(): array
         $groups[$groupKey]['features'][$key] = $definition;
     }
 
-    return array_filter($groups, static fn (array $group): bool => $group['features'] !== []);
+    return array_filter(
+        $groups,
+        static fn(array $group): bool => $group['features'] !== [],
+    );
 }

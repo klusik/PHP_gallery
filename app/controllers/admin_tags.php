@@ -70,6 +70,8 @@ use function Gallery\Services\admin_log_event;
 
 /**
  * Render and process the admin tag editor.
+ *
+ * @return void Render the editor or redirect/respond after a submitted action.
  */
 function cms_admin_tags(): void
 {
@@ -81,15 +83,22 @@ function cms_admin_tags(): void
     // Variable $normalizationKey stores this steps working value.
     $normalizationKey = 'tags_safe_lowercase_sidecars_v1';
     // Variable $normalizedSidecars stores this steps working value.
-    $normalizedSidecars = app_setting($normalizationKey, '') === 'done' ? 0 : normalize_gallery_sidecar_tags_recursively();
+    $normalizedSidecars = app_setting($normalizationKey, '') === 'done'
+        ? 0
+        : normalize_gallery_sidecar_tags_recursively();
     if (app_setting($normalizationKey, '') !== 'done') {
         set_app_setting($normalizationKey, 'done');
     }
     if ($normalizedRows > 0 || $normalizedSidecars > 0) {
-        admin_log_event('info', 'tags.normalized', 'Admin tag page normalized existing tags.', [
-            'database_rows' => $normalizedRows,
-            'sidecar_files' => $normalizedSidecars,
-        ]);
+        admin_log_event(
+            'info',
+            'tags.normalized',
+            'Admin tag page normalized existing tags.',
+            [
+                'database_rows' => $normalizedRows,
+                'sidecar_files' => $normalizedSidecars,
+            ],
+        );
     }
 
     // Variable $selectedId stores this steps working value.
@@ -127,15 +136,30 @@ function cms_admin_tags(): void
             $result = delete_tag_by_id($tagId);
             if (!($result['ok'] ?? false)) {
                 if ($wantsJson) {
-                    $message = admin_tags_error_message((string) ($result['error'] ?? 'delete_failed'));
+                    $message = admin_tags_error_message(
+                        (string) ($result['error'] ?? 'delete_failed'),
+                    );
                     admin_tags_json_response(admin_mutation_error_envelope(
                         $message,
                         'tag_delete_failed',
-                        admin_mutation_descriptor('tag.delete', 'tag', 'delete', [$tagId])
+                        admin_mutation_descriptor(
+                            'tag.delete',
+                            'tag',
+                            'delete',
+                            [$tagId],
+                        ),
                     ), 422);
                 }
-                flash_message('admin_tags_error', admin_tags_error_message((string) ($result['error'] ?? 'delete_failed')));
-                redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
+                flash_message(
+                    'admin_tags_error',
+                    admin_tags_error_message(
+                        (string) ($result['error'] ?? 'delete_failed'),
+                    ),
+                );
+                redirect_to(url_for('admin_tags', [
+                    'id' => $tagId,
+                    'sort' => $postedSort,
+                ]));
             }
             admin_log_event('info', 'tags.deleted', 'Admin deleted tag.', [
                 'tag_id' => $tagId,
@@ -146,15 +170,35 @@ function cms_admin_tags(): void
                 $returnUrl = url_for('home');
                 $payload = admin_mutation_success_envelope(
                     t('admin.tags.deleted', 'Tag deleted.'),
-                    admin_mutation_descriptor('tag.delete', 'tag', 'delete', [$tagId]),
-                    admin_mutation_panel_metadata('tag-edit', url_for('admin_tags', ['panel' => 1]), true),
+                    admin_mutation_descriptor(
+                        'tag.delete',
+                        'tag',
+                        'delete',
+                        [$tagId],
+                    ),
+                    admin_mutation_panel_metadata(
+                        'tag-edit',
+                        url_for('admin_tags', ['panel' => 1]),
+                        true,
+                    ),
                     [],
-                    ['redirect_url' => $returnUrl]
+                    ['redirect_url' => $returnUrl],
                 );
-                admin_tags_json_response(array_merge($payload, ['return_url' => $returnUrl]));
+                admin_tags_json_response(array_merge($payload, [
+                    'return_url' => $returnUrl,
+                ]));
             }
-            flash_message('admin_tags_notice', t('admin.tags.deleted', 'Tag deleted.'));
-            redirect_to(admin_tags_safe_return_url((string) ($_POST['return_url'] ?? url_for('admin_tags', ['sort' => $postedSort]))));
+            flash_message('admin_tags_notice', t(
+                'admin.tags.deleted',
+                'Tag deleted.',
+            ));
+            redirect_to(admin_tags_safe_return_url(
+                (string) (
+                    $_POST['return_url'] ?? url_for('admin_tags', [
+                        'sort' => $postedSort,
+                    ])
+                ),
+            ));
         }
 
         // Variable $result stores this steps working value.
@@ -162,19 +206,34 @@ function cms_admin_tags(): void
             $tagId,
             (string) ($_POST['name'] ?? ''),
             (string) ($_POST['slug'] ?? ''),
-            (string) ($_POST['description'] ?? '')
+            (string) ($_POST['description'] ?? ''),
         );
         if (!($result['ok'] ?? false)) {
             if ($wantsJson) {
-                $message = admin_tags_error_message((string) ($result['error'] ?? 'save_failed'));
+                $message = admin_tags_error_message(
+                    (string) ($result['error'] ?? 'save_failed'),
+                );
                 admin_tags_json_response(admin_mutation_error_envelope(
                     $message,
                     'tag_update_failed',
-                    admin_mutation_descriptor('tag.update', 'tag', 'update', [$tagId])
+                    admin_mutation_descriptor(
+                        'tag.update',
+                        'tag',
+                        'update',
+                        [$tagId],
+                    ),
                 ), 422);
             }
-            flash_message('admin_tags_error', admin_tags_error_message((string) ($result['error'] ?? 'save_failed')));
-            redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
+            flash_message(
+                'admin_tags_error',
+                admin_tags_error_message(
+                    (string) ($result['error'] ?? 'save_failed'),
+                ),
+            );
+            redirect_to(url_for('admin_tags', [
+                'id' => $tagId,
+                'sort' => $postedSort,
+            ]));
         }
         // Variable $updatedTag stores this steps working value.
         $updatedTag = (array) ($result['tag'] ?? []);
@@ -187,21 +246,37 @@ function cms_admin_tags(): void
             // $editUrl refreshes the mounted editor without changing the browser URL.
             $editUrl = url_for('admin_tags', ['id' => $tagId, 'panel' => 1]);
             // $publicUrl is canonical after a slug rename only while public tag browsing is enabled.
-            $publicTagBrowsingEnabled = feature_capability_effective_enabled('public_tag_browsing');
-            $publicUrl = $publicTagBrowsingEnabled ? url_for('tag', ['slug' => (string) ($updatedTag['slug'] ?? '')]) : '';
+            $publicTagBrowsingEnabled = feature_capability_effective_enabled(
+                'public_tag_browsing',
+            );
+            $publicUrl = $publicTagBrowsingEnabled
+                ? url_for('tag', [
+                    'slug' => (string) ($updatedTag['slug'] ?? ''),
+                ]) : '';
             $payload = admin_mutation_success_envelope(
                 t('admin.tags.saved', 'Tag saved.'),
-                admin_mutation_descriptor('tag.update', 'tag', 'update', [$tagId]),
+                admin_mutation_descriptor(
+                    'tag.update',
+                    'tag',
+                    'update',
+                    [$tagId],
+                ),
                 admin_mutation_panel_metadata('tag-edit', $editUrl, true),
-                $publicTagBrowsingEnabled ? [
-                    admin_mutation_public_tag_context(
-                        $tagId,
-                        $publicUrl,
-                        admin_mutation_postcondition('tag_identity', ['tag_id' => $tagId]),
-                        'canonical'
-                    ),
-                ] : [],
-                ['redirect_url' => url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort])]
+                $publicTagBrowsingEnabled
+                    ? [
+                        admin_mutation_public_tag_context(
+                            $tagId,
+                            $publicUrl,
+                            admin_mutation_postcondition('tag_identity', [
+                                'tag_id' => $tagId,
+                            ]),
+                            'canonical',
+                        ),
+                    ] : [],
+                ['redirect_url' => url_for('admin_tags', [
+                    'id' => $tagId,
+                    'sort' => $postedSort,
+                ])],
             );
             admin_tags_json_response(array_merge($payload, [
                 'tag_id' => $tagId,
@@ -212,7 +287,10 @@ function cms_admin_tags(): void
             ]));
         }
         flash_message('admin_tags_notice', t('admin.tags.saved', 'Tag saved.'));
-        redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
+        redirect_to(url_for('admin_tags', [
+            'id' => $tagId,
+            'sort' => $postedSort,
+        ]));
     }
 
     // Variable $tags stores this steps working value.
@@ -223,17 +301,29 @@ function cms_admin_tags(): void
     // Variable $selectedTag stores this steps working value.
     $selectedTag = $selectedId > 0 ? find_tag_by_id($selectedId) : null;
     // Variable $selectedTagUsage stores this steps working value.
-    $selectedTagUsage = $selectedTag ? admin_tag_usage_rows((int) $selectedTag['id']) : ['galleries' => [], 'images' => []];
+    $selectedTagUsage = $selectedTag
+        ? admin_tag_usage_rows((int) $selectedTag['id'])
+        : ['galleries' => [], 'images' => []];
 
     foreach ($tags as &$tagRow) {
-        $tagRow['edit_url'] = url_for('admin_tags', ['id' => (int) $tagRow['id'], 'sort' => $sortMode]);
+        $tagRow['edit_url'] = url_for('admin_tags', [
+            'id' => (int) $tagRow['id'],
+            'sort' => $sortMode,
+        ]);
     }
     unset($tagRow);
-    foreach ((array) ($selectedTagUsage['images'] ?? []) as $index => $imageRow) {
-        $selectedTagUsage['images'][$index]['side_panel_url'] = url_for('admin_edit_image', ['id' => (int) $imageRow['id'], 'panel' => 1]);
+    foreach ((array) (
+        $selectedTagUsage['images'] ?? []
+    ) as $index => $imageRow) {
+        $selectedTagUsage['images'][$index]['side_panel_url'] = url_for('admin_edit_image', [
+            'id' => (int) $imageRow['id'],
+            'panel' => 1,
+        ]);
     }
 
-    $formViewModel = $selectedTag ? admin_tag_form_view_model($selectedTag, $sortMode) : [];
+    $formViewModel = $selectedTag
+        ? admin_tag_form_view_model($selectedTag, $sortMode)
+        : [];
     \Gallery\Views\view_render_admin_tags([
         'panel' => isset($_GET['panel']),
         'selected_id' => $selectedId,
@@ -245,45 +335,66 @@ function cms_admin_tags(): void
         'usage' => $selectedTagUsage,
         'form' => $formViewModel,
         'settings_url' => admin_settings_url('content'),
-        'sort_url' => url_for('admin_tags', ['id' => $selectedId > 0 ? $selectedId : null, 'sort' => $sortMode]),
-        'sort_template_url' => url_for('admin_tags', ['id' => $selectedId > 0 ? $selectedId : null, 'sort' => '__SORT__']),
+        'sort_url' => url_for('admin_tags', [
+            'id' => $selectedId > 0 ? $selectedId : null,
+            'sort' => $sortMode,
+        ]),
+        'sort_template_url' => url_for('admin_tags', [
+            'id' => $selectedId > 0 ? $selectedId : null,
+            'sort' => '__SORT__',
+        ]),
     ]);
 }
 
 /**
  * Render the selected tag edit form.
  *
- * @param array $tag Tag value.
- * @param string $sortMode Sort mode value.
+ * @param array{id:int,name?:string,slug?:string,description?:string} $tag Selected tag row.
+ * @param string $sortMode Tag list ordering mode.
+ * @return void Render the selected tag form.
  */
 function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
 {
-    \Gallery\Views\view_render_admin_tag_form(admin_tag_form_view_model($tag, $sortMode));
+    \Gallery\Views\view_render_admin_tag_form(admin_tag_form_view_model(
+        $tag,
+        $sortMode,
+    ));
 }
 
 /**
  * Prepare presentation state for the selected tag form.
  *
- * @param array $tag Tag value.
- * @param string $sortMode Sort mode value.
- * @return array<string,mixed> View model.
+ * @param array{id:int,name?:string,slug?:string,description?:string} $tag Selected tag row.
+ * @param string $sortMode Tag list ordering mode.
+ * @return array{tag:array{id:int,name?:string,slug?:string,description?:string},description:string,sort_mode:string,action_url:string,csrf_html:string,public_url:string,theme_url:string} View model.
  */
-function admin_tag_form_view_model(array $tag, string $sortMode = 'usage'): array
-{
-    $description = tag_description_schema_ready() ? (string) ($tag['description'] ?? '') : '';
-    $publicEnabled = feature_capability_effective_enabled('public_tag_browsing');
+function admin_tag_form_view_model(
+    array $tag,
+    string $sortMode = 'usage',
+): array {
+    $description = tag_description_schema_ready()
+        ? (string) ($tag['description'] ?? '')
+        : '';
+    $publicEnabled = feature_capability_effective_enabled(
+        'public_tag_browsing',
+    );
     return [
         'tag' => $tag,
         'description' => $description,
-        'sort_mode' => in_array($sortMode, ['name', 'usage'], true) ? $sortMode : 'usage',
+        'sort_mode' => in_array($sortMode, ['name', 'usage'], true)
+            ? $sortMode
+            : 'usage',
         'action_url' => url_for('admin_tags', ['id' => (int) $tag['id']]),
         'csrf_html' => csrf_field(),
-        'public_url' => $publicEnabled ? url_for('tag', ['slug' => (string) $tag['slug']]) : '',
-        'theme_url' => url_for('admin_theme', ['appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags']) . '#admin-theme-tab-appearance',
+        'public_url' => $publicEnabled
+            ? url_for('tag', ['slug' => (string) $tag['slug']])
+            : '',
+        'theme_url' =>
+            url_for('admin_theme', [
+                'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
+            ]) . '#admin-theme-tab-appearance',
     ];
 }
-
-
 
 /**
  * Return whether the current admin tag request expects JSON.
@@ -298,15 +409,16 @@ function admin_tags_request_wants_json(): bool
 /**
  * Send a JSON response for the admin tag editor and stop execution.
  *
- * @param array $payload Payload value.
- * @param int $status Status value.
+ * @param array<string,mixed> $payload JSON response fields.
+ * @param int $status HTTP response status.
+ * @return void Emit the JSON response and terminate the request.
  */
 function admin_tags_json_response(array $payload, int $status = 200): void
 {
     http_response_code($status);
     header('Content-Type: application/json');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
+    exit();
 }
 
 /**
@@ -336,11 +448,26 @@ function admin_tags_safe_return_url(string $url): string
 function admin_tags_error_message(string $code): string
 {
     return match ($code) {
-        'not_found' => t('admin.tags.error_not_found', 'The selected tag no longer exists.'),
-        'invalid_name' => t('admin.tags.error_invalid_name', 'Enter a safe tag name using letters, numbers, or hyphens.'),
-        'invalid_slug' => t('admin.tags.error_invalid_slug', 'Enter a safe URL slug using letters, numbers, or hyphens.'),
-        'slug_taken' => t('admin.tags.error_slug_taken', 'That tag slug is already used by another tag.'),
-        'delete_failed' => t('admin.tags.error_delete_failed', 'Tag could not be deleted.'),
+        'not_found' => t(
+            'admin.tags.error_not_found',
+            'The selected tag no longer exists.',
+        ),
+        'invalid_name' => t(
+            'admin.tags.error_invalid_name',
+            'Enter a safe tag name using letters, numbers, or hyphens.',
+        ),
+        'invalid_slug' => t(
+            'admin.tags.error_invalid_slug',
+            'Enter a safe URL slug using letters, numbers, or hyphens.',
+        ),
+        'slug_taken' => t(
+            'admin.tags.error_slug_taken',
+            'That tag slug is already used by another tag.',
+        ),
+        'delete_failed' => t(
+            'admin.tags.error_delete_failed',
+            'Tag could not be deleted.',
+        ),
         default => t('admin.tags.error_save_failed', 'Tag could not be saved.'),
     };
 }

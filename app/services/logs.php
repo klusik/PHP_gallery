@@ -37,7 +37,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use Throwable;
 use RuntimeException;
 use ZipArchive;
@@ -99,17 +98,20 @@ use const Gallery\Core\ADMIN_LOG_RETENTION_MAX_DELETE_PER_RUN;
  */
 if (!function_exists('admin_log_english_t')) {
     /**
-     * Handle admin log english t.
+     * Translate a diagnostic string using the English catalog and interpolate parameters.
      *
      * Part of the related application service.
      *
      * @param string $key Lookup key.
-     * @param string|array|null $fallback Fallback value.
-     * @param array $parameters Parameters value.
-     * @return string Text result for the caller.
+     * @param string|array<string,string|int|float>|null $fallback Fallback text, legacy parameter map, or null to use the key.
+     * @param array<string,string|int|float> $parameters Scalar placeholder values.
+     * @return string English diagnostic text with supplied placeholders interpolated.
      */
-    function admin_log_english_t(string $key, string|array|null $fallback = null, array $parameters = []): string
-    {
+    function admin_log_english_t(
+        string $key,
+        string|array|null $fallback = null,
+        array $parameters = [],
+    ): string {
         if (is_array($fallback)) {
             $parameters = $fallback;
             $fallback = null;
@@ -118,7 +120,10 @@ if (!function_exists('admin_log_english_t')) {
         $text = null;
         if (function_exists('Gallery\\Services\\translation_load_language')) {
             $englishStrings = translation_load_language('en');
-            if (array_key_exists($key, $englishStrings) && is_string($englishStrings[$key])) {
+            if (
+                array_key_exists($key, $englishStrings)
+                && is_string($englishStrings[$key])
+            ) {
                 $text = $englishStrings[$key];
             }
         }
@@ -132,7 +137,11 @@ if (!function_exists('admin_log_english_t')) {
         }
 
         foreach ($parameters as $name => $value) {
-            $text = str_replace('{' . (string) $name . '}', (string) $value, $text);
+            $text = str_replace(
+                '{' . (string) $name . '}',
+                (string) $value,
+                $text,
+            );
         }
         return $text;
     }
@@ -150,7 +159,6 @@ function admin_log_schema_ready(): bool
     return admin_log_model_schema_ready();
 }
 
-
 /**
  * Return whether an optional admin log column is available.
  *
@@ -165,20 +173,38 @@ function admin_log_column_exists(string $columnName): bool
 /**
  * Return all admin log categories exposed by the observability layer.
  *
- * @return array Structured result data for the caller.
+ * @return array<string,string> Localized labels keyed by the stable category identifiers.
  */
 function admin_log_category_options(): array
 {
     return [
         'system' => admin_log_english_t('admin.logs.category.system', 'System'),
-        'gallery' => admin_log_english_t('admin.logs.category.gallery', 'Gallery'),
+        'gallery' => admin_log_english_t(
+            'admin.logs.category.gallery',
+            'Gallery',
+        ),
         'media' => admin_log_english_t('admin.logs.category.media', 'Media'),
         'upload' => admin_log_english_t('admin.logs.category.upload', 'Upload'),
-        'thumbnail' => admin_log_english_t('admin.logs.category.thumbnail', 'Thumbnails'),
-        'update' => admin_log_english_t('admin.logs.category.update', 'Updates'),
-        'security' => admin_log_english_t('admin.logs.category.security', 'Security'),
-        'database' => admin_log_english_t('admin.logs.category.database', 'Database'),
-        'telemetry' => admin_log_english_t('admin.logs.category.telemetry', 'Telemetry'),
+        'thumbnail' => admin_log_english_t(
+            'admin.logs.category.thumbnail',
+            'Thumbnails',
+        ),
+        'update' => admin_log_english_t(
+            'admin.logs.category.update',
+            'Updates',
+        ),
+        'security' => admin_log_english_t(
+            'admin.logs.category.security',
+            'Security',
+        ),
+        'database' => admin_log_english_t(
+            'admin.logs.category.database',
+            'Database',
+        ),
+        'telemetry' => admin_log_english_t(
+            'admin.logs.category.telemetry',
+            'Telemetry',
+        ),
         'admin' => admin_log_english_t('admin.logs.category.admin', 'Admin'),
         'other' => admin_log_english_t('admin.logs.category.other', 'Other'),
     ];
@@ -187,7 +213,7 @@ function admin_log_category_options(): array
 /**
  * Return all admin log severities exposed by the observability layer.
  *
- * @return array Structured result data for the caller.
+ * @return array<string,string> Localized labels keyed by the stable severity identifiers.
  */
 function admin_log_severity_options(): array
 {
@@ -195,9 +221,15 @@ function admin_log_severity_options(): array
         'debug' => admin_log_english_t('admin.logs.severity.debug', 'Debug'),
         'info' => admin_log_english_t('admin.logs.severity.info', 'Info'),
         'notice' => admin_log_english_t('admin.logs.severity.notice', 'Notice'),
-        'warning' => admin_log_english_t('admin.logs.severity.warning', 'Warning'),
+        'warning' => admin_log_english_t(
+            'admin.logs.severity.warning',
+            'Warning',
+        ),
         'error' => admin_log_english_t('admin.logs.severity.error', 'Error'),
-        'critical' => admin_log_english_t('admin.logs.severity.critical', 'Critical'),
+        'critical' => admin_log_english_t(
+            'admin.logs.severity.critical',
+            'Critical',
+        ),
     ];
 }
 
@@ -234,8 +266,13 @@ function ensure_admin_log_status_schema(): bool
  * @param array{severity?:string,category?:string,subject_type?:string,subject_id?:int,request_id?:string,route_name?:string} $options Optional log presentation and correlation metadata.
  * @return void Attempts persistence without making a caller's operation depend on logging.
  */
-function admin_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-{
+function admin_log_event(
+    string $level,
+    string $eventKey,
+    string $message,
+    array $context = [],
+    array $options = [],
+): void {
     admin_log_event_result($level, $eventKey, $message, $context, $options);
 }
 
@@ -248,8 +285,13 @@ function admin_log_event(string $level, string $eventKey, string $message, array
  * @param array{severity?:string,category?:string,subject_type?:string,subject_id?:int,request_id?:string,route_name?:string} $options Optional log presentation and correlation metadata.
  * @return array{ok:bool,failure_code?:string,exception_class?:string,sqlstate?:string,driver_code?:int,field?:string} Confirmed insertion or safe failure; field is an approved log-column identifier, never raw SQL/PDO text.
  */
-function admin_log_event_result(string $level, string $eventKey, string $message, array $context = [], array $options = []): array
-{
+function admin_log_event_result(
+    string $level,
+    string $eventKey,
+    string $message,
+    array $context = [],
+    array $options = [],
+): array {
     if (!admin_log_schema_ready()) {
         return ['ok' => false, 'failure_code' => 'log_schema_unavailable'];
     }
@@ -277,32 +319,64 @@ function admin_log_event_result(string $level, string $eventKey, string $message
             'severity' => $severity,
             'event_key' => $eventKey,
             'message' => $message,
-            'subject_type' => isset($options['subject_type']) ? substr((string) $options['subject_type'], 0, 40) : null,
-            'subject_id' => isset($options['subject_id']) ? (int) $options['subject_id'] : null,
-            'request_id' => (string) ($options['request_id'] ?? (function_exists('telemetry_request_id') ? telemetry_request_id() : null)),
-            'route_name' => substr((string) ($options['route_name'] ?? admin_log_current_route_name()), 0, 80),
-            'context_json' => $context ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+            'subject_type' => isset($options['subject_type'])
+                ? substr((string) $options['subject_type'], 0, 40)
+                : null,
+            'subject_id' => isset($options['subject_id'])
+                ? (int) $options['subject_id']
+                : null,
+            'request_id' => (string) (
+                $options['request_id']
+                ?? (
+                    function_exists('telemetry_request_id')
+                        ? telemetry_request_id()
+                        : null
+                )
+            ),
+            'route_name' => substr(
+                (string) (
+                    $options['route_name'] ?? admin_log_current_route_name()
+                ),
+                0,
+                80,
+            ),
+            'context_json' => $context
+                ? json_encode(
+                    $context,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                )
+                : null,
             'created_at' => now_sql(),
         ];
         $diagnostic = [];
         $ok = admin_log_model_insert_available($values, $diagnostic);
         return ['ok' => $ok] + $diagnostic;
     } catch (Throwable $exception) {
-        return ['ok' => false, 'failure_code' => 'log_service_exception', 'exception_class' => $exception::class];
+        return [
+            'ok' => false,
+            'failure_code' => 'log_service_exception',
+            'exception_class' => $exception::class,
+        ];
     }
 }
 
 /**
- * Handles admin log status options logic for the gallery application.
+ * Return the supported admin-log workflow statuses and their labels.
  *
- * @return mixed Result produced by this operation.
+ * @return array<string,string> Localized labels keyed by `todo`, `doing`, `waiting`, and `done`.
  */
 function admin_log_status_options(): array
 {
     return [
         'todo' => admin_log_english_t('admin.logs.status.todo', 'To be done'),
-        'doing' => admin_log_english_t('admin.logs.status.doing', 'Will be done'),
-        'waiting' => admin_log_english_t('admin.logs.status.waiting', 'Waiting'),
+        'doing' => admin_log_english_t(
+            'admin.logs.status.doing',
+            'Will be done',
+        ),
+        'waiting' => admin_log_english_t(
+            'admin.logs.status.waiting',
+            'Waiting',
+        ),
         'done' => admin_log_english_t('admin.logs.status.done', 'Done'),
     ];
 }
@@ -338,17 +412,19 @@ function admin_log_recent(int $limit = 12): array
  * Return reusable SQL fragments for admin log list filters.
  *
  * @param ?string $status Status value.
- * @param array $filters Filters value.
- * @return array Structured result data for the caller.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated category, severity, search, and time-order filters.
+ * @return array{where_sql:string,params:list<string>} Model-generated predicate and bound filter values.
  */
-function admin_log_filter_sql(?string $status = null, array $filters = []): array
-{
+function admin_log_filter_sql(
+    ?string $status = null,
+    array $filters = [],
+): array {
     return admin_log_model_filter_sql(
         $status,
         $filters,
         array_keys(admin_log_status_options()),
         array_keys(admin_log_category_options()),
-        array_keys(admin_log_severity_options())
+        array_keys(admin_log_severity_options()),
     );
 }
 
@@ -385,16 +461,20 @@ function admin_log_group_hash_sql(string $tableAlias = 'l'): string
 }
 
 /**
- * Handles admin log list logic for the gallery application.
+ * Return filtered admin-log rows in the requested order and page.
  *
- * @param mixed $status Input used by this operation.
- * @param mixed $limit Input used by this operation.
- * @param array $filters Filters value.
+ * @param ?string $status Optional workflow status filter.
+ * @param int $limit Maximum number of rows requested before the model clamp.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated category, severity, search, and time-order filters.
  * @param int $offset Starting offset.
- * @return mixed Result produced by this operation.
+ * @return list<array<string,int|string|null>> Filtered log rows with username and grouping metadata, or an empty list when schema is unavailable.
  */
-function admin_log_list(?string $status = null, int $limit = 100, array $filters = [], int $offset = 0): array
-{
+function admin_log_list(
+    ?string $status = null,
+    int $limit = 100,
+    array $filters = [],
+    int $offset = 0,
+): array {
     if (!admin_log_schema_ready()) {
         return [];
     }
@@ -405,7 +485,7 @@ function admin_log_list(?string $status = null, int $limit = 100, array $filters
         $offset,
         array_keys(admin_log_status_options()),
         array_keys(admin_log_category_options()),
-        array_keys(admin_log_severity_options())
+        array_keys(admin_log_severity_options()),
     );
 }
 
@@ -413,7 +493,7 @@ function admin_log_list(?string $status = null, int $limit = 100, array $filters
  * Return the number of admin log rows matching the active filters.
  *
  * @param ?string $status Status value.
- * @param array $filters Filters value.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated semantic filters.
  * @return int Integer result for the caller.
  */
 function admin_log_count(?string $status = null, array $filters = []): int
@@ -426,7 +506,7 @@ function admin_log_count(?string $status = null, array $filters = []): int
         $filters,
         array_keys(admin_log_status_options()),
         array_keys(admin_log_category_options()),
-        array_keys(admin_log_severity_options())
+        array_keys(admin_log_severity_options()),
     );
 }
 
@@ -435,12 +515,16 @@ function admin_log_count(?string $status = null, array $filters = []): int
  *
  * @param ?string $status Status value.
  * @param int $limit Maximum number of items.
- * @param array $filters Filters value.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated category, severity, search, and time-order filters.
  * @param int $offset Starting offset.
- * @return array Structured result data for the caller.
+ * @return list<array<string,int|string|null>> Representative rows with group hash, count and timestamp boundaries.
  */
-function admin_log_grouped_list(?string $status = null, int $limit = 100, array $filters = [], int $offset = 0): array
-{
+function admin_log_grouped_list(
+    ?string $status = null,
+    int $limit = 100,
+    array $filters = [],
+    int $offset = 0,
+): array {
     if (!admin_log_schema_ready()) {
         return [];
     }
@@ -451,7 +535,7 @@ function admin_log_grouped_list(?string $status = null, int $limit = 100, array 
         $offset,
         array_keys(admin_log_status_options()),
         array_keys(admin_log_category_options()),
-        array_keys(admin_log_severity_options())
+        array_keys(admin_log_severity_options()),
     );
 }
 
@@ -459,11 +543,13 @@ function admin_log_grouped_list(?string $status = null, int $limit = 100, array 
  * Return the number of grouped admin log rows matching the active filters.
  *
  * @param ?string $status Status value.
- * @param array $filters Filters value.
+ * @param array{category?:string,severity?:string,severities?:list<string>,q?:string,time_sort?:string} $filters Validated semantic filters.
  * @return int Integer result for the caller.
  */
-function admin_log_grouped_count(?string $status = null, array $filters = []): int
-{
+function admin_log_grouped_count(
+    ?string $status = null,
+    array $filters = [],
+): int {
     if (!admin_log_schema_ready()) {
         return 0;
     }
@@ -472,7 +558,7 @@ function admin_log_grouped_count(?string $status = null, array $filters = []): i
         $filters,
         array_keys(admin_log_status_options()),
         array_keys(admin_log_category_options()),
-        array_keys(admin_log_severity_options())
+        array_keys(admin_log_severity_options()),
     );
 }
 
@@ -496,25 +582,30 @@ function admin_log_group_hash_for_entry(array $entry): string
 /**
  * Return an indexed WHERE clause matching the group represented by one log row.
  *
- * @param array $entry Entry value.
+ * @param array<string,int|string|null> $entry Representative admin-log row defining the group.
  * @param string $tableAlias Table alias value.
- * @return array Structured result data for the caller.
+ * @return array{where_sql:string,params:list<string>} Group-member predicate and bound grouping values.
  */
-function admin_log_group_member_filter(array $entry, string $tableAlias = 'l'): array
-{
+function admin_log_group_member_filter(
+    array $entry,
+    string $tableAlias = 'l',
+): array {
     return admin_log_model_group_member_filter($entry, $tableAlias);
 }
 
 /**
  * Return one bounded page of raw rows represented by a grouped admin log entry.
  *
- * @param array $entry Representative grouped entry.
+ * @param array<string,int|string|null> $entry Representative grouped admin-log row.
  * @param int $limit Maximum number of items.
  * @param int $offset Starting offset.
- * @return array Structured result data for the caller.
+ * @return list<array<string,int|string|null>> Descending raw log rows in the requested group page.
  */
-function admin_log_group_member_page(array $entry, int $limit = ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE, int $offset = 0): array
-{
+function admin_log_group_member_page(
+    array $entry,
+    int $limit = ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE,
+    int $offset = 0,
+): array {
     if (!admin_log_schema_ready()) {
         return [];
     }
@@ -524,30 +615,43 @@ function admin_log_group_member_page(array $entry, int $limit = ADMIN_LOG_GROUP_
 /**
  * Return one descending keyset batch of grouped members for streaming exports.
  *
- * @param array $entry Representative grouped entry.
+ * @param array<string,int|string|null> $entry Representative grouped admin-log row.
  * @param ?string $beforeCreatedAt Created-at cursor; null starts at the newest row.
  * @param int $beforeId Id cursor paired with beforeCreatedAt.
  * @param int $limit Maximum number of rows.
- * @return array Structured result data for the caller.
+ * @return list<array<string,int|string|null>> Descending keyset batch of raw log rows for the group.
  */
-function admin_log_group_member_export_batch(array $entry, ?string $beforeCreatedAt = null, int $beforeId = 0, int $limit = ADMIN_LOG_EXPORT_BATCH_SIZE): array
-{
+function admin_log_group_member_export_batch(
+    array $entry,
+    ?string $beforeCreatedAt = null,
+    int $beforeId = 0,
+    int $limit = ADMIN_LOG_EXPORT_BATCH_SIZE,
+): array {
     if (!admin_log_schema_ready()) {
         return [];
     }
-    return admin_log_model_group_member_export_batch($entry, $beforeCreatedAt, $beforeId, $limit);
+    return admin_log_model_group_member_export_batch(
+        $entry,
+        $beforeCreatedAt,
+        $beforeId,
+        $limit,
+    );
 }
 
 /**
  * Return aggregate timestamps and count for one grouped admin log entry.
  *
- * @param array $entry Representative grouped entry.
- * @return array Structured result data for the caller.
+ * @param array<string,int|string|null> $entry Representative grouped admin-log row.
+ * @return array{group_count:int,first_created_at:string,latest_created_at:string} Aggregate member count and timestamp boundaries.
  */
 function admin_log_group_member_summary(array $entry): array
 {
     if (!admin_log_schema_ready()) {
-        return ['group_count' => 0, 'first_created_at' => '', 'latest_created_at' => ''];
+        return [
+            'group_count' => 0,
+            'first_created_at' => '',
+            'latest_created_at' => '',
+        ];
     }
     return admin_log_model_group_member_summary($entry);
 }
@@ -559,12 +663,14 @@ function admin_log_group_member_summary(array $entry): array
  * details and exports use representative-row pagination instead, which prevents a
  * single noisy event from materializing an arbitrarily large result in PHP memory.
  *
- * @param array $groupHashes Group hashes value.
+ * @param list<string> $groupHashes Stable grouped-event hashes to expand.
  * @param int $limit Maximum number of raw rows returned across all groups.
- * @return array Structured result data for the caller.
+ * @return list<array<string,int|string|null>> Descending raw log rows matching the requested hashes.
  */
-function admin_log_group_member_rows(array $groupHashes, int $limit = 500): array
-{
+function admin_log_group_member_rows(
+    array $groupHashes,
+    int $limit = 500,
+): array {
     if ($groupHashes === [] || !admin_log_schema_ready()) {
         return [];
     }
@@ -582,7 +688,10 @@ function admin_log_attach_group_members(array $logs): array
     // $groupHashes stores visible grouped hashes that need a member listing.
     $groupHashes = [];
     foreach ($logs as $entry) {
-        if ((int) ($entry['group_count'] ?? 1) > 1 && !empty($entry['group_hash'])) {
+        if (
+            (int) ($entry['group_count'] ?? 1) > 1
+            && !empty($entry['group_hash'])
+        ) {
             $groupHashes[] = (string) $entry['group_hash'];
         }
     }
@@ -620,7 +729,10 @@ function admin_log_normalize_retention_days(int $days): int
     if ($days <= 0) {
         return 0;
     }
-    return max(ADMIN_LOG_MIN_RETENTION_DAYS, min(ADMIN_LOG_MAX_RETENTION_DAYS, $days));
+    return max(ADMIN_LOG_MIN_RETENTION_DAYS, min(
+        ADMIN_LOG_MAX_RETENTION_DAYS,
+        $days,
+    ));
 }
 
 /**
@@ -630,7 +742,10 @@ function admin_log_normalize_retention_days(int $days): int
  */
 function admin_log_retention_days(): int
 {
-    return admin_log_normalize_retention_days((int) app_setting('admin_log_retention_days', (string) ADMIN_LOG_DEFAULT_RETENTION_DAYS));
+    return admin_log_normalize_retention_days((int) app_setting(
+        'admin_log_retention_days',
+        (string) ADMIN_LOG_DEFAULT_RETENTION_DAYS,
+    ));
 }
 
 /**
@@ -645,12 +760,18 @@ function admin_log_retention_days(): int
  * @param ?float $deadline Optional maintenance deadline expressed as microtime(true).
  * @param int $maxDeletes Legacy maximum rows argument, retained for call compatibility.
  * @param int $batchSize Legacy batch-size argument, retained for call compatibility.
- * @return array Structured result data for the caller.
+ * @return array{enabled:false,retention_days:int,deleted_rows:0,batches:0,cutoff:string,has_more:false,time_exhausted:false,reason:string} Compatibility result confirming that archive-first retention performed no deletion.
  */
-function admin_log_cleanup_retention(?int $retentionDays = null, ?float $deadline = null, int $maxDeletes = ADMIN_LOG_RETENTION_MAX_DELETE_PER_RUN, int $batchSize = ADMIN_LOG_RETENTION_DELETE_BATCH_SIZE): array
-{
+function admin_log_cleanup_retention(
+    ?int $retentionDays = null,
+    ?float $deadline = null,
+    int $maxDeletes = ADMIN_LOG_RETENTION_MAX_DELETE_PER_RUN,
+    int $batchSize = ADMIN_LOG_RETENTION_DELETE_BATCH_SIZE,
+): array {
     unset($deadline, $maxDeletes, $batchSize);
-    $days = admin_log_normalize_retention_days($retentionDays ?? admin_log_retention_days());
+    $days = admin_log_normalize_retention_days(
+        $retentionDays ?? admin_log_retention_days(),
+    );
     return [
         'enabled' => false,
         'retention_days' => $days,
@@ -713,8 +834,8 @@ function admin_log_export_columns(): array
 /**
  * Normalize one admin log database row for reusable export payloads.
  *
- * @param array $entry Entry value.
- * @return array Structured result data for the caller.
+ * @param array<string,int|string|null> $entry Raw admin-log row to normalize.
+ * @return array{id:?int,created_at:string,status:string,status_label:string,status_updated_at:string,level:string,severity:string,category:string,event_key:string,message:string,user_id:?int,username:string,subject_type:string,subject_id:?int,request_id:string,route_name:string,fingerprint:string,http_method:string,is_ajax:int,resolved_at:string,resolution_note:string,context:array<string,mixed>,context_json:string} Export-ready row with decoded context and stable scalar fields.
  */
 function admin_log_export_normalize_entry(array $entry): array
 {
@@ -724,17 +845,24 @@ function admin_log_export_normalize_entry(array $entry): array
         'id' => isset($entry['id']) ? (int) $entry['id'] : null,
         'created_at' => (string) ($entry['created_at'] ?? ''),
         'status' => (string) ($entry['status'] ?? 'todo'),
-        'status_label' => admin_log_status_label((string) ($entry['status'] ?? 'todo')),
+        'status_label' => admin_log_status_label(
+            (string) ($entry['status'] ?? 'todo'),
+        ),
         'status_updated_at' => (string) ($entry['status_updated_at'] ?? ''),
         'level' => (string) ($entry['level'] ?? ''),
-        'severity' => (string) ($entry['severity'] ?? ($entry['level'] ?? '')),
+        'severity' => (string) ($entry['severity'] ?? $entry['level'] ?? ''),
         'category' => (string) ($entry['category'] ?? 'other'),
         'event_key' => (string) ($entry['event_key'] ?? ''),
         'message' => (string) ($entry['message'] ?? ''),
-        'user_id' => isset($entry['user_id']) && $entry['user_id'] !== null ? (int) $entry['user_id'] : null,
+        'user_id' => isset($entry['user_id']) && $entry['user_id'] !== null
+            ? (int) $entry['user_id']
+            : null,
         'username' => (string) ($entry['username'] ?? ''),
         'subject_type' => (string) ($entry['subject_type'] ?? ''),
-        'subject_id' => isset($entry['subject_id']) && $entry['subject_id'] !== null ? (int) $entry['subject_id'] : null,
+        'subject_id' => isset($entry['subject_id'])
+        && $entry['subject_id'] !== null
+            ? (int) $entry['subject_id']
+            : null,
         'request_id' => (string) ($entry['request_id'] ?? ''),
         'route_name' => (string) ($entry['route_name'] ?? ''),
         'fingerprint' => (string) ($entry['fingerprint'] ?? ''),
@@ -743,7 +871,10 @@ function admin_log_export_normalize_entry(array $entry): array
         'resolved_at' => (string) ($entry['resolved_at'] ?? ''),
         'resolution_note' => (string) ($entry['resolution_note'] ?? ''),
         'context' => $context,
-        'context_json' => isset($entry['context_json']) && $entry['context_json'] !== null ? (string) $entry['context_json'] : '',
+        'context_json' => isset($entry['context_json'])
+        && $entry['context_json'] !== null
+            ? (string) $entry['context_json']
+            : '',
     ];
 }
 
@@ -775,9 +906,14 @@ function admin_log_export_payload(?array $rows = null): array
 function admin_log_export_json(?array $payload = null): string
 {
     $payload = $payload ?? admin_log_export_payload();
-    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $json = json_encode(
+        $payload,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    );
     if ($json === false) {
-        throw new RuntimeException('Unable to encode admin log JSON export: ' . json_last_error_msg());
+        throw new RuntimeException(
+            'Unable to encode admin log JSON export: ' . json_last_error_msg(),
+        );
     }
     return $json . "\n";
 }
@@ -785,8 +921,8 @@ function admin_log_export_json(?array $payload = null): string
 /**
  * Build a CSV export from the same normalized payload used for JSON.
  *
- * @param array $payload Payload value.
- * @return string Text result for the caller.
+ * @param array{logs?:list<array<string,mixed>>} $payload Normalized log export payload.
+ * @return string CSV document with stable export columns and nested values JSON-encoded in cells.
  */
 function admin_log_export_csv(array $payload): string
 {
@@ -797,13 +933,16 @@ function admin_log_export_csv(array $payload): string
     }
     $columns = admin_log_export_columns();
     fputcsv($handle, $columns, ',', '"', '');
-    foreach (($payload['logs'] ?? []) as $entry) {
+    foreach ($payload['logs'] ?? [] as $entry) {
         $row = [];
         foreach ($columns as $column) {
             $value = $entry[$column] ?? '';
             if (is_array($value)) {
                 // CSV cannot hold nested arrays directly, so structured values are faithfully JSON-encoded in one cell.
-                $encoded = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $encoded = json_encode(
+                    $value,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                );
                 $row[] = $encoded === false ? '' : $encoded;
                 continue;
             }
@@ -826,10 +965,12 @@ function admin_log_export_csv(array $payload): string
  *
  * @param int $afterId Last exported id.
  * @param int $limit Maximum number of rows.
- * @return array Structured result data for the caller.
+ * @return list<array<string,int|string|null>> Ascending id-based log batch joined with usernames, or an empty list when schema is unavailable.
  */
-function admin_log_export_row_batch(int $afterId, int $limit = ADMIN_LOG_EXPORT_BATCH_SIZE): array
-{
+function admin_log_export_row_batch(
+    int $afterId,
+    int $limit = ADMIN_LOG_EXPORT_BATCH_SIZE,
+): array {
     if (!admin_log_schema_ready()) {
         return [];
     }
@@ -841,9 +982,12 @@ function admin_log_export_row_batch(int $afterId, int $limit = ADMIN_LOG_EXPORT_
  *
  * @param string $filePath File path filesystem path.
  * @param int $batchSize Maximum rows held in PHP memory at once.
+ * @return void Writes the completed CSV and JSON archive to the requested path; throws when export cannot be completed.
  */
-function admin_log_create_export_zip_streamed(string $filePath, int $batchSize = ADMIN_LOG_EXPORT_BATCH_SIZE): void
-{
+function admin_log_create_export_zip_streamed(
+    string $filePath,
+    int $batchSize = ADMIN_LOG_EXPORT_BATCH_SIZE,
+): void {
     if (!class_exists(ZipArchive::class)) {
         throw new RuntimeException('ZipArchive is not available.');
     }
@@ -861,7 +1005,9 @@ function admin_log_create_export_zip_streamed(string $filePath, int $batchSize =
         if (is_string($jsonPath) && is_file($jsonPath)) {
             @unlink($jsonPath);
         }
-        throw new RuntimeException('Unable to allocate temporary admin log export streams.');
+        throw new RuntimeException(
+            'Unable to allocate temporary admin log export streams.',
+        );
     }
 
     $csvHandle = null;
@@ -871,7 +1017,9 @@ function admin_log_create_export_zip_streamed(string $filePath, int $batchSize =
         $csvHandle = fopen($csvPath, 'wb');
         $jsonHandle = fopen($jsonPath, 'wb');
         if ($csvHandle === false || $jsonHandle === false) {
-            throw new RuntimeException('Unable to open temporary admin log export streams.');
+            throw new RuntimeException(
+                'Unable to open temporary admin log export streams.',
+            );
         }
 
         // $columns stores the stable shared CSV/JSON column contract.
@@ -880,13 +1028,39 @@ function admin_log_create_export_zip_streamed(string $filePath, int $batchSize =
 
         // $rowCount is scalar metadata only and does not materialize row payloads.
         $rowCount = admin_log_count();
-        $schemaJson = json_encode('php-gallery-admin-logs-v1', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $generatedAtJson = json_encode(now_sql(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $columnsJson = json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($schemaJson === false || $generatedAtJson === false || $columnsJson === false) {
-            throw new RuntimeException('Unable to encode admin log export metadata.');
+        $schemaJson = json_encode(
+            'php-gallery-admin-logs-v1',
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
+        $generatedAtJson = json_encode(
+            now_sql(),
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
+        $columnsJson = json_encode(
+            $columns,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
+        if (
+            $schemaJson === false
+            || $generatedAtJson === false
+            || $columnsJson === false
+        ) {
+            throw new RuntimeException(
+                'Unable to encode admin log export metadata.',
+            );
         }
-        fwrite($jsonHandle, "{\n  \"schema\": " . $schemaJson . ",\n  \"generated_at\": " . $generatedAtJson . ",\n  \"row_count\": " . $rowCount . ",\n  \"columns\": " . $columnsJson . ",\n  \"logs\": [");
+        fwrite(
+            $jsonHandle,
+            "{\n  \"schema\": "
+                . $schemaJson
+                . ",\n  \"generated_at\": "
+                . $generatedAtJson
+                . ",\n  \"row_count\": "
+                . $rowCount
+                . ",\n  \"columns\": "
+                . $columnsJson
+                . ",\n  \"logs\": [",
+        );
 
         $afterId = 0;
         $firstJsonRow = true;
@@ -902,7 +1076,10 @@ function admin_log_create_export_zip_streamed(string $filePath, int $batchSize =
                 foreach ($columns as $column) {
                     $value = $normalized[$column] ?? '';
                     if (is_array($value)) {
-                        $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        $value = json_encode(
+                            $value,
+                            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                        );
                         if ($value === false) {
                             $value = '';
                         }
@@ -911,11 +1088,20 @@ function admin_log_create_export_zip_streamed(string $filePath, int $batchSize =
                 }
                 fputcsv($csvHandle, $csvRow, ',', '"', '');
 
-                $encoded = json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $encoded = json_encode(
+                    $normalized,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                );
                 if ($encoded === false) {
-                    throw new RuntimeException('Unable to encode admin log JSON export row: ' . json_last_error_msg());
+                    throw new RuntimeException(
+                        'Unable to encode admin log JSON export row: '
+                            . json_last_error_msg(),
+                    );
                 }
-                fwrite($jsonHandle, ($firstJsonRow ? "\n" : ",\n") . '    ' . $encoded);
+                fwrite(
+                    $jsonHandle,
+                    ($firstJsonRow ? "\n" : ",\n") . '    ' . $encoded,
+                );
                 $firstJsonRow = false;
                 $afterId = max($afterId, (int) ($entry['id'] ?? 0));
             }
@@ -930,16 +1116,28 @@ function admin_log_create_export_zip_streamed(string $filePath, int $batchSize =
         $jsonHandle = null;
 
         $zip = new ZipArchive();
-        if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            throw new RuntimeException('Unable to create admin log ZIP export.');
+        if (
+            $zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE)
+            !== true
+        ) {
+            throw new RuntimeException(
+                'Unable to create admin log ZIP export.',
+            );
         }
-        if (!$zip->addFile($csvPath, 'logs.csv') || !$zip->addFile($jsonPath, 'logs.json')) {
-            throw new RuntimeException('Unable to add streamed admin log export files to ZIP.');
+        if (
+            !$zip->addFile($csvPath, 'logs.csv')
+            || !$zip->addFile($jsonPath, 'logs.json')
+        ) {
+            throw new RuntimeException(
+                'Unable to add streamed admin log export files to ZIP.',
+            );
         }
         $zip->close();
         $zip = null;
         if (!is_file($filePath)) {
-            throw new RuntimeException('Unable to finalize admin log ZIP export.');
+            throw new RuntimeException(
+                'Unable to finalize admin log ZIP export.',
+            );
         }
     } finally {
         if (is_resource($csvHandle)) {
@@ -968,7 +1166,10 @@ function admin_log_create_export_zip(string $filePath, array $payload): void
         throw new RuntimeException('ZipArchive is not available.');
     }
     $zip = new ZipArchive();
-    if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+    if (
+        $zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE)
+        !== true
+    ) {
         throw new RuntimeException('Unable to create admin log ZIP export.');
     }
     $zip->addFromString('logs.csv', admin_log_export_csv($payload));
@@ -984,10 +1185,12 @@ function admin_log_create_export_zip(string $filePath, array $payload): void
  *
  * @param string $filePath File path filesystem path.
  * @param string $downloadName Download name value.
- * @return array{path:string,filename:string,size:int}
+ * @return array{path:string,filename:string,size:int} Existing archive path, sanitized download filename, and file size in bytes.
  */
-function admin_log_export_zip_descriptor(string $filePath, string $downloadName): array
-{
+function admin_log_export_zip_descriptor(
+    string $filePath,
+    string $downloadName,
+): array {
     if (!is_file($filePath)) {
         throw new RuntimeException('Admin log export not found.');
     }
@@ -1007,7 +1210,9 @@ function admin_log_export_temp_path(): string
 {
     $filePath = tempnam(sys_get_temp_dir(), 'php-gallery-admin-logs-');
     if ($filePath === false) {
-        throw new RuntimeException('Unable to allocate temporary admin log export file.');
+        throw new RuntimeException(
+            'Unable to allocate temporary admin log export file.',
+        );
     }
     $owned = &admin_log_export_owned_paths();
     $owned[$filePath] = true;
@@ -1049,6 +1254,7 @@ function admin_log_export_zip_filename(): string
 {
     return 'php-gallery-admin-logs-' . date('Ymd-His') . '.zip';
 }
+
 /**
  * Return one admin log entry with user information for detail display or export.
  *
@@ -1066,8 +1272,8 @@ function admin_log_find(int $logId): ?array
 /**
  * Decode the structured context stored on an admin log entry.
  *
- * @param array $entry Entry value.
- * @return array Structured result data for the caller.
+ * @param array<string,int|string|null> $entry Log row containing serialized context JSON.
+ * @return array<string,mixed> Decoded structured context, or a bounded raw JSON/error pair when decoding fails.
  */
 function admin_log_context_array(array $entry): array
 {
@@ -1076,17 +1282,21 @@ function admin_log_context_array(array $entry): array
     }
     // $decoded stores the parsed diagnostic context for safe display.
     $decoded = json_decode((string) $entry['context_json'], true);
-    return is_array($decoded) ? $decoded : [
-        'raw_context_json' => (string) $entry['context_json'],
-        'json_error' => json_last_error_msg(),
-    ];
+    return (
+        is_array($decoded)
+            ? $decoded
+            : [
+                'raw_context_json' => (string) $entry['context_json'],
+                'json_error' => json_last_error_msg(),
+            ]
+    );
 }
 
 /**
  * Build a deterministic text export for one admin log entry.
  *
- * @param array $entry Entry value.
- * @return string Text result for the caller.
+ * @param array<string,int|string|null> $entry Admin-log row to render as a diagnostic text report.
+ * @return string Deterministic plain-text report for one log event.
  */
 function admin_log_export_text(array $entry): string
 {
@@ -1094,25 +1304,79 @@ function admin_log_export_text(array $entry): string
     $context = admin_log_context_array($entry);
     // $lines stores the text report line by line to keep formatting predictable.
     $lines = [
-        admin_log_english_t('admin.logs.export.title', 'PHP Gallery admin log event'),
+        admin_log_english_t(
+            'admin.logs.export.title',
+            'PHP Gallery admin log event',
+        ),
         '',
         'ID: ' . (string) ($entry['id'] ?? ''),
-        admin_log_english_t('admin.logs.export.created_at', 'Created at: {value}', ['value' => (string) ($entry['created_at'] ?? '')]),
-        admin_log_english_t('admin.logs.export.status', 'Status: {value}', ['value' => admin_log_status_label((string) ($entry['status'] ?? 'todo'))]),
-        admin_log_english_t('admin.logs.export.level', 'Level: {value}', ['value' => (string) ($entry['level'] ?? '')]),
-        admin_log_english_t('admin.logs.export.severity', 'Severity: {value}', ['value' => (string) ($entry['severity'] ?? ($entry['level'] ?? ''))]),
-        admin_log_english_t('admin.logs.export.category', 'Category: {value}', ['value' => (string) ($entry['category'] ?? 'other')]),
-        admin_log_english_t('admin.logs.export.event_key', 'Event key: {value}', ['value' => (string) ($entry['event_key'] ?? '')]),
-        admin_log_english_t('admin.logs.export.message', 'Message: {value}', ['value' => (string) ($entry['message'] ?? '')]),
-        admin_log_english_t('admin.logs.export.admin_user', 'Admin user: {value}', ['value' => (string) ($entry['username'] ?? '')]),
-        admin_log_english_t('admin.logs.export.subject', 'Subject: {value}', ['value' => trim((string) ($entry['subject_type'] ?? '') . ' ' . (string) ($entry['subject_id'] ?? ''))]),
-        admin_log_english_t('admin.logs.export.request_id', 'Request ID: {value}', ['value' => (string) ($entry['request_id'] ?? '')]),
-        admin_log_english_t('admin.logs.export.route', 'Route: {value}', ['value' => (string) ($entry['route_name'] ?? '')]),
-        admin_log_english_t('admin.logs.export.resolved_at', 'Resolved at: {value}', ['value' => (string) ($entry['resolved_at'] ?? '')]),
-        admin_log_english_t('admin.logs.export.resolution_note', 'Resolution note: {value}', ['value' => (string) ($entry['resolution_note'] ?? '')]),
+        admin_log_english_t(
+            'admin.logs.export.created_at',
+            'Created at: {value}',
+            ['value' => (string) ($entry['created_at'] ?? '')],
+        ),
+        admin_log_english_t('admin.logs.export.status', 'Status: {value}', [
+            'value' => admin_log_status_label(
+                (string) ($entry['status'] ?? 'todo'),
+            ),
+        ]),
+        admin_log_english_t('admin.logs.export.level', 'Level: {value}', [
+            'value' => (string) ($entry['level'] ?? ''),
+        ]),
+        admin_log_english_t('admin.logs.export.severity', 'Severity: {value}', [
+            'value' => (string) ($entry['severity'] ?? $entry['level'] ?? ''),
+        ]),
+        admin_log_english_t('admin.logs.export.category', 'Category: {value}', [
+            'value' => (string) ($entry['category'] ?? 'other'),
+        ]),
+        admin_log_english_t(
+            'admin.logs.export.event_key',
+            'Event key: {value}',
+            ['value' => (string) ($entry['event_key'] ?? '')],
+        ),
+        admin_log_english_t('admin.logs.export.message', 'Message: {value}', [
+            'value' => (string) ($entry['message'] ?? ''),
+        ]),
+        admin_log_english_t(
+            'admin.logs.export.admin_user',
+            'Admin user: {value}',
+            ['value' => (string) ($entry['username'] ?? '')],
+        ),
+        admin_log_english_t('admin.logs.export.subject', 'Subject: {value}', [
+            'value' => trim(
+                (string) ($entry['subject_type'] ?? '')
+                    . ' '
+                    . (string) ($entry['subject_id'] ?? ''),
+            ),
+        ]),
+        admin_log_english_t(
+            'admin.logs.export.request_id',
+            'Request ID: {value}',
+            ['value' => (string) ($entry['request_id'] ?? '')],
+        ),
+        admin_log_english_t('admin.logs.export.route', 'Route: {value}', [
+            'value' => (string) ($entry['route_name'] ?? ''),
+        ]),
+        admin_log_english_t(
+            'admin.logs.export.resolved_at',
+            'Resolved at: {value}',
+            ['value' => (string) ($entry['resolved_at'] ?? '')],
+        ),
+        admin_log_english_t(
+            'admin.logs.export.resolution_note',
+            'Resolution note: {value}',
+            ['value' => (string) ($entry['resolution_note'] ?? '')],
+        ),
         '',
         admin_log_english_t('admin.logs.export.context', 'Context:'),
-        $context ? json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : admin_log_english_t('admin.logs.export.none', '(none)'),
+        $context
+            ? json_encode(
+                $context,
+                JSON_PRETTY_PRINT
+                    | JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES,
+            )
+            : admin_log_english_t('admin.logs.export.none', '(none)'),
         '',
     ];
     return implode("\n", $lines);
@@ -1129,17 +1393,24 @@ function admin_log_export_selection(array $tokens): array
     $resolved = [];
     $groups = [];
     foreach (array_unique($tokens) as $token) {
-        if (preg_match('/^([1-9][0-9]*)(?::([a-f0-9]{64}))?$/D', $token, $match) !== 1) {
+        if (
+            preg_match('/^([1-9][0-9]*)(?::([a-f0-9]{64}))?$/D', $token, $match)
+            !== 1
+        ) {
             throw new RuntimeException('Invalid log selection.');
         }
         $entry = admin_log_find((int) $match[1]);
         if ($entry === null) {
-            throw new RuntimeException('A selected log is no longer available.');
+            throw new RuntimeException(
+                'A selected log is no longer available.',
+            );
         }
         $group = isset($match[2]);
         $hash = admin_log_group_hash_for_entry($entry);
         if ($group && !hash_equals($hash, $match[2])) {
-            throw new RuntimeException('The selected log group does not match its representative.');
+            throw new RuntimeException(
+                'The selected log group does not match its representative.',
+            );
         }
         if ($group) {
             $groups[$hash] = true;
@@ -1147,7 +1418,10 @@ function admin_log_export_selection(array $tokens): array
         $resolved[] = ['entry' => $entry, 'group' => $group];
     }
     $emittedGroups = [];
-    return array_values(array_filter($resolved, static function (array $item) use ($groups, &$emittedGroups): bool {
+    return array_values(array_filter($resolved, static function (array $item) use (
+        $groups,
+        &$emittedGroups,
+    ): bool {
         $hash = admin_log_group_hash_for_entry($item['entry']);
         if (!$item['group']) {
             return !isset($groups[$hash]);
@@ -1175,15 +1449,26 @@ function admin_log_selection_text_chunks(array $selection): \Generator
         }
         $summary = admin_log_group_member_summary($entry);
         $entry = array_merge($entry, $summary);
-        yield admin_log_export_group_header_text($entry, (int) $summary['group_count']);
+        yield admin_log_export_group_header_text(
+            $entry,
+            (int) $summary['group_count'],
+        );
         $cursorTime = null;
         $cursorId = 0;
         $written = 0;
         do {
-            $batch = admin_log_group_member_export_batch($entry, $cursorTime, $cursorId);
+            $batch = admin_log_group_member_export_batch(
+                $entry,
+                $cursorTime,
+                $cursorId,
+            );
             foreach ($batch as $member) {
                 $written++;
-                yield '[' . $written . '/' . (int) $summary['group_count'] . "]\n";
+                yield '['
+                    . $written
+                    . '/'
+                    . (int) $summary['group_count']
+                    . "]\n";
                 yield admin_log_export_text($member) . "\n";
                 $cursorTime = (string) $member['created_at'];
                 $cursorId = (int) $member['id'];
@@ -1205,8 +1490,14 @@ function admin_log_filtered_text_chunks(array $filters): \Generator
     $cursorTime = null;
     $cursorId = 0;
     do {
-        $batch = admin_log_model_filtered_export_batch($filters, $cursorTime, $cursorId, ADMIN_LOG_EXPORT_BATCH_SIZE,
-            array_keys(admin_log_category_options()), array_keys(admin_log_severity_options()));
+        $batch = admin_log_model_filtered_export_batch(
+            $filters,
+            $cursorTime,
+            $cursorId,
+            ADMIN_LOG_EXPORT_BATCH_SIZE,
+            array_keys(admin_log_category_options()),
+            array_keys(admin_log_severity_options()),
+        );
         foreach ($batch as $entry) {
             yield admin_log_export_text($entry) . "\n";
             $cursorTime = (string) $entry['created_at'];
@@ -1218,19 +1509,42 @@ function admin_log_filtered_text_chunks(array $filters): \Generator
 /**
  * Build the fixed header used by grouped plain-text log exports.
  *
- * @param array $entry Entry value.
+ * @param array<string,int|string|null> $entry Representative grouped log row.
  * @param int $groupCount Group count value.
- * @return string Text result for the caller.
+ * @return string Fixed text header describing the grouped event and its count/time boundaries.
  */
-function admin_log_export_group_header_text(array $entry, int $groupCount): string
-{
+function admin_log_export_group_header_text(
+    array $entry,
+    int $groupCount,
+): string {
     $lines = [
-        admin_log_english_t('admin.logs.export.title', 'PHP Gallery admin log event'),
+        admin_log_english_t(
+            'admin.logs.export.title',
+            'PHP Gallery admin log event',
+        ),
         str_repeat('=', 60),
-        admin_log_english_t('admin.logs.export.event_key', 'Event key: {value}', ['value' => (string) ($entry['event_key'] ?? '')]),
-        admin_log_english_t('admin.logs.group_count', 'Grouped entries') . ': ' . max(0, $groupCount),
-        admin_log_english_t('admin.logs.first_seen', 'First seen') . ': ' . (string) ($entry['first_created_at'] ?? $entry['created_at'] ?? ''),
-        admin_log_english_t('admin.logs.latest_seen', 'Latest seen') . ': ' . (string) ($entry['latest_created_at'] ?? $entry['created_at'] ?? ''),
+        admin_log_english_t(
+            'admin.logs.export.event_key',
+            'Event key: {value}',
+            ['value' => (string) ($entry['event_key'] ?? '')],
+        ),
+        admin_log_english_t('admin.logs.group_count', 'Grouped entries')
+            . ': '
+            . max(0, $groupCount),
+        admin_log_english_t('admin.logs.first_seen', 'First seen')
+            . ': '
+            . (string) (
+                $entry['first_created_at']
+                ?? $entry['created_at']
+                ?? ''
+            ),
+        admin_log_english_t('admin.logs.latest_seen', 'Latest seen')
+            . ': '
+            . (string) (
+                $entry['latest_created_at']
+                ?? $entry['created_at']
+                ?? ''
+            ),
         '',
     ];
     return implode("\n", $lines) . "\n";
@@ -1239,8 +1553,8 @@ function admin_log_export_group_header_text(array $entry, int $groupCount): stri
 /**
  * Build a plain-text diagnostic export for a grouped admin log summary.
  *
- * @param array $entry Entry value.
- * @param array $groupMembers Group members value.
+ * @param array<string,int|string|null> $entry Representative grouped log row.
+ * @param list<array<string,int|string|null>> $groupMembers Raw log rows belonging to the group.
  * @return string Text result for the caller.
  */
 function admin_log_export_group_text(array $entry, array $groupMembers): string
@@ -1255,15 +1569,18 @@ function admin_log_export_group_text(array $entry, array $groupMembers): string
 }
 
 /**
- * Handles admin log update status logic for the gallery application.
+ * Update one admin-log status through the constrained legacy predicate bridge.
  *
- * @param string $whereSql Where sql value.
- * @param array $whereParams Where params value.
- * @param mixed $status Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param string $whereSql Legacy predicate, accepted only as `id = ?`.
+ * @param list<int|string> $whereParams Single log identifier parameter.
+ * @param string $status Target workflow status key.
+ * @return int Number of rows updated (zero or one).
  */
-function admin_log_update_status_where(string $whereSql, array $whereParams, string $status): int
-{
+function admin_log_update_status_where(
+    string $whereSql,
+    array $whereParams,
+    string $status,
+): int {
     // Compatibility bridge retained for historical internal callers. New code must
     // use semantic status operations instead of passing SQL predicates across layers.
     if (trim($whereSql) === 'id = ?' && count($whereParams) === 1) {
@@ -1271,9 +1588,13 @@ function admin_log_update_status_where(string $whereSql, array $whereParams, str
         if ($logId <= 0) {
             return 0;
         }
-        return admin_log_model_update_status($logId, $status, now_sql()) ? 1 : 0;
+        return admin_log_model_update_status($logId, $status, now_sql())
+            ? 1
+            : 0;
     }
-    throw new RuntimeException('Direct Admin log SQL predicates are no longer supported by the service layer.');
+    throw new RuntimeException(
+        'Direct Admin log SQL predicates are no longer supported by the service layer.',
+    );
 }
 
 /**
@@ -1314,7 +1635,11 @@ function admin_log_update_group_status(string $groupHash, string $status): int
     if (!admin_log_schema_ready() && !ensure_admin_log_status_schema()) {
         throw new RuntimeException('Admin log schema is not ready.');
     }
-    $updatedRows = admin_log_model_update_group_status($groupHash, $status, now_sql());
+    $updatedRows = admin_log_model_update_group_status(
+        $groupHash,
+        $status,
+        now_sql(),
+    );
     if ($updatedRows <= 0) {
         throw new RuntimeException('Grouped admin log rows were not updated.');
     }

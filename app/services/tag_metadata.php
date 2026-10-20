@@ -187,7 +187,6 @@ function tags_for_entity(string $type, int $id): array
     }
 }
 
-
 /**
  * Return direct gallery and image assignment counts for the supplied tag IDs.
  *
@@ -196,14 +195,17 @@ function tags_for_entity(string $type, int $id): array
  * assignment contributes one use. The query is restricted to the IDs present
  * in the current hero so unrelated tags are not aggregated on every request.
  *
- * @param array $tagIds Tag identifiers required by the current render.
+ * @param list<int|string> $tagIds Tag identifiers required by the current render.
  * @return array<int,int> Usage counts keyed by tag ID.
  */
 function tag_usage_counts(array $tagIds): array
 {
     static $cache = [];
     // $ids stores normalized unique positive identifiers for a bounded persistence query.
-    $ids = array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $tagIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     sort($ids, SORT_NUMERIC);
     if (!$ids) {
         return [];
@@ -240,7 +242,9 @@ function tag_usage_counts(array $tagIds): array
 function sort_public_hero_tag_groups(array $groups, string $sortMode): array
 {
     // $mode defensively normalizes callers that do not pass the Theme service result.
-    $mode = in_array($sortMode, ['usage', 'alphabetical'], true) ? $sortMode : 'usage';
+    $mode = in_array($sortMode, ['usage', 'alphabetical'], true)
+        ? $sortMode
+        : 'usage';
     // $tagIds collects all tag IDs once so usage mode needs only one aggregate query.
     $tagIds = [];
     foreach ($groups as $tags) {
@@ -251,20 +255,28 @@ function sort_public_hero_tag_groups(array $groups, string $sortMode): array
     // $usageCounts is empty for alphabetical mode, avoiding an unnecessary database query.
     $usageCounts = $mode === 'usage' ? tag_usage_counts($tagIds) : [];
     foreach ($groups as $groupKey => $tags) {
-        usort($tags, static function (array $left, array $right) use ($mode, $usageCounts): int {
+        usort($tags, static function (array $left, array $right) use (
+            $mode,
+            $usageCounts,
+        ): int {
             if ($mode === 'usage') {
                 // $usageComparison sorts larger aggregate assignment counts first.
-                $usageComparison = ($usageCounts[(int) ($right['id'] ?? 0)] ?? 0) <=> ($usageCounts[(int) ($left['id'] ?? 0)] ?? 0);
+                $usageComparison =
+                    ($usageCounts[(int) ($right['id'] ?? 0)] ?? 0)
+                    <=> ($usageCounts[(int) ($left['id'] ?? 0)] ?? 0);
                 if ($usageComparison !== 0) {
                     return $usageComparison;
                 }
             }
             // $nameComparison keeps ties human-readable and stable across render pipelines.
-            $nameComparison = strnatcasecmp((string) ($left['name'] ?? ''), (string) ($right['name'] ?? ''));
+            $nameComparison = strnatcasecmp(
+                (string) ($left['name'] ?? ''),
+                (string) ($right['name'] ?? ''),
+            );
             if ($nameComparison !== 0) {
                 return $nameComparison;
             }
-            return ((int) ($left['id'] ?? 0)) <=> ((int) ($right['id'] ?? 0));
+            return (int) ($left['id'] ?? 0) <=> (int) ($right['id'] ?? 0);
         });
         $groups[$groupKey] = $tags;
     }
@@ -274,15 +286,18 @@ function sort_public_hero_tag_groups(array $groups, string $sortMode): array
 /**
  * Return all tags for many entities in one query, grouped by entity ID.
  *
- * @param string $type Type value.
- * @param array $ids Ids value.
- * @return array Structured result data for the caller.
+ * @param string $type Entity type whose tags are requested.
+ * @param list<int|string> $ids Entity identifiers.
+ * @return array<int,list<array{entity_id:int|string,id:int|string,name:string,slug:string,description?:string|null,created_at?:string|null,updated_at?:string|null}>> Tag rows keyed by entity ID.
  */
 function tags_for_entities(string $type, array $ids): array
 {
     static $cache = [];
     // $ids stores an intermediate value used by the surrounding gallery workflow.
-    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $ids),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$ids) {
         return [];
     }
@@ -329,7 +344,6 @@ function all_tag_names(): array
     }
 }
 
-
 /**
  * Return weighted tag suggestions for a gallery editor context.
  *
@@ -337,12 +351,14 @@ function all_tag_names(): array
  * current gallery images, siblings, descendants, ancestors, and finally all-site
  * usage. This keeps tag advice local to the folder where the admin is working.
  *
- * @param int $galleryId Gallery identifier.
- * @param int $limit Maximum number of items.
- * @return array Structured result data for the caller.
+ * @param int $galleryId Gallery providing local suggestion context.
+ * @param int $limit Maximum number of suggestions.
+ * @return list<array{id:int,name:string,slug:string,score:float,sources:list<string>}> Ranked tag suggestions with contributing context labels.
  */
-function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): array
-{
+function weighted_tag_suggestions_for_gallery(
+    int $galleryId,
+    int $limit = 80,
+): array {
     // Variable $gallery stores this steps working value.
     $gallery = $galleryId > 0 ? tag_model_gallery_context($galleryId) : null;
     if (!$gallery) {
@@ -362,7 +378,11 @@ function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): 
      * @param string $source Human-readable internal source label.
      * @return void
      */
-    $addRows = static function (array $rows, float $weight, string $source) use (&$scores, &$details): void {
+    $addRows = static function (
+        array $rows,
+        float $weight,
+        string $source,
+    ) use (&$scores, &$details): void {
         foreach ($rows as $row) {
             // Variable $tagId stores this steps working value.
             $tagId = (int) ($row['id'] ?? 0);
@@ -384,16 +404,22 @@ function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): 
             }
             $scores[$tagId]['score'] += $score;
             $scores[$tagId]['sources'][$source] = true;
-            $details[$tagId][$source] = ($details[$tagId][$source] ?? 0) + $usageCount;
+            $details[$tagId][$source] =
+                ($details[$tagId][$source] ?? 0) + $usageCount;
         }
     };
 
     // Variable $folderPath stores this steps working value.
-    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    $folderPath = normalize_relative_path(
+        (string) ($gallery['folder_path'] ?? ''),
+    );
     // Variable $parentId stores this steps working value.
     $parentId = (int) ($gallery['parent_id'] ?? 0);
     // Variable $pathParts stores this steps working value.
-    $pathParts = array_values(array_filter(explode('/', $folderPath), static fn (string $part): bool => $part !== ''));
+    $pathParts = array_values(array_filter(
+        explode('/', $folderPath),
+        static fn(string $part): bool => $part !== '',
+    ));
     // Variable $ancestorPatterns stores this steps working value.
     $ancestorPatterns = [];
     for ($index = 1; $index < count($pathParts); $index++) {
@@ -401,23 +427,62 @@ function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): 
     }
 
     try {
-        $addRows(tag_model_suggestion_usage_rows('image', 'current', ['gallery_id' => $galleryId]), 18.0, 'current_images');
-        $addRows(tag_model_suggestion_usage_rows('gallery', 'siblings', ['parent_id' => $parentId, 'gallery_id' => $galleryId]), 12.0, 'siblings');
-        $addRows(tag_model_suggestion_usage_rows('image', 'siblings', ['parent_id' => $parentId, 'gallery_id' => $galleryId]), 8.0, 'sibling_images');
+        $addRows(tag_model_suggestion_usage_rows('image', 'current', [
+            'gallery_id' => $galleryId,
+        ]), 18.0, 'current_images');
+        $addRows(tag_model_suggestion_usage_rows('gallery', 'siblings', [
+            'parent_id' => $parentId,
+            'gallery_id' => $galleryId,
+        ]), 12.0, 'siblings');
+        $addRows(tag_model_suggestion_usage_rows('image', 'siblings', [
+            'parent_id' => $parentId,
+            'gallery_id' => $galleryId,
+        ]), 8.0, 'sibling_images');
 
         if ($folderPath !== '') {
-            $context = ['folder_prefix' => $folderPath . '/%', 'gallery_id' => $galleryId];
-            $addRows(tag_model_suggestion_usage_rows('gallery', 'descendants', $context), 10.0, 'descendants');
-            $addRows(tag_model_suggestion_usage_rows('image', 'descendants', $context), 6.0, 'descendant_images');
+            $context = [
+                'folder_prefix' => $folderPath . '/%',
+                'gallery_id' => $galleryId,
+            ];
+            $addRows(
+                tag_model_suggestion_usage_rows(
+                    'gallery',
+                    'descendants',
+                    $context,
+                ),
+                10.0,
+                'descendants',
+            );
+            $addRows(
+                tag_model_suggestion_usage_rows(
+                    'image',
+                    'descendants',
+                    $context,
+                ),
+                6.0,
+                'descendant_images',
+            );
         }
 
         if ($ancestorPatterns) {
-            $addRows(tag_model_suggestion_usage_rows('gallery', 'ancestors', ['paths' => $ancestorPatterns]), 5.0, 'ancestors');
-            $addRows(tag_model_suggestion_usage_rows('image', 'ancestors', ['paths' => $ancestorPatterns]), 3.0, 'ancestor_images');
+            $addRows(tag_model_suggestion_usage_rows('gallery', 'ancestors', [
+                'paths' => $ancestorPatterns,
+            ]), 5.0, 'ancestors');
+            $addRows(tag_model_suggestion_usage_rows('image', 'ancestors', [
+                'paths' => $ancestorPatterns,
+            ]), 3.0, 'ancestor_images');
         }
 
-        $addRows(tag_model_suggestion_usage_rows('gallery', 'global'), 1.2, 'global_galleries');
-        $addRows(tag_model_suggestion_usage_rows('image', 'global'), 0.8, 'global_images');
+        $addRows(
+            tag_model_suggestion_usage_rows('gallery', 'global'),
+            1.2,
+            'global_galleries',
+        );
+        $addRows(
+            tag_model_suggestion_usage_rows('image', 'global'),
+            0.8,
+            'global_images',
+        );
     } catch (PDOException) {
         return weighted_global_tag_suggestions($limit);
     }
@@ -426,8 +491,10 @@ function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): 
     $rows = array_values($scores);
     usort($rows, static function (array $left, array $right): int {
         // Variable $scoreCompare stores this steps working value.
-        $scoreCompare = ($right['score'] <=> $left['score']);
-        return $scoreCompare !== 0 ? $scoreCompare : strcmp((string) $left['name'], (string) $right['name']);
+        $scoreCompare = $right['score'] <=> $left['score'];
+        return $scoreCompare !== 0
+            ? $scoreCompare
+            : strcmp((string) $left['name'], (string) $right['name']);
     });
 
     return array_slice(array_map(static function (array $row): array {
@@ -440,23 +507,28 @@ function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): 
 /**
  * Return weighted tag suggestions when no specific gallery context is available.
  *
- * @param int $limit Maximum number of items.
- * @return array Structured result data for the caller.
+ * @param int $limit Maximum number of suggestions.
+ * @return list<array{id:int,name:string,slug:string,score:float,sources:list<string>}> Globally ranked suggestions, or an empty list when storage is unavailable.
  */
 function weighted_global_tag_suggestions(int $limit = 80): array
 {
     try {
-        return array_map(static function (array $row): array {
-            // Variable $usage stores this steps working value.
-            $usage = (int) ($row['gallery_count'] ?? 0) + (int) ($row['image_count'] ?? 0);
-            return [
-                'id' => (int) ($row['id'] ?? 0),
-                'name' => (string) ($row['name'] ?? ''),
-                'slug' => (string) ($row['slug'] ?? ''),
-                'score' => (float) $usage,
-                'sources' => ['global'],
-            ];
-        }, tag_model_global_suggestion_rows(max(1, $limit)));
+        return array_map(
+            static function (array $row): array {
+                // Variable $usage stores this steps working value.
+                $usage =
+                    (int) ($row['gallery_count'] ?? 0)
+                    + (int) ($row['image_count'] ?? 0);
+                return [
+                    'id' => (int) ($row['id'] ?? 0),
+                    'name' => (string) ($row['name'] ?? ''),
+                    'slug' => (string) ($row['slug'] ?? ''),
+                    'score' => (float) $usage,
+                    'sources' => ['global'],
+                ];
+            },
+            tag_model_global_suggestion_rows(max(1, $limit)),
+        );
     } catch (PDOException) {
         return [];
     }
@@ -485,18 +557,24 @@ function tag_description_schema_ready(): bool
  *
  * @param string $sortField Sorting key, either name or usage.
  * @param string $sortDirection Sort direction, asc or desc.
- * @return array Structured result data for the caller.
+ * @return list<array{id:int,name:string,slug:string,description:?string,created_at:string,updated_at:string,gallery_count:int,image_count:int,usage_count:int}> Editable tags with direct gallery and image usage counts.
  */
-function admin_tag_rows(string $sortField = 'usage', string $sortDirection = 'desc'): array
-{
-    return tag_model_admin_rows(tag_description_schema_ready(), $sortField, $sortDirection);
+function admin_tag_rows(
+    string $sortField = 'usage',
+    string $sortDirection = 'desc',
+): array {
+    return tag_model_admin_rows(
+        tag_description_schema_ready(),
+        $sortField,
+        $sortDirection,
+    );
 }
 
 /**
  * Return the gallery and image records that use one tag.
  *
  * @param int $tagId Tag id identifier.
- * @return array Structured result data for the caller.
+ * @return array{galleries:list<array{id:int,title:string,slug:string,url_path:string,folder_path:string,edit_url:string,public_url:string}>,images:list<array{id:int,relative_path:string,filename:string,gallery_id:int,gallery_title:string,gallery_slug:string,edit_url:string}>} Admin links for gallery and image records using this tag.
  */
 function admin_tag_usage_rows(int $tagId): array
 {
@@ -509,7 +587,9 @@ function admin_tag_usage_rows(int $tagId): array
             'slug' => (string) ($row['slug'] ?? ''),
             'url_path' => (string) ($row['url_path'] ?? ''),
             'folder_path' => (string) ($row['folder_path'] ?? ''),
-            'edit_url' => url_for('admin_edit_gallery', ['id' => (int) $row['id']]),
+            'edit_url' => url_for('admin_edit_gallery', [
+                'id' => (int) $row['id'],
+            ]),
             'public_url' => gallery_public_url($row),
         ];
     }
@@ -524,7 +604,9 @@ function admin_tag_usage_rows(int $tagId): array
             'gallery_id' => (int) ($row['gallery_id'] ?? 0),
             'gallery_title' => (string) ($row['gallery_title'] ?? ''),
             'gallery_slug' => (string) ($row['gallery_slug'] ?? ''),
-            'edit_url' => url_for('admin_edit_image', ['id' => (int) $row['id']]),
+            'edit_url' => url_for('admin_edit_image', [
+                'id' => (int) $row['id'],
+            ]),
         ];
     }
 
@@ -549,10 +631,14 @@ function find_tag_by_id(int $id): ?array
  * @param string $name Name value.
  * @param string $slug Slug value.
  * @param string $description Description value.
- * @return array Structured result data for the caller.
+ * @return array{ok:false,error:'not_found'|'invalid_name'|'invalid_slug'|'slug_taken'}|array{ok:true,tag:array<string,mixed>|null} Update outcome and refreshed tag row when successful.
  */
-function update_tag_metadata(int $id, string $name, string $slug, string $description): array
-{
+function update_tag_metadata(
+    int $id,
+    string $name,
+    string $slug,
+    string $description,
+): array {
     // Variable $tag stores this steps working value.
     $tag = find_tag_by_id($id);
     if (!$tag) {
@@ -574,7 +660,14 @@ function update_tag_metadata(int $id, string $name, string $slug, string $descri
         return ['ok' => false, 'error' => 'slug_taken'];
     }
 
-    tag_model_update_metadata($id, $safeName, $safeSlug, trim($description), tag_description_schema_ready(), now_sql());
+    tag_model_update_metadata(
+        $id,
+        $safeName,
+        $safeSlug,
+        trim($description),
+        tag_description_schema_ready(),
+        now_sql(),
+    );
     return ['ok' => true, 'tag' => find_tag_by_id($id)];
 }
 
@@ -640,7 +733,10 @@ function normalize_existing_tags(): int
             continue;
         }
         $seen[$key] = $id;
-        if ((string) $row['name'] !== $safeName || (string) $row['slug'] !== $safeSlug) {
+        if (
+            (string) $row['name'] !== $safeName
+            || (string) $row['slug'] !== $safeSlug
+        ) {
             tag_model_update_canonical($id, $safeName, $safeSlug, now_sql());
             $changed++;
         }
@@ -663,9 +759,15 @@ function normalize_gallery_sidecar_tags_recursively(): int
     // Variable $changed stores this steps working value.
     $changed = 0;
     // Variable $iterator stores this steps working value.
-    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(
+        $root,
+        FilesystemIterator::SKIP_DOTS,
+    ));
     foreach ($iterator as $file) {
-        if (!$file instanceof SplFileInfo || $file->getFilename() !== 'gallery.json') {
+        if (
+            !$file instanceof SplFileInfo
+            || $file->getFilename() !== 'gallery.json'
+        ) {
             continue;
         }
         // Variable $path stores this steps working value.
@@ -678,12 +780,19 @@ function normalize_gallery_sidecar_tags_recursively(): int
         // Variable $rawTags stores this steps working value.
         $rawTags = $data['tags'];
         // Variable $source stores this steps working value.
-        $source = is_array($rawTags) ? implode(', ', array_map('strval', $rawTags)) : (string) $rawTags;
+        $source = is_array($rawTags)
+            ? implode(', ', array_map('strval', $rawTags))
+            : (string) $rawTags;
         // Variable $normalized stores this steps working value.
         $normalized = implode(', ', split_tag_names($source));
         if ($normalized !== $source) {
             $data['tags'] = $normalized;
-            file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            file_put_contents($path, json_encode(
+                $data,
+                JSON_PRETTY_PRINT
+                    | JSON_UNESCAPED_SLASHES
+                    | JSON_UNESCAPED_UNICODE,
+            ));
             $changed++;
         }
     }
@@ -717,9 +826,9 @@ function public_galleries_for_tag(int $tagId): array
 /**
  * Aggregate tags from descendant galleries and descendant images.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{folder_path:string} $gallery Gallery row anchoring the descendant search.
  * @param bool $publicOnly Public only value.
- * @return array Structured result data for the caller.
+ * @return list<array{id:int|string,name:string,slug:string}> Unique tags on descendant galleries and images.
  */
 function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
 {
@@ -732,5 +841,9 @@ function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
         gallery_visibility_assert_public_policy_available();
         gallery_access_assert_public_policy_available();
     }
-    return tag_model_contained_for_gallery($folderPath, $publicOnly, $publicOnly && gallery_access_schema_ready());
+    return tag_model_contained_for_gallery(
+        $folderPath,
+        $publicOnly,
+        $publicOnly && gallery_access_schema_ready(),
+    );
 }

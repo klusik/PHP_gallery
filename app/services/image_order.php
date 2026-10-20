@@ -48,9 +48,15 @@ use function Gallery\Models\image_order_model_save;
  * @param string $eventKey Admin log event key.
  * @param string $eventMessage Admin log event message.
  * @param array<string,mixed> $context Additional event context.
+ * @return void Persists the image order and records the associated admin event.
  */
-function admin_save_image_order(int $galleryId, array $orderedIds, string $eventKey, string $eventMessage, array $context = []): void
-{
+function admin_save_image_order(
+    int $galleryId,
+    array $orderedIds,
+    string $eventKey,
+    string $eventMessage,
+    array $context = [],
+): void {
     // Variable $now stores one timestamp shared by all rows touched by this reorder operation.
     $now = now_sql();
     try {
@@ -60,11 +66,16 @@ function admin_save_image_order(int $galleryId, array $orderedIds, string $event
             'images' => count($orderedIds),
         ], $context));
     } catch (Throwable $exception) {
-        admin_log_event('error', 'image.reorder_failed', 'Admin image reorder failed.', [
-            'gallery_id' => $galleryId,
-            'error' => $exception->getMessage(),
-            'event_key' => $eventKey,
-        ]);
+        admin_log_event(
+            'error',
+            'image.reorder_failed',
+            'Admin image reorder failed.',
+            [
+                'gallery_id' => $galleryId,
+                'error' => $exception->getMessage(),
+                'event_key' => $eventKey,
+            ],
+        );
         throw $exception;
     }
 }

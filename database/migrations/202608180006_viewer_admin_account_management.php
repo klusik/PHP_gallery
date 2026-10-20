@@ -36,5 +36,5 @@
 declare(strict_types=1);
 
 return [
-    "ALTER TABLE viewer_accounts ADD COLUMN must_change_password TINYINT(1) UNSIGNED NOT NULL DEFAULT 0 AFTER password_hash",
+    'ALTER TABLE viewer_accounts ADD COLUMN must_change_password TINYINT(1) UNSIGNED NOT NULL DEFAULT 0 AFTER password_hash',
 ];

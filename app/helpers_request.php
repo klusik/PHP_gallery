@@ -107,7 +107,11 @@ use function Gallery\Views\view_render_public_seo_tags;
  */
 function e(?string $value): string
 {
-    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    return htmlspecialchars(
+        (string) $value,
+        ENT_QUOTES | ENT_SUBSTITUTE,
+        'UTF-8',
+    );
 }
 
 /**
@@ -135,11 +139,11 @@ function apply_cookie_intents(array $instructions): void
     }
 }
 
-
 /**
  * Apply response-header instructions prepared by a service or policy layer.
  *
  * @param array<int,array{name:string,value:string,replace?:bool}> $instructions Header instructions.
+ * @return void Apply valid header instructions unless response headers have already been sent.
  */
 function apply_response_header_intents(array $instructions): void
 {
@@ -151,7 +155,11 @@ function apply_response_header_intents(array $instructions): void
         if ($name === '' || preg_match('/^[A-Za-z0-9-]+$/D', $name) !== 1) {
             continue;
         }
-        $value = str_replace(["\r", "\n"], '', (string) ($instruction['value'] ?? ''));
+        $value = str_replace(
+            ["\r", "\n"],
+            '',
+            (string) ($instruction['value'] ?? ''),
+        );
         header($name . ': ' . $value, (bool) ($instruction['replace'] ?? true));
     }
 }
@@ -233,7 +241,11 @@ function request_aware_base_url(string $base): string
     $configuredPath = rtrim((string) ($parts['path'] ?? ''), '/');
     // $scriptBasePath stores an intermediate value used by the surrounding gallery workflow.
     $scriptBasePath = request_script_base_path();
-    if ($configuredPath !== '' && $scriptBasePath !== '' && !str_starts_with($scriptBasePath . '/', $configuredPath . '/')) {
+    if (
+        $configuredPath !== ''
+        && $scriptBasePath !== ''
+        && !str_starts_with($scriptBasePath . '/', $configuredPath . '/')
+    ) {
         // $configuredPath stores an intermediate value used by the surrounding gallery workflow.
         $configuredPath = $scriptBasePath;
     } elseif ($configuredPath !== '' && $scriptBasePath === '') {
@@ -243,7 +255,11 @@ function request_aware_base_url(string $base): string
 
     // $url stores an intermediate value used by the surrounding gallery workflow.
     $url = $scheme . '://' . $configuredHost;
-    if (!empty($parts['port']) && (int) $parts['port'] !== 80 && (int) $parts['port'] !== 443) {
+    if (
+        !empty($parts['port'])
+        && (int) $parts['port'] !== 80
+        && (int) $parts['port'] !== 443
+    ) {
         $url .= ':' . (int) $parts['port'];
     }
     $url .= $configuredPath;
@@ -272,18 +288,34 @@ function base_url(string $path = ''): string
         return request_mount_url($path);
     }
     // Variable $base stores this steps working value.
-    $base = request_aware_base_url(rtrim((string) cms_config()['base_url'], '/'));
+    $base = request_aware_base_url(rtrim(
+        (string) cms_config()['base_url'],
+        '/',
+    ));
     // Variable $basePath stores this steps working value.
     $basePath = request_script_base_path();
     if ($path === '') {
-        return $base === '' ? ($basePath === '' ? '/' : $basePath . '/') : $base . '/';
+        return (
+            $base === ''
+                ? ($basePath === '' ? '/' : $basePath . '/')
+                : $base . '/'
+        );
     }
     if (str_starts_with($path, 'index.php')) {
-        return ($base === '' ? ($basePath === '' ? '/' : $basePath . '/') : $base . '/') . $path;
+        return (
+            (
+                $base === ''
+                    ? ($basePath === '' ? '/' : $basePath . '/')
+                    : $base . '/'
+            ) . $path
+        );
     }
-    return ($base === '' ? ($basePath === '' ? '' : $basePath) : $base) . '/' . ltrim($path, '/');
+    return (
+        ($base === '' ? ($basePath === '' ? '' : $basePath) : $base)
+            . '/'
+            . ltrim($path, '/')
+    );
 }
-
 
 /**
  * Return the current browser request URI as a safe post-login return target.
@@ -316,8 +348,10 @@ function current_login_return_target(): string
  * @param string $fallback Fallback value.
  * @return string Text result for the caller.
  */
-function sanitize_login_return_target(string $target, string $fallback = ''): string
-{
+function sanitize_login_return_target(
+    string $target,
+    string $fallback = '',
+): string {
     // $fallback stores the route used when no trustworthy return target exists.
     $fallback = $fallback !== '' ? $fallback : url_for('admin');
     // $target stores the trimmed value from either the query string or POST body.
@@ -329,12 +363,18 @@ function sanitize_login_return_target(string $target, string $fallback = ''): st
     // HTTP(S) browsers treat backslashes as path separators. "/\host" is
     // therefore a network-path redirect even though PHP sees a local path.
     // Refuse it before normalizing any submitted relative return path.
-    if (str_contains($target, '\\') || preg_match('/[\x00-\x1F\x7F]/', $target)) {
+    if (
+        str_contains($target, '\\')
+        || preg_match('/[\x00-\x1F\x7F]/', $target)
+    ) {
         return $fallback;
     }
 
     // Only accept relative URLs. This prevents redirects to another domain.
-    if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $target) || str_starts_with($target, '//')) {
+    if (
+        preg_match('/^[a-z][a-z0-9+.-]*:/i', $target)
+        || str_starts_with($target, '//')
+    ) {
         return $fallback;
     }
 
@@ -362,14 +402,30 @@ function sanitize_login_return_target(string $target, string $fallback = ''): st
     // $page stores the front-controller page name when the URL uses index.php routing.
     $page = (string) ($queryParams['page'] ?? '');
     // Do not return to authentication, setup, or password-reset pages after login.
-    if (in_array($page, ['admin_login', 'admin_logout', 'admin_forgot_password', 'admin_reset_password', 'setup'], true)) {
+    if (in_array(
+        $page,
+        [
+            'admin_login',
+            'admin_logout',
+            'admin_forgot_password',
+            'admin_reset_password',
+            'setup',
+        ],
+        true,
+    )) {
         return $fallback;
     }
 
     // Clean URL installations can also expose auth routes without a page query.
     // Keep this conservative because these paths should never be a post-login target.
     $lowerPath = strtolower($path);
-    foreach (['admin_login', 'admin_logout', 'admin_forgot_password', 'admin_reset_password', 'setup'] as $unsafePathPart) {
+    foreach ([
+        'admin_login',
+        'admin_logout',
+        'admin_forgot_password',
+        'admin_reset_password',
+        'setup',
+    ] as $unsafePathPart) {
         if (str_contains($lowerPath, $unsafePathPart)) {
             return $fallback;
         }
@@ -393,29 +449,71 @@ function url_for(string $page, array $params = []): string
             $params['view_as'] = 'anonymous';
         }
     }
-    if ($page === 'home' && $params === [] && url_rewrite_should_emit_clean_urls()) {
+    if (
+        $page === 'home'
+        && $params === []
+        && url_rewrite_should_emit_clean_urls()
+    ) {
         return base_url();
     }
-    if ($page === 'viewer_register' && $params === [] && url_rewrite_should_emit_clean_urls()) {
+    if (
+        $page === 'viewer_register'
+        && $params === []
+        && url_rewrite_should_emit_clean_urls()
+    ) {
         return base_url('viewer/register');
     }
-    if ($page === 'viewer_resend_verification' && $params === [] && url_rewrite_should_emit_clean_urls()) {
+    if (
+        $page === 'viewer_resend_verification'
+        && $params === []
+        && url_rewrite_should_emit_clean_urls()
+    ) {
         return base_url('viewer/resend');
     }
-    if ($page === 'viewer_collection_share_exchange' && isset($params['token']) && count($params) === 1 && url_rewrite_should_emit_clean_urls()) {
-        return base_url('viewer/collection/share/' . rawurlencode((string) $params['token']));
+    if (
+        $page === 'viewer_collection_share_exchange'
+        && isset($params['token'])
+        && count($params) === 1
+        && url_rewrite_should_emit_clean_urls()
+    ) {
+        return base_url(
+            'viewer/collection/share/'
+                . rawurlencode((string) $params['token']),
+        );
     }
-    if ($page === 'viewer_collection_shared' && isset($params['collection_id']) && count($params) === 1 && url_rewrite_should_emit_clean_urls()) {
-        return base_url('viewer/shared/' . rawurlencode((string) $params['collection_id']));
+    if (
+        $page === 'viewer_collection_shared'
+        && isset($params['collection_id'])
+        && count($params) === 1
+        && url_rewrite_should_emit_clean_urls()
+    ) {
+        return base_url(
+            'viewer/shared/' . rawurlencode((string) $params['collection_id']),
+        );
     }
-    if ($page === 'smart_gallery' && isset($params['slug']) && url_rewrite_should_emit_clean_urls()) {
+    if (
+        $page === 'smart_gallery'
+        && isset($params['slug'])
+        && url_rewrite_should_emit_clean_urls()
+    ) {
         $pageNumber = max(1, (int) ($params['photo_page'] ?? 1));
         $cleanParams = $params;
         unset($cleanParams['slug'], $cleanParams['photo_page']);
-        $url = base_url('smart/' . rawurlencode((string) $params['slug']) . ($pageNumber > 1 ? '/' . $pageNumber : ''));
-        return $cleanParams === [] ? $url : $url . '?' . http_build_query($cleanParams);
+        $url = base_url(
+            'smart/'
+                . rawurlencode((string) $params['slug'])
+                . ($pageNumber > 1 ? '/' . $pageNumber : ''),
+        );
+        return $cleanParams === []
+            ? $url
+            : $url . '?' . http_build_query($cleanParams);
     }
-    if ($page === 'tag' && isset($params['slug']) && count($params) === 1 && url_rewrite_should_emit_clean_urls()) {
+    if (
+        $page === 'tag'
+        && isset($params['slug'])
+        && count($params) === 1
+        && url_rewrite_should_emit_clean_urls()
+    ) {
         return base_url('tag/' . rawurlencode((string) $params['slug']));
     }
     // Variable $params stores this steps working value.
@@ -431,7 +529,10 @@ function url_for(string $page, array $params = []): string
 function public_base_url(): string
 {
     // $configured stores an intermediate value used by the surrounding gallery workflow.
-    $configured = rtrim(request_aware_base_url(rtrim((string) cms_config()['base_url'], '/')), '/');
+    $configured = rtrim(
+        request_aware_base_url(rtrim((string) cms_config()['base_url'], '/')),
+        '/',
+    );
     if ($configured !== '') {
         return $configured;
     }
@@ -457,7 +558,10 @@ function absolute_public_url(string $url): string
         // $parts stores an intermediate value used by the surrounding gallery workflow.
         $parts = parse_url(public_base_url());
         // $origin stores an intermediate value used by the surrounding gallery workflow.
-        $origin = (string) ($parts['scheme'] ?? 'http') . '://' . (string) ($parts['host'] ?? 'localhost');
+        $origin =
+            (string) ($parts['scheme'] ?? 'http')
+            . '://'
+            . (string) ($parts['host'] ?? 'localhost');
         if (!empty($parts['port'])) {
             $origin .= ':' . (int) $parts['port'];
         }
@@ -481,10 +585,15 @@ function public_path_segment(string $path): string
     }
 
     // $segments stores an intermediate value used by the surrounding gallery workflow.
-    $segments = array_values(array_filter(explode('/', $normalizedPath), static fn (string $segment): bool => $segment !== ''));
-    return implode('/', array_map(static fn (string $segment): string => rawurlencode($segment), $segments));
+    $segments = array_values(array_filter(
+        explode('/', $normalizedPath),
+        static fn(string $segment): bool => $segment !== '',
+    ));
+    return implode('/', array_map(
+        static fn(string $segment): string => rawurlencode($segment),
+        $segments,
+    ));
 }
-
 
 /**
  * Return true when a logged-in admin explicitly requested the public page as an anonymous visitor.
@@ -580,21 +689,41 @@ function public_visual_preview_url(string $url, bool $anonymous = false): string
     }
     $requestHost = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
     $requestScheme = request_is_https() ? 'https' : 'http';
-    $requestOrigin = $requestHost === '' ? null : parse_url($requestScheme . '://' . $requestHost);
-    if (!is_array($requestOrigin) || !isset($requestOrigin['host'])
-        || isset($requestOrigin['user']) || isset($requestOrigin['pass']) || isset($requestOrigin['path'])
-        || isset($requestOrigin['query']) || isset($requestOrigin['fragment'])) {
+    $requestOrigin = $requestHost === ''
+        ? null
+        : parse_url($requestScheme . '://' . $requestHost);
+    if (
+        !is_array($requestOrigin)
+        || !isset($requestOrigin['host'])
+        || isset($requestOrigin['user'])
+        || isset($requestOrigin['pass'])
+        || isset($requestOrigin['path'])
+        || isset($requestOrigin['query'])
+        || isset($requestOrigin['fragment'])
+    ) {
         return $url;
     }
     if (isset($parts['host'])) {
         $urlScheme = strtolower((string) ($parts['scheme'] ?? ''));
-        $requestOriginScheme = strtolower((string) ($requestOrigin['scheme'] ?? ''));
-        $urlPort = (int) ($parts['port'] ?? ($urlScheme === 'https' ? 443 : 80));
-        $requestPort = (int) ($requestOrigin['port'] ?? ($requestOriginScheme === 'https' ? 443 : 80));
-        if ($urlScheme !== $requestOriginScheme
-            || strtolower((string) $parts['host']) !== strtolower((string) ($requestOrigin['host'] ?? ''))
+        $requestOriginScheme = strtolower(
+            (string) ($requestOrigin['scheme'] ?? ''),
+        );
+        $urlPort = (int) (
+            $parts['port'] ?? ($urlScheme === 'https' ? 443 : 80)
+        );
+        $requestPort = (int) (
+            $requestOrigin['port']
+            ?? ($requestOriginScheme === 'https' ? 443 : 80)
+        );
+        if (
+            $urlScheme !== $requestOriginScheme
+            || strtolower((string) $parts['host']) !== strtolower(
+                (string) ($requestOrigin['host'] ?? ''),
+            )
             || $urlPort !== $requestPort
-            || isset($parts['user']) || isset($parts['pass'])) {
+            || isset($parts['user'])
+            || isset($parts['pass'])
+        ) {
             return $url;
         }
     } elseif (isset($parts['scheme']) || str_starts_with($url, '//')) {
@@ -605,8 +734,15 @@ function public_visual_preview_url(string $url, bool $anonymous = false): string
     if ($mountPath === '/') {
         $mountPath = '';
     }
-    if ($urlPath === '' || $urlPath[0] !== '/' || ($mountPath !== ''
-        && $urlPath !== $mountPath && !str_starts_with($urlPath, $mountPath . '/'))) {
+    if (
+        $urlPath === ''
+        || $urlPath[0] !== '/'
+        || (
+            $mountPath !== ''
+            && $urlPath !== $mountPath
+            && !str_starts_with($urlPath, $mountPath . '/')
+        )
+    ) {
         return $url;
     }
     $query = [];
@@ -620,7 +756,13 @@ function public_visual_preview_url(string $url, bool $anonymous = false): string
             $explicitPreviewValues[] = urldecode($rawValue);
         }
     }
-    if (count($explicitPreviewValues) > 1 || ($explicitPreviewValues !== [] && $explicitPreviewValues[0] !== 'visual')) {
+    if (
+        count($explicitPreviewValues) > 1
+        || (
+            $explicitPreviewValues !== []
+            && $explicitPreviewValues[0] !== 'visual'
+        )
+    ) {
         return $url;
     }
     parse_str((string) ($parts['query'] ?? ''), $query);

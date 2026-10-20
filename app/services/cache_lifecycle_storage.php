@@ -89,10 +89,16 @@ const CACHE_LIFECYCLE_MANUAL_IDLE_SECONDS = 900;
  * @param bool $windows Whether the runtime lacks supported built-in server multiprocessing; defaults to the actual platform.
  * @return bool False for single-worker cli-server and every Windows cli-server; true for other server interfaces or a supported pool of at least two workers. Short visitor opportunities remain available on refusal.
  */
-function cache_lifecycle_chain_runtime_available(string $sapi = PHP_SAPI, ?string $workers = null, bool $windows = DIRECTORY_SEPARATOR === '\\'): bool
-{
-    if ($sapi !== 'cli-server') return true;
-    return !$windows && (int) ($workers ?? getenv('PHP_CLI_SERVER_WORKERS')) >= 2;
+function cache_lifecycle_chain_runtime_available(
+    string $sapi = PHP_SAPI,
+    ?string $workers = null,
+    bool $windows = DIRECTORY_SEPARATOR === '\\',
+): bool {
+    if ($sapi !== 'cli-server')
+        return true;
+    return (
+        !$windows && (int) ($workers ?? getenv('PHP_CLI_SERVER_WORKERS')) >= 2
+    );
 }
 
 /**
@@ -101,7 +107,9 @@ function cache_lifecycle_chain_runtime_available(string $sapi = PHP_SAPI, ?strin
  */
 function cache_lifecycle_project_root(): string
 {
-    return defined('CACHE_LIFECYCLE_TEST_ROOT') ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT') : dirname(__DIR__, 2);
+    return defined('CACHE_LIFECYCLE_TEST_ROOT')
+        ? (string) constant('CACHE_LIFECYCLE_TEST_ROOT')
+        : dirname(__DIR__, 2);
 }
 
 /**
@@ -112,7 +120,11 @@ function cache_lifecycle_project_root(): string
 function cache_lifecycle_path(string $relative): string
 {
     $root = cache_lifecycle_project_root();
-    application_update_assert_safe_target($root, 'cache' . ($relative !== '' ? '/' . $relative : ''), true);
+    application_update_assert_safe_target(
+        $root,
+        'cache' . ($relative !== '' ? '/' . $relative : ''),
+        true,
+    );
     return $root . '/cache' . ($relative !== '' ? '/' . $relative : '');
 }
 
@@ -123,10 +135,13 @@ function cache_lifecycle_path(string $relative): string
  */
 function cache_lifecycle_assert_path(string $path): void
 {
-    $prefix = str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/';
+    $prefix =
+        str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/';
     $normalized = str_replace('\\', '/', $path);
     if (!str_starts_with($normalized, $prefix)) {
-        throw new \RuntimeException('Cache lifecycle path is outside its owner.');
+        throw new \RuntimeException(
+            'Cache lifecycle path is outside its owner.',
+        );
     }
     cache_lifecycle_path(substr($normalized, strlen($prefix)));
 }
@@ -137,11 +152,15 @@ function cache_lifecycle_assert_path(string $path): void
  */
 function cache_lifecycle_now(): int
 {
-    if (defined('CACHE_LIFECYCLE_TEST_ROOT')
-        && isset($GLOBALS['cache_lifecycle_test_now'])) {
+    if (
+        defined('CACHE_LIFECYCLE_TEST_ROOT')
+        && isset($GLOBALS['cache_lifecycle_test_now'])
+    ) {
         return (int) $GLOBALS['cache_lifecycle_test_now'];
     }
-    return defined('CACHE_LIFECYCLE_TEST_NOW') ? (int) constant('CACHE_LIFECYCLE_TEST_NOW') : time();
+    return defined('CACHE_LIFECYCLE_TEST_NOW')
+        ? (int) constant('CACHE_LIFECYCLE_TEST_NOW')
+        : time();
 }
 
 /**
@@ -158,16 +177,33 @@ function cache_lifecycle_read_json(string $path): array
     if (!is_file($path) || is_link($path)) {
         return [];
     }
-    $json = @file_get_contents($path, false, null, 0, CACHE_LIFECYCLE_STATE_BYTES + 1);
-    $control = str_replace('\\', '/', $path) === str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/cache-lifecycle/state.json';
+    $json = @file_get_contents(
+        $path,
+        false,
+        null,
+        0,
+        CACHE_LIFECYCLE_STATE_BYTES + 1,
+    );
+    $control =
+        str_replace('\\', '/', $path)
+        === str_replace('\\', '/', cache_lifecycle_project_root())
+            . '/cache/cache-lifecycle/state.json';
     if (!is_string($json) || strlen($json) > CACHE_LIFECYCLE_STATE_BYTES) {
         if ($control) {
-            throw new \RuntimeException('Cache lifecycle checkpoint is unreadable.');
+            throw new \RuntimeException(
+                'Cache lifecycle checkpoint is unreadable.',
+            );
         }
         return [];
     }
     $decoded = json_decode($json, true);
-    if ($control && (!is_array($decoded) || !isset($decoded['schema'], $decoded['id'], $decoded['phase']))) {
+    if (
+        $control
+        && (
+            !is_array($decoded)
+            || !isset($decoded['schema'], $decoded['id'], $decoded['phase'])
+        )
+    ) {
         throw new \RuntimeException('Cache lifecycle checkpoint is invalid.');
     }
     return is_array($decoded) ? $decoded : [];
@@ -187,13 +223,23 @@ function cache_lifecycle_write_json(string $path, array $record): void
         return;
     }
     cache_lifecycle_assert_path($path . '.tmp');
-    $json = json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    $json = json_encode(
+        $record,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+    );
     if (strlen($json) > CACHE_LIFECYCLE_STATE_BYTES) {
-        throw new \RuntimeException('Cache lifecycle state exceeded its bound.');
+        throw new \RuntimeException(
+            'Cache lifecycle state exceeded its bound.',
+        );
     }
     $temporary = $path . '.tmp';
-    if (file_put_contents($temporary, $json, LOCK_EX) !== strlen($json) || !@rename($temporary, $path)) {
-        throw new \RuntimeException('Cache lifecycle checkpoint could not be committed.');
+    if (
+        file_put_contents($temporary, $json, LOCK_EX) !== strlen($json)
+        || !@rename($temporary, $path)
+    ) {
+        throw new \RuntimeException(
+            'Cache lifecycle checkpoint could not be committed.',
+        );
     }
 }
 
@@ -204,8 +250,14 @@ function cache_lifecycle_write_json(string $path, array $record): void
 function cache_lifecycle_control_directory(): string
 {
     $directory = cache_lifecycle_path('cache-lifecycle');
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new \RuntimeException('Cache lifecycle control directory is unavailable.');
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new \RuntimeException(
+            'Cache lifecycle control directory is unavailable.',
+        );
     }
     return $directory;
 }
@@ -219,8 +271,12 @@ function cache_lifecycle_producer_lease(string $relative): mixed
 {
     $leasePath = cache_lifecycle_lease_path($relative);
     $handle = @fopen($leasePath, 'c');
-    if ($handle === false) return null;
-    if (!flock($handle, LOCK_SH | LOCK_NB)) { fclose($handle); return null; }
+    if ($handle === false)
+        return null;
+    if (!flock($handle, LOCK_SH | LOCK_NB)) {
+        fclose($handle);
+        return null;
+    }
     return $handle;
 }
 
@@ -234,8 +290,14 @@ function cache_lifecycle_lease_path(string $relative): string
     cache_lifecycle_path($relative);
     $directory = cache_lifecycle_control_directory() . '/leases';
     cache_lifecycle_assert_path($directory);
-    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new \RuntimeException('Cache producer lease directory is unavailable.');
+    if (
+        !is_dir($directory)
+        && !mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new \RuntimeException(
+            'Cache producer lease directory is unavailable.',
+        );
     }
     // Stable two-hex-digit buckets cap live coordination at 256 inodes.
     // Type: string. Units: one SHA-256 prefix of two hexadecimal characters.
@@ -254,8 +316,18 @@ function cache_lifecycle_lease_path(string $relative): string
  */
 function cache_lifecycle_flat_download_identity(string $relative): ?array
 {
-    if (preg_match('#^(zips/(?:(?:gallery|smart-gallery|selected)-[1-9][0-9]*-|all-)(?:[a-f0-9]{40}|[a-f0-9]{64})\.zip)(?:(\.partial-[a-f0-9]{16}|\.[a-zA-Z0-9]{6}(?:\.part)?))?$#D', $relative, $match) !== 1) return null;
-    return ['base'=>$match[1],'partial'=>isset($match[2]) && $match[2] !== ''];
+    if (
+        preg_match(
+            '#^(zips/(?:(?:gallery|smart-gallery|selected)-[1-9][0-9]*-|all-)(?:[a-f0-9]{40}|[a-f0-9]{64})\.zip)(?:(\.partial-[a-f0-9]{16}|\.[a-zA-Z0-9]{6}(?:\.part)?))?$#D',
+            $relative,
+            $match,
+        ) !== 1
+    )
+        return null;
+    return [
+        'base' => $match[1],
+        'partial' => isset($match[2]) && $match[2] !== '',
+    ];
 }
 
 /**
@@ -265,18 +337,24 @@ function cache_lifecycle_flat_download_identity(string $relative): ?array
  */
 function cache_lifecycle_download_lease(string $path): mixed
 {
-    $prefix = str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/';
+    $prefix =
+        str_replace('\\', '/', cache_lifecycle_project_root()) . '/cache/';
     $normalized = str_replace('\\', '/', $path);
     if (!str_starts_with($normalized, $prefix)) {
         return null;
     }
-    $identity = cache_lifecycle_flat_download_identity(substr($normalized, strlen($prefix)));
+    $identity = cache_lifecycle_flat_download_identity(substr(
+        $normalized,
+        strlen($prefix),
+    ));
     if ($identity === null) {
         return null;
     }
     $lease = cache_lifecycle_producer_lease($identity['base']);
     if (!is_resource($lease)) {
-        throw new \RuntimeException('Download cache reclamation owns this archive.');
+        throw new \RuntimeException(
+            'Download cache reclamation owns this archive.',
+        );
     }
     return $lease;
 }
@@ -287,7 +365,9 @@ function cache_lifecycle_download_lease(string $path): mixed
  */
 function cache_lifecycle_status(): array
 {
-    $state = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/state.json'));
+    $state = cache_lifecycle_read_json(cache_lifecycle_path(
+        'cache-lifecycle/state.json',
+    ));
     $totals = is_array($state['totals'] ?? null) ? $state['totals'] : [];
     $bytes = $files = $dirs = 0;
     foreach ($totals as $total) {
@@ -295,21 +375,34 @@ function cache_lifecycle_status(): array
         $files += max(0, (int) ($total['files'] ?? 0));
         $dirs += max(0, (int) ($total['dirs'] ?? 0));
     }
-    $scheduler = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/scheduler.json'));
-    $chain = cache_lifecycle_read_json(cache_lifecycle_path('cache-lifecycle/chain.json'));
+    $scheduler = cache_lifecycle_read_json(cache_lifecycle_path(
+        'cache-lifecycle/scheduler.json',
+    ));
+    $chain = cache_lifecycle_read_json(cache_lifecycle_path(
+        'cache-lifecycle/chain.json',
+    ));
     $now = cache_lifecycle_now();
     $attempt = (int) ($scheduler['last_attempt_at'] ?? 0);
     $previous = (int) ($scheduler['previous_attempt_at'] ?? 0);
     $progress = (int) ($scheduler['last_progress_at'] ?? 0);
-    $pending = max(0, (int) ($state['candidate_bytes'] ?? 0) - (int) ($state['settled_bytes'] ?? 0));
+    $pending = max(
+        0,
+        (int) ($state['candidate_bytes'] ?? 0)
+            - (int) ($state['settled_bytes'] ?? 0),
+    );
     if (is_array($state['current'] ?? null)) {
         $pending = max(
             0,
-            $pending - min(
-                (int) ($state['current']['bytes'] ?? 0),
-                (int) ($state['bytes_removed'] ?? 0)
-                    - (int) ($state['current']['removed_before'] ?? $state['bytes_removed'] ?? 0)
-            )
+            $pending
+                - min(
+                    (int) ($state['current']['bytes'] ?? 0),
+                    (int) ($state['bytes_removed'] ?? 0)
+                        - (int) (
+                            $state['current']['removed_before']
+                            ?? $state['bytes_removed']
+                            ?? 0
+                        ),
+                ),
         );
     }
     $scheduled = !empty($state['scheduled']);
@@ -320,7 +413,11 @@ function cache_lifecycle_status(): array
         'ok' => true,
         'id' => (string) ($state['id'] ?? ''),
         'phase' => (string) ($state['phase'] ?? 'idle'),
-        'complete' => in_array($state['phase'] ?? '', ['preview','cleanup','complete'], true),
+        'complete' => in_array(
+            $state['phase'] ?? '',
+            ['preview', 'cleanup', 'complete'],
+            true,
+        ),
         'partial' => !empty($state['errors']) || !empty($state['blocked']),
         'bytes' => $bytes,
         'files' => $files,
@@ -336,60 +433,152 @@ function cache_lifecycle_status(): array
         'excluded' => 'cache-lifecycle',
         'scheduled' => $scheduled,
         'pending_bytes' => $pending,
-        'pending_candidates' => ($state['phase'] ?? '') === 'complete' ? 0 : max(0, (int) ($state['candidates'] ?? 0) - (int) ($state['settled_candidates'] ?? 0)),
+        'pending_candidates' => ($state['phase'] ?? '') === 'complete'
+            ? 0
+            : max(
+                0,
+                (int) ($state['candidates'] ?? 0)
+                    - (int) ($state['settled_candidates'] ?? 0),
+            ),
         'last_attempt_at' => $attempt,
         'last_progress_at' => $progress,
         'last_observed_at' => (int) ($state['last_observed_at'] ?? 0),
         'next_due' => ($state['phase'] ?? '') === 'complete'
-            ? (int) ($state['completed_at'] ?? 0) + CACHE_LIFECYCLE_REFRESH_SECONDS : (int) ($state['next_due'] ?? 0),
-        'stale' => empty($state['last_observed_at']) || $now - (int) $state['last_observed_at'] > CACHE_LIFECYCLE_HEALTH_SECONDS,
-        'stalled' => $attempt > 0 && !in_array($state['phase'] ?? '', ['complete','preview'], true)
-            && $now - ($progress ?: (int) ($scheduler['first_attempt_at'] ?? $attempt)) > CACHE_LIFECYCLE_HEALTH_SECONDS,
-        'scheduler_health' => $attempt === 0 ? 'unobserved' : ($now - $attempt > CACHE_LIFECYCLE_HEALTH_SECONDS ? 'missing'
-            : ($previous > 0 && $attempt > $previous && $attempt - $previous <= CACHE_LIFECYCLE_HEALTH_SECONDS ? 'arrivals_observed' : 'single_arrival')),
-        'scheduler_reason' => (string) app_setting('feature_flag.automatic_cache_cleanup.enabled', '1') === '0'
-            ? 'automatic_cache_cleanup_disabled' : ((string) ($chain['last_error'] ?? '') ?: (string) ($scheduler['reason'] ?? '')),
+            ? (int) ($state['completed_at'] ?? 0)
+            + CACHE_LIFECYCLE_REFRESH_SECONDS
+            : (int) ($state['next_due'] ?? 0),
+        'stale' =>
+            empty($state['last_observed_at'])
+                || ($now - (int) $state['last_observed_at'])
+                    > CACHE_LIFECYCLE_HEALTH_SECONDS,
+        'stalled' =>
+            $attempt > 0
+                && !in_array(
+                    $state['phase'] ?? '',
+                    ['complete', 'preview'],
+                    true,
+                )
+                && (
+                    $now
+                    - (
+                        $progress
+                        ?: (int) ($scheduler['first_attempt_at'] ?? $attempt)
+                    )
+                ) > CACHE_LIFECYCLE_HEALTH_SECONDS,
+        'scheduler_health' => $attempt === 0
+            ? 'unobserved'
+            : (
+                ($now - $attempt) > CACHE_LIFECYCLE_HEALTH_SECONDS
+                    ? 'missing'
+                    : (
+                        $previous > 0
+                            && $attempt > $previous
+                            && ($attempt - $previous)
+                            <= CACHE_LIFECYCLE_HEALTH_SECONDS
+                                ? 'arrivals_observed'
+                                : 'single_arrival'
+                    )
+            ),
+        'scheduler_reason' => (string) app_setting(
+            'feature_flag.automatic_cache_cleanup.enabled',
+            '1',
+        ) === '0'
+            ? 'automatic_cache_cleanup_disabled'
+            : (
+                (string) ($chain['last_error'] ?? '')
+                ?: (string) ($scheduler['reason'] ?? '')
+            ),
         'scheduler_source' => (string) ($scheduler['source'] ?? ''),
-        'chain_health' => $chain === [] ? 'unstarted' : ((int) ($chain['queued_until'] ?? 0) > $now
-            ? (!empty($chain['running']) ? 'waiting' : 'queued') : 'stalled'),
+        'chain_health' => $chain === []
+            ? 'unstarted'
+            : (
+                (int) ($chain['queued_until'] ?? 0) > $now
+                    ? (!empty($chain['running']) ? 'waiting' : 'queued')
+                    : 'stalled'
+            ),
         'chain_arrival_at' => (int) ($chain['last_arrival_at'] ?? 0),
         'chain_next_start_at' => (int) ($chain['next_start_at'] ?? 0),
         'interrupted' => !empty($scheduler['interrupted']),
         'superseded_manual_at' => (int) ($state['superseded_manual_at'] ?? 0),
-        'sample' => array_slice(is_array($state['sample'] ?? null) ? $state['sample'] : [], 0, CACHE_LIFECYCLE_PREVIEW_SAMPLES),
+        'sample' => array_slice(
+            is_array($state['sample'] ?? null) ? $state['sample'] : [],
+            0,
+            CACHE_LIFECYCLE_PREVIEW_SAMPLES,
+        ),
         'policies' => cache_lifecycle_policies(),
         'totals' => $totals,
         'measurement_available' => (int) ($state['last_observed_at'] ?? 0) > 0,
     ];
     if (!$scheduled && ($state['id'] ?? '') !== '') {
         // Keep manual-cycle progress separate from retained regional/lifetime measurements.
-        $summary['operation'] = array_intersect_key($summary, array_flip(['id','phase','files','bytes','candidates','candidate_bytes','pending_bytes','removed','bytes_removed','skipped','errors','blocked','partial']));
+        $summary['operation'] = array_intersect_key($summary, array_flip([
+            'id',
+            'phase',
+            'files',
+            'bytes',
+            'candidates',
+            'candidate_bytes',
+            'pending_bytes',
+            'removed',
+            'bytes_removed',
+            'skipped',
+            'errors',
+            'blocked',
+            'partial',
+        ]));
     }
     if (cache_lifecycle_registry_enabled()) {
         try {
             $registry = cache_lifecycle_registry_summary();
         } catch (\Throwable) {
-            return array_replace($summary, ['ok'=>false,'partial'=>true,'registry_unavailable'=>true,'last_error'=>'cache_registry_unavailable']);
+            return array_replace($summary, [
+                'ok' => false,
+                'partial' => true,
+                'registry_unavailable' => true,
+                'last_error' => 'cache_registry_unavailable',
+            ]);
         }
         // Manual previews retain their explicit controls; registry findings never grant approval.
         if ($registry['regions_total'] > 0) {
             $manual = $state !== [] && ($state['phase'] ?? '') !== 'complete';
-            $controls = $manual ? array_intersect_key($summary, array_flip(['id','phase','scheduled','candidates','candidate_bytes','sample'])) : [];
+            $controls = $manual
+                ? array_intersect_key($summary, array_flip([
+                    'id',
+                    'phase',
+                    'scheduled',
+                    'candidates',
+                    'candidate_bytes',
+                    'sample',
+                ]))
+                : [];
             $summary = array_replace($summary, $registry, $controls);
-            $summary['stale'] = $registry['oldest_completed_at'] === 0
-                || $now - $registry['oldest_completed_at'] > CACHE_REGISTRY_RECHECK_SECONDS;
+            $summary['stale'] =
+                $registry['oldest_completed_at'] === 0
+                || ($now - $registry['oldest_completed_at'])
+                    > CACHE_REGISTRY_RECHECK_SECONDS;
         }
     }
     $summary['snapshot_at'] = $now;
-    $summary['stalled'] = empty($summary['registry']) ? $summary['stalled'] : $attempt > 0 && (int) ($summary['regions_working'] ?? 0) > 0
-        && $now - ($progress ?: (int) ($scheduler['first_attempt_at'] ?? $attempt)) > CACHE_LIFECYCLE_HEALTH_SECONDS;
+    $summary['stalled'] = empty($summary['registry'])
+        ? $summary['stalled']
+        : $attempt > 0
+        && (int) ($summary['regions_working'] ?? 0) > 0
+        && (
+            $now
+            - ($progress ?: (int) ($scheduler['first_attempt_at'] ?? $attempt))
+        ) > CACHE_LIFECYCLE_HEALTH_SECONDS;
     $summary['worker_state'] = match (true) {
-        $summary['scheduler_reason'] === 'automatic_cache_cleanup_disabled' => 'disabled',
+        $summary['scheduler_reason'] === 'automatic_cache_cleanup_disabled'
+            => 'disabled',
         empty($summary['ok']) => 'unavailable',
-        $summary['scheduler_health'] === 'missing' || $summary['scheduler_health'] === 'unobserved' => 'missing',
+        $summary['scheduler_health'] === 'missing'
+            || $summary['scheduler_health'] === 'unobserved'
+            => 'missing',
         $summary['stalled'] => 'stalled',
         !empty($summary['partial']) => 'partial',
-        (int) ($summary['regions_working'] ?? 0) > 0 || $summary['phase'] === 'inventory' => 'working',
+        (int) ($summary['regions_working'] ?? 0) > 0
+            || $summary['phase'] === 'inventory'
+            => 'working',
         default => 'waiting',
     };
     return $summary;
@@ -407,20 +596,95 @@ function cache_lifecycle_policies(): array
     // Consumers: preview classification, scheduled reclamation and the Admin policy table.
     // Rationale: completed diagnostics need one day, downloads seven days, and recovery/user data must outlive time-based caches.
     return [
-        'audits' => ['label'=>'Test audits','seconds'=>86400,'mode'=>'expiry','reason'=>'Completed producer-verified reports; active leases and explicit pins survive.'],
-        'ci_diagnostics' => ['label'=>'Downloaded CI diagnostics','seconds'=>86400,'mode'=>'expiry','reason'=>'Verified completed audit exports; unknown exports and pinned evidence survive.'],
-        'admin_tests' => ['label'=>'Admin test reports','seconds'=>86400,'mode'=>'expiry','reason'=>'Finalized producer-owned reports, never live request recording.'],
-        'workspaces' => ['label'=>'Disposable browser and release workspaces','seconds'=>86400,'mode'=>'expiry','reason'=>'Fixed lifetime from creation or a persisted legacy age anchor; use does not renew expiry. Pins and unsafe paths survive.'],
-        'downloads' => ['label'=>'Download ZIPs','seconds'=>604800,'mode'=>'owner','reason'=>'Existing download identity, serving leases and build reservations remain authoritative.'],
-        'manifests' => ['label'=>'Download manifests','seconds'=>86400,'mode'=>'owner','reason'=>'Physical metadata one day; dynamic smart metadata fifteen minutes.'],
-        'partials' => ['label'=>'Download partials','seconds'=>21600,'mode'=>'owner','reason'=>'Six hours, only after exclusive build ownership permits reclamation.'],
-        'github' => ['label'=>'GitHub response cache','seconds'=>86400,'mode'=>'expiry','reason'=>'Rebuildable response metadata with valid producer shape and expired cache timestamp.'],
-        'drafts' => ['label'=>'SimBrief preview drafts','seconds'=>1860,'mode'=>'expiry','reason'=>'Existing thirty-minute preview expiry plus a one-minute safety margin.'],
-        'updates' => ['label'=>'Updater versions and rollback','seconds'=>null,'mode'=>'context','reason'=>'Keep current/last successful recovery ownership and active jobs; reclaim older verified terminal work.'],
-        'uploads' => ['label'=>'Upload idempotency and resume state','seconds'=>null,'mode'=>'owner','reason'=>'Keep unfinished upload state until the upload owner establishes completion/expiry.'],
-        'media' => ['label'=>'Thumbnails and favicon derivatives','seconds'=>null,'mode'=>'context','reason'=>'Invalidate by source/version through the media owner, never by age alone.'],
-        'durable' => ['label'=>'Theme, branding, Trash and persistent state','seconds'=>null,'mode'=>'preserve','reason'=>'These may contain originals, selected assets or recovery state despite their cache location.'],
-        'control' => ['label'=>'Maintenance journals and live control state','seconds'=>null,'mode'=>'preserve','reason'=>'Owned jobs, locks and inventory checkpoints support safe recovery.'],
-        'unknown' => ['label'=>'Unregistered cache content','seconds'=>null,'mode'=>'preserve','reason'=>'Report actual bytes; no deletion based only on a directory name or age.'],
+        'audits' => [
+            'label' => 'Test audits',
+            'seconds' => 86400,
+            'mode' => 'expiry',
+            'reason' => 'Completed producer-verified reports; active leases and explicit pins survive.',
+        ],
+        'ci_diagnostics' => [
+            'label' => 'Downloaded CI diagnostics',
+            'seconds' => 86400,
+            'mode' => 'expiry',
+            'reason' => 'Verified completed audit exports; unknown exports and pinned evidence survive.',
+        ],
+        'admin_tests' => [
+            'label' => 'Admin test reports',
+            'seconds' => 86400,
+            'mode' => 'expiry',
+            'reason' => 'Finalized producer-owned reports, never live request recording.',
+        ],
+        'workspaces' => [
+            'label' => 'Disposable browser and release workspaces',
+            'seconds' => 86400,
+            'mode' => 'expiry',
+            'reason' => 'Fixed lifetime from creation or a persisted legacy age anchor; use does not renew expiry. Pins and unsafe paths survive.',
+        ],
+        'downloads' => [
+            'label' => 'Download ZIPs',
+            'seconds' => 604800,
+            'mode' => 'owner',
+            'reason' => 'Existing download identity, serving leases and build reservations remain authoritative.',
+        ],
+        'manifests' => [
+            'label' => 'Download manifests',
+            'seconds' => 86400,
+            'mode' => 'owner',
+            'reason' => 'Physical metadata one day; dynamic smart metadata fifteen minutes.',
+        ],
+        'partials' => [
+            'label' => 'Download partials',
+            'seconds' => 21600,
+            'mode' => 'owner',
+            'reason' => 'Six hours, only after exclusive build ownership permits reclamation.',
+        ],
+        'github' => [
+            'label' => 'GitHub response cache',
+            'seconds' => 86400,
+            'mode' => 'expiry',
+            'reason' => 'Rebuildable response metadata with valid producer shape and expired cache timestamp.',
+        ],
+        'drafts' => [
+            'label' => 'SimBrief preview drafts',
+            'seconds' => 1860,
+            'mode' => 'expiry',
+            'reason' => 'Existing thirty-minute preview expiry plus a one-minute safety margin.',
+        ],
+        'updates' => [
+            'label' => 'Updater versions and rollback',
+            'seconds' => null,
+            'mode' => 'context',
+            'reason' => 'Keep current/last successful recovery ownership and active jobs; reclaim older verified terminal work.',
+        ],
+        'uploads' => [
+            'label' => 'Upload idempotency and resume state',
+            'seconds' => null,
+            'mode' => 'owner',
+            'reason' => 'Keep unfinished upload state until the upload owner establishes completion/expiry.',
+        ],
+        'media' => [
+            'label' => 'Thumbnails and favicon derivatives',
+            'seconds' => null,
+            'mode' => 'context',
+            'reason' => 'Invalidate by source/version through the media owner, never by age alone.',
+        ],
+        'durable' => [
+            'label' => 'Theme, branding, Trash and persistent state',
+            'seconds' => null,
+            'mode' => 'preserve',
+            'reason' => 'These may contain originals, selected assets or recovery state despite their cache location.',
+        ],
+        'control' => [
+            'label' => 'Maintenance journals and live control state',
+            'seconds' => null,
+            'mode' => 'preserve',
+            'reason' => 'Owned jobs, locks and inventory checkpoints support safe recovery.',
+        ],
+        'unknown' => [
+            'label' => 'Unregistered cache content',
+            'seconds' => null,
+            'mode' => 'preserve',
+            'reason' => 'Report actual bytes; no deletion based only on a directory name or age.',
+        ],
     ];
 }

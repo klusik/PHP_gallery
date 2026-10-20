@@ -30,14 +30,24 @@ require_once dirname(__DIR__, 2) . '/scripts/release_lib.php';
 
 $version = (string) ($argv[1] ?? '');
 if (!valid_version($version)) {
-    fwrite(STDERR, "Usage: php .github/scripts/prepare_release_candidate.php X.Y[.Z]\n");
+    fwrite(
+        STDERR,
+        "Usage: php .github/scripts/prepare_release_candidate.php X.Y[.Z]\n",
+    );
     exit(2);
 }
 
 $root = dirname(__DIR__, 2);
 $current = detect_cms_version($root);
 if ($current !== $version && version_compare($version, $current, '<=')) {
-    fwrite(STDERR, 'Refusing non-incrementing release version ' . $version . '; current runtime version is ' . $current . ".\n");
+    fwrite(
+        STDERR,
+        'Refusing non-incrementing release version '
+            . $version
+            . '; current runtime version is '
+            . $current
+            . ".\n",
+    );
     exit(2);
 }
 
@@ -45,15 +55,32 @@ $timezone = new DateTimeZone('Europe/Prague');
 $metadataPath = $root . '/release-metadata.json';
 $metadata = json_decode((string) file_get_contents($metadataPath), true);
 if (!is_array($metadata)) {
-    throw new RuntimeException('release-metadata.json is not a valid JSON object.');
+    throw new RuntimeException(
+        'release-metadata.json is not a valid JSON object.',
+    );
 }
 
-$existing = isset($metadata[$version]) && is_array($metadata[$version]) ? $metadata[$version] : null;
+$existing = isset($metadata[$version]) && is_array($metadata[$version])
+    ? $metadata[$version]
+    : null;
 $initialEpoch = getenv('RELEASE_INITIAL_EPOCH');
-$releaseMoment = resolve_release_moment($existing, $version, $initialEpoch === false ? null : $initialEpoch, $timezone);
+$releaseMoment = resolve_release_moment(
+    $existing,
+    $version,
+    $initialEpoch === false ? null : $initialEpoch,
+    $timezone,
+);
 
-$changed = prepare_version_markers($root, $version, $releaseMoment->format('j F Y'));
-if (upsert_release_metadata($root, $version, $existing === null ? $releaseMoment : null)) {
+$changed = prepare_version_markers(
+    $root,
+    $version,
+    $releaseMoment->format('j F Y'),
+);
+if (upsert_release_metadata(
+    $root,
+    $version,
+    $existing === null ? $releaseMoment : null,
+)) {
     $changed[] = 'release-metadata.json';
 }
 if (ensure_patch_notes_scaffold($root, $version)) {
@@ -61,9 +88,48 @@ if (ensure_patch_notes_scaffold($root, $version)) {
 }
 
 $months = [
-    'CZ' => [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'],
-    'DE' => [1 => 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'],
-    'SV' => [1 => 'januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december'],
+    'CZ' => [
+        1 => 'ledna',
+        'února',
+        'března',
+        'dubna',
+        'května',
+        'června',
+        'července',
+        'srpna',
+        'září',
+        'října',
+        'listopadu',
+        'prosince',
+    ],
+    'DE' => [
+        1 => 'Januar',
+        'Februar',
+        'März',
+        'April',
+        'Mai',
+        'Juni',
+        'Juli',
+        'August',
+        'September',
+        'Oktober',
+        'November',
+        'Dezember',
+    ],
+    'SV' => [
+        1 => 'januari',
+        'februari',
+        'mars',
+        'april',
+        'maj',
+        'juni',
+        'juli',
+        'augusti',
+        'september',
+        'oktober',
+        'november',
+        'december',
+    ],
 ];
 
 foreach (['CZ', 'DE', 'SV'] as $language) {
@@ -71,9 +137,21 @@ foreach (['CZ', 'DE', 'SV'] as $language) {
     $absolute = $root . '/' . $path;
     $contents = (string) file_get_contents($absolute);
     $date = match ($language) {
-        'CZ' => $releaseMoment->format('j') . '.~' . $months[$language][(int) $releaseMoment->format('n')] . '~' . $releaseMoment->format('Y'),
-        'DE' => $releaseMoment->format('j') . '.~' . $months[$language][(int) $releaseMoment->format('n')] . '~' . $releaseMoment->format('Y'),
-        'SV' => $releaseMoment->format('j') . '~' . $months[$language][(int) $releaseMoment->format('n')] . '~' . $releaseMoment->format('Y'),
+        'CZ' => $releaseMoment->format('j')
+            . '.~'
+            . $months[$language][(int) $releaseMoment->format('n')]
+            . '~'
+            . $releaseMoment->format('Y'),
+        'DE' => $releaseMoment->format('j')
+            . '.~'
+            . $months[$language][(int) $releaseMoment->format('n')]
+            . '~'
+            . $releaseMoment->format('Y'),
+        'SV' => $releaseMoment->format('j')
+            . '~'
+            . $months[$language][(int) $releaseMoment->format('n')]
+            . '~'
+            . $releaseMoment->format('Y'),
     };
 
     $versionCount = 0;
@@ -83,24 +161,27 @@ foreach (['CZ', 'DE', 'SV'] as $language) {
         static fn(array $match): string => $match[1] . $version . $match[2],
         $contents,
         1,
-        $versionCount
+        $versionCount,
     );
     if (!is_string($updated) || $versionCount !== 1) {
-        throw new RuntimeException('Unable to update translated manual version marker: ' . $path);
+        throw new RuntimeException('Unable to update translated manual version marker: '
+            . $path);
     }
     $updated = preg_replace_callback(
         '/(\\\\newcommand\{\\\\manualdate\}\{)[^}]+(\})/',
         static fn(array $match): string => $match[1] . $date . $match[2],
         $updated,
         1,
-        $dateCount
+        $dateCount,
     );
     if (!is_string($updated) || $dateCount !== 1) {
-        throw new RuntimeException('Unable to update translated manual date marker: ' . $path);
+        throw new RuntimeException('Unable to update translated manual date marker: '
+            . $path);
     }
     if ($updated !== $contents) {
         if (file_put_contents($absolute, $updated) === false) {
-            throw new RuntimeException('Unable to write translated manual marker: ' . $path);
+            throw new RuntimeException('Unable to write translated manual marker: '
+                . $path);
         }
         $changed[] = $path;
     }
@@ -108,7 +189,10 @@ foreach (['CZ', 'DE', 'SV'] as $language) {
 
 $changed = array_values(array_unique($changed));
 sort($changed, SORT_STRING);
-fwrite(STDOUT, 'GitHub release preparation | ' . $current . ' -> ' . $version . "\n");
+fwrite(
+    STDOUT,
+    'GitHub release preparation | ' . $current . ' -> ' . $version . "\n",
+);
 if ($changed === []) {
     fwrite(STDOUT, "No deterministic release markers required changes.\n");
 } else {

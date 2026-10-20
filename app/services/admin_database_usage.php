@@ -41,7 +41,6 @@ namespace Gallery\Services;
 require_once __DIR__ . '/../runtime/storage_observer.php';
 
 use function Gallery\Core\storage_observer_call;
-
 use function Gallery\Models\admin_database_usage_model_analyze_table;
 use function Gallery\Models\admin_database_usage_model_current_database_name;
 use function Gallery\Models\admin_database_usage_model_table_rows;
@@ -94,20 +93,22 @@ function admin_database_usage_gallery_table_names(): array
  * enough for admin capacity planning, but they should not be treated as exact
  * byte-for-byte payload serialization sizes.
  *
- * @return array<string mixed>.
+ * @return array<string,mixed> Usage summary containing availability, byte and row estimates, largest table, and top table lists; on failure it contains available=false, an error, and empty row lists.
  */
 function admin_database_usage_summary(): array
 {
     try {
         $databaseName = admin_database_usage_current_database_name();
         if ($databaseName === '') {
-            return admin_database_usage_unavailable('Current database name could not be detected.');
+            return admin_database_usage_unavailable(
+                'Current database name could not be detected.',
+            );
         }
 
         return admin_database_usage_build_summary_from_rows(
             $databaseName,
             admin_database_usage_table_rows($databaseName),
-            admin_database_usage_gallery_table_names()
+            admin_database_usage_gallery_table_names(),
         );
     } catch (Throwable $exception) {
         return admin_database_usage_unavailable($exception->getMessage());
@@ -136,8 +137,12 @@ function admin_database_usage_recompute_statistics(): array
             'table_count' => 0,
             'table_reports' => [],
             'duration_seconds' => 0.0,
-            'before_summary' => admin_database_usage_unavailable('Current database name could not be detected.'),
-            'after_summary' => admin_database_usage_unavailable('Current database name could not be detected.'),
+            'before_summary' => admin_database_usage_unavailable(
+                'Current database name could not be detected.',
+            ),
+            'after_summary' => admin_database_usage_unavailable(
+                'Current database name could not be detected.',
+            ),
             'error' => 'Current database name could not be detected.',
         ];
     }
@@ -146,7 +151,7 @@ function admin_database_usage_recompute_statistics(): array
     $beforeSummary = admin_database_usage_build_summary_from_rows(
         $databaseName,
         $beforeRows,
-        admin_database_usage_gallery_table_names()
+        admin_database_usage_gallery_table_names(),
     );
     $tableNames = admin_database_usage_recomputable_table_names($beforeRows);
     $tableReports = [];
@@ -159,15 +164,22 @@ function admin_database_usage_recompute_statistics(): array
             $tableReports[] = [
                 'table_name' => $tableName,
                 'status' => 'ok',
-                'duration_seconds' => round(microtime(true) - $tableStartedAt, 4),
-                'messages' => admin_database_usage_normalize_analyze_messages($messages),
+                'duration_seconds' => round(
+                    microtime(true) - $tableStartedAt,
+                    4,
+                ),
+                'messages' =>
+                    admin_database_usage_normalize_analyze_messages($messages),
             ];
         } catch (Throwable $exception) {
             $failedTables++;
             $tableReports[] = [
                 'table_name' => $tableName,
                 'status' => 'failed',
-                'duration_seconds' => round(microtime(true) - $tableStartedAt, 4),
+                'duration_seconds' => round(
+                    microtime(true) - $tableStartedAt,
+                    4,
+                ),
                 'messages' => [],
                 'error' => $exception->getMessage(),
             ];
@@ -178,7 +190,7 @@ function admin_database_usage_recompute_statistics(): array
     $afterSummary = admin_database_usage_build_summary_from_rows(
         $databaseName,
         $afterRows,
-        admin_database_usage_gallery_table_names()
+        admin_database_usage_gallery_table_names(),
     );
 
     $report = [
@@ -194,15 +206,32 @@ function admin_database_usage_recompute_statistics(): array
         'php_memory_limit' => ini_get('memory_limit'),
         'before_summary' => $beforeSummary,
         'after_summary' => $afterSummary,
-        'total_bytes_delta' => (int) ($afterSummary['total_bytes'] ?? 0) - (int) ($beforeSummary['total_bytes'] ?? 0),
-        'gallery_bytes_delta' => (int) ($afterSummary['gallery_bytes'] ?? 0) - (int) ($beforeSummary['gallery_bytes'] ?? 0),
-        'row_estimate_delta' => (int) ($afterSummary['table_rows_estimate'] ?? 0) - (int) ($beforeSummary['table_rows_estimate'] ?? 0),
-        'gallery_row_estimate_delta' => (int) ($afterSummary['gallery_rows_estimate'] ?? 0) - (int) ($beforeSummary['gallery_rows_estimate'] ?? 0),
+        'total_bytes_delta' =>
+            (int) ($afterSummary['total_bytes'] ?? 0)
+                - (int) ($beforeSummary['total_bytes'] ?? 0),
+        'gallery_bytes_delta' =>
+            (int) ($afterSummary['gallery_bytes'] ?? 0)
+                - (int) ($beforeSummary['gallery_bytes'] ?? 0),
+        'row_estimate_delta' =>
+            (int) ($afterSummary['table_rows_estimate'] ?? 0)
+                - (int) ($beforeSummary['table_rows_estimate'] ?? 0),
+        'gallery_row_estimate_delta' =>
+            (int) ($afterSummary['gallery_rows_estimate'] ?? 0)
+                - (int) ($beforeSummary['gallery_rows_estimate'] ?? 0),
         'error' => '',
     ];
 
     if (function_exists('Gallery\\Services\\admin_log_event')) {
-        admin_log_event('info', 'database_usage.recomputed', 'Admin recomputed database table statistics.', $report, ['category' => 'database', 'severity' => $failedTables === 0 ? 'notice' : 'warning']);
+        admin_log_event(
+            'info',
+            'database_usage.recomputed',
+            'Admin recomputed database table statistics.',
+            $report,
+            [
+                'category' => 'database',
+                'severity' => $failedTables === 0 ? 'notice' : 'warning',
+            ],
+        );
     }
 
     return $report;
@@ -217,16 +246,20 @@ function admin_database_usage_recompute_statistics(): array
  *     table_timings:list<array{table:string,seconds:float,ok:bool}>} Batch progress,
  *     failures and bounded per-table timings without SQL or exception text.
  */
-function admin_database_usage_recompute_statistics_batch(int $offset, int $batchSize = ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE): array
-{
-    $databaseName = storage_observer_call('db.current_database_name',
-        static fn(): string => admin_database_usage_current_database_name());
+function admin_database_usage_recompute_statistics_batch(
+    int $offset,
+    int $batchSize = ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE,
+): array {
+    $databaseName = storage_observer_call('db.current_database_name', static fn(): string => admin_database_usage_current_database_name());
     if ($databaseName === '') {
-        throw new \RuntimeException('Current database name could not be detected.');
+        throw new \RuntimeException(
+            'Current database name could not be detected.',
+        );
     }
 
-    $rows = storage_observer_call('db.table_metadata',
-        static fn(): array => admin_database_usage_table_rows($databaseName));
+    $rows = storage_observer_call('db.table_metadata', static fn(): array => admin_database_usage_table_rows(
+        $databaseName,
+    ));
     $tableNames = admin_database_usage_recomputable_table_names($rows);
     // ANALYZE can change size estimates, so use a stable name order for the browser cursor.
     sort($tableNames, SORT_NATURAL | SORT_FLAG_CASE);
@@ -240,7 +273,10 @@ function admin_database_usage_recompute_statistics_batch(int $offset, int $batch
      * Consumers: admin_database_usage_recompute_statistics_batch().
      * Rationale: cap request duration while allowing the persisted cursor to resume remaining tables.
      */
-    $batchSize = max(1, min(ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE, $batchSize));
+    $batchSize = max(1, min(
+        ADMIN_DATABASE_USAGE_ANALYZE_BATCH_SIZE,
+        $batchSize,
+    ));
     $batch = array_slice($tableNames, $offset, $batchSize);
     $failed = 0;
     $tableTimings = [];
@@ -249,15 +285,19 @@ function admin_database_usage_recompute_statistics_batch(int $offset, int $batch
         $started = hrtime(true);
         $ok = true;
         try {
-            storage_observer_call('db.analyze_table',
-                static fn(): array => admin_database_usage_model_analyze_table($tableName));
+            storage_observer_call('db.analyze_table', static fn(): array => admin_database_usage_model_analyze_table(
+                $tableName,
+            ));
         } catch (Throwable) {
             $failed++;
             $ok = false;
         }
         // Convert monotonic nanoseconds to seconds; one record per bounded table.
-        $tableTimings[] = ['table' => $tableName,
-            'seconds' => max(0.0, (hrtime(true) - $started) / 1e9), 'ok' => $ok];
+        $tableTimings[] = [
+            'table' => $tableName,
+            'seconds' => max(0.0, (hrtime(true) - $started) / 1e9),
+            'ok' => $ok,
+        ];
     }
 
     $processed = $offset + count($batch);
@@ -274,14 +314,16 @@ function admin_database_usage_recompute_statistics_batch(int $offset, int $batch
 /**
  * Return table names that can be safely passed to ANALYZE TABLE.
  *
- * @param array $rows Table metadata rows.
- * @return array<int, string> Table names.
+ * @param array<int,array<string,mixed>> $rows Table metadata rows with table_name/TABLE_NAME and engine/ENGINE fields.
+ * @return list<string> Unique non-empty table names with a reported engine.
  */
 function admin_database_usage_recomputable_table_names(array $rows): array
 {
     $tableNames = [];
     foreach ($rows as $row) {
-        $tableName = trim((string) ($row['table_name'] ?? $row['TABLE_NAME'] ?? ''));
+        $tableName = trim(
+            (string) ($row['table_name'] ?? $row['TABLE_NAME'] ?? ''),
+        );
         $engine = trim((string) ($row['engine'] ?? $row['ENGINE'] ?? ''));
         if ($tableName === '' || $engine === '') {
             continue;
@@ -315,8 +357,16 @@ function admin_database_usage_normalize_analyze_messages(array $messages): array
         $normalized[] = [
             'table' => (string) ($message['Table'] ?? $message['table'] ?? ''),
             'operation' => (string) ($message['Op'] ?? $message['op'] ?? ''),
-            'message_type' => (string) ($message['Msg_type'] ?? $message['msg_type'] ?? ''),
-            'message_text' => (string) ($message['Msg_text'] ?? $message['msg_text'] ?? ''),
+            'message_type' => (string) (
+                $message['Msg_type']
+                ?? $message['msg_type']
+                ?? ''
+            ),
+            'message_text' => (string) (
+                $message['Msg_text']
+                ?? $message['msg_text']
+                ?? ''
+            ),
         ];
     }
     return $normalized;
@@ -387,13 +437,19 @@ function admin_database_usage_unavailable(string $reason): array
  * Build a normalized usage summary from information_schema rows.
  *
  * @param string $databaseName Database name value.
- * @param array $rows Rows to process.
- * @param array $galleryTableNames Gallery table names value.
- * @return array<string mixed>.
+ * @param array<int,array<string,mixed>> $rows Information-schema table rows with name, engine, data/index bytes, and estimated row fields.
+ * @param list<string> $galleryTableNames Table names classified as gallery content.
+ * @return array<string,mixed> Normalized database usage totals, availability metadata, and finalized overall and gallery table rows.
  */
-function admin_database_usage_build_summary_from_rows(string $databaseName, array $rows, array $galleryTableNames): array
-{
-    $galleryTableLookup = array_fill_keys(array_map('strtolower', $galleryTableNames), true);
+function admin_database_usage_build_summary_from_rows(
+    string $databaseName,
+    array $rows,
+    array $galleryTableNames,
+): array {
+    $galleryTableLookup = array_fill_keys(
+        array_map('strtolower', $galleryTableNames),
+        true,
+    );
     $normalizedRows = [];
     $galleryRows = [];
 
@@ -409,7 +465,10 @@ function admin_database_usage_build_summary_from_rows(string $databaseName, arra
     $largestTableBytes = 0;
 
     foreach ($rows as $row) {
-        $normalized = admin_database_usage_normalize_table_row($row, $galleryTableLookup);
+        $normalized = admin_database_usage_normalize_table_row(
+            $row,
+            $galleryTableLookup,
+        );
         if ((string) ($normalized['table_name'] ?? '') === '') {
             continue;
         }
@@ -448,14 +507,24 @@ function admin_database_usage_build_summary_from_rows(string $databaseName, arra
         'gallery_data_bytes' => $galleryDataBytes,
         'gallery_index_bytes' => $galleryIndexBytes,
         'gallery_table_count' => count($galleryRows),
-        'gallery_percent_of_database' => $totalBytes > 0 ? round(($galleryBytes / $totalBytes) * 100, 1) : 0.0,
+        'gallery_percent_of_database' => $totalBytes > 0
+            ? round(($galleryBytes / $totalBytes) * 100, 1)
+            : 0.0,
         'operational_bytes' => max(0, $totalBytes - $galleryBytes),
         'table_rows_estimate' => $rowEstimate,
         'gallery_rows_estimate' => $galleryRowEstimate,
         'largest_table_name' => $largestTableName,
         'largest_table_bytes' => $largestTableBytes,
-        'table_rows' => admin_database_usage_finalize_table_rows($normalizedRows, $totalBytes, 10),
-        'gallery_table_rows' => admin_database_usage_finalize_table_rows($galleryRows, $galleryBytes, 10),
+        'table_rows' => admin_database_usage_finalize_table_rows(
+            $normalizedRows,
+            $totalBytes,
+            10,
+        ),
+        'gallery_table_rows' => admin_database_usage_finalize_table_rows(
+            $galleryRows,
+            $galleryBytes,
+            10,
+        ),
         'error' => '',
     ];
 }
@@ -463,21 +532,30 @@ function admin_database_usage_build_summary_from_rows(string $databaseName, arra
 /**
  * Normalize one information_schema row for display and aggregation.
  *
- * @param array $row Row data.
- * @param array $galleryTableLookup Gallery table lookup value.
- * @return array<string mixed>.
+ * @param array<string,mixed> $row One information-schema table row using database-native or normalized field names.
+ * @param array<string,true> $galleryTableLookup Lowercase gallery table names mapped to true.
+ * @return array{key:string,label:string,table_name:string,count:int,bytes:int,data_bytes:int,index_bytes:int,engine:string,is_gallery_table:bool} Normalized table usage row.
  */
-function admin_database_usage_normalize_table_row(array $row, array $galleryTableLookup): array
-{
-    $tableName = trim((string) ($row['table_name'] ?? $row['TABLE_NAME'] ?? ''));
+function admin_database_usage_normalize_table_row(
+    array $row,
+    array $galleryTableLookup,
+): array {
+    $tableName = trim(
+        (string) ($row['table_name'] ?? $row['TABLE_NAME'] ?? ''),
+    );
     $dataBytes = max(0, (int) ($row['data_bytes'] ?? $row['DATA_LENGTH'] ?? 0));
-    $indexBytes = max(0, (int) ($row['index_bytes'] ?? $row['INDEX_LENGTH'] ?? 0));
+    $indexBytes = max(
+        0,
+        (int) ($row['index_bytes'] ?? $row['INDEX_LENGTH'] ?? 0),
+    );
     $rowCount = max(0, (int) ($row['table_rows'] ?? $row['TABLE_ROWS'] ?? 0));
     $engine = trim((string) ($row['engine'] ?? $row['ENGINE'] ?? ''));
     $isGalleryTable = isset($galleryTableLookup[strtolower($tableName)]);
 
     return [
-        'key' => 'db-table-' . preg_replace('/[^a-z0-9_]+/i', '-', strtolower($tableName)),
+        'key' =>
+            'db-table-'
+                . preg_replace('/[^a-z0-9_]+/i', '-', strtolower($tableName)),
         'label' => $tableName,
         'table_name' => $tableName,
         'count' => $rowCount,
@@ -492,19 +570,26 @@ function admin_database_usage_normalize_table_row(array $row, array $galleryTabl
 /**
  * Sort table rows and add percentage values for chart rendering.
  *
- * @param array $rows Rows to process.
+ * @param array<int,array<string,mixed>> $rows Normalized table usage rows.
  * @param int $totalBytes Total bytes value.
  * @param int $limit Maximum number of items.
- * @return array<int array<string, mixed>>.
+ * @return list<array{key:string,label:string,table_name:string,count:int,bytes:int,data_bytes:int,index_bytes:int,engine:string,is_gallery_table:bool,percent:float}> Rows sorted by descending bytes and annotated with their percentage of total bytes.
  */
-function admin_database_usage_finalize_table_rows(array $rows, int $totalBytes, int $limit = 10): array
-{
+function admin_database_usage_finalize_table_rows(
+    array $rows,
+    int $totalBytes,
+    int $limit = 10,
+): array {
     usort($rows, static function (array $left, array $right): int {
-        $bytesCompare = (int) ($right['bytes'] ?? 0) <=> (int) ($left['bytes'] ?? 0);
+        $bytesCompare =
+            (int) ($right['bytes'] ?? 0) <=> (int) ($left['bytes'] ?? 0);
         if ($bytesCompare !== 0) {
             return $bytesCompare;
         }
-        return strnatcasecmp((string) ($left['label'] ?? ''), (string) ($right['label'] ?? ''));
+        return strnatcasecmp(
+            (string) ($left['label'] ?? ''),
+            (string) ($right['label'] ?? ''),
+        );
     });
 
     if ($limit > 0 && count($rows) > $limit) {
@@ -513,7 +598,9 @@ function admin_database_usage_finalize_table_rows(array $rows, int $totalBytes, 
 
     foreach ($rows as $index => $row) {
         $bytes = max(0, (int) ($row['bytes'] ?? 0));
-        $rows[$index]['percent'] = $totalBytes > 0 ? round(($bytes / $totalBytes) * 100, 1) : 0.0;
+        $rows[$index]['percent'] = $totalBytes > 0
+            ? round(($bytes / $totalBytes) * 100, 1)
+            : 0.0;
     }
 
     return $rows;

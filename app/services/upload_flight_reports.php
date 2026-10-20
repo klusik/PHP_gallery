@@ -36,14 +36,20 @@ const UPLOAD_FLIGHT_REPORT_MAX_ID_LENGTH = 80;
  * @return string Stable provenance value stored in the PDF index.
  * @throws RuntimeException When either identity value is unsupported.
  */
-function upload_flight_report_identity(string $reportId, string $language): string
-{
+function upload_flight_report_identity(
+    string $reportId,
+    string $language,
+): string {
     $reportId = trim($reportId);
     $language = strtolower(trim($language));
-    if (strlen($reportId) > UPLOAD_FLIGHT_REPORT_MAX_ID_LENGTH
+    if (
+        strlen($reportId) > UPLOAD_FLIGHT_REPORT_MAX_ID_LENGTH
         || preg_match('/^[A-Za-z0-9_-]+$/D', $reportId) !== 1
-        || !in_array($language, ['en', 'cs', 'de', 'sv'], true)) {
-        throw new RuntimeException('The flight report identity or language is invalid.');
+        || !in_array($language, ['en', 'cs', 'de', 'sv'], true)
+    ) {
+        throw new RuntimeException(
+            'The flight report identity or language is invalid.',
+        );
     }
 
     return 'flight-v1:' . hash('sha256', $reportId . "\0" . $language);
@@ -63,7 +69,7 @@ function upload_flight_report_status(
     array $gallery,
     string $reportId,
     string $language,
-    string $sha256
+    string $sha256,
 ): array {
     $provenance = upload_flight_report_identity($reportId, $language);
     if (preg_match('/^[a-f0-9]{64}$/D', strtolower($sha256)) !== 1) {
@@ -87,12 +93,14 @@ function upload_flight_report_status(
     $verified = gallery_pdf_documents_read($gallery, (string) $document['id']);
     if ($verified === null) {
         throw new RuntimeException(
-            'The indexed flight report is missing or failed integrity validation.'
+            'The indexed flight report is missing or failed integrity validation.',
         );
     }
     $stored = $verified['metadata'];
     if (($stored['provenance'] ?? '') !== $provenance) {
-        throw new RuntimeException('The flight report identity is inconsistent.');
+        throw new RuntimeException(
+            'The flight report identity is inconsistent.',
+        );
     }
     $metadata = [
         'id' => (string) $stored['id'],
@@ -125,26 +133,30 @@ function upload_flight_report_attach(
     string $reportId,
     string $sessionId,
     string $language,
-    string $sha256
+    string $sha256,
 ): array {
     upload_flight_report_identity($reportId, $language);
     $sessionId = trim($sessionId);
-    if (strlen($sessionId) > UPLOAD_FLIGHT_REPORT_MAX_ID_LENGTH
-        || preg_match('/^[A-Za-z0-9_-]+$/D', $sessionId) !== 1) {
+    if (
+        strlen($sessionId) > UPLOAD_FLIGHT_REPORT_MAX_ID_LENGTH
+        || preg_match('/^[A-Za-z0-9_-]+$/D', $sessionId) !== 1
+    ) {
         throw new RuntimeException('The flight session identity is invalid.');
     }
 
     $validated = gallery_pdf_documents_validate_pdf_source($source);
     $sha256 = strtolower(trim($sha256));
     if (!hash_equals($validated['sha256'], $sha256)) {
-        throw new RuntimeException('The flight report checksum does not match its PDF bytes.');
+        throw new RuntimeException(
+            'The flight report checksum does not match its PDF bytes.',
+        );
     }
 
     $existing = upload_flight_report_status(
         $gallery,
         $reportId,
         $language,
-        $sha256
+        $sha256,
     );
     if ($existing['found'] || $existing['conflict']) {
         return $existing;
@@ -152,13 +164,14 @@ function upload_flight_report_attach(
 
     $language = strtoupper($language);
     $identity = substr(hash('sha256', $reportId), 0, 16);
-    $filename = 'flight-report-' . $identity . '-' . strtolower($language) . '.pdf';
+    $filename =
+        'flight-report-' . $identity . '-' . strtolower($language) . '.pdf';
     $document = gallery_pdf_documents_attach(
         $gallery,
         $source,
         $filename,
         'Flight report (' . $language . ')',
-        upload_flight_report_identity($reportId, $language)
+        upload_flight_report_identity($reportId, $language),
     );
 
     return [

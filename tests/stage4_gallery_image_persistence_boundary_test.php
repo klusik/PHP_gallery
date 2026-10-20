@@ -75,12 +75,29 @@ function stage4_gallery_image_looks_like_sql(string $value): bool
     return false;
 }
 
-/** Return the next significant token index after one token. */
+/**
+ * Return the next significant token index after one token.
+ *
+ * @param list<string|array{0:int,1:string,2:int}> $tokens PHP token stream.
+ * @param int $index Current token index.
+ * @return ?int Index of the next non-trivia token, or null at end of stream.
+ */
 function stage4_gallery_image_next_token_index(array $tokens, int $index): ?int
 {
-    for ($cursor = $index + 1, $count = count($tokens); $cursor < $count; $cursor++) {
+    for (
+        $cursor = $index + 1, $count = count($tokens);
+        $cursor < $count;
+        $cursor++
+    ) {
         $token = $tokens[$cursor];
-        if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+        if (
+            is_array($token)
+            && in_array(
+                $token[0],
+                [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT],
+                true,
+            )
+        ) {
             continue;
         }
         return $cursor;
@@ -88,7 +105,13 @@ function stage4_gallery_image_next_token_index(array $tokens, int $index): ?int
     return null;
 }
 
-/** Return whether one T_STRING token is a direct function call. */
+/**
+ * Return whether one T_STRING token is a direct function call.
+ *
+ * @param list<string|array{0:int,1:string,2:int}> $tokens PHP token stream.
+ * @param int $index Index of the candidate T_STRING token.
+ * @return bool Whether the token is followed by a call parenthesis and is not a declaration/construction.
+ */
 function stage4_gallery_image_is_function_call(array $tokens, int $index): bool
 {
     $next = stage4_gallery_image_next_token_index($tokens, $index);
@@ -98,26 +121,45 @@ function stage4_gallery_image_is_function_call(array $tokens, int $index): bool
 
     for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
         $token = $tokens[$cursor];
-        if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+        if (
+            is_array($token)
+            && in_array(
+                $token[0],
+                [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT],
+                true,
+            )
+        ) {
             continue;
         }
-        return !(is_array($token) && in_array($token[0], [T_FUNCTION, T_NEW], true));
+        return !(
+            is_array($token)
+            && in_array($token[0], [T_FUNCTION, T_NEW], true)
+        );
     }
     return true;
 }
 
 $violations = [];
-$pdoMethods = ['prepare', 'query', 'exec', 'beginTransaction', 'commit', 'rollBack'];
+$pdoMethods = [
+    'prepare',
+    'query',
+    'exec',
+    'beginTransaction',
+    'commit',
+    'rollBack',
+];
 
 foreach ($serviceFiles as $relativePath) {
     $path = $root . '/' . $relativePath;
     if (!is_file($path)) {
-        throw new RuntimeException('Stage 4 service is unavailable: ' . $relativePath);
+        throw new RuntimeException('Stage 4 service is unavailable: '
+            . $relativePath);
     }
 
     $source = module_source($path);
     if ($source === '') {
-        throw new RuntimeException('Unable to read Stage 4 service module: ' . $relativePath);
+        throw new RuntimeException('Unable to read Stage 4 service module: '
+            . $relativePath);
     }
 
     $tokens = token_get_all($source);
@@ -127,7 +169,11 @@ foreach ($serviceFiles as $relativePath) {
         }
         [$tokenId, $text, $line] = $token;
 
-        if ($tokenId === T_STRING && strtolower($text) === 'db' && stage4_gallery_image_is_function_call($tokens, $index)) {
+        if (
+            $tokenId === T_STRING
+            && strtolower($text) === 'db'
+            && stage4_gallery_image_is_function_call($tokens, $index)
+        ) {
             $violations[] = "$relativePath:$line direct db() call";
             continue;
         }
@@ -135,10 +181,23 @@ foreach ($serviceFiles as $relativePath) {
         if ($tokenId === T_STRING && in_array($text, $pdoMethods, true)) {
             for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
                 $previous = $tokens[$cursor];
-                if (is_array($previous) && in_array($previous[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                if (
+                    is_array($previous)
+                    && in_array(
+                        $previous[0],
+                        [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT],
+                        true,
+                    )
+                ) {
                     continue;
                 }
-                if ($previous === '->' || (is_array($previous) && $previous[0] === T_OBJECT_OPERATOR)) {
+                if (
+                    $previous === '->'
+                    || (
+                        is_array($previous)
+                        && $previous[0] === T_OBJECT_OPERATOR
+                    )
+                ) {
                     $violations[] = "$relativePath:$line PDO method $text()";
                 }
                 break;
@@ -146,8 +205,14 @@ foreach ($serviceFiles as $relativePath) {
             continue;
         }
 
-        if (in_array($tokenId, [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE], true)
-            && stage4_gallery_image_looks_like_sql($text)) {
+        if (
+            in_array(
+                $tokenId,
+                [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE],
+                true,
+            )
+            && stage4_gallery_image_looks_like_sql($text)
+        ) {
             $violations[] = "$relativePath:$line SQL literal";
         }
     }
@@ -155,7 +220,8 @@ foreach ($serviceFiles as $relativePath) {
 
 if ($violations !== []) {
     throw new RuntimeException(
-        "Stage 4 gallery/image persistence boundary violations:\n  - " . implode("\n  - ", $violations)
+        "Stage 4 gallery/image persistence boundary violations:\n  - "
+            . implode("\n  - ", $violations),
     );
 }
 

@@ -77,24 +77,33 @@ function admin_gallery_form_current_user_id(): int
  * @param ?int $userId Optional administrator id. Null resolves the current administrator.
  * @return array<string,mixed> Prepared optional controls and configured public-language fallback.
  */
-function admin_gallery_form_view_model(string $entityType, array $entity = [], ?int $userId = null): array
-{
+function admin_gallery_form_view_model(
+    string $entityType,
+    array $entity = [],
+    ?int $userId = null,
+): array {
     $entityType = $entityType === 'image' ? 'image' : 'gallery';
     $resolvedUserId = $userId ?? admin_gallery_form_current_user_id();
     $localizationEnabled = content_localization_enabled();
-    $localizationSchemaReady = $localizationEnabled && content_localization_schema_ready($entityType);
+    $localizationSchemaReady =
+        $localizationEnabled && content_localization_schema_ready($entityType);
     $languages = $localizationSchemaReady ? content_supported_languages() : [];
     $translations = [];
     $entityId = (int) ($entity['id'] ?? 0);
     $creationPreferences = $entityType === 'gallery'
-        ? \Gallery\Services\gallery_creation_preferences_for_user($resolvedUserId)
+        ? \Gallery\Services\gallery_creation_preferences_for_user(
+            $resolvedUserId,
+        )
         : [];
     if ($localizationSchemaReady && $entityId > 0) {
         $translationRows = content_translation_rows($entityType, [$entityId]);
-        $translations = is_array($translationRows[$entityId] ?? null) ? $translationRows[$entityId] : [];
+        $translations = is_array($translationRows[$entityId] ?? null)
+            ? $translationRows[$entityId]
+            : [];
     }
 
-    $openAiAvailable = $resolvedUserId > 0 && openai_text_assist_available($resolvedUserId);
+    $openAiAvailable =
+        $resolvedUserId > 0 && openai_text_assist_available($resolvedUserId);
     $dateModel = [
         'schema_ready' => false,
         'range_schema_ready' => false,
@@ -106,27 +115,41 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
     ];
     if ($entityType === 'gallery') {
         $dateSchemaReady = gallery_date_schema_ready();
-        $rangeSchemaReady = $dateSchemaReady && gallery_date_range_schema_ready();
+        $rangeSchemaReady =
+            $dateSchemaReady && gallery_date_range_schema_ready();
         $galleryId = (int) ($entity['id'] ?? 0);
-        $exifSuggestionEnabled = $galleryId > 0
-            && feature_capability_effective_enabled('exif_gallery_date_suggestions')
+        $exifSuggestionEnabled =
+            $galleryId > 0
+            && feature_capability_effective_enabled(
+                'exif_gallery_date_suggestions',
+            )
             && gallery_date_exif_suggestions_schema_ready();
-        $suggestion = $exifSuggestionEnabled ? gallery_date_exif_suggestion_for_gallery($galleryId) : null;
+        $suggestion = $exifSuggestionEnabled
+            ? gallery_date_exif_suggestion_for_gallery($galleryId)
+            : null;
         $dateModel = [
             'schema_ready' => $dateSchemaReady,
             'range_schema_ready' => $rangeSchemaReady,
-            'start_value' => $dateSchemaReady ? gallery_date_input_value($entity['gallery_date'] ?? null) : '',
-            'end_value' => $rangeSchemaReady ? gallery_date_input_value($entity['gallery_date_end'] ?? null) : '',
+            'start_value' => $dateSchemaReady
+                ? gallery_date_input_value($entity['gallery_date'] ?? null)
+                : '',
+            'end_value' => $rangeSchemaReady
+                ? gallery_date_input_value($entity['gallery_date_end'] ?? null)
+                : '',
             'exif_suggestion_enabled' => $exifSuggestionEnabled,
             'exif_suggestion' => is_array($suggestion) ? $suggestion : null,
             'exif_suggestion_label' => is_array($suggestion)
-                ? gallery_date_range_storage_label($suggestion['suggested_start'] ?? null, $suggestion['suggested_end'] ?? null)
+                ? gallery_date_range_storage_label(
+                    $suggestion['suggested_start'] ?? null,
+                    $suggestion['suggested_end'] ?? null,
+                )
                 : '',
         ];
     }
 
     $countBadgeOptions = [];
-    $countBadgeSchemaReady = $entityType === 'gallery' && gallery_count_badge_schema_ready();
+    $countBadgeSchemaReady =
+        $entityType === 'gallery' && gallery_count_badge_schema_ready();
     if ($countBadgeSchemaReady) {
         foreach (gallery_count_badge_override_values() as $value) {
             $countBadgeOptions[] = [
@@ -138,29 +161,41 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
 
     return [
         'creation_preferences' => $creationPreferences,
-        'creation_preferences_available' => $entityType === 'gallery'
-            && \Gallery\Services\gallery_creation_preferences_available(),
-        'simbrief_enabled' => $entityType === 'gallery'
-            && feature_capability_effective_enabled('simbrief'),
+        'creation_preferences_available' =>
+            $entityType === 'gallery'
+                && \Gallery\Services\gallery_creation_preferences_available(),
+        'simbrief_enabled' =>
+            $entityType === 'gallery'
+                && feature_capability_effective_enabled('simbrief'),
         'route_navdata_url' => $entityType === 'gallery'
-            && feature_capability_effective_enabled('flight_maps')
-            && feature_capability_effective_enabled('navigation_data')
-                ? url_for('admin_route_navdata_refresh') : '',
+        && feature_capability_effective_enabled('flight_maps')
+        && feature_capability_effective_enabled('navigation_data')
+            ? url_for('admin_route_navdata_refresh')
+            : '',
         'localization' => [
             'enabled' => $localizationEnabled,
             'schema_ready' => $localizationSchemaReady,
             'languages' => $languages,
-            'default_source_language' => $entityType === 'gallery' && $localizationSchemaReady
+            'default_source_language' => $entityType === 'gallery'
+            && $localizationSchemaReady
                 ? translation_public_language()
                 : '',
-            'presentation' => $localizationSchemaReady ? translation_language_presentation() : [],
+            'presentation' => $localizationSchemaReady
+                ? translation_language_presentation()
+                : [],
             'translations' => $translations,
         ],
         'openai' => [
             'available' => $openAiAvailable,
-            'allow_image_input' => $openAiAvailable && openai_text_assist_image_input_allowed($resolvedUserId),
-            'language_catalog' => $openAiAvailable ? openai_text_assist_language_catalog() : [],
-            'default_language' => $openAiAvailable ? openai_text_assist_default_language() : 'en',
+            'allow_image_input' =>
+                $openAiAvailable
+                    && openai_text_assist_image_input_allowed($resolvedUserId),
+            'language_catalog' => $openAiAvailable
+                ? openai_text_assist_language_catalog()
+                : [],
+            'default_language' => $openAiAvailable
+                ? openai_text_assist_default_language()
+                : 'en',
         ],
         'date' => $dateModel,
         'count_badge' => [
@@ -169,7 +204,10 @@ function admin_gallery_form_view_model(string $entityType, array $entity = [], ?
         ],
         'title_completion' => [
             'candidates' => [],
-            'url' => $entityType === 'gallery' && $entityId <= 0 ? url_for('admin_gallery_title_completion') : '',
+            'url' =>
+                $entityType === 'gallery' && $entityId <= 0
+                    ? url_for('admin_gallery_title_completion')
+                    : '',
         ],
     ];
 }

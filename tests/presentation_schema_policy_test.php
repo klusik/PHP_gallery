@@ -48,11 +48,23 @@ namespace Gallery\Services {
      * @param string $message Message.
      * @param array<string,mixed> $context Context.
      * @param array<string,mixed> $options Options.
+     * @return void Append the bounded event to the fixture log collection.
      */
-    function admin_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-    {
+    function admin_log_event(
+        string $level,
+        string $eventKey,
+        string $message,
+        array $context = [],
+        array $options = [],
+    ): void {
         global $presentationSchemaPolicyTestLogs;
-        $presentationSchemaPolicyTestLogs[] = compact('level', 'eventKey', 'message', 'context', 'options');
+        $presentationSchemaPolicyTestLogs[] = compact(
+            'level',
+            'eventKey',
+            'message',
+            'context',
+            'options',
+        );
     }
 }
 
@@ -69,7 +81,8 @@ namespace {
     use function Gallery\Services\schema_inspection_is_available;
     use function Gallery\Services\schema_inspection_is_missing;
     use function Gallery\Services\schema_inspection_is_unknown;
-    use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
+    use function Gallery\Services\schema_inspection_set_query_executor_for_tests
+    ;
 
     require_once __DIR__ . '/../app/services/schema_inspection.php';
     require_once __DIR__ . '/../app/services/presentation_schema_policy.php';
@@ -94,63 +107,135 @@ namespace {
     }
 
     $queryCount = 0;
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object, string $token = '') use (&$queryCount): bool {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+        string $token = '',
+    ) use (&$queryCount): bool {
         $queryCount++;
         return true;
     });
     $available = presentation_voting_schema_status();
-    presentation_policy_assert(schema_inspection_is_available($available), 'Complete voting schema must be available.');
-    presentation_policy_assert($queryCount === 10, 'Voting capability must use exactly ten first-use metadata probes.');
+    presentation_policy_assert(
+        schema_inspection_is_available($available),
+        'Complete voting schema must be available.',
+    );
+    presentation_policy_assert(
+        $queryCount === 10,
+        'Voting capability must use exactly ten first-use metadata probes.',
+    );
     presentation_voting_schema_status();
-    presentation_policy_assert($queryCount === 10, 'Repeated voting inspection in one request must use the request-local cache.');
-    presentation_policy_assert(presentation_schema_render_available($available, 'test_render'), 'Available optional schema must render.');
+    presentation_policy_assert(
+        $queryCount === 10,
+        'Repeated voting inspection in one request must use the request-local cache.',
+    );
+    presentation_policy_assert(
+        presentation_schema_render_available($available, 'test_render'),
+        'Available optional schema must render.',
+    );
 
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object, string $token = ''): bool {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+        string $token = '',
+    ): bool {
         return !($table === 'galleries' && $object === 'voting_enabled');
     });
     $missing = presentation_voting_schema_status();
-    presentation_policy_assert(schema_inspection_is_missing($missing), 'Confirmed absent voting column must produce missing state.');
-    presentation_policy_assert(!presentation_schema_render_available($missing, 'test_missing_render'), 'Missing optional schema must omit the optional renderer.');
+    presentation_policy_assert(
+        schema_inspection_is_missing($missing),
+        'Confirmed absent voting column must produce missing state.',
+    );
+    presentation_policy_assert(
+        !presentation_schema_render_available($missing, 'test_missing_render'),
+        'Missing optional schema must omit the optional renderer.',
+    );
     presentation_schema_assert_known($missing, 'test_optional_legacy_write');
     $missingWriteBlocked = false;
     try {
-        presentation_schema_assert_write_available($missing, 'test_required_write');
+        presentation_schema_assert_write_available(
+            $missing,
+            'test_required_write',
+        );
     } catch (PresentationSchemaUnavailableException $exception) {
         $missingWriteBlocked = $exception->state() === 'missing';
     }
-    presentation_policy_assert($missingWriteBlocked, 'A write that requires the optional schema must reject confirmed missing state.');
+    presentation_policy_assert(
+        $missingWriteBlocked,
+        'A write that requires the optional schema must reject confirmed missing state.',
+    );
 
     $secretMarker = 'SECRET_DATABASE_PASSWORD_SHOULD_NEVER_APPEAR';
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object, string $token = '') use ($secretMarker): bool {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+        string $token = '',
+    ) use ($secretMarker): bool {
         if ($table === 'image_votes' && $object === 'visitor_hash') {
-            throw new RuntimeException('permission denied ' . $secretMarker . ' mysql://user:password@host/gallery');
+            throw new RuntimeException(
+                'permission denied '
+                    . $secretMarker
+                    . ' mysql://user:password@host/gallery',
+            );
         }
         return true;
     });
     $unknown = presentation_voting_schema_status();
-    presentation_policy_assert(schema_inspection_is_unknown($unknown), 'Inspection exception must produce unknown state.');
-    presentation_policy_assert(!presentation_schema_render_available($unknown, 'test_unknown_render'), 'Unknown optional read schema must omit only the optional renderer.');
+    presentation_policy_assert(
+        schema_inspection_is_unknown($unknown),
+        'Inspection exception must produce unknown state.',
+    );
+    presentation_policy_assert(
+        !presentation_schema_render_available($unknown, 'test_unknown_render'),
+        'Unknown optional read schema must omit only the optional renderer.',
+    );
     $unknownWriteBlocked = false;
     try {
         presentation_schema_assert_known($unknown, 'test_unknown_write');
     } catch (PresentationSchemaUnavailableException $exception) {
         $unknownWriteBlocked = $exception->state() === 'unknown';
     }
-    presentation_policy_assert($unknownWriteBlocked, 'Unknown optional schema must never authorize a dependent write.');
+    presentation_policy_assert(
+        $unknownWriteBlocked,
+        'Unknown optional schema must never authorize a dependent write.',
+    );
 
     global $presentationSchemaPolicyTestLogs;
-    $encodedLogs = json_encode($presentationSchemaPolicyTestLogs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
-    presentation_policy_assert(str_contains($encodedLogs, 'database.presentation_schema_degraded'), 'Unknown presentation schema must create a bounded diagnostic log event.');
-    presentation_policy_assert(!str_contains($encodedLogs, $secretMarker), 'Presentation diagnostics must not contain raw exception text.');
-    presentation_policy_assert(!str_contains($encodedLogs, 'mysql://'), 'Presentation diagnostics must not contain credential-bearing DSNs.');
+    $encodedLogs = json_encode(
+        $presentationSchemaPolicyTestLogs,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    ) ?: '';
+    presentation_policy_assert(
+        str_contains($encodedLogs, 'database.presentation_schema_degraded'),
+        'Unknown presentation schema must create a bounded diagnostic log event.',
+    );
+    presentation_policy_assert(
+        !str_contains($encodedLogs, $secretMarker),
+        'Presentation diagnostics must not contain raw exception text.',
+    );
+    presentation_policy_assert(
+        !str_contains($encodedLogs, 'mysql://'),
+        'Presentation diagnostics must not contain credential-bearing DSNs.',
+    );
 
     $healthQueryCount = 0;
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object, string $token = '') use (&$healthQueryCount): bool {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+        string $token = '',
+    ) use (&$healthQueryCount): bool {
         $healthQueryCount++;
         return true;
     });
     $definitions = presentation_schema_health_definitions();
-    presentation_policy_assert($healthQueryCount === 0, 'Building the Phase 11 health registry must be lazy and issue no metadata queries by itself.');
+    presentation_policy_assert(
+        $healthQueryCount === 0,
+        'Building the Phase 11 health registry must be lazy and issue no metadata queries by itself.',
+    );
     $expectedHealthKeys = [
         'presentation_gps_exif',
         'presentation_gps_override',
@@ -169,15 +254,35 @@ namespace {
         'presentation_telemetry_reporting',
         'presentation_admin_gallery_report',
     ];
-    presentation_policy_assert(array_keys($definitions) === $expectedHealthKeys, 'Phase 11 System Health registry changed unexpectedly.');
-    $votingResolver = $definitions['presentation_image_voting']['resolver'] ?? null;
-    presentation_policy_assert(is_callable($votingResolver), 'Phase 11 health entries must expose lazy schema resolvers.');
+    presentation_policy_assert(
+        array_keys($definitions) === $expectedHealthKeys,
+        'Phase 11 System Health registry changed unexpectedly.',
+    );
+    $votingResolver =
+        $definitions['presentation_image_voting']['resolver'] ?? null;
+    presentation_policy_assert(
+        is_callable($votingResolver),
+        'Phase 11 health entries must expose lazy schema resolvers.',
+    );
     $votingResolver();
-    presentation_policy_assert($healthQueryCount === 10, 'Resolving only voting health must inspect only the ten voting metadata requirements.');
+    presentation_policy_assert(
+        $healthQueryCount === 10,
+        'Resolving only voting health must inspect only the ten voting metadata requirements.',
+    );
 
-    schema_inspection_set_query_executor_for_tests(static fn (string $objectType, string $table, string $object, string $token = ''): bool => true);
+    schema_inspection_set_query_executor_for_tests(
+        static fn(
+            string $objectType,
+            string $table,
+            string $object,
+            string $token = '',
+        ): bool => true,
+    );
     $pictureGame = presentation_picture_game_schema_status();
-    presentation_policy_assert(schema_inspection_is_available($pictureGame), 'Complete picture-game schema must remain available through aggregate composition.');
+    presentation_policy_assert(
+        schema_inspection_is_available($pictureGame),
+        'Complete picture-game schema must remain available through aggregate composition.',
+    );
 
     $convertedFiles = [
         'app/services/exif.php',
@@ -196,42 +301,126 @@ namespace {
     foreach ($convertedFiles as $relativePath) {
         // module_source() also covers services that are split into part files.
         $source = module_source(__DIR__ . '/../' . $relativePath);
-        presentation_policy_assert(!preg_match('/\bdb_(?:table|column)_exists\s*\(/', $source), $relativePath . ' still contains a legacy boolean schema probe.');
-        presentation_policy_assert(!str_contains($source, 'SHOW COLUMNS'), $relativePath . ' still contains a direct SHOW COLUMNS schema probe.');
+        presentation_policy_assert(
+            !preg_match('/\bdb_(?:table|column)_exists\s*\(/', $source),
+            $relativePath . ' still contains a legacy boolean schema probe.',
+        );
+        presentation_policy_assert(
+            !str_contains($source, 'SHOW COLUMNS'),
+            $relativePath
+                . ' still contains a direct SHOW COLUMNS schema probe.',
+        );
     }
 
     // The Admin report service is split into part files; assert against the whole module.
-    $reportSource = module_source(__DIR__ . '/../app/services/admin_gallery_report.php');
-    presentation_policy_assert(!preg_match('/\bdb_(?:table|column)_exists\s*\(/', $reportSource), 'Admin report must use structured named-object inspection.');
-    presentation_policy_assert(str_contains($reportSource, 'information_schema.TABLES'), 'Admin report must retain its explicitly justified dynamic base-table inventory query.');
-    presentation_policy_assert(!str_contains($reportSource, '$exception->getMessage()'), 'Admin report must not export raw database exception messages.');
+    $reportSource = module_source(__DIR__
+        . '/../app/services/admin_gallery_report.php');
+    presentation_policy_assert(
+        !preg_match('/\bdb_(?:table|column)_exists\s*\(/', $reportSource),
+        'Admin report must use structured named-object inspection.',
+    );
+    presentation_policy_assert(
+        str_contains($reportSource, 'information_schema.TABLES'),
+        'Admin report must retain its explicitly justified dynamic base-table inventory query.',
+    );
+    presentation_policy_assert(
+        !str_contains($reportSource, '$exception->getMessage()'),
+        'Admin report must not export raw database exception messages.',
+    );
 
-    $uploadAutomationSource = file_get_contents(__DIR__ . '/../app/controllers/upload_automation.php') ?: '';
-    $aiActionStart = strpos($uploadAutomationSource, 'function upload_automation_handle_ai_action');
-    $aiActionEnd = $aiActionStart === false ? false : strpos($uploadAutomationSource, '/**', $aiActionStart + 1);
-    $aiActionSource = ($aiActionStart !== false && $aiActionEnd !== false)
-        ? substr($uploadAutomationSource, $aiActionStart, $aiActionEnd - $aiActionStart)
-        : '';
-    presentation_policy_assert(str_contains($aiActionSource, 'presentation_ai_image_analysis_schema_status'), 'AI worker endpoint must distinguish Phase 11 schema state before queue mutations.');
-    presentation_policy_assert(!str_contains($aiActionSource, '$exception->getMessage()'), 'AI worker endpoint must not return or log raw service/database exception text.');
+    $uploadAutomationSource = file_get_contents(__DIR__
+        . '/../app/controllers/upload_automation.php') ?: '';
+    $aiActionStart = strpos(
+        $uploadAutomationSource,
+        'function upload_automation_handle_ai_action',
+    );
+    $aiActionEnd = $aiActionStart === false
+        ? false
+        : strpos($uploadAutomationSource, '/**', $aiActionStart + 1);
+    $aiActionSource =
+        $aiActionStart !== false && $aiActionEnd !== false
+            ? substr(
+                $uploadAutomationSource,
+                $aiActionStart,
+                $aiActionEnd - $aiActionStart,
+            )
+            : '';
+    presentation_policy_assert(
+        str_contains(
+            $aiActionSource,
+            'presentation_ai_image_analysis_schema_status',
+        ),
+        'AI worker endpoint must distinguish Phase 11 schema state before queue mutations.',
+    );
+    presentation_policy_assert(
+        !str_contains($aiActionSource, '$exception->getMessage()'),
+        'AI worker endpoint must not return or log raw service/database exception text.',
+    );
 
-    $sidecarSource = file_get_contents(__DIR__ . '/../app/services/gallery_sidecars.php') ?: '';
-    presentation_policy_assert(str_contains($sidecarSource, 'gallery_sidecar_import.voting_enabled'), 'Gallery sidecar import must verify voting storage before enabling voting.');
-    presentation_policy_assert(str_contains($sidecarSource, 'gallery_sidecar_import.lightbox_override'), 'Gallery sidecar import must not silently discard an explicit lightbox override on unknown schema.');
-    presentation_policy_assert(str_contains($sidecarSource, 'gallery_create.voting_enabled'), 'Gallery creation must verify voting storage before enabling voting.');
-    presentation_policy_assert(str_contains($sidecarSource, 'gallery_create.lightbox_override'), 'Gallery creation must verify explicit lightbox override schema before persistence.');
+    $sidecarSource = file_get_contents(__DIR__
+        . '/../app/services/gallery_sidecars.php') ?: '';
+    presentation_policy_assert(
+        str_contains($sidecarSource, 'gallery_sidecar_import.voting_enabled'),
+        'Gallery sidecar import must verify voting storage before enabling voting.',
+    );
+    presentation_policy_assert(
+        str_contains(
+            $sidecarSource,
+            'gallery_sidecar_import.lightbox_override',
+        ),
+        'Gallery sidecar import must not silently discard an explicit lightbox override on unknown schema.',
+    );
+    presentation_policy_assert(
+        str_contains($sidecarSource, 'gallery_create.voting_enabled'),
+        'Gallery creation must verify voting storage before enabling voting.',
+    );
+    presentation_policy_assert(
+        str_contains($sidecarSource, 'gallery_create.lightbox_override'),
+        'Gallery creation must verify explicit lightbox override schema before persistence.',
+    );
 
-    $organizerSource = file_get_contents(__DIR__ . '/../app/services/gallery_metadata_organizer.php') ?: '';
-    presentation_policy_assert(str_contains($organizerSource, 'gallery_metadata_organizer.inherit_lightbox_override'), 'Metadata organizer child creation must distinguish unknown lightbox schema from confirmed legacy absence.');
+    $organizerSource = file_get_contents(__DIR__
+        . '/../app/services/gallery_metadata_organizer.php') ?: '';
+    presentation_policy_assert(
+        str_contains(
+            $organizerSource,
+            'gallery_metadata_organizer.inherit_lightbox_override',
+        ),
+        'Metadata organizer child creation must distinguish unknown lightbox schema from confirmed legacy absence.',
+    );
 
-    $bulkGallerySource = file_get_contents(__DIR__ . '/../app/controllers/admin_galleries_bulk.php') ?: '';
-    presentation_policy_assert(!str_contains($bulkGallerySource, 'admin_feature_schema_ready()'), 'Picture-game bulk mutation must not depend on unrelated legacy readiness booleans.');
-    presentation_policy_assert(str_contains($bulkGallerySource, 'presentation_picture_game_schema_status'), 'Picture-game bulk mutation must use the exact Phase 11 capability status.');
+    $bulkGallerySource = file_get_contents(__DIR__
+        . '/../app/controllers/admin_galleries_bulk.php') ?: '';
+    presentation_policy_assert(
+        !str_contains($bulkGallerySource, 'admin_feature_schema_ready()'),
+        'Picture-game bulk mutation must not depend on unrelated legacy readiness booleans.',
+    );
+    presentation_policy_assert(
+        str_contains(
+            $bulkGallerySource,
+            'presentation_picture_game_schema_status',
+        ),
+        'Picture-game bulk mutation must use the exact Phase 11 capability status.',
+    );
 
-    $dashboardSource = module_source(__DIR__ . '/../app/services/admin_dashboard.php');
-    $diagnosticsSource = file_get_contents(__DIR__ . '/../app/controllers/admin_diagnostics.php') ?: '';
-    presentation_policy_assert(str_contains($dashboardSource, 'admin_presentation_schema_health_statuses'), 'System Health must include the Phase 11 presentation registry.');
-    presentation_policy_assert(str_contains($diagnosticsSource, 'Optional presentation and reporting database status'), 'Runtime Diagnostics copy report must include Phase 11 readiness.');
+    $dashboardSource = module_source(__DIR__
+        . '/../app/services/admin_dashboard.php');
+    $diagnosticsSource = file_get_contents(__DIR__
+        . '/../app/controllers/admin_diagnostics.php') ?: '';
+    presentation_policy_assert(
+        str_contains(
+            $dashboardSource,
+            'admin_presentation_schema_health_statuses',
+        ),
+        'System Health must include the Phase 11 presentation registry.',
+    );
+    presentation_policy_assert(
+        str_contains(
+            $diagnosticsSource,
+            'Optional presentation and reporting database status',
+        ),
+        'Runtime Diagnostics copy report must include Phase 11 readiness.',
+    );
 
     schema_inspection_set_query_executor_for_tests(null);
     echo "Presentation schema policy checks passed.\n";

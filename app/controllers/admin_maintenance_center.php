@@ -58,55 +58,127 @@ use function Gallery\Services\maintenance_center_start_execution;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_maintenance_center_page;
 
-/** Return the current administrator id after the shared auth guard. */
+/**
+ * Return the current administrator id after the shared auth guard.
+ *
+ * @return int Positive administrator ID for the authenticated account.
+ */
 function admin_maintenance_center_actor_id(): int
 {
     $user = current_user();
     $actorId = is_array($user) ? max(0, (int) ($user['id'] ?? 0)) : 0;
     if ($actorId <= 0) {
-        throw new \RuntimeException('Authenticated administrator identity is unavailable.');
+        throw new \RuntimeException(
+            'Authenticated administrator identity is unavailable.',
+        );
     }
     return $actorId;
 }
 
-/** Require POST and CSRF for one Maintenance Center mutation endpoint. */
+/**
+ * Require POST and CSRF for one Maintenance Center mutation endpoint.
+ *
+ * @return void Continues after valid CSRF or emits a method error response.
+ */
 function admin_maintenance_center_require_post(): void
 {
     if (request_method() !== 'POST') {
         http_response_code(405);
         header('Allow: POST');
-        admin_maintenance_center_json_response(['ok' => false, 'error_code' => 'request.method_not_allowed', 'error' => t('admin.maintenance_center.error.method', 'POST is required.')], 405);
+        admin_maintenance_center_json_response([
+            'ok' => false,
+            'error_code' => 'request.method_not_allowed',
+            'error' => t(
+                'admin.maintenance_center.error.method',
+                'POST is required.',
+            ),
+        ], 405);
     }
     verify_csrf();
 }
 
-/** Emit one no-store Admin JSON response. */
-function admin_maintenance_center_json_response(array $payload, int $status = 200): never
-{
+/**
+ * Emit one no-store Admin JSON response.
+ *
+ * @param array<string,mixed> $payload JSON response fields.
+ * @param int $status HTTP status code for the response.
+ * @return never Writes the response and terminates the request.
+ */
+function admin_maintenance_center_json_response(
+    array $payload,
+    int $status = 200,
+): never {
     http_response_code($status);
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store, private, max-age=0');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
+    exit();
 }
 
-/** Map bounded domain failures to stable browser-facing error codes. */
+/**
+ * Map bounded domain failures to stable browser-facing error codes.
+ *
+ * @param Throwable $exception Service exception to classify.
+ * @return array{error_code:string,error:string,status:int} Browser-safe error fields and HTTP status.
+ */
 function admin_maintenance_center_error_payload(Throwable $exception): array
 {
     $message = $exception->getMessage();
     if (str_contains($message, 'stale')) {
-        return ['error_code' => 'maintenance_center.stale_plan', 'error' => t('admin.maintenance_center.error.stale', 'The analyzed plan is stale. Analyze again before running maintenance.'), 'status' => 409];
+        return [
+            'error_code' => 'maintenance_center.stale_plan',
+            'error' => t(
+                'admin.maintenance_center.error.stale',
+                'The analyzed plan is stale. Analyze again before running maintenance.',
+            ),
+            'status' => 409,
+        ];
     }
-    if (str_contains($message, 'mutation lock') || str_contains($message, 'already running') || str_contains($message, 'existing maintenance job')) {
-        return ['error_code' => 'maintenance_center.busy', 'error' => t('admin.maintenance_center.error.busy', 'Another central maintenance job is active. Resume or cancel the existing job first.'), 'status' => 409];
+    if (
+        str_contains($message, 'mutation lock')
+        || str_contains($message, 'already running')
+        || str_contains($message, 'existing maintenance job')
+    ) {
+        return [
+            'error_code' => 'maintenance_center.busy',
+            'error' => t(
+                'admin.maintenance_center.error.busy',
+                'Another central maintenance job is active. Resume or cancel the existing job first.',
+            ),
+            'status' => 409,
+        ];
     }
-    if (str_contains($message, 'not installed') || str_contains($message, 'migrations')) {
-        return ['error_code' => 'maintenance_center.schema_unavailable', 'error' => t('admin.maintenance_center.error.schema', 'Maintenance Center storage is not available. Apply pending database migrations first.'), 'status' => 409];
+    if (
+        str_contains($message, 'not installed')
+        || str_contains($message, 'migrations')
+    ) {
+        return [
+            'error_code' => 'maintenance_center.schema_unavailable',
+            'error' => t(
+                'admin.maintenance_center.error.schema',
+                'Maintenance Center storage is not available. Apply pending database migrations first.',
+            ),
+            'status' => 409,
+        ];
     }
     if (str_contains($message, 'not found')) {
-        return ['error_code' => 'maintenance_center.not_found', 'error' => t('admin.maintenance_center.error.not_found', 'Maintenance job was not found.'), 'status' => 404];
+        return [
+            'error_code' => 'maintenance_center.not_found',
+            'error' => t(
+                'admin.maintenance_center.error.not_found',
+                'Maintenance job was not found.',
+            ),
+            'status' => 404,
+        ];
     }
-    return ['error_code' => 'maintenance_center.request_failed', 'error' => t('admin.maintenance_center.error.generic', 'The maintenance request could not be completed safely.'), 'status' => 409];
+    return [
+        'error_code' => 'maintenance_center.request_failed',
+        'error' => t(
+            'admin.maintenance_center.error.generic',
+            'The maintenance request could not be completed safely.',
+        ),
+        'status' => 409,
+    ];
 }
 
 /**
@@ -121,35 +193,69 @@ function admin_maintenance_center_runtime_loader(): callable
     };
 }
 
-/** Execute one service callback and normalize its JSON success/failure envelope. */
-function admin_maintenance_center_json_action(callable $callback, ?string $mutationAction = null, int $jobId = 0): never
-{
+/**
+ * Execute one service callback and normalize its JSON success/failure envelope.
+ *
+ * @param callable():array<string,mixed> $callback Service operation returning a maintenance job.
+ * @param ?string $mutationAction Optional mutation name used for the mutation descriptor.
+ * @param int $jobId Existing job ID associated with the requested operation.
+ * @return never Writes a success or failure JSON response and terminates the request.
+ */
+function admin_maintenance_center_json_action(
+    callable $callback,
+    ?string $mutationAction = null,
+    int $jobId = 0,
+): never {
     try {
         $job = $callback();
         if ($mutationAction === null) {
-            admin_maintenance_center_json_response(['ok' => true, 'job' => $job]);
+            admin_maintenance_center_json_response([
+                'ok' => true,
+                'job' => $job,
+            ]);
         }
         $resolvedJobId = max($jobId, (int) ($job['id'] ?? 0));
         $payload = admin_mutation_success_envelope(
-            t('admin.maintenance_center.response.saved', 'Maintenance checkpoint saved.'),
-            admin_mutation_descriptor('maintenance_center.' . $mutationAction, 'maintenance_job', $mutationAction, $resolvedJobId > 0 ? [$resolvedJobId] : [])
+            t(
+                'admin.maintenance_center.response.saved',
+                'Maintenance checkpoint saved.',
+            ),
+            admin_mutation_descriptor(
+                'maintenance_center.' . $mutationAction,
+                'maintenance_job',
+                $mutationAction,
+                $resolvedJobId > 0 ? [$resolvedJobId] : [],
+            ),
         );
-        admin_maintenance_center_json_response(array_merge($payload, ['job' => $job]));
+        admin_maintenance_center_json_response(array_merge($payload, [
+            'job' => $job,
+        ]));
     } catch (Throwable $exception) {
         $error = admin_maintenance_center_error_payload($exception);
         if ($mutationAction === null) {
-            admin_maintenance_center_json_response([
-                'ok' => false,
-                'error_code' => $error['error_code'],
-                'error' => $error['error'],
-            ], (int) $error['status']);
+            admin_maintenance_center_json_response(
+                [
+                    'ok' => false,
+                    'error_code' => $error['error_code'],
+                    'error' => $error['error'],
+                ],
+                (int) $error['status'],
+            );
         }
         $payload = admin_mutation_error_envelope(
             (string) $error['error'],
             (string) $error['error_code'],
-            admin_mutation_descriptor('maintenance_center.' . $mutationAction, 'maintenance_job', $mutationAction, $jobId > 0 ? [$jobId] : [])
+            admin_mutation_descriptor(
+                'maintenance_center.' . $mutationAction,
+                'maintenance_job',
+                $mutationAction,
+                $jobId > 0 ? [$jobId] : [],
+            ),
         );
-        admin_maintenance_center_json_response($payload, (int) $error['status']);
+        admin_maintenance_center_json_response(
+            $payload,
+            (int) $error['status'],
+        );
     }
 }
 
@@ -164,7 +270,9 @@ function cms_admin_maintenance_center(): void
     $model = maintenance_center_page_model($actorId);
     $model['csrf_token'] = csrf_token();
     $model['dashboard_url'] = url_for('admin');
-    $model['storage_maintenance_url'] = url_for('admin_storage_statistics', ['tab' => 'maintenance']);
+    $model['storage_maintenance_url'] = url_for('admin_storage_statistics', [
+        'tab' => 'maintenance',
+    ]);
     $model['endpoints'] = [
         'status' => url_for('admin_maintenance_center_status'),
         'analyze_start' => url_for('admin_maintenance_center_analyze_start'),
@@ -177,25 +285,42 @@ function cms_admin_maintenance_center(): void
     view_render_admin_maintenance_center_page($model);
 }
 
-/** Return persisted job status for reload/resume polling. */
+/**
+ * Return persisted job status for reload/resume polling.
+ *
+ * @return void Emits the authorized job status as JSON.
+ */
 function cms_admin_maintenance_center_status(): void
 {
     require_admin();
     $actorId = admin_maintenance_center_actor_id();
     $jobId = max(0, (int) ($_GET['job_id'] ?? 0));
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_job_status($jobId, $actorId));
+    admin_maintenance_center_json_action(
+        static fn(): array => maintenance_center_job_status($jobId, $actorId),
+    );
 }
 
-/** Start a new read-only analysis. */
+/**
+ * Start a new read-only analysis.
+ *
+ * @return void Emits the analysis job as JSON.
+ */
 function cms_admin_maintenance_center_analyze_start(): void
 {
     require_admin();
     admin_maintenance_center_require_post();
     $actorId = admin_maintenance_center_actor_id();
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_start_analysis($actorId), 'analyze_start');
+    admin_maintenance_center_json_action(
+        static fn(): array => maintenance_center_start_analysis($actorId),
+        'analyze_start',
+    );
 }
 
-/** Execute exactly one read-only analysis task. */
+/**
+ * Execute exactly one read-only analysis task.
+ *
+ * @return void Emits the updated analysis job as JSON.
+ */
 function cms_admin_maintenance_center_analyze_step(): void
 {
     require_admin();
@@ -203,22 +328,55 @@ function cms_admin_maintenance_center_analyze_step(): void
     $actorId = admin_maintenance_center_actor_id();
     $jobId = max(0, (int) ($_POST['job_id'] ?? 0));
     $loadDependencies = admin_maintenance_center_runtime_loader();
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_analysis_step($jobId, $actorId, $loadDependencies), 'analyze_step', $jobId);
+    admin_maintenance_center_json_action(
+        static fn(): array => maintenance_center_analysis_step(
+            $jobId,
+            $actorId,
+            $loadDependencies,
+        ),
+        'analyze_step',
+        $jobId,
+    );
 }
 
-/** Start or resume approved plan execution. */
+/**
+ * Start or resume approved plan execution.
+ *
+ * @return void Emits the execution job as JSON.
+ */
 function cms_admin_maintenance_center_execute_start(): void
 {
     require_admin();
     admin_maintenance_center_require_post();
     $actorId = admin_maintenance_center_actor_id();
     $jobId = max(0, (int) ($_POST['job_id'] ?? 0));
-    $tasks = array_values(array_filter(array_map('strval', (array) ($_POST['tasks'] ?? [])), static fn (string $key): bool => preg_match('/^[a-z0-9][a-z0-9._-]*$/D', $key) === 1));
-    $options = ['full_physical_optimization' => !empty($_POST['full_physical_optimization'])];
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_start_execution($jobId, $actorId, $tasks, $options), 'execute_start', $jobId);
+    $tasks = array_values(array_filter(
+        array_map('strval', (array) ($_POST['tasks'] ?? [])),
+        static fn(string $key): bool => (
+            preg_match('/^[a-z0-9][a-z0-9._-]*$/D', $key) === 1
+        ),
+    ));
+    $options = [
+        'full_physical_optimization' =>
+            !empty($_POST['full_physical_optimization']),
+    ];
+    admin_maintenance_center_json_action(
+        static fn(): array => maintenance_center_start_execution(
+            $jobId,
+            $actorId,
+            $tasks,
+            $options,
+        ),
+        'execute_start',
+        $jobId,
+    );
 }
 
-/** Execute one bounded maintenance slice. */
+/**
+ * Execute one bounded maintenance slice.
+ *
+ * @return void Emits the updated execution job as JSON.
+ */
 function cms_admin_maintenance_center_execute_step(): void
 {
     require_admin();
@@ -226,25 +384,49 @@ function cms_admin_maintenance_center_execute_step(): void
     $actorId = admin_maintenance_center_actor_id();
     $jobId = max(0, (int) ($_POST['job_id'] ?? 0));
     $loadDependencies = admin_maintenance_center_runtime_loader();
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_execution_step($jobId, $actorId, $loadDependencies), 'execute_step', $jobId);
+    admin_maintenance_center_json_action(
+        static fn(): array => maintenance_center_execution_step(
+            $jobId,
+            $actorId,
+            $loadDependencies,
+        ),
+        'execute_step',
+        $jobId,
+    );
 }
 
-/** Pause between operations while retaining the central job claim. */
+/**
+ * Pause between operations while retaining the central job claim.
+ *
+ * @return void Emits the paused job as JSON.
+ */
 function cms_admin_maintenance_center_pause(): void
 {
     require_admin();
     admin_maintenance_center_require_post();
     $actorId = admin_maintenance_center_actor_id();
     $jobId = max(0, (int) ($_POST['job_id'] ?? 0));
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_pause($jobId, $actorId), 'pause', $jobId);
+    admin_maintenance_center_json_action(
+        static fn(): array => maintenance_center_pause($jobId, $actorId),
+        'pause',
+        $jobId,
+    );
 }
 
-/** Request cooperative cancellation. */
+/**
+ * Request cooperative cancellation.
+ *
+ * @return void Emits the cancellation result as JSON.
+ */
 function cms_admin_maintenance_center_cancel(): void
 {
     require_admin();
     admin_maintenance_center_require_post();
     $actorId = admin_maintenance_center_actor_id();
     $jobId = max(0, (int) ($_POST['job_id'] ?? 0));
-    admin_maintenance_center_json_action(static fn (): array => maintenance_center_cancel($jobId, $actorId), 'cancel', $jobId);
+    admin_maintenance_center_json_action(
+        static fn(): array => maintenance_center_cancel($jobId, $actorId),
+        'cancel',
+        $jobId,
+    );
 }

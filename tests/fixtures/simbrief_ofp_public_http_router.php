@@ -21,7 +21,11 @@ namespace Gallery\Core {
      */
     function current_user(): ?array
     {
-        return ($_COOKIE['ofp_test_admin'] ?? '') === '1' ? ['id' => 1, 'role' => 'admin'] : null;
+        return (
+            ($_COOKIE['ofp_test_admin'] ?? '') === '1'
+                ? ['id' => 1, 'role' => 'admin']
+                : null
+        );
     }
 
     /** Indicate when the fixture explicitly requests anonymous Admin preview.
@@ -29,8 +33,10 @@ namespace Gallery\Core {
      */
     function admin_anonymous_preview_active(): bool
     {
-        return ($_GET['anonymous_preview'] ?? '') === '1'
-            || ($_GET['view_as'] ?? '') === 'anonymous';
+        return (
+            ($_GET['anonymous_preview'] ?? '') === '1'
+                || ($_GET['view_as'] ?? '') === 'anonymous'
+        );
     }
 
     /** Check the resolved attachment path against its fixture-owned root.
@@ -42,8 +48,14 @@ namespace Gallery\Core {
     {
         $root = realpath($root);
         $path = realpath($path);
-        return is_string($root) && is_string($path)
-            && ($path === $root || str_starts_with($path, $root . DIRECTORY_SEPARATOR));
+        return (
+            is_string($root)
+                && is_string($path)
+                && (
+                    $path === $root
+                    || str_starts_with($path, $root . DIRECTORY_SEPARATOR)
+                )
+        );
     }
 
     /** Return the actual front-controller mount path, not configured base_url.
@@ -51,8 +63,12 @@ namespace Gallery\Core {
      */
     function request_script_base_path(): string
     {
-        return str_starts_with((string) ($_SERVER['SCRIPT_NAME'] ?? ''), '/galerie/')
-            ? '/galerie' : '';
+        return str_starts_with(
+            (string) ($_SERVER['SCRIPT_NAME'] ?? ''),
+            '/galerie/',
+        )
+            ? '/galerie'
+            : '';
     }
 }
 
@@ -87,20 +103,55 @@ namespace Gallery\Services {
     {
         $galleries = [
             1 => ['folder_path' => 'public', 'visibility' => 'public'],
-            2 => ['folder_path' => 'unpublished', 'visibility' => 'unpublished'],
+            2 => [
+                'folder_path' => 'unpublished',
+                'visibility' => 'unpublished',
+            ],
             3 => ['folder_path' => 'private', 'visibility' => 'private'],
-            4 => ['folder_path' => 'password', 'visibility' => 'public', 'access_mode' => 'password'],
-            5 => ['folder_path' => 'nsfw', 'visibility' => 'public', 'nsfw_enabled' => 1],
+            4 => [
+                'folder_path' => 'password',
+                'visibility' => 'public',
+                'access_mode' => 'password',
+            ],
+            5 => [
+                'folder_path' => 'nsfw',
+                'visibility' => 'public',
+                'nsfw_enabled' => 1,
+            ],
             6 => ['folder_path' => 'missing', 'visibility' => 'public'],
             7 => ['folder_path' => 'invalid', 'visibility' => 'public'],
             8 => ['folder_path' => 'parent', 'visibility' => 'public'],
-            9 => ['folder_path' => 'parent/ofp-pages', 'visibility' => 'private', 'parent_id' => 8],
-            10 => ['folder_path' => 'share', 'visibility' => 'public', 'access_mode' => 'password'],
-            11 => ['folder_path' => 'unpublished-password', 'visibility' => 'unpublished', 'access_mode' => 'password'],
-            12 => ['folder_path' => 'unlisted', 'visibility' => 'public', 'access_listing' => 'unlisted'],
-            13 => ['folder_path' => 'unpublished-nsfw', 'visibility' => 'unpublished', 'nsfw_enabled' => 1],
+            9 => [
+                'folder_path' => 'parent/ofp-pages',
+                'visibility' => 'private',
+                'parent_id' => 8,
+            ],
+            10 => [
+                'folder_path' => 'share',
+                'visibility' => 'public',
+                'access_mode' => 'password',
+            ],
+            11 => [
+                'folder_path' => 'unpublished-password',
+                'visibility' => 'unpublished',
+                'access_mode' => 'password',
+            ],
+            12 => [
+                'folder_path' => 'unlisted',
+                'visibility' => 'public',
+                'access_listing' => 'unlisted',
+            ],
+            13 => [
+                'folder_path' => 'unpublished-nsfw',
+                'visibility' => 'unpublished',
+                'nsfw_enabled' => 1,
+            ],
             14 => ['folder_path' => 'legacy-draft', 'visibility' => 'draft'],
-            15 => ['folder_path' => 'private-share', 'visibility' => 'private', 'access_mode' => 'password'],
+            15 => [
+                'folder_path' => 'private-share',
+                'visibility' => 'private',
+                'access_mode' => 'password',
+            ],
             16 => ['folder_path' => 'hidden', 'visibility' => 'public'],
             17 => ['folder_path' => 'hidden-ofp', 'visibility' => 'public'],
         ];
@@ -114,8 +165,14 @@ namespace Gallery\Services {
     function gallery_effective_visibility(array $gallery): string
     {
         $visibility = (string) ($gallery['visibility'] ?? 'private');
-        if ($visibility === 'draft' || $visibility === 'unlisted'
-            || ($visibility === 'public' && ($gallery['access_listing'] ?? 'listed') === 'unlisted')) {
+        if (
+            $visibility === 'draft'
+            || $visibility === 'unlisted'
+            || (
+                $visibility === 'public'
+                && ($gallery['access_listing'] ?? 'listed') === 'unlisted'
+            )
+        ) {
             return 'unpublished';
         }
         return $visibility;
@@ -131,16 +188,24 @@ namespace Gallery\Services {
      */
     function visitor_can_access_gallery_without_admin_bypass(array $gallery): bool
     {
-        $direct = in_array(gallery_effective_visibility($gallery), ['public', 'unpublished'], true);
+        $direct = in_array(
+            gallery_effective_visibility($gallery),
+            ['public', 'unpublished'],
+            true,
+        );
         $hasPassword = ($gallery['access_mode'] ?? 'normal') === 'password';
         $passwordUnlock = ($_COOKIE['ofp_test_password'] ?? '') === '1';
-        $shareUnlock = in_array((int) ($gallery['id'] ?? 0), [10, 15], true)
+        $shareUnlock =
+            in_array((int) ($gallery['id'] ?? 0), [10, 15], true)
             && ($_GET['share'] ?? '') === 'fixture-allowed';
         $granted = $passwordUnlock || $shareUnlock;
         if ((!$direct && !$hasPassword) || ($hasPassword && !$granted)) {
             return false;
         }
-        if (!empty($gallery['nsfw_enabled']) && ($_COOKIE['ofp_test_adult'] ?? '') !== '1') {
+        if (
+            !empty($gallery['nsfw_enabled'])
+            && ($_COOKIE['ofp_test_adult'] ?? '') !== '1'
+        ) {
             return false;
         }
         return true;
@@ -185,7 +250,10 @@ namespace Gallery\Controllers {
 }
 
 namespace {
-    $routePath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    $routePath = (string) parse_url(
+        (string) ($_SERVER['REQUEST_URI'] ?? ''),
+        PHP_URL_PATH,
+    );
     if (!in_array($routePath, ['/index.php', '/galerie/index.php'], true)) {
         http_response_code(404);
         return;
@@ -194,18 +262,24 @@ namespace {
     // The browser-visible route path simulates both deployment layouts, even
     // when PHP's development-server router is implemented by this fixture file.
     $_SERVER['SCRIPT_NAME'] = $routePath;
-    require_once dirname(__DIR__, 2) . '/app/services/gallery_pdf_documents.php';
-    require_once dirname(__DIR__, 2) . '/app/services/simbrief_ofp_attachments.php';
+    require_once
+        dirname(__DIR__, 2) . '/app/services/gallery_pdf_documents.php';
+    require_once
+        dirname(__DIR__, 2) . '/app/services/simbrief_ofp_attachments.php';
     require_once dirname(__DIR__, 2) . '/app/controllers/public_media.php';
     require_once dirname(__DIR__, 2) . '/app/controllers/gallery_music.php';
-    require_once dirname(__DIR__, 2) . '/app/controllers/public_gallery_controls.php';
+    require_once
+        dirname(__DIR__, 2) . '/app/controllers/public_gallery_controls.php';
     require_once dirname(__DIR__, 2) . '/app/services/seo_request_guard.php';
 
     if (($_GET['fixture_links'] ?? '') === '1') {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'view' => \Gallery\Controllers\public_gallery_ofp_document_url(1),
-            'download' => \Gallery\Controllers\public_gallery_ofp_document_url(1, true),
+            'download' => \Gallery\Controllers\public_gallery_ofp_document_url(
+                1,
+                true,
+            ),
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
         return;
     }
@@ -220,14 +294,17 @@ namespace {
         \Gallery\Core\current_user() !== null,
         (string) ($_SERVER['REQUEST_URI'] ?? ''),
         '127.0.0.1',
-        'ofp-http-fixture'
+        'ofp-http-fixture',
     );
     if (($decision['action'] ?? 'allow') !== 'allow') {
         http_response_code((int) ($decision['status'] ?? 404));
-        foreach (($decision['headers'] ?? []) as $name => $value) {
+        foreach ($decision['headers'] ?? [] as $name => $value) {
             header((string) $name . ': ' . (string) $value);
         }
-        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'HEAD') {
+        if (
+            strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'))
+            !== 'HEAD'
+        ) {
             echo (string) ($decision['body'] ?? '');
         }
         return;

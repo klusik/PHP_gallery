@@ -62,8 +62,12 @@ function viewer_security_event_schema_status(): array
  */
 function viewer_security_event_storage_available(): bool
 {
-    return function_exists(__NAMESPACE__ . '\\schema_inspection_table')
-        && schema_inspection_is_available(viewer_security_event_schema_status());
+    return (
+        function_exists(__NAMESPACE__ . '\\schema_inspection_table')
+            && schema_inspection_is_available(
+                viewer_security_event_schema_status(),
+            )
+    );
 }
 
 /**
@@ -118,34 +122,57 @@ function viewer_security_event_sanitize_context(array $context): array
  * @param string $eventKey Stable event key such as viewer.login_failure.
  * @param ?int $viewerAccountId Viewer account id when known, otherwise null.
  * @param string $outcome Short outcome category.
- * @param array $context Allowlisted low-risk structured metadata.
+ * @param array<string,int|string|bool|null> $context Allowlisted scalar metadata; credentials and secrets are not accepted.
+ *
+ * @return void No return value; inserts the sanitized event only when event storage is available.
  */
-function viewer_security_event_record(string $eventKey, ?int $viewerAccountId = null, string $outcome = '', array $context = []): void
-{
+function viewer_security_event_record(
+    string $eventKey,
+    ?int $viewerAccountId = null,
+    string $outcome = '',
+    array $context = [],
+): void {
     if (!viewer_security_event_storage_available()) {
         return;
     }
     if (preg_match('/^viewer\.[a-z0-9_.-]{1,92}$/', $eventKey) !== 1) {
-        throw new InvalidArgumentException('Viewer security event key is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer security event key is invalid.',
+        );
     }
     if ($viewerAccountId !== null && $viewerAccountId <= 0) {
-        throw new InvalidArgumentException('Viewer security event account id is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer security event account id is invalid.',
+        );
     }
 
-    $outcome = preg_replace('/[^a-z0-9_.-]/', '', strtolower(trim($outcome))) ?? '';
+    $outcome =
+        preg_replace('/[^a-z0-9_.-]/', '', strtolower(trim($outcome))) ?? '';
     $outcome = substr($outcome, 0, 32);
     $clientIp = request_client_ip();
-    $ipHash = $clientIp === '' ? null : viewer_security_fingerprint('viewer-event-ip', $clientIp);
+    $ipHash = $clientIp === ''
+        ? null
+        : viewer_security_fingerprint('viewer-event-ip', $clientIp);
     $userAgent = viewer_identity_request_user_agent();
-    $userAgentHash = $userAgent === '' ? null : viewer_security_fingerprint('viewer-event-ua', $userAgent);
-    $requestId = function_exists('Gallery\\Services\\telemetry_request_id') ? (string) telemetry_request_id() : '';
+    $userAgentHash = $userAgent === ''
+        ? null
+        : viewer_security_fingerprint('viewer-event-ua', $userAgent);
+    $requestId = function_exists('Gallery\\Services\\telemetry_request_id')
+        ? (string) telemetry_request_id()
+        : '';
     $requestId = substr($requestId, 0, 64);
     $safeContext = viewer_security_event_sanitize_context($context);
-    $contextJson = $safeContext === [] ? null : json_encode($safeContext, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $contextJson = $safeContext === []
+        ? null
+        : json_encode(
+            $safeContext,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+        );
     if (!is_string($contextJson) || strlen($contextJson) > 2000) {
         $contextJson = null;
     }
-    $retentionDays = (int) viewer_accounts_config()['security_event_retention_days'];
+    $retentionDays =
+        (int) viewer_accounts_config()['security_event_retention_days'];
     $retentionUntil = date('Y-m-d H:i:s', time() + ($retentionDays * 86400));
 
     viewer_security_event_model_insert(
@@ -157,6 +184,6 @@ function viewer_security_event_record(string $eventKey, ?int $viewerAccountId = 
         $requestId === '' ? null : $requestId,
         $contextJson,
         now_sql(),
-        $retentionUntil
+        $retentionUntil,
     );
 }

@@ -36,9 +36,9 @@
 declare(strict_types=1);
 
 namespace Gallery\Services;
+
 use const Gallery\Core\ADMIN_GALLERY_REPORT_MAX_GROUPS;
 use const Gallery\Core\ADMIN_GALLERY_REPORT_ROW_LIMITS;
-
 
 /**
  * Build a safe optional SQL column expression.
@@ -50,9 +50,16 @@ use const Gallery\Core\ADMIN_GALLERY_REPORT_ROW_LIMITS;
  * @param string $outputAlias Output alias.
  * @return string SQL expression.
  */
-function admin_gallery_report_column_select(string $table, string $column, string $alias, string $fallback, string $outputAlias): string
-{
-    throw new \LogicException('Raw report SQL expressions are model-owned. Pass semantic schema capabilities to the report model instead.');
+function admin_gallery_report_column_select(
+    string $table,
+    string $column,
+    string $alias,
+    string $fallback,
+    string $outputAlias,
+): string {
+    throw new \LogicException(
+        'Raw report SQL expressions are model-owned. Pass semantic schema capabilities to the report model instead.',
+    );
 }
 
 /**
@@ -63,10 +70,14 @@ function admin_gallery_report_column_select(string $table, string $column, strin
  */
 function admin_gallery_report_table_exists(string $table): bool
 {
-    $status = schema_inspection_feature('presentation.admin_report.table.' . $table, [
+    $status = schema_inspection_feature('presentation.admin_report.table.'
+        . $table, [
         schema_inspection_table($table),
     ]);
-    return presentation_schema_render_available($status, 'admin_gallery_report_table');
+    return presentation_schema_render_available(
+        $status,
+        'admin_gallery_report_table',
+    );
 }
 
 /**
@@ -82,53 +93,71 @@ function admin_gallery_report_table_exists(string $table): bool
  */
 function admin_gallery_report_column_exists(string $table, string $column): bool
 {
-    $status = schema_inspection_feature('presentation.admin_report.column.' . $table . '.' . $column, [
+    $status = schema_inspection_feature('presentation.admin_report.column.'
+        . $table
+        . '.'
+        . $column, [
         schema_inspection_column($table, $column),
     ]);
-    return presentation_schema_render_available($status, 'admin_gallery_report_column');
+    return presentation_schema_render_available(
+        $status,
+        'admin_gallery_report_column',
+    );
 }
 
 /**
  * Read rows with failure isolation.
  *
  * @param string $sql SQL query.
- * @param array $params Query parameters.
- * @return array<int, array<string, mixed>> Rows.
+ * @param array<array-key, mixed> $params Bound query parameters.
+ * @return never This retired raw-SQL service entry point always throws.
  */
-function admin_gallery_report_rows(string $sql, array $params = []): array
+function admin_gallery_report_rows(string $sql, array $params = []): never
 {
-    throw new \LogicException('Raw report SQL execution is no longer available in the service layer.');
+    throw new \LogicException(
+        'Raw report SQL execution is no longer available in the service layer.',
+    );
 }
 
 /**
  * Read scalar integer with failure isolation.
  *
  * @param string $sql SQL query.
- * @param array $params Query parameters.
+ * @param array<array-key, mixed> $params Bound query parameters.
  * @param bool $countRows Count result rows instead of reading first column.
- * @return int Integer value.
+ * @return never This retired raw-SQL service entry point always throws.
  */
-function admin_gallery_report_scalar_int(string $sql, array $params = [], bool $countRows = false): int
-{
-    throw new \LogicException('Raw report SQL execution is no longer available in the service layer.');
+function admin_gallery_report_scalar_int(
+    string $sql,
+    array $params = [],
+    bool $countRows = false,
+): never {
+    throw new \LogicException(
+        'Raw report SQL execution is no longer available in the service layer.',
+    );
 }
 
 /**
  * Read grouping rows with standard labels and counts.
  *
  * @param string $sql SQL query.
- * @param array $params Query parameters.
- * @return array<int, array<string, mixed>> Group rows.
+ * @param array<array-key, mixed> $params Bound query parameters.
+ * @return never This retired raw-SQL service entry point always throws.
  */
-function admin_gallery_report_group_query(string $sql, array $params = []): array
-{
-    throw new \LogicException('Raw report SQL execution is no longer available in the service layer.');
+function admin_gallery_report_group_query(
+    string $sql,
+    array $params = [],
+): never {
+    throw new \LogicException(
+        'Raw report SQL execution is no longer available in the service layer.',
+    );
 }
 
 /**
  * Normalize grouped report rows returned by model-owned queries.
  *
- * @param array $rows Group rows.
+ * @param array<int, array<string, mixed>> $rows Rows keyed by result order;
+ *     each row contains grouped report fields.
  * @return array<int, array<string, mixed>> Normalized group rows.
  */
 function admin_gallery_report_normalize_group_rows(array $rows): array
@@ -148,15 +177,23 @@ function admin_gallery_report_normalize_group_rows(array $rows): array
 /**
  * Add one value to an aggregate group.
  *
- * @param array $groups Group accumulator.
+ * @param array<string, array<string, mixed>> $groups Group rows keyed by
+ *     aggregate key, updated in place.
  * @param string $key Group key.
  * @param string $label Human label.
  * @param int $count Count increment.
  * @param int $bytes Byte increment.
- * @param array $meta Additional fields.
+ * @param array<string, mixed> $meta Additional aggregate fields.
+ * @return void The matching aggregate row is created or incremented in place.
  */
-function admin_gallery_report_add_group(array &$groups, string $key, string $label, int $count, int $bytes = 0, array $meta = []): void
-{
+function admin_gallery_report_add_group(
+    array &$groups,
+    string $key,
+    string $label,
+    int $count,
+    int $bytes = 0,
+    array $meta = [],
+): void {
     if (!isset($groups[$key]) || !is_array($groups[$key])) {
         if (count($groups) >= ADMIN_GALLERY_REPORT_MAX_GROUPS) {
             $key = '__other_values__';
@@ -184,11 +221,16 @@ function admin_gallery_report_add_group(array &$groups, string $key, string $lab
  * @param int $limit Maximum rows.
  * @return array<int, array<string, mixed>> Final rows.
  */
-function admin_gallery_report_finalize_group_rows(array $groups, string $sortKey = 'count', int $limit = ADMIN_GALLERY_REPORT_ROW_LIMITS['groups']): array
-{
-    $rows = array_values(array_filter($groups,
+function admin_gallery_report_finalize_group_rows(
+    array $groups,
+    string $sortKey = 'count',
+    int $limit = ADMIN_GALLERY_REPORT_ROW_LIMITS['groups'],
+): array {
+    $rows = array_values(array_filter(
+        $groups,
         /** Keep valid aggregate rows only. @param array<string,mixed>|scalar|null $row Candidate aggregate. @return bool Whether a row can be ranked. */
-        static fn ($row): bool => is_array($row)));
+        static fn($row): bool => is_array($row),
+    ));
     /**
      * Order aggregates by descending numeric rank and stable ascending label.
      * @param array<string,mixed> $a First aggregate with optional count/bytes/label fields.
@@ -196,11 +238,14 @@ function admin_gallery_report_finalize_group_rows(array $groups, string $sortKey
      * @return int Negative, zero or positive comparator result.
      */
     usort($rows, static function (array $a, array $b) use ($sortKey): int {
-        $primary = ((int) ($b[$sortKey] ?? 0)) <=> ((int) ($a[$sortKey] ?? 0));
+        $primary = (int) ($b[$sortKey] ?? 0) <=> (int) ($a[$sortKey] ?? 0);
         if ($primary !== 0) {
             return $primary;
         }
-        return strcmp((string) ($a['label'] ?? ''), (string) ($b['label'] ?? ''));
+        return strcmp(
+            (string) ($a['label'] ?? ''),
+            (string) ($b['label'] ?? ''),
+        );
     });
     return array_slice($rows, 0, max(1, $limit));
 }
@@ -208,20 +253,31 @@ function admin_gallery_report_finalize_group_rows(array $groups, string $sortKey
 /**
  * Update a string date range.
  *
- * @param array $target Target array.
+ * @param array<string, mixed> $target Date range values, updated in place.
  * @param string $minKey Minimum key.
  * @param string $maxKey Maximum key.
- * @param string $value Date value.
+ * @param string $value Candidate date and time value.
+ * @return void The valid value extends the keyed minimum and maximum.
  */
-function admin_gallery_report_update_date_range(array &$target, string $minKey, string $maxKey, string $value): void
-{
+function admin_gallery_report_update_date_range(
+    array &$target,
+    string $minKey,
+    string $maxKey,
+    string $value,
+): void {
     if (!admin_gallery_report_valid_datetime($value)) {
         return;
     }
-    if (empty($target[$minKey]) || strcmp($value, (string) $target[$minKey]) < 0) {
+    if (
+        empty($target[$minKey])
+        || strcmp($value, (string) $target[$minKey]) < 0
+    ) {
         $target[$minKey] = $value;
     }
-    if (empty($target[$maxKey]) || strcmp($value, (string) $target[$maxKey]) > 0) {
+    if (
+        empty($target[$maxKey])
+        || strcmp($value, (string) $target[$maxKey]) > 0
+    ) {
         $target[$maxKey] = $value;
     }
 }
@@ -229,13 +285,18 @@ function admin_gallery_report_update_date_range(array &$target, string $minKey, 
 /**
  * Update a float range.
  *
- * @param array $target Target array.
+ * @param array<string, mixed> $target Numeric range values, updated in place.
  * @param string $minKey Minimum key.
  * @param string $maxKey Maximum key.
- * @param float $value Numeric value.
+ * @param float $value Candidate numeric value.
+ * @return void The value extends the keyed minimum and maximum.
  */
-function admin_gallery_report_update_float_range(array &$target, string $minKey, string $maxKey, float $value): void
-{
+function admin_gallery_report_update_float_range(
+    array &$target,
+    string $minKey,
+    string $maxKey,
+    float $value,
+): void {
     if ($target[$minKey] === null || $value < (float) $target[$minKey]) {
         $target[$minKey] = $value;
     }

@@ -64,18 +64,27 @@ function admin_public_widget_preview_gallery_url(): string
 {
     try {
         foreach (public_home_physical_galleries() as $gallery) {
-            if (!is_array($gallery) || !gallery_is_public_listed($gallery)
+            if (
+                !is_array($gallery)
+                || !gallery_is_public_listed($gallery)
                 || gallery_access_requirement($gallery) !== null
-                || !visitor_can_access_gallery_without_admin_bypass($gallery)) {
+                || !visitor_can_access_gallery_without_admin_bypass($gallery)
+            ) {
                 continue;
             }
-            $url = public_visual_preview_url(gallery_public_url($gallery), true);
+            $url = public_visual_preview_url(
+                gallery_public_url($gallery),
+                true,
+            );
             $parts = parse_url($url);
             if (!is_array($parts) || !isset($parts['path'], $parts['query'])) {
                 continue;
             }
             parse_str((string) $parts['query'], $query);
-            if (($query['preview'] ?? null) !== 'visual' || ($query['view_as'] ?? null) !== 'anonymous') {
+            if (
+                ($query['preview'] ?? null) !== 'visual'
+                || ($query['view_as'] ?? null) !== 'anonymous'
+            ) {
                 continue;
             }
             return $url;
@@ -95,9 +104,20 @@ function admin_public_widget_preview_gallery_url(): string
 function admin_public_widget_submitted_draft(array $post): array
 {
     $fields = [
-        'title', 'content_md', 'status', 'page_scope', 'placement_mode',
-        'flow_slot', 'floating_anchor', 'x_permille', 'y_permille',
-        'width_px', 'sort_order', 'mobile_fallback', 'appearance', 'source_language',
+        'title',
+        'content_md',
+        'status',
+        'page_scope',
+        'placement_mode',
+        'flow_slot',
+        'floating_anchor',
+        'x_permille',
+        'y_permille',
+        'width_px',
+        'sort_order',
+        'mobile_fallback',
+        'appearance',
+        'source_language',
     ];
     $draft = [];
     foreach ($fields as $field) {
@@ -120,13 +140,18 @@ function admin_public_widget_select(array $rows, mixed $requested): ?array
     if ($requested === 'new' || $requested === '' || $rows === []) {
         return null;
     }
-    $id = $requested === null ? (string) ($rows[0]['widget_id'] ?? '') : public_widget_id($requested);
+    $id = $requested === null
+        ? (string) ($rows[0]['widget_id'] ?? '')
+        : public_widget_id($requested);
     foreach ($rows as $row) {
         if (($row['widget_id'] ?? '') === $id) {
             return $row;
         }
     }
-    throw new PublicWidgetInvalidField('widget_id', 'The selected widget is no longer available.');
+    throw new PublicWidgetInvalidField(
+        'widget_id',
+        'The selected widget is no longer available.',
+    );
 }
 
 /**
@@ -142,8 +167,11 @@ function admin_public_widget_published_peers(array $rows): array
 {
     $peers = [];
     foreach ($rows as $row) {
-        if (!is_array($row) || ($row['status'] ?? null) !== 'published'
-            || ($row['placement_mode'] ?? null) !== 'floating') {
+        if (
+            !is_array($row)
+            || ($row['status'] ?? null) !== 'published'
+            || ($row['placement_mode'] ?? null) !== 'floating'
+        ) {
             continue;
         }
         try {
@@ -205,7 +233,10 @@ function admin_public_widget_error_message(PublicWidgetInvalidField $failure): s
     ];
     $key = $keys[$failure->getMessage()] ?? null;
     return $key === null
-        ? t('admin.widgets.validation.generic', 'The widget contains invalid input. Review the fields and try again.')
+        ? t(
+            'admin.widgets.validation.generic',
+            'The widget contains invalid input. Review the fields and try again.',
+        )
         : t($key, $failure->getMessage());
 }
 
@@ -231,8 +262,12 @@ function cms_admin_public_widgets(): void
     $draft = null;
     if (request_method() === 'POST') {
         verify_csrf();
-        $action = is_string($_POST['widget_action'] ?? null) ? $_POST['widget_action'] : '';
-        $wantsPreviewJson = $action === 'preview' && ($_POST['widget_preview_json'] ?? null) === '1';
+        $action = is_string($_POST['widget_action'] ?? null)
+            ? $_POST['widget_action']
+            : '';
+        $wantsPreviewJson =
+            $action === 'preview'
+            && ($_POST['widget_preview_json'] ?? null) === '1';
         $selection = $_POST['widget_id'] ?? $selection;
         if ($selection === '') {
             $selection = 'new';
@@ -243,41 +278,81 @@ function cms_admin_public_widgets(): void
         try {
             if ($action === 'create') {
                 $id = public_widget_create((array) $draft);
-                flash_message('admin_public_widget_notice', t('admin.widgets.created', 'Widget created.'));
-                redirect_to(url_for('admin_theme', ['widgets' => '1', 'id' => $id]));
+                flash_message('admin_public_widget_notice', t(
+                    'admin.widgets.created',
+                    'Widget created.',
+                ));
+                redirect_to(url_for('admin_theme', [
+                    'widgets' => '1',
+                    'id' => $id,
+                ]));
                 return;
             }
             if ($action === 'save') {
                 $id = public_widget_id($selection);
-                public_widget_save($id, $_POST['revision'] ?? null, (array) $draft);
-                flash_message('admin_public_widget_notice', t('admin.widgets.saved', 'Widget saved.'));
-                redirect_to(url_for('admin_theme', ['widgets' => '1', 'id' => $id]));
+                public_widget_save(
+                    $id,
+                    $_POST['revision'] ?? null,
+                    (array) $draft,
+                );
+                flash_message('admin_public_widget_notice', t(
+                    'admin.widgets.saved',
+                    'Widget saved.',
+                ));
+                redirect_to(url_for('admin_theme', [
+                    'widgets' => '1',
+                    'id' => $id,
+                ]));
                 return;
             }
             if ($action === 'duplicate') {
                 $id = public_widget_duplicate(public_widget_id($selection));
-                flash_message('admin_public_widget_notice', t('admin.widgets.duplicated', 'An independent unpublished copy was created.'));
-                redirect_to(url_for('admin_theme', ['widgets' => '1', 'id' => $id]));
+                flash_message('admin_public_widget_notice', t(
+                    'admin.widgets.duplicated',
+                    'An independent unpublished copy was created.',
+                ));
+                redirect_to(url_for('admin_theme', [
+                    'widgets' => '1',
+                    'id' => $id,
+                ]));
                 return;
             }
             if ($action === 'delete') {
                 if (($_POST['confirm_delete'] ?? null) !== '1') {
-                    throw new PublicWidgetInvalidField('confirm_delete', 'Confirm permanent deletion first.');
+                    throw new PublicWidgetInvalidField(
+                        'confirm_delete',
+                        'Confirm permanent deletion first.',
+                    );
                 }
-                public_widget_delete(public_widget_id($selection), $_POST['revision'] ?? null);
-                flash_message('admin_public_widget_notice', t('admin.widgets.deleted', 'Widget deleted.'));
-                redirect_to(url_for('admin_theme', ['widgets' => '1', 'id' => 'new']));
+                public_widget_delete(
+                    public_widget_id($selection),
+                    $_POST['revision'] ?? null,
+                );
+                flash_message('admin_public_widget_notice', t(
+                    'admin.widgets.deleted',
+                    'Widget deleted.',
+                ));
+                redirect_to(url_for('admin_theme', [
+                    'widgets' => '1',
+                    'id' => 'new',
+                ]));
                 return;
             }
             if ($action === 'reorder') {
                 $submitted = $_POST['ordering'] ?? null;
                 if (!is_array($submitted) || !array_is_list($submitted)) {
-                    throw new PublicWidgetInvalidField('sort_order', 'Submit a complete ordered widget list.');
+                    throw new PublicWidgetInvalidField(
+                        'sort_order',
+                        'Submit a complete ordered widget list.',
+                    );
                 }
                 $changes = [];
                 foreach ($submitted as $item) {
                     if (!is_array($item)) {
-                        throw new PublicWidgetInvalidField('sort_order', 'Invalid widget ordering input.');
+                        throw new PublicWidgetInvalidField(
+                            'sort_order',
+                            'Invalid widget ordering input.',
+                        );
                     }
                     $changes[] = [
                         'widget_id' => $item['widget_id'] ?? null,
@@ -286,19 +361,27 @@ function cms_admin_public_widgets(): void
                     ];
                 }
                 public_widget_reorder($changes);
-                flash_message('admin_public_widget_notice', t('admin.widgets.reordered', 'Widget order saved.'));
+                flash_message('admin_public_widget_notice', t(
+                    'admin.widgets.reordered',
+                    'Widget order saved.',
+                ));
                 redirect_to(url_for('admin_theme', ['widgets' => '1']));
                 return;
             }
             if ($action === 'preview') {
                 $validated = public_widget_normalize((array) $draft);
-                $notice = t('admin.widgets.preview_only', 'Preview only. No widget data was saved.');
+                $notice = t(
+                    'admin.widgets.preview_only',
+                    'Preview only. No widget data was saved.',
+                );
                 if ($wantsPreviewJson) {
                     header('Content-Type: application/json; charset=utf-8');
                     header('Cache-Control: no-store');
                     echo json_encode([
                         'ok' => true,
-                        'html' => public_widget_markdown_html((string) $validated['content_md']),
+                        'html' => public_widget_markdown_html(
+                            (string) $validated['content_md'],
+                        ),
                         'title' => (string) $validated['title'],
                         'appearance' => (string) $validated['appearance'],
                         'message' => $notice,
@@ -306,7 +389,10 @@ function cms_admin_public_widgets(): void
                     return;
                 }
             } else {
-                throw new PublicWidgetInvalidField('widget_action', 'Choose a supported widget action.');
+                throw new PublicWidgetInvalidField(
+                    'widget_action',
+                    'Choose a supported widget action.',
+                );
             }
         } catch (PublicWidgetInvalidField $failure) {
             $errorField = $failure->field;
@@ -314,18 +400,31 @@ function cms_admin_public_widgets(): void
             if ($action === 'save' && $failure->field === 'revision') {
                 $rawRevision = $_POST['revision'] ?? null;
                 $parsedRevision = is_scalar($rawRevision)
-                    ? filter_var((string) $rawRevision, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+                    ? filter_var(
+                        (string) $rawRevision,
+                        FILTER_VALIDATE_INT,
+                        ['options' => ['min_range' => 1]],
+                    )
                     : false;
-                $submittedRevision = is_int($parsedRevision) ? $parsedRevision : 0;
+                $submittedRevision = is_int($parsedRevision)
+                    ? $parsedRevision
+                    : 0;
             }
         } catch (Throwable) {
-            $error = t('admin.widgets.storage_error', 'Widget storage is unavailable. Check database migrations and try again.');
+            $error = t(
+                'admin.widgets.storage_error',
+                'Widget storage is unavailable. Check database migrations and try again.',
+            );
         }
         if ($wantsPreviewJson && $error !== '') {
             http_response_code($errorField !== '' ? 422 : 503);
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: no-store');
-            echo json_encode(['ok' => false, 'message' => $error, 'field' => $errorField], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            echo json_encode([
+                'ok' => false,
+                'message' => $error,
+                'field' => $errorField,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
     }
@@ -333,7 +432,10 @@ function cms_admin_public_widgets(): void
         $rows = public_widget_admin_list();
     } catch (Throwable) {
         $rows = [];
-        $error = t('admin.widgets.storage_error', 'Widget storage is unavailable. Check database migrations and try again.');
+        $error = t(
+            'admin.widgets.storage_error',
+            'Widget storage is unavailable. Check database migrations and try again.',
+        );
     }
     $selected = null;
     try {
@@ -343,12 +445,18 @@ function cms_admin_public_widgets(): void
         $error = admin_public_widget_error_message($failure);
     }
     if ($draft === null) {
-        $draft = $selected ?? public_widget_normalize(['title' => '', 'content_md' => '']);
+        $draft = $selected ?? public_widget_normalize([
+            'title' => '',
+            'content_md' => '',
+        ]);
     }
-    $content = is_string($draft['content_md'] ?? null) ? $draft['content_md'] : '';
+    $content = is_string($draft['content_md'] ?? null)
+        ? $draft['content_md']
+        : '';
     foreach ($rows as &$row) {
         $row['edit_url'] = url_for('admin_theme', [
-            'widgets' => '1', 'id' => (string) ($row['widget_id'] ?? ''),
+            'widgets' => '1',
+            'id' => (string) ($row['widget_id'] ?? ''),
         ]);
     }
     unset($row);
@@ -370,7 +478,10 @@ function cms_admin_public_widgets(): void
         'new_url' => url_for('admin_theme', ['widgets' => '1', 'id' => 'new']),
         'discard_url' => $selected === null
             ? url_for('admin_theme', ['widgets' => '1', 'id' => 'new'])
-            : url_for('admin_theme', ['widgets' => '1', 'id' => (string) ($selected['widget_id'] ?? '')]),
+            : url_for('admin_theme', [
+                'widgets' => '1',
+                'id' => (string) ($selected['widget_id'] ?? ''),
+            ]),
         'theme_url' => url_for('admin_theme'),
         'settings_url' => admin_settings_url('appearance'),
     ]);

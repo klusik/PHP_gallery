@@ -33,4 +33,7 @@ gallery_require_cli_sapi();
 
 require_once __DIR__ . '/release_qualification_lib.php';
 
-exit(\PhpGallery\ReleaseQualification\run_cli(dirname(__DIR__), array_slice($argv, 1)));
+exit(\PhpGallery\ReleaseQualification\run_cli(
+    dirname(__DIR__),
+    array_slice($argv, 1),
+));

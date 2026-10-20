@@ -49,18 +49,30 @@ use function Gallery\Core\url_for;
 
 /**
  * Return the storage root for detailed Admin test runs.
+ *
+ * @return string Absolute cache directory path, created when missing.
  */
 function admin_test_run_root(): string
 {
-    $root = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'admin-test-runs';
+    $root =
+        dirname(__DIR__, 3)
+        . DIRECTORY_SEPARATOR
+        . 'cache'
+        . DIRECTORY_SEPARATOR
+        . 'admin-test-runs';
     if (!is_dir($root) && !@mkdir($root, 0775, true) && !is_dir($root)) {
-        throw new RuntimeException('Could not create Admin test-run cache directory.');
+        throw new RuntimeException(
+            'Could not create Admin test-run cache directory.',
+        );
     }
     return $root;
 }
 
 /**
  * Validate one opaque test-run token.
+ *
+ * @param string $token Candidate token.
+ * @return bool True when the token is a 32-character hexadecimal value.
  */
 function admin_test_run_token_valid(string $token): bool
 {
@@ -69,6 +81,9 @@ function admin_test_run_token_valid(string $token): bool
 
 /**
  * Return a non-secret short identifier for display/report filenames.
+ *
+ * @param string $token Test-run token.
+ * @return string Stable eight-character display identifier derived from the token.
  */
 function admin_test_run_public_run_id(string $token): string
 {
@@ -77,6 +92,10 @@ function admin_test_run_public_run_id(string $token): string
 
 /**
  * Return the directory for one test-run token.
+ *
+ * @param string $token Opaque test-run token.
+ * @param bool $create Whether to create the run directory when missing.
+ * @return string Absolute path to the validated run directory.
  */
 function admin_test_run_directory(string $token, bool $create = false): string
 {
@@ -85,14 +104,24 @@ function admin_test_run_directory(string $token, bool $create = false): string
         throw new RuntimeException('Invalid Admin test-run token.');
     }
     $directory = admin_test_run_root() . DIRECTORY_SEPARATOR . $token;
-    if ($create && !is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new RuntimeException('Could not create Admin test-run directory.');
+    if (
+        $create
+        && !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new RuntimeException(
+            'Could not create Admin test-run directory.',
+        );
     }
     return $directory;
 }
 
 /**
  * Return one test-run metadata path.
+ *
+ * @param string $token Opaque test-run token.
+ * @return string Absolute path to the run's metadata JSON file.
  */
 function admin_test_run_meta_path(string $token): string
 {
@@ -101,28 +130,54 @@ function admin_test_run_meta_path(string $token): string
 
 /**
  * Return one final JSON report path.
+ *
+ * @param string $token Opaque test-run token.
+ * @return string Absolute path to the final report JSON file.
  */
 function admin_test_run_report_path(string $token): string
 {
-    return admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'report.json';
+    return (
+        admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'report.json'
+    );
 }
 
 /**
  * Return one optional ZIP artifact path.
+ *
+ * @param string $token Opaque test-run token.
+ * @return string Absolute path assigned to the optional ZIP artifact.
  */
 function admin_test_run_zip_path(string $token): string
 {
-    return admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'report.zip';
+    return (
+        admin_test_run_directory($token) . DIRECTORY_SEPARATOR . 'report.zip'
+    );
 }
 
 /**
  * Return the request-sidecar directory for one run.
+ *
+ * @param string $token Opaque test-run token.
+ * @param bool $create Whether to create the sidecar directory when missing.
+ * @return string Absolute path to the run's request-sidecar directory.
  */
-function admin_test_run_requests_directory(string $token, bool $create = false): string
-{
-    $directory = admin_test_run_directory($token, $create) . DIRECTORY_SEPARATOR . 'requests';
-    if ($create && !is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new RuntimeException('Could not create Admin test-run request directory.');
+function admin_test_run_requests_directory(
+    string $token,
+    bool $create = false,
+): string {
+    $directory =
+        admin_test_run_directory($token, $create)
+        . DIRECTORY_SEPARATOR
+        . 'requests';
+    if (
+        $create
+        && !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new RuntimeException(
+            'Could not create Admin test-run request directory.',
+        );
     }
     return $directory;
 }

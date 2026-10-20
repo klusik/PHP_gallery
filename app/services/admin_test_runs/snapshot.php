@@ -40,7 +40,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use RuntimeException;
 use Throwable;
 use ZipArchive;
@@ -71,11 +70,14 @@ function admin_test_run_resource_counts(): array
 /**
  * Return a privacy-safe process/runtime snapshot for one request stage.
  *
- * @return array<string,mixed>
+ * @param string $stage Lifecycle stage being measured.
+ * @return array<string, mixed> Runtime measurements including memory, PHP limits, process details, open resources, caches, and OPcache status.
  */
 function admin_test_run_runtime_snapshot(string $stage): array
 {
-    $realpathEntries = function_exists('realpath_cache_get') ? realpath_cache_get() : [];
+    $realpathEntries = function_exists('realpath_cache_get')
+        ? realpath_cache_get()
+        : [];
     $realpathSummary = [];
     foreach ($realpathEntries as $path => $entry) {
         $realpathSummary[] = [
@@ -88,18 +90,32 @@ function admin_test_run_runtime_snapshot(string $stage): array
         }
     }
     $beforeOpcacheError = error_get_last();
-    $opcache = function_exists(__NAMESPACE__ . '\\admin_test_run_opcache_capability')
+    $opcache = function_exists(__NAMESPACE__
+        . '\\admin_test_run_opcache_capability')
         ? admin_test_run_opcache_capability()
         : [
-            'extension_loaded' => extension_loaded('Zend OPcache') || function_exists('opcache_get_status'),
-            'enabled' => filter_var((string) ini_get('opcache.enable'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE),
-            'status_access' => function_exists('opcache_get_status') ? 'unavailable' : 'unavailable',
+            'extension_loaded' =>
+                extension_loaded('Zend OPcache')
+                    || function_exists('opcache_get_status'),
+            'enabled' => filter_var(
+                (string) ini_get('opcache.enable'),
+                FILTER_VALIDATE_BOOL,
+                FILTER_NULL_ON_FAILURE,
+            ),
+            'status_access' => function_exists('opcache_get_status')
+                ? 'unavailable'
+                : 'unavailable',
             'status' => null,
         ];
     $afterOpcacheError = error_get_last();
-    if ($afterOpcacheError !== $beforeOpcacheError
+    if (
+        $afterOpcacheError !== $beforeOpcacheError
         && is_array($afterOpcacheError)
-        && str_contains(strtolower((string) ($afterOpcacheError['message'] ?? '')), 'restrict_api')) {
+        && str_contains(
+            strtolower((string) ($afterOpcacheError['message'] ?? '')),
+            'restrict_api',
+        )
+    ) {
         $GLOBALS['admin_test_run_diagnostic_last_error'] = $afterOpcacheError;
         $GLOBALS['admin_test_run_preserved_last_error'] = $beforeOpcacheError;
     }
@@ -110,7 +126,9 @@ function admin_test_run_runtime_snapshot(string $stage): array
         'php_version' => PHP_VERSION,
         'php_sapi' => PHP_SAPI,
         'os_family' => PHP_OS_FAMILY,
-        'server_software' => (string) (request_data('server')['SERVER_SOFTWARE'] ?? ''),
+        'server_software' => (string) (
+            request_data('server')['SERVER_SOFTWARE'] ?? ''
+        ),
         'memory_usage_bytes' => memory_get_usage(true),
         'memory_usage_real_bytes' => memory_get_usage(false),
         'memory_peak_bytes' => memory_get_peak_usage(true),
@@ -123,15 +141,23 @@ function admin_test_run_runtime_snapshot(string $stage): array
         'upload_max_filesize' => (string) ini_get('upload_max_filesize'),
         'default_socket_timeout' => (string) ini_get('default_socket_timeout'),
         'output_buffering' => (string) ini_get('output_buffering'),
-        'zlib_output_compression' => (string) ini_get('zlib.output_compression'),
+        'zlib_output_compression' => (string) ini_get(
+            'zlib.output_compression',
+        ),
         'display_errors' => (string) ini_get('display_errors'),
         'log_errors' => (string) ini_get('log_errors'),
         'loaded_extensions' => get_loaded_extensions(),
         'pdo_drivers' => class_exists('PDO') ? \PDO::getAvailableDrivers() : [],
-        'host_load_average' => function_exists('sys_getloadavg') ? sys_getloadavg() : null,
+        'host_load_average' => function_exists('sys_getloadavg')
+            ? sys_getloadavg()
+            : null,
         'response_detach_capabilities' => [
-            'fastcgi_finish_request' => function_exists('fastcgi_finish_request'),
-            'litespeed_finish_request' => function_exists('litespeed_finish_request'),
+            'fastcgi_finish_request' => function_exists(
+                'fastcgi_finish_request',
+            ),
+            'litespeed_finish_request' => function_exists(
+                'litespeed_finish_request',
+            ),
         ],
         'session_status' => session_status(),
         'session_id_present' => session_id() !== '',
@@ -145,8 +171,12 @@ function admin_test_run_runtime_snapshot(string $stage): array
         'realpath_cache' => [
             'configured_size' => (string) ini_get('realpath_cache_size'),
             'ttl' => (string) ini_get('realpath_cache_ttl'),
-            'used_bytes' => function_exists('realpath_cache_size') ? realpath_cache_size() : null,
-            'entry_count' => is_array($realpathEntries) ? count($realpathEntries) : 0,
+            'used_bytes' => function_exists('realpath_cache_size')
+                ? realpath_cache_size()
+                : null,
+            'entry_count' => is_array($realpathEntries)
+                ? count($realpathEntries)
+                : 0,
             'sample' => $realpathSummary,
         ],
         'opcache' => $opcache,
@@ -156,7 +186,8 @@ function admin_test_run_runtime_snapshot(string $stage): array
 /**
  * Return a bounded recursive size/count inventory for one cache directory.
  *
- * @return array<string,mixed>
+ * @param string $path Cache directory to inventory.
+ * @return array{exists:bool,path:string,files:int,directories:int,bytes:int,newest_mtime:int,oldest_mtime:int,truncated:bool,entry_cap:int,scan_elapsed_ms:float} Bounded filesystem inventory and its truncation status.
  */
 function admin_test_run_directory_inventory(string $path): array
 {
@@ -210,8 +241,14 @@ function admin_test_run_directory_inventory(string $path): array
             }
             $mtime = @filemtime($itemPath);
             if (is_int($mtime) && $mtime > 0) {
-                $result['newest_mtime'] = max((int) $result['newest_mtime'], $mtime);
-                if ((int) $result['oldest_mtime'] === 0 || $mtime < (int) $result['oldest_mtime']) {
+                $result['newest_mtime'] = max(
+                    (int) $result['newest_mtime'],
+                    $mtime,
+                );
+                if (
+                    (int) $result['oldest_mtime'] === 0
+                    || $mtime < (int) $result['oldest_mtime']
+                ) {
                     $result['oldest_mtime'] = $mtime;
                 }
             }
@@ -224,11 +261,12 @@ function admin_test_run_directory_inventory(string $path): array
 /**
  * Inventory application-owned cache families without traversing user gallery media.
  *
- * @return array<string,mixed>
+ * @return array<string, mixed> Cache-family inventory with traversal count, elapsed time, truncation status/reason, and per-family measurements.
  */
 function admin_test_run_cache_inventory(): array
 {
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_cache_inventory_single_pass')) {
+    if (function_exists(__NAMESPACE__
+        . '\\admin_test_run_cache_inventory_single_pass')) {
         return admin_test_run_cache_inventory_single_pass();
     }
     return [
@@ -244,7 +282,8 @@ function admin_test_run_cache_inventory(): array
 /**
  * Check whether a lock file is currently held without waiting for it.
  *
- * @return array<string,mixed>
+ * @param string $path Lock file path to probe.
+ * @return array{path:string,exists:bool,mtime:int|null,size:int,busy:bool|null,probe_error:string,owner_hash:string,acquired_at:mixed,expires_at:mixed} Lock state and safe owner metadata; the probe never waits for the lock.
  */
 function admin_test_run_lock_snapshot(string $path): array
 {
@@ -284,7 +323,8 @@ function admin_test_run_lock_snapshot(string $path): array
             if ($owner !== '') {
                 $snapshot['owner_hash'] = substr(hash('sha256', $owner), 0, 12);
             }
-            $snapshot['acquired_at'] = $decoded['acquired_at'] ?? $decoded['started_at'] ?? null;
+            $snapshot['acquired_at'] =
+                $decoded['acquired_at'] ?? $decoded['started_at'] ?? null;
             $snapshot['expires_at'] = $decoded['expires_at'] ?? null;
         }
     }
@@ -294,13 +334,15 @@ function admin_test_run_lock_snapshot(string $path): array
 /**
  * Return known worker caps, budgets, durable jobs, and locks that can affect PHP worker usage.
  *
- * @return array<string,mixed>
+ * @return array<string, mixed> Snapshot of worker-affecting subsystem limits, capabilities, durable jobs, locks, and warnings.
  */
 function admin_test_run_subsystem_snapshot(): array
 {
     $snapshot = [
         'at_unix' => microtime(true),
-        'application_version' => defined('Gallery\Core\CMS_VERSION') ? constant('Gallery\Core\CMS_VERSION') : '',
+        'application_version' => defined('Gallery\Core\CMS_VERSION')
+            ? constant('Gallery\Core\CMS_VERSION')
+            : '',
         'browser_upload' => null,
         'updates' => null,
         'site_maintenance' => null,
@@ -322,8 +364,12 @@ function admin_test_run_subsystem_snapshot(): array
         if (function_exists(__NAMESPACE__ . '\\feature_flag_definitions')) {
             foreach (feature_flag_definitions() as $key => $definition) {
                 $snapshot['features'][(string) $key] = [
-                    'enabled' => feature_capability_configured_enabled((string) $key),
-                    'default_enabled' => feature_flag_default_enabled((string) $key),
+                    'enabled' => feature_capability_configured_enabled(
+                        (string) $key,
+                    ),
+                    'default_enabled' => feature_flag_default_enabled(
+                        (string) $key,
+                    ),
                     'group' => (string) ($definition['group'] ?? ''),
                 ];
             }
@@ -336,11 +382,19 @@ function admin_test_run_subsystem_snapshot(): array
             $settings = browser_upload_settings();
             $snapshot['browser_upload'] = [
                 'enabled' => !empty($settings['enabled']),
-                'default_worker_count' => (int) ($settings['default_worker_count'] ?? 0),
-                'max_worker_count' => (int) ($settings['max_worker_count'] ?? 0),
+                'default_worker_count' => (int) (
+                    $settings['default_worker_count'] ?? 0
+                ),
+                'max_worker_count' => (int) (
+                    $settings['max_worker_count'] ?? 0
+                ),
                 'hard_worker_cap' => (int) ($settings['hard_worker_cap'] ?? 0),
-                'max_items_per_batch' => (int) ($settings['max_items_per_batch'] ?? 0),
-                'max_zip_batch_bytes' => (int) ($settings['max_zip_batch_bytes'] ?? 0),
+                'max_items_per_batch' => (int) (
+                    $settings['max_items_per_batch'] ?? 0
+                ),
+                'max_zip_batch_bytes' => (int) (
+                    $settings['max_zip_batch_bytes'] ?? 0
+                ),
             ];
             if ((int) ($settings['max_worker_count'] ?? 0) > 16) {
                 $snapshot['warnings'][] = 'Browser upload maximum worker count exceeds 16; this is client-side preparation parallelism, but the value is intentionally highlighted for review.';
@@ -350,39 +404,84 @@ function admin_test_run_subsystem_snapshot(): array
         $snapshot['browser_upload'] = ['error' => $exception->getMessage()];
     }
     try {
-        $activeJob = function_exists(__NAMESPACE__ . '\\application_update_active_job') ? application_update_active_job() : null;
-        $lastJob = function_exists(__NAMESPACE__ . '\\application_update_last_job') ? application_update_last_job() : null;
+        $activeJob = function_exists(__NAMESPACE__
+            . '\\application_update_active_job')
+            ? application_update_active_job()
+            : null;
+        $lastJob = function_exists(__NAMESPACE__
+            . '\\application_update_last_job')
+            ? application_update_last_job()
+            : null;
         $snapshot['updates'] = [
-            'autoupdate_enabled' => function_exists(__NAMESPACE__ . '\\application_autoupdate_enabled') ? application_autoupdate_enabled() : null,
-            'autoupdate_status' => function_exists(__NAMESPACE__ . '\\application_autoupdate_status') ? application_autoupdate_status() : null,
-            'active_job' => is_array($activeJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state') ? application_update_job_public_state($activeJob) : $activeJob,
-            'last_job' => is_array($lastJob) && function_exists(__NAMESPACE__ . '\\application_update_job_public_state') ? application_update_job_public_state($lastJob) : $lastJob,
+            'autoupdate_enabled' => function_exists(__NAMESPACE__
+                . '\\application_autoupdate_enabled')
+                ? application_autoupdate_enabled()
+                : null,
+            'autoupdate_status' => function_exists(__NAMESPACE__
+                . '\\application_autoupdate_status')
+                ? application_autoupdate_status()
+                : null,
+            'active_job' => is_array($activeJob)
+            && function_exists(__NAMESPACE__
+                . '\\application_update_job_public_state')
+                ? application_update_job_public_state($activeJob)
+                : $activeJob,
+            'last_job' => is_array($lastJob)
+            && function_exists(__NAMESPACE__
+                . '\\application_update_job_public_state')
+                ? application_update_job_public_state($lastJob)
+                : $lastJob,
             'request_time_background_continue_budget_seconds' => 3.0,
             'admin_continue_or_retry_budget_seconds' => 7.0,
             'failed_background_retry_backoff_seconds' => 60,
         ];
         if (function_exists(__NAMESPACE__ . '\\application_update_jobs_root')) {
             $jobsRoot = application_update_jobs_root();
-            $snapshot['locks']['update_start'] = admin_test_run_lock_snapshot($jobsRoot . DIRECTORY_SEPARATOR . 'start.lock');
-            if (is_array($activeJob) && !empty($activeJob['id']) && function_exists(__NAMESPACE__ . '\\application_update_job_dir')) {
-                $snapshot['locks']['update_worker'] = admin_test_run_lock_snapshot(application_update_job_dir((string) $activeJob['id']) . DIRECTORY_SEPARATOR . 'worker.lock');
+            $snapshot['locks']['update_start'] = admin_test_run_lock_snapshot(
+                $jobsRoot . DIRECTORY_SEPARATOR . 'start.lock',
+            );
+            if (
+                is_array($activeJob)
+                && !empty($activeJob['id'])
+                && function_exists(__NAMESPACE__
+                    . '\\application_update_job_dir')
+            ) {
+                $snapshot['locks']['update_worker'] = admin_test_run_lock_snapshot(
+                    application_update_job_dir((string) $activeJob['id'])
+                        . DIRECTORY_SEPARATOR
+                        . 'worker.lock',
+                );
             }
         }
     } catch (Throwable $exception) {
         $snapshot['updates'] = ['error' => $exception->getMessage()];
     }
     try {
-        $snapshot['site_maintenance'] = function_exists(__NAMESPACE__ . '\\site_maintenance_status') ? site_maintenance_status() : null;
+        $snapshot['site_maintenance'] = function_exists(__NAMESPACE__
+            . '\\site_maintenance_status')
+            ? site_maintenance_status()
+            : null;
         if (function_exists(__NAMESPACE__ . '\\site_maintenance_lock_path')) {
-            $snapshot['locks']['site_maintenance'] = admin_test_run_lock_snapshot(site_maintenance_lock_path());
+            $snapshot['locks']['site_maintenance'] = admin_test_run_lock_snapshot(
+                site_maintenance_lock_path(),
+            );
         }
     } catch (Throwable $exception) {
         $snapshot['site_maintenance'] = ['error' => $exception->getMessage()];
     }
     try {
-        $snapshot['admin_log_archives'] = function_exists(__NAMESPACE__ . '\\admin_log_archive_status') ? admin_log_archive_status() : null;
-        $archiveLock = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'admin-log-archive-maintenance.lock';
-        $snapshot['locks']['admin_log_archive'] = admin_test_run_lock_snapshot($archiveLock);
+        $snapshot['admin_log_archives'] = function_exists(__NAMESPACE__
+            . '\\admin_log_archive_status')
+            ? admin_log_archive_status()
+            : null;
+        $archiveLock =
+            dirname(__DIR__, 3)
+            . DIRECTORY_SEPARATOR
+            . 'cache'
+            . DIRECTORY_SEPARATOR
+            . 'admin-log-archive-maintenance.lock';
+        $snapshot['locks']['admin_log_archive'] =
+            admin_test_run_lock_snapshot($archiveLock);
     } catch (Throwable $exception) {
         $snapshot['admin_log_archives'] = ['error' => $exception->getMessage()];
     }
@@ -397,41 +496,67 @@ function admin_test_run_subsystem_snapshot(): array
 /**
  * Clear safe request/summary caches before a diagnostic reload without deleting generated media or updater state.
  *
- * @return array<string,mixed>
+ * @return array{scope:string,actions:array<string,array<string,mixed>>,total_ms:float} Results and elapsed time for safe request/summary cache invalidation attempts.
  */
 function admin_test_run_clear_safe_caches(): array
 {
     $started = microtime(true);
     $actions = [];
     $callbacks = [
-        'thumbnail_maintenance_summary' => __NAMESPACE__ . '\\thumbnail_maintenance_summary_cache_clear_diagnostic',
-        'admin_storage_statistics' => __NAMESPACE__ . '\\admin_storage_statistics_cache_clear',
-        'gallery_map_runtime' => __NAMESPACE__ . '\\gallery_map_cache_clear_all',
-        'smart_gallery_graph_request' => __NAMESPACE__ . '\\smart_gallery_graph_cache_clear',
-        'translation_runtime' => __NAMESPACE__ . '\\translation_clear_runtime_cache',
-        'content_localization_request' => __NAMESPACE__ . '\\content_localization_reset_request_cache',
-        'schema_inspection_request' => __NAMESPACE__ . '\\schema_inspection_reset_request_cache',
-        'app_settings_request' => __NAMESPACE__ . '\\app_settings_reset_request_cache',
+        'thumbnail_maintenance_summary' =>
+            __NAMESPACE__
+                . '\\thumbnail_maintenance_summary_cache_clear_diagnostic',
+        'admin_storage_statistics' =>
+            __NAMESPACE__ . '\\admin_storage_statistics_cache_clear',
+        'gallery_map_runtime' =>
+            __NAMESPACE__ . '\\gallery_map_cache_clear_all',
+        'smart_gallery_graph_request' =>
+            __NAMESPACE__ . '\\smart_gallery_graph_cache_clear',
+        'translation_runtime' =>
+            __NAMESPACE__ . '\\translation_clear_runtime_cache',
+        'content_localization_request' =>
+            __NAMESPACE__ . '\\content_localization_reset_request_cache',
+        'schema_inspection_request' =>
+            __NAMESPACE__ . '\\schema_inspection_reset_request_cache',
+        'app_settings_request' =>
+            __NAMESPACE__ . '\\app_settings_reset_request_cache',
     ];
     foreach ($callbacks as $name => $callback) {
         if (!function_exists($callback)) {
-            $actions[$name] = ['available' => false, 'ok' => null, 'elapsed_ms' => 0.0];
+            $actions[$name] = [
+                'available' => false,
+                'ok' => null,
+                'elapsed_ms' => 0.0,
+            ];
             continue;
         }
         $actionStarted = microtime(true);
         try {
             $callbackResult = $callback();
-            $actions[$name] = ['available' => true, 'ok' => true, 'elapsed_ms' => (microtime(true) - $actionStarted) * 1000];
+            $actions[$name] = [
+                'available' => true,
+                'ok' => true,
+                'elapsed_ms' => (microtime(true) - $actionStarted) * 1000,
+            ];
             if (is_array($callbackResult) && $callbackResult !== []) {
                 $actions[$name]['details'] = $callbackResult;
             }
         } catch (Throwable $exception) {
-            $actions[$name] = ['available' => true, 'ok' => false, 'elapsed_ms' => (microtime(true) - $actionStarted) * 1000, 'error' => $exception->getMessage()];
+            $actions[$name] = [
+                'available' => true,
+                'ok' => false,
+                'elapsed_ms' => (microtime(true) - $actionStarted) * 1000,
+                'error' => $exception->getMessage(),
+            ];
         }
     }
     $statStarted = microtime(true);
     clearstatcache(true);
-    $actions['php_stat_cache'] = ['available' => true, 'ok' => true, 'elapsed_ms' => (microtime(true) - $statStarted) * 1000];
+    $actions['php_stat_cache'] = [
+        'available' => true,
+        'ok' => true,
+        'elapsed_ms' => (microtime(true) - $statStarted) * 1000,
+    ];
     return [
         'scope' => 'safe application/request metadata caches only; generated thumbnails, download ZIPs, update payloads, and OPcache are intentionally preserved',
         'actions' => $actions,
@@ -442,7 +567,8 @@ function admin_test_run_clear_safe_caches(): array
 /**
  * Return a constant-time runtime snapshot for starter metadata before the measured reload.
  *
- * @return array<string,mixed>
+ * @param string $stage Starter-preflight stage label.
+ * @return array{stage:string,at_unix:float,pid:int|null,php_version:string,php_sapi:string,memory_usage_bytes:int,memory_peak_bytes:int,included_file_count:int,opcache:array<string,mixed>} Constant-time runtime values recorded before the measured reload.
  */
 function admin_test_run_runtime_preflight(string $stage): array
 {
@@ -456,8 +582,14 @@ function admin_test_run_runtime_preflight(string $stage): array
         'memory_peak_bytes' => memory_get_peak_usage(true),
         'included_file_count' => count(get_included_files()),
         'opcache' => [
-            'extension_loaded' => extension_loaded('Zend OPcache') || function_exists('opcache_get_status'),
-            'enabled' => filter_var((string) ini_get('opcache.enable'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE),
+            'extension_loaded' =>
+                extension_loaded('Zend OPcache')
+                    || function_exists('opcache_get_status'),
+            'enabled' => filter_var(
+                (string) ini_get('opcache.enable'),
+                FILTER_VALIDATE_BOOL,
+                FILTER_NULL_ON_FAILURE,
+            ),
             'status_access' => 'deferred_to_post_measurement_inventory',
         ],
     ];

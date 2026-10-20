@@ -65,11 +65,16 @@ use const Gallery\Core\DUPLICATE_PHOTO_DETECTOR_TOKEN_BYTES;
  * @param bool $administratorAuthorized Whether administrator authorization succeeded.
  * @return array{gallery_id:int,search_all:bool} Resolved immutable detector scope.
  */
-function duplicate_photo_detector_resolve_scope(?array $gallery, bool $searchAllRequested, bool $administratorAuthorized): array
-{
+function duplicate_photo_detector_resolve_scope(
+    ?array $gallery,
+    bool $searchAllRequested,
+    bool $administratorAuthorized,
+): array {
     $galleryId = is_array($gallery) ? (int) ($gallery['id'] ?? 0) : 0;
     if (!$administratorAuthorized || $galleryId <= 0) {
-        throw new InvalidArgumentException('The selected gallery is missing or inaccessible.');
+        throw new InvalidArgumentException(
+            'The selected gallery is missing or inaccessible.',
+        );
     }
 
     return [
@@ -96,7 +101,7 @@ function duplicate_photo_detector_gallery_branch_ids(int $galleryId): array
 
     $galleryIds = array_values(array_unique(array_filter(
         duplicate_photo_model_gallery_branch_ids($galleryId),
-        'Gallery\Services\duplicate_photo_detector_positive_id'
+        'Gallery\Services\duplicate_photo_detector_positive_id',
     )));
     return $galleryIds !== [] ? $galleryIds : [$galleryId];
 }
@@ -114,8 +119,11 @@ function duplicate_photo_detector_gallery_branch_ids(int $galleryId): array
 function duplicate_photo_detector_job_gallery_ids(array $job): array
 {
     $galleryIds = array_values(array_unique(array_filter(
-        array_map('intval', is_array($job['gallery_ids'] ?? null) ? $job['gallery_ids'] : []),
-        'Gallery\\Services\\duplicate_photo_detector_positive_id'
+        array_map(
+            'intval',
+            is_array($job['gallery_ids'] ?? null) ? $job['gallery_ids'] : [],
+        ),
+        'Gallery\\Services\\duplicate_photo_detector_positive_id',
     )));
 
     if ($galleryIds === []) {
@@ -147,13 +155,15 @@ function duplicate_photo_detector_normalize_text(mixed $value): ?string
     }
 
     $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
-    return function_exists('mb_strtolower') ? mb_strtolower($text, 'UTF-8') : strtolower($text);
+    return function_exists('mb_strtolower')
+        ? mb_strtolower($text, 'UTF-8')
+        : strtolower($text);
 }
 
 /**
  * Normalize one stored EXIF capture date without applying timezone conversion.
  *
- * @param mixed $value Raw stored capture date.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Raw stored EXIF date; arrays, objects, resources, and null return null.
  * @return string|null Canonical date-time text, or null when unavailable.
  */
 function duplicate_photo_detector_normalize_taken_at(mixed $value): ?string
@@ -167,8 +177,26 @@ function duplicate_photo_detector_normalize_taken_at(mixed $value): ?string
         return null;
     }
 
-    if (preg_match('/^(\d{4})[-:](\d{2})[-:](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/', $text, $matches) === 1) {
-        return $matches[1] . '-' . $matches[2] . '-' . $matches[3] . ' ' . $matches[4] . ':' . $matches[5] . ':' . $matches[6];
+    if (
+        preg_match(
+            '/^(\d{4})[-:](\d{2})[-:](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/',
+            $text,
+            $matches,
+        ) === 1
+    ) {
+        return (
+            $matches[1]
+                . '-'
+                . $matches[2]
+                . '-'
+                . $matches[3]
+                . ' '
+                . $matches[4]
+                . ':'
+                . $matches[5]
+                . ':'
+                . $matches[6]
+        );
     }
 
     return duplicate_photo_detector_normalize_text($text);
@@ -177,12 +205,14 @@ function duplicate_photo_detector_normalize_taken_at(mixed $value): ?string
 /**
  * Normalize one numeric or rational EXIF value into deterministic decimal text.
  *
- * @param mixed $value Raw stored EXIF value.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Raw stored EXIF numeric or rational value; arrays, objects, resources, and null return null.
  * @param string $suffix Optional suffix to remove before numeric parsing.
  * @return string|null Canonical numeric/text value, or null when unavailable.
  */
-function duplicate_photo_detector_normalize_numeric(mixed $value, string $suffix = ''): ?string
-{
+function duplicate_photo_detector_normalize_numeric(
+    mixed $value,
+    string $suffix = '',
+): ?string {
     if (!is_scalar($value)) {
         return null;
     }
@@ -193,16 +223,29 @@ function duplicate_photo_detector_normalize_numeric(mixed $value, string $suffix
     }
 
     if ($suffix !== '') {
-        $text = preg_replace('/\s*' . preg_quote($suffix, '/') . '\s*$/i', '', $text) ?? $text;
+        $text =
+            preg_replace(
+                '/\s*' . preg_quote($suffix, '/') . '\s*$/i',
+                '',
+                $text,
+            ) ?? $text;
         $text = trim($text);
     }
 
-    if (preg_match('/^(-?\d+(?:\.\d+)?)\s*\/\s*(-?\d+(?:\.\d+)?)$/', $text, $matches) === 1) {
+    if (
+        preg_match(
+            '/^(-?\d+(?:\.\d+)?)\s*\/\s*(-?\d+(?:\.\d+)?)$/',
+            $text,
+            $matches,
+        ) === 1
+    ) {
         $denominator = (float) $matches[2];
         if (abs($denominator) < 0.000000000001) {
             return null;
         }
-        return duplicate_photo_detector_normalize_decimal((float) $matches[1] / $denominator);
+        return duplicate_photo_detector_normalize_decimal(
+            (float) $matches[1] / $denominator,
+        );
     }
 
     if (is_numeric($text)) {
@@ -259,7 +302,9 @@ function duplicate_photo_detector_normalize_exposure_time(mixed $value): ?string
         return null;
     }
 
-    $text = preg_replace('/\s*(?:s|sec|secs|second|seconds)\s*$/i', '', $text) ?? $text;
+    $text =
+        preg_replace('/\s*(?:s|sec|secs|second|seconds)\s*$/i', '', $text)
+        ?? $text;
     return duplicate_photo_detector_normalize_numeric(trim($text));
 }
 
@@ -311,7 +356,9 @@ function duplicate_photo_detector_exif_components(array $image): array
 {
     $components = [];
 
-    $takenAt = duplicate_photo_detector_normalize_taken_at($image['exif_taken_at'] ?? null);
+    $takenAt = duplicate_photo_detector_normalize_taken_at(
+        $image['exif_taken_at'] ?? null,
+    );
     if ($takenAt !== null) {
         $components['taken_at'] = $takenAt;
     }
@@ -321,23 +368,32 @@ function duplicate_photo_detector_exif_components(array $image): array
         'camera_model' => 'exif_camera_model',
         'lens_model' => 'exif_lens_model',
     ] as $component => $column) {
-        $normalized = duplicate_photo_detector_normalize_text($image[$column] ?? null);
+        $normalized = duplicate_photo_detector_normalize_text(
+            $image[$column] ?? null,
+        );
         if ($normalized !== null) {
             $components[$component] = $normalized;
         }
     }
 
-    $focalLength = duplicate_photo_detector_normalize_numeric($image['exif_focal_length'] ?? null, 'mm');
+    $focalLength = duplicate_photo_detector_normalize_numeric(
+        $image['exif_focal_length'] ?? null,
+        'mm',
+    );
     if ($focalLength !== null) {
         $components['focal_length'] = $focalLength;
     }
 
-    $aperture = duplicate_photo_detector_normalize_aperture($image['exif_aperture'] ?? null);
+    $aperture = duplicate_photo_detector_normalize_aperture(
+        $image['exif_aperture'] ?? null,
+    );
     if ($aperture !== null) {
         $components['aperture'] = $aperture;
     }
 
-    $exposureTime = duplicate_photo_detector_normalize_exposure_time($image['exif_exposure_time'] ?? null);
+    $exposureTime = duplicate_photo_detector_normalize_exposure_time(
+        $image['exif_exposure_time'] ?? null,
+    );
     if ($exposureTime !== null) {
         $components['exposure_time'] = $exposureTime;
     }
@@ -347,8 +403,12 @@ function duplicate_photo_detector_exif_components(array $image): array
         $components['iso'] = $iso;
     }
 
-    $gpsLat = duplicate_photo_detector_normalize_numeric($image['gps_lat'] ?? null);
-    $gpsLng = duplicate_photo_detector_normalize_numeric($image['gps_lng'] ?? null);
+    $gpsLat = duplicate_photo_detector_normalize_numeric(
+        $image['gps_lat'] ?? null,
+    );
+    $gpsLng = duplicate_photo_detector_normalize_numeric(
+        $image['gps_lng'] ?? null,
+    );
     if ($gpsLat !== null && $gpsLng !== null) {
         $components['gps'] = $gpsLat . ',' . $gpsLng;
     }
@@ -374,8 +434,14 @@ function duplicate_photo_detector_exif_fingerprint(array $image): ?array
     }
 
     $hasCaptureTime = isset($components['taken_at']);
-    $hasIdentity = isset($components['camera_make']) || isset($components['camera_model']) || isset($components['lens_model']);
-    $complete = $hasCaptureTime && $hasIdentity && count($components) >= DUPLICATE_PHOTO_DETECTOR_MIN_EXIF_COMPONENTS;
+    $hasIdentity =
+        isset($components['camera_make'])
+        || isset($components['camera_model'])
+        || isset($components['lens_model']);
+    $complete =
+        $hasCaptureTime
+        && $hasIdentity
+        && count($components) >= DUPLICATE_PHOTO_DETECTOR_MIN_EXIF_COMPONENTS;
 
     $parts = [];
     foreach ($components as $name => $value) {
@@ -416,8 +482,12 @@ function duplicate_photo_detector_candidate_exif_fingerprint(array $image): ?arr
 
     $components = $fingerprint['components'];
     $hasCaptureTime = isset($components['taken_at']);
-    $hasIdentity = isset($components['camera_make']) || isset($components['camera_model']) || isset($components['lens_model']);
-    $fingerprint['complete'] = $hasCaptureTime && $hasIdentity && count($components) >= 3;
+    $hasIdentity =
+        isset($components['camera_make'])
+        || isset($components['camera_model'])
+        || isset($components['lens_model']);
+    $fingerprint['complete'] =
+        $hasCaptureTime && $hasIdentity && count($components) >= 3;
     return $fingerprint;
 }
 
@@ -443,9 +513,13 @@ function duplicate_photo_detector_normalize_checksum(mixed $value): ?string
  * @param array<string,array<int,int>> $groups Match groups keyed by deterministic fingerprint.
  * @param string $key Group key.
  * @param int $imageId Image identifier.
+ * @return void Adds the positive image id once to the keyed match group.
  */
-function duplicate_photo_detector_append_group_id(array &$groups, string $key, int $imageId): void
-{
+function duplicate_photo_detector_append_group_id(
+    array &$groups,
+    string $key,
+    int $imageId,
+): void {
     if ($imageId <= 0) {
         return;
     }
@@ -465,6 +539,7 @@ function duplicate_photo_detector_append_group_id(array &$groups, string $key, i
  *
  * @param array<string,mixed> $job Mutable detector job state.
  * @param array<int,array<string,mixed>> $rows Stored image metadata rows.
+ * @return void Adds row-derived indexes and exact/possible match groups to the job state.
  */
 function duplicate_photo_detector_process_rows(array &$job, array $rows): void
 {
@@ -480,7 +555,10 @@ function duplicate_photo_detector_process_rows(array &$job, array $rows): void
     if (!isset($job['possible_groups']) || !is_array($job['possible_groups'])) {
         $job['possible_groups'] = [];
     }
-    if (!isset($job['image_gallery_ids']) || !is_array($job['image_gallery_ids'])) {
+    if (
+        !isset($job['image_gallery_ids'])
+        || !is_array($job['image_gallery_ids'])
+    ) {
         $job['image_gallery_ids'] = [];
     }
 
@@ -494,17 +572,28 @@ function duplicate_photo_detector_process_rows(array &$job, array $rows): void
             $job['image_gallery_ids'][$imageId] = $galleryId;
         }
 
-        $checksum = duplicate_photo_detector_normalize_checksum($row['checksum_sha256'] ?? null);
+        $checksum = duplicate_photo_detector_normalize_checksum(
+            $row['checksum_sha256'] ?? null,
+        );
         if ($checksum !== null) {
             if (isset($job['exact_first'][$checksum])) {
-                duplicate_photo_detector_append_group_id($job['exact_groups'], $checksum, (int) $job['exact_first'][$checksum]);
-                duplicate_photo_detector_append_group_id($job['exact_groups'], $checksum, $imageId);
+                duplicate_photo_detector_append_group_id(
+                    $job['exact_groups'],
+                    $checksum,
+                    (int) $job['exact_first'][$checksum],
+                );
+                duplicate_photo_detector_append_group_id(
+                    $job['exact_groups'],
+                    $checksum,
+                    $imageId,
+                );
             } else {
                 $job['exact_first'][$checksum] = $imageId;
             }
         }
 
-        $fingerprint = duplicate_photo_detector_candidate_exif_fingerprint($row);
+        $fingerprint =
+            duplicate_photo_detector_candidate_exif_fingerprint($row);
         if ($fingerprint === null || !$fingerprint['complete']) {
             continue;
         }
@@ -513,8 +602,16 @@ function duplicate_photo_detector_process_rows(array &$job, array $rows): void
         // packaged copies of the same photo may retain EXIF while byte size differs.
         $possibleKey = $fingerprint['hash'];
         if (isset($job['possible_first'][$possibleKey])) {
-            duplicate_photo_detector_append_group_id($job['possible_groups'], $possibleKey, (int) $job['possible_first'][$possibleKey]);
-            duplicate_photo_detector_append_group_id($job['possible_groups'], $possibleKey, $imageId);
+            duplicate_photo_detector_append_group_id(
+                $job['possible_groups'],
+                $possibleKey,
+                (int) $job['possible_first'][$possibleKey],
+            );
+            duplicate_photo_detector_append_group_id(
+                $job['possible_groups'],
+                $possibleKey,
+                $imageId,
+            );
         } else {
             $job['possible_first'][$possibleKey] = $imageId;
         }
@@ -532,8 +629,12 @@ function duplicate_photo_detector_process_rows(array &$job, array $rows): void
  */
 function duplicate_photo_detector_finalize_job(array $job): array
 {
-    $exactGroups = duplicate_photo_detector_normalize_group_map((array) ($job['exact_groups'] ?? []));
-    $possibleGroups = duplicate_photo_detector_normalize_group_map((array) ($job['possible_groups'] ?? []));
+    $exactGroups = duplicate_photo_detector_normalize_group_map(
+        (array) ($job['exact_groups'] ?? []),
+    );
+    $possibleGroups = duplicate_photo_detector_normalize_group_map(
+        (array) ($job['possible_groups'] ?? []),
+    );
 
     $exactMemberSets = [];
     foreach ($exactGroups as $ids) {
@@ -564,14 +665,20 @@ function duplicate_photo_detector_normalize_group_map(array $groups): array
 {
     $normalized = [];
     foreach ($groups as $key => $ids) {
-        $cleanIds = array_values(array_unique(array_filter(array_map('intval', is_array($ids) ? $ids : []), 'Gallery\\Services\\duplicate_photo_detector_positive_id')));
+        $cleanIds = array_values(array_unique(array_filter(
+            array_map('intval', is_array($ids) ? $ids : []),
+            'Gallery\\Services\\duplicate_photo_detector_positive_id',
+        )));
         sort($cleanIds, SORT_NUMERIC);
         if (count($cleanIds) >= 2) {
             $normalized[(string) $key] = $cleanIds;
         }
     }
 
-    uksort($normalized, 'Gallery\\Services\\duplicate_photo_detector_group_key_compare');
+    uksort(
+        $normalized,
+        'Gallery\\Services\\duplicate_photo_detector_group_key_compare',
+    );
     return $normalized;
 }
 
@@ -582,8 +689,10 @@ function duplicate_photo_detector_normalize_group_map(array $groups): array
  * @param int $imageId Image identifier to verify.
  * @return bool True when the image is still a member of an exact or possible group.
  */
-function duplicate_photo_detector_job_contains_image(array $job, int $imageId): bool
-{
+function duplicate_photo_detector_job_contains_image(
+    array $job,
+    int $imageId,
+): bool {
     if ($imageId <= 0) {
         return false;
     }
@@ -608,16 +717,29 @@ function duplicate_photo_detector_job_contains_image(array $job, int $imageId): 
  * @param int $secondImageId Second image identifier.
  * @return bool True when both ids coexist in one exact or possible match group.
  */
-function duplicate_photo_detector_job_contains_pair(array $job, int $firstImageId, int $secondImageId): bool
-{
-    if ($firstImageId <= 0 || $secondImageId <= 0 || $firstImageId === $secondImageId) {
+function duplicate_photo_detector_job_contains_pair(
+    array $job,
+    int $firstImageId,
+    int $secondImageId,
+): bool {
+    if (
+        $firstImageId <= 0
+        || $secondImageId <= 0
+        || $firstImageId === $secondImageId
+    ) {
         return false;
     }
 
     foreach (['exact_groups', 'possible_groups'] as $groupKey) {
         foreach ((array) ($job[$groupKey] ?? []) as $ids) {
-            $memberIds = array_values(array_unique(array_map('intval', is_array($ids) ? $ids : [])));
-            if (in_array($firstImageId, $memberIds, true) && in_array($secondImageId, $memberIds, true)) {
+            $memberIds = array_values(array_unique(array_map(
+                'intval',
+                is_array($ids) ? $ids : [],
+            )));
+            if (
+                in_array($firstImageId, $memberIds, true)
+                && in_array($secondImageId, $memberIds, true)
+            ) {
                 return true;
             }
         }
@@ -637,8 +759,10 @@ function duplicate_photo_detector_job_contains_pair(array $job, int $firstImageI
  * @param int $galleryId Current gallery identifier for the image.
  * @return bool True when the current gallery remains inside the detector scope.
  */
-function duplicate_photo_detector_job_allows_gallery(array $job, int $galleryId): bool
-{
+function duplicate_photo_detector_job_allows_gallery(
+    array $job,
+    int $galleryId,
+): bool {
     if ($galleryId <= 0) {
         return false;
     }
@@ -646,7 +770,11 @@ function duplicate_photo_detector_job_allows_gallery(array $job, int $galleryId)
         return true;
     }
 
-    return in_array($galleryId, duplicate_photo_detector_job_gallery_ids($job), true);
+    return in_array(
+        $galleryId,
+        duplicate_photo_detector_job_gallery_ids($job),
+        true,
+    );
 }
 
 /**
@@ -659,8 +787,10 @@ function duplicate_photo_detector_job_allows_gallery(array $job, int $galleryId)
  * @param int $imageId Deleted image identifier.
  * @return array<string,mixed> Updated detector job state.
  */
-function duplicate_photo_detector_prune_image_from_job(array $job, int $imageId): array
-{
+function duplicate_photo_detector_prune_image_from_job(
+    array $job,
+    int $imageId,
+): array {
     if ($imageId <= 0) {
         return $job;
     }
@@ -670,14 +800,22 @@ function duplicate_photo_detector_prune_image_from_job(array $job, int $imageId)
         foreach ((array) ($job[$groupKey] ?? []) as $key => $ids) {
             $remainingIds = array_values(array_filter(
                 array_map('intval', is_array($ids) ? $ids : []),
-                static fn (int $memberId): bool => $memberId > 0 && $memberId !== $imageId
+                static fn(int $memberId): bool => (
+                    $memberId > 0 && $memberId !== $imageId
+                ),
             ));
             $groups[(string) $key] = $remainingIds;
         }
         $job[$groupKey] = duplicate_photo_detector_normalize_group_map($groups);
     }
-    if (isset($job['image_gallery_ids']) && is_array($job['image_gallery_ids'])) {
-        unset($job['image_gallery_ids'][$imageId], $job['image_gallery_ids'][(string) $imageId]);
+    if (
+        isset($job['image_gallery_ids'])
+        && is_array($job['image_gallery_ids'])
+    ) {
+        unset(
+            $job['image_gallery_ids'][$imageId],
+            $job['image_gallery_ids'][(string) $imageId],
+        );
     }
 
     $job['updated_at'] = time();
@@ -692,8 +830,11 @@ function duplicate_photo_detector_prune_image_from_job(array $job, int $imageId)
  * @param array<string,array<string,mixed>> $jobs Caller-owned detector map, updated by reference after pruning.
  * @return array<string,mixed>|null Updated job, or null when the job expired.
  */
-function duplicate_photo_detector_remove_image_from_job(string $token, int $imageId, array &$jobs): ?array
-{
+function duplicate_photo_detector_remove_image_from_job(
+    string $token,
+    int $imageId,
+    array &$jobs,
+): ?array {
     $job = duplicate_photo_detector_read_job($token, $jobs);
     if ($job === null) {
         return null;
@@ -722,8 +863,10 @@ function duplicate_photo_detector_positive_id(int $id): bool
  * @param string $right Right group key.
  * @return int Comparison result.
  */
-function duplicate_photo_detector_group_key_compare(string $left, string $right): int
-{
+function duplicate_photo_detector_group_key_compare(
+    string $left,
+    string $right,
+): int {
     return $left <=> $right;
 }
 
@@ -734,15 +877,17 @@ function duplicate_photo_detector_group_key_compare(string $left, string $right)
  * @param array<int,int> $galleryIds Immutable local gallery-branch ids.
  * @return array{total:int,max_image_id:int} Snapshot bounds for the job.
  */
-function duplicate_photo_detector_scope_snapshot(array $scope, array $galleryIds = []): array
-{
+function duplicate_photo_detector_scope_snapshot(
+    array $scope,
+    array $galleryIds = [],
+): array {
     if (!empty($scope['search_all'])) {
         return duplicate_photo_model_scope_snapshot([]);
     }
 
     $galleryIds = array_values(array_unique(array_filter(
         array_map('intval', $galleryIds),
-        'Gallery\Services\duplicate_photo_detector_positive_id'
+        'Gallery\Services\duplicate_photo_detector_positive_id',
     )));
     if ($galleryIds === []) {
         $galleryIds = [(int) $scope['gallery_id']];
@@ -762,7 +907,9 @@ function duplicate_photo_detector_start_job(array $scope, array &$jobs): array
     duplicate_photo_detector_cleanup_jobs($jobs);
     $galleryIds = !empty($scope['search_all'])
         ? []
-        : duplicate_photo_detector_gallery_branch_ids((int) $scope['gallery_id']);
+        : duplicate_photo_detector_gallery_branch_ids(
+            (int) $scope['gallery_id'],
+        );
     $snapshot = duplicate_photo_detector_scope_snapshot($scope, $galleryIds);
     $token = bin2hex(random_bytes(DUPLICATE_PHOTO_DETECTOR_TOKEN_BYTES));
     $job = [
@@ -800,8 +947,11 @@ function duplicate_photo_detector_start_job(array $scope, array &$jobs): array
  * @param int $batchSize Maximum rows to inspect in this request.
  * @return array<string,mixed> Public detector job state.
  */
-function duplicate_photo_detector_process_job(string $token, array &$jobs, int $batchSize = DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE): array
-{
+function duplicate_photo_detector_process_job(
+    string $token,
+    array &$jobs,
+    int $batchSize = DUPLICATE_PHOTO_DETECTOR_DEFAULT_BATCH_SIZE,
+): array {
     $job = duplicate_photo_detector_read_job($token, $jobs);
     if ($job === null) {
         return duplicate_photo_detector_missing_state();
@@ -810,18 +960,31 @@ function duplicate_photo_detector_process_job(string $token, array &$jobs, int $
         return duplicate_photo_detector_public_state($job);
     }
 
-    $batchSize = max(1, min(DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE, $batchSize));
+    $batchSize = max(1, min(
+        DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE,
+        $batchSize,
+    ));
     $rows = duplicate_photo_detector_fetch_batch($job, $batchSize);
     duplicate_photo_detector_process_rows($job, $rows);
 
     if ($rows !== []) {
         $lastRow = $rows[count($rows) - 1];
-        $job['cursor'] = max((int) ($job['cursor'] ?? 0), (int) ($lastRow['id'] ?? 0));
-        $job['processed'] = min((int) ($job['total'] ?? 0), (int) ($job['processed'] ?? 0) + count($rows));
+        $job['cursor'] = max(
+            (int) ($job['cursor'] ?? 0),
+            (int) ($lastRow['id'] ?? 0),
+        );
+        $job['processed'] = min(
+            (int) ($job['total'] ?? 0),
+            (int) ($job['processed'] ?? 0) + count($rows),
+        );
     }
     $job['updated_at'] = time();
 
-    if ($rows === [] || count($rows) < $batchSize || (int) ($job['cursor'] ?? 0) >= (int) ($job['max_image_id'] ?? 0)) {
+    if (
+        $rows === []
+        || count($rows) < $batchSize
+        || (int) ($job['cursor'] ?? 0) >= (int) ($job['max_image_id'] ?? 0)
+    ) {
         $job['processed'] = (int) ($job['total'] ?? $job['processed'] ?? 0);
         $job = duplicate_photo_detector_finalize_job($job);
     }
@@ -844,7 +1007,10 @@ function duplicate_photo_detector_fetch_batch(array $job, int $batchSize): array
 {
     $cursor = max(0, (int) ($job['cursor'] ?? 0));
     $maxImageId = max(0, (int) ($job['max_image_id'] ?? 0));
-    $batchSize = max(1, min(DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE, $batchSize));
+    $batchSize = max(1, min(
+        DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE,
+        $batchSize,
+    ));
 
     $galleryIds = [];
     if (empty($job['search_all'])) {
@@ -853,7 +1019,12 @@ function duplicate_photo_detector_fetch_batch(array $job, int $batchSize): array
             return [];
         }
     }
-    return duplicate_photo_model_fetch_batch($galleryIds, $cursor, $maxImageId, $batchSize);
+    return duplicate_photo_model_fetch_batch(
+        $galleryIds,
+        $cursor,
+        $maxImageId,
+        $batchSize,
+    );
 }
 
 /**
@@ -867,7 +1038,9 @@ function duplicate_photo_detector_public_state(array $job): array
     $total = max(0, (int) ($job['total'] ?? 0));
     $processed = max(0, min($total, (int) ($job['processed'] ?? 0)));
     $complete = (string) ($job['status'] ?? '') === 'complete';
-    $percent = $total > 0 ? round(($processed / $total) * 100, 1) : ($complete ? 100.0 : 0.0);
+    $percent = $total > 0
+        ? round(($processed / $total) * 100, 1)
+        : ($complete ? 100.0 : 0.0);
 
     return [
         'ok' => true,
@@ -880,7 +1053,9 @@ function duplicate_photo_detector_public_state(array $job): array
         'gallery_id' => (int) ($job['gallery_id'] ?? 0),
         'search_all' => !empty($job['search_all']),
         'exact_group_count' => count((array) ($job['exact_groups'] ?? [])),
-        'possible_group_count' => count((array) ($job['possible_groups'] ?? [])),
+        'possible_group_count' => count(
+            (array) ($job['possible_groups'] ?? []),
+        ),
     ];
 }
 
@@ -921,7 +1096,10 @@ function duplicate_photo_detector_read_job(string $token, array &$jobs): ?array
     }
 
     $job = $jobs[$token];
-    if (time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0) > DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS) {
+    if (
+        (time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0))
+        > DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS
+    ) {
         unset($jobs[$token]);
         return null;
     }
@@ -938,7 +1116,8 @@ function duplicate_photo_detector_read_job(string $token, array &$jobs): ?array
  */
 function duplicate_photo_detector_write_job(array $job, array &$jobs): void
 {
-    $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($job['token'] ?? '')) ?: '';
+    $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($job['token'] ?? ''))
+    ?: '';
     if ($token === '') {
         return;
     }
@@ -955,7 +1134,11 @@ function duplicate_photo_detector_write_job(array $job, array &$jobs): void
 function duplicate_photo_detector_cleanup_jobs(array &$jobs): void
 {
     foreach ($jobs as $token => $job) {
-        if (!is_array($job) || time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0) > DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS) {
+        if (
+            !is_array($job)
+            || (time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0))
+                > DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS
+        ) {
             unset($jobs[$token]);
         }
     }
@@ -964,8 +1147,16 @@ function duplicate_photo_detector_cleanup_jobs(array &$jobs): void
         return;
     }
 
-    uasort($jobs, 'Gallery\\Services\\duplicate_photo_detector_job_recency_compare');
-    $jobs = array_slice($jobs, 0, DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS, true);
+    uasort(
+        $jobs,
+        'Gallery\\Services\\duplicate_photo_detector_job_recency_compare',
+    );
+    $jobs = array_slice(
+        $jobs,
+        0,
+        DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS,
+        true,
+    );
 }
 
 /**
@@ -975,9 +1166,13 @@ function duplicate_photo_detector_cleanup_jobs(array &$jobs): void
  * @param array<string,mixed> $right Right job.
  * @return int Comparison result.
  */
-function duplicate_photo_detector_job_recency_compare(array $left, array $right): int
-{
-    return (int) ($right['updated_at'] ?? 0) <=> (int) ($left['updated_at'] ?? 0);
+function duplicate_photo_detector_job_recency_compare(
+    array $left,
+    array $right,
+): int {
+    return (
+        (int) ($right['updated_at'] ?? 0) <=> (int) ($left['updated_at'] ?? 0)
+    );
 }
 
 /**
@@ -990,7 +1185,10 @@ function duplicate_photo_detector_group_references(array $job): array
 {
     $groups = [];
     foreach ((array) ($job['exact_groups'] ?? []) as $key => $ids) {
-        $cleanIds = array_values(array_map('intval', is_array($ids) ? $ids : []));
+        $cleanIds = array_values(array_map(
+            'intval',
+            is_array($ids) ? $ids : [],
+        ));
         if (count($cleanIds) >= 2) {
             sort($cleanIds, SORT_NUMERIC);
             $groups[] = [
@@ -1002,7 +1200,10 @@ function duplicate_photo_detector_group_references(array $job): array
         }
     }
     foreach ((array) ($job['possible_groups'] ?? []) as $key => $ids) {
-        $cleanIds = array_values(array_map('intval', is_array($ids) ? $ids : []));
+        $cleanIds = array_values(array_map(
+            'intval',
+            is_array($ids) ? $ids : [],
+        ));
         if (count($cleanIds) >= 2) {
             sort($cleanIds, SORT_NUMERIC);
             $groups[] = [
@@ -1014,7 +1215,10 @@ function duplicate_photo_detector_group_references(array $job): array
         }
     }
 
-    usort($groups, 'Gallery\\Services\\duplicate_photo_detector_group_reference_compare');
+    usort(
+        $groups,
+        'Gallery\\Services\\duplicate_photo_detector_group_reference_compare',
+    );
     return $groups;
 }
 
@@ -1025,8 +1229,10 @@ function duplicate_photo_detector_group_references(array $job): array
  * @param array<string,mixed> $right Right group reference.
  * @return int Comparison result.
  */
-function duplicate_photo_detector_group_reference_compare(array $left, array $right): int
-{
+function duplicate_photo_detector_group_reference_compare(
+    array $left,
+    array $right,
+): int {
     $rank = ['exact' => 0, 'possible' => 1];
     $leftRank = $rank[(string) ($left['confidence'] ?? '')] ?? 99;
     $rightRank = $rank[(string) ($right['confidence'] ?? '')] ?? 99;
@@ -1035,7 +1241,9 @@ function duplicate_photo_detector_group_reference_compare(array $left, array $ri
     }
 
     $idCompare = (int) ($left['min_id'] ?? 0) <=> (int) ($right['min_id'] ?? 0);
-    return $idCompare !== 0 ? $idCompare : ((string) ($left['key'] ?? '') <=> (string) ($right['key'] ?? ''));
+    return $idCompare !== 0
+        ? $idCompare
+        : (string) ($left['key'] ?? '') <=> (string) ($right['key'] ?? '');
 }
 
 /**
@@ -1046,12 +1254,26 @@ function duplicate_photo_detector_group_reference_compare(array $left, array $ri
  */
 function duplicate_photo_detector_fetch_images_by_ids(array $imageIds): array
 {
-    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), 'Gallery\Services\duplicate_photo_detector_positive_id')));
+    $imageIds = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        'Gallery\Services\duplicate_photo_detector_positive_id',
+    )));
     if ($imageIds === []) {
         return [];
     }
-    if (count($imageIds) > DUPLICATE_PHOTO_DETECTOR_GROUPS_PER_PAGE * DUPLICATE_PHOTO_DETECTOR_MAX_GROUP_MEMBERS) {
-        $imageIds = array_slice($imageIds, 0, DUPLICATE_PHOTO_DETECTOR_GROUPS_PER_PAGE * DUPLICATE_PHOTO_DETECTOR_MAX_GROUP_MEMBERS);
+    if (
+        count($imageIds)
+        > (
+            DUPLICATE_PHOTO_DETECTOR_GROUPS_PER_PAGE
+            * DUPLICATE_PHOTO_DETECTOR_MAX_GROUP_MEMBERS
+        )
+    ) {
+        $imageIds = array_slice(
+            $imageIds,
+            0,
+            DUPLICATE_PHOTO_DETECTOR_GROUPS_PER_PAGE
+                * DUPLICATE_PHOTO_DETECTOR_MAX_GROUP_MEMBERS,
+        );
     }
     return duplicate_photo_model_images_by_ids($imageIds);
 }
@@ -1098,7 +1320,9 @@ function duplicate_photo_detector_exif_metadata_compatible(array $rows): bool
 
     $seen = [];
     foreach ($rows as $row) {
-        foreach (duplicate_photo_detector_exif_components($row) as $name => $value) {
+        foreach (duplicate_photo_detector_exif_components(
+            $row,
+        ) as $name => $value) {
             if (isset($seen[$name]) && $seen[$name] !== $value) {
                 return false;
             }
@@ -1149,7 +1373,10 @@ function duplicate_photo_detector_same_dimensions(array $rows): bool
         return false;
     }
     foreach (array_slice($rows, 1) as $row) {
-        if ((int) ($row['width'] ?? 0) !== $width || (int) ($row['height'] ?? 0) !== $height) {
+        if (
+            (int) ($row['width'] ?? 0) !== $width
+            || (int) ($row['height'] ?? 0) !== $height
+        ) {
             return false;
         }
     }
@@ -1167,12 +1394,18 @@ function duplicate_photo_detector_same_checksum(array $rows): bool
     if (count($rows) < 2) {
         return false;
     }
-    $checksum = duplicate_photo_detector_normalize_checksum($rows[0]['checksum_sha256'] ?? null);
+    $checksum = duplicate_photo_detector_normalize_checksum(
+        $rows[0]['checksum_sha256'] ?? null,
+    );
     if ($checksum === null) {
         return false;
     }
     foreach (array_slice($rows, 1) as $row) {
-        if (duplicate_photo_detector_normalize_checksum($row['checksum_sha256'] ?? null) !== $checksum) {
+        if (
+            duplicate_photo_detector_normalize_checksum(
+                $row['checksum_sha256'] ?? null,
+            ) !== $checksum
+        ) {
             return false;
         }
     }
@@ -1191,13 +1424,16 @@ function duplicate_photo_detector_same_checksum(array $rows): bool
  * @param string $confidence Primary group confidence: exact or possible.
  * @return array<string,mixed> Group signal summary.
  */
-function duplicate_photo_detector_group_signals(array $rows, string $confidence): array
-{
+function duplicate_photo_detector_group_signals(
+    array $rows,
+    string $confidence,
+): array {
     $sameChecksum = duplicate_photo_detector_same_checksum($rows);
     $sameFileSize = duplicate_photo_detector_same_file_size($rows);
     $sameDimensions = duplicate_photo_detector_same_dimensions($rows);
     $commonExif = duplicate_photo_detector_common_exif_components($rows);
-    $strongCorroboration = $confidence === 'exact'
+    $strongCorroboration =
+        $confidence === 'exact'
         && $sameChecksum
         && $sameFileSize
         && $sameDimensions
@@ -1227,18 +1463,25 @@ function duplicate_photo_detector_group_signals(array $rows, string $confidence)
  * @param array<string,mixed> $ledger Persistent ledger snapshot.
  * @return array{references:array<int,array<string,mixed>>,truncated:bool} Pair reference state.
  */
-function duplicate_photo_detector_pair_references(array $job, array $ledger = []): array
-{
+function duplicate_photo_detector_pair_references(
+    array $job,
+    array $ledger = [],
+): array {
     $references = [];
     $seenPairs = [];
-    $galleryMap = is_array($job['image_gallery_ids'] ?? null) ? $job['image_gallery_ids'] : [];
+    $galleryMap = is_array($job['image_gallery_ids'] ?? null)
+        ? $job['image_gallery_ids']
+        : [];
     $truncated = false;
     $consideredPairs = 0;
 
     foreach (duplicate_photo_detector_group_references($job) as $group) {
         $ids = array_values(array_unique(array_filter(
-            array_map('intval', is_array($group['ids'] ?? null) ? $group['ids'] : []),
-            'Gallery\\Services\\duplicate_photo_detector_positive_id'
+            array_map(
+                'intval',
+                is_array($group['ids'] ?? null) ? $group['ids'] : [],
+            ),
+            'Gallery\\Services\\duplicate_photo_detector_positive_id',
         )));
         sort($ids, SORT_NUMERIC);
         $memberCount = count($ids);
@@ -1246,32 +1489,58 @@ function duplicate_photo_detector_pair_references(array $job, array $ledger = []
             continue;
         }
 
-        for ($leftIndex = 0; $leftIndex < $memberCount - 1; $leftIndex++) {
-            for ($rightIndex = $leftIndex + 1; $rightIndex < $memberCount; $rightIndex++) {
+        for ($leftIndex = 0; $leftIndex < ($memberCount - 1); $leftIndex++) {
+            for (
+                $rightIndex = $leftIndex + 1;
+                $rightIndex < $memberCount;
+                $rightIndex++
+            ) {
                 $consideredPairs++;
-                if ($consideredPairs > DUPLICATE_PHOTO_DETECTOR_MAX_PAIR_REFERENCES) {
+                if (
+                    $consideredPairs
+                    > DUPLICATE_PHOTO_DETECTOR_MAX_PAIR_REFERENCES
+                ) {
                     $truncated = true;
                     break 3;
                 }
 
                 $leftImageId = $ids[$leftIndex];
                 $rightImageId = $ids[$rightIndex];
-                $pairKey = duplicate_photo_ledger_pair_key($leftImageId, $rightImageId);
+                $pairKey = duplicate_photo_ledger_pair_key(
+                    $leftImageId,
+                    $rightImageId,
+                );
                 if (isset($seenPairs[$pairKey])) {
                     continue;
                 }
                 $seenPairs[$pairKey] = true;
 
-                $leftGalleryId = (int) ($galleryMap[$leftImageId] ?? $galleryMap[(string) $leftImageId] ?? 0);
-                $rightGalleryId = (int) ($galleryMap[$rightImageId] ?? $galleryMap[(string) $rightImageId] ?? 0);
-                if (duplicate_photo_ledger_ignores_pair($ledger, $leftImageId, $rightImageId, $leftGalleryId, $rightGalleryId)) {
+                $leftGalleryId = (int) (
+                    $galleryMap[$leftImageId]
+                    ?? $galleryMap[(string) $leftImageId]
+                    ?? 0
+                );
+                $rightGalleryId = (int) (
+                    $galleryMap[$rightImageId]
+                    ?? $galleryMap[(string) $rightImageId]
+                    ?? 0
+                );
+                if (duplicate_photo_ledger_ignores_pair(
+                    $ledger,
+                    $leftImageId,
+                    $rightImageId,
+                    $leftGalleryId,
+                    $rightGalleryId,
+                )) {
                     continue;
                 }
 
                 $references[] = [
                     'key' => (string) ($group['key'] ?? ''),
                     'pair_key' => $pairKey,
-                    'confidence' => (string) ($group['confidence'] ?? 'possible'),
+                    'confidence' => (string) (
+                        $group['confidence'] ?? 'possible'
+                    ),
                     'ids' => [$leftImageId, $rightImageId],
                     'min_id' => $leftImageId,
                     'max_id' => $rightImageId,
@@ -1308,15 +1577,22 @@ function duplicate_photo_detector_pair_references(array $job, array $ledger = []
  * @param array<string,mixed> $ledger Persistent ledger snapshot.
  * @return array<string,mixed> Page model for the renderer.
  */
-function duplicate_photo_detector_result_page(array $job, int $page = 1, array $ledger = []): array
-{
+function duplicate_photo_detector_result_page(
+    array $job,
+    int $page = 1,
+    array $ledger = [],
+): array {
     $pairState = duplicate_photo_detector_pair_references($job, $ledger);
     $references = $pairState['references'];
     $totalPairs = count($references);
     $perPage = DUPLICATE_PHOTO_DETECTOR_PAIRS_PER_PAGE;
     $pageCount = max(1, (int) ceil($totalPairs / $perPage));
     $page = max(1, min($pageCount, $page));
-    $pageReferences = array_slice($references, ($page - 1) * $perPage, $perPage);
+    $pageReferences = array_slice(
+        $references,
+        ($page - 1) * $perPage,
+        $perPage,
+    );
 
     $detailIds = [];
     foreach ($pageReferences as $reference) {
@@ -1352,7 +1628,10 @@ function duplicate_photo_detector_result_page(array $job, int $page = 1, array $
         $confidence = (string) ($reference['confidence'] ?? 'possible');
         $signals = duplicate_photo_detector_group_signals($rows, $confidence);
         // Strong corroboration must describe the whole exact group, not only the bounded visible subset.
-        if ($confidence === 'exact' && (int) ($reference['source_member_count'] ?? 2) > 2) {
+        if (
+            $confidence === 'exact'
+            && (int) ($reference['source_member_count'] ?? 2) > 2
+        ) {
             $signals['strong'] = false;
         }
 
@@ -1363,7 +1642,9 @@ function duplicate_photo_detector_result_page(array $job, int $page = 1, array $
             'images' => $rows,
             'signals' => $signals,
             'member_count' => 2,
-            'source_member_count' => (int) ($reference['source_member_count'] ?? 2),
+            'source_member_count' => (int) (
+                $reference['source_member_count'] ?? 2
+            ),
             'truncated' => false,
         ];
     }

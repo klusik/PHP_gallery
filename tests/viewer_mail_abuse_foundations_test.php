@@ -16,10 +16,10 @@
  *   - Verify conservative default limits and one generic external response code
  *   - Protect corrected max-attempt semantics used by the future mail budgets
  *   - Protect trusted-client handling by refusing valid mail authorization without a usable client IP
-  *
+ *
  * Author:
  *   Rudolf Klusal
-*/
+ */
 
 declare(strict_types=1);
 
@@ -51,7 +51,9 @@ namespace Gallery\Core {
      */
     function db(): \PDO
     {
-        throw new \RuntimeException('Database access is not expected in viewer_mail_abuse_foundations_test.php.');
+        throw new \RuntimeException(
+            'Database access is not expected in viewer_mail_abuse_foundations_test.php.',
+        );
     }
 }
 
@@ -100,7 +102,12 @@ namespace {
     require_once __DIR__ . '/../app/services/viewer_mail.php';
 
     Gallery\Services\schema_inspection_set_query_executor_for_tests(
-        static fn (string $objectType, string $table, string $object, ?string $definition = null): bool => true
+        static fn(
+            string $objectType,
+            string $table,
+            string $object,
+            ?string $definition = null,
+        ): bool => true,
     );
 
     /**
@@ -116,15 +123,35 @@ namespace {
         }
     }
 
-    viewer_mail_assert(!viewer_accounts_enabled(), 'Viewer mail authority must remain unavailable while the viewer feature is disabled.');
-    $disabled = viewer_mail_authorize_send('verification', 'person@example.com', '192.0.2.10');
-    viewer_mail_assert(!$disabled['allowed'] && $disabled['reason'] === 'viewer_disabled', 'Disabled viewer mail must fail closed before rate-limit database access.');
-    viewer_mail_assert($disabled['public_result'] === viewer_mail_public_result_code(), 'Disabled viewer mail must retain the generic external result.');
+    viewer_mail_assert(
+        !viewer_accounts_enabled(),
+        'Viewer mail authority must remain unavailable while the viewer feature is disabled.',
+    );
+    $disabled = viewer_mail_authorize_send(
+        'verification',
+        'person@example.com',
+        '192.0.2.10',
+    );
+    viewer_mail_assert(
+        !$disabled['allowed'] && $disabled['reason'] === 'viewer_disabled',
+        'Disabled viewer mail must fail closed before rate-limit database access.',
+    );
+    viewer_mail_assert(
+        $disabled['public_result'] === viewer_mail_public_result_code(),
+        'Disabled viewer mail must retain the generic external result.',
+    );
 
     $verificationPlan = viewer_mail_rate_limit_plan('verification');
     $verificationBuckets = array_column($verificationPlan, 'bucket');
-    viewer_mail_assert($verificationBuckets[0] === 'viewer_verify_mail_email_cooldown', 'Verification recipient cooldown must be checked before broader budgets.');
-    viewer_mail_assert($verificationBuckets[count($verificationBuckets) - 1] === 'viewer_verify_mail_global_day', 'Verification global mail budget must be reserved last so suppressed recipient attempts cannot burn it.');
+    viewer_mail_assert(
+        $verificationBuckets[0] === 'viewer_verify_mail_email_cooldown',
+        'Verification recipient cooldown must be checked before broader budgets.',
+    );
+    viewer_mail_assert(
+        $verificationBuckets[count($verificationBuckets) - 1]
+            === 'viewer_verify_mail_global_day',
+        'Verification global mail budget must be reserved last so suppressed recipient attempts cannot burn it.',
+    );
     foreach ([
         'viewer_verify_mail_global_day',
         'viewer_verify_mail_ip_hour',
@@ -135,51 +162,167 @@ namespace {
         'viewer_verify_mail_email_hour',
         'viewer_verify_mail_email_day',
     ] as $bucket) {
-        viewer_mail_assert(in_array($bucket, $verificationBuckets, true), 'Verification mail must reserve budget: ' . $bucket);
+        viewer_mail_assert(
+            in_array($bucket, $verificationBuckets, true),
+            'Verification mail must reserve budget: ' . $bucket,
+        );
     }
 
     $resetPlan = viewer_mail_rate_limit_plan('password_reset');
     $resetBuckets = array_column($resetPlan, 'bucket');
-    viewer_mail_assert($resetBuckets[0] === 'viewer_reset_mail_email_cooldown' && $resetBuckets[count($resetBuckets) - 1] === 'viewer_reset_mail_global_day', 'Reset mail must reserve narrow recipient budgets before the global circuit breaker.');
-    viewer_mail_assert(in_array('viewer_reset_mail_global_day', $resetBuckets, true), 'Password-reset email must have a global installation budget.');
-    viewer_mail_assert(in_array('viewer_reset_mail_email_day', $resetBuckets, true), 'Password-reset email must have a per-address daily budget.');
-    viewer_mail_assert(in_array('viewer_reset_mail_ip_hour', $resetBuckets, true), 'Password-reset email must have a per-client budget.');
-    viewer_mail_assert(in_array('viewer_reset_mail_subnet_hour', $resetBuckets, true), 'Password-reset email must have a secondary subnet budget.');
+    viewer_mail_assert(
+        $resetBuckets[0] === 'viewer_reset_mail_email_cooldown'
+            && $resetBuckets[count($resetBuckets) - 1]
+                === 'viewer_reset_mail_global_day',
+        'Reset mail must reserve narrow recipient budgets before the global circuit breaker.',
+    );
+    viewer_mail_assert(
+        in_array('viewer_reset_mail_global_day', $resetBuckets, true),
+        'Password-reset email must have a global installation budget.',
+    );
+    viewer_mail_assert(
+        in_array('viewer_reset_mail_email_day', $resetBuckets, true),
+        'Password-reset email must have a per-address daily budget.',
+    );
+    viewer_mail_assert(
+        in_array('viewer_reset_mail_ip_hour', $resetBuckets, true),
+        'Password-reset email must have a per-client budget.',
+    );
+    viewer_mail_assert(
+        in_array('viewer_reset_mail_subnet_hour', $resetBuckets, true),
+        'Password-reset email must have a secondary subnet budget.',
+    );
 
     $invitePlan = viewer_mail_rate_limit_plan('invitation');
-    viewer_mail_assert(count($invitePlan) === 2, 'Future administrator invitation delivery needs only bounded recipient/global mail budgets in this phase.');
-    viewer_mail_assert($invitePlan[0]['bucket'] === 'viewer_invite_mail_email_day' && $invitePlan[1]['bucket'] === 'viewer_invite_mail_global_day', 'Invitation recipient budget must precede the installation-global budget.');
-    viewer_mail_assert(viewer_mail_public_result_code() === 'request_received', 'Future mail-triggering endpoints must share one generic external result.');
+    viewer_mail_assert(
+        count($invitePlan) === 2,
+        'Future administrator invitation delivery needs only bounded recipient/global mail budgets in this phase.',
+    );
+    viewer_mail_assert(
+        $invitePlan[0]['bucket'] === 'viewer_invite_mail_email_day'
+            && $invitePlan[1]['bucket'] === 'viewer_invite_mail_global_day',
+        'Invitation recipient budget must precede the installation-global budget.',
+    );
+    viewer_mail_assert(
+        viewer_mail_public_result_code() === 'request_received',
+        'Future mail-triggering endpoints must share one generic external result.',
+    );
 
     $GLOBALS['viewer_mail_fixture_config']['viewer_accounts']['enabled'] = true;
-    viewer_mail_assert(viewer_accounts_enabled(), 'Fixture must explicitly enable dormant viewer services for policy inspection.');
+    viewer_mail_assert(
+        viewer_accounts_enabled(),
+        'Fixture must explicitly enable dormant viewer services for policy inspection.',
+    );
 
-    viewer_mail_assert((viewer_rate_limit_policy('viewer_verify_mail_email_cooldown')['max_attempts'] ?? 0) === 1, 'Verification mail cooldown must permit exactly one reserved send per cooldown window.');
-    viewer_mail_assert((viewer_rate_limit_policy('viewer_verify_mail_email_hour')['max_attempts'] ?? 0) === 3, 'Verification mail per-address hourly default must be three.');
-    viewer_mail_assert((viewer_rate_limit_policy('viewer_verify_mail_email_day')['max_attempts'] ?? 0) === 5, 'Verification mail per-address daily default must be five.');
-    viewer_mail_assert((viewer_rate_limit_policy('viewer_verify_mail_global_day')['max_attempts'] ?? 0) === 50, 'Verification mail global daily default must bound distributed abuse.');
-    viewer_mail_assert((viewer_rate_limit_policy('viewer_reset_mail_email_hour')['max_attempts'] ?? 0) === 3, 'Reset mail per-address hourly default must be three.');
+    viewer_mail_assert(
+        (
+            viewer_rate_limit_policy(
+                'viewer_verify_mail_email_cooldown',
+            )['max_attempts'] ?? 0
+        ) === 1,
+        'Verification mail cooldown must permit exactly one reserved send per cooldown window.',
+    );
+    viewer_mail_assert(
+        (
+            viewer_rate_limit_policy(
+                'viewer_verify_mail_email_hour',
+            )['max_attempts'] ?? 0
+        ) === 3,
+        'Verification mail per-address hourly default must be three.',
+    );
+    viewer_mail_assert(
+        (
+            viewer_rate_limit_policy(
+                'viewer_verify_mail_email_day',
+            )['max_attempts'] ?? 0
+        ) === 5,
+        'Verification mail per-address daily default must be five.',
+    );
+    viewer_mail_assert(
+        (
+            viewer_rate_limit_policy(
+                'viewer_verify_mail_global_day',
+            )['max_attempts'] ?? 0
+        ) === 50,
+        'Verification mail global daily default must bound distributed abuse.',
+    );
+    viewer_mail_assert(
+        (
+            viewer_rate_limit_policy(
+                'viewer_reset_mail_email_hour',
+            )['max_attempts'] ?? 0
+        ) === 3,
+        'Reset mail per-address hourly default must be three.',
+    );
 
-    $invalidEmail = viewer_mail_authorize_send('verification', 'not-an-email', '192.0.2.10');
-    viewer_mail_assert(!$invalidEmail['allowed'] && $invalidEmail['reason'] === 'invalid_email', 'Invalid recipient must fail before limiter access.');
-    viewer_mail_assert($invalidEmail['public_result'] === viewer_mail_public_result_code(), 'Invalid recipient must not change the future generic public result.');
+    $invalidEmail = viewer_mail_authorize_send(
+        'verification',
+        'not-an-email',
+        '192.0.2.10',
+    );
+    viewer_mail_assert(
+        !$invalidEmail['allowed']
+            && $invalidEmail['reason'] === 'invalid_email',
+        'Invalid recipient must fail before limiter access.',
+    );
+    viewer_mail_assert(
+        $invalidEmail['public_result'] === viewer_mail_public_result_code(),
+        'Invalid recipient must not change the future generic public result.',
+    );
 
-    $missingIp = viewer_mail_authorize_send('verification', 'person@example.com', '');
-    viewer_mail_assert(!$missingIp['allowed'] && $missingIp['reason'] === 'client_ip_unavailable', 'Anonymous verification mail must fail closed without a trustworthy client IP.');
+    $missingIp = viewer_mail_authorize_send(
+        'verification',
+        'person@example.com',
+        '',
+    );
+    viewer_mail_assert(
+        !$missingIp['allowed']
+            && $missingIp['reason'] === 'client_ip_unavailable',
+        'Anonymous verification mail must fail closed without a trustworthy client IP.',
+    );
 
     $root = dirname(__DIR__);
-    $mailService = (string) file_get_contents($root . '/app/services/viewer_mail.php');
-    viewer_mail_assert(strpos($mailService, "\n    mail(") === false && strpos($mailService, 'return mail(') === false, 'Phase 0.5 viewer mail boundary must not call PHP mail().');
-    viewer_mail_assert(stripos($mailService, 'stream_socket_client') === false && stripos($mailService, 'smtp_') === false, 'Phase 0.5 viewer mail boundary must not implement SMTP transport.');
-    viewer_mail_assert(stripos($mailService, 'curl_') === false, 'Phase 0.5 viewer mail boundary must not add a provider/API transport.');
+    $mailService = (string) file_get_contents($root
+        . '/app/services/viewer_mail.php');
+    viewer_mail_assert(
+        strpos($mailService, "\n    mail(") === false
+            && strpos($mailService, 'return mail(') === false,
+        'Phase 0.5 viewer mail boundary must not call PHP mail().',
+    );
+    viewer_mail_assert(
+        stripos($mailService, 'stream_socket_client') === false
+            && stripos($mailService, 'smtp_') === false,
+        'Phase 0.5 viewer mail boundary must not implement SMTP transport.',
+    );
+    viewer_mail_assert(
+        stripos($mailService, 'curl_') === false,
+        'Phase 0.5 viewer mail boundary must not add a provider/API transport.',
+    );
 
-    $rateService = (string) file_get_contents($root . '/app/services/viewer_rate_limits.php');
-    $rateModel = (string) file_get_contents($root . '/app/models/viewer_rate_limits.php');
-    viewer_mail_assert(str_contains($rateModel, '$attempts > (int) $policy[\'max_attempts\']'), 'Rate limiter model must preserve max_attempts as the number of attempts that may pass, with the following attempt locked.');
+    $rateService = (string) file_get_contents($root
+        . '/app/services/viewer_rate_limits.php');
+    $rateModel = (string) file_get_contents($root
+        . '/app/models/viewer_rate_limits.php');
+    viewer_mail_assert(
+        str_contains($rateModel, '$attempts > (int) $policy[\'max_attempts\']'),
+        'Rate limiter model must preserve max_attempts as the number of attempts that may pass, with the following attempt locked.',
+    );
 
     $configExample = (string) file_get_contents($root . '/config.example.php');
-    viewer_mail_assert(str_contains($configExample, "'verification_mail_global_daily_limit' => 50"), 'Example configuration must expose a conservative global verification-mail circuit breaker.');
-    viewer_mail_assert(str_contains($configExample, "'max_pending_registration_requests' => 250"), 'Example configuration must expose a hard pending-registration cap.');
+    viewer_mail_assert(
+        str_contains(
+            $configExample,
+            "'verification_mail_global_daily_limit' => 50",
+        ),
+        'Example configuration must expose a conservative global verification-mail circuit breaker.',
+    );
+    viewer_mail_assert(
+        str_contains(
+            $configExample,
+            "'max_pending_registration_requests' => 250",
+        ),
+        'Example configuration must expose a hard pending-registration cap.',
+    );
 
     echo "Viewer mail abuse foundation tests passed.\n";
 }

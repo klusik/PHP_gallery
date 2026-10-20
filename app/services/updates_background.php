@@ -38,7 +38,7 @@ function application_update_background_job_eligible(?array $job): bool
  */
 function application_update_background_chain_deliver(
     string $ticket,
-    callable $deliver
+    callable $deliver,
 ): bool {
     try {
         if ($deliver($ticket)) {
@@ -48,7 +48,7 @@ function application_update_background_chain_deliver(
         // Provider messages may contain private origins or credentials.
     }
     $lock = application_update_acquire_lock(
-        application_update_jobs_root() . '/background-chain.lock'
+        application_update_jobs_root() . '/background-chain.lock',
     );
     if ($lock === null) {
         return false;
@@ -56,7 +56,10 @@ function application_update_background_chain_deliver(
     try {
         $path = application_update_jobs_root() . '/background-chain.json';
         $record = application_update_read_json($path);
-        if (hash_equals((string) ($record['ticket_hash'] ?? ''), hash('sha256', $ticket))) {
+        if (hash_equals((string) ($record['ticket_hash'] ?? ''), hash(
+            'sha256',
+            $ticket,
+        ))) {
             $record['ticket_hash'] = '';
             $record['queued_until'] = 0;
             $record['last_error'] = 'update_chain_dispatch_unavailable';
@@ -77,10 +80,14 @@ function application_update_background_chain_start(callable $deliver): array
 {
     $idle = ['ok' => true, 'queued' => false, 'reason' => 'update_chain_idle'];
     $lock = application_update_acquire_lock(
-        application_update_jobs_root() . '/background-chain.lock'
+        application_update_jobs_root() . '/background-chain.lock',
     );
     if ($lock === null) {
-        return ['ok' => true, 'queued' => false, 'reason' => 'update_chain_active'];
+        return [
+            'ok' => true,
+            'queued' => false,
+            'reason' => 'update_chain_active',
+        ];
     }
     try {
         $job = application_update_active_job();
@@ -92,10 +99,21 @@ function application_update_background_chain_start(callable $deliver): array
         $now = time();
         if (($record['job_id'] ?? '') === $job['id']) {
             if ((int) ($record['queued_until'] ?? 0) > $now) {
-                return ['ok' => true, 'queued' => false, 'reason' => 'update_chain_queued'];
+                return [
+                    'ok' => true,
+                    'queued' => false,
+                    'reason' => 'update_chain_queued',
+                ];
             }
-            if ($now - (int) ($record['last_dispatch_at'] ?? 0) < APPLICATION_UPDATE_CHAIN_RETRY_SECONDS) {
-                return ['ok' => true, 'queued' => false, 'reason' => 'update_chain_throttled'];
+            if (
+                ($now - (int) ($record['last_dispatch_at'] ?? 0))
+                < APPLICATION_UPDATE_CHAIN_RETRY_SECONDS
+            ) {
+                return [
+                    'ok' => true,
+                    'queued' => false,
+                    'reason' => 'update_chain_throttled',
+                ];
             }
         }
         // 32 random bytes form the fixed 256-bit, 64-hex-character wire token.
@@ -106,7 +124,8 @@ function application_update_background_chain_start(callable $deliver): array
             'queued_until' => $now + APPLICATION_UPDATE_CHAIN_LEASE_SECONDS,
             'last_dispatch_at' => $now,
             'last_arrival_at' => ($record['job_id'] ?? '') === $job['id']
-                ? (int) ($record['last_arrival_at'] ?? 0) : 0,
+                ? (int) ($record['last_arrival_at'] ?? 0)
+                : 0,
             'last_error' => '',
         ];
         application_update_write_json_atomic($path, $record);
@@ -114,8 +133,13 @@ function application_update_background_chain_start(callable $deliver): array
         application_update_release_lock($lock);
     }
     $queued = application_update_background_chain_deliver($ticket, $deliver);
-    return ['ok' => $queued, 'queued' => $queued,
-        'reason' => $queued ? 'update_chain_queued' : 'update_chain_dispatch_unavailable'];
+    return [
+        'ok' => $queued,
+        'queued' => $queued,
+        'reason' => $queued
+            ? 'update_chain_queued'
+            : 'update_chain_dispatch_unavailable',
+    ];
 }
 
 /**
@@ -126,43 +150,65 @@ function application_update_background_chain_start(callable $deliver): array
  */
 function application_update_background_chain_run(
     string $ticket,
-    callable $deliver
+    callable $deliver,
 ): array {
-    $refused = ['ok' => false, 'queued' => false,
-        'reason' => 'update_chain_ticket_refused'];
+    $refused = [
+        'ok' => false,
+        'queued' => false,
+        'reason' => 'update_chain_ticket_refused',
+    ];
     if (preg_match('/^[a-f0-9]{64}$/D', $ticket) !== 1) {
         return $refused;
     }
     $lock = application_update_acquire_lock(
-        application_update_jobs_root() . '/background-chain.lock'
+        application_update_jobs_root() . '/background-chain.lock',
     );
     if ($lock === null) {
-        return ['ok' => true, 'queued' => false, 'reason' => 'update_chain_active'];
+        return [
+            'ok' => true,
+            'queued' => false,
+            'reason' => 'update_chain_active',
+        ];
     }
     $nextTicket = '';
     try {
         $path = application_update_jobs_root() . '/background-chain.json';
         $record = application_update_read_json($path);
-        if ((int) ($record['queued_until'] ?? 0) <= time()
-            || !hash_equals((string) ($record['ticket_hash'] ?? ''), hash('sha256', $ticket))) {
+        if (
+            (int) ($record['queued_until'] ?? 0) <= time()
+            || !hash_equals((string) ($record['ticket_hash'] ?? ''), hash(
+                'sha256',
+                $ticket,
+            ))
+        ) {
             return $refused;
         }
         // Commit consumption before work: replay cannot advance a second slice.
         $record['ticket_hash'] = '';
-        $record['queued_until'] = time() + APPLICATION_UPDATE_CHAIN_LEASE_SECONDS;
+        $record['queued_until'] =
+            time() + APPLICATION_UPDATE_CHAIN_LEASE_SECONDS;
         $record['last_arrival_at'] = time();
         application_update_write_json_atomic($path, $record);
         $job = application_update_active_job();
-        if (!application_update_background_job_eligible($job)
-            || ($record['job_id'] ?? '') !== $job['id']) {
+        if (
+            !application_update_background_job_eligible($job)
+            || ($record['job_id'] ?? '') !== $job['id']
+        ) {
             $record['queued_until'] = 0;
             application_update_write_json_atomic($path, $record);
-            return ['ok' => true, 'queued' => false, 'reason' => 'update_chain_idle'];
+            return [
+                'ok' => true,
+                'queued' => false,
+                'reason' => 'update_chain_idle',
+            ];
         }
         $attempts = (int) ($job['attempts'] ?? 0);
-        application_update_continue_background_job(APPLICATION_UPDATE_CHAIN_SLICE_SECONDS);
+        application_update_continue_background_job(
+            APPLICATION_UPDATE_CHAIN_SLICE_SECONDS,
+        );
         $job = application_update_active_job();
-        $continues = application_update_background_job_eligible($job)
+        $continues =
+            application_update_background_job_eligible($job)
             && ($record['job_id'] ?? '') === $job['id']
             && (int) ($job['attempts'] ?? 0) > $attempts;
         $record['queued_until'] = 0;
@@ -170,14 +216,16 @@ function application_update_background_chain_run(
         if ($continues) {
             $nextTicket = bin2hex(random_bytes(32));
             $record['ticket_hash'] = hash('sha256', $nextTicket);
-            $record['queued_until'] = time() + APPLICATION_UPDATE_CHAIN_LEASE_SECONDS;
+            $record['queued_until'] =
+                time() + APPLICATION_UPDATE_CHAIN_LEASE_SECONDS;
             $record['last_dispatch_at'] = time();
             $reason = 'update_chain_queued';
         }
         // A failed or busy slice stops this chain; the existing visitor retry owner
         // retains its sixty-second backoff and package-stage cleanup policy.
         $record['last_error'] = ($job['status'] ?? '') === 'failed'
-            ? 'update_chain_worker_failed' : '';
+            ? 'update_chain_worker_failed'
+            : '';
         if ($record['last_error'] !== '') {
             $reason = $record['last_error'];
         }
@@ -189,15 +237,23 @@ function application_update_background_chain_run(
             $record['last_error'] = 'update_chain_worker_exception';
             application_update_write_json_atomic($path, $record);
         }
-        return ['ok' => false, 'queued' => false, 'reason' => 'update_chain_worker_exception'];
+        return [
+            'ok' => false,
+            'queued' => false,
+            'reason' => 'update_chain_worker_exception',
+        ];
     } finally {
         application_update_release_lock($lock);
     }
     // Release the chain lock before a successor can arrive; never wait for it.
-    $queued = $nextTicket !== ''
+    $queued =
+        $nextTicket !== ''
         && application_update_background_chain_deliver($nextTicket, $deliver);
-    return ['ok' => $record['last_error'] === '' && ($nextTicket === '' || $queued),
+    return [
+        'ok' => $record['last_error'] === '' && ($nextTicket === '' || $queued),
         'queued' => $queued,
         'reason' => $nextTicket !== '' && !$queued
-            ? 'update_chain_dispatch_unavailable' : $reason];
+            ? 'update_chain_dispatch_unavailable'
+            : $reason,
+    ];
 }

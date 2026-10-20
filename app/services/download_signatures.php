@@ -67,7 +67,13 @@ function gallery_zip_signature(int $galleryId, bool $publicOnly): string
     // Variable $galleryIds stores this steps working value.
     $galleryIds = gallery_zip_gallery_ids($galleries);
     if (!$galleryIds) {
-        return hash('sha256', 'empty-visible-gallery-' . $galleryId . '-' . ($publicOnly ? 'public' : 'admin'));
+        return hash(
+            'sha256',
+            'empty-visible-gallery-'
+                . $galleryId
+                . '-'
+                . ($publicOnly ? 'public' : 'admin'),
+        );
     }
 
     $rows = download_signatures_model_rows($galleryIds, $publicOnly);

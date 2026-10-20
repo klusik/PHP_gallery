@@ -112,7 +112,9 @@ function render_tag_datalist(): void
  */
 function admin_weighted_tag_suggestions_attribute(int $galleryId): string
 {
-    return view_render_weighted_tag_suggestions_attribute(weighted_tag_suggestions_for_gallery($galleryId));
+    return view_render_weighted_tag_suggestions_attribute(weighted_tag_suggestions_for_gallery(
+        $galleryId,
+    ));
 }
 
 /**
@@ -136,7 +138,9 @@ function gallery_parent_options(array $currentGallery): string
         $rows[] = [
             'value' => (int) $gallery['id'],
             'label' => (string) $gallery['title'] . ' (' . $path . ')',
-            'selected' => (int) ($currentGallery['parent_id'] ?? 0) === (int) $gallery['id'],
+            'selected' =>
+                (int) ($currentGallery['parent_id'] ?? 0)
+                    === (int) $gallery['id'],
         ];
     }
     return view_render_admin_select_options($rows);
@@ -154,13 +158,16 @@ function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
     foreach (gallery_picker_source_rows() as $gallery) {
         $rows[] = [
             'value' => (int) $gallery['id'],
-            'label' => (string) $gallery['title'] . ' (' . (string) $gallery['folder_path'] . ')',
+            'label' =>
+                (string) $gallery['title']
+                    . ' ('
+                    . (string) $gallery['folder_path']
+                    . ')',
             'selected' => (int) $gallery['id'] === $selectedGalleryId,
         ];
     }
     return view_render_admin_select_options($rows);
 }
-
 
 /**
  * Render a shared searchable gallery destination picker.
@@ -175,13 +182,33 @@ function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
  * @param array<string,mixed> $options Root/branch policy, input ID, optional hint and hidden data attributes.
  * @return string Complete HTML for the picker.
  */
-function render_gallery_search_picker(string $fieldName, int $selectedGalleryId = 0, int $excludedGalleryId = 0, array $options = []): string
-{
-    $pickerId = preg_replace('/[^a-zA-Z0-9_-]+/', '-', (string) ($options['id'] ?? ('gallery-picker-' . $fieldName . '-' . uniqid('', false))));
+function render_gallery_search_picker(
+    string $fieldName,
+    int $selectedGalleryId = 0,
+    int $excludedGalleryId = 0,
+    array $options = [],
+): string {
+    $pickerId = preg_replace(
+        '/[^a-zA-Z0-9_-]+/',
+        '-',
+        (string) (
+            $options['id']
+            ?? 'gallery-picker-'
+            . $fieldName
+            . '-'
+            . uniqid('', false)
+        ),
+    );
     $excludeDescendants = !empty($options['exclude_descendants']);
     $allowRoot = !empty($options['allow_root']);
     try {
-        $page = gallery_picker_search_page('', 0, $selectedGalleryId, $excludedGalleryId, $excludeDescendants);
+        $page = gallery_picker_search_page(
+            '',
+            0,
+            $selectedGalleryId,
+            $excludedGalleryId,
+            $excludeDescendants,
+        );
     } catch (\Throwable) {
         $page = gallery_picker_empty_page();
     }
@@ -189,10 +216,20 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
     $prefillGalleryId = (int) ($options['prefill_gallery_id'] ?? 0);
     $prefillEnabled = empty($options['disable_prefill']);
     $selectedRow = $page['selected'];
-    if (!$page['ok'] && $selectedGalleryId > 0 && $selectedGalleryId !== $excludedGalleryId) {
+    if (
+        !$page['ok']
+        && $selectedGalleryId > 0
+        && $selectedGalleryId !== $excludedGalleryId
+    ) {
         // A failed optional search must not silently clear an existing parent.
-        $selectedRow = ['id' => $selectedGalleryId,
-            'label' => t('gallery_picker.selected_unavailable', 'Selected gallery') . ' (#' . $selectedGalleryId . ')'];
+        $selectedRow = [
+            'id' => $selectedGalleryId,
+            'label' =>
+                t('gallery_picker.selected_unavailable', 'Selected gallery')
+                    . ' (#'
+                    . $selectedGalleryId
+                    . ')',
+        ];
     }
     $prefillRow = null;
     foreach ($rows as $row) {
@@ -203,18 +240,35 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
             $prefillRow = $row;
         }
     }
-    if ($prefillEnabled && !$excludeDescendants && $prefillGalleryId > 0 && $prefillRow === null && $selectedRow === null) {
+    if (
+        $prefillEnabled
+        && !$excludeDescendants
+        && $prefillGalleryId > 0
+        && $prefillRow === null
+        && $selectedRow === null
+    ) {
         try {
-            $prefillRow = gallery_picker_destination_hint($prefillGalleryId, $excludedGalleryId);
+            $prefillRow = gallery_picker_destination_hint(
+                $prefillGalleryId,
+                $excludedGalleryId,
+            );
         } catch (\Throwable) {
             // Optional hints never block an explicit destination selection.
         }
     }
-    if ($prefillEnabled && $prefillRow === null && $selectedRow === null && $rows !== []) {
+    if (
+        $prefillEnabled
+        && $prefillRow === null
+        && $selectedRow === null
+        && $rows !== []
+    ) {
         $prefillRow = $rows[0];
     }
     if ($allowRoot && $selectedGalleryId === 0) {
-        $selectedRow = ['id' => 0, 'label' => t('admin.gallery_editor.no_parent', 'No parent')];
+        $selectedRow = [
+            'id' => 0,
+            'label' => t('admin.gallery_editor.no_parent', 'No parent'),
+        ];
     }
     $preparedRows = [];
     foreach ($rows as $row) {
@@ -228,14 +282,33 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
         'field_name' => $fieldName,
         'picker_id' => $pickerId,
         'list_id' => $pickerId . '-list',
-        'hidden_value' => $selectedRow !== null ? (string) $selectedRow['id'] : '',
-        'input_value' => $selectedRow !== null ? (string) $selectedRow['label'] : ($prefillRow !== null ? (string) $prefillRow['label'] : ''),
-        'prefill_value' => $prefillRow !== null ? (string) $prefillRow['label'] : '',
-        'placeholder' => (string) ($options['placeholder'] ?? t('gallery_picker.placeholder', 'Search gallery by name or path')),
-        'hidden_attributes' => is_array($options['hidden_attributes'] ?? null) ? $options['hidden_attributes'] : [],
+        'hidden_value' => $selectedRow !== null
+            ? (string) $selectedRow['id']
+            : '',
+        'input_value' => $selectedRow !== null
+            ? (string) $selectedRow['label']
+            : ($prefillRow !== null ? (string) $prefillRow['label'] : ''),
+        'prefill_value' => $prefillRow !== null
+            ? (string) $prefillRow['label']
+            : '',
+        'placeholder' => (string) (
+            $options['placeholder'] ?? t(
+                'gallery_picker.placeholder',
+                'Search gallery by name or path',
+            )
+        ),
+        'hidden_attributes' => is_array($options['hidden_attributes'] ?? null)
+            ? $options['hidden_attributes']
+            : [],
         'clear_label' => t('gallery_picker.clear', 'Clear selected gallery'),
-        'empty_label' => t('gallery_picker.no_results', 'No matching galleries found.'),
-        'help_label' => t('gallery_picker.help', 'Type to search, then press Enter or click a result to select it.'),
+        'empty_label' => t(
+            'gallery_picker.no_results',
+            'No matching galleries found.',
+        ),
+        'help_label' => t(
+            'gallery_picker.help',
+            'Type to search, then press Enter or click a result to select it.',
+        ),
         'search_url' => url_for('admin_gallery_picker_search', [
             'excluded_id' => $excludedGalleryId,
             'exclude_descendants' => $excludeDescendants ? 1 : 0,
@@ -250,10 +323,22 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
         'allow_root' => $allowRoot,
         'root_label' => t('admin.gallery_editor.no_parent', 'No parent'),
         'more_label' => t('gallery_picker.more', 'Next results'),
-        'loading_label' => t('gallery_picker.loading', 'Searching galleries...'),
-        'error_label' => t('gallery_picker.error', 'Search is unavailable. Try again or use the directory lookup.'),
-        'lookup_label' => t('gallery_picker.lookup', 'Look up a gallery ID in a new tab'),
-        'fallback_label' => t('gallery_picker.fallback', 'Gallery ID: use the directory lookup, then enter the chosen ID here.'),
+        'loading_label' => t(
+            'gallery_picker.loading',
+            'Searching galleries...',
+        ),
+        'error_label' => t(
+            'gallery_picker.error',
+            'Search is unavailable. Try again or use the directory lookup.',
+        ),
+        'lookup_label' => t(
+            'gallery_picker.lookup',
+            'Look up a gallery ID in a new tab',
+        ),
+        'fallback_label' => t(
+            'gallery_picker.fallback',
+            'Gallery ID: use the directory lookup, then enter the chosen ID here.',
+        ),
         'more' => $page['more'],
         'next_after_id' => $page['next_after_id'],
         'page_size' => $page['page_size'],
@@ -273,37 +358,53 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
  * @param string $fieldName Existing form parameter expected by the mutation owner.
  * @return string Bounded parent control with root and no-JavaScript lookup.
  */
-function render_gallery_parent_picker(int $selectedGalleryId = 0, int $sourceGalleryId = 0, string $fieldName = 'parent_id'): string
-{
-    return render_gallery_search_picker($fieldName, $selectedGalleryId, $sourceGalleryId, [
-        'allow_root' => true,
-        'exclude_descendants' => true,
-        'disable_prefill' => true,
-    ]);
+function render_gallery_parent_picker(
+    int $selectedGalleryId = 0,
+    int $sourceGalleryId = 0,
+    string $fieldName = 'parent_id',
+): string {
+    return render_gallery_search_picker(
+        $fieldName,
+        $selectedGalleryId,
+        $sourceGalleryId,
+        [
+            'allow_root' => true,
+            'exclude_descendants' => true,
+            'disable_prefill' => true,
+        ],
+    );
 }
 
 /**
- * Handles gallery options for select logic for the gallery application.
+ * Build the option markup for the gallery selector.
  *
  * @param int $selectedGalleryId Selected gallery id identifier.
  * @param int $excludedGalleryId Excluded gallery id identifier.
- * @return mixed Result produced by this operation.
+ * @return string Rendered select-option markup.
  */
-function gallery_options_for_select(int $selectedGalleryId = 0, int $excludedGalleryId = 0): string
-{
+function gallery_options_for_select(
+    int $selectedGalleryId = 0,
+    int $excludedGalleryId = 0,
+): string {
     $rows = [];
     foreach (gallery_picker_source_rows() as $gallery) {
-        if ($excludedGalleryId > 0 && (int) $gallery['id'] === $excludedGalleryId) {
+        if (
+            $excludedGalleryId > 0
+            && (int) $gallery['id'] === $excludedGalleryId
+        ) {
             continue;
         }
         $folderPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
-        $depth = $folderPath === '' ? 0 : max(0, substr_count($folderPath, '/'));
+        $depth = $folderPath === ''
+            ? 0
+            : max(0, substr_count($folderPath, '/'));
         $indent = str_repeat(' ', $depth);
         $branch = $depth > 0 ? '↳ ' : '';
         $pathSuffix = $folderPath !== '' ? '  ·  /' . $folderPath : '';
         $rows[] = [
             'value' => (int) $gallery['id'],
-            'label' => $indent . $branch . (string) $gallery['title'] . $pathSuffix,
+            'label' =>
+                $indent . $branch . (string) $gallery['title'] . $pathSuffix,
             'selected' => (int) $gallery['id'] === $selectedGalleryId,
         ];
     }
@@ -331,22 +432,32 @@ function selected_gallery_id_from_query(string $parameterName): int
 }
 
 /**
- * Handles gallery cover options logic for the gallery application.
+ * Build the option markup for selecting a gallery cover image.
  *
- * @param mixed $galleryId Input used by this operation.
- * @param mixed $selectedImageId Input used by this operation.
- * @param mixed $includeDescendants Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param int $galleryId Gallery whose direct images or branch images are offered.
+ * @param int $selectedImageId Image ID selected in the rendered options.
+ * @param bool $includeDescendants Whether to include images in descendant galleries.
+ * @return string Rendered select-option markup.
  */
-function gallery_cover_options(int $galleryId, int $selectedImageId, bool $includeDescendants = false): string
-{
+function gallery_cover_options(
+    int $galleryId,
+    int $selectedImageId,
+    bool $includeDescendants = false,
+): string {
     $images = $includeDescendants
         ? gallery_cover_choices($galleryId, false)
-        : array_map(static fn (array $image): array => ['image' => $image], gallery_images($galleryId, false));
+        : array_map(
+            static fn(array $image): array => ['image' => $image],
+            gallery_images($galleryId, false),
+        );
     $rows = [];
     foreach ($images as $entry) {
         $image = $entry['image'];
-        $label = ($image['title'] ?: $image['filename']) . ' (' . $image['relative_path'] . ')';
+        $label =
+            ($image['title'] ?: $image['filename'])
+            . ' ('
+            . $image['relative_path']
+            . ')';
         if ($includeDescendants && !empty($entry['gallery_title'])) {
             $label = $entry['gallery_title'] . ' - ' . $label;
         }

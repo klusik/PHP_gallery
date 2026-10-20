@@ -46,5 +46,7 @@ namespace Gallery\Services;
 function app_setting(string $key, ?string $default = null): ?string
 {
     $settings = $GLOBALS['dng_policy_test_settings'] ?? [];
-    return array_key_exists($key, $settings) ? (string) $settings[$key] : $default;
+    return array_key_exists($key, $settings)
+        ? (string) $settings[$key]
+        : $default;
 }

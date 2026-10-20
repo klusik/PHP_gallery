@@ -52,37 +52,81 @@ function cms_admin_gallery_password(): void
     }
     verify_csrf();
     $galleryId = max(0, (int) ($_POST['gallery_id'] ?? 0));
-    $descriptor = admin_mutation_descriptor('gallery.password', 'gallery', 'update', [$galleryId]);
+    $descriptor = admin_mutation_descriptor(
+        'gallery.password',
+        'gallery',
+        'update',
+        [$galleryId],
+    );
     $fallback = url_for('admin', ['dashboard_tab' => 'galleries']);
     $status = 200;
     $bufferLevel = ob_get_level();
     ob_start();
     try {
         $gallery = find_gallery($galleryId, true);
-        if (!$gallery) throw new GalleryQuickAccessRefusal(t('admin.gallery_not_found', 'Gallery not found.'));
+        if (!$gallery)
+            throw new GalleryQuickAccessRefusal(t(
+                'admin.gallery_not_found',
+                'Gallery not found.',
+            ));
         $action = is_string($_POST['action'] ?? null) ? $_POST['action'] : '';
-        if (!in_array($action, ['enable', 'disable'], true)) throw new GalleryQuickAccessRefusal(t('gallery.password_save_failed', 'Gallery password could not be saved.'));
-        $password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
-        $updated = gallery_editor_change_own_password($gallery, $_POST['edit_revision'] ?? null, $action === 'enable', $password);
+        if (!in_array($action, ['enable', 'disable'], true))
+            throw new GalleryQuickAccessRefusal(t(
+                'gallery.password_save_failed',
+                'Gallery password could not be saved.',
+            ));
+        $password = is_string($_POST['password'] ?? null)
+            ? $_POST['password']
+            : '';
+        $updated = gallery_editor_change_own_password(
+            $gallery,
+            $_POST['edit_revision'] ?? null,
+            $action === 'enable',
+            $password,
+        );
         $result = admin_mutation_success_envelope(
-            t('admin.gallery_editor.gallery_saved', 'Gallery saved.'), $descriptor, null,
-            [admin_mutation_public_gallery_context(0, url_for('home')), admin_mutation_public_gallery_context($galleryId, gallery_public_url($updated))], ['redirect_url' => $fallback]
+            t('admin.gallery_editor.gallery_saved', 'Gallery saved.'),
+            $descriptor,
+            null,
+            [
+                admin_mutation_public_gallery_context(0, url_for('home')),
+                admin_mutation_public_gallery_context(
+                    $galleryId,
+                    gallery_public_url($updated),
+                ),
+            ],
+            ['redirect_url' => $fallback],
         );
         $result['gallery_state'] = gallery_editor_quick_access_state($updated);
     } catch (Throwable $exception) {
         $status = $exception instanceof GalleryEditConflict ? 409 : 422;
         // Only approved domain messages are exposed; unexpected errors must not leak credentials or storage details.
-        $message = $exception instanceof GalleryQuickAccessRefusal || $exception instanceof GalleryEditConflict || $exception instanceof GalleryEditUnavailable
-            ? $exception->getMessage() : t('gallery.password_save_failed', 'Gallery password could not be saved.');
-        $result = admin_mutation_error_envelope($message, 'gallery_password_failed', $descriptor);
+        $message =
+            $exception instanceof GalleryQuickAccessRefusal
+            || $exception instanceof GalleryEditConflict
+            || $exception instanceof GalleryEditUnavailable
+                ? $exception->getMessage()
+                : t(
+                    'gallery.password_save_failed',
+                    'Gallery password could not be saved.',
+                );
+        $result = admin_mutation_error_envelope(
+            $message,
+            'gallery_password_failed',
+            $descriptor,
+        );
     }
     // Discard incidental service output without logging it: this request carries a credential.
-    while (ob_get_level() > $bufferLevel) ob_end_clean();
+    while (ob_get_level() > $bufferLevel)
+        ob_end_clean();
     if (admin_wants_json()) {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
         http_response_code($status);
-        echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode(
+            $result,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
         return;
     }
     flash_message('admin_notice', (string) $result['message']);

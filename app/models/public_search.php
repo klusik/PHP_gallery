@@ -73,8 +73,11 @@ function public_search_model_prefix_pattern(string $query): string
  * @param ?array $contextGallery Optional gallery branch context.
  * @return array{0: string, 1: array<int, mixed>} SQL condition and bound values.
  */
-function public_search_model_listing_scope(string $alias, bool $listedOnly, ?array $contextGallery): array
-{
+function public_search_model_listing_scope(
+    string $alias,
+    bool $listedOnly,
+    ?array $contextGallery,
+): array {
     $prefix = $alias . '.';
     $condition = $prefix . "visibility = 'public'";
     if ($listedOnly) {
@@ -85,11 +88,20 @@ function public_search_model_listing_scope(string $alias, bool $listedOnly, ?arr
         return [$condition, []];
     }
 
-    $folderPath = normalize_relative_path((string) ($contextGallery['folder_path'] ?? ''));
+    $folderPath = normalize_relative_path(
+        (string) ($contextGallery['folder_path'] ?? ''),
+    );
     if ($folderPath === '') {
         $folderPath = (string) ($contextGallery['folder_path'] ?? '');
     }
-    $condition = '(' . $condition . ') AND (' . $prefix . 'folder_path = ? OR ' . $prefix . 'folder_path LIKE ?)';
+    $condition =
+        '('
+        . $condition
+        . ') AND ('
+        . $prefix
+        . 'folder_path = ? OR '
+        . $prefix
+        . 'folder_path LIKE ?)';
     return [$condition, [$folderPath, $folderPath . '/%']];
 }
 
@@ -116,17 +128,30 @@ function public_search_model_compatibility_gallery_rows(
     bool $aiSearchReady,
     bool $localizedGallerySearchReady,
     string $contentLanguage,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata public_image_ai ON public_image_ai.image_id = public_image.id' : '';
-    $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN public_image_ai.searchable_text LIKE ? THEN 10 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
-    $aiWhereSql = $aiSearchReady ? ' OR public_image_ai.searchable_text LIKE ?' : '';
-    $localizedGalleryWhereSql = $localizedGallerySearchReady ? ' OR EXISTS (SELECT 1 FROM gallery_translations content_gallery_translation WHERE content_gallery_translation.gallery_id = g.id AND content_gallery_translation.language_code = ? AND (content_gallery_translation.title LIKE ? OR content_gallery_translation.description LIKE ?))' : '';
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $aiJoin = $aiSearchReady
+        ? 'LEFT JOIN image_ai_metadata public_image_ai ON public_image_ai.image_id = public_image.id'
+        : '';
+    $aiScoreSql = $aiSearchReady
+        ? ', MAX(CASE WHEN public_image_ai.searchable_text LIKE ? THEN 10 ELSE 0 END) AS ai_score'
+        : ', 0 AS ai_score';
+    $aiWhereSql = $aiSearchReady
+        ? ' OR public_image_ai.searchable_text LIKE ?'
+        : '';
+    $localizedGalleryWhereSql = $localizedGallerySearchReady
+        ? ' OR EXISTS (SELECT 1 FROM gallery_translations content_gallery_translation WHERE content_gallery_translation.gallery_id = g.id AND content_gallery_translation.language_code = ? AND (content_gallery_translation.title LIKE ? OR content_gallery_translation.description LIKE ?))'
+        : '';
 
-    $sql = "SELECT g.*,
+    $sql =
+        "SELECT g.*,
             GROUP_CONCAT(DISTINCT gallery_tag.name ORDER BY gallery_tag.name SEPARATOR ', ') AS gallery_tag_names,
             GROUP_CONCAT(DISTINCT image_tag.name ORDER BY image_tag.name SEPARATOR ', ') AS image_tag_names,
             MAX(CASE WHEN LOWER(g.title) = LOWER(?) THEN 80 ELSE 0 END) AS exact_title_score,
@@ -158,7 +183,17 @@ function public_search_model_compatibility_gallery_rows(
     if ($aiSearchReady) {
         $scoreParams[] = $like;
     }
-    $whereParams = [$like, $like, $like, $like, $like, $like, $like, $like, $like];
+    $whereParams = [
+        $like,
+        $like,
+        $like,
+        $like,
+        $like,
+        $like,
+        $like,
+        $like,
+        $like,
+    ];
     if ($aiSearchReady) {
         $whereParams[] = $like;
     }
@@ -190,17 +225,28 @@ function public_search_model_compatibility_image_rows(
     bool $aiSearchReady,
     bool $localizedSearchReady,
     string $contentLanguage,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata image_ai ON image_ai.image_id = i.id' : '';
-    $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN image_ai.searchable_text LIKE ? THEN 14 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $aiJoin = $aiSearchReady
+        ? 'LEFT JOIN image_ai_metadata image_ai ON image_ai.image_id = i.id'
+        : '';
+    $aiScoreSql = $aiSearchReady
+        ? ', MAX(CASE WHEN image_ai.searchable_text LIKE ? THEN 14 ELSE 0 END) AS ai_score'
+        : ', 0 AS ai_score';
     $aiWhereSql = $aiSearchReady ? ' OR image_ai.searchable_text LIKE ?' : '';
-    $localizedWhereSql = $localizedSearchReady ? ' OR EXISTS (SELECT 1 FROM image_translations content_image_translation WHERE content_image_translation.image_id = i.id AND content_image_translation.language_code = ? AND (content_image_translation.title LIKE ? OR content_image_translation.description LIKE ?))' : '';
+    $localizedWhereSql = $localizedSearchReady
+        ? ' OR EXISTS (SELECT 1 FROM image_translations content_image_translation WHERE content_image_translation.image_id = i.id AND content_image_translation.language_code = ? AND (content_image_translation.title LIKE ? OR content_image_translation.description LIKE ?))'
+        : '';
 
-    $sql = "SELECT i.*, g.id AS matched_gallery_id, g.parent_id AS matched_gallery_parent_id,
+    $sql =
+        'SELECT i.*, g.id AS matched_gallery_id, g.parent_id AS matched_gallery_parent_id,
             g.folder_path AS matched_gallery_folder_path, g.folder_path_hash AS matched_gallery_folder_path_hash,
             g.slug AS matched_gallery_slug, g.title AS matched_gallery_title, g.description AS matched_gallery_description,
             g.cover_image_id AS matched_gallery_cover_image_id, g.sort_order AS matched_gallery_sort_order,
@@ -210,8 +256,20 @@ function public_search_model_compatibility_image_rows(
             g.access_share_token AS matched_gallery_access_share_token, g.access_token_hash AS matched_gallery_access_token_hash,
             g.access_token_expires_at AS matched_gallery_access_token_expires_at, g.created_at AS matched_gallery_created_at,
             g.updated_at AS matched_gallery_updated_at,
-            " . (database_helpers_model_column_exists('galleries', 'url_slug') ? 'g.url_slug AS matched_gallery_url_slug,' : "'' AS matched_gallery_url_slug,") . "
-            " . (database_helpers_model_column_exists('galleries', 'url_path') ? 'g.url_path AS matched_gallery_url_path,' : "'' AS matched_gallery_url_path,") . "
+            '
+        . (
+            database_helpers_model_column_exists('galleries', 'url_slug')
+                ? 'g.url_slug AS matched_gallery_url_slug,'
+                : "'' AS matched_gallery_url_slug,"
+        )
+        . '
+            '
+        . (
+            database_helpers_model_column_exists('galleries', 'url_path')
+                ? 'g.url_path AS matched_gallery_url_path,'
+                : "'' AS matched_gallery_url_path,"
+        )
+        . "
             GROUP_CONCAT(DISTINCT image_tag.name ORDER BY image_tag.name SEPARATOR ', ') AS image_tag_names,
             MAX(CASE WHEN LOWER(i.filename) = LOWER(?) OR LOWER(i.title) = LOWER(?) THEN 70 ELSE 0 END) AS exact_name_score,
             MAX(CASE WHEN i.filename LIKE ? OR i.title LIKE ? THEN 36 ELSE 0 END) AS name_score,
@@ -232,7 +290,8 @@ function public_search_model_compatibility_image_rows(
           )
         GROUP BY i.id
         ORDER BY exact_name_score DESC, name_score DESC, tag_score DESC, ai_score DESC, i.filename ASC
-        LIMIT " . (int) $limit;
+        LIMIT "
+        . (int) $limit;
 
     $scoreParams = [$query, $query, $like, $like, $like];
     if ($aiSearchReady) {

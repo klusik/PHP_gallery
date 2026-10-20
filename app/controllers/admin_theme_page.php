@@ -80,7 +80,8 @@ use function Gallery\Services\main_page_gallery_grid_settings;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\pagination_global_settings;
 use function Gallery\Services\public_thumbnail_rendering_mode;
-use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision;
+use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision
+;
 use function Gallery\Services\remove_stored_favicon;
 use function Gallery\Services\reset_all_gallery_grid_overrides;
 use function Gallery\Services\sanitize_hex_color;
@@ -153,103 +154,81 @@ use function Gallery\Views\view_render_admin_theme_page;
  * Send validators for a streamed file and stop on a matching browser cache entry.
  */
 
-
-
 /**
  * Render the public scroll helper next to a listing without joining the listing grid.
  */
-
 
 /**
  * Public homepage showing top-level public galleries.
  */
 
-
 /**
  * Public gallery detail page with breadcrumbs, subgalleries, images, tags, and votes.
  */
-
 
 /**
  * Render gallery ancestor links for public navigation.
  */
 
-
 /**
  * Render the password prompt for a protected public gallery.
  */
-
 
 /**
  * Process a public protected-gallery password unlock.
  */
 
-
 /**
  * Resolve a share token and redirect to its protected gallery.
  */
-
 
 /**
  * Build the canonical copyable share URL for one gallery/token pair.
  */
 
-
 /**
  * Render one gallery card, including direct cover or child-cover collage.
  */
-
 
 /**
  * Render logged-in admin metadata controls directly on public gallery pages.
  */
 
-
 /**
  * Render logged-in admin metadata controls for a public image card.
  */
-
 
 /**
  * Render the lightbox shell used by public gallery JavaScript.
  */
 
-
 /**
  * Stream a generated thumbnail after the same visibility checks as originals.
  */
-
-
 
 /**
  * Stream a generated thumbnail addressed through the clean public image URL.
  */
 
-
 /**
  * Stream an original image addressed through the clean public image URL.
  */
-
 
 /**
  * Stream an uploaded gallery thumbnail asset.
  */
 
-
 /**
  * Stream a protected image file after checking gallery/image visibility.
  */
-
 
 /**
  * Serve robots.txt for search engines.
  */
 
-
 /**
  * Serve sitemap.xml for public gallery pages.
  */
-
 
 /**
  * Render and process the admin login form.
@@ -262,8 +241,10 @@ use function Gallery\Views\view_render_admin_theme_page;
  * @param bool $lightboxModesFeatureEnabled Whether lightbox mode settings are enabled.
  * @return void Emits prepared Theme tabs and their independent settings/editor form authorities.
  */
-function render_admin_theme_page(bool $gpsMapsFeatureEnabled, bool $lightboxModesFeatureEnabled): void
-{
+function render_admin_theme_page(
+    bool $gpsMapsFeatureEnabled,
+    bool $lightboxModesFeatureEnabled,
+): void {
     // Variable $theme stores this steps working value.
     $theme = theme_settings();
     // Variable $paginationSettings stores this steps working value.
@@ -283,20 +264,36 @@ function render_admin_theme_page(bool $gpsMapsFeatureEnabled, bool $lightboxMode
         $databaseRows = max(0, (int) ($_GET['db_rows'] ?? 0));
         // $sidecars stores how many gallery.json files had stale custom-grid metadata removed.
         $sidecars = max(0, (int) ($_GET['sidecars'] ?? 0));
-        $gridResetNotice = t('admin.theme.grid_reset_notice', 'Custom gallery grid settings were reset. Database rows changed: {db_rows}. Sidecar files cleaned: {sidecars}.', ['db_rows' => $databaseRows, 'sidecars' => $sidecars]);
+        $gridResetNotice = t(
+            'admin.theme.grid_reset_notice',
+            'Custom gallery grid settings were reset. Database rows changed: {db_rows}. Sidecar files cleaned: {sidecars}.',
+            ['db_rows' => $databaseRows, 'sidecars' => $sidecars],
+        );
     }
     // $themeBackgroundUrl stores the current global background asset so the live preview can mirror the public page before saving.
     $themeBackgroundUrl = theme_background_asset_url();
 
     // Prepare child-tab fragments before the page view composes the Theme form shell.
     ob_start();
-    render_admin_theme_appearance_tab($theme, $themeBackgroundUrl, $gpsMapsFeatureEnabled, $tagPageGridSettings, $tagPageDescriptionLayout);
+    render_admin_theme_appearance_tab(
+        $theme,
+        $themeBackgroundUrl,
+        $gpsMapsFeatureEnabled,
+        $tagPageGridSettings,
+        $tagPageDescriptionLayout,
+    );
     $appearanceHtml = (string) ob_get_clean();
     ob_start();
     render_admin_theme_media_tab($theme);
     $mediaHtml = (string) ob_get_clean();
     ob_start();
-    render_admin_theme_layout_tab($theme, $paginationSettings, $homeGridSettings, $publicThumbnailRenderingMode, $lightboxModesFeatureEnabled);
+    render_admin_theme_layout_tab(
+        $theme,
+        $paginationSettings,
+        $homeGridSettings,
+        $publicThumbnailRenderingMode,
+        $lightboxModesFeatureEnabled,
+    );
     $layoutHtml = (string) ob_get_clean();
     ob_start();
     render_admin_theme_language_tab();
@@ -312,11 +309,26 @@ function render_admin_theme_page(bool $gpsMapsFeatureEnabled, bool $lightboxMode
         'csrf_html' => csrf_field(),
         'override_csrf_html' => csrf_field(),
         'tabs' => [
-            ['id' => 'admin-theme-tab-appearance', 'label' => t('admin.theme.tab_appearance', 'Appearance')],
-            ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Branding & media')],
-            ['id' => 'admin-theme-tab-layout', 'label' => t('admin.theme.tab_layout', 'Layout')],
-            ['id' => 'admin-theme-tab-language', 'label' => t('admin.theme.language.tab_label', 'Language')],
-            ['id' => 'admin-theme-tab-custom-css', 'label' => t('admin.theme.tab_custom_css', 'Custom CSS')],
+            [
+                'id' => 'admin-theme-tab-appearance',
+                'label' => t('admin.theme.tab_appearance', 'Appearance'),
+            ],
+            [
+                'id' => 'admin-theme-tab-media',
+                'label' => t('admin.theme.tab_media', 'Branding & media'),
+            ],
+            [
+                'id' => 'admin-theme-tab-layout',
+                'label' => t('admin.theme.tab_layout', 'Layout'),
+            ],
+            [
+                'id' => 'admin-theme-tab-language',
+                'label' => t('admin.theme.language.tab_label', 'Language'),
+            ],
+            [
+                'id' => 'admin-theme-tab-custom-css',
+                'label' => t('admin.theme.tab_custom_css', 'Custom CSS'),
+            ],
         ],
         'tab_fragments' => [
             'appearance' => $appearanceHtml,
@@ -327,12 +339,27 @@ function render_admin_theme_page(bool $gpsMapsFeatureEnabled, bool $lightboxMode
         ],
         'labels' => [
             'title' => t('admin.theme.title', 'Theme'),
-            'description' => t('admin.theme.description', 'Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.'),
-            'open_centralized' => t('admin.settings.open_centralized', 'Open centralized settings'),
+            'description' => t(
+                'admin.theme.description',
+                'Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.',
+            ),
+            'open_centralized' => t(
+                'admin.settings.open_centralized',
+                'Open centralized settings',
+            ),
             'save_theme' => t('admin.theme.save_theme', 'Save theme'),
-            'save_panel_title' => t('admin.theme.save_panel_title', 'Save changes'),
-            'save_panel_hint' => t('admin.theme.save_panel_hint', 'All Theme tabs are saved together, so hidden tab settings are preserved when you submit the form.'),
-            'reset_to_css' => t('admin.theme.custom_css.reset_to_css', 'Reset to CSS'),
+            'save_panel_title' => t(
+                'admin.theme.save_panel_title',
+                'Save changes',
+            ),
+            'save_panel_hint' => t(
+                'admin.theme.save_panel_hint',
+                'All Theme tabs are saved together, so hidden tab settings are preserved when you submit the form.',
+            ),
+            'reset_to_css' => t(
+                'admin.theme.custom_css.reset_to_css',
+                'Reset to CSS',
+            ),
         ],
     ]);
     render_footer();

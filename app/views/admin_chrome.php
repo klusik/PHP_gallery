@@ -53,7 +53,8 @@ use function Gallery\Services\t;
 function view_admin_menu_structure(array $model = []): array
 {
     $updatePending = !empty($model['update_pending']);
-    $legacyUploadsEnabled = !empty($model['admin_legacy_upload_navigation_enabled']);
+    $legacyUploadsEnabled =
+        !empty($model['admin_legacy_upload_navigation_enabled']);
     $updateLabel = trim((string) ($model['update_label'] ?? ''));
     if ($updateLabel === '') {
         $updateLabel = t('admin.menu.updates', 'Updates');
@@ -62,53 +63,213 @@ function view_admin_menu_structure(array $model = []): array
         [
             'label' => t('admin.menu.dashboard', 'Dashboard'),
             'items' => [
-                ['label' => t('admin.menu.overview', 'Overview'), 'page' => 'admin', 'url' => url_for('admin'), 'icon' => 'overview'],
-                ['label' => t('admin.menu.settings', 'Settings'), 'page' => 'admin_settings', 'url' => url_for('admin_settings'), 'icon' => 'settings'],
+                [
+                    'label' => t('admin.menu.overview', 'Overview'),
+                    'page' => 'admin',
+                    'url' => url_for('admin'),
+                    'icon' => 'overview',
+                ],
+                [
+                    'label' => t('admin.menu.settings', 'Settings'),
+                    'page' => 'admin_settings',
+                    'url' => url_for('admin_settings'),
+                    'icon' => 'settings',
+                ],
             ],
         ],
         [
             'label' => t('admin.menu.galleries', 'Galleries'),
             'items' => [
-                ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries', 'icon' => 'galleries'],
-                ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery'), 'icon' => 'create'],
-                ['label' => t('admin.menu.smart_galleries', 'Smart Galleries'), 'page' => 'admin_smart_galleries', 'url' => url_for('admin_smart_galleries'), 'feature' => 'smart_galleries', 'icon' => 'smart'],
-                ...($legacyUploadsEnabled ? [
-                    ['label' => t('admin.menu.legacy_upload_photos', 'Legacy uploads'), 'page' => 'admin_upload', 'url' => url_for('admin_upload'), 'icon' => 'upload'],
-                    ['label' => t('admin.menu.legacy_upload_settings', 'Legacy upload settings'), 'page' => 'admin_upload_settings', 'url' => url_for('admin_upload_settings'), 'icon' => 'settings'],
-                    ['label' => t('admin.menu.legacy_upload_mobile', 'Legacy mobile uploads'), 'page' => 'admin_mobile_uploads', 'url' => url_for('admin_mobile_uploads'), 'feature' => 'mobile_webdav', 'icon' => 'mobile'],
-                ] : []),
-                ['label' => t('admin.menu.media_renamer', 'Media renamer'), 'page' => 'admin_media_renamer', 'url' => url_for('admin_media_renamer'), 'feature' => 'media_renamer', 'icon' => 'rename'],
-                ['label' => t('admin.menu.api_manager', 'API manager'), 'page' => 'admin_api_manager', 'url' => url_for('admin_api_manager'), 'feature' => 'upload_api', 'icon' => 'api'],
-                ['label' => t('admin.menu.edit_tags', 'Edit tags'), 'page' => 'admin_tags', 'url' => url_for('admin_tags'), 'icon' => 'tags'],
+                [
+                    'label' => t('admin.menu.all_galleries', 'All galleries'),
+                    'page' => 'admin',
+                    'url' => url_for('admin') . '#admin-tab-galleries',
+                    'icon' => 'galleries',
+                ],
+                [
+                    'label' => t('admin.menu.create_gallery', 'Create gallery'),
+                    'page' => 'admin_new_gallery',
+                    'url' => url_for('admin_new_gallery'),
+                    'icon' => 'create',
+                ],
+                [
+                    'label' => t(
+                        'admin.menu.smart_galleries',
+                        'Smart Galleries',
+                    ),
+                    'page' => 'admin_smart_galleries',
+                    'url' => url_for('admin_smart_galleries'),
+                    'feature' => 'smart_galleries',
+                    'icon' => 'smart',
+                ],
+                ...(
+                    $legacyUploadsEnabled
+                        ? [
+                            [
+                                'label' => t(
+                                    'admin.menu.legacy_upload_photos',
+                                    'Legacy uploads',
+                                ),
+                                'page' => 'admin_upload',
+                                'url' => url_for('admin_upload'),
+                                'icon' => 'upload',
+                            ],
+                            [
+                                'label' => t(
+                                    'admin.menu.legacy_upload_settings',
+                                    'Legacy upload settings',
+                                ),
+                                'page' => 'admin_upload_settings',
+                                'url' => url_for('admin_upload_settings'),
+                                'icon' => 'settings',
+                            ],
+                            [
+                                'label' => t(
+                                    'admin.menu.legacy_upload_mobile',
+                                    'Legacy mobile uploads',
+                                ),
+                                'page' => 'admin_mobile_uploads',
+                                'url' => url_for('admin_mobile_uploads'),
+                                'feature' => 'mobile_webdav',
+                                'icon' => 'mobile',
+                            ],
+                        ] : []
+                ),
+                [
+                    'label' => t('admin.menu.media_renamer', 'Media renamer'),
+                    'page' => 'admin_media_renamer',
+                    'url' => url_for('admin_media_renamer'),
+                    'feature' => 'media_renamer',
+                    'icon' => 'rename',
+                ],
+                [
+                    'label' => t('admin.menu.api_manager', 'API manager'),
+                    'page' => 'admin_api_manager',
+                    'url' => url_for('admin_api_manager'),
+                    'feature' => 'upload_api',
+                    'icon' => 'api',
+                ],
+                [
+                    'label' => t('admin.menu.edit_tags', 'Edit tags'),
+                    'page' => 'admin_tags',
+                    'url' => url_for('admin_tags'),
+                    'icon' => 'tags',
+                ],
             ],
         ],
         [
             'label' => t('admin.menu.appearance', 'Appearance'),
             'items' => [
-                ['label' => t('admin.menu.theme', 'Theme'), 'page' => 'admin_theme', 'url' => url_for('admin_theme'), 'icon' => 'theme', 'active' => empty($model['theme_widgets_active'])],
-                ['label' => t('admin.menu.widgets', 'Widgets'), 'page' => 'admin_theme', 'url' => url_for('admin_theme', ['widgets' => '1']), 'icon' => 'theme', 'active' => !empty($model['theme_widgets_active'])],
-                ['label' => t('admin.menu.features', 'Features'), 'page' => 'admin_features', 'url' => url_for('admin_features'), 'icon' => 'features'],
+                [
+                    'label' => t('admin.menu.theme', 'Theme'),
+                    'page' => 'admin_theme',
+                    'url' => url_for('admin_theme'),
+                    'icon' => 'theme',
+                    'active' => empty($model['theme_widgets_active']),
+                ],
+                [
+                    'label' => t('admin.menu.widgets', 'Widgets'),
+                    'page' => 'admin_theme',
+                    'url' => url_for('admin_theme', ['widgets' => '1']),
+                    'icon' => 'theme',
+                    'active' => !empty($model['theme_widgets_active']),
+                ],
+                [
+                    'label' => t('admin.menu.features', 'Features'),
+                    'page' => 'admin_features',
+                    'url' => url_for('admin_features'),
+                    'icon' => 'features',
+                ],
             ],
         ],
         [
             'label' => t('admin.menu.maintenance', 'Maintenance'),
             'items' => [
-                ['label' => t('admin.menu.trash', 'Trash'), 'page' => 'admin_trash', 'url' => url_for('admin_trash'), 'icon' => 'trash'],
-                ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs'), 'icon' => 'logs'],
-                ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry', 'icon' => 'telemetry'],
-                ['label' => t('admin.menu.maintenance_center', 'Maintenance Center'), 'page' => 'admin_maintenance_center', 'url' => url_for('admin_maintenance_center'), 'icon' => 'maintenance'],
-                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report'), 'feature' => 'complete_gallery_report', 'icon' => 'report'],
-                ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity'), 'icon' => 'integrity'],
-                ['label' => t('admin.menu.navdata', 'Navigation data'), 'page' => 'admin_navdata', 'url' => url_for('admin_navdata'), 'feature' => 'navigation_data', 'icon' => 'navigation'],
-                ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending, 'icon' => 'update'],
+                [
+                    'label' => t('admin.menu.trash', 'Trash'),
+                    'page' => 'admin_trash',
+                    'url' => url_for('admin_trash'),
+                    'icon' => 'trash',
+                ],
+                [
+                    'label' => t('admin.menu.logs', 'Logs'),
+                    'page' => 'admin_logs',
+                    'url' => url_for('admin_logs'),
+                    'icon' => 'logs',
+                ],
+                [
+                    'label' => t('admin.menu.telemetry', 'Telemetry'),
+                    'page' => 'admin_telemetry',
+                    'url' => url_for('admin_telemetry'),
+                    'feature' => 'telemetry',
+                    'icon' => 'telemetry',
+                ],
+                [
+                    'label' => t(
+                        'admin.menu.maintenance_center',
+                        'Maintenance Center',
+                    ),
+                    'page' => 'admin_maintenance_center',
+                    'url' => url_for('admin_maintenance_center'),
+                    'icon' => 'maintenance',
+                ],
+                [
+                    'label' => t(
+                        'admin.menu.gallery_report',
+                        'Complete report',
+                    ),
+                    'page' => 'admin_gallery_report',
+                    'url' => url_for('admin_gallery_report'),
+                    'feature' => 'complete_gallery_report',
+                    'icon' => 'report',
+                ],
+                [
+                    'label' => t('admin.menu.integrity', 'Integrity'),
+                    'page' => 'admin_integrity',
+                    'url' => url_for('admin_integrity'),
+                    'icon' => 'integrity',
+                ],
+                [
+                    'label' => t('admin.menu.navdata', 'Navigation data'),
+                    'page' => 'admin_navdata',
+                    'url' => url_for('admin_navdata'),
+                    'feature' => 'navigation_data',
+                    'icon' => 'navigation',
+                ],
+                [
+                    'label' => $updateLabel,
+                    'page' => 'admin_update',
+                    'url' => url_for('admin_update'),
+                    'highlight' => $updatePending,
+                    'icon' => 'update',
+                ],
             ],
         ],
         [
             'label' => t('admin.menu.account', 'Account'),
             'items' => [
-                ['label' => t('admin.menu.profile', 'Profile'), 'page' => 'admin_account', 'url' => url_for('admin_account'), 'icon' => 'profile'],
-                ['label' => t('viewer.admin.invites.menu', 'Viewer accounts'), 'page' => 'admin_viewer_invitations', 'url' => url_for('admin_viewer_invitations'), 'feature' => 'viewer_accounts', 'icon' => 'viewers'],
-                ['label' => t('admin.menu.logout', 'Logout'), 'page' => 'admin_logout', 'url' => url_for('admin_logout'), 'icon' => 'logout'],
+                [
+                    'label' => t('admin.menu.profile', 'Profile'),
+                    'page' => 'admin_account',
+                    'url' => url_for('admin_account'),
+                    'icon' => 'profile',
+                ],
+                [
+                    'label' => t(
+                        'viewer.admin.invites.menu',
+                        'Viewer accounts',
+                    ),
+                    'page' => 'admin_viewer_invitations',
+                    'url' => url_for('admin_viewer_invitations'),
+                    'feature' => 'viewer_accounts',
+                    'icon' => 'viewers',
+                ],
+                [
+                    'label' => t('admin.menu.logout', 'Logout'),
+                    'page' => 'admin_logout',
+                    'url' => url_for('admin_logout'),
+                    'icon' => 'logout',
+                ],
             ],
         ],
     ];
@@ -136,8 +297,18 @@ function view_admin_menu_item_is_active(array $item, string $currentPage): bool
         }
         return true;
     }
-    if ($itemPage === 'admin' && in_array($currentPage, ['admin_edit_gallery', 'admin_edit_image'], true)) {
-        return str_contains((string) ($item['url'] ?? ''), '#admin-tab-galleries');
+    if (
+        $itemPage === 'admin'
+        && in_array(
+            $currentPage,
+            ['admin_edit_gallery', 'admin_edit_image'],
+            true,
+        )
+    ) {
+        return str_contains(
+            (string) ($item['url'] ?? ''),
+            '#admin-tab-galleries',
+        );
     }
     return false;
 }
@@ -164,7 +335,10 @@ function view_render_admin_tabs(array $tabs, string $activeId = ''): void
     }
 
     foreach ($tabs as $tab) {
-        if ((string) ($tab['id'] ?? '') === $resolvedActiveId && !empty($tab['disabled'])) {
+        if (
+            (string) ($tab['id'] ?? '') === $resolvedActiveId
+            && !empty($tab['disabled'])
+        ) {
             foreach ($tabs as $candidate) {
                 if (empty($candidate['disabled'])) {
                     $resolvedActiveId = (string) ($candidate['id'] ?? '');
@@ -175,7 +349,10 @@ function view_render_admin_tabs(array $tabs, string $activeId = ''): void
         }
     }
 
-    echo '<nav class="admin-tabs" data-admin-tabs aria-label="' . e(t('admin.tabs.aria_sections', 'Admin sections')) . '">';
+    echo
+        '<nav class="admin-tabs" data-admin-tabs aria-label="'
+            . e(t('admin.tabs.aria_sections', 'Admin sections'))
+            . '">';
     echo '<div class="admin-tab-list" role="tablist">';
     foreach ($tabs as $tab) {
         $tabId = trim((string) ($tab['id'] ?? ''));
@@ -183,14 +360,40 @@ function view_render_admin_tabs(array $tabs, string $activeId = ''): void
             continue;
         }
         $tabLabel = (string) ($tab['label'] ?? $tabId);
-        $tabHref = (string) ($tab['href'] ?? ('#' . $tabId));
+        $tabHref = (string) ($tab['href'] ?? '#' . $tabId);
         $disabled = (bool) ($tab['disabled'] ?? false);
         $isActive = !$disabled && $tabId === $resolvedActiveId;
         $controlId = $tabId . '-control';
-        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '"' . ($disabled ? ' aria-disabled="true"' : ' href="' . e($tabHref) . '"') . ' role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($tabId) . '">';
+        echo
+            '<a class="admin-tab'
+                . ($isActive ? ' is-active' : '')
+                . '" id="'
+                . e($controlId)
+                . '"'
+                . (
+                    $disabled
+                        ? ' aria-disabled="true"'
+                        : ' href="' . e($tabHref) . '"'
+                )
+                . ' role="tab" aria-controls="'
+                . e($tabId)
+                . '" aria-selected="'
+                . ($isActive ? 'true' : 'false')
+                . '" tabindex="'
+                . ($isActive ? '0' : '-1')
+                . '" data-admin-tab-target="'
+                . e($tabId)
+                . '">';
         echo '<span>' . e($tabLabel) . '</span>';
-        if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
-            echo '<span class="admin-tab-badge">' . e((string) $tab['badge']) . '</span>';
+        if (
+            array_key_exists('badge', $tab)
+            && $tab['badge'] !== null
+            && $tab['badge'] !== ''
+        ) {
+            echo
+                '<span class="admin-tab-badge">'
+                    . e((string) $tab['badge'])
+                    . '</span>';
         }
         echo '</a>';
     }
@@ -198,23 +401,32 @@ function view_render_admin_tabs(array $tabs, string $activeId = ''): void
 }
 
 /**
- * Handle view render admin tab panel.
+ * Render one Admin tab panel.
  *
  * Used by server-rendered view helpers.
  *
  * @param string $id Identifier value.
  * @param string $contentHtml Content html HTML markup.
  * @param bool $active Active value.
+ * @return void Emits the panel section and its prepared HTML.
  */
-function view_render_admin_tab_panel(string $id, string $contentHtml, bool $active = false): void
-{
+function view_render_admin_tab_panel(
+    string $id,
+    string $contentHtml,
+    bool $active = false,
+): void {
     $controlId = $id . '-control';
-    echo '<section class="panel admin-tab-panel' . ($active ? ' is-active' : '') . '" id="' . e($id) . '" role="tabpanel" aria-labelledby="' . e($controlId) . '" data-admin-tab-panel>';
+    echo
+        '<section class="panel admin-tab-panel'
+            . ($active ? ' is-active' : '')
+            . '" id="'
+            . e($id)
+            . '" role="tabpanel" aria-labelledby="'
+            . e($controlId)
+            . '" data-admin-tab-panel>';
     echo $contentHtml;
     echo '</section>';
 }
-
-
 
 /**
  * Render one reusable admin subtab control row.
@@ -229,8 +441,11 @@ function view_render_admin_tab_panel(string $id, string $contentHtml, bool $acti
  * @param string $ariaLabel Accessible label for this subtab group.
  * @return void Emits escaped labels and fixed decorative SVG for recognized icons.
  */
-function view_render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLabel = ''): void
-{
+function view_render_admin_subtabs(
+    array $tabs,
+    string $activeId = '',
+    string $ariaLabel = '',
+): void {
     $resolvedActiveId = $activeId;
     if ($resolvedActiveId === '') {
         foreach ($tabs as $tab) {
@@ -244,8 +459,13 @@ function view_render_admin_subtabs(array $tabs, string $activeId = '', string $a
         $resolvedActiveId = (string) $tabs[0]['id'];
     }
 
-    $resolvedAriaLabel = $ariaLabel !== '' ? $ariaLabel : t('admin.subtabs.aria_sections', 'Admin subsection tabs');
-    echo '<nav class="admin-subtabs" data-admin-subtabs aria-label="' . e($resolvedAriaLabel) . '">';
+    $resolvedAriaLabel = $ariaLabel !== ''
+        ? $ariaLabel
+        : t('admin.subtabs.aria_sections', 'Admin subsection tabs');
+    echo
+        '<nav class="admin-subtabs" data-admin-subtabs aria-label="'
+            . e($resolvedAriaLabel)
+            . '">';
     echo '<div class="admin-subtab-list" role="tablist">';
     foreach ($tabs as $tab) {
         $tabId = trim((string) ($tab['id'] ?? ''));
@@ -255,10 +475,34 @@ function view_render_admin_subtabs(array $tabs, string $activeId = '', string $a
         $tabLabel = (string) ($tab['label'] ?? $tabId);
         $isActive = $tabId === $resolvedActiveId;
         $controlId = $tabId . '-control';
-        echo '<button type="button" class="admin-subtab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '" role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-subtab-target="' . e($tabId) . '">';
-        echo '<span>' . view_admin_menu_icon((string) ($tab['icon'] ?? '')) . e($tabLabel) . '</span>';
-        if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
-            echo '<span class="admin-subtab-badge">' . e((string) $tab['badge']) . '</span>';
+        echo
+            '<button type="button" class="admin-subtab'
+                . ($isActive ? ' is-active' : '')
+                . '" id="'
+                . e($controlId)
+                . '" role="tab" aria-controls="'
+                . e($tabId)
+                . '" aria-selected="'
+                . ($isActive ? 'true' : 'false')
+                . '" tabindex="'
+                . ($isActive ? '0' : '-1')
+                . '" data-admin-subtab-target="'
+                . e($tabId)
+                . '">';
+        echo
+            '<span>'
+                . view_admin_menu_icon((string) ($tab['icon'] ?? ''))
+                . e($tabLabel)
+                . '</span>';
+        if (
+            array_key_exists('badge', $tab)
+            && $tab['badge'] !== null
+            && $tab['badge'] !== ''
+        ) {
+            echo
+                '<span class="admin-subtab-badge">'
+                    . e((string) $tab['badge'])
+                    . '</span>';
         }
         echo '</button>';
     }
@@ -275,11 +519,22 @@ function view_render_admin_subtabs(array $tabs, string $activeId = '', string $a
  * @param string $id Panel id referenced by the matching subtab.
  * @param string $contentHtml Trusted admin HTML rendered by the caller.
  * @param bool $active Whether the panel should start selected.
+ * @return void Emits the panel section and its prepared HTML.
  */
-function view_render_admin_subtab_panel(string $id, string $contentHtml, bool $active = false): void
-{
+function view_render_admin_subtab_panel(
+    string $id,
+    string $contentHtml,
+    bool $active = false,
+): void {
     $controlId = $id . '-control';
-    echo '<section class="admin-subtab-panel' . ($active ? ' is-active' : '') . '" id="' . e($id) . '" role="tabpanel" aria-labelledby="' . e($controlId) . '" data-admin-subtab-panel>';
+    echo
+        '<section class="admin-subtab-panel'
+            . ($active ? ' is-active' : '')
+            . '" id="'
+            . e($id)
+            . '" role="tabpanel" aria-labelledby="'
+            . e($controlId)
+            . '" data-admin-subtab-panel>';
     echo $contentHtml;
     echo '</section>';
 }
@@ -294,20 +549,32 @@ function view_render_admin_subtab_panel(string $id, string $contentHtml, bool $a
  * @param string $label Label value.
  * @return string Text result for the caller.
  */
-function view_render_admin_feature_flag(bool $enabled, string $symbolHtml, string $label): string
-{
+function view_render_admin_feature_flag(
+    bool $enabled,
+    string $symbolHtml,
+    string $label,
+): string {
     if (!$enabled) {
         return '';
     }
-    return '<span class="admin-flag is-enabled" title="' . e($label) . '" aria-label="' . e($label) . '">' . $symbolHtml . '</span>';
+    return (
+        '<span class="admin-flag is-enabled" title="'
+            . e($label)
+            . '" aria-label="'
+            . e($label)
+            . '">'
+            . $symbolHtml
+            . '</span>'
+    );
 }
 
 /**
- * Handle view render admin thumbnail maintenance notice.
+ * Render the thumbnail maintenance notice when repairs are needed.
  *
  * Used by server-rendered view helpers.
  *
- * @param array $summary Summary value.
+ * @param array{images_with_missing:int,missing_variants:int,limited:bool} $summary Prepared thumbnail maintenance totals.
+ * @return void Emits a notice unless it has no findings or was dismissed.
  */
 function view_render_admin_thumbnail_maintenance_notice(array $summary): void
 {
@@ -322,24 +589,68 @@ function view_render_admin_thumbnail_maintenance_notice(array $summary): void
     echo '<div class="notice admin-thumbnail-maintenance-notice">';
     echo '<div class="admin-thumbnail-maintenance-copy">';
     if (($summary['images_with_missing'] ?? 0) > 0) {
-        echo '<strong>' . e(t('admin.thumbnails.maintenance_required', 'Thumbnail maintenance required.')) . '</strong> ';
-        echo e(t('admin.thumbnails.missing_images_value', '{count} image(s) are missing optimized thumbnails or have stale thumbnail files.', ['count' => (string) $summary['images_with_missing']])) . ' ';
-        echo e(t('admin.thumbnails.missing_variants_value', '{count} thumbnail variant(s) need to be created.', ['count' => (string) $summary['missing_variants']])) . ' ';
+        echo
+            '<strong>'
+                . e(t(
+                    'admin.thumbnails.maintenance_required',
+                    'Thumbnail maintenance required.',
+                ))
+                . '</strong> ';
+        echo
+            e(t(
+                'admin.thumbnails.missing_images_value',
+                '{count} image(s) are missing optimized thumbnails or have stale thumbnail files.',
+                ['count' => (string) $summary['images_with_missing']],
+            )) . ' ';
+        echo
+            e(t(
+                'admin.thumbnails.missing_variants_value',
+                '{count} thumbnail variant(s) need to be created.',
+                ['count' => (string) $summary['missing_variants']],
+            )) . ' ';
         if (!empty($summary['limited'])) {
-            echo e(t('admin.thumbnails.limited_scan_value', 'Only the first {count} image(s) were checked, so more may be pending.', ['count' => (string) $summary['images_scanned']])) . ' ';
+            echo
+                e(t(
+                    'admin.thumbnails.limited_scan_value',
+                    'Only the first {count} image(s) were checked, so more may be pending.',
+                    ['count' => (string) $summary['images_scanned']],
+                )) . ' ';
         }
-        echo t('admin.thumbnails.public_visitors_do_not_generate', 'Public visitors will not generate these thumbnails while browsing. Use <strong>Create all thumbnails</strong> in the admin toolbar.');
+        echo t(
+            'admin.thumbnails.public_visitors_do_not_generate',
+            'Public visitors will not generate these thumbnails while browsing. Use <strong>Create all thumbnails</strong> in the admin toolbar.',
+        );
     }
     if (($summary['webp_skipped'] ?? 0) > 0) {
-        echo (($summary['images_with_missing'] ?? 0) > 0 ? '<br>' : '');
-        echo e(t('admin.thumbnails.webp_skipped_exif', 'Some WebP variants are intentionally skipped because the source images contain EXIF metadata and this server cannot preserve EXIF during WebP conversion.'));
+        echo ($summary['images_with_missing'] ?? 0) > 0 ? '<br>' : '';
+        echo e(t(
+            'admin.thumbnails.webp_skipped_exif',
+            'Some WebP variants are intentionally skipped because the source images contain EXIF metadata and this server cannot preserve EXIF during WebP conversion.',
+        ));
     }
     echo '</div>';
-    echo '<form method="post" action="' . e(url_for('admin_dismiss_thumbnail_notice')) . '" class="admin-thumbnail-maintenance-dismiss" data-thumbnail-maintenance-form>';
+    echo
+        '<form method="post" action="'
+            . e(url_for('admin_dismiss_thumbnail_notice'))
+            . '" class="admin-thumbnail-maintenance-dismiss" data-thumbnail-maintenance-form>';
     echo csrf_field();
-    echo '<input type="hidden" name="thumbnail_inventory_fingerprint" value="' . e((string) ($summary['inventory_fingerprint'] ?? '')) . '">';
-    echo '<button type="submit" class="secondary" formaction="' . e(url_for('admin_create_thumbnails')) . '" name="scope" value="missing" data-create-missing-thumbnails>' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.thumbnails.dismiss_7_days', 'Dismiss for 7 days')) . '</button>';
+    echo
+        '<input type="hidden" name="thumbnail_inventory_fingerprint" value="'
+            . e((string) ($summary['inventory_fingerprint'] ?? ''))
+            . '">';
+    echo
+        '<button type="submit" class="secondary" formaction="'
+            . e(url_for('admin_create_thumbnails'))
+            . '" name="scope" value="missing" data-create-missing-thumbnails>'
+            . e(t(
+                'admin.thumbnails.create_missing',
+                'Create missing thumbnails',
+            ))
+            . '</button>';
+    echo
+        '<button type="submit" class="secondary">'
+            . e(t('admin.thumbnails.dismiss_7_days', 'Dismiss for 7 days'))
+            . '</button>';
     echo '</form>';
     echo '</div>';
 }
@@ -355,22 +666,43 @@ function view_render_admin_thumbnail_maintenance_notice(array $summary): void
  */
 function view_render_admin_sidebar(string $currentPage, array $model = []): void
 {
-    echo '<aside class="admin-sidebar" aria-label="' . e(t('admin.menu.aria_navigation', 'Admin navigation')) . '">';
-    echo '<div class="admin-sidebar-title">' . e(t('admin.menu.title', 'Admin')) . '</div>';
+    echo
+        '<aside class="admin-sidebar" aria-label="'
+            . e(t('admin.menu.aria_navigation', 'Admin navigation'))
+            . '">';
+    echo
+        '<div class="admin-sidebar-title">'
+            . e(t('admin.menu.title', 'Admin'))
+            . '</div>';
     foreach (view_admin_menu_structure($model) as $group) {
         echo '<section class="admin-menu-group">';
         echo '<h2>' . e((string) $group['label']) . '</h2>';
         echo '<nav class="admin-menu-links">';
         foreach ((array) $group['items'] as $item) {
             $featureKey = (string) ($item['feature'] ?? '');
-            $featureStates = is_array($model['feature_enabled'] ?? null) ? $model['feature_enabled'] : [];
-            $featureEnabled = $featureKey === '' || !empty($featureStates[$featureKey]);
+            $featureStates = is_array($model['feature_enabled'] ?? null)
+                ? $model['feature_enabled']
+                : [];
+            $featureEnabled =
+                $featureKey === '' || !empty($featureStates[$featureKey]);
             if (!$featureEnabled) {
                 continue;
             }
-            $activeClass = view_admin_menu_item_is_active($item, $currentPage) ? ' is-active' : '';
-            $highlightClass = !empty($item['highlight']) ? ' is-update-pending' : '';
-            echo '<a class="admin-menu-link' . e($activeClass . $highlightClass) . '" href="' . e((string) $item['url']) . '">' . view_admin_menu_icon((string) ($item['icon'] ?? '')) . e((string) $item['label']) . '</a>';
+            $activeClass = view_admin_menu_item_is_active($item, $currentPage)
+                ? ' is-active'
+                : '';
+            $highlightClass = !empty($item['highlight'])
+                ? ' is-update-pending'
+                : '';
+            echo
+                '<a class="admin-menu-link'
+                    . e($activeClass . $highlightClass)
+                    . '" href="'
+                    . e((string) $item['url'])
+                    . '">'
+                    . view_admin_menu_icon((string) ($item['icon'] ?? ''))
+                    . e((string) $item['label'])
+                    . '</a>';
         }
         echo '</nav></section>';
     }
@@ -378,16 +710,24 @@ function view_render_admin_sidebar(string $currentPage, array $model = []): void
 }
 
 /**
- * Handle view render missing admin email notice.
+ * Render a notice when the signed-in administrator has no recovery email.
  *
  * Used by server-rendered view helpers.
  *
  * @param ?array $user User value.
  * @param string $currentPage Current page value.
+ * @return void Emits the notice when applicable.
  */
-function view_render_missing_admin_email_notice(?array $user, string $currentPage): void
-{
-    if (!$user || $currentPage === 'admin_login' || $currentPage === 'admin_logout' || $currentPage === 'setup') {
+function view_render_missing_admin_email_notice(
+    ?array $user,
+    string $currentPage,
+): void {
+    if (
+        !$user
+        || $currentPage === 'admin_login'
+        || $currentPage === 'admin_logout'
+        || $currentPage === 'setup'
+    ) {
         return;
     }
     if (trim((string) ($user['email'] ?? '')) !== '') {
@@ -395,8 +735,25 @@ function view_render_missing_admin_email_notice(?array $user, string $currentPag
     }
 
     echo '<div class="notice admin-account-notice">';
-    echo '<strong>' . e(t('admin.account.notice_recovery_email_missing_title', 'Recovery email missing.')) . '</strong> ';
-    echo e(t('admin.account.notice_recovery_email_missing_body', 'Add an email address to your account so username-or-email login works and the app is ready for future account recovery.'));
-    echo ' <a href="' . e(url_for('admin_account')) . '">' . e(t('admin.account.open_account_settings', 'Open account settings')) . '</a>';
+    echo
+        '<strong>'
+            . e(t(
+                'admin.account.notice_recovery_email_missing_title',
+                'Recovery email missing.',
+            ))
+            . '</strong> ';
+    echo e(t(
+        'admin.account.notice_recovery_email_missing_body',
+        'Add an email address to your account so username-or-email login works and the app is ready for future account recovery.',
+    ));
+    echo
+        ' <a href="'
+            . e(url_for('admin_account'))
+            . '">'
+            . e(t(
+                'admin.account.open_account_settings',
+                'Open account settings',
+            ))
+            . '</a>';
     echo '</div>';
 }

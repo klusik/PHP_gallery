@@ -10,5 +10,10 @@
  * License: MIT License (see LICENSE file in repository)
  */
 declare(strict_types=1);
-require dirname(__DIR__, 2).'/app/services/translations.php';
-echo json_encode(['defaults'=>\Gallery\Services\translation_public_language_selector_design_defaults(), 'bounds'=>\Gallery\Services\translation_public_language_selector_design_numeric_bounds()], JSON_THROW_ON_ERROR);
+require dirname(__DIR__, 2) . '/app/services/translations.php';
+echo json_encode([
+    'defaults' =>
+        \Gallery\Services\translation_public_language_selector_design_defaults(),
+    'bounds' =>
+        \Gallery\Services\translation_public_language_selector_design_numeric_bounds(),
+], JSON_THROW_ON_ERROR);

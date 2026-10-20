@@ -68,7 +68,10 @@ namespace Gallery\Services {
      */
     function move_uploaded_file(string $source, string $destination): bool
     {
-        return empty($GLOBALS['theme_replace_fail_move']) && \rename($source, $destination);
+        return (
+            empty($GLOBALS['theme_replace_fail_move'])
+                && \rename($source, $destination)
+        );
     }
 
     /**
@@ -80,7 +83,10 @@ namespace Gallery\Services {
      */
     function rename(string $source, string $destination): bool
     {
-        return empty($GLOBALS['theme_replace_fail_rename']) && \rename($source, $destination);
+        return (
+            empty($GLOBALS['theme_replace_fail_rename'])
+                && \rename($source, $destination)
+        );
     }
 
     /**
@@ -138,35 +144,56 @@ namespace {
      * @param string $message Failure description.
      * @return void No value after expected rejection.
      */
-    function theme_replacement_refused(callable $operation, string $message): void
-    {
+    function theme_replacement_refused(
+        callable $operation,
+        string $message,
+    ): void {
         try {
             $operation();
         } catch (RuntimeException) {
             return;
         }
-        throw new RuntimeException($message . ': the injected failure was accepted.');
+        throw new RuntimeException($message
+            . ': the injected failure was accepted.');
     }
 
-    $root = sys_get_temp_dir() . '/php-gallery-theme-replace-' . bin2hex(random_bytes(10));
+    $root =
+        sys_get_temp_dir()
+        . '/php-gallery-theme-replace-'
+        . bin2hex(random_bytes(10));
     $serviceDir = $root . '/app/services';
     $backgroundDir = $root . '/cache/theme-background';
     $brandingDir = $root . '/cache/theme-branding';
     foreach ([$serviceDir, $backgroundDir, $brandingDir] as $directory) {
         if (!mkdir($directory, 0700, true)) {
-            throw new RuntimeException('Unable to create disposable Theme module fixture.');
+            throw new RuntimeException(
+                'Unable to create disposable Theme module fixture.',
+            );
         }
     }
     if (!mkdir($serviceDir . '/gallery_backgrounds', 0700, true)) {
-        throw new RuntimeException('Unable to create the disposable Theme background module part directory.');
+        throw new RuntimeException(
+            'Unable to create the disposable Theme background module part directory.',
+        );
     }
     foreach (['gallery_backgrounds.php', 'gallery_branding.php'] as $module) {
-        if (!copy(dirname(__DIR__) . '/app/services/' . $module, $serviceDir . '/' . $module)) {
-            throw new RuntimeException('Unable to stage isolated Theme service.');
+        if (!copy(
+            dirname(__DIR__) . '/app/services/' . $module,
+            $serviceDir . '/' . $module,
+        )) {
+            throw new RuntimeException(
+                'Unable to stage isolated Theme service.',
+            );
         }
     }
-    if (!copy(dirname(__DIR__) . '/app/services/gallery_backgrounds/visual_css_save.php', $serviceDir . '/gallery_backgrounds/visual_css_save.php')) {
-        throw new RuntimeException('Unable to stage the isolated Theme background module part.');
+    if (!copy(
+        dirname(__DIR__)
+            . '/app/services/gallery_backgrounds/visual_css_save.php',
+        $serviceDir . '/gallery_backgrounds/visual_css_save.php',
+    )) {
+        throw new RuntimeException(
+            'Unable to stage the isolated Theme background module part.',
+        );
     }
     file_put_contents($serviceDir . '/gallery_edit_concurrency.php', "<?php\n");
     require $serviceDir . '/gallery_backgrounds.php';
@@ -192,61 +219,83 @@ namespace {
 
         $GLOBALS['theme_replace_fail_move'] = true;
         theme_replacement_refused(
-            static fn (): string => \Gallery\Services\store_uploaded_theme_background(theme_replacement_upload($incoming, 'new-original')),
-            'Failed background upload'
+            static fn(): string => \Gallery\Services\store_uploaded_theme_background(theme_replacement_upload(
+                $incoming,
+                'new-original',
+            )),
+            'Failed background upload',
         );
         theme_replacement_refused(
-            static fn (): string => \Gallery\Services\store_uploaded_theme_branding_asset('banner', theme_replacement_upload($incoming, 'new-banner')),
-            'Failed branding upload'
+            static fn(): string => \Gallery\Services\store_uploaded_theme_branding_asset('banner', theme_replacement_upload(
+                $incoming,
+                'new-banner',
+            )),
+            'Failed branding upload',
         );
         theme_replacement_check(
             file_get_contents($oldOriginal) === 'previous-original'
                 && file_get_contents($oldDerivative) === 'previous-optimized'
                 && file_get_contents($oldBanner) === 'previous-banner'
-                && file_get_contents($oldBannerWebp) === 'previous-banner-format'
+                && file_get_contents($oldBannerWebp)
+                    === 'previous-banner-format'
                 && $GLOBALS['theme_replace_settings'] === $oldSettings,
-            'Failure before staging must preserve all previous Theme media and settings.'
+            'Failure before staging must preserve all previous Theme media and settings.',
         );
 
         $GLOBALS['theme_replace_fail_move'] = false;
         $GLOBALS['theme_replace_fail_rename'] = true;
         theme_replacement_refused(
-            static fn (): string => \Gallery\Services\store_uploaded_theme_background(theme_replacement_upload($incoming, 'new-original')),
-            'Failed background finalize'
+            static fn(): string => \Gallery\Services\store_uploaded_theme_background(theme_replacement_upload(
+                $incoming,
+                'new-original',
+            )),
+            'Failed background finalize',
         );
         theme_replacement_refused(
-            static fn (): string => \Gallery\Services\store_uploaded_theme_branding_asset('banner', theme_replacement_upload($incoming, 'new-banner')),
-            'Failed branding finalize'
+            static fn(): string => \Gallery\Services\store_uploaded_theme_branding_asset('banner', theme_replacement_upload(
+                $incoming,
+                'new-banner',
+            )),
+            'Failed branding finalize',
         );
         theme_replacement_check(
             file_get_contents($oldOriginal) === 'previous-original'
                 && file_get_contents($oldDerivative) === 'previous-optimized'
                 && file_get_contents($oldBanner) === 'previous-banner'
-                && file_get_contents($oldBannerWebp) === 'previous-banner-format'
+                && file_get_contents($oldBannerWebp)
+                    === 'previous-banner-format'
                 && $GLOBALS['theme_replace_settings'] === $oldSettings,
-            'Failed replacement rename must not discard existing Theme images or settings.'
+            'Failed replacement rename must not discard existing Theme images or settings.',
         );
         theme_replacement_check(
             (glob($backgroundDir . '/.background-upload-*') ?: []) === []
                 && (glob($brandingDir . '/.upload-banner-*') ?: []) === [],
-            'Failed Theme replacement must clean temporary staging files.'
+            'Failed Theme replacement must clean temporary staging files.',
         );
 
         $GLOBALS['theme_replace_fail_rename'] = false;
-        \Gallery\Services\store_uploaded_theme_branding_asset('banner', theme_replacement_upload($incoming, 'new-banner'));
+        \Gallery\Services\store_uploaded_theme_branding_asset('banner', theme_replacement_upload(
+            $incoming,
+            'new-banner',
+        ));
         theme_replacement_check(
             file_get_contents($oldBanner) === 'new-banner'
                 && !is_file($oldBannerWebp)
-                && $GLOBALS['theme_replace_settings']['theme_branding_banner_path'] === 'cache/theme-branding/banner.png',
-            'Successful branding replacement must update the file and remove the obsolete format.'
+                && $GLOBALS['theme_replace_settings']['theme_branding_banner_path']
+                    === 'cache/theme-branding/banner.png',
+            'Successful branding replacement must update the file and remove the obsolete format.',
         );
 
-        \Gallery\Services\store_uploaded_theme_background(theme_replacement_upload($incoming, 'new-original'));
+        \Gallery\Services\store_uploaded_theme_background(theme_replacement_upload(
+            $incoming,
+            'new-original',
+        ));
         theme_replacement_check(
             file_get_contents($oldOriginal) === 'new-original'
                 && !is_file($oldDerivative)
-                && $GLOBALS['theme_replace_settings']['theme_background_original_path'] === 'cache/theme-background/background-original.png',
-            'Successful Theme background replacement must update the original after staging.'
+                && $GLOBALS['theme_replace_settings']['theme_background_original_path']
+                    === 'cache/theme-background/background-original.png',
+            'Successful Theme background replacement must update the original after staging.',
         );
 
         echo "Theme asset replacement failure preservation passed.\n";
@@ -267,7 +316,12 @@ namespace {
                 @unlink($path);
             }
         }
-        foreach (['gallery_backgrounds.php', 'gallery_backgrounds/visual_css_save.php', 'gallery_branding.php', 'gallery_edit_concurrency.php'] as $module) {
+        foreach ([
+            'gallery_backgrounds.php',
+            'gallery_backgrounds/visual_css_save.php',
+            'gallery_branding.php',
+            'gallery_edit_concurrency.php',
+        ] as $module) {
             @unlink($serviceDir . '/' . $module);
         }
         @unlink($incoming);

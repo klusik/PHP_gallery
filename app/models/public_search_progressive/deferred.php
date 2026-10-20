@@ -38,7 +38,6 @@ declare(strict_types=1);
 
 namespace Gallery\Models;
 
-
 /**
  * Fetch galleries whose canonical description contains the query.
  *
@@ -48,12 +47,21 @@ namespace Gallery\Models;
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw gallery rows.
  */
-function public_search_model_gallery_description_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
-{
+function public_search_model_gallery_description_rows(
+    string $query,
+    bool $listedOnly,
+    ?array $contextGallery,
+    int $limit,
+): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $sql = "SELECT g.id, g.title
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $sql =
+        "SELECT g.id, g.title
         FROM galleries g
         WHERE $listingCondition
           AND g.description LIKE ?
@@ -62,7 +70,7 @@ function public_search_model_gallery_description_rows(string $query, bool $liste
     return public_search_diagnostics_fetch_all(
         'descriptive.gallery_description_candidates',
         $sql,
-        array_merge($contextParams, [$like])
+        array_merge($contextParams, [$like]),
     );
 }
 
@@ -75,12 +83,21 @@ function public_search_model_gallery_description_rows(string $query, bool $liste
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw gallery rows.
  */
-function public_search_model_gallery_tag_description_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
-{
+function public_search_model_gallery_tag_description_rows(
+    string $query,
+    bool $listedOnly,
+    ?array $contextGallery,
+    int $limit,
+): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $sql = "SELECT g.id, g.title
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $sql =
+        "SELECT g.id, g.title
         FROM (
             SELECT DISTINCT gt.gallery_id
             FROM tags t
@@ -94,7 +111,7 @@ function public_search_model_gallery_tag_description_rows(string $query, bool $l
     return public_search_diagnostics_fetch_all(
         'descriptive.gallery_tag_description_candidates',
         $sql,
-        array_merge([$like], $contextParams)
+        array_merge([$like], $contextParams),
     );
 }
 
@@ -108,12 +125,22 @@ function public_search_model_gallery_tag_description_rows(string $query, bool $l
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw translated gallery rows.
  */
-function public_search_model_gallery_translated_title_rows(string $language, string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
-{
+function public_search_model_gallery_translated_title_rows(
+    string $language,
+    string $query,
+    bool $listedOnly,
+    ?array $contextGallery,
+    int $limit,
+): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $sql = "SELECT g.id, COALESCE(NULLIF(tr.title, ''), g.title) AS title_sort
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $sql =
+        "SELECT g.id, COALESCE(NULLIF(tr.title, ''), g.title) AS title_sort
         FROM gallery_translations tr
         INNER JOIN galleries g ON g.id = tr.gallery_id
         WHERE tr.language_code = ?
@@ -124,7 +151,7 @@ function public_search_model_gallery_translated_title_rows(string $language, str
     return public_search_diagnostics_fetch_all(
         'descriptive.gallery_translated_title_candidates',
         $sql,
-        array_merge([$language, $like], $contextParams)
+        array_merge([$language, $like], $contextParams),
     );
 }
 
@@ -138,12 +165,22 @@ function public_search_model_gallery_translated_title_rows(string $language, str
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw translated gallery rows.
  */
-function public_search_model_gallery_translated_description_rows(string $language, string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
-{
+function public_search_model_gallery_translated_description_rows(
+    string $language,
+    string $query,
+    bool $listedOnly,
+    ?array $contextGallery,
+    int $limit,
+): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $sql = "SELECT g.id, COALESCE(NULLIF(tr.title, ''), g.title) AS title_sort
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $sql =
+        "SELECT g.id, COALESCE(NULLIF(tr.title, ''), g.title) AS title_sort
         FROM gallery_translations tr
         INNER JOIN galleries g ON g.id = tr.gallery_id
         WHERE tr.language_code = ?
@@ -154,7 +191,7 @@ function public_search_model_gallery_translated_description_rows(string $languag
     return public_search_diagnostics_fetch_all(
         'deep.gallery_translated_description_candidates',
         $sql,
-        array_merge([$language, $like], $contextParams)
+        array_merge([$language, $like], $contextParams),
     );
 }
 
@@ -167,12 +204,21 @@ function public_search_model_gallery_translated_description_rows(string $languag
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image rows.
  */
-function public_search_model_image_description_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
-{
+function public_search_model_image_description_rows(
+    string $query,
+    bool $listedOnly,
+    ?array $contextGallery,
+    int $limit,
+): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $sql = "SELECT i.id, i.filename, i.title
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $sql =
+        "SELECT i.id, i.filename, i.title
         FROM images i
         INNER JOIN galleries g ON g.id = i.gallery_id
         WHERE i.visibility = 'public'
@@ -183,7 +229,7 @@ function public_search_model_image_description_rows(string $query, bool $listedO
     return public_search_diagnostics_fetch_all(
         'deep.image_description_candidates',
         $sql,
-        array_merge($contextParams, [$like])
+        array_merge($contextParams, [$like]),
     );
 }
 
@@ -198,12 +244,21 @@ function public_search_model_image_description_rows(string $query, bool $listedO
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image rows.
  */
-function public_search_model_image_tag_description_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
-{
+function public_search_model_image_tag_description_rows(
+    string $query,
+    bool $listedOnly,
+    ?array $contextGallery,
+    int $limit,
+): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $sql = "SELECT i.id, i.filename, i.title
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $sql =
+        "SELECT i.id, i.filename, i.title
         FROM (
             SELECT DISTINCT it.image_id
             FROM tags t
@@ -219,21 +274,21 @@ function public_search_model_image_tag_description_rows(string $query, bool $lis
     return public_search_diagnostics_fetch_all(
         'deep.image_tag_description_candidates',
         $sql,
-        array_merge([$like], $contextParams)
+        array_merge([$like], $contextParams),
     );
 }
 
 /**
  * Fetch public images through translated title/description metadata.
  *
- * @param string $language Active content language.
- * @param string $like Escaped substring LIKE pattern.
+  * @param string $language Active content language.
+ * @param string $query Normalized translated-title or description query.
  * @param int $titleScore Relevance score for translated title matches.
  * @param int $descriptionScore Relevance score for translated description matches.
- * @param string $listingCondition Hardcoded public-listing SQL condition.
- * @param array<int, mixed> $contextParams Bound branch-scope values.
- * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw translated image rows with match score.
+ * @param bool $listedOnly Whether public access policy requires listed galleries.
+ * @param ?array<string,mixed> $contextGallery Optional authorized gallery-branch context.
+ * @param int $limit Maximum translated image rows returned.
+ * @return list<array{id:int|string,filename:string,title:string,title_sort:string,match_score:int|string}> Raw translated image candidates with their relevance score.
  */
 function public_search_model_image_translation_rows(
     string $language,
@@ -242,12 +297,17 @@ function public_search_model_image_translation_rows(
     int $descriptionScore,
     bool $listedOnly,
     ?array $contextGallery,
-    int $limit
+    int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $sql = "SELECT i.id, i.filename, i.title,
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $sql =
+        "SELECT i.id, i.filename, i.title,
             COALESCE(NULLIF(tr.title, ''), NULLIF(i.title, ''), i.filename) AS title_sort,
             CASE
                 WHEN tr.title LIKE ? THEN $titleScore
@@ -266,7 +326,7 @@ function public_search_model_image_translation_rows(
     return public_search_diagnostics_fetch_all(
         'deep.image_translation_candidates',
         $sql,
-        array_merge([$like, $like, $language, $like, $like], $contextParams)
+        array_merge([$like, $like, $language, $like, $like], $contextParams),
     );
 }
 
@@ -281,12 +341,21 @@ function public_search_model_image_translation_rows(
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image rows.
  */
-function public_search_model_image_ai_rows(string $query, bool $listedOnly, ?array $contextGallery, int $limit): array
-{
+function public_search_model_image_ai_rows(
+    string $query,
+    bool $listedOnly,
+    ?array $contextGallery,
+    int $limit,
+): array {
     $limit = max(1, min(90, $limit));
     $like = public_search_model_like_pattern($query);
-    [$listingCondition, $contextParams] = public_search_model_listing_scope('g', $listedOnly, $contextGallery);
-    $sql = "SELECT i.id, i.filename, i.title
+    [$listingCondition, $contextParams] = public_search_model_listing_scope(
+        'g',
+        $listedOnly,
+        $contextGallery,
+    );
+    $sql =
+        "SELECT i.id, i.filename, i.title
         FROM (
             SELECT DISTINCT m.image_id
             FROM image_ai_metadata m
@@ -301,6 +370,6 @@ function public_search_model_image_ai_rows(string $query, bool $listedOnly, ?arr
     return public_search_diagnostics_fetch_all(
         'deep.image_ai_candidates',
         $sql,
-        array_merge([$like], $contextParams)
+        array_merge([$like], $contextParams),
     );
 }

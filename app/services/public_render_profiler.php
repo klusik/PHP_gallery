@@ -37,7 +37,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use function Gallery\Core\asset_url;
 use function Gallery\Core\current_user;
 use function Gallery\Core\csrf_token;
@@ -56,7 +55,10 @@ function public_render_profile_enabled(): bool
     if (!function_exists('Gallery\\Core\\current_user')) {
         return false;
     }
-    if (function_exists(__NAMESPACE__ . '\\dev_mode_enabled') && !dev_mode_enabled()) {
+    if (
+        function_exists(__NAMESPACE__ . '\\dev_mode_enabled')
+        && !dev_mode_enabled()
+    ) {
         return false;
     }
     return current_user() !== null;
@@ -112,13 +114,16 @@ function &public_render_profile_state(): array
  *
  * @param string $route Route value.
  * @param ?int $galleryId Gallery identifier.
+ * @return void Updates request-local profiling state when profiling is enabled.
  */
-function public_render_profile_start(string $route, ?int $galleryId = null): void
-{
+function public_render_profile_start(
+    string $route,
+    ?int $galleryId = null,
+): void {
     if (!public_render_profile_enabled()) {
         return;
     }
-    $state =& public_render_profile_state();
+    $state = &public_render_profile_state();
     $state['started_at'] = microtime(true);
     $state['route'] = $route;
     $state['gallery_id'] = $galleryId;
@@ -134,7 +139,7 @@ function public_render_profile_set_gallery(?int $galleryId): void
     if (!public_render_profile_enabled()) {
         return;
     }
-    $state =& public_render_profile_state();
+    $state = &public_render_profile_state();
     $state['gallery_id'] = $galleryId;
 }
 
@@ -149,7 +154,7 @@ function public_render_profile_count(string $counter, int $amount = 1): void
     if (!public_render_profile_enabled()) {
         return;
     }
-    $state =& public_render_profile_state();
+    $state = &public_render_profile_state();
     if (!array_key_exists($counter, $state['counters'])) {
         $state['counters'][$counter] = 0;
     }
@@ -166,7 +171,7 @@ function public_render_profile_thumbnail_purpose(): string
     if (!public_render_profile_enabled()) {
         return 'unprofiled';
     }
-    $state =& public_render_profile_state();
+    $state = &public_render_profile_state();
     $stack = $state['thumbnail_purpose_stack'] ?? [];
     if (!$stack) {
         return 'unlabeled';
@@ -179,15 +184,17 @@ function public_render_profile_thumbnail_purpose(): string
  *
  * @param string $purpose Purpose value.
  * @param callable():T $callback Callback invoked by this workflow.
- * @return T Result value for the caller.
+ * @return T Result returned unchanged by the callback, including when profiling is disabled.
  * @template T
  */
-function public_render_profile_with_thumbnail_purpose(string $purpose, callable $callback)
-{
+function public_render_profile_with_thumbnail_purpose(
+    string $purpose,
+    callable $callback,
+): mixed {
     if (!public_render_profile_enabled()) {
         return $callback();
     }
-    $state =& public_render_profile_state();
+    $state = &public_render_profile_state();
     $state['thumbnail_purpose_stack'][] = $purpose;
     try {
         return $callback();
@@ -204,14 +211,22 @@ function public_render_profile_with_thumbnail_purpose(string $purpose, callable 
  * @param string $format Format value.
  * @param string $kind Kind value.
  * @param float $elapsedMs Elapsed ms value.
+ * @return void Updates request-local profiling state when profiling is enabled.
  */
-function public_render_profile_record_thumbnail_purpose(?string $purpose, int $size, string $format, string $kind, float $elapsedMs = 0.0): void
-{
+function public_render_profile_record_thumbnail_purpose(
+    ?string $purpose,
+    int $size,
+    string $format,
+    string $kind,
+    float $elapsedMs = 0.0,
+): void {
     if (!public_render_profile_enabled()) {
         return;
     }
-    $state =& public_render_profile_state();
-    $label = trim((string) ($purpose ?: public_render_profile_thumbnail_purpose()));
+    $state = &public_render_profile_state();
+    $label = trim(
+        (string) ($purpose ?: public_render_profile_thumbnail_purpose()),
+    );
     if ($label === '') {
         $label = 'unlabeled';
     }
@@ -238,7 +253,10 @@ function public_render_profile_record_thumbnail_purpose(?string $purpose, int $s
     }
     if ($elapsedMs > 0.0) {
         $state['thumbnail_purposes'][$key]['total_ms'] += $elapsedMs;
-        $state['thumbnail_purposes'][$key]['max_ms'] = max($state['thumbnail_purposes'][$key]['max_ms'], $elapsedMs);
+        $state['thumbnail_purposes'][$key]['max_ms'] = max(
+            $state['thumbnail_purposes'][$key]['max_ms'],
+            $elapsedMs,
+        );
     }
 }
 
@@ -247,13 +265,14 @@ function public_render_profile_record_thumbnail_purpose(?string $purpose, int $s
  *
  * @param string $timer Timer value.
  * @param float $elapsedMs Elapsed ms value.
+ * @return void Updates request-local profiling state when profiling is enabled.
  */
 function public_render_profile_add_time(string $timer, float $elapsedMs): void
 {
     if (!public_render_profile_enabled()) {
         return;
     }
-    $state =& public_render_profile_state();
+    $state = &public_render_profile_state();
     if (!isset($state['timers'][$timer])) {
         $state['timers'][$timer] = [
             'count' => 0,
@@ -263,7 +282,10 @@ function public_render_profile_add_time(string $timer, float $elapsedMs): void
     }
     $state['timers'][$timer]['count']++;
     $state['timers'][$timer]['total_ms'] += $elapsedMs;
-    $state['timers'][$timer]['max_ms'] = max($state['timers'][$timer]['max_ms'], $elapsedMs);
+    $state['timers'][$timer]['max_ms'] = max(
+        $state['timers'][$timer]['max_ms'],
+        $elapsedMs,
+    );
 }
 
 /**
@@ -271,10 +293,10 @@ function public_render_profile_add_time(string $timer, float $elapsedMs): void
  *
  * @param string $timer Timer value.
  * @param callable():T $callback Callback invoked by this workflow.
- * @return T Result value for the caller.
+ * @return T Result returned unchanged by the callback, including when profiling is disabled.
  * @template T
  */
-function public_render_profile_span(string $timer, callable $callback)
+function public_render_profile_span(string $timer, callable $callback): mixed
 {
     if (!public_render_profile_enabled()) {
         return $callback();
@@ -283,7 +305,10 @@ function public_render_profile_span(string $timer, callable $callback)
     try {
         return $callback();
     } finally {
-        public_render_profile_add_time($timer, (microtime(true) - $startedAt) * 1000);
+        public_render_profile_add_time(
+            $timer,
+            (microtime(true) - $startedAt) * 1000,
+        );
     }
 }
 
@@ -347,10 +372,11 @@ function public_render_profile_is_file(string $path): bool
     try {
         return is_file($path);
     } finally {
-        public_render_profile_record_filesystem_check((microtime(true) - $startedAt) * 1000);
+        public_render_profile_record_filesystem_check(
+            (microtime(true) - $startedAt) * 1000,
+        );
     }
 }
-
 
 /**
  * Return a structured snapshot of the current public render profile state.
@@ -366,7 +392,7 @@ function public_render_profile_snapshot(): array
     if (!public_render_profile_enabled()) {
         return [];
     }
-    $state =& public_render_profile_state();
+    $state = &public_render_profile_state();
     $endedAt = microtime(true);
     $totalMs = ($endedAt - (float) $state['started_at']) * 1000;
     $timers = $state['timers'];
@@ -376,11 +402,21 @@ function public_render_profile_snapshot(): array
         'max_ms' => $totalMs,
     ];
     $thumbnailPurposes = $state['thumbnail_purposes'] ?? [];
-    uasort($timers, static fn (array $left, array $right): int => $right['total_ms'] <=> $left['total_ms']);
+    uasort(
+        $timers,
+        static fn(array $left, array $right): int => (
+            $right['total_ms'] <=> $left['total_ms']
+        ),
+    );
     if ($thumbnailPurposes) {
-        uasort($thumbnailPurposes, static function (array $left, array $right): int {
-            return (($right['total_ms'] ?? 0.0) <=> ($left['total_ms'] ?? 0.0))
-                ?: (($right['calls'] ?? 0) <=> ($left['calls'] ?? 0));
+        uasort($thumbnailPurposes, static function (
+            array $left,
+            array $right,
+        ): int {
+            return (
+                ($right['total_ms'] ?? 0.0) <=> ($left['total_ms'] ?? 0.0)
+                    ?: ($right['calls'] ?? 0) <=> ($left['calls'] ?? 0)
+            );
         });
     }
 
@@ -398,9 +434,16 @@ function public_render_profile_snapshot(): array
         'thumbnail_purposes' => array_values($thumbnailPurposes),
         'events' => $state['events'] ?? [],
         'request' => [
-            'method' => (string) (request_data('server')['REQUEST_METHOD'] ?? ''),
-            'request_uri' => (string) (request_data('server')['REQUEST_URI'] ?? ''),
-            'query_keys' => array_values(array_map('strval', array_keys(request_data('query')))),
+            'method' => (string) (
+                request_data('server')['REQUEST_METHOD'] ?? ''
+            ),
+            'request_uri' => (string) (
+                request_data('server')['REQUEST_URI'] ?? ''
+            ),
+            'query_keys' => array_values(array_map(
+                'strval',
+                array_keys(request_data('query')),
+            )),
         ],
     ];
 }
@@ -420,13 +463,17 @@ function public_render_profile_panel_model(): ?array
     }
 
     $snapshot = public_render_profile_snapshot();
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_active') && admin_test_run_active()
-        && function_exists(__NAMESPACE__ . '\\admin_test_run_record_component')) {
+    if (
+        function_exists(__NAMESPACE__ . '\\admin_test_run_active')
+        && admin_test_run_active()
+        && function_exists(__NAMESPACE__ . '\\admin_test_run_record_component')
+    ) {
         admin_test_run_record_component('public_render_profile', $snapshot);
     }
 
     // $thumbnailRenderingMode exposes only the validated machine mode to the admin-only browser diagnostics panel.
-    $thumbnailRenderingMode = (string) ($snapshot['route'] ?? '') === 'gallery' && function_exists('Gallery\\Services\\public_thumbnail_rendering_mode')
+    $thumbnailRenderingMode = (string) ($snapshot['route'] ?? '') === 'gallery'
+    && function_exists('Gallery\\Services\\public_thumbnail_rendering_mode')
         ? public_thumbnail_rendering_mode()
         : '';
 
@@ -440,7 +487,9 @@ function public_render_profile_panel_model(): ?array
             'browser_url' => url_for('admin_gallery_benchmark_browser'),
             'status_url' => url_for('admin_gallery_benchmark_status'),
             'php_probe_url' => url_for('admin_gallery_benchmark_probe'),
-            'static_probe_url' => asset_url('assets/gallery-benchmark-static-probe.txt'),
+            'static_probe_url' => asset_url(
+                'assets/gallery-benchmark-static-probe.txt',
+            ),
         ];
     }
 

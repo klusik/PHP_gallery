@@ -74,19 +74,27 @@ function view_gallery_description_utf8_excerpt(string $text, int $limit): string
  * @param int $limit Maximum number of items.
  * @return string Text result for the caller.
  */
-function view_gallery_description_markdown_excerpt(string $markdown, int $limit = 360): string
-{
+function view_gallery_description_markdown_excerpt(
+    string $markdown,
+    int $limit = 360,
+): string {
     $normalized = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
     if ($normalized === '') {
         return '';
     }
-    if (function_exists('mb_strlen') && mb_strlen($normalized, 'UTF-8') <= $limit) {
+    if (
+        function_exists('mb_strlen')
+        && mb_strlen($normalized, 'UTF-8') <= $limit
+    ) {
         return $normalized;
     }
     if (!function_exists('mb_strlen') && strlen($normalized) <= $limit) {
         return $normalized;
     }
-    $excerpt = view_gallery_description_utf8_excerpt($normalized, max(1, $limit - 6));
+    $excerpt = view_gallery_description_utf8_excerpt($normalized, max(
+        1,
+        $limit - 6,
+    ));
     $excerpt = preg_replace('/[ \t]+\S*$/u', '', $excerpt) ?: $excerpt;
     return rtrim($excerpt, " \t\n\r\0\x0B.,;:") . ' (...)';
 }
@@ -131,8 +139,10 @@ function view_gallery_description_link_url(string $url): ?string
  * @param string $domain Canonical lowercase domain to test.
  * @return bool True when the hostname belongs to the domain.
  */
-function view_gallery_description_link_host_matches(string $host, string $domain): bool
-{
+function view_gallery_description_link_host_matches(
+    string $host,
+    string $domain,
+): bool {
     return $host === $domain || str_ends_with($host, '.' . $domain);
 }
 
@@ -191,19 +201,29 @@ function view_gallery_description_link_icon_id(string $url): ?string
  * @param array<string,array{icon_id:?string,cached_url:?string}> $linkModels Presentation records keyed by normalized target URL.
  * @return string Safe inline SVG markup, or an empty string for unknown hosts.
  */
-function view_gallery_description_link_icon_html(string $url, array $linkModels = []): string
-{
+function view_gallery_description_link_icon_html(
+    string $url,
+    array $linkModels = [],
+): string {
     $iconId = view_gallery_description_link_icon_id($url);
     if ($iconId !== null) {
         $spriteUrl = asset_url('assets/link-icons/brands.svg');
-        return '<svg class="gallery-description-link-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16"><use href="' . e($spriteUrl . '#' . $iconId) . '"></use></svg>';
+        return (
+            '<svg class="gallery-description-link-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16"><use href="'
+                . e($spriteUrl . '#' . $iconId)
+                . '"></use></svg>'
+        );
     }
 
-    $cachedUrl = (string) (($linkModels[$url]['cached_url'] ?? '') ?: '');
+    $cachedUrl = (string) ($linkModels[$url]['cached_url'] ?? '' ?: '');
     if ($cachedUrl === '') {
         return '';
     }
-    return '<img class="gallery-description-link-icon gallery-description-link-favicon" src="' . e($cachedUrl) . '" alt="" aria-hidden="true" decoding="async">';
+    return (
+        '<img class="gallery-description-link-icon gallery-description-link-favicon" src="'
+            . e($cachedUrl)
+            . '" alt="" aria-hidden="true" decoding="async">'
+    );
 }
 
 /**
@@ -215,14 +235,25 @@ function view_gallery_description_link_icon_html(string $url, array $linkModels 
  * @param array<string,array{icon_id:?string,cached_url:?string}> $linkModels Presentation records keyed by normalized target URL.
  * @return string Safe anchor HTML or the unchanged fallback markup.
  */
-function view_gallery_description_link_html(string $url, string $label, string $fallback, array $linkModels = []): string
-{
+function view_gallery_description_link_html(
+    string $url,
+    string $label,
+    string $fallback,
+    array $linkModels = [],
+): string {
     $href = view_gallery_description_link_url($url);
     if ($href === null) {
         return $fallback;
     }
     $iconHtml = view_gallery_description_link_icon_html($href, $linkModels);
-    return '<a class="gallery-description-external-link" href="' . e($href) . '" rel="noopener noreferrer" target="_blank">' . $iconHtml . $label . '</a>';
+    return (
+        '<a class="gallery-description-external-link" href="'
+            . e($href)
+            . '" rel="noopener noreferrer" target="_blank">'
+            . $iconHtml
+            . $label
+            . '</a>'
+    );
 }
 
 /**
@@ -233,8 +264,11 @@ function view_gallery_description_link_html(string $url, string $label, string $
  * @param string $tokenPrefix Unique prefix for this description render.
  * @return string Opaque token that marks the protected fragment.
  */
-function view_gallery_description_register_token(string $value, array &$tokens, string $tokenPrefix): string
-{
+function view_gallery_description_register_token(
+    string $value,
+    array &$tokens,
+    string $tokenPrefix,
+): string {
     $token = $tokenPrefix . count($tokens) . "\x1E";
     $tokens[$token] = $value;
     return $token;
@@ -248,11 +282,18 @@ function view_gallery_description_register_token(string $value, array &$tokens, 
  * @param string $tokenPrefix Unique prefix for this description render.
  * @return string Text with known tokens replaced by their safe HTML fragments.
  */
-function view_gallery_description_resolve_tokens(string $value, array $tokens, string $tokenPrefix): string
-{
-    return preg_replace_callback('/' . preg_quote($tokenPrefix, '/') . '\d+\x1E/u', static function (array $matches) use ($tokens): string {
-        return $tokens[(string) $matches[0]] ?? $matches[0];
-    }, $value) ?? $value;
+function view_gallery_description_resolve_tokens(
+    string $value,
+    array $tokens,
+    string $tokenPrefix,
+): string {
+    return preg_replace_callback(
+        '/' . preg_quote($tokenPrefix, '/') . '\d+\x1E/u',
+        static function (array $matches) use ($tokens): string {
+            return $tokens[(string) $matches[0]] ?? $matches[0];
+        },
+        $value,
+    ) ?? $value;
 }
 
 /**
@@ -263,11 +304,21 @@ function view_gallery_description_resolve_tokens(string $value, array $tokens, s
  */
 function view_gallery_description_format_inline(string $value): string
 {
-    $value = preg_replace('/`([^`\n]+)`/u', '<code>$1</code>', $value) ?? $value;
-    $value = preg_replace('/\*\*([^*\n]+)\*\*/u', '<strong>$1</strong>', $value) ?? $value;
-    $value = preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $value) ?? $value;
-    $value = preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $value) ?? $value;
-    return preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $value) ?? $value;
+    $value =
+        preg_replace('/`([^`\n]+)`/u', '<code>$1</code>', $value) ?? $value;
+    $value =
+        preg_replace('/\*\*([^*\n]+)\*\*/u', '<strong>$1</strong>', $value)
+        ?? $value;
+    $value =
+        preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $value)
+        ?? $value;
+    $value =
+        preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $value)
+        ?? $value;
+    return (
+        preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $value)
+            ?? $value
+    );
 }
 
 /**
@@ -280,15 +331,18 @@ function view_gallery_description_format_inline(string $value): string
  * @param array<string,array{icon_id:?string,cached_url:?string}> $linkModels Presentation records keyed by normalized target URL.
  * @return string Rendered safe description HTML.
  */
-function view_gallery_description_markdown_html(string $markdown, array $linkModels = []): string
-{
+function view_gallery_description_markdown_html(
+    string $markdown,
+    array $linkModels = [],
+): string {
     $normalized = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
     if ($normalized === '') {
         return '';
     }
     $paragraphs = preg_split('/\n{2,}/u', $normalized) ?: [$normalized];
     $html = [];
-    $tokenPrefix = "\x1DGALLERYDESCRIPTION" . hash('sha256', $normalized) . 'TOKEN';
+    $tokenPrefix =
+        "\x1DGALLERYDESCRIPTION" . hash('sha256', $normalized) . 'TOKEN';
     $tokens = [];
 
     foreach ($paragraphs as $paragraph) {
@@ -297,27 +351,117 @@ function view_gallery_description_markdown_html(string $markdown, array $linkMod
             continue;
         }
         $escaped = e($paragraph);
-        $escaped = preg_replace_callback('/`([^`\n]+)`/u', static function (array $matches) use (&$tokens, $tokenPrefix): string {
-            return view_gallery_description_register_token('<code>' . $matches[1] . '</code>', $tokens, $tokenPrefix);
-        }, $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[(link|url)=([^\]\n]{1,2048})\]([^\n]*?)\[\/\1\]/iu', static function (array $matches) use ($linkModels, &$tokens, $tokenPrefix): string {
-            $label = view_gallery_description_resolve_tokens(view_gallery_description_format_inline((string) $matches[3]), $tokens, $tokenPrefix);
-            $fallback = view_gallery_description_resolve_tokens((string) $matches[0], $tokens, $tokenPrefix);
-            $markup = view_gallery_description_link_html((string) $matches[2], $label, $fallback, $linkModels);
-            return view_gallery_description_register_token($markup, $tokens, $tokenPrefix);
-        }, $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[(link|url)\]([^\[\]\n]{1,2048})\[\/\1\]/iu', static function (array $matches) use ($linkModels, &$tokens, $tokenPrefix): string {
-            $label = trim((string) $matches[2]);
-            $fallback = view_gallery_description_resolve_tokens((string) $matches[0], $tokens, $tokenPrefix);
-            $markup = view_gallery_description_link_html($label, $label, $fallback, $linkModels);
-            return view_gallery_description_register_token($markup, $tokens, $tokenPrefix);
-        }, $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s<>\")]+)\)/iu', static function (array $matches) use ($linkModels, &$tokens, $tokenPrefix): string {
-            $label = view_gallery_description_resolve_tokens(view_gallery_description_format_inline((string) $matches[1]), $tokens, $tokenPrefix);
-            $fallback = view_gallery_description_resolve_tokens((string) $matches[0], $tokens, $tokenPrefix);
-            $markup = view_gallery_description_link_html((string) $matches[2], $label, $fallback, $linkModels);
-            return view_gallery_description_register_token($markup, $tokens, $tokenPrefix);
-        }, $escaped) ?? $escaped;
+        $escaped =
+            preg_replace_callback(
+                '/`([^`\n]+)`/u',
+                static function (array $matches) use (
+                    &$tokens,
+                    $tokenPrefix,
+                ): string {
+                    return view_gallery_description_register_token(
+                        '<code>' . $matches[1] . '</code>',
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                },
+                $escaped,
+            ) ?? $escaped;
+        $escaped =
+            preg_replace_callback(
+                '/\[(link|url)=([^\]\n]{1,2048})\]([^\n]*?)\[\/\1\]/iu',
+                static function (array $matches) use (
+                    $linkModels,
+                    &$tokens,
+                    $tokenPrefix,
+                ): string {
+                    $label = view_gallery_description_resolve_tokens(
+                        view_gallery_description_format_inline(
+                            (string) $matches[3],
+                        ),
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                    $fallback = view_gallery_description_resolve_tokens(
+                        (string) $matches[0],
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                    $markup = view_gallery_description_link_html(
+                        (string) $matches[2],
+                        $label,
+                        $fallback,
+                        $linkModels,
+                    );
+                    return view_gallery_description_register_token(
+                        $markup,
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                },
+                $escaped,
+            ) ?? $escaped;
+        $escaped =
+            preg_replace_callback(
+                '/\[(link|url)\]([^\[\]\n]{1,2048})\[\/\1\]/iu',
+                static function (array $matches) use (
+                    $linkModels,
+                    &$tokens,
+                    $tokenPrefix,
+                ): string {
+                    $label = trim((string) $matches[2]);
+                    $fallback = view_gallery_description_resolve_tokens(
+                        (string) $matches[0],
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                    $markup = view_gallery_description_link_html(
+                        $label,
+                        $label,
+                        $fallback,
+                        $linkModels,
+                    );
+                    return view_gallery_description_register_token(
+                        $markup,
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                },
+                $escaped,
+            ) ?? $escaped;
+        $escaped =
+            preg_replace_callback(
+                '/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s<>\")]+)\)/iu',
+                static function (array $matches) use (
+                    $linkModels,
+                    &$tokens,
+                    $tokenPrefix,
+                ): string {
+                    $label = view_gallery_description_resolve_tokens(
+                        view_gallery_description_format_inline(
+                            (string) $matches[1],
+                        ),
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                    $fallback = view_gallery_description_resolve_tokens(
+                        (string) $matches[0],
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                    $markup = view_gallery_description_link_html(
+                        (string) $matches[2],
+                        $label,
+                        $fallback,
+                        $linkModels,
+                    );
+                    return view_gallery_description_register_token(
+                        $markup,
+                        $tokens,
+                        $tokenPrefix,
+                    );
+                },
+                $escaped,
+            ) ?? $escaped;
         $escaped = view_gallery_description_format_inline($escaped);
         $escaped = strtr($escaped, $tokens);
         $html[] = '<p>' . str_replace("\n", '<br>', $escaped) . '</p>';

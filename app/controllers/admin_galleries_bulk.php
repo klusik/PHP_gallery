@@ -73,7 +73,9 @@ use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
 
 /**
- * Handles cms admin bulk galleries logic for the gallery application.
+ * Process authenticated bulk gallery scans, thumbnail creation, and mutations.
+ *
+ * @return void Redirects after handling the submitted bulk action.
  */
 function cms_admin_bulk_galleries(): void
 {
@@ -89,14 +91,18 @@ function cms_admin_bulk_galleries(): void
         foreach ($galleryIds as $galleryId) {
             $count += scan_gallery_images($galleryId);
         }
-        flash_message('admin_notice', t('admin.galleries.scan_result', ['count' => $count]));
+        flash_message('admin_notice', t('admin.galleries.scan_result', [
+            'count' => $count,
+        ]));
         redirect_to(url_for('admin'));
     }
     if ($action === 'thumbs') {
         foreach ($galleryIds as $galleryId) {
             $count += create_gallery_thumbnails($galleryId);
         }
-        flash_message('admin_notice', t('admin.galleries.thumbnail_result', ['count' => $count]));
+        flash_message('admin_notice', t('admin.galleries.thumbnail_result', [
+            'count' => $count,
+        ]));
         redirect_to(url_for('admin'));
     }
     if ($action === 'delete' && $galleryIds) {
@@ -108,9 +114,17 @@ function cms_admin_bulk_galleries(): void
         // schema must never silently fall back to permanent deletion.
         if ($trashEnabled && !gallery_trash_available()) {
             $trashSchemaStatus = gallery_trash_schema_status();
-            $trashUnavailableMessage = (string) ($trashSchemaStatus['state'] ?? 'unknown') === 'missing'
-                ? t('admin.galleries.trash_requires_migration', 'The trash bin needs a database migration. Run pending migrations, then try again.')
-                : t('admin.galleries.trash_temporarily_unavailable', 'The trash bin is temporarily unavailable because its database schema could not be verified. Nothing was deleted.');
+            $trashUnavailableMessage = (string) (
+                $trashSchemaStatus['state'] ?? 'unknown'
+            ) === 'missing'
+                ? t(
+                    'admin.galleries.trash_requires_migration',
+                    'The trash bin needs a database migration. Run pending migrations, then try again.',
+                )
+                : t(
+                    'admin.galleries.trash_temporarily_unavailable',
+                    'The trash bin is temporarily unavailable because its database schema could not be verified. Nothing was deleted.',
+                );
             flash_message('admin_notice', $trashUnavailableMessage);
             redirect_to(url_for('admin'));
         }
@@ -121,125 +135,269 @@ function cms_admin_bulk_galleries(): void
                     'user_id' => (int) (current_user()['id'] ?? 0),
                     'deleted_from' => 'dashboard_bulk',
                 ]);
-                admin_log_event('warning', 'gallery.bulk_trashed', t('admin.galleries.log_bulk_trashed', 'Admin moved galleries to the trash bin.'), [
-                    'gallery_ids' => $galleryIds,
-                    'trashed_roots' => (int) $trashed['root_count'],
-                    'trashed_rows' => (int) $trashed['row_count'],
-                    'missing_folders' => (int) $trashed['missing_folders'],
-                    'failed_roots' => (int) ($trashed['failed_root_count'] ?? 0),
-                ]);
+                admin_log_event(
+                    'warning',
+                    'gallery.bulk_trashed',
+                    t(
+                        'admin.galleries.log_bulk_trashed',
+                        'Admin moved galleries to the trash bin.',
+                    ),
+                    [
+                        'gallery_ids' => $galleryIds,
+                        'trashed_roots' => (int) $trashed['root_count'],
+                        'trashed_rows' => (int) $trashed['row_count'],
+                        'missing_folders' => (int) $trashed['missing_folders'],
+                        'failed_roots' => (int) (
+                            $trashed['failed_root_count'] ?? 0
+                        ),
+                    ],
+                );
                 $failedRoots = (int) ($trashed['failed_root_count'] ?? 0);
-                flash_message('admin_notice', $failedRoots > 0
-                    ? t('admin.galleries.trash_partial_result', 'Moved {count} gallery folder(s) to the trash; {failed} selected root(s) could not be moved.', [
-                        'count' => (int) $trashed['root_count'],
-                        'failed' => $failedRoots,
-                    ])
-                    : t('admin.galleries.trashed_result', 'Moved {count} gallery folder(s) to the trash.', ['count' => (int) $trashed['root_count']]));
+                flash_message(
+                    'admin_notice',
+                    $failedRoots > 0
+                        ? t(
+                            'admin.galleries.trash_partial_result',
+                            'Moved {count} gallery folder(s) to the trash; {failed} selected root(s) could not be moved.',
+                            [
+                                'count' => (int) $trashed['root_count'],
+                                'failed' => $failedRoots,
+                            ],
+                        )
+                        : t(
+                            'admin.galleries.trashed_result',
+                            'Moved {count} gallery folder(s) to the trash.',
+                            ['count' => (int) $trashed['root_count']],
+                        ),
+                );
                 redirect_to(url_for('admin'));
             }
             // $deleted stores an intermediate value used by the surrounding gallery workflow.
             $deleted = delete_gallery_subtrees($galleryIds);
-            admin_log_event('warning', 'gallery.bulk_deleted', t('admin.galleries.log_bulk_deleted'), [
-                'gallery_ids' => $galleryIds,
-                'deleted_roots' => (int) $deleted['root_count'],
-                'deleted_rows' => (int) $deleted['row_count'],
-            ]);
-            flash_message('admin_notice', t('admin.galleries.deleted_result', 'Deleted {count} gallery folder(s).', ['count' => (int) $deleted['root_count']]));
+            admin_log_event(
+                'warning',
+                'gallery.bulk_deleted',
+                t('admin.galleries.log_bulk_deleted'),
+                [
+                    'gallery_ids' => $galleryIds,
+                    'deleted_roots' => (int) $deleted['root_count'],
+                    'deleted_rows' => (int) $deleted['row_count'],
+                ],
+            );
+            flash_message('admin_notice', t(
+                'admin.galleries.deleted_result',
+                'Deleted {count} gallery folder(s).',
+                ['count' => (int) $deleted['root_count']],
+            ));
             redirect_to(url_for('admin'));
         } catch (Throwable $exception) {
-            admin_log_event('error', 'gallery.bulk_delete_failed', t('admin.galleries.log_bulk_delete_failed'), [
-                'gallery_ids' => $galleryIds,
-                'exception' => $exception->getMessage(),
-            ]);
-            flash_message('admin_notice', t('admin.galleries.delete_failed', 'Gallery delete failed: {error}', ['error' => $exception->getMessage()]));
+            admin_log_event(
+                'error',
+                'gallery.bulk_delete_failed',
+                t('admin.galleries.log_bulk_delete_failed'),
+                [
+                    'gallery_ids' => $galleryIds,
+                    'exception' => $exception->getMessage(),
+                ],
+            );
+            flash_message('admin_notice', t(
+                'admin.galleries.delete_failed',
+                'Gallery delete failed: {error}',
+                ['error' => $exception->getMessage()],
+            ));
             redirect_to(url_for('admin'));
         }
     }
     if (in_array($action, gallery_visibility_values(), true) && $galleryIds) {
-        gallery_bulk_set_visibility($galleryIds, gallery_visibility_storage_value($action));
-        flash_message('admin_notice', 'Updated ' . count($galleryIds) . ' gallery folder(s).');
+        gallery_bulk_set_visibility(
+            $galleryIds,
+            gallery_visibility_storage_value($action),
+        );
+        flash_message(
+            'admin_notice',
+            'Updated ' . count($galleryIds) . ' gallery folder(s).',
+        );
         redirect_to(url_for('admin'));
     }
-    if (in_array($action, ['maps_on', 'maps_off', 'maps_inherit'], true) && $galleryIds) {
+    if (
+        in_array($action, ['maps_on', 'maps_off', 'maps_inherit'], true)
+        && $galleryIds
+    ) {
         if (!feature_capability_effective_enabled('gallery_maps')) {
-            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
-                'feature' => t('admin.features.gallery_maps.label', 'EXIF GPS gallery maps'),
-            ]));
+            flash_message('admin_notice', t(
+                'admin.features.disabled_route_message',
+                'This feature is disabled in Admin > Features: {feature}',
+                [
+                    'feature' => t(
+                        'admin.features.gallery_maps.label',
+                        'EXIF GPS gallery maps',
+                    ),
+                ],
+            ));
             redirect_to(url_for('admin'));
         }
-        if (!exif_gps_schema_ready() || ($action === 'maps_inherit' && !exif_gps_override_schema_ready())) {
-            admin_log_event('warning', 'gps_maps.schema_missing', t('admin.galleries.log_gps_maps_schema_missing'), [
-                'gallery_ids' => $galleryIds,
-                'action' => $action,
-            ]);
-            flash_message('admin_notice', t('admin.galleries.gps_requires_migration'));
+        if (
+            !exif_gps_schema_ready()
+            || (
+                $action === 'maps_inherit'
+                && !exif_gps_override_schema_ready()
+            )
+        ) {
+            admin_log_event(
+                'warning',
+                'gps_maps.schema_missing',
+                t('admin.galleries.log_gps_maps_schema_missing'),
+                [
+                    'gallery_ids' => $galleryIds,
+                    'action' => $action,
+                ],
+            );
+            flash_message(
+                'admin_notice',
+                t('admin.galleries.gps_requires_migration'),
+            );
             redirect_to(url_for('admin'));
         }
         // $gpsMapValue stores the explicit or inherited GPS display value for the selected gallery branches.
-        $gpsMapValue = $action === 'maps_inherit' ? null : ($action === 'maps_on');
+        $gpsMapValue = $action === 'maps_inherit'
+            ? null
+            : $action === 'maps_on';
         // $expandedIds stores all galleries changed by the subtree-scoped service operation.
-        $expandedIds = gallery_bulk_set_gps_map_enabled($galleryIds, $gpsMapValue);
-        flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
+        $expandedIds = gallery_bulk_set_gps_map_enabled(
+            $galleryIds,
+            $gpsMapValue,
+        );
+        flash_message(
+            'admin_notice',
+            'Updated ' . count($expandedIds) . ' gallery folder(s).',
+        );
         redirect_to(url_for('admin'));
     }
     if (in_array($action, ['vote_on', 'vote_off'], true) && $galleryIds) {
         if (!feature_capability_effective_enabled('image_voting')) {
-            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
-                'feature' => t('admin.features.image_voting.label', 'Image voting'),
-            ]));
+            flash_message('admin_notice', t(
+                'admin.features.disabled_route_message',
+                'This feature is disabled in Admin > Features: {feature}',
+                [
+                    'feature' => t(
+                        'admin.features.image_voting.label',
+                        'Image voting',
+                    ),
+                ],
+            ));
             redirect_to(url_for('admin'));
         }
         if (!gallery_voting_schema_ready()) {
-            admin_log_event('warning', 'votes.schema_missing', t('admin.galleries.log_voting_schema_missing'), [
-                'gallery_ids' => $galleryIds,
-                'action' => $action,
-            ]);
-            flash_message('admin_notice', t('admin.galleries.voting_requires_migration'));
+            admin_log_event(
+                'warning',
+                'votes.schema_missing',
+                t('admin.galleries.log_voting_schema_missing'),
+                [
+                    'gallery_ids' => $galleryIds,
+                    'action' => $action,
+                ],
+            );
+            flash_message(
+                'admin_notice',
+                t('admin.galleries.voting_requires_migration'),
+            );
             redirect_to(url_for('admin'));
         }
         // $expandedIds stores all galleries changed by the subtree-scoped service operation.
-        $expandedIds = gallery_bulk_set_voting_enabled($galleryIds, $action === 'vote_on');
-        flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
+        $expandedIds = gallery_bulk_set_voting_enabled(
+            $galleryIds,
+            $action === 'vote_on',
+        );
+        flash_message(
+            'admin_notice',
+            'Updated ' . count($expandedIds) . ' gallery folder(s).',
+        );
         redirect_to(url_for('admin'));
     }
-    if (in_array($action, ['filenames_on', 'filenames_off'], true) && $galleryIds) {
+    if (
+        in_array($action, ['filenames_on', 'filenames_off'], true)
+        && $galleryIds
+    ) {
         if (!gallery_filename_display_schema_ready()) {
-            admin_log_event('warning', 'gallery_filenames.schema_missing', t('admin.galleries.log_filename_schema_missing'), [
-                'gallery_ids' => $galleryIds,
-                'action' => $action,
-            ]);
-            flash_message('admin_notice', t('admin.galleries.filename_requires_migration'));
+            admin_log_event(
+                'warning',
+                'gallery_filenames.schema_missing',
+                t('admin.galleries.log_filename_schema_missing'),
+                [
+                    'gallery_ids' => $galleryIds,
+                    'action' => $action,
+                ],
+            );
+            flash_message(
+                'admin_notice',
+                t('admin.galleries.filename_requires_migration'),
+            );
             redirect_to(url_for('admin'));
         }
         // $expandedIds stores all galleries changed by the subtree-scoped service operation.
-        $expandedIds = gallery_bulk_set_show_filenames($galleryIds, $action === 'filenames_on');
-        flash_message('admin_notice', 'Updated filename display for ' . count($expandedIds) . ' gallery folder(s).');
+        $expandedIds = gallery_bulk_set_show_filenames(
+            $galleryIds,
+            $action === 'filenames_on',
+        );
+        flash_message(
+            'admin_notice',
+            'Updated filename display for '
+                . count($expandedIds)
+                . ' gallery folder(s).',
+        );
         redirect_to(url_for('admin'));
     }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
         if (!feature_capability_effective_enabled('picture_game')) {
-            flash_message('admin_notice', t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
-                'feature' => t('admin.features.picture_game.label', 'Picture game'),
-            ]));
+            flash_message('admin_notice', t(
+                'admin.features.disabled_route_message',
+                'This feature is disabled in Admin > Features: {feature}',
+                [
+                    'feature' => t(
+                        'admin.features.picture_game.label',
+                        'Picture game',
+                    ),
+                ],
+            ));
             redirect_to(url_for('admin'));
         }
         $pictureGameStatus = presentation_picture_game_schema_status();
         if (!schema_inspection_is_available($pictureGameStatus)) {
             if (schema_inspection_is_unknown($pictureGameStatus)) {
-                presentation_schema_log_degraded($pictureGameStatus, 'admin_bulk_picture_game');
-                flash_message('admin_notice', t('admin.galleries.picture_game_schema_unavailable', 'Picture Game database status could not be verified. No galleries were changed. Check System Health and try again.'));
+                presentation_schema_log_degraded(
+                    $pictureGameStatus,
+                    'admin_bulk_picture_game',
+                );
+                flash_message('admin_notice', t(
+                    'admin.galleries.picture_game_schema_unavailable',
+                    'Picture Game database status could not be verified. No galleries were changed. Check System Health and try again.',
+                ));
             } else {
-                admin_log_event('warning', 'picture_game.schema_missing', t('admin.galleries.log_picture_game_schema_missing'), [
-                    'gallery_ids' => $galleryIds,
-                    'action' => $action,
-                ]);
-                flash_message('admin_notice', t('admin.galleries.picture_game_requires_migration'));
+                admin_log_event(
+                    'warning',
+                    'picture_game.schema_missing',
+                    t('admin.galleries.log_picture_game_schema_missing'),
+                    [
+                        'gallery_ids' => $galleryIds,
+                        'action' => $action,
+                    ],
+                );
+                flash_message(
+                    'admin_notice',
+                    t('admin.galleries.picture_game_requires_migration'),
+                );
             }
             redirect_to(url_for('admin'));
         }
         // $expandedIds stores all galleries changed by the subtree-scoped service operation.
-        $expandedIds = gallery_bulk_set_picture_game_enabled($galleryIds, $action === 'game_on');
-        flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
+        $expandedIds = gallery_bulk_set_picture_game_enabled(
+            $galleryIds,
+            $action === 'game_on',
+        );
+        flash_message(
+            'admin_notice',
+            'Updated ' . count($expandedIds) . ' gallery folder(s).',
+        );
         redirect_to(url_for('admin'));
     }
     redirect_to(url_for('admin'));
@@ -262,9 +420,20 @@ function cms_admin_regenerate_paths(): void
     try {
         // $result stores an intermediate value used by the surrounding gallery workflow.
         $result = regenerate_public_paths();
-        flash_message('admin_notice', t('admin.galleries.public_paths_regenerated', 'Regenerated clean public paths. Updated {galleries} gallery path(s) and {images} image path(s).', ['galleries' => (int) $result['galleries'], 'images' => (int) $result['images']]));
+        flash_message('admin_notice', t(
+            'admin.galleries.public_paths_regenerated',
+            'Regenerated clean public paths. Updated {galleries} gallery path(s) and {images} image path(s).',
+            [
+                'galleries' => (int) $result['galleries'],
+                'images' => (int) $result['images'],
+            ],
+        ));
     } catch (Throwable $exception) {
-        flash_message('admin_notice', t('admin.galleries.public_paths_failed', 'Path regeneration failed: {error}', ['error' => $exception->getMessage()]));
+        flash_message('admin_notice', t(
+            'admin.galleries.public_paths_failed',
+            'Path regeneration failed: {error}',
+            ['error' => $exception->getMessage()],
+        ));
     }
     redirect_to($returnUrl);
 }

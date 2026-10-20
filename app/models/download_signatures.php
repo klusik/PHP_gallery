@@ -32,20 +32,33 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
-/** @param array<int,int> $galleryIds @return array<int,array<string,mixed>> */
-function download_signatures_model_rows(array $galleryIds, bool $publicOnly): array
-{
-    $ids = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+/**
+ * Load signature inputs for selected galleries.
+ *
+ * @param list<int> $galleryIds Gallery identifiers whose download contents are fingerprinted.
+ * @param bool $publicOnly Whether to restrict the signature inputs to public images.
+ * @return list<array<string,mixed>> Gallery and image metadata rows ordered by gallery path and image path.
+ */
+function download_signatures_model_rows(
+    array $galleryIds,
+    bool $publicOnly,
+): array {
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
     $imageVisibilitySql = $publicOnly ? " AND i.visibility = 'public'" : '';
-    $stmt = db()->prepare("SELECT g.id AS gallery_id, g.parent_id, g.folder_path, g.visibility AS gallery_visibility,
+    $stmt = db()->prepare('SELECT g.id AS gallery_id, g.parent_id, g.folder_path, g.visibility AS gallery_visibility,
             g.access_mode, g.updated_at AS gallery_updated_at, i.id AS image_id, i.relative_path, i.relative_path_hash,
             i.file_size, i.modified_at, i.checksum_sha256, i.visibility, i.updated_at AS image_updated_at
         FROM galleries g
-        LEFT JOIN images i ON i.gallery_id = g.id" . $imageVisibilitySql . "
+        LEFT JOIN images i ON i.gallery_id = g.id'
+        . $imageVisibilitySql
+        . "
         WHERE g.id IN ($placeholders)
         ORDER BY g.folder_path, i.relative_path");
     $stmt->execute($ids);

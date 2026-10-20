@@ -77,7 +77,18 @@ function cooperative_pairing_nonce_valid(string $nonce): bool
  */
 function cooperative_pairing_invitation_code(array $invitation): string
 {
-    return 'pgci1.' . rtrim(strtr(base64_encode(json_encode($invitation, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)), '+/', '-_'), '=');
+    return 'pgci1.'
+        . rtrim(
+            strtr(
+                base64_encode(json_encode(
+                    $invitation,
+                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+                )),
+                '+/',
+                '-_',
+            ),
+            '=',
+        );
 }
 
 /** Decode the exact bootstrap descriptor; its source server must still verify it.
@@ -87,20 +98,36 @@ function cooperative_pairing_invitation_code(array $invitation): string
  */
 function cooperative_pairing_invitation_decode(string $code): array
 {
-    if (strlen($code) > COOPERATIVE_PAIRING_CODE_MAX_BYTES || !str_starts_with($code, 'pgci1.')
-        || preg_match('/\A[A-Za-z0-9_-]+\z/', substr($code, 6)) !== 1) {
+    if (
+        strlen($code) > COOPERATIVE_PAIRING_CODE_MAX_BYTES
+        || !str_starts_with($code, 'pgci1.')
+        || preg_match('/\A[A-Za-z0-9_-]+\z/', substr($code, 6)) !== 1
+    ) {
         throw new CooperativeException('invalid_invitation');
     }
     try {
         $json = base64_decode(strtr(substr($code, 6), '-_', '+/'), true);
-        $data = json_decode($json === false ? '' : $json, true, 8, JSON_THROW_ON_ERROR);
+        $data = json_decode(
+            $json === false ? '' : $json,
+            true,
+            8,
+            JSON_THROW_ON_ERROR,
+        );
     } catch (\Throwable) {
         throw new CooperativeException('invalid_invitation');
     }
     if (!is_array($data)) {
         throw new CooperativeException('invalid_invitation');
     }
-    cooperative_pairing_fields($data, ['protocol', 'invitation_id', 'source_id', 'target_id', 'source_base', 'target_base', 'secret']);
+    cooperative_pairing_fields($data, [
+        'protocol',
+        'invitation_id',
+        'source_id',
+        'target_id',
+        'source_base',
+        'target_base',
+        'secret',
+    ]);
     foreach (['invitation_id', 'source_id', 'target_id'] as $field) {
         cooperative_id_validate($data[$field]);
     }
@@ -109,7 +136,10 @@ function cooperative_pairing_invitation_decode(string $code): array
             throw new CooperativeException('invalid_invitation');
         }
     }
-    if (!cooperative_pairing_nonce_valid($data['secret']) || $data['source_id'] === $data['target_id']) {
+    if (
+        !cooperative_pairing_nonce_valid($data['secret'])
+        || $data['source_id'] === $data['target_id']
+    ) {
         throw new CooperativeException('invalid_invitation');
     }
     return $data;
@@ -122,8 +152,11 @@ function cooperative_pairing_invitation_decode(string $code): array
  * @param array<string,mixed> $extra Additional allowlisted fields for the message.
  * @return array<string,mixed> Result described by the operation above.
  */
-function cooperative_pairing_message(array $pair, string $action, array $extra = []): array
-{
+function cooperative_pairing_message(
+    array $pair,
+    string $action,
+    array $extra = [],
+): array {
     return array_merge([
         'protocol' => COOPERATIVE_PROTOCOL_VERSION,
         'action' => $action,
@@ -141,10 +174,13 @@ function cooperative_pairing_message(array $pair, string $action, array $extra =
  */
 function cooperative_pairing_check_response(array $response, array $pair): void
 {
-    if (($response['ok'] ?? null) !== true || ($response['protocol'] ?? null) !== COOPERATIVE_PROTOCOL_VERSION
+    if (
+        ($response['ok'] ?? null) !== true
+        || ($response['protocol'] ?? null) !== COOPERATIVE_PROTOCOL_VERSION
         || ($response['invitation_id'] ?? null) !== $pair['invitation_id']
         || ($response['sender_id'] ?? null) !== $pair['peer_id']
-        || ($response['recipient_id'] ?? null) !== cooperative_instance_id()) {
+        || ($response['recipient_id'] ?? null) !== cooperative_instance_id()
+    ) {
         throw new CooperativeException('peer_response_invalid');
     }
 }
@@ -174,9 +210,17 @@ function cooperative_pairing_response(array $pair, array $extra = []): array
  * @param string $nonce Per-exchange unpredictable challenge.
  * @return string Result described by the operation above.
  */
-function cooperative_pairing_proof(string $token, string $invitationId, string $action, string $nonce): string
-{
-    return hash_hmac('sha256', 'cooperative-v1|' . $invitationId . '|' . $action . '|' . $nonce, $token);
+function cooperative_pairing_proof(
+    string $token,
+    string $invitationId,
+    string $action,
+    string $nonce,
+): string {
+    return hash_hmac(
+        'sha256',
+        'cooperative-v1|' . $invitationId . '|' . $action . '|' . $nonce,
+        $token,
+    );
 }
 
 /** Bound installation addresses to keep encrypted recovery payloads within their storage envelope.

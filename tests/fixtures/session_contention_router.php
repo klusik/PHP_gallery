@@ -26,11 +26,27 @@ require_once dirname(__DIR__) . '/support/session_contention.php';
 
 try {
     $owner = (string) getenv('GALLERY_SESSION_OWNER');
-    check(PHP_SAPI === 'cli-server' && ($_SERVER['REMOTE_ADDR'] ?? '') === '127.0.0.1'
-        && $owner !== '' && hash_equals($owner, (string) ($_SERVER['HTTP_X_FIXTURE_OWNER'] ?? '')), 'Fixture request refused.');
-    $directory = owned_directory((string) getenv('GALLERY_SESSION_FIXTURE'), $owner);
-    check(realpath((string) ini_get('session.save_path')) === realpath($directory . '/sessions')
-        && !is_link($directory . '/sessions') && session_module_name() === 'files', 'Fixture session storage mismatch.');
+    check(
+        PHP_SAPI === 'cli-server'
+            && ($_SERVER['REMOTE_ADDR'] ?? '') === '127.0.0.1'
+            && $owner !== ''
+            && hash_equals(
+                $owner,
+                (string) ($_SERVER['HTTP_X_FIXTURE_OWNER'] ?? ''),
+            ),
+        'Fixture request refused.',
+    );
+    $directory = owned_directory(
+        (string) getenv('GALLERY_SESSION_FIXTURE'),
+        $owner,
+    );
+    check(
+        realpath((string) ini_get('session.save_path')) === realpath($directory
+            . '/sessions')
+            && !is_link($directory . '/sessions')
+            && session_module_name() === 'files',
+        'Fixture session storage mismatch.',
+    );
     $route = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
     header('Cache-Control: private, no-store');
     if ($route === '/health') {
@@ -41,18 +57,24 @@ try {
     if ($route === '/suggest' && isset($_GET['scenario'], $_GET['reader'])) {
         $scenario = (string) $_GET['scenario'];
         $reader = (string) $_GET['reader'];
-        check(preg_match('/\A(?:held|released)-[0-2]\z/', $scenario) === 1
-            && in_array($reader, ['same', 'independent'], true), 'Invalid fixture reader barrier.');
+        check(
+            preg_match('/\A(?:held|released)-[0-2]\z/', $scenario) === 1
+                && in_array($reader, ['same', 'independent'], true),
+            'Invalid fixture reader barrier.',
+        );
         if ($scenario === 'held-2' && $reader === 'same') {
             // Simulate scheduling/startup latency longer than the observation window.
             usleep(DELAYED_READER_MILLISECONDS * MILLISECONDS_PER_SECOND);
         }
-        $GLOBALS['session_contention_reader_barrier'] = $directory . '/enter-' . $scenario . '-' . $reader;
+        $GLOBALS['session_contention_reader_barrier'] =
+            $directory . '/enter-' . $scenario . '-' . $reader;
     }
     require_once dirname(__DIR__) . '/support/session_contention_runtime.php';
     Gallery\Core\cms_start_session(['admin_session_name' => 'session_fixture']);
     $marks = $GLOBALS['session_contention_marks'];
-    $milliseconds = ($marks['session_start_end'] - $marks['session_start_begin']) * MILLISECONDS_PER_SECOND;
+    $milliseconds =
+        ($marks['session_start_end'] - $marks['session_start_begin'])
+        * MILLISECONDS_PER_SECOND;
     header('X-Fixture-Session-Ms: ' . number_format($milliseconds, 3, '.', ''));
     header('X-Fixture-Handler: files');
     header('Content-Type: application/json');
@@ -72,19 +94,36 @@ try {
         return;
     }
     $user = Gallery\Core\current_user();
-    check(is_array($user) && $user['role'] === 'admin', 'Fixture administrator required.');
+    check(
+        is_array($user) && $user['role'] === 'admin',
+        'Fixture administrator required.',
+    );
     if ($route === '/state') {
-        echo json_encode(['ok' => ($_SESSION['fixture_preference'] ?? '') === 'retained'
-            && hash_equals((string) ($_SESSION['fixture_csrf'] ?? ''), Gallery\Core\csrf_token())], JSON_THROW_ON_ERROR);
+        echo json_encode([
+            'ok' =>
+                ($_SESSION['fixture_preference'] ?? '') === 'retained'
+                    && hash_equals(
+                        (string) ($_SESSION['fixture_csrf'] ?? ''),
+                        Gallery\Core\csrf_token(),
+                    ),
+        ], JSON_THROW_ON_ERROR);
         return;
     }
     $scenario = (string) ($_GET['scenario'] ?? '');
-    check($route === '/hold' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
-        && preg_match('/\A(?:held|released)-[0-2]\z/', $scenario) === 1, 'Fixture route refused.');
+    check(
+        $route === '/hold'
+            && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST'
+            && preg_match('/\A(?:held|released)-[0-2]\z/', $scenario) === 1,
+        'Fixture route refused.',
+    );
     if (str_starts_with($scenario, 'released-')) {
         session_write_close();
     }
-    check(file_put_contents($directory . '/ready-' . $scenario, 'ready') !== false, 'Fixture readiness write failed.');
+    check(
+        file_put_contents($directory . '/ready-' . $scenario, 'ready')
+            !== false,
+        'Fixture readiness write failed.',
+    );
     $deadline = microtime(true) + HOLD_TIMEOUT_SECONDS;
     do {
         clearstatcache(true, $directory . '/release-' . $scenario);

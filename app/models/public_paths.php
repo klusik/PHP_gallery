@@ -41,25 +41,40 @@ use PDO;
 use Throwable;
 use function Gallery\Core\db;
 
-/** Return the newest updated_at timestamp among public galleries. */
+/**
+ * Return the newest updated_at timestamp among public galleries.
+ * @return ?string Newest public-gallery update timestamp, or null when no timestamp exists.
+ */
 function public_path_model_public_gallery_max_updated_at(): ?string
 {
-    $value = db()->query("SELECT MAX(updated_at) FROM galleries WHERE visibility = 'public'")->fetchColumn();
-    return $value === false || $value === null || $value === '' ? null : (string) $value;
+    $value = db()
+        ->query(
+            "SELECT MAX(updated_at) FROM galleries WHERE visibility = 'public'",
+        )
+        ->fetchColumn();
+    return $value === false || $value === null || $value === ''
+        ? null
+        : (string) $value;
 }
 
 /**
  * Return public galleries in stable filesystem-path order.
  *
  * @param bool $accessSchemaReady Whether current access columns are verified.
- * @return array<int,array<string,mixed>>
+ * @return list<array<string,int|string|null>> Public gallery rows ordered by filesystem path.
  */
 function public_path_model_public_gallery_rows(bool $accessSchemaReady): array
 {
     $columns = $accessSchemaReady
         ? '*'
         : 'id, parent_id, folder_path, slug, title, description, visibility, cover_image_id, created_at, updated_at';
-    return db()->query("SELECT {$columns} FROM galleries WHERE visibility = 'public' ORDER BY folder_path")->fetchAll() ?: [];
+    return (
+        db()
+            ->query(
+                "SELECT {$columns} FROM galleries WHERE visibility = 'public' ORDER BY folder_path",
+            )
+            ->fetchAll() ?: []
+    );
 }
 
 /**
@@ -67,11 +82,13 @@ function public_path_model_public_gallery_rows(bool $accessSchemaReady): array
  *
  * @param int $galleryId Gallery identifier.
  * @param ?int $limit Optional bounded row limit.
- * @return array<int,array<string,mixed>>
+ * @return list<array<string,int|string|null>> Public image rows in display order, optionally bounded by the requested limit.
  */
-function public_path_model_public_images(int $galleryId, ?int $limit = null): array
-{
-    $sql = "SELECT * FROM images WHERE gallery_id = ? AND visibility = ? ORDER BY sort_order, filename";
+function public_path_model_public_images(
+    int $galleryId,
+    ?int $limit = null,
+): array {
+    $sql = 'SELECT * FROM images WHERE gallery_id = ? AND visibility = ? ORDER BY sort_order, filename';
     if ($limit !== null) {
         $limit = max(1, min(100, $limit));
         $sql .= ' LIMIT ' . $limit;
@@ -90,10 +107,19 @@ function public_path_model_find_gallery_by_path_hash(string $pathHash): ?array
     return is_array($row) ? $row : null;
 }
 
-/** Find one image by its persisted clean slug inside one gallery. */
-function public_path_model_find_image_by_slug(int $galleryId, string $slug): ?array
-{
-    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND url_slug = ?');
+/**
+ * Find one image by its persisted clean slug inside one gallery.
+ * @param int $galleryId Physical gallery containing the image.
+ * @param string $slug Persisted clean public image slug.
+ * @return ?array<string,int|string|null> Matching image row, or null when no slug exists in the gallery.
+ */
+function public_path_model_find_image_by_slug(
+    int $galleryId,
+    string $slug,
+): ?array {
+    $stmt = db()->prepare(
+        'SELECT * FROM images WHERE gallery_id = ? AND url_slug = ?',
+    );
     $stmt->execute([$galleryId, $slug]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -111,35 +137,47 @@ function public_path_model_gallery_images(int $galleryId): array
  * Return gallery rows required to rebuild hierarchy and public paths.
  *
  * @param ?PDO $pdo Optional migration-owned connection.
- * @return array<int,array<string,mixed>>
+ * @return list<array{id:int|string,parent_id:int|string|null,title:string,folder_path:string,slug:string}> Gallery ids, parent links, names, and paths ordered parent-first.
  */
 function public_path_model_gallery_regeneration_rows(?PDO $pdo = null): array
 {
     $connection = $pdo ?? db();
-    return $connection->query(
-        'SELECT id, parent_id, title, folder_path, slug FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id'
-    )->fetchAll() ?: [];
+    return (
+        $connection
+            ->query(
+                'SELECT id, parent_id, title, folder_path, slug FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id',
+            )
+            ->fetchAll() ?: []
+    );
 }
 
 /**
  * Return compact image rows required to rebuild every public image slug.
  *
  * @param ?PDO $pdo Optional migration-owned connection.
- * @return array<int,array<string,mixed>>
+ * @return list<array{id:int|string,gallery_id:int|string,title:string,filename:string}> Compact image rows ordered by gallery and display position.
  */
 function public_path_model_image_regeneration_rows(?PDO $pdo = null): array
 {
     $connection = $pdo ?? db();
-    return $connection->query(
-        'SELECT id, gallery_id, title, filename FROM images ORDER BY gallery_id, sort_order, filename, id'
-    )->fetchAll() ?: [];
+    return (
+        $connection
+            ->query(
+                'SELECT id, gallery_id, title, filename FROM images ORDER BY gallery_id, sort_order, filename, id',
+            )
+            ->fetchAll() ?: []
+    );
 }
 
-/** Return compact image rows required to rebuild slugs in one gallery. */
+/**
+ * Return compact image rows required to rebuild slugs in one gallery.
+ * @param int $galleryId Gallery whose image slugs are rebuilt.
+ * @return list<array{id:int|string,gallery_id:int|string,title:string,filename:string}> Compact image rows for one gallery in display order.
+ */
 function public_path_model_gallery_image_regeneration_rows(int $galleryId): array
 {
     $stmt = db()->prepare(
-        'SELECT id, gallery_id, title, filename FROM images WHERE gallery_id = ? ORDER BY sort_order, filename, id'
+        'SELECT id, gallery_id, title, filename FROM images WHERE gallery_id = ? ORDER BY sort_order, filename, id',
     );
     $stmt->execute([$galleryId]);
     return $stmt->fetchAll() ?: [];
@@ -153,22 +191,29 @@ function public_path_model_gallery_image_regeneration_rows(int $galleryId): arra
  * @param ?PDO $pdo Optional migration-owned connection.
  * @return int Number of parent links changed.
  */
-function public_path_model_apply_parent_assignments(array $rows, array $parentAssignments, ?PDO $pdo = null): int
-{
+function public_path_model_apply_parent_assignments(
+    array $rows,
+    array $parentAssignments,
+    ?PDO $pdo = null,
+): int {
     $connection = $pdo ?? db();
     $ownsTransaction = !$connection->inTransaction();
     if ($ownsTransaction) {
         $connection->beginTransaction();
     }
     try {
-        $updateParent = $connection->prepare('UPDATE galleries SET parent_id = ?, edit_revision = edit_revision + 1 WHERE id = ?');
+        $updateParent = $connection->prepare(
+            'UPDATE galleries SET parent_id = ?, edit_revision = edit_revision + 1 WHERE id = ?',
+        );
         $changed = 0;
         foreach ($rows as $row) {
             $galleryId = (int) ($row['id'] ?? 0);
             if ($galleryId <= 0) {
                 continue;
             }
-            $currentParentId = $row['parent_id'] === null ? null : (int) $row['parent_id'];
+            $currentParentId = $row['parent_id'] === null
+                ? null
+                : (int) $row['parent_id'];
             $desiredParentId = $parentAssignments[$galleryId] ?? null;
             if ($currentParentId === $desiredParentId) {
                 continue;
@@ -196,14 +241,14 @@ function public_path_model_apply_parent_assignments(array $rows, array $parentAs
  * @param array<int,array{slug:string,path:string}> $pathAssignments Clean path assignments keyed by gallery id.
  * @param string $now Shared SQL timestamp.
  * @param ?PDO $pdo Optional migration-owned connection.
- * @return array{galleries:int,parent_changed:int}
+ * @return array{galleries:int,parent_changed:int} Gallery path rows written and parent links changed.
  */
 function public_path_model_apply_gallery_regeneration(
     array $rows,
     array $parentAssignments,
     array $pathAssignments,
     string $now,
-    ?PDO $pdo = null
+    ?PDO $pdo = null,
 ): array {
     $connection = $pdo ?? db();
     $ownsTransaction = !$connection->inTransaction();
@@ -212,12 +257,18 @@ function public_path_model_apply_gallery_regeneration(
     }
 
     try {
-        $parentChanged = public_path_model_apply_parent_assignments($rows, $parentAssignments, $connection);
+        $parentChanged = public_path_model_apply_parent_assignments(
+            $rows,
+            $parentAssignments,
+            $connection,
+        );
 
         // Clear old values first so path swaps cannot collide with the unique hash index.
-        $connection->exec('UPDATE galleries SET url_slug = NULL, url_path = NULL, url_path_hash = NULL, edit_revision = edit_revision + 1');
+        $connection->exec(
+            'UPDATE galleries SET url_slug = NULL, url_path = NULL, url_path_hash = NULL, edit_revision = edit_revision + 1',
+        );
         $updatePath = $connection->prepare(
-            'UPDATE galleries SET url_slug = ?, url_path = ?, url_path_hash = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?'
+            'UPDATE galleries SET url_slug = ?, url_path = ?, url_path_hash = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
         );
         foreach ($pathAssignments as $galleryId => $assignment) {
             $path = (string) ($assignment['path'] ?? '');
@@ -233,7 +284,10 @@ function public_path_model_apply_gallery_regeneration(
         if ($ownsTransaction) {
             $connection->commit();
         }
-        return ['galleries' => count($pathAssignments), 'parent_changed' => $parentChanged];
+        return [
+            'galleries' => count($pathAssignments),
+            'parent_changed' => $parentChanged,
+        ];
     } catch (Throwable $exception) {
         if ($ownsTransaction && $connection->inTransaction()) {
             $connection->rollBack();
@@ -250,14 +304,14 @@ function public_path_model_apply_gallery_regeneration(
  * @param array<int,array{slug:string,path:string}> $pathAssignments Clean path assignments keyed by gallery id.
  * @param array<int,string> $imageSlugAssignments Image slugs keyed by image id.
  * @param string $now Shared SQL timestamp.
- * @return array{galleries:int,images:int,parent_changed:int}
+ * @return array{galleries:int,images:int,parent_changed:int} Gallery paths written, image slugs written, and parent links changed.
  */
 function public_path_model_apply_full_regeneration(
     array $galleryRows,
     array $parentAssignments,
     array $pathAssignments,
     array $imageSlugAssignments,
-    string $now
+    string $now,
 ): array {
     $pdo = db();
     $pdo->beginTransaction();
@@ -267,9 +321,13 @@ function public_path_model_apply_full_regeneration(
             $parentAssignments,
             $pathAssignments,
             $now,
-            $pdo
+            $pdo,
         );
-        $imageCount = public_path_model_apply_image_slugs($imageSlugAssignments, $now, $pdo);
+        $imageCount = public_path_model_apply_image_slugs(
+            $imageSlugAssignments,
+            $now,
+            $pdo,
+        );
         $pdo->commit();
         return [
             'galleries' => $galleryResult['galleries'],
@@ -292,8 +350,11 @@ function public_path_model_apply_full_regeneration(
  * @param ?PDO $pdo Optional caller-owned connection.
  * @return int Number of assignments executed.
  */
-function public_path_model_apply_image_slugs(array $assignments, string $now, ?PDO $pdo = null): int
-{
+function public_path_model_apply_image_slugs(
+    array $assignments,
+    string $now,
+    ?PDO $pdo = null,
+): int {
     if ($assignments === []) {
         return 0;
     }
@@ -303,7 +364,9 @@ function public_path_model_apply_image_slugs(array $assignments, string $now, ?P
         $connection->beginTransaction();
     }
     try {
-        $update = $connection->prepare('UPDATE images SET url_slug = ?, updated_at = ? WHERE id = ?');
+        $update = $connection->prepare(
+            'UPDATE images SET url_slug = ?, updated_at = ? WHERE id = ?',
+        );
         foreach ($assignments as $imageId => $slug) {
             $update->execute([(string) $slug, $now, (int) $imageId]);
         }

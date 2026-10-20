@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
-
 /**
  * Return centralized multi-capability route requirements.
  *
@@ -86,14 +85,16 @@ function feature_capability_multi_route_requirements(): array
 /**
  * Normalize one route requirement to the canonical policy shape.
  *
- * @param mixed $requirement Raw route requirement.
+ * @param string|array{type?:string,capabilities?:array<array-key,mixed>} $requirement Capability key or requirement data containing a type and capability-key list.
  * @return ?array{type:string,capabilities:list<string>} Canonical requirement or null when malformed.
  */
 function feature_capability_normalize_route_requirement(mixed $requirement): ?array
 {
     if (is_string($requirement)) {
         $key = feature_flag_normalize_key($requirement);
-        return $key !== '' ? ['type' => 'single', 'capabilities' => [$key]] : null;
+        return (
+            $key !== '' ? ['type' => 'single', 'capabilities' => [$key]] : null
+        );
     }
     if (!is_array($requirement)) {
         return null;
@@ -112,7 +113,13 @@ function feature_capability_normalize_route_requirement(mixed $requirement): ?ar
         }
     }
     $capabilities = array_keys($capabilities);
-    if ($capabilities === [] || ($type === 'single' && count($capabilities) !== 1)) {
+    if (
+        $capabilities === []
+        || (
+            $type === 'single'
+            && count($capabilities) !== 1
+        )
+    ) {
         return null;
     }
 
@@ -143,7 +150,10 @@ function feature_capability_route_requirement(string $page): ?array
     foreach (feature_capability_definitions() as $featureKey => $definition) {
         foreach ((array) ($definition['routes'] ?? []) as $route) {
             if ($page === trim((string) $route)) {
-                return ['type' => 'single', 'capabilities' => [(string) $featureKey]];
+                return [
+                    'type' => 'single',
+                    'capabilities' => [(string) $featureKey],
+                ];
             }
         }
     }
@@ -152,7 +162,10 @@ function feature_capability_route_requirement(string $page): ?array
         foreach ((array) ($definition['route_prefixes'] ?? []) as $prefix) {
             $prefixKey = (string) $prefix;
             if ($prefixKey !== '' && str_starts_with($page, $prefixKey)) {
-                return ['type' => 'single', 'capabilities' => [(string) $featureKey]];
+                return [
+                    'type' => 'single',
+                    'capabilities' => [(string) $featureKey],
+                ];
             }
         }
     }
@@ -174,8 +187,10 @@ function feature_capability_route_requirement_allowed(array $requirement): bool
     }
 
     $states = array_map(
-        static fn (string $key): bool => feature_capability_effective_enabled($key),
-        $normalized['capabilities']
+        static fn(string $key): bool => feature_capability_effective_enabled(
+            $key,
+        ),
+        $normalized['capabilities'],
     );
 
     return match ($normalized['type']) {
@@ -199,7 +214,12 @@ function feature_flag_route_map(): array
     foreach (feature_capability_definitions() as $featureKey => $definition) {
         foreach ((array) ($definition['routes'] ?? []) as $route) {
             $routeKey = trim((string) $route);
-            if ($routeKey !== '' && !isset(feature_capability_multi_route_requirements()[$routeKey])) {
+            if (
+                $routeKey !== ''
+                && !isset(
+                    feature_capability_multi_route_requirements()[$routeKey],
+                )
+            ) {
                 $map[$routeKey] = (string) $featureKey;
             }
         }
@@ -231,7 +251,8 @@ function feature_flag_for_route(string $page): ?string
 function feature_flag_route_enabled(string $page): bool
 {
     $requirement = feature_capability_route_requirement($page);
-    return $requirement === null || feature_capability_route_requirement_allowed($requirement);
+    return $requirement === null
+        || feature_capability_route_requirement_allowed($requirement);
 }
 
 /**
@@ -245,9 +266,14 @@ function feature_capability_route_requirement_label(array $requirement): string
     $labels = [];
     foreach ($requirement['capabilities'] as $key) {
         $definition = feature_capability_definitions()[$key] ?? null;
-        $labels[] = is_array($definition) ? (string) ($definition['label'] ?? $key) : $key;
+        $labels[] = is_array($definition)
+            ? (string) ($definition['label'] ?? $key)
+            : $key;
     }
-    $labels = array_values(array_filter($labels, static fn (string $label): bool => $label !== ''));
+    $labels = array_values(array_filter(
+        $labels,
+        static fn(string $label): bool => $label !== '',
+    ));
     if ($labels === []) {
         return 'Optional feature';
     }
@@ -273,8 +299,11 @@ function feature_capability_route_requirement_label(array $requirement): string
  *         requirement?:string,message?:string},title:string,message:string,
  *     admin:bool} Opaque visitor refusal or actionable administrator guidance.
  */
-function feature_flag_disabled_route_decision(string $page, bool $wantsJson, bool $isAdmin): array
-{
+function feature_flag_disabled_route_decision(
+    string $page,
+    bool $wantsJson,
+    bool $isAdmin,
+): array {
     $requirement = feature_capability_route_requirement($page);
     $requirement ??= ['type' => 'single', 'capabilities' => []];
     $headers = [
@@ -285,19 +314,30 @@ function feature_flag_disabled_route_decision(string $page, bool $wantsJson, boo
     if (!$isAdmin) {
         return [
             'status' => 404,
-            'representation' => $wantsJson ? 'json'
-                : (in_array($page, ['gallery_ofp_pdf', 'gallery_music'], true)
-                    ? 'text' : 'html'),
+            'representation' => $wantsJson
+                ? 'json'
+                : (
+                    in_array($page, ['gallery_ofp_pdf', 'gallery_music'], true)
+                        ? 'text'
+                        : 'html'
+                ),
             'headers' => $headers,
             'payload' => ['ok' => false, 'error' => 'not_found'],
             'title' => t('public.not_found_title', 'Not found'),
-            'message' => t('public.not_found_message', 'The requested page was not found.'),
+            'message' => t(
+                'public.not_found_message',
+                'The requested page was not found.',
+            ),
             'admin' => false,
         ];
     }
 
     $label = feature_capability_route_requirement_label($requirement);
-    $message = t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', ['feature' => $label]);
+    $message = t(
+        'admin.features.disabled_route_message',
+        'This feature is disabled in Admin > Features: {feature}',
+        ['feature' => $label],
+    );
     return [
         'status' => 403,
         'representation' => $wantsJson ? 'json' : 'html',

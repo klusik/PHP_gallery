@@ -61,12 +61,14 @@ use function Gallery\Services\admin_log_event;
 /**
  * Send a SimBrief JSON response and stop the request.
  *
- * @param array $payload Payload value.
+ * @param array{ok?:bool,error?:string,description?:string,translations?:array<string,string>,source_language?:string,route?:string,draft_ref?:string,message?:string} $payload JSON response fields for success or failure.
  * @param int $statusCode HTTP status code.
  * @return void Emit the JSON response with the requested status.
  */
-function admin_simbrief_json_response(array $payload, int $statusCode = 200): void
-{
+function admin_simbrief_json_response(
+    array $payload,
+    int $statusCode = 200,
+): void {
     http_response_code($statusCode);
     header('Content-Type: application/json');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -83,7 +85,10 @@ function cms_admin_simbrief_description(): void
     if (request_method() !== 'POST') {
         admin_simbrief_json_response([
             'ok' => false,
-            'error' => t('admin.simbrief.error_post_required', 'Use the gallery editor form to generate a SimBrief description draft.'),
+            'error' => t(
+                'admin.simbrief.error_post_required',
+                'Use the gallery editor form to generate a SimBrief description draft.',
+            ),
         ], 405);
         return;
     }
@@ -95,48 +100,82 @@ function cms_admin_simbrief_description(): void
     if ($galleryId > 0 && !$gallery) {
         admin_simbrief_json_response([
             'ok' => false,
-            'error' => t('admin.simbrief.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'),
+            'error' => t(
+                'admin.simbrief.error_gallery_missing',
+                'The gallery could not be found. Reload the editor and try again.',
+            ),
         ], 404);
         return;
     }
 
     try {
         $simbriefInput = array_key_exists('simbrief_identifier', $_POST)
-            ? \Gallery\Services\simbrief_description_expand_identifier_input($_POST)
+            ? \Gallery\Services\simbrief_description_expand_identifier_input(
+                $_POST,
+            )
             : $_POST;
         $identifier = simbrief_description_identifier(
             (string) ($simbriefInput['simbrief_pilot_id'] ?? ''),
-            (string) ($simbriefInput['simbrief_pilot_name'] ?? '')
+            (string) ($simbriefInput['simbrief_pilot_name'] ?? ''),
         );
         $payload = simbrief_description_fetch_latest_ofp($identifier);
         $details = simbrief_description_extract_details($payload);
-        $routePoints = simbrief_description_extract_route_points($payload, $details);
-        $description = function_exists('Gallery\\Views\\view_simbrief_description_markdown')
+        $routePoints = simbrief_description_extract_route_points(
+            $payload,
+            $details,
+        );
+        $description = function_exists(
+            'Gallery\\Views\\view_simbrief_description_markdown',
+        )
             ? view_simbrief_description_markdown($details)
             : simbrief_description_build_markdown($details);
-        $localizationReady = function_exists('Gallery\\Services\\content_localization_enabled')
+        $localizationReady =
+            function_exists('Gallery\\Services\\content_localization_enabled')
             && content_localization_enabled()
-            && function_exists('Gallery\\Services\\content_localization_schema_ready')
+            && function_exists(
+                'Gallery\\Services\\content_localization_schema_ready',
+            )
             && content_localization_schema_ready('gallery');
-        $languages = $localizationReady && function_exists('Gallery\\Services\\content_supported_languages')
+        $languages = $localizationReady
+        && function_exists('Gallery\\Services\\content_supported_languages')
             ? content_supported_languages()
             : [];
-        $supportedLanguages = function_exists('Gallery\\Services\\content_supported_languages')
+        $supportedLanguages = function_exists(
+            'Gallery\\Services\\content_supported_languages',
+        )
             ? content_supported_languages()
             : ['en'];
-        $publicDefaultLanguage = function_exists('Gallery\\Services\\translation_public_language')
+        $publicDefaultLanguage = function_exists(
+            'Gallery\\Services\\translation_public_language',
+        )
             ? translation_public_language()
             : 'en';
-        $requestedSourceLanguage = strtolower(trim((string) ($_POST['content_language'] ?? '')));
-        $selectedSourceLanguage = in_array($requestedSourceLanguage, $supportedLanguages, true)
+        $requestedSourceLanguage = strtolower(trim(
+            (string) ($_POST['content_language'] ?? ''),
+        ));
+        $selectedSourceLanguage = in_array(
+            $requestedSourceLanguage,
+            $supportedLanguages,
+            true,
+        )
             ? $requestedSourceLanguage
             : $publicDefaultLanguage;
         if (!in_array($selectedSourceLanguage, $supportedLanguages, true)) {
             $selectedSourceLanguage = 'en';
         }
-        $localizedDrafts = function_exists('Gallery\\Services\\simbrief_description_localized_drafts')
-            ? simbrief_description_localized_drafts($details, $selectedSourceLanguage, $languages)
-            : ['description' => $description, 'translations' => [], 'source_language' => 'en'];
+        $localizedDrafts = function_exists(
+            'Gallery\\Services\\simbrief_description_localized_drafts',
+        )
+            ? simbrief_description_localized_drafts(
+                $details,
+                $selectedSourceLanguage,
+                $languages,
+            )
+            : [
+                'description' => $description,
+                'translations' => [],
+                'source_language' => 'en',
+            ];
         if ($selectedSourceLanguage === 'en') {
             $localizedDrafts['description'] = $description;
         }
@@ -144,30 +183,55 @@ function cms_admin_simbrief_description(): void
             $localizedDrafts['translations']['en'] = $description;
         }
         $user = \Gallery\Core\current_user();
-        $draftRef = simbrief_description_draft_create((int) ($user['id'] ?? 0), $payload, $identifier, $details);
+        $draftRef = simbrief_description_draft_create(
+            (int) ($user['id'] ?? 0),
+            $payload,
+            $identifier,
+            $details,
+        );
         $draftMessage = $languages !== []
-            ? t('admin.simbrief.generated', 'Descriptions are ready in every supported language. Review them; nothing is saved until you save the gallery.')
-            : t('admin.simbrief.create_draft_ready', 'Flight description is ready. Review it; nothing is saved until you save the gallery.');
+            ? t(
+                'admin.simbrief.generated',
+                'Descriptions are ready in every supported language. Review them; nothing is saved until you save the gallery.',
+            )
+            : t(
+                'admin.simbrief.create_draft_ready',
+                'Flight description is ready. Review it; nothing is saved until you save the gallery.',
+            );
 
         if (function_exists('Gallery\\Services\\admin_log_event')) {
-            admin_log_event('info', 'simbrief.description_generated', 'Admin generated a private gallery description draft from SimBrief.', [
-                'gallery_id' => $galleryId,
-                'identifier_type' => (string) ($identifier['label'] ?? ''),
-                'origin' => (string) ($details['origin_code'] ?? ''),
-                'destination' => (string) ($details['destination_code'] ?? ''),
-                'aircraft' => (string) ($details['aircraft'] ?? ''),
-            ]);
+            admin_log_event(
+                'info',
+                'simbrief.description_generated',
+                'Admin generated a private gallery description draft from SimBrief.',
+                [
+                    'gallery_id' => $galleryId,
+                    'identifier_type' => (string) ($identifier['label'] ?? ''),
+                    'origin' => (string) ($details['origin_code'] ?? ''),
+                    'destination' => (string) (
+                        $details['destination_code'] ?? ''
+                    ),
+                    'aircraft' => (string) ($details['aircraft'] ?? ''),
+                ],
+            );
         }
 
         admin_simbrief_json_response([
             'ok' => true,
-            'description' => (string) ($localizedDrafts['description'] ?? $description),
+            'description' => (string) (
+                $localizedDrafts['description'] ?? $description
+            ),
             'translations' => (array) ($localizedDrafts['translations'] ?? []),
-            'source_language' => (string) ($localizedDrafts['source_language'] ?? 'en'),
+            'source_language' => (string) (
+                $localizedDrafts['source_language'] ?? 'en'
+            ),
             'draft_ref' => $draftRef,
             'route' => [
                 'saved' => false,
-                'route_text' => simbrief_description_route_text_from_points($routePoints, $details),
+                'route_text' => simbrief_description_route_text_from_points(
+                    $routePoints,
+                    $details,
+                ),
                 'point_count' => count($routePoints),
             ],
             'message' => $draftMessage,
@@ -175,10 +239,15 @@ function cms_admin_simbrief_description(): void
         ]);
     } catch (Throwable $exception) {
         if (function_exists('Gallery\\Services\\admin_log_event')) {
-            admin_log_event('warning', 'simbrief.description_failed', 'Admin SimBrief description generation failed.', [
-                'gallery_id' => $galleryId,
-                'error' => $exception->getMessage(),
-            ]);
+            admin_log_event(
+                'warning',
+                'simbrief.description_failed',
+                'Admin SimBrief description generation failed.',
+                [
+                    'gallery_id' => $galleryId,
+                    'error' => $exception->getMessage(),
+                ],
+            );
         }
 
         admin_simbrief_json_response([

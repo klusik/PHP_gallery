@@ -35,15 +35,21 @@ function theme_background_with_writer_lock(callable $operation): void
     $storage = theme_background_storage_dir();
     $lockPath = $storage . DIRECTORY_SEPARATOR . '.theme-background.lock';
     if (is_link($lockPath)) {
-        throw new RuntimeException('The Theme background writer lock is unsafe.');
+        throw new RuntimeException(
+            'The Theme background writer lock is unsafe.',
+        );
     }
     $lock = @fopen($lockPath, 'c');
     if ($lock === false) {
-        throw new RuntimeException('The Theme background writer lock is unavailable.');
+        throw new RuntimeException(
+            'The Theme background writer lock is unavailable.',
+        );
     }
     try {
         if (!flock($lock, LOCK_EX | LOCK_NB)) {
-            throw new RuntimeException('Another Theme background write is in progress.');
+            throw new RuntimeException(
+                'Another Theme background write is in progress.',
+            );
         }
         $operation();
     } finally {
@@ -64,25 +70,44 @@ function theme_background_revision(): string
 {
     $originalSetting = app_settings_model_get('theme_background_original_path');
     $pathSetting = app_settings_model_get('theme_background_path');
-    $optimizedSetting = app_settings_model_get('theme_background_optimized_path');
+    $optimizedSetting = app_settings_model_get(
+        'theme_background_optimized_path',
+    );
     $sourceSetting = app_settings_model_get('theme_background_source');
     $opacitySetting = app_settings_model_get('theme_background_opacity');
-    $maxSideSetting = app_settings_model_get('theme_background_optimized_max_side');
-    $originalPath = theme_background_existing_path(is_string($originalSetting) ? $originalSetting : '');
-    $path = theme_background_existing_path(is_string($pathSetting) ? $pathSetting : '');
-    $optimizedPath = theme_background_existing_path(is_string($optimizedSetting) ? $optimizedSetting : '');
+    $maxSideSetting = app_settings_model_get(
+        'theme_background_optimized_max_side',
+    );
+    $originalPath = theme_background_existing_path(
+        is_string($originalSetting) ? $originalSetting : '',
+    );
+    $path = theme_background_existing_path(
+        is_string($pathSetting) ? $pathSetting : '',
+    );
+    $optimizedPath = theme_background_existing_path(
+        is_string($optimizedSetting) ? $optimizedSetting : '',
+    );
     $identity = [
         'source' => is_string($sourceSetting) ? $sourceSetting : '',
-        'original_setting' => is_string($originalSetting) ? $originalSetting : '',
+        'original_setting' => is_string($originalSetting)
+            ? $originalSetting
+            : '',
         'path_setting' => is_string($pathSetting) ? $pathSetting : '',
-        'optimized_setting' => is_string($optimizedSetting) ? $optimizedSetting : '',
+        'optimized_setting' => is_string($optimizedSetting)
+            ? $optimizedSetting
+            : '',
         'opacity' => is_string($opacitySetting) ? $opacitySetting : '',
         'max_side' => is_string($maxSideSetting) ? $maxSideSetting : '1920',
-        'original_sha256' => theme_background_revision_file_digest($originalPath),
+        'original_sha256' =>
+            theme_background_revision_file_digest($originalPath),
         'path_sha256' => theme_background_revision_file_digest($path),
-        'optimized_sha256' => theme_background_revision_file_digest($optimizedPath),
+        'optimized_sha256' =>
+            theme_background_revision_file_digest($optimizedPath),
     ];
-    return hash('sha256', json_encode($identity, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+    return hash('sha256', json_encode(
+        $identity,
+        JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+    ));
 }
 
 /**
@@ -114,25 +139,43 @@ function theme_background_editor_state(): array
  * @param bool $publicOnly Whether the existing gallery resolver must hide visitor-inaccessible cover assets.
  * @return array{target:'theme'|'none',owner:'theme_image'|'theme_gallery_fallback'|'gallery_override'|'none',mode:'theme_image'|'upload'|'existing'|'collage'|'none',url:string} Path-free edit target and source metadata matching the public URL actually rendered.
  */
-function theme_background_visual_editor_context(?array $gallery, bool $publicOnly): array
-{
-    $galleryUrl = $gallery === null ? '' : gallery_background_asset_url($gallery, $publicOnly);
+function theme_background_visual_editor_context(
+    ?array $gallery,
+    bool $publicOnly,
+): array {
+    $galleryUrl = $gallery === null
+        ? ''
+        : gallery_background_asset_url($gallery, $publicOnly);
     if ($galleryUrl !== '' && $gallery !== null) {
         $gallerySource = gallery_background_source($gallery);
         $mode = $gallerySource ?? theme_background_source() ?? 'none';
         return [
             'target' => 'none',
-            'owner' => $gallerySource !== null ? 'gallery_override' : 'theme_gallery_fallback',
-            'mode' => in_array($mode, ['upload', 'existing', 'collage'], true) ? $mode : 'none',
+            'owner' => $gallerySource !== null
+                ? 'gallery_override'
+                : 'theme_gallery_fallback',
+            'mode' => in_array($mode, ['upload', 'existing', 'collage'], true)
+                ? $mode
+                : 'none',
             'url' => $galleryUrl,
         ];
     }
 
     $themeUrl = theme_background_asset_url();
     if ($themeUrl !== '') {
-        return ['target' => 'theme', 'owner' => 'theme_image', 'mode' => 'theme_image', 'url' => $themeUrl];
+        return [
+            'target' => 'theme',
+            'owner' => 'theme_image',
+            'mode' => 'theme_image',
+            'url' => $themeUrl,
+        ];
     }
-    return ['target' => 'theme', 'owner' => 'none', 'mode' => 'none', 'url' => ''];
+    return [
+        'target' => 'theme',
+        'owner' => 'none',
+        'mode' => 'none',
+        'url' => '',
+    ];
 }
 
 /**
@@ -144,7 +187,11 @@ function theme_background_visual_editor_context(?array $gallery, bool $publicOnl
 function theme_background_verified_current_paths(): array
 {
     $paths = [];
-    foreach (['theme_background_path', 'theme_background_original_path', 'theme_background_optimized_path'] as $settingKey) {
+    foreach ([
+        'theme_background_path',
+        'theme_background_original_path',
+        'theme_background_optimized_path',
+    ] as $settingKey) {
         $configured = app_settings_model_get($settingKey);
         if (!is_string($configured) || trim($configured) === '') {
             continue;
@@ -152,7 +199,9 @@ function theme_background_verified_current_paths(): array
         $resolved = theme_background_existing_path($configured);
         $absolute = dirname(__DIR__, 3) . '/' . ltrim($configured, '/');
         if ($resolved === null || is_link($absolute)) {
-            throw new RuntimeException('A configured Theme background image could not be verified for removal.');
+            throw new RuntimeException(
+                'A configured Theme background image could not be verified for removal.',
+            );
         }
         $paths[$resolved] = $resolved;
     }
@@ -174,7 +223,9 @@ function theme_background_revision_file_digest(?string $relativePath): ?string
     $absolute = dirname(__DIR__, 3) . '/' . ltrim($relativePath, '/');
     $digest = @hash_file('sha256', $absolute);
     if (!is_string($digest)) {
-        throw new RuntimeException('The configured Theme background changed while its revision was read.');
+        throw new RuntimeException(
+            'The configured Theme background changed while its revision was read.',
+        );
     }
     return $digest;
 }
@@ -192,36 +243,81 @@ function theme_background_stage_pending_upload(array $file, int $maxSide): array
 {
     $tmpPath = (string) ($file['tmp_name'] ?? '');
     $filename = (string) ($file['name'] ?? '');
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || $tmpPath === '' || !is_uploaded_file($tmpPath)) {
-        throw new \InvalidArgumentException('Choose a complete uploaded image before saving the Theme background.');
+    if (
+        ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+        || $tmpPath === ''
+        || !is_uploaded_file($tmpPath)
+    ) {
+        throw new \InvalidArgumentException(
+            'Choose a complete uploaded image before saving the Theme background.',
+        );
     }
     $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
     if (!in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
-        throw new \InvalidArgumentException('The Theme background must be a JPEG, PNG, GIF, or WebP image.');
+        throw new \InvalidArgumentException(
+            'The Theme background must be a JPEG, PNG, GIF, or WebP image.',
+        );
     }
     $info = @getimagesize($tmpPath);
-    $mimeExtension = is_array($info) ? gallery_branding_mime_extension((string) ($info['mime'] ?? '')) : null;
+    $mimeExtension = is_array($info)
+        ? gallery_branding_mime_extension((string) ($info['mime'] ?? ''))
+        : null;
     $normalizedExtension = $extension === 'jpeg' ? 'jpg' : $extension;
-    if (!is_array($info) || $mimeExtension === null || $mimeExtension !== $normalizedExtension
-        || (int) ($info[0] ?? 0) < 1 || (int) ($info[1] ?? 0) < 1) {
-        throw new \InvalidArgumentException('The uploaded Theme background is not a supported image with valid dimensions.');
+    if (
+        !is_array($info)
+        || $mimeExtension === null
+        || $mimeExtension !== $normalizedExtension
+        || (int) ($info[0] ?? 0) < 1
+        || (int) ($info[1] ?? 0) < 1
+    ) {
+        throw new \InvalidArgumentException(
+            'The uploaded Theme background is not a supported image with valid dimensions.',
+        );
     }
 
     $storage = theme_background_storage_dir();
     $token = bin2hex(random_bytes(16));
-    $originalStage = $storage . DIRECTORY_SEPARATOR . '.pending-original-' . $token . '.' . $mimeExtension;
-    $originalFinal = $storage . DIRECTORY_SEPARATOR . 'background-original-' . $token . '.' . $mimeExtension;
+    $originalStage =
+        $storage
+        . DIRECTORY_SEPARATOR
+        . '.pending-original-'
+        . $token
+        . '.'
+        . $mimeExtension;
+    $originalFinal =
+        $storage
+        . DIRECTORY_SEPARATOR
+        . 'background-original-'
+        . $token
+        . '.'
+        . $mimeExtension;
     $optimizedStage = null;
     $optimizedFinal = null;
     if (!move_uploaded_file($tmpPath, $originalStage)) {
         @unlink($originalStage);
-        throw new RuntimeException('The Theme background upload could not be staged.');
+        throw new RuntimeException(
+            'The Theme background upload could not be staged.',
+        );
     }
     try {
         if (theme_background_webp_generation_available()) {
-            $optimizedStage = $storage . DIRECTORY_SEPARATOR . '.pending-optimized-' . $token . '.webp';
-            $optimizedFinal = $storage . DIRECTORY_SEPARATOR . 'background-optimized-' . $token . '.webp';
-            if (!theme_background_write_optimized_derivative($originalStage, $maxSide, $optimizedStage)) {
+            $optimizedStage =
+                $storage
+                . DIRECTORY_SEPARATOR
+                . '.pending-optimized-'
+                . $token
+                . '.webp';
+            $optimizedFinal =
+                $storage
+                . DIRECTORY_SEPARATOR
+                . 'background-optimized-'
+                . $token
+                . '.webp';
+            if (!theme_background_write_optimized_derivative(
+                $originalStage,
+                $maxSide,
+                $optimizedStage,
+            )) {
                 @unlink($optimizedStage);
                 $optimizedStage = null;
                 $optimizedFinal = null;
@@ -232,7 +328,11 @@ function theme_background_stage_pending_upload(array $file, int $maxSide): array
         if ($optimizedStage !== null) {
             @unlink($optimizedStage);
         }
-        throw new RuntimeException('The Theme background derivative could not be prepared.', 0, $exception);
+        throw new RuntimeException(
+            'The Theme background derivative could not be prepared.',
+            0,
+            $exception,
+        );
     }
     return [
         'original_stage' => $originalStage,
@@ -253,24 +353,40 @@ function theme_background_activate_staged_upload(array $staged): array
 {
     $storage = realpath(theme_background_storage_dir());
     $activated = [];
-    foreach ([['original_stage', 'original_final'], ['optimized_stage', 'optimized_final']] as [$stageKey, $finalKey]) {
+    foreach ([
+        ['original_stage', 'original_final'],
+        ['optimized_stage', 'optimized_final'],
+    ] as [$stageKey, $finalKey]) {
         $stagePath = $staged[$stageKey];
         $finalPath = $staged[$finalKey];
         if ($stagePath === null || $finalPath === null) {
             continue;
         }
-        if ($storage === false || realpath(dirname($stagePath)) !== $storage || realpath(dirname($finalPath)) !== $storage
-            || is_link($stagePath) || is_link($finalPath) || file_exists($finalPath) || !is_file($stagePath) || !@rename($stagePath, $finalPath)) {
+        if (
+            $storage === false
+            || realpath(dirname($stagePath)) !== $storage
+            || realpath(dirname($finalPath)) !== $storage
+            || is_link($stagePath)
+            || is_link($finalPath)
+            || file_exists($finalPath)
+            || !is_file($stagePath)
+            || !@rename($stagePath, $finalPath)
+        ) {
             foreach ($activated as $path) {
                 @unlink($path);
             }
-            throw new RuntimeException('A staged Theme background asset could not be activated safely.');
+            throw new RuntimeException(
+                'A staged Theme background asset could not be activated safely.',
+            );
         }
         $activated[] = $finalPath;
     }
     return [
-        'original_path' => 'cache/theme-background/' . basename($staged['original_final']),
-        'optimized_path' => $staged['optimized_final'] !== null ? 'cache/theme-background/' . basename($staged['optimized_final']) : '',
+        'original_path' =>
+            'cache/theme-background/' . basename($staged['original_final']),
+        'optimized_path' => $staged['optimized_final'] !== null
+            ? 'cache/theme-background/' . basename($staged['optimized_final'])
+            : '',
     ];
 }
 
@@ -281,15 +397,26 @@ function theme_background_activate_staged_upload(array $staged): array
  * @param bool $removeActivated Whether to remove the unique final files created by this request.
  * @return void Removes only regular files directly owned by the Theme background storage directory.
  */
-function theme_background_discard_staged_upload(array $staged, bool $removeActivated = false): void
-{
+function theme_background_discard_staged_upload(
+    array $staged,
+    bool $removeActivated = false,
+): void {
     $storage = realpath(theme_background_storage_dir());
     if ($storage === false) {
         return;
     }
-    foreach (['original_stage', 'original_final', 'optimized_stage', 'optimized_final'] as $key) {
+    foreach ([
+        'original_stage',
+        'original_final',
+        'optimized_stage',
+        'optimized_final',
+    ] as $key) {
         $path = $staged[$key] ?? null;
-        if (!is_string($path) || realpath(dirname($path)) !== $storage || is_link($path)) {
+        if (
+            !is_string($path)
+            || realpath(dirname($path)) !== $storage
+            || is_link($path)
+        ) {
             continue;
         }
         $isFinal = str_ends_with($key, '_final');
@@ -312,8 +439,14 @@ function theme_background_cleanup_replaced_assets(array $keepPaths): void
         return;
     }
     $keep = array_fill_keys(array_map('basename', $keepPaths), true);
-    foreach (glob($storage . DIRECTORY_SEPARATOR . 'background*.*') ?: [] as $path) {
-        if (is_link($path) || !is_file($path) || dirname($path) !== $storage || isset($keep[basename($path)])) {
+    foreach (glob($storage . DIRECTORY_SEPARATOR . 'background*.*')
+        ?: [] as $path) {
+        if (
+            is_link($path)
+            || !is_file($path)
+            || dirname($path) !== $storage
+            || isset($keep[basename($path)])
+        ) {
             continue;
         }
         @unlink($path);
@@ -329,13 +462,25 @@ function theme_background_cleanup_replaced_assets(array $keepPaths): void
  * @return bool True when a complete WebP file was written and can be verified.
  * @throws RuntimeException When the destination escapes the owned directory.
  */
-function theme_background_write_optimized_derivative(string $sourcePath, int $maxSide, string $targetPath): bool
-{
+function theme_background_write_optimized_derivative(
+    string $sourcePath,
+    int $maxSide,
+    string $targetPath,
+): bool {
     $storage = realpath(theme_background_storage_dir());
-    if ($storage === false || realpath(dirname($targetPath)) !== $storage || is_link($targetPath)) {
-        throw new RuntimeException('The optimized Theme background destination is unsafe.');
+    if (
+        $storage === false
+        || realpath(dirname($targetPath)) !== $storage
+        || is_link($targetPath)
+    ) {
+        throw new RuntimeException(
+            'The optimized Theme background destination is unsafe.',
+        );
     }
-    if (!theme_background_webp_generation_available() || !is_file($sourcePath)) {
+    if (
+        !theme_background_webp_generation_available()
+        || !is_file($sourcePath)
+    ) {
         return false;
     }
     $raw = @file_get_contents($sourcePath);
@@ -359,8 +504,26 @@ function theme_background_write_optimized_derivative(string $sourcePath, int $ma
     imagealphablending($target, false);
     imagesavealpha($target, true);
     $transparent = imagecolorallocatealpha($target, 0, 0, 0, 127);
-    imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $transparent);
-    imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+    imagefilledrectangle(
+        $target,
+        0,
+        0,
+        $targetWidth,
+        $targetHeight,
+        $transparent,
+    );
+    imagecopyresampled(
+        $target,
+        $source,
+        0,
+        0,
+        0,
+        0,
+        $targetWidth,
+        $targetHeight,
+        $width,
+        $height,
+    );
     imageinterlace($target, true);
     $written = imagewebp($target, $targetPath, 82);
     imagedestroy($target);

@@ -19,38 +19,66 @@ use function Gallery\Services\public_widget_inline_html;
 use function Gallery\Services\public_widget_markdown_html;
 use function Gallery\Services\public_widget_normalize;
 
-$source = "# Friend galleries\n\nVisit our **friends** and *resources*:\n\n"
+$source =
+    "# Friend galleries\n\nVisit our **friends** and *resources*:\n\n"
     . "- [Aircraft photos](https://example.org/pictures?q=1&v=2)\n"
     . "- [Internal gallery](/index.php?page=gallery&id=42)\n\n"
     . "1. First\n2. Second\n\n## More information\nA second line.\n";
 $html = public_widget_markdown_html($source);
-foreach (['<h2>Friend galleries</h2>', '<strong>friends</strong>', '<em>resources</em>',
-    '<ul>', '<ol>', '<li>First</li>', '<h3>More information</h3>',
+foreach ([
+    '<h2>Friend galleries</h2>',
+    '<strong>friends</strong>',
+    '<em>resources</em>',
+    '<ul>',
+    '<ol>',
+    '<li>First</li>',
+    '<h3>More information</h3>',
     '<p>A second line.</p>',
     '<a href="https://example.org/pictures?q=1&amp;v=2" target="_blank" rel="noopener noreferrer">Aircraft photos</a>',
-    '<a href="/index.php?page=gallery&amp;id=42">Internal gallery</a>'] as $needle) {
+    '<a href="/index.php?page=gallery&amp;id=42">Internal gallery</a>',
+] as $needle) {
     if (!str_contains($html, $needle)) {
-        throw new RuntimeException('Markdown widget renderer missing: ' . $needle);
+        throw new RuntimeException('Markdown widget renderer missing: '
+            . $needle);
     }
 }
-$malicious = public_widget_markdown_html("# Safe heading\n<script>alert(1)</script>\n"
-    . "- [unsafe](javascript:alert)\n"
-    . "- [injected](https://example.org/\"onclick=\"alert)\n"
-    . "- <img src=x onerror=alert(1)>\n"
-    . "- <iframe src=\"https://example.org/\">embedded content</iframe>\n");
-foreach (['<script', '<img ', ' onclick="', ' onerror="', 'href="javascript:', '<iframe'] as $needle) {
+$malicious = public_widget_markdown_html(
+    "# Safe heading\n<script>alert(1)</script>\n"
+        . "- [unsafe](javascript:alert)\n"
+        . "- [injected](https://example.org/\"onclick=\"alert)\n"
+        . "- <img src=x onerror=alert(1)>\n"
+        . "- <iframe src=\"https://example.org/\">embedded content</iframe>\n",
+);
+foreach ([
+    '<script',
+    '<img ',
+    ' onclick="',
+    ' onerror="',
+    'href="javascript:',
+    '<iframe',
+] as $needle) {
     if (str_contains($malicious, $needle)) {
-        throw new RuntimeException('Untrusted widget source emitted active HTML: ' . $needle);
+        throw new RuntimeException('Untrusted widget source emitted active HTML: '
+            . $needle);
     }
 }
-if (!str_contains($malicious, '&lt;script&gt;') || !str_contains($malicious, '[unsafe](javascript:alert)')
-    || !str_contains($malicious, '&lt;iframe')) {
-    throw new RuntimeException('Unsupported HTML and URLs must remain visibly inert.');
+if (
+    !str_contains($malicious, '&lt;script&gt;')
+    || !str_contains($malicious, '[unsafe](javascript:alert)')
+    || !str_contains($malicious, '&lt;iframe')
+) {
+    throw new RuntimeException(
+        'Unsupported HTML and URLs must remain visibly inert.',
+    );
 }
-if (public_widget_markdown_html(str_repeat('a', 16385)) !== ''
+if (
+    public_widget_markdown_html(str_repeat('a', 16385)) !== ''
     || public_widget_markdown_html("\xff") !== ''
-    || public_widget_markdown_html("  \n\n ") !== '') {
-    throw new RuntimeException('Widget renderer must fail closed on invalid source.');
+    || public_widget_markdown_html("  \n\n ") !== ''
+) {
+    throw new RuntimeException(
+        'Widget renderer must fail closed on invalid source.',
+    );
 }
 if (str_contains(public_widget_inline_html('[bad](data:text/html,hi)'), '<a')) {
     throw new RuntimeException('Executable URI created a link.');
@@ -64,22 +92,36 @@ $normalized = public_widget_normalize([
     'status' => 'published',
 ]);
 $parenthesizedHtml = public_widget_markdown_html($normalized['content_md']);
-if (!str_contains($parenthesizedHtml,
-    '<a href="https://example.org/wiki/Topic_(aviation)" target="_blank" rel="noopener noreferrer">Reference</a>')) {
-    throw new RuntimeException('A safe balanced-parenthesis link must render as a validated link.');
+if (!str_contains(
+    $parenthesizedHtml,
+    '<a href="https://example.org/wiki/Topic_(aviation)" target="_blank" rel="noopener noreferrer">Reference</a>',
+)) {
+    throw new RuntimeException(
+        'A safe balanced-parenthesis link must render as a validated link.',
+    );
 }
-foreach (['[bad](javascript:alert(1))', '[bad](data:text/html,(evil))', '[bad](javascript:alert)'] as $unsafe) {
+foreach ([
+    '[bad](javascript:alert(1))',
+    '[bad](data:text/html,(evil))',
+    '[bad](javascript:alert)',
+] as $unsafe) {
     $rejected = false;
     try {
-        public_widget_normalize(['title' => 'Blocked', 'content_md' => $unsafe, 'status' => 'published']);
+        public_widget_normalize([
+            'title' => 'Blocked',
+            'content_md' => $unsafe,
+            'status' => 'published',
+        ]);
     } catch (\Gallery\Services\PublicWidgetInvalidField $exception) {
         $rejected = $exception->field === 'content_md';
     }
     if (!$rejected) {
-        throw new RuntimeException('An unsafe Markdown link was admitted: ' . $unsafe);
+        throw new RuntimeException('An unsafe Markdown link was admitted: '
+            . $unsafe);
     }
     if (str_contains(public_widget_markdown_html($unsafe), '<a ')) {
-        throw new RuntimeException('An unsafe Markdown link was rendered: ' . $unsafe);
+        throw new RuntimeException('An unsafe Markdown link was rendered: '
+            . $unsafe);
     }
 }
 

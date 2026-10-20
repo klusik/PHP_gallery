@@ -65,14 +65,23 @@ require_once __DIR__ . '/../app/helpers.php';
 /**
  * Throw when an expectation fails.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @template TExpected
+ * @template TActual
+ * @param TExpected $expected Value expected to match strictly, including its collection shape.
+ * @param TActual $actual Value compared by strict equality, including its collection shape.
  * @param string $label Label value.
+ * @return void Returns normally only when expected and actual match strictly.
  */
-function assert_url_rewrite_same(mixed $expected, mixed $actual, string $label): void
-{
+function assert_url_rewrite_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
@@ -84,12 +93,17 @@ function assert_url_rewrite_same(mixed $expected, mixed $actual, string $label):
  */
 function make_url_rewrite_test_root(bool $withMarkers): string
 {
-    $root = sys_get_temp_dir() . '/php-gallery-url-rewrite-test-' . bin2hex(random_bytes(4));
+    $root =
+        sys_get_temp_dir()
+        . '/php-gallery-url-rewrite-test-'
+        . bin2hex(random_bytes(4));
     if (!mkdir($root, 0777, true) && !is_dir($root)) {
         throw new RuntimeException('Unable to create temporary test root.');
     }
     if (!mkdir($root . '/public', 0777, true) && !is_dir($root . '/public')) {
-        throw new RuntimeException('Unable to create temporary public test root.');
+        throw new RuntimeException(
+            'Unable to create temporary public test root.',
+        );
     }
     if ($withMarkers) {
         $rules = "<IfModule mod_rewrite.c>\nRewriteEngine On\nRewriteRule ^ index.php [L]\n</IfModule>\n";
@@ -102,11 +116,20 @@ function make_url_rewrite_test_root(bool $withMarkers): string
 /**
  * Remove a temporary test root recursively.
  *
- * @param string $root Root value.
+ * @param string $root Path to the temporary test root.
+ * @return void
  */
 function remove_url_rewrite_test_root(string $root): void
 {
-    foreach (array_reverse(iterator_to_array(new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST))) as $path) {
+    foreach (array_reverse(iterator_to_array(
+        new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator(
+                $root,
+                FilesystemIterator::SKIP_DOTS,
+            ),
+            RecursiveIteratorIterator::SELF_FIRST,
+        ),
+    )) as $path) {
         $path->isDir() ? rmdir((string) $path) : unlink((string) $path);
     }
     rmdir($root);
@@ -125,16 +148,32 @@ try {
         'REQUEST_URI' => '/index.php?page=admin',
         'SCRIPT_NAME' => '/index.php',
     ], $supportedRoot);
-    assert_url_rewrite_same('likely_supported', $supported['status'], 'rewrite detection success status');
-    assert_url_rewrite_same(true, $supported['supported'], 'rewrite detection success flag');
+    assert_url_rewrite_same(
+        'likely_supported',
+        $supported['status'],
+        'rewrite detection success status',
+    );
+    assert_url_rewrite_same(
+        true,
+        $supported['supported'],
+        'rewrite detection success flag',
+    );
 
     $unsupported = url_rewrite_compatibility([
         'SERVER_SOFTWARE' => 'Apache/2.4',
         'REQUEST_URI' => '/index.php?page=admin',
         'SCRIPT_NAME' => '/index.php',
     ], $unsupportedRoot);
-    assert_url_rewrite_same('unsupported', $unsupported['status'], 'rewrite detection failure status');
-    assert_url_rewrite_same(false, $unsupported['supported'], 'rewrite detection failure flag');
+    assert_url_rewrite_same(
+        'unsupported',
+        $unsupported['status'],
+        'rewrite detection failure status',
+    );
+    assert_url_rewrite_same(
+        false,
+        $unsupported['supported'],
+        'rewrite detection failure flag',
+    );
 
     $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => '0'];
     $disabled = url_rewrite_compatibility([
@@ -142,12 +181,39 @@ try {
         'REQUEST_URI' => '/index.php?page=admin',
         'SCRIPT_NAME' => '/index.php',
     ], $supportedRoot);
-    assert_url_rewrite_same('disabled', $disabled['status'], 'manual disabled status');
-    assert_url_rewrite_same(false, url_rewrite_should_emit_clean_urls(), 'manual disabled emit clean URLs');
-    assert_url_rewrite_same('https://example.test/index.php?page=tag&slug=friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'manual disabled tag fallback URL');
-    assert_url_rewrite_same('https://example.test/index.php?page=smart_gallery&slug=aviation&source_gallery_id=17', url_for('smart_gallery', ['slug' => 'aviation', 'source_gallery_id' => 17]), 'manual disabled Smart Gallery source-filter fallback URL');
-    assert_url_rewrite_same('https://example.test/index.php?page=upload_automation_upload', url_for('upload_automation_upload'), 'manual disabled upload automation fallback URL');
-    $gallery = ['url_path' => 'Trips/Prague', 'folder_path' => 'Trips/Prague', 'slug' => 'prague'];
+    assert_url_rewrite_same(
+        'disabled',
+        $disabled['status'],
+        'manual disabled status',
+    );
+    assert_url_rewrite_same(
+        false,
+        url_rewrite_should_emit_clean_urls(),
+        'manual disabled emit clean URLs',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/index.php?page=tag&slug=friedrichshafen',
+        url_for('tag', ['slug' => 'friedrichshafen']),
+        'manual disabled tag fallback URL',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/index.php?page=smart_gallery&slug=aviation&source_gallery_id=17',
+        url_for('smart_gallery', [
+            'slug' => 'aviation',
+            'source_gallery_id' => 17,
+        ]),
+        'manual disabled Smart Gallery source-filter fallback URL',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/index.php?page=upload_automation_upload',
+        url_for('upload_automation_upload'),
+        'manual disabled upload automation fallback URL',
+    );
+    $gallery = [
+        'url_path' => 'Trips/Prague',
+        'folder_path' => 'Trips/Prague',
+        'slug' => 'prague',
+    ];
     $image = [
         'id' => 91,
         'url_slug' => 'Evening Flight',
@@ -159,23 +225,82 @@ try {
         'thumbnail_derivative_version' => 2,
     ];
     $assetVersion = image_public_asset_version($image);
-    assert_url_rewrite_same('https://example.test/index.php?page=gallery&public_path=Trips%2FPrague', gallery_public_url($gallery), 'manual disabled gallery fallback URL');
-    assert_url_rewrite_same('https://example.test/index.php?page=gallery&public_path=Trips%2FPrague%2Fevening-flight', image_public_url($image, $gallery), 'manual disabled image fallback URL');
-    assert_url_rewrite_same('https://example.test/index.php?page=public_media&public_path=Trips%2FPrague%2Fevening-flight&v=' . $assetVersion, image_public_media_url($image, $gallery), 'manual disabled media fallback URL');
-    assert_url_rewrite_same('https://example.test/index.php?page=public_thumb&public_path=Trips%2FPrague%2Fevening-flight&size=300&format=webp&v=' . $assetVersion, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'manual disabled thumbnail fallback URL');
+    assert_url_rewrite_same(
+        'https://example.test/index.php?page=gallery&public_path=Trips%2FPrague',
+        gallery_public_url($gallery),
+        'manual disabled gallery fallback URL',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/index.php?page=gallery&public_path=Trips%2FPrague%2Fevening-flight',
+        image_public_url($image, $gallery),
+        'manual disabled image fallback URL',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/index.php?page=public_media&public_path=Trips%2FPrague%2Fevening-flight&v='
+            . $assetVersion,
+        image_public_media_url($image, $gallery),
+        'manual disabled media fallback URL',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/index.php?page=public_thumb&public_path=Trips%2FPrague%2Fevening-flight&size=300&format=webp&v='
+            . $assetVersion,
+        image_public_thumbnail_url($image, $gallery, 300, 'webp'),
+        'manual disabled thumbnail fallback URL',
+    );
 
     $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => '1'];
     $_SERVER['SERVER_SOFTWARE'] = 'Apache/2.4';
     $_SERVER['REQUEST_URI'] = '/gallery/Trips/Prague/';
     $_SERVER['SCRIPT_NAME'] = '/index.php';
-    assert_url_rewrite_same(true, url_rewrite_should_emit_clean_urls(), 'default enabled emit clean URLs');
-    assert_url_rewrite_same('https://example.test/tag/friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'default enabled tag clean URL');
-    assert_url_rewrite_same('https://example.test/smart/aviation?source_gallery_id=17', url_for('smart_gallery', ['slug' => 'aviation', 'source_gallery_id' => 17]), 'default enabled Smart Gallery clean URL preserves source filter query state');
-    assert_url_rewrite_same('https://example.test/smart/aviation/3?source_gallery_id=17', url_for('smart_gallery', ['slug' => 'aviation', 'photo_page' => 3, 'source_gallery_id' => 17]), 'default enabled Smart Gallery pagination keeps source filter query state');
-    assert_url_rewrite_same('https://example.test/index.php?page=upload_automation_upload', url_for('upload_automation_upload'), 'upload automation keeps portable canonical query endpoint when rewrite is enabled');
-    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/', image_public_url($image, $gallery), 'default enabled image clean URL');
-    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/media?v=' . $assetVersion, image_public_media_url($image, $gallery), 'default enabled media clean URL');
-    assert_url_rewrite_same('https://example.test/gallery/Trips/Prague/evening-flight/thumb-300.webp?v=' . $assetVersion, image_public_thumbnail_url($image, $gallery, 300, 'webp'), 'default enabled thumbnail clean URL');
+    assert_url_rewrite_same(
+        true,
+        url_rewrite_should_emit_clean_urls(),
+        'default enabled emit clean URLs',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/tag/friedrichshafen',
+        url_for('tag', ['slug' => 'friedrichshafen']),
+        'default enabled tag clean URL',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/smart/aviation?source_gallery_id=17',
+        url_for('smart_gallery', [
+            'slug' => 'aviation',
+            'source_gallery_id' => 17,
+        ]),
+        'default enabled Smart Gallery clean URL preserves source filter query state',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/smart/aviation/3?source_gallery_id=17',
+        url_for('smart_gallery', [
+            'slug' => 'aviation',
+            'photo_page' => 3,
+            'source_gallery_id' => 17,
+        ]),
+        'default enabled Smart Gallery pagination keeps source filter query state',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/index.php?page=upload_automation_upload',
+        url_for('upload_automation_upload'),
+        'upload automation keeps portable canonical query endpoint when rewrite is enabled',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/gallery/Trips/Prague/evening-flight/',
+        image_public_url($image, $gallery),
+        'default enabled image clean URL',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/gallery/Trips/Prague/evening-flight/media?v='
+            . $assetVersion,
+        image_public_media_url($image, $gallery),
+        'default enabled media clean URL',
+    );
+    assert_url_rewrite_same(
+        'https://example.test/gallery/Trips/Prague/evening-flight/thumb-300.webp?v='
+            . $assetVersion,
+        image_public_thumbnail_url($image, $gallery, 300, 'webp'),
+        'default enabled thumbnail clean URL',
+    );
     assert_url_rewrite_same(
         'https://example.test/gallery/testovaci-fotky',
         rtrim(gallery_public_url([
@@ -184,7 +309,7 @@ try {
             'slug' => 'testovaci-fotky',
             'title' => 'Testovací fotky',
         ]), '/'),
-        'missing public path uses safe stored slug instead of physical folder name'
+        'missing public path uses safe stored slug instead of physical folder name',
     );
 } finally {
     remove_url_rewrite_test_root($supportedRoot);

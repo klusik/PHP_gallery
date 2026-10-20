@@ -33,5 +33,5 @@
  */
 
 return [
-    "ALTER TABLE tags ADD COLUMN description TEXT NULL AFTER slug",
+    'ALTER TABLE tags ADD COLUMN description TEXT NULL AFTER slug',
 ];

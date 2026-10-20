@@ -21,7 +21,9 @@ namespace Gallery\Services {
      */
     function app_setting(string $key, string $default = ''): string
     {
-        return (string) ($GLOBALS['theme_asset_test_settings'][$key] ?? $default);
+        return (string) (
+            $GLOBALS['theme_asset_test_settings'][$key] ?? $default
+        );
     }
 
     /**
@@ -58,12 +60,18 @@ namespace {
 
     $root = dirname(__DIR__);
     $id = bin2hex(random_bytes(6));
-    $dirs = [$root . '/cache', $root . '/cache/theme-background', $root . '/cache/theme-branding'];
+    $dirs = [
+        $root . '/cache',
+        $root . '/cache/theme-background',
+        $root . '/cache/theme-branding',
+    ];
     $created = [];
     foreach ($dirs as $dir) {
         if (!is_dir($dir)) {
             if (!mkdir($dir, 0700, true)) {
-                throw new \RuntimeException('Could not create Theme test directory.');
+                throw new \RuntimeException(
+                    'Could not create Theme test directory.',
+                );
             }
             $created[] = $dir;
         }
@@ -82,37 +90,93 @@ namespace {
         $validBg = 'cache/theme-background/fixture-' . $id . '.png';
         $validBrand = 'cache/theme-branding/fixture-' . $id . '.png';
         $other = 'cache/fixture-outside-' . $id . '.png';
-        theme_asset_safety_assert(\Gallery\Services\theme_background_existing_path($validBg) === $validBg, 'Valid saved background.');
-        theme_asset_safety_assert(\Gallery\Services\theme_background_existing_path($other) === null, 'Reject background outside owned cache.');
-        theme_asset_safety_assert(\Gallery\Services\theme_background_existing_path('cache/theme-background/../fixture-outside-' . $id . '.png') === null, 'Reject background traversal.');
+        theme_asset_safety_assert(
+            \Gallery\Services\theme_background_existing_path($validBg)
+                === $validBg,
+            'Valid saved background.',
+        );
+        theme_asset_safety_assert(
+            \Gallery\Services\theme_background_existing_path($other) === null,
+            'Reject background outside owned cache.',
+        );
+        theme_asset_safety_assert(
+            \Gallery\Services\theme_background_existing_path(
+                'cache/theme-background/../fixture-outside-' . $id . '.png',
+            ) === null,
+            'Reject background traversal.',
+        );
 
-        $GLOBALS['theme_asset_test_settings'] = ['theme_branding_banner_path' => $validBrand, 'theme_background_original_path' => $validBg];
-        theme_asset_safety_assert(\Gallery\Services\theme_background_original_path() === $validBg, 'Valid persisted original.');
-        theme_asset_safety_assert(\Gallery\Services\theme_branding_asset_path('banner') === $validBrand, 'Valid persisted banner.');
-        $GLOBALS['theme_asset_test_settings']['theme_branding_banner_path'] = $other;
-        theme_asset_safety_assert(\Gallery\Services\theme_branding_asset_path('banner') === null, 'Reject external branding file.');
-        $GLOBALS['theme_asset_test_settings']['theme_branding_banner_path'] = 'cache/theme-branding/../fixture-outside-' . $id . '.png';
-        theme_asset_safety_assert(\Gallery\Services\theme_branding_asset_path('banner') === null, 'Reject branding traversal.');
+        $GLOBALS['theme_asset_test_settings'] = [
+            'theme_branding_banner_path' => $validBrand,
+            'theme_background_original_path' => $validBg,
+        ];
+        theme_asset_safety_assert(
+            \Gallery\Services\theme_background_original_path() === $validBg,
+            'Valid persisted original.',
+        );
+        theme_asset_safety_assert(
+            \Gallery\Services\theme_branding_asset_path('banner')
+                === $validBrand,
+            'Valid persisted banner.',
+        );
+        $GLOBALS['theme_asset_test_settings']['theme_branding_banner_path'] =
+            $other;
+        theme_asset_safety_assert(
+            \Gallery\Services\theme_branding_asset_path('banner') === null,
+            'Reject external branding file.',
+        );
+        $GLOBALS['theme_asset_test_settings']['theme_branding_banner_path'] =
+            'cache/theme-branding/../fixture-outside-' . $id . '.png';
+        theme_asset_safety_assert(
+            \Gallery\Services\theme_branding_asset_path('banner') === null,
+            'Reject branding traversal.',
+        );
 
         if (function_exists('symlink') && @symlink($outside, $bgLink)) {
-            theme_asset_safety_assert(\Gallery\Services\theme_background_existing_path('cache/theme-background/link-' . $id . '.png') === null, 'Reject background symlink escape.');
+            theme_asset_safety_assert(
+                \Gallery\Services\theme_background_existing_path(
+                    'cache/theme-background/link-' . $id . '.png',
+                ) === null,
+                'Reject background symlink escape.',
+            );
         }
         if (function_exists('symlink') && @symlink($outside, $brandLink)) {
-            $GLOBALS['theme_asset_test_settings']['theme_branding_banner_path'] = 'cache/theme-branding/link-' . $id . '.png';
-            theme_asset_safety_assert(\Gallery\Services\theme_branding_asset_path('banner') === null, 'Reject branding symlink escape.');
+            $GLOBALS['theme_asset_test_settings']['theme_branding_banner_path'] =
+                'cache/theme-branding/link-' . $id . '.png';
+            theme_asset_safety_assert(
+                \Gallery\Services\theme_branding_asset_path('banner') === null,
+                'Reject branding symlink escape.',
+            );
         }
 
-        theme_asset_safety_assert(\Gallery\Services\gallery_branding_mime_extension('image/svg+xml') === null, 'SVG must not qualify as public Theme raster.');
-        $source = (string) file_get_contents($root . '/app/controllers/theme_assets.php');
+        theme_asset_safety_assert(
+            \Gallery\Services\gallery_branding_mime_extension('image/svg+xml')
+                === null,
+            'SVG must not qualify as public Theme raster.',
+        );
+        $source = (string) file_get_contents($root
+            . '/app/controllers/theme_assets.php');
         $first = strpos($source, 'function cms_theme_background_asset(): void');
         $second = strpos($source, 'function cms_theme_branding_asset(): void');
         $third = strpos($source, 'function cms_favicon_asset(): void');
-        $backgroundHandler = $first !== false && $second !== false ? substr($source, $first, $second - $first) : '';
-        $brandingHandler = $second !== false && $third !== false ? substr($source, $second, $third - $second) : '';
+        $backgroundHandler =
+            $first !== false && $second !== false
+                ? substr($source, $first, $second - $first)
+                : '';
+        $brandingHandler =
+            $second !== false && $third !== false
+                ? substr($source, $second, $third - $second)
+                : '';
         theme_asset_safety_assert(
-            str_contains($backgroundHandler, 'gallery_branding_mime_extension($mime) === null')
-                && str_contains($brandingHandler, 'gallery_branding_mime_extension($mime) === null'),
-            'Public Theme controllers must use the supported raster MIME allowlist.'
+            str_contains(
+                $backgroundHandler,
+                'gallery_branding_mime_extension($mime) === null',
+            )
+                && str_contains(
+                    $brandingHandler,
+                    'gallery_branding_mime_extension($mime) === null',
+                ),
+            'Public Theme controllers must use the supported raster MIME allowlist.',
         );
         echo "Theme asset path and MIME safety passed.\n";
     } finally {

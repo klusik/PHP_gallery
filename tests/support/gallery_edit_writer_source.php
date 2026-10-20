@@ -48,22 +48,46 @@ function gallery_writer_functions(string $source): array
             continue;
         }
         $cursor = $index + 1;
-        while (isset($tokens[$cursor]) && is_array($tokens[$cursor]) && $tokens[$cursor][0] === T_WHITESPACE) {
+        while (
+            isset($tokens[$cursor])
+            && is_array($tokens[$cursor])
+            && $tokens[$cursor][0] === T_WHITESPACE
+        ) {
             $cursor++;
         }
-        if (!isset($tokens[$cursor]) || !is_array($tokens[$cursor]) || $tokens[$cursor][0] !== T_STRING) {
+        if (
+            !isset($tokens[$cursor])
+            || !is_array($tokens[$cursor])
+            || $tokens[$cursor][0] !== T_STRING
+        ) {
             continue;
         }
         $name = $tokens[$cursor][1];
         $declaration = '';
-        for ($cursor = $index; $cursor < $count && $tokens[$cursor] !== '{'; $cursor++) {
-            $declaration .= is_array($tokens[$cursor]) ? $tokens[$cursor][1] : $tokens[$cursor];
+        for (
+            $cursor = $index;
+            $cursor < $count && $tokens[$cursor] !== '{';
+            $cursor++
+        ) {
+            $declaration .= is_array($tokens[$cursor])
+                ? $tokens[$cursor][1]
+                : $tokens[$cursor];
         }
         $body = '';
         $depth = 0;
         for (; $cursor < $count; $cursor++) {
             $part = $tokens[$cursor];
-            if ($part === '{' || (is_array($part) && in_array($part[0], [T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES], true))) {
+            if (
+                $part === '{'
+                || (
+                    is_array($part)
+                    && in_array(
+                        $part[0],
+                        [T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES],
+                        true,
+                    )
+                )
+            ) {
                 $depth++;
             } elseif ($part === '}') {
                 $depth--;
@@ -73,9 +97,19 @@ function gallery_writer_functions(string $source): array
                 break;
             }
         }
-        gallery_writer_check($depth === 0 && $body !== '', 'Unbalanced function: ' . $name);
-        gallery_writer_check(!isset($functions[$name]), 'Duplicate function: ' . $name);
-        $functions[$name] = ['declaration' => trim($declaration), 'body' => $body, 'doc' => $doc];
+        gallery_writer_check(
+            $depth === 0 && $body !== '',
+            'Unbalanced function: ' . $name,
+        );
+        gallery_writer_check(
+            !isset($functions[$name]),
+            'Duplicate function: ' . $name,
+        );
+        $functions[$name] = [
+            'declaration' => trim($declaration),
+            'body' => $body,
+            'doc' => $doc,
+        ];
         $index = $cursor;
         $doc = '';
     }
@@ -92,7 +126,14 @@ function gallery_writer_compact(string $source): string
 {
     $result = '';
     foreach (token_get_all('<?php ' . $source) as $token) {
-        if (is_array($token) && in_array($token[0], [T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+        if (
+            is_array($token)
+            && in_array(
+                $token[0],
+                [T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT],
+                true,
+            )
+        ) {
             continue;
         }
         $result .= is_array($token) ? $token[1] : $token;
@@ -113,17 +154,44 @@ function gallery_writer_compact(string $source): string
  * @param array<string,callable(mixed...):mixed> $adapters Explicit named substitutes, each accepting its replaced dependency's semantic arguments and returning that dependency's fixture result.
  * @return Closure(mixed...):mixed Actual service body retaining its original signature, including reference parameters and return type, bound to the supplied adapters.
  */
-function gallery_writer_fixture_function(string $source, string $name, array $adapters): Closure
-{
+function gallery_writer_fixture_function(
+    string $source,
+    string $name,
+    array $adapters,
+): Closure {
     $function = gallery_writer_functions($source)[$name] ?? null;
-    gallery_writer_check(is_array($function), 'Missing snapshot function: ' . $name);
-    $declaration = str_replace('function ' . $name, 'static function', $function['declaration']);
-    $declaration = preg_replace('/\)\s*:/', ') use ($adapters):', $declaration, 1);
+    gallery_writer_check(
+        is_array($function),
+        'Missing snapshot function: ' . $name,
+    );
+    $declaration = str_replace(
+        'function ' . $name,
+        'static function',
+        $function['declaration'],
+    );
+    $declaration = preg_replace(
+        '/\)\s*:/',
+        ') use ($adapters):',
+        $declaration,
+        1,
+    );
     $body = $function['body'];
     foreach (array_keys($adapters) as $call) {
-        $body = str_replace($call . '(', '$adapters[' . var_export($call, true) . '](', $body);
+        $body = str_replace(
+            $call . '(',
+            '$adapters[' . var_export($call, true) . '](',
+            $body,
+        );
     }
-    $callable = eval('namespace Gallery\\Services; use RuntimeException; use Throwable; return ' . $declaration . ' ' . $body . ';');
-    gallery_writer_check($callable instanceof Closure, 'Snapshot function did not compile: ' . $name);
+    $callable =
+        eval('namespace Gallery\\Services; use RuntimeException; use Throwable; return '
+            . $declaration
+            . ' '
+            . $body
+            . ';');
+    gallery_writer_check(
+        $callable instanceof Closure,
+        'Snapshot function did not compile: ' . $name,
+    );
     return $callable;
 }

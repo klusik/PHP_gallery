@@ -50,10 +50,20 @@ function admin_setup_wizard_apply(array $changes, array $original): array
     }
     $initialSteps = admin_setup_wizard_steps();
     $initialEntries = admin_setup_wizard_editable_entries($initialSteps);
-    $normalized = admin_setup_wizard_validate_apply_payload($changes, $original, $initialEntries);
+    $normalized = admin_setup_wizard_validate_apply_payload(
+        $changes,
+        $original,
+        $initialEntries,
+    );
     admin_setup_wizard_preflight($normalized, $initialEntries);
-    $settingKeys = admin_setup_wizard_storage_keys($normalized, $initialEntries);
-    $telemetrySettingKeys = admin_setup_wizard_telemetry_storage_keys($normalized, $initialEntries);
+    $settingKeys = admin_setup_wizard_storage_keys(
+        $normalized,
+        $initialEntries,
+    );
+    $telemetrySettingKeys = admin_setup_wizard_telemetry_storage_keys(
+        $normalized,
+        $initialEntries,
+    );
     $urlChanged = false;
     $restoreUrl = null;
 
@@ -61,17 +71,36 @@ function admin_setup_wizard_apply(array $changes, array $original): array
         return admin_setup_wizard_model_transaction(
             $settingKeys,
             /** Revalidate and persist the normalized changes under row locks. @return array<string,mixed> Applied values. */
-            static function () use ($normalized, $original, &$urlChanged, &$restoreUrl): array {
+            static function () use (
+                $normalized,
+                $original,
+                &$urlChanged,
+                &$restoreUrl,
+            ): array {
                 app_settings_reset_request_cache();
-                $freshEntries = admin_setup_wizard_editable_entries(admin_setup_wizard_steps());
-                $freshNormalized = admin_setup_wizard_validate_apply_payload($normalized, $original, $freshEntries);
+                $freshEntries = admin_setup_wizard_editable_entries(
+                    admin_setup_wizard_steps(),
+                );
+                $freshNormalized = admin_setup_wizard_validate_apply_payload(
+                    $normalized,
+                    $original,
+                    $freshEntries,
+                );
                 admin_setup_wizard_preflight($freshNormalized, $freshEntries);
                 foreach ($freshNormalized as $id => $value) {
                     $entry = $freshEntries[$id];
-                    $expected = admin_setup_wizard_normalize_original($entry, $original[$id]);
-                    $current = admin_setup_wizard_normalize_original($entry, $entry['current'] ?? null);
+                    $expected = admin_setup_wizard_normalize_original(
+                        $entry,
+                        $original[$id],
+                    );
+                    $current = admin_setup_wizard_normalize_original(
+                        $entry,
+                        $entry['current'] ?? null,
+                    );
                     if (!admin_setup_wizard_values_equal($expected, $current)) {
-                        throw new AdminSetupWizardException('admin.setup_wizard.error.conflict');
+                        throw new AdminSetupWizardException(
+                            'admin.setup_wizard.error.conflict',
+                        );
                     }
                 }
                 $operationalGroups = [];
@@ -80,8 +109,12 @@ function admin_setup_wizard_apply(array $changes, array $original): array
                         continue;
                     }
                     $entry = $freshEntries[$id];
-                    if (($entry['wizard_adapter'] ?? '') === 'operational_safe') {
-                        $group = admin_setup_wizard_operational_group((string) $id);
+                    if (
+                        ($entry['wizard_adapter'] ?? '') === 'operational_safe'
+                    ) {
+                        $group = admin_setup_wizard_operational_group(
+                            (string) $id,
+                        );
                         if ($group !== '') {
                             $operationalGroups[$group][(string) $id] = $value;
                             continue;
@@ -90,10 +123,15 @@ function admin_setup_wizard_apply(array $changes, array $original): array
                     admin_setup_wizard_save_entry($entry, $value);
                 }
                 foreach ($operationalGroups as $group => $groupChanges) {
-                    admin_setup_wizard_operational_group_save((string) $group, $groupChanges);
+                    admin_setup_wizard_operational_group_save(
+                        (string) $group,
+                        $groupChanges,
+                    );
                 }
                 if (array_key_exists('base_url', $freshNormalized)) {
-                    $restoreUrl = site_url_save_reversible((string) $freshNormalized['base_url']);
+                    $restoreUrl = site_url_save_reversible(
+                        (string) $freshNormalized['base_url'],
+                    );
                     $urlChanged = true;
                 }
                 return $freshNormalized;
@@ -104,7 +142,7 @@ function admin_setup_wizard_apply(array $changes, array $original): array
                     $restoreUrl();
                 }
             },
-            $telemetrySettingKeys
+            $telemetrySettingKeys,
         );
     } finally {
         app_settings_reset_request_cache();
@@ -119,19 +157,32 @@ function admin_setup_wizard_apply(array $changes, array $original): array
  * @param array<string,array<string,mixed>> $entries Editable entries.
  * @return array<string,mixed> Normalized changes.
  */
-function admin_setup_wizard_validate_apply_payload(array $changes, array $original, array $entries): array
-{
+function admin_setup_wizard_validate_apply_payload(
+    array $changes,
+    array $original,
+    array $entries,
+): array {
     $normalized = [];
     foreach ($changes as $id => $value) {
         $id = (string) $id;
         if (!isset($entries[$id]) || !array_key_exists($id, $original)) {
-            throw new AdminSetupWizardException('admin.setup_wizard.error.invalid_draft');
+            throw new AdminSetupWizardException(
+                'admin.setup_wizard.error.invalid_draft',
+            );
         }
         try {
-            $normalized[$id] = admin_setup_wizard_normalize_entry($entries[$id], $value);
-            admin_setup_wizard_normalize_original($entries[$id], $original[$id]);
+            $normalized[$id] = admin_setup_wizard_normalize_entry(
+                $entries[$id],
+                $value,
+            );
+            admin_setup_wizard_normalize_original(
+                $entries[$id],
+                $original[$id],
+            );
         } catch (InvalidArgumentException) {
-            throw new AdminSetupWizardException('admin.setup_wizard.error.invalid_value');
+            throw new AdminSetupWizardException(
+                'admin.setup_wizard.error.invalid_value',
+            );
         }
     }
     ksort($normalized, SORT_STRING);
@@ -148,45 +199,71 @@ function admin_setup_wizard_validate_apply_payload(array $changes, array $origin
 function admin_setup_wizard_preflight(array $changes, array $entries): void
 {
     foreach ($changes as $id => $_value) {
-        if (!isset($entries[$id]) || !empty($entries[$id]['unavailable']) || empty($entries[$id]['wizard_editable'])) {
-            throw new AdminSetupWizardException('admin.setup_wizard.error.unavailable');
+        if (
+            !isset($entries[$id])
+            || !empty($entries[$id]['unavailable'])
+            || empty($entries[$id]['wizard_editable'])
+        ) {
+            throw new AdminSetupWizardException(
+                'admin.setup_wizard.error.unavailable',
+            );
         }
     }
     foreach (array_keys($changes) as $id) {
-        if (($entries[$id]['wizard_adapter'] ?? '') === 'theme_layout_safe'
-            && !theme_layout_safe_setting_available((string) $id)) {
-            throw new AdminSetupWizardException('admin.setup_wizard.error.unavailable');
+        if (
+            ($entries[$id]['wizard_adapter'] ?? '') === 'theme_layout_safe'
+            && !theme_layout_safe_setting_available((string) $id)
+        ) {
+            throw new AdminSetupWizardException(
+                'admin.setup_wizard.error.unavailable',
+            );
         }
     }
-    if (array_key_exists('public_home_search_enabled', $changes)
-        && function_exists(__NAMESPACE__ . '\\feature_capability_effective_enabled')
-        && !feature_capability_effective_enabled('public_search')) {
-        throw new AdminSetupWizardException('admin.setup_wizard.error.unavailable');
+    if (
+        array_key_exists('public_home_search_enabled', $changes)
+        && function_exists(__NAMESPACE__
+            . '\\feature_capability_effective_enabled')
+        && !feature_capability_effective_enabled('public_search')
+    ) {
+        throw new AdminSetupWizardException(
+            'admin.setup_wizard.error.unavailable',
+        );
     }
     if (array_key_exists('exif_gps_maps_default_enabled', $changes)) {
         $status = presentation_gps_override_schema_status();
         if (!schema_inspection_is_available($status)) {
-            throw new AdminSetupWizardException('admin.setup_wizard.error.unavailable');
+            throw new AdminSetupWizardException(
+                'admin.setup_wizard.error.unavailable',
+            );
         }
     }
     $telemetryChanges = array_filter(
         array_keys($changes),
-        static fn (string $id): bool => (($entries[$id]['wizard_adapter'] ?? '') === 'telemetry_safe')
+        static fn(string $id): bool => (
+            ($entries[$id]['wizard_adapter'] ?? '') === 'telemetry_safe'
+        ),
     );
     if ($telemetryChanges !== []) {
         $status = presentation_telemetry_settings_schema_status();
         if (!schema_inspection_is_available($status)) {
-            throw new AdminSetupWizardException('admin.setup_wizard.error.unavailable');
+            throw new AdminSetupWizardException(
+                'admin.setup_wizard.error.unavailable',
+            );
         }
     }
     $appSettingChanges = array_filter(
         array_keys($changes),
-        static fn (string $id): bool => $id !== 'base_url' && (($entries[$id]['wizard_adapter'] ?? '') !== 'telemetry_safe')
+        static fn(string $id): bool => (
+            $id !== 'base_url'
+            && ($entries[$id]['wizard_adapter'] ?? '') !== 'telemetry_safe'
+        ),
     );
     if ($appSettingChanges !== []) {
         $status = schema_inspection_table('app_settings');
         if (!schema_inspection_is_available($status)) {
-            throw new AdminSetupWizardException('admin.setup_wizard.error.unavailable');
+            throw new AdminSetupWizardException(
+                'admin.setup_wizard.error.unavailable',
+            );
         }
     }
 }
@@ -210,15 +287,27 @@ function admin_setup_wizard_storage_keys(array $changes, array $entries): array
         if ($adapter === 'telemetry_safe') {
             continue;
         }
-        $key = in_array($adapter, ['theme_basic_appearance', 'theme_layout_safe', 'admin_upload_safe', 'browser_upload_safe', 'operational_safe'], true)
+        $key = in_array(
+            $adapter,
+            [
+                'theme_basic_appearance',
+                'theme_layout_safe',
+                'admin_upload_safe',
+                'browser_upload_safe',
+                'operational_safe',
+            ],
+            true,
+        )
             ? $id
             : (string) ($entry['key'] ?? '');
         if ($key !== '') {
             $keys[] = $key;
         }
     }
-    if (array_key_exists('public_language_selector_enabled', $changes)
-        || array_key_exists('public_language_selector_languages', $changes)) {
+    if (
+        array_key_exists('public_language_selector_enabled', $changes)
+        || array_key_exists('public_language_selector_languages', $changes)
+    ) {
         $keys[] = 'public_language_selector_enabled';
         $keys[] = 'public_language_selector_languages';
     }
@@ -228,14 +317,40 @@ function admin_setup_wizard_storage_keys(array $changes, array $entries): array
         $keys[] = 'browser_upload_max_worker_count';
         $keys[] = 'browser_upload_hard_worker_cap';
     }
-    if (array_intersect(array_keys($changes), ['gallery_trash_enabled', 'gallery_trash_auto_purge_enabled', 'gallery_trash_retention_days', 'gallery_trash_purge_batch']) !== []) {
+    if (array_intersect(array_keys($changes), [
+        'gallery_trash_enabled',
+        'gallery_trash_auto_purge_enabled',
+        'gallery_trash_retention_days',
+        'gallery_trash_purge_batch',
+    ]) !== []) {
         // The canonical Trash owner persists the coupled preference set in one call. Lock every
         // member so a concurrent Admin update cannot be overwritten by a preserved sibling value.
-        array_push($keys, 'gallery_trash_enabled', 'gallery_trash_auto_purge_enabled', 'gallery_trash_retention_days', 'gallery_trash_purge_batch');
+        array_push(
+            $keys,
+            'gallery_trash_enabled',
+            'gallery_trash_auto_purge_enabled',
+            'gallery_trash_retention_days',
+            'gallery_trash_purge_batch',
+        );
     }
-    if (array_intersect(array_keys($changes), ['site_maintenance_enabled', 'site_maintenance_request_trigger_enabled', 'site_maintenance_utc_time', 'site_maintenance_window_minutes', 'site_maintenance_batch_size', 'site_maintenance_time_budget_seconds']) !== []) {
+    if (array_intersect(array_keys($changes), [
+        'site_maintenance_enabled',
+        'site_maintenance_request_trigger_enabled',
+        'site_maintenance_utc_time',
+        'site_maintenance_window_minutes',
+        'site_maintenance_batch_size',
+        'site_maintenance_time_budget_seconds',
+    ]) !== []) {
         // Scheduled maintenance is likewise persisted as a coherent owner-level preference set.
-        array_push($keys, 'site_maintenance_enabled', 'site_maintenance_request_trigger_enabled', 'site_maintenance_utc_time', 'site_maintenance_window_minutes', 'site_maintenance_batch_size', 'site_maintenance_time_budget_seconds');
+        array_push(
+            $keys,
+            'site_maintenance_enabled',
+            'site_maintenance_request_trigger_enabled',
+            'site_maintenance_utc_time',
+            'site_maintenance_window_minutes',
+            'site_maintenance_batch_size',
+            'site_maintenance_time_budget_seconds',
+        );
     }
     return array_values(array_unique($keys));
 }
@@ -247,8 +362,10 @@ function admin_setup_wizard_storage_keys(array $changes, array $entries): array
  * @param array<string,array<string,mixed>> $entries Editable entries.
  * @return list<string> Unique telemetry setting keys.
  */
-function admin_setup_wizard_telemetry_storage_keys(array $changes, array $entries): array
-{
+function admin_setup_wizard_telemetry_storage_keys(
+    array $changes,
+    array $entries,
+): array {
     $keys = [];
     foreach (array_keys($changes) as $id) {
         if (($entries[$id]['wizard_adapter'] ?? '') === 'telemetry_safe') {
@@ -279,9 +396,13 @@ function admin_setup_wizard_save_entry(array $entry, mixed $value): void
     }
     if (($entry['wizard_adapter'] ?? '') === 'admin_upload_safe') {
         match ($id) {
-            'admin_upload_client_format_mode' => save_admin_upload_client_format_mode($value),
-            'admin_upload_auto_rename_enabled' => save_admin_upload_auto_rename_setting($value),
-            default => throw new InvalidArgumentException('Unsupported Admin upload setting.'),
+            'admin_upload_client_format_mode'
+                => save_admin_upload_client_format_mode($value),
+            'admin_upload_auto_rename_enabled'
+                => save_admin_upload_auto_rename_setting($value),
+            default => throw new InvalidArgumentException(
+                'Unsupported Admin upload setting.',
+            ),
         };
         return;
     }

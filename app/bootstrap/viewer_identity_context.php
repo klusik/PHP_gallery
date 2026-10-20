@@ -60,7 +60,8 @@ function viewer_identity_session_active(): bool
 /** Rotate the PHP session id while preserving all current namespaced state. */
 function viewer_identity_session_regenerate(): bool
 {
-    return session_status() !== PHP_SESSION_ACTIVE || session_regenerate_id(true);
+    return session_status() !== PHP_SESSION_ACTIVE
+        || session_regenerate_id(true);
 }
 
 /** Return the current request user-agent value. */
@@ -88,7 +89,11 @@ function viewer_identity_apply_cookie_instruction(array $instruction): bool
     }
     $name = (string) ($instruction['name'] ?? '');
     $expiresAt = (int) ($instruction['expires_at'] ?? 0);
-    if ($name === '' || preg_match('/^[A-Za-z0-9_]+$/D', $name) !== 1 || $expiresAt <= 0) {
+    if (
+        $name === ''
+        || preg_match('/^[A-Za-z0-9_]+$/D', $name) !== 1
+        || $expiresAt <= 0
+    ) {
         return false;
     }
     $value = (string) ($instruction['value'] ?? '');
@@ -109,31 +114,54 @@ function viewer_identity_apply_cookie_instruction(array $instruction): bool
     return $ok;
 }
 
-/** Return the current request's parsed viewer remember credential. */
+/**
+ * Return the current request's parsed viewer remember credential.
+ *
+ * @return array<string,mixed>|null Parsed credential fields, or null when the
+ *     request cookie is absent or invalid.
+ */
 function viewer_identity_remember_cookie_parse_request(): ?array
 {
     $name = \Gallery\Services\viewer_remember_cookie_name();
-    return \Gallery\Services\viewer_remember_cookie_parse(viewer_identity_request_cookie($name));
+    return \Gallery\Services\viewer_remember_cookie_parse(viewer_identity_request_cookie(
+        $name,
+    ));
 }
 
-/** Emit one issued viewer remember credential through the Core HTTP boundary. */
+/**
+ * Emit one issued viewer remember credential through the Core HTTP boundary.
+ *
+ * @param array<string,mixed> $credential Issued credential fields consumed by
+ *     the remember-cookie service.
+ * @return bool True when the cookie instruction was emitted successfully.
+ */
 function viewer_identity_remember_cookie_set(array $credential): bool
 {
     $instruction = \Gallery\Services\viewer_remember_cookie_set($credential);
-    return is_array($instruction) && viewer_identity_apply_cookie_instruction($instruction);
+    return (
+        is_array($instruction)
+            && viewer_identity_apply_cookie_instruction($instruction)
+    );
 }
 
-/** Clear only the dedicated viewer remember cookie. */
+/**
+ * Clear only the dedicated viewer remember cookie.
+ *
+ * @return void Emits an expired cookie instruction when headers remain open.
+ */
 function viewer_identity_remember_cookie_clear(): void
 {
-    viewer_identity_apply_cookie_instruction(\Gallery\Services\viewer_remember_cookie_clear());
+    viewer_identity_apply_cookie_instruction(
+        \Gallery\Services\viewer_remember_cookie_clear(),
+    );
 }
 
 /** Revoke the current request's viewer remember credential and clear local browser authority. */
 function viewer_identity_remember_revoke_current_cookie(): bool
 {
     $credential = viewer_identity_remember_cookie_parse_request();
-    $revoked = \Gallery\Services\viewer_remember_revoke_current_cookie($credential);
+    $revoked =
+        \Gallery\Services\viewer_remember_revoke_current_cookie($credential);
     viewer_identity_remember_cookie_clear();
     return $revoked;
 }
@@ -147,9 +175,13 @@ function viewer_identity_remember_revoke_current_cookie(): bool
 function viewer_identity_remember_restore_request(): bool
 {
     $credential = viewer_identity_remember_cookie_parse_request();
-    $result = \Gallery\Services\viewer_remember_restore_from_cookie($credential);
+    $result =
+        \Gallery\Services\viewer_remember_restore_from_cookie($credential);
     $instruction = $result['cookie_instruction'] ?? null;
-    if (is_array($instruction) && !viewer_identity_apply_cookie_instruction($instruction)) {
+    if (
+        is_array($instruction)
+        && !viewer_identity_apply_cookie_instruction($instruction)
+    ) {
         $selector = trim((string) ($result['rotated_selector'] ?? ''));
         if ($selector !== '') {
             try {

@@ -44,9 +44,7 @@ use PDOException;
 use RuntimeException;
 
 /** Signal that persistence failed and the database did not confirm rollback. */
-final class AppSettingsRollbackException extends RuntimeException
-{
-}
+final class AppSettingsRollbackException extends RuntimeException {}
 
 /**
  * Return all application-setting rows.
@@ -62,11 +60,15 @@ function app_settings_model_all(): array
 /**
  * Return one raw application-setting value.
  *
+
+ * @param string $key Setting key to retrieve.
  * @return string|false Database value or false when the key is absent.
  */
 function app_settings_model_get(string $key): string|false
 {
-    $stmt = db()->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
+    $stmt = db()->prepare(
+        'SELECT setting_value FROM app_settings WHERE setting_key = ?',
+    );
     $stmt->execute([$key]);
     $value = $stmt->fetchColumn();
     return $value === false ? false : (string) $value;
@@ -74,10 +76,17 @@ function app_settings_model_get(string $key): string|false
 
 /**
  * Upsert one application-setting value.
+
+ * @param string $key Setting key to persist.
+ * @param string $value Setting value to persist.
+ * @param string $now SQL timestamp recorded for the update.
+ * @return void Insert or update the setting row.
  */
 function app_settings_model_set(string $key, string $value, string $now): void
 {
-    $stmt = db()->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
+    $stmt = db()->prepare(
+        'INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)',
+    );
     $stmt->execute([$key, $value, $now]);
 }
 
@@ -93,50 +102,81 @@ function app_settings_model_set(string $key, string $value, string $now): void
  * @throws AppSettingsRollbackException When the transaction outcome cannot be confirmed after failure.
  * @throws RuntimeException When a transaction boundary reports failure.
  */
-function app_settings_model_set_many_with_activation(array $settings, string $now, callable $activate): void
-{
+function app_settings_model_set_many_with_activation(
+    array $settings,
+    string $now,
+    callable $activate,
+): void {
     if ($settings === []) {
-        throw new InvalidArgumentException('At least one application setting is required.');
+        throw new InvalidArgumentException(
+            'At least one application setting is required.',
+        );
     }
     foreach ($settings as $key => $value) {
         if (!is_string($key) || trim($key) === '' || !is_string($value)) {
-            throw new InvalidArgumentException('Application setting keys must be non-empty strings and values must be strings.');
+            throw new InvalidArgumentException(
+                'Application setting keys must be non-empty strings and values must be strings.',
+            );
         }
     }
 
     $connection = db();
     if ($connection->inTransaction()) {
-        throw new InvalidArgumentException('Atomic application settings cannot join an existing transaction.');
+        throw new InvalidArgumentException(
+            'Atomic application settings cannot join an existing transaction.',
+        );
     }
     if (!$connection->beginTransaction()) {
-        throw new RuntimeException('The application settings transaction could not start.');
+        throw new RuntimeException(
+            'The application settings transaction could not start.',
+        );
     }
     try {
-        $statement = $connection->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
+        $statement = $connection->prepare(
+            'INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)',
+        );
         if ($statement === false) {
-            throw new RuntimeException('The application settings statement could not be prepared.');
+            throw new RuntimeException(
+                'The application settings statement could not be prepared.',
+            );
         }
         foreach ($settings as $key => $value) {
             if (!$statement->execute([$key, $value, $now])) {
-                throw new RuntimeException('An application setting could not be persisted.');
+                throw new RuntimeException(
+                    'An application setting could not be persisted.',
+                );
             }
         }
         $activate();
         if (!$connection->commit()) {
-            throw new RuntimeException('The application settings transaction could not commit.');
+            throw new RuntimeException(
+                'The application settings transaction could not commit.',
+            );
         }
     } catch (\Throwable $exception) {
         if ($connection->inTransaction()) {
             try {
                 $rolledBack = $connection->rollBack();
             } catch (\Throwable $rollbackException) {
-                throw new AppSettingsRollbackException('The application settings transaction could not roll back.', 0, $rollbackException);
+                throw new AppSettingsRollbackException(
+                    'The application settings transaction could not roll back.',
+                    0,
+                    $rollbackException,
+                );
             }
             if (!$rolledBack || $connection->inTransaction()) {
-                throw new AppSettingsRollbackException('The application settings transaction could not roll back.', 0, $exception);
+                throw new AppSettingsRollbackException(
+                    'The application settings transaction could not roll back.',
+                    0,
+                    $exception,
+                );
             }
         } else {
-            throw new AppSettingsRollbackException('The application settings transaction outcome could not be confirmed.', 0, $exception);
+            throw new AppSettingsRollbackException(
+                'The application settings transaction outcome could not be confirmed.',
+                0,
+                $exception,
+            );
         }
         throw $exception;
     }
@@ -146,6 +186,8 @@ function app_settings_model_set_many_with_activation(array $settings, string $no
  * Delete selected application-setting keys.
  *
  * @param array<int,string> $keys Non-empty unique setting keys.
+
+ * @return void Delete rows for the supplied setting keys.
  */
 function app_settings_model_delete(array $keys): void
 {
@@ -153,6 +195,8 @@ function app_settings_model_delete(array $keys): void
         return;
     }
     $placeholders = implode(', ', array_fill(0, count($keys), '?'));
-    $stmt = db()->prepare('DELETE FROM app_settings WHERE setting_key IN (' . $placeholders . ')');
+    $stmt = db()->prepare(
+        'DELETE FROM app_settings WHERE setting_key IN (' . $placeholders . ')',
+    );
     $stmt->execute($keys);
 }

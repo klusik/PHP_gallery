@@ -51,6 +51,8 @@ use function Gallery\Services\telemetry_request_excluded;
 
 /**
  * Handle anonymous telemetry ingestion requests.
+ *
+ * @return void Emits an HTTP status and JSON response for the submitted event batch.
  */
 function cms_telemetry_ingest(): void
 {
@@ -68,7 +70,13 @@ function cms_telemetry_ingest(): void
     if ($contentLength > 32768) {
         http_response_code(413);
         header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => t('telemetry.collect.error_payload_too_large', 'Payload too large.')]);
+        echo json_encode([
+            'ok' => false,
+            'error' => t(
+                'telemetry.collect.error_payload_too_large',
+                'Payload too large.',
+            ),
+        ]);
         return;
     }
     // $rawBody stores the raw JSON body only long enough to decode the event batch.
@@ -76,15 +84,31 @@ function cms_telemetry_ingest(): void
     if ($rawBody === '' || strlen($rawBody) > 32768) {
         http_response_code(400);
         header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => t('telemetry.collect.error_invalid_payload', 'Invalid payload.')]);
+        echo json_encode([
+            'ok' => false,
+            'error' => t(
+                'telemetry.collect.error_invalid_payload',
+                'Invalid payload.',
+            ),
+        ]);
         return;
     }
     // $payload stores the decoded telemetry batch.
     $payload = json_decode($rawBody, true);
-    if (!is_array($payload) || !isset($payload['events']) || !is_array($payload['events'])) {
+    if (
+        !is_array($payload)
+        || !isset($payload['events'])
+        || !is_array($payload['events'])
+    ) {
         http_response_code(400);
         header('Content-Type: application/json');
-        echo json_encode(['ok' => false, 'error' => t('telemetry.collect.error_invalid_payload', 'Invalid payload.')]);
+        echo json_encode([
+            'ok' => false,
+            'error' => t(
+                'telemetry.collect.error_invalid_payload',
+                'Invalid payload.',
+            ),
+        ]);
         return;
     }
     // $storedCount stores the number of accepted events.

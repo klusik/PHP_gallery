@@ -66,7 +66,9 @@ function cms_admin_edit_gallery(): void
 {
     require_admin();
     // Variable $gallery stores this steps working value.
-    $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['id'] ?? $_POST['gallery_id'] ?? 0));
+    $gallery = find_gallery(
+        (int) ($_GET['id'] ?? $_POST['id'] ?? $_POST['gallery_id'] ?? 0),
+    );
     if (!$gallery) {
         cms_not_found();
         return;
@@ -86,26 +88,58 @@ function cms_admin_edit_gallery(): void
     // Drawer requests opt into deferred image work; ordinary navigation retains
     // the supported complete/no-JavaScript response without changing its URL.
     $deferredImages = (string) ($_GET['panel'] ?? '') === '1';
-    $images = $deferredImages ? [] : gallery_images((int) $gallery['id'], false);
-    $imageCount = $deferredImages ? gallery_editor_image_inventory((int) $gallery['id'])['total'] : count($images);
+    $images = $deferredImages
+        ? []
+        : gallery_images((int) $gallery['id'], false);
+    $imageCount = $deferredImages
+        ? gallery_editor_image_inventory((int) $gallery['id'])['total']
+        : count($images);
     render_header(t('admin.gallery_editor.page_title'));
     admin_edit_gallery_render_notices($gallery, $capabilities);
     // $activeEditTab stores the tab selected by redirect query state before JavaScript reads the URL hash.
-    $activeEditTab = admin_edit_gallery_tab_id((string) ($_GET['tab'] ?? '')) ?: 'admin-edit-identity';
-    admin_edit_gallery_render_overview($gallery, $imageCount, $activeEditTab, $capabilities, $deferredImages);
+    $activeEditTab = admin_edit_gallery_tab_id((string) ($_GET['tab'] ?? ''))
+    ?: 'admin-edit-identity';
+    admin_edit_gallery_render_overview(
+        $gallery,
+        $imageCount,
+        $activeEditTab,
+        $capabilities,
+        $deferredImages,
+    );
     if ($deferredImages) {
         view_render_admin_gallery_images_loading([
             'gallery_id' => (int) $gallery['id'],
             'total' => $imageCount,
             'requested' => $activeEditTab === 'admin-edit-images',
-            'endpoint' => url_for('admin_edit_gallery', ['id' => (int) $gallery['id'], 'action' => 'images_batch']),
+            'endpoint' => url_for('admin_edit_gallery', [
+                'id' => (int) $gallery['id'],
+                'action' => 'images_batch',
+            ]),
             'labels' => [
-                'preparing' => t('admin.gallery_editor.images_preparing', 'Preparing photos…'),
-                'progress' => t('admin.gallery_editor.images_progress', 'Photos: {current} / {total}'),
-                'ready' => t('admin.gallery_editor.images_ready', 'Photos ready.'),
-                'failed' => t('admin.gallery_editor.images_failed', '{count} thumbnails failed. Retry images.'),
-                'error' => t('admin.gallery_editor.images_load_error', 'Photos could not be loaded. Other settings remain available.'),
-                'retry' => t('admin.gallery_editor.images_retry', 'Retry images'),
+                'preparing' => t(
+                    'admin.gallery_editor.images_preparing',
+                    'Preparing photos…',
+                ),
+                'progress' => t(
+                    'admin.gallery_editor.images_progress',
+                    'Photos: {current} / {total}',
+                ),
+                'ready' => t(
+                    'admin.gallery_editor.images_ready',
+                    'Photos ready.',
+                ),
+                'failed' => t(
+                    'admin.gallery_editor.images_failed',
+                    '{count} thumbnails failed. Retry images.',
+                ),
+                'error' => t(
+                    'admin.gallery_editor.images_load_error',
+                    'Photos could not be loaded. Other settings remain available.',
+                ),
+                'retry' => t(
+                    'admin.gallery_editor.images_retry',
+                    'Retry images',
+                ),
             ],
         ]);
     }
@@ -116,27 +150,53 @@ function cms_admin_edit_gallery(): void
         'gallery_id' => (int) $gallery['id'],
         'edit_revision' => gallery_edit_revision($gallery),
     ]);
-    admin_edit_gallery_render_identity_tab($gallery, $activeEditTab, $capabilities);
-    admin_edit_gallery_render_access_tab($gallery, $activeEditTab, $capabilities);
-    admin_edit_gallery_render_display_tab($gallery, $activeEditTab, $capabilities);
+    admin_edit_gallery_render_identity_tab(
+        $gallery,
+        $activeEditTab,
+        $capabilities,
+    );
+    admin_edit_gallery_render_access_tab(
+        $gallery,
+        $activeEditTab,
+        $capabilities,
+    );
+    admin_edit_gallery_render_display_tab(
+        $gallery,
+        $activeEditTab,
+        $capabilities,
+    );
     admin_edit_gallery_render_media_tab($gallery, $activeEditTab);
     view_render_admin_gallery_editor_form_close([
         'save_label' => t('admin.gallery_editor.save_gallery', 'Save gallery'),
-        'help' => t('admin.gallery_editor.savebar_help', 'Saves gallery settings, including presentation defaults.'),
+        'help' => t(
+            'admin.gallery_editor.savebar_help',
+            'Saves gallery settings, including presentation defaults.',
+        ),
     ]);
 
     // The remaining tabs own their own forms and panels outside the editor form.
     if ($deferredImages && $imageCount > 0) {
         view_render_admin_gallery_images_placeholder([
-            'fallback_url' => url_for('admin_edit_gallery', ['id' => (int) $gallery['id'], 'tab' => 'admin-edit-images']),
-            'label' => t('admin.gallery_editor.images_preparing', 'Preparing photos…'),
+            'fallback_url' => url_for('admin_edit_gallery', [
+                'id' => (int) $gallery['id'],
+                'tab' => 'admin-edit-images',
+            ]),
+            'label' => t(
+                'admin.gallery_editor.images_preparing',
+                'Preparing photos…',
+            ),
         ]);
     } else {
         admin_edit_gallery_render_images_tab($gallery, $images, $activeEditTab);
     }
     admin_edit_gallery_render_documents_tab($gallery, $activeEditTab);
     admin_edit_gallery_render_organizer_tab($gallery, $activeEditTab);
-    admin_edit_gallery_render_renamer_tab($gallery, $activeEditTab, $capabilities, $deferredImages);
+    admin_edit_gallery_render_renamer_tab(
+        $gallery,
+        $activeEditTab,
+        $capabilities,
+        $deferredImages,
+    );
     admin_edit_gallery_render_api_tab($gallery, $activeEditTab, $capabilities);
     render_admin_image_reorder_script();
     render_admin_devmode_panel();
@@ -161,27 +221,46 @@ function admin_edit_gallery_handle_json_panel_request(array $gallery): bool
         admin_edit_gallery_images_batch_response($gallery);
         return true;
     }
-    if ((string) ($_GET['tab'] ?? '') === 'admin-edit-renamer' && function_exists('Gallery\\Controllers\\admin_media_renamer_render_gallery_panel_html')) {
+    if (
+        (string) ($_GET['tab'] ?? '') === 'admin-edit-renamer'
+        && function_exists(
+            'Gallery\\Controllers\\admin_media_renamer_render_gallery_panel_html',
+        )
+    ) {
         csrf_field();
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
-        $pattern = media_renamer_normalize_pattern((string) ($_GET['renamer_pattern'] ?? ''));
+        $pattern = media_renamer_normalize_pattern(
+            (string) ($_GET['renamer_pattern'] ?? ''),
+        );
         header('Content-Type: application/json');
         echo json_encode([
             'ok' => true,
             'message' => '',
-            'panel_html' => admin_media_renamer_render_gallery_panel_html($gallery, $pattern),
+            'panel_html' => admin_media_renamer_render_gallery_panel_html(
+                $gallery,
+                $pattern,
+            ),
         ]);
         return true;
     }
-    if ((string) ($_GET['action'] ?? '') === 'metadata_organizer_preview_batch') {
+    if (
+        (string) ($_GET['action'] ?? '') === 'metadata_organizer_preview_batch'
+    ) {
         if (!feature_capability_effective_enabled('metadata_organizer')) {
             admin_gallery_metadata_organizer_json_response([
                 'ok' => false,
-                'error' => t('admin.features.disabled_route_message', 'This feature is disabled in Admin > Features: {feature}', [
-                    'feature' => t('admin.features.metadata_organizer.label', 'Metadata Organizer'),
-                ]),
+                'error' => t(
+                    'admin.features.disabled_route_message',
+                    'This feature is disabled in Admin > Features: {feature}',
+                    [
+                        'feature' => t(
+                            'admin.features.metadata_organizer.label',
+                            'Metadata Organizer',
+                        ),
+                    ],
+                ),
             ], 403);
             return true;
         }
@@ -203,10 +282,17 @@ function admin_edit_gallery_images_batch_response(array $gallery): void
 {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');
-    $offset = filter_var($_GET['offset'] ?? '0', FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+    $offset = filter_var(
+        $_GET['offset'] ?? '0',
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 0]],
+    );
     if ($offset === false) {
         http_response_code(400);
-        echo json_encode(['ok' => false, 'message' => t('admin.gallery_editor.images_load_error')]);
+        echo json_encode([
+            'ok' => false,
+            'message' => t('admin.gallery_editor.images_load_error'),
+        ]);
         return;
     }
     csrf_field();
@@ -214,19 +300,44 @@ function admin_edit_gallery_images_batch_response(array $gallery): void
         session_write_close();
     }
     $expectedRevision = $_GET['revision'] ?? '';
-    if (!is_string($expectedRevision) || ($expectedRevision !== '' && preg_match('/^[a-f0-9]{64}$/D', $expectedRevision) !== 1)) {
+    if (
+        !is_string($expectedRevision)
+        || (
+            $expectedRevision !== ''
+            && preg_match('/^[a-f0-9]{64}$/D', $expectedRevision) !== 1
+        )
+    ) {
         http_response_code(400);
-        echo json_encode(['ok' => false, 'message' => t('admin.gallery_editor.images_load_error')]);
+        echo json_encode([
+            'ok' => false,
+            'message' => t('admin.gallery_editor.images_load_error'),
+        ]);
         return;
     }
     $bufferLevel = ob_get_level();
     try {
         $inventory = gallery_editor_image_inventory((int) $gallery['id']);
-        $revision = hash('sha256', gallery_edit_revision($gallery) . $inventory['revision']);
+        $revision = hash(
+            'sha256',
+            gallery_edit_revision($gallery) . $inventory['revision'],
+        );
         $expected = $expectedRevision;
-        if (($offset > 0 && $expected === '') || ($expected !== '' && !hash_equals($revision, $expected)) || $offset > $inventory['total']) {
+        if (
+            (
+                $offset > 0
+                && $expected === ''
+            )
+            || (
+                $expected !== ''
+                && !hash_equals($revision, $expected)
+            )
+            || $offset > $inventory['total']
+        ) {
             http_response_code(409);
-            echo json_encode(['ok' => false, 'message' => t('admin.gallery_editor.images_load_error')]);
+            echo json_encode([
+                'ok' => false,
+                'message' => t('admin.gallery_editor.images_load_error'),
+            ]);
             return;
         }
         $images = gallery_editor_image_page((int) $gallery['id'], $offset);
@@ -241,9 +352,18 @@ function admin_edit_gallery_images_batch_response(array $gallery): void
         }
         $latest = find_gallery((int) $gallery['id'], true);
         $after = gallery_editor_image_inventory((int) $gallery['id']);
-        if (!$latest || !hash_equals($revision, hash('sha256', gallery_edit_revision($latest) . $after['revision']))) {
+        if (
+            !$latest
+            || !hash_equals($revision, hash(
+                'sha256',
+                gallery_edit_revision($latest) . $after['revision'],
+            ))
+        ) {
             http_response_code(409);
-            echo json_encode(['ok' => false, 'message' => t('admin.gallery_editor.images_load_error')]);
+            echo json_encode([
+                'ok' => false,
+                'message' => t('admin.gallery_editor.images_load_error'),
+            ]);
             return;
         }
         $next = $offset + count($images);
@@ -251,15 +371,24 @@ function admin_edit_gallery_images_batch_response(array $gallery): void
             throw new \RuntimeException('Incomplete editor page.');
         }
         echo json_encode([
-            'ok' => true, 'gallery_id' => (int) $gallery['id'], 'offset' => $offset,
-            'next_offset' => $next, 'total' => $inventory['total'], 'done' => $next === $inventory['total'],
-            'revision' => $revision, 'rows_html' => $rowsHtml, 'shell_html' => $shellHtml,
+            'ok' => true,
+            'gallery_id' => (int) $gallery['id'],
+            'offset' => $offset,
+            'next_offset' => $next,
+            'total' => $inventory['total'],
+            'done' => $next === $inventory['total'],
+            'revision' => $revision,
+            'rows_html' => $rowsHtml,
+            'shell_html' => $shellHtml,
         ], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
     } catch (\Throwable) {
         while (ob_get_level() > $bufferLevel) {
             ob_end_clean();
         }
         http_response_code(500);
-        echo json_encode(['ok' => false, 'message' => t('admin.gallery_editor.images_load_error')]);
+        echo json_encode([
+            'ok' => false,
+            'message' => t('admin.gallery_editor.images_load_error'),
+        ]);
     }
 }

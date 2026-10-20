@@ -15,7 +15,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/cli_guard.php';
 gallery_require_cli_sapi();
 if (!is_file(__DIR__ . '/../tests/support/gallery_workflow_safety.php')) {
-    fwrite(STDERR, "BLOCKED gallery workflow source checkout with test support required\n");
+    fwrite(
+        STDERR,
+        "BLOCKED gallery workflow source checkout with test support required\n",
+    );
     exit(1);
 }
 require_once __DIR__ . '/../tests/support/gallery_workflow_safety.php';
@@ -23,32 +26,52 @@ use function GalleryWorkflow\check;
 use function GalleryWorkflow\databaseOptions;
 
 try {
-    check(getenv('GITHUB_ACTIONS') === 'true' && getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only',
-        'This provisioner requires the disposable GitHub Actions service.');
+    check(
+        getenv('GITHUB_ACTIONS') === 'true'
+            && getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only',
+        'This provisioner requires the disposable GitHub Actions service.',
+    );
     $password = bin2hex(random_bytes(24));
     putenv('GALLERY_WORKFLOW_DB_PASSWORD=' . $password);
     $options = databaseOptions(getenv());
-    check((string) getenv('GALLERY_WORKFLOW_CI_ROOT_PASSWORD') !== '', 'CI service bootstrap credential missing.');
+    check(
+        (string) getenv('GALLERY_WORKFLOW_CI_ROOT_PASSWORD') !== '',
+        'CI service bootstrap credential missing.',
+    );
     $pdo = null;
     for ($attempt = 0; $attempt < 60; $attempt++) {
         try {
-            $pdo = new PDO('mysql:host=127.0.0.1;port=' . $options['port'], 'root',
-                (string) getenv('GALLERY_WORKFLOW_CI_ROOT_PASSWORD'), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            $pdo = new PDO(
+                'mysql:host=127.0.0.1;port=' . $options['port'],
+                'root',
+                (string) getenv('GALLERY_WORKFLOW_CI_ROOT_PASSWORD'),
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            );
             break;
         } catch (Throwable) {
             usleep(500000);
         }
     }
-    check($pdo instanceof PDO && $pdo->query('SELECT @@hostname')->fetchColumn() === 'gallery-workflow-ci',
-        'Disposable CI database identity mismatch.');
-    $pdo->exec("CREATE USER 'gallery_workflow_runner'@'%' IDENTIFIED BY " . $pdo->quote($password));
+    check(
+        $pdo instanceof PDO
+            && $pdo->query('SELECT @@hostname')->fetchColumn()
+                === 'gallery-workflow-ci',
+        'Disposable CI database identity mismatch.',
+    );
+    $pdo->exec(
+        "CREATE USER 'gallery_workflow_runner'@'%' IDENTIFIED BY "
+            . $pdo->quote($password),
+    );
     $quotedSchemaPattern = chr(96) . 'gallery\\_workflow\\_%' . chr(96);
     // Match ordinary application ownership: schema-local data and portable DDL
     // only. The engine qualification fixture also owns connection-local temporary
     // tables; this test privilege is not a production installation requirement.
     // Migrations must not depend on TRIGGER, SUPER or server-global state.
-    $pdo->exec("GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, CREATE TEMPORARY TABLES, ALTER, DROP, INDEX, REFERENCES ON "
-        . $quotedSchemaPattern . ".* TO 'gallery_workflow_runner'@'%'");
+    $pdo->exec(
+        'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, CREATE TEMPORARY TABLES, ALTER, DROP, INDEX, REFERENCES ON '
+            . $quotedSchemaPattern
+            . ".* TO 'gallery_workflow_runner'@'%'",
+    );
     $pdo = null;
     putenv('GALLERY_WORKFLOW_REQUIRED=1');
     // Keep the service root credential out of application/audit child environments.

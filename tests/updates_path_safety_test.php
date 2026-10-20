@@ -25,15 +25,18 @@ use function Gallery\Services\application_update_assert_safe_target;
  * @param string $relativePath Relative path expected to fail validation.
  * @return void Throws when the guard accepts the target.
  */
-function updates_path_safety_expect_rejected(string $root, string $relativePath): void
-{
+function updates_path_safety_expect_rejected(
+    string $root,
+    string $relativePath,
+): void {
     try {
         application_update_assert_safe_target($root, $relativePath);
     } catch (RuntimeException) {
         return;
     }
 
-    throw new RuntimeException('Updater path guard accepted unsafe target: ' . $relativePath);
+    throw new RuntimeException('Updater path guard accepted unsafe target: '
+        . $relativePath);
 }
 
 /**
@@ -43,8 +46,10 @@ function updates_path_safety_expect_rejected(string $root, string $relativePath)
  * @param string $link Alias path to create.
  * @return bool True when either supported directory alias was created.
  */
-function updates_path_safety_create_directory_alias(string $target, string $link): bool
-{
+function updates_path_safety_create_directory_alias(
+    string $target,
+    string $link,
+): bool {
     if (@symlink($target, $link)) {
         return true;
     }
@@ -63,7 +68,7 @@ function updates_path_safety_create_directory_alias(string $target, string $link
         $pipes,
         null,
         null,
-        ['bypass_shell' => true]
+        ['bypass_shell' => true],
     );
     if (!is_resource($process)) {
         return false;
@@ -91,13 +96,19 @@ function updates_path_safety_remove_fixture(string $path): void
         return;
     }
     $temporaryBoundary = rtrim($temporaryRoot, '/\\') . DIRECTORY_SEPARATOR;
-    if (!str_starts_with($resolved, $temporaryBoundary) || basename($resolved) === '') {
+    if (
+        !str_starts_with($resolved, $temporaryBoundary)
+        || basename($resolved) === ''
+    ) {
         return;
     }
 
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($resolved, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $resolved,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $entry) {
         if ($entry->isLink() || !$entry->isDir()) {
@@ -109,40 +120,95 @@ function updates_path_safety_remove_fixture(string $path): void
     @rmdir($resolved);
 }
 
-$fixtureRoot = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-update-path-safety-' . bin2hex(random_bytes(8));
+$fixtureRoot =
+    sys_get_temp_dir()
+    . DIRECTORY_SEPARATOR
+    . 'php-gallery-update-path-safety-'
+    . bin2hex(random_bytes(8));
 $installRoot = $fixtureRoot . DIRECTORY_SEPARATOR . 'install';
 $outsideRoot = $fixtureRoot . DIRECTORY_SEPARATOR . 'outside';
 $insideAliasTarget = $installRoot . DIRECTORY_SEPARATOR . 'inside-target';
-$externalLink = $installRoot . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'external-link';
-$internalAlias = $installRoot . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'internal-alias';
-if (!mkdir($installRoot . DIRECTORY_SEPARATOR . 'app', 0777, true)
+$externalLink =
+    $installRoot
+    . DIRECTORY_SEPARATOR
+    . 'app'
+    . DIRECTORY_SEPARATOR
+    . 'external-link';
+$internalAlias =
+    $installRoot
+    . DIRECTORY_SEPARATOR
+    . 'app'
+    . DIRECTORY_SEPARATOR
+    . 'internal-alias';
+if (
+    !mkdir($installRoot . DIRECTORY_SEPARATOR . 'app', 0777, true)
     || !mkdir($insideAliasTarget, 0777, true)
-    || !mkdir($outsideRoot, 0777, true)) {
+    || !mkdir($outsideRoot, 0777, true)
+) {
     throw new RuntimeException('Could not create updater path safety fixture.');
 }
-file_put_contents($installRoot . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'existing.php', '<?php return true;');
-file_put_contents($outsideRoot . DIRECTORY_SEPARATOR . 'external.php', '<?php return false;');
-file_put_contents($insideAliasTarget . DIRECTORY_SEPARATOR . 'aliased.php', '<?php return false;');
+file_put_contents(
+    $installRoot
+        . DIRECTORY_SEPARATOR
+        . 'app'
+        . DIRECTORY_SEPARATOR
+        . 'existing.php',
+    '<?php return true;',
+);
+file_put_contents(
+    $outsideRoot . DIRECTORY_SEPARATOR . 'external.php',
+    '<?php return false;',
+);
+file_put_contents(
+    $insideAliasTarget . DIRECTORY_SEPARATOR . 'aliased.php',
+    '<?php return false;',
+);
 
 $externalLinkCreated = false;
 $internalAliasCreated = false;
 try {
     application_update_assert_safe_target($installRoot, 'app/existing.php');
-    application_update_assert_safe_target($installRoot, 'app/new/nested/file.php', true);
-    updates_path_safety_expect_rejected($installRoot, 'app/new/nested/file.php');
-    updates_path_safety_expect_rejected($installRoot, '../outside/external.php');
+    application_update_assert_safe_target(
+        $installRoot,
+        'app/new/nested/file.php',
+        true,
+    );
+    updates_path_safety_expect_rejected(
+        $installRoot,
+        'app/new/nested/file.php',
+    );
+    updates_path_safety_expect_rejected(
+        $installRoot,
+        '../outside/external.php',
+    );
 
-    $externalLinkCreated = updates_path_safety_create_directory_alias($outsideRoot, $externalLink);
-    $internalAliasCreated = updates_path_safety_create_directory_alias($insideAliasTarget, $internalAlias);
+    $externalLinkCreated = updates_path_safety_create_directory_alias(
+        $outsideRoot,
+        $externalLink,
+    );
+    $internalAliasCreated = updates_path_safety_create_directory_alias(
+        $insideAliasTarget,
+        $internalAlias,
+    );
     if ($externalLinkCreated) {
-        updates_path_safety_expect_rejected($installRoot, 'app/external-link/external.php');
-        updates_path_safety_expect_rejected($installRoot, 'app/external-link/new/file.php');
+        updates_path_safety_expect_rejected(
+            $installRoot,
+            'app/external-link/external.php',
+        );
+        updates_path_safety_expect_rejected(
+            $installRoot,
+            'app/external-link/new/file.php',
+        );
     }
     if ($internalAliasCreated) {
-        updates_path_safety_expect_rejected($installRoot, 'app/internal-alias/aliased.php');
+        updates_path_safety_expect_rejected(
+            $installRoot,
+            'app/internal-alias/aliased.php',
+        );
     }
     if (!$externalLinkCreated && !$internalAliasCreated) {
-        echo "SKIP: This runtime cannot create directory symbolic links; ordinary and missing target cases passed.\n";
+        echo
+            "SKIP: This runtime cannot create directory symbolic links; ordinary and missing target cases passed.\n";
     }
 
     echo "Updater path safety tests passed.\n";

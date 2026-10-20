@@ -46,32 +46,73 @@ use function Gallery\Services\t;
  * @param bool $expanded Whether diagnostics should be expanded initially.
  * @return void Outputs diagnostics, or nothing when profiling is disabled.
  */
-function view_render_admin_render_profile_panel(?array $model, bool $expanded = true): void
-{
+function view_render_admin_render_profile_panel(
+    ?array $model,
+    bool $expanded = true,
+): void {
     if ($model === null) {
         return;
     }
     $counters = is_array($model['counters'] ?? null) ? $model['counters'] : [];
     $timers = is_array($model['timers'] ?? null) ? $model['timers'] : [];
 
-    echo '<details class="admin-render-profile" data-admin-render-profile' . ($expanded ? ' open' : '') . '>';
-    echo '<summary>' . e(t('dev.admin_render_profile.title', 'Admin render profile'));
+    echo
+        '<details class="admin-render-profile" data-admin-render-profile'
+            . ($expanded ? ' open' : '')
+            . '>';
+    echo
+        '<summary>'
+            . e(t('dev.admin_render_profile.title', 'Admin render profile'));
     if ((string) ($model['route'] ?? '') !== '') {
         echo ' · ' . e((string) $model['route']);
     }
     echo '</summary>';
     echo '<div class="admin-render-profile-grid">';
-    echo '<section><h2>' . e(t('dev.admin_render_profile.counters', 'Counters')) . '</h2><table><tbody>';
+    echo
+        '<section><h2>'
+            . e(t('dev.admin_render_profile.counters', 'Counters'))
+            . '</h2><table><tbody>';
     foreach ($counters as $name => $value) {
-        echo '<tr><th>' . e(str_replace('_', ' ', (string) $name)) . '</th><td>' . number_format((float) $value, 0, '.', ' ') . '</td></tr>';
+        echo
+            '<tr><th>'
+                . e(str_replace('_', ' ', (string) $name))
+                . '</th><td>'
+                . number_format((float) $value, 0, '.', ' ')
+                . '</td></tr>';
     }
     echo '</tbody></table></section>';
-    echo '<section><h2>' . e(t('dev.admin_render_profile.timers', 'Timers')) . '</h2><table><thead><tr><th>' . e(t('dev.admin_render_profile.name', 'Name')) . '</th><th>' . e(t('dev.admin_render_profile.count', 'Count')) . '</th><th>' . e(t('dev.admin_render_profile.total_ms', 'Total ms')) . '</th><th>' . e(t('dev.admin_render_profile.max_ms', 'Max ms')) . '</th></tr></thead><tbody>';
+    echo
+        '<section><h2>'
+            . e(t('dev.admin_render_profile.timers', 'Timers'))
+            . '</h2><table><thead><tr><th>'
+            . e(t('dev.admin_render_profile.name', 'Name'))
+            . '</th><th>'
+            . e(t('dev.admin_render_profile.count', 'Count'))
+            . '</th><th>'
+            . e(t('dev.admin_render_profile.total_ms', 'Total ms'))
+            . '</th><th>'
+            . e(t('dev.admin_render_profile.max_ms', 'Max ms'))
+            . '</th></tr></thead><tbody>';
     foreach ($timers as $name => $timer) {
-        echo '<tr><th>' . e(str_replace('_', ' ', (string) $name)) . '</th><td>' . (int) $timer['count'] . '</td><td>' . number_format((float) $timer['total_ms'], 2, '.', ' ') . '</td><td>' . number_format((float) $timer['max_ms'], 2, '.', ' ') . '</td></tr>';
+        echo
+            '<tr><th>'
+                . e(str_replace('_', ' ', (string) $name))
+                . '</th><td>'
+                . (int) $timer['count']
+                . '</td><td>'
+                . number_format((float) $timer['total_ms'], 2, '.', ' ')
+                . '</td><td>'
+                . number_format((float) $timer['max_ms'], 2, '.', ' ')
+                . '</td></tr>';
     }
     echo '</tbody></table></section>';
     echo '</div>';
-    echo '<p class="admin-render-profile-note">' . e(t('dev.admin_render_profile.admin_only_note', 'Admin-only diagnostics for /index.php?page=admin. Use this output to identify first-load cost before optimizing.')) . '</p>';
+    echo
+        '<p class="admin-render-profile-note">'
+            . e(t(
+                'dev.admin_render_profile.admin_only_note',
+                'Admin-only diagnostics for /index.php?page=admin. Use this output to identify first-load cost before optimizing.',
+            ))
+            . '</p>';
     echo '</details>';
 }

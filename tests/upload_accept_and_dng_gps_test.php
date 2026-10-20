@@ -46,7 +46,7 @@ require_once __DIR__ . '/../app/services/app_settings.php';
 require_once __DIR__ . '/../app/services/uploads.php';
 
 if (!function_exists('now_sql')) {
-        /**
+    /**
      * Minimal clock shim used by the isolated metadata test.
      *
      * @return string Text result for the caller.
@@ -78,17 +78,35 @@ function assert_upload_dng_true(bool $condition, string $message): void
  * Assert that two values are close enough for coordinate extraction.
  *
  * @param float $expected Expected value.
- * @param mixed $actual Actual value.
+ * @param int|float $actual Numeric coordinate value to compare with the expected value.
  * @param string $message Message value.
+ * @return void Returns normally only when the numeric values are within tolerance.
  */
-function assert_upload_dng_float_close(float $expected, mixed $actual, string $message): void
-{
+function assert_upload_dng_float_close(
+    float $expected,
+    mixed $actual,
+    string $message,
+): void {
     if (!is_float($actual) && !is_int($actual)) {
-        fwrite(STDERR, $message . ' expected numeric value, got ' . var_export($actual, true) . PHP_EOL);
+        fwrite(
+            STDERR,
+            $message
+                . ' expected numeric value, got '
+                . var_export($actual, true)
+                . PHP_EOL,
+        );
         exit(1);
     }
     if (abs($expected - (float) $actual) > 0.000001) {
-        fwrite(STDERR, $message . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . PHP_EOL);
+        fwrite(
+            STDERR,
+            $message
+                . ' expected '
+                . var_export($expected, true)
+                . ', got '
+                . var_export($actual, true)
+                . PHP_EOL,
+        );
         exit(1);
     }
 }
@@ -98,9 +116,12 @@ function assert_upload_dng_float_close(float $expected, mixed $actual, string $m
  *
  * @param callable $callback Callback expected to throw InvalidArgumentException.
  * @param string $message Message value.
+ * @return void Returns normally only when the callback throws InvalidArgumentException.
  */
-function assert_upload_dng_invalid_argument(callable $callback, string $message): void
-{
+function assert_upload_dng_invalid_argument(
+    callable $callback,
+    string $message,
+): void {
     try {
         $callback();
     } catch (InvalidArgumentException) {
@@ -119,7 +140,10 @@ function assert_upload_dng_invalid_argument(callable $callback, string $message)
  */
 function test_buffer_put(string &$buffer, int $offset, string $value): void
 {
-    $buffer = substr($buffer, 0, $offset) . $value . substr($buffer, $offset + strlen($value));
+    $buffer =
+        substr($buffer, 0, $offset)
+        . $value
+        . substr($buffer, $offset + strlen($value));
 }
 
 /**
@@ -131,8 +155,12 @@ function test_buffer_put(string &$buffer, int $offset, string $value): void
  * @param string $valueArea Value area value.
  * @return string Text result for the caller.
  */
-function test_tiff_entry(int $tag, int $type, int $count, string $valueArea): string
-{
+function test_tiff_entry(
+    int $tag,
+    int $type,
+    int $count,
+    string $valueArea,
+): string {
     return pack('vvV', $tag, $type, $count) . str_pad($valueArea, 4, "\0");
 }
 
@@ -160,7 +188,12 @@ function make_test_dng_with_gps(): string
 {
     $buffer = str_repeat("\0", 320);
     test_buffer_put($buffer, 0, 'II' . pack('vV', 42, 8));
-    test_buffer_put($buffer, 8, pack('v', 1) . test_tiff_entry(0x8825, 4, 1, pack('V', 100)) . pack('V', 0));
+    test_buffer_put(
+        $buffer,
+        8,
+        pack('v', 1) . test_tiff_entry(0x8825, 4, 1, pack('V', 100))
+            . pack('V', 0),
+    );
 
     $gpsEntries = '';
     $gpsEntries .= test_tiff_entry(1, 2, 2, "N\0");
@@ -170,33 +203,77 @@ function make_test_dng_with_gps(): string
     $gpsEntries .= test_tiff_entry(5, 1, 1, "\0");
     $gpsEntries .= test_tiff_entry(6, 5, 1, pack('V', 248));
     test_buffer_put($buffer, 100, pack('v', 6) . $gpsEntries . pack('V', 0));
-    test_buffer_put($buffer, 200, test_tiff_rationals([[50, 1], [5, 1], [3000, 100]]));
-    test_buffer_put($buffer, 224, test_tiff_rationals([[14, 1], [24, 1], [1200, 100]]));
+    test_buffer_put($buffer, 200, test_tiff_rationals([
+        [50, 1],
+        [5, 1],
+        [3000, 100],
+    ]));
+    test_buffer_put($buffer, 224, test_tiff_rationals([
+        [14, 1],
+        [24, 1],
+        [1200, 100],
+    ]));
     test_buffer_put($buffer, 248, test_tiff_rationals([[345, 10]]));
     return $buffer;
 }
 
-$historicAccept = admin_upload_accept_value_for_mode('server_supported', true, true);
-assert_upload_dng_true(str_contains($historicAccept, '.dng'), 'Default server-supported accept mode must keep DNG when RAW is available.');
-assert_upload_dng_true(str_contains($historicAccept, '.heic'), 'Default server-supported accept mode must keep HEIC when available.');
-assert_upload_dng_true(str_contains($historicAccept, 'image/*'), 'Default server-supported accept mode must keep image/* compatibility.');
+$historicAccept = admin_upload_accept_value_for_mode(
+    'server_supported',
+    true,
+    true,
+);
+assert_upload_dng_true(
+    str_contains($historicAccept, '.dng'),
+    'Default server-supported accept mode must keep DNG when RAW is available.',
+);
+assert_upload_dng_true(
+    str_contains($historicAccept, '.heic'),
+    'Default server-supported accept mode must keep HEIC when available.',
+);
+assert_upload_dng_true(
+    str_contains($historicAccept, 'image/*'),
+    'Default server-supported accept mode must keep image/* compatibility.',
+);
 
 $phoneAccept = admin_upload_accept_value_for_mode('phone_jpeg', true, true);
-assert_upload_dng_true(!str_contains($phoneAccept, '.dng'), 'Phone-rendered accept mode must not advertise DNG.');
-assert_upload_dng_true(!str_contains($phoneAccept, '.heic'), 'Phone-rendered accept mode must not advertise HEIC.');
-assert_upload_dng_true(!str_contains($phoneAccept, 'image/*'), 'Phone-rendered accept mode must avoid broad image/* when asking for rendered browser images.');
-assert_upload_dng_true(str_contains($phoneAccept, 'image/jpeg'), 'Phone-rendered accept mode must explicitly request JPEG.');
-
-assert_upload_dng_true(admin_upload_client_format_mode_validate(' PHONE_JPEG ') === 'phone_jpeg', 'Strict source-format validation must normalize supported values.');
-assert_upload_dng_invalid_argument(
-    static fn (): string => admin_upload_client_format_mode_validate('future_format'),
-    'Strict source-format validation must reject unsupported values.'
+assert_upload_dng_true(
+    !str_contains($phoneAccept, '.dng'),
+    'Phone-rendered accept mode must not advertise DNG.',
 );
-assert_upload_dng_true(admin_upload_auto_rename_setting_normalize(true) === '1', 'Strict auto-rename validation must accept boolean true.');
-assert_upload_dng_true(admin_upload_auto_rename_setting_normalize(' 0 ') === '0', 'Strict auto-rename validation must normalize the disabled scalar.');
+assert_upload_dng_true(
+    !str_contains($phoneAccept, '.heic'),
+    'Phone-rendered accept mode must not advertise HEIC.',
+);
+assert_upload_dng_true(
+    !str_contains($phoneAccept, 'image/*'),
+    'Phone-rendered accept mode must avoid broad image/* when asking for rendered browser images.',
+);
+assert_upload_dng_true(
+    str_contains($phoneAccept, 'image/jpeg'),
+    'Phone-rendered accept mode must explicitly request JPEG.',
+);
+
+assert_upload_dng_true(
+    admin_upload_client_format_mode_validate(' PHONE_JPEG ') === 'phone_jpeg',
+    'Strict source-format validation must normalize supported values.',
+);
 assert_upload_dng_invalid_argument(
-    static fn (): string => admin_upload_auto_rename_setting_normalize('yes'),
-    'Strict auto-rename validation must reject non-canonical checkbox values.'
+    static fn(): string => admin_upload_client_format_mode_validate(
+        'future_format',
+    ),
+    'Strict source-format validation must reject unsupported values.',
+);
+assert_upload_dng_true(
+    admin_upload_auto_rename_setting_normalize(true) === '1',
+    'Strict auto-rename validation must accept boolean true.',
+);
+assert_upload_dng_true(
+    admin_upload_auto_rename_setting_normalize(' 0 ') === '0',
+    'Strict auto-rename validation must normalize the disabled scalar.',
+);
+assert_upload_dng_invalid_argument(
+    static fn(): string => admin_upload_auto_rename_setting_normalize('yes'),
+    'Strict auto-rename validation must reject non-canonical checkbox values.',
 );
 
 $path = tempnam(sys_get_temp_dir(), 'php-gallery-dng-gps-');
@@ -206,10 +283,25 @@ if ($path === false) {
 try {
     file_put_contents($path, make_test_dng_with_gps());
     $metadata = extract_dng_gps_metadata($path);
-    assert_upload_dng_float_close(50.0916667, $metadata['gps_lat'], 'DNG GPS latitude must be extracted.');
-    assert_upload_dng_float_close(14.4033333, $metadata['gps_lng'], 'DNG GPS longitude must be extracted.');
-    assert_upload_dng_float_close(34.5, $metadata['gps_altitude'], 'DNG GPS altitude must be extracted.');
-    assert_upload_dng_true($metadata['gps_extracted_at'] === '2026-06-04 12:00:00', 'DNG GPS extraction timestamp must be set when coordinates exist.');
+    assert_upload_dng_float_close(
+        50.0916667,
+        $metadata['gps_lat'],
+        'DNG GPS latitude must be extracted.',
+    );
+    assert_upload_dng_float_close(
+        14.4033333,
+        $metadata['gps_lng'],
+        'DNG GPS longitude must be extracted.',
+    );
+    assert_upload_dng_float_close(
+        34.5,
+        $metadata['gps_altitude'],
+        'DNG GPS altitude must be extracted.',
+    );
+    assert_upload_dng_true(
+        $metadata['gps_extracted_at'] === '2026-06-04 12:00:00',
+        'DNG GPS extraction timestamp must be set when coordinates exist.',
+    );
 } finally {
     @unlink($path);
 }

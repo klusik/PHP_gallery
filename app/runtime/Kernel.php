@@ -19,6 +19,7 @@ namespace Gallery\Core;
 final class Kernel
 {
     private ?RouteDefinition $currentRoute = null;
+
     /**
      * Inject the concrete routing and module-loading boundaries.
      *
@@ -26,9 +27,10 @@ final class Kernel
      * @param ModuleLoader $loader Request-local selective dependency loader.
      * @return void Initializes kernel ownership.
      */
-    public function __construct(private readonly Router $router, private readonly ModuleLoader $loader)
-    {
-    }
+    public function __construct(
+        private readonly Router $router,
+        private readonly ModuleLoader $loader,
+    ) {}
 
     /**
      * Execute the web request lifecycle while preserving transport and security ordering.
@@ -41,11 +43,16 @@ final class Kernel
         $this->load('database-observer');
         $cookies = request_data('cookie');
         $query = request_data('query');
-        if (!empty($cookies['gallery_admin_test_run'])
-            || ($query['page'] ?? '') === 'admin_test_run_start') {
+        if (
+            !empty($cookies['gallery_admin_test_run'])
+            || ($query['page'] ?? '') === 'admin_test_run_start'
+        ) {
             $this->load('request-diagnostics');
         }
-        if (isset($query['benchmark_token']) || isset($cookies['gallery_benchmark_media_context'])) {
+        if (
+            isset($query['benchmark_token'])
+            || isset($cookies['gallery_benchmark_media_context'])
+        ) {
             $this->load('benchmark-diagnostics');
         }
         cms_request_trace_begin();
@@ -58,7 +65,9 @@ final class Kernel
         $this->load('request-policy');
         cms_start_session($config);
         cms_request_trace_mark('request_initialize_start');
-        $request = Request::fromRoute(cms_route_from_request(fn(string $module): mixed => $this->load($module)));
+        $request = Request::fromRoute(cms_route_from_request(
+            fn(string $module): mixed => $this->load($module),
+        ));
         // Select immutable metadata before any feature controller or view is loaded.
         $this->resolve($request);
         $this->load('viewer-identity');
@@ -69,17 +78,28 @@ final class Kernel
         cms_request_trace_mark('request_maintenance_start', ['page' => $page]);
         cms_run_request_maintenance($page, $this);
         cms_request_trace_mark('request_maintenance_end', ['page' => $page]);
-        if (function_exists('Gallery\\Services\\admin_test_run_register_final_shutdown_observer')) {
+        if (function_exists(
+            'Gallery\\Services\\admin_test_run_register_final_shutdown_observer',
+        )) {
             \Gallery\Services\admin_test_run_register_final_shutdown_observer();
         }
         cms_request_trace_mark('dispatch_start', ['page' => $page]);
         cms_dispatch_page($page, $this);
         cms_request_trace_mark('dispatch_end', ['page' => $page]);
-        if (function_exists('Gallery\\Services\\admin_test_run_response_logical_finish')) {
-            apply_response_header_intents(\Gallery\Services\admin_test_run_response_logical_finish('cms_dispatch_returned', http_response_code() ?: 200));
+        if (function_exists(
+            'Gallery\\Services\\admin_test_run_response_logical_finish',
+        )) {
+            apply_response_header_intents(\Gallery\Services\admin_test_run_response_logical_finish(
+                'cms_dispatch_returned',
+                http_response_code() ?: 200,
+            ));
         }
-        if (function_exists('Gallery\\Services\\gallery_benchmark_record_request_completion')) {
-            \Gallery\Services\gallery_benchmark_record_request_completion($page);
+        if (function_exists(
+            'Gallery\\Services\\gallery_benchmark_record_request_completion',
+        )) {
+            \Gallery\Services\gallery_benchmark_record_request_completion(
+                $page,
+            );
         }
     }
 
@@ -116,7 +136,8 @@ final class Kernel
             $this->loader->load($module);
         }
         if (!is_callable($route->handler)) {
-            throw new \RuntimeException('Runtime route handler is unavailable: ' . $route->name);
+            throw new \RuntimeException('Runtime route handler is unavailable: '
+                . $route->name);
         }
         return $route->handler;
     }

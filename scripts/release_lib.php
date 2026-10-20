@@ -64,10 +64,18 @@ function project_root(): string
 
 /**
  * Return true when a version uses the supported X.Y or X.Y.Z numeric form.
+ *
+ * @param string $version Candidate release version.
+ * @return bool True when the version has the supported numeric form.
  */
 function valid_version(string $version): bool
 {
-    return preg_match('/^(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/', $version) === 1;
+    return (
+        preg_match(
+            '/^(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/',
+            $version,
+        ) === 1
+    );
 }
 
 /**
@@ -79,32 +87,64 @@ function valid_version(string $version): bool
  * @param DateTimeZone $timezone Display timezone shared by metadata and all four manuals.
  * @return DateTimeImmutable Existing valid release moment or deterministic initial commit moment.
  */
-function resolve_release_moment(?array $existing, string $version, ?string $initialEpoch, DateTimeZone $timezone): DateTimeImmutable
-{
+function resolve_release_moment(
+    ?array $existing,
+    string $version,
+    ?string $initialEpoch,
+    DateTimeZone $timezone,
+): DateTimeImmutable {
     if (!valid_version($version)) {
-        throw new RuntimeException('Invalid release version for timestamp binding.');
+        throw new RuntimeException(
+            'Invalid release version for timestamp binding.',
+        );
     }
     if ($existing !== null) {
         $timestamp = $existing['released_at'] ?? null;
-        if (($existing['tag'] ?? null) !== 'v_' . $version || !is_string($timestamp)
-            || preg_match('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/D', $timestamp) !== 1) {
-            throw new RuntimeException('Existing release metadata has a missing or mismatched tag/timestamp.');
+        if (
+            ($existing['tag'] ?? null) !== 'v_' . $version
+            || !is_string($timestamp)
+            || preg_match(
+                '/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/D',
+                $timestamp,
+            ) !== 1
+        ) {
+            throw new RuntimeException(
+                'Existing release metadata has a missing or mismatched tag/timestamp.',
+            );
         }
-        $moment = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $timestamp, $timezone);
+        $moment = DateTimeImmutable::createFromFormat(
+            '!Y-m-d H:i:s',
+            $timestamp,
+            $timezone,
+        );
         if (!$moment || $moment->format('Y-m-d H:i:s') !== $timestamp) {
-            throw new RuntimeException('Existing release metadata has an invalid or inconsistent timestamp.');
+            throw new RuntimeException(
+                'Existing release metadata has an invalid or inconsistent timestamp.',
+            );
         }
         // Early release records use a dotted day, e.g. "3. September 2026".
         // Preserve validated reviewed bytes without admitting arbitrary labels.
-        if (!in_array($existing['released_label'] ?? null,
-            [$moment->format('j F Y, H:i'), $moment->format('j. F Y, H:i')], true)) {
-            throw new RuntimeException('Existing release metadata has an inconsistent edition label.');
+        if (!in_array(
+            $existing['released_label'] ?? null,
+            [$moment->format('j F Y, H:i'), $moment->format('j. F Y, H:i')],
+            true,
+        )) {
+            throw new RuntimeException(
+                'Existing release metadata has an inconsistent edition label.',
+            );
         }
         return $moment;
     }
-    if ($initialEpoch === null || preg_match('/^[1-9]\\d{0,10}$/D', $initialEpoch) !== 1
-        || filter_var($initialEpoch, FILTER_VALIDATE_INT, ['options' => ['min_range' => 946684800]]) === false) {
-        throw new RuntimeException('RELEASE_INITIAL_EPOCH must be a valid immutable source-commit timestamp.');
+    if (
+        $initialEpoch === null
+        || preg_match('/^[1-9]\\d{0,10}$/D', $initialEpoch) !== 1
+        || filter_var($initialEpoch, FILTER_VALIDATE_INT, ['options' => [
+            'min_range' => 946684800,
+        ]]) === false
+    ) {
+        throw new RuntimeException(
+            'RELEASE_INITIAL_EPOCH must be a valid immutable source-commit timestamp.',
+        );
     }
     return (new DateTimeImmutable('@' . $initialEpoch))->setTimezone($timezone);
 }
@@ -134,11 +174,13 @@ function write_text(string $path, string $contents): bool
     $directory = dirname($path);
     $temporary = tempnam($directory, '.release-');
     if ($temporary === false) {
-        throw new RuntimeException('Unable to create temporary file in: ' . $directory);
+        throw new RuntimeException('Unable to create temporary file in: '
+            . $directory);
     }
     if (file_put_contents($temporary, $contents) === false) {
         @unlink($temporary);
-        throw new RuntimeException('Unable to write temporary release file: ' . $temporary);
+        throw new RuntimeException('Unable to write temporary release file: '
+            . $temporary);
     }
     if (is_file($path)) {
         @chmod($temporary, fileperms($path) & 0777);
@@ -152,26 +194,55 @@ function write_text(string $path, string $contents): bool
 
 /**
  * Detect the runtime CMS version from app/bootstrap.php.
+ *
+ * @param string $root Repository or isolated fixture root.
+ * @return string Detected CMS version.
  */
 function detect_cms_version(string $root): string
 {
     $contents = read_text($root . '/app/bootstrap.php');
-    if (preg_match("/const\\s+CMS_VERSION\\s*=\\s*['\"]([^'\"]+)['\"]\\s*;/", $contents, $match) !== 1) {
-        throw new RuntimeException('Unable to detect CMS_VERSION in app/bootstrap.php.');
+    if (
+        preg_match(
+            "/const\\s+CMS_VERSION\\s*=\\s*['\"]([^'\"]+)['\"]\\s*;/",
+            $contents,
+            $match,
+        ) !== 1
+    ) {
+        throw new RuntimeException(
+            'Unable to detect CMS_VERSION in app/bootstrap.php.',
+        );
     }
     return (string) $match[1];
 }
 
 /**
  * Replace exactly one registered marker in a file.
+ *
+ * @param string $path File containing the registered marker.
+ * @param string $pattern Regular expression matching exactly one marker.
+ * @param string $replacement Replacement text for the matched marker.
+ * @param string $label Human-readable marker label for errors.
+ * @return bool True when file contents changed.
  */
-function replace_registered_marker(string $path, string $pattern, string $replacement, string $label): bool
-{
+function replace_registered_marker(
+    string $path,
+    string $pattern,
+    string $replacement,
+    string $label,
+): bool {
     $contents = read_text($path);
     $count = 0;
     $updated = preg_replace($pattern, $replacement, $contents, 1, $count);
     if ($updated === null || $count !== 1) {
-        throw new RuntimeException('Expected exactly one ' . $label . ' marker in ' . $path . '; found ' . $count . '.');
+        throw new RuntimeException(
+            'Expected exactly one '
+                . $label
+                . ' marker in '
+                . $path
+                . '; found '
+                . $count
+                . '.',
+        );
     }
     return write_text($path, $updated);
 }
@@ -185,11 +256,19 @@ function replace_registered_marker(string $path, string $pattern, string $replac
  *
  * @return list<string> Repository-relative paths that changed.
  */
-function prepare_version_markers(string $root, string $version, string $manualDate): array
-{
+function prepare_version_markers(
+    string $root,
+    string $version,
+    string $manualDate,
+): array {
     $gap = MARKDOWN_MARKER_WORD_GAP;
     $definitions = [
-        ['app/bootstrap.php', "/(const\\s+CMS_VERSION\\s*=\\s*['\"])[^'\"]+(['\"]\\s*;)/", '${1}' . $version . '${2}', 'runtime version'],
+        [
+            'app/bootstrap.php',
+            "/(const\\s+CMS_VERSION\\s*=\\s*['\"])[^'\"]+(['\"]\\s*;)/",
+            '${1}' . $version . '${2}',
+            'runtime version',
+        ],
         [
             'README.md',
             '/(\*\*Current' . $gap . 'Version:\*\*(?:' . $gap . ')?)[^\r\n]+/',
@@ -198,25 +277,66 @@ function prepare_version_markers(string $root, string $version, string $manualDa
         ],
         [
             'TESTING.md',
-            '/(This' . $gap . 'guide' . $gap . 'applies' . $gap . 'to' . $gap
-                . 'PHP' . $gap . 'Gallery' . $gap . 'Version' . $gap . ')[0-9]+(?:\.[0-9]+){1,2}(\.)/',
+            '/(This'
+                . $gap
+                . 'guide'
+                . $gap
+                . 'applies'
+                . $gap
+                . 'to'
+                . $gap
+                . 'PHP'
+                . $gap
+                . 'Gallery'
+                . $gap
+                . 'Version'
+                . $gap
+                . ')[0-9]+(?:\.[0-9]+){1,2}(\.)/',
             '${1}' . $version . '${2}',
             'testing-guide version',
         ],
         [
             'DATABASE.md',
-            '/(as' . $gap . 'of' . $gap . 'application' . $gap . 'version' . $gap . ')[0-9]+(?:\.[0-9]+){1,2}(\.)/',
+            '/(as'
+                . $gap
+                . 'of'
+                . $gap
+                . 'application'
+                . $gap
+                . 'version'
+                . $gap
+                . ')[0-9]+(?:\.[0-9]+){1,2}(\.)/',
             '${1}' . $version . '${2}',
             'database-document version',
         ],
-        ['ARCHITECTURE.md', "/(const\\s+CMS_VERSION\\s*=\\s*['\"])[^'\"]+(['\"]\\s*;)/", '${1}' . $version . '${2}', 'architecture version example'],
-        ['docs/PHP_Gallery_Manual.tex', '/(\\\\newcommand\{\\\\version\}\{)[^}]+(\})/', '${1}' . $version . '${2}', 'manual version'],
-        ['docs/PHP_Gallery_Manual.tex', '/(\\\\newcommand\{\\\\manualdate\}\{)[^}]+(\})/', '${1}' . $manualDate . '${2}', 'manual edition date'],
+        [
+            'ARCHITECTURE.md',
+            "/(const\\s+CMS_VERSION\\s*=\\s*['\"])[^'\"]+(['\"]\\s*;)/",
+            '${1}' . $version . '${2}',
+            'architecture version example',
+        ],
+        [
+            'docs/PHP_Gallery_Manual.tex',
+            '/(\\\\newcommand\{\\\\version\}\{)[^}]+(\})/',
+            '${1}' . $version . '${2}',
+            'manual version',
+        ],
+        [
+            'docs/PHP_Gallery_Manual.tex',
+            '/(\\\\newcommand\{\\\\manualdate\}\{)[^}]+(\})/',
+            '${1}' . $manualDate . '${2}',
+            'manual edition date',
+        ],
     ];
 
     $changed = [];
     foreach ($definitions as [$relative, $pattern, $replacement, $label]) {
-        if (replace_registered_marker($root . '/' . $relative, $pattern, $replacement, $label)) {
+        if (replace_registered_marker(
+            $root . '/' . $relative,
+            $pattern,
+            $replacement,
+            $label,
+        )) {
             $changed[] = $relative;
         }
     }
@@ -232,13 +352,18 @@ function prepare_version_markers(string $root, string $version, string $manualDa
  * @param ?DateTimeImmutable $releasedAt Explicit timestamp, or null to preserve/default it.
  * @return bool True when the metadata file changed.
  */
-function upsert_release_metadata(string $root, string $version, ?DateTimeImmutable $releasedAt = null): bool
-{
+function upsert_release_metadata(
+    string $root,
+    string $version,
+    ?DateTimeImmutable $releasedAt = null,
+): bool {
     $path = $root . '/release-metadata.json';
     $contents = read_text($path);
     $decoded = json_decode($contents, true);
     if (!is_array($decoded)) {
-        throw new RuntimeException('release-metadata.json is not a valid JSON object.');
+        throw new RuntimeException(
+            'release-metadata.json is not a valid JSON object.',
+        );
     }
 
     $existing = $decoded[$version] ?? null;
@@ -246,7 +371,11 @@ function upsert_release_metadata(string $root, string $version, ?DateTimeImmutab
         $releasedAtText = (string) ($existing['released_at'] ?? '');
         $releasedLabel = (string) ($existing['released_label'] ?? '');
         $existingTag = (string) ($existing['tag'] ?? '');
-        if ($releasedAtText !== '' && $releasedLabel !== '' && $existingTag === 'v_' . $version) {
+        if (
+            $releasedAtText !== ''
+            && $releasedLabel !== ''
+            && $existingTag === 'v_' . $version
+        ) {
             return false;
         }
         if ($releasedAtText === '' || $releasedLabel === '') {
@@ -267,19 +396,27 @@ function upsert_release_metadata(string $root, string $version, ?DateTimeImmutab
 
     $entryLines = [
         '    ' . json_encode($version, JSON_UNESCAPED_SLASHES) . ': {',
-        '        "released_at": ' . json_encode($releasedAtText, JSON_UNESCAPED_SLASHES) . ',',
-        '        "released_label": ' . json_encode($releasedLabel, JSON_UNESCAPED_SLASHES) . ',',
-        '        "tag": ' . json_encode('v_' . $version, JSON_UNESCAPED_SLASHES),
+        '        "released_at": '
+            . json_encode($releasedAtText, JSON_UNESCAPED_SLASHES)
+            . ',',
+        '        "released_label": '
+            . json_encode($releasedLabel, JSON_UNESCAPED_SLASHES)
+            . ',',
+        '        "tag": '
+            . json_encode('v_' . $version, JSON_UNESCAPED_SLASHES),
         '    }',
     ];
     $block = implode("\n", $entryLines);
 
     $quotedVersion = preg_quote($version, '/');
-    $pattern = '/^\s*"' . $quotedVersion . '"\s*:\s*\{.*?^\s*\}(?=\s*,|\s*$)/ms';
+    $pattern =
+        '/^\s*"' . $quotedVersion . '"\s*:\s*\{.*?^\s*\}(?=\s*,|\s*$)/ms';
     if (preg_match($pattern, $contents) === 1) {
         $updated = preg_replace($pattern, $block, $contents, 1);
         if ($updated === null) {
-            throw new RuntimeException('Unable to update release metadata entry for ' . $version . '.');
+            throw new RuntimeException(
+                'Unable to update release metadata entry for ' . $version . '.',
+            );
         }
         return write_text($path, $updated);
     }
@@ -291,22 +428,35 @@ function upsert_release_metadata(string $root, string $version, ?DateTimeImmutab
     $tail = substr($contents, $openBrace + 1);
     $hasEntries = trim($tail, " \t\r\n}") !== '';
     $insertion = "\n" . $block . ($hasEntries ? ',' : '') . "\n";
-    $updated = substr($contents, 0, $openBrace + 1) . $insertion . ltrim($tail, "\r\n");
+    $updated =
+        substr($contents, 0, $openBrace + 1)
+        . $insertion
+        . ltrim($tail, "\r\n");
     return write_text($path, $updated);
 }
 
 /**
  * Ensure a new version has an explicit patch-notes work item.
+ *
+ * @param string $root Repository or isolated fixture root.
+ * @param string $version Target release version.
+ * @return bool True when the scaffold was added.
  */
 function ensure_patch_notes_scaffold(string $root, string $version): bool
 {
     $path = $root . '/PATCH_NOTES.md';
     $contents = read_text($path);
-    if (preg_match('/^## Version\s+' . preg_quote($version, '/') . '\s*$/m', $contents) === 1) {
+    if (
+        preg_match(
+            '/^## Version\s+' . preg_quote($version, '/') . '\s*$/m',
+            $contents,
+        ) === 1
+    ) {
         return false;
     }
 
-    $scaffold = "## Version {$version}\n\n"
+    $scaffold =
+        "## Version {$version}\n\n"
         . "<!-- RELEASE_NOTES_TODO: replace this scaffold with complete release notes before publishing. -->\n\n"
         . "Release notes for Version {$version} are not complete yet.\n\n"
         . "### Highlights\n\n- TODO: describe the release highlights.\n\n"
@@ -315,9 +465,14 @@ function ensure_patch_notes_scaffold(string $root, string $version): bool
         . "### User Impact\n\n- TODO: describe administrator and visitor impact.\n\n";
 
     if (preg_match('/\A(# Patch notes\s*\R+)/i', $contents, $match) !== 1) {
-        throw new RuntimeException('PATCH_NOTES.md does not start with the expected title.');
+        throw new RuntimeException(
+            'PATCH_NOTES.md does not start with the expected title.',
+        );
     }
-    $updated = substr($contents, 0, strlen($match[1])) . $scaffold . substr($contents, strlen($match[1]));
+    $updated =
+        substr($contents, 0, strlen($match[1]))
+        . $scaffold
+        . substr($contents, strlen($match[1]));
     return write_text($path, $updated);
 }
 
@@ -327,7 +482,9 @@ function ensure_patch_notes_scaffold(string $root, string $version): bool
 function extract_marker(string $path, string $pattern): ?string
 {
     $contents = read_text($path);
-    return preg_match($pattern, $contents, $match) === 1 ? (string) $match[1] : null;
+    return preg_match($pattern, $contents, $match) === 1
+        ? (string) $match[1]
+        : null;
 }
 
 /**
@@ -336,23 +493,39 @@ function extract_marker(string $path, string $pattern): ?string
 function patch_notes_section(string $root, string $version): ?string
 {
     $contents = read_text($root . '/PATCH_NOTES.md');
-    $pattern = '/^## Version\s+' . preg_quote($version, '/') . '\s*$\R(.*?)(?=^## Version\s+|\z)/ms';
-    return preg_match($pattern, $contents, $match) === 1 ? (string) $match[1] : null;
+    $pattern =
+        '/^## Version\s+'
+        . preg_quote($version, '/')
+        . '\s*$\R(.*?)(?=^## Version\s+|\z)/ms';
+    return preg_match($pattern, $contents, $match) === 1
+        ? (string) $match[1]
+        : null;
 }
 
 /**
  * Build one normalized consistency result.
+ *
+ * @param string $label Check name.
+ * @param bool $passed Whether the check passed.
+ * @param string $detail Observed value or actionable failure detail.
+ * @return array{label:string,status:string,detail:string} Normalized result.
  */
 function check_result(string $label, bool $passed, string $detail): array
 {
-    return ['label' => $label, 'status' => $passed ? 'PASS' : 'FAIL', 'detail' => $detail];
+    return [
+        'label' => $label,
+        'status' => $passed ? 'PASS' : 'FAIL',
+        'detail' => $detail,
+    ];
 }
-
 
 /**
  * Extract the first manual pages through pdftotext when that optional tool is available.
  *
  * Returning null means content extraction is unavailable and callers may use a weaker fallback.
+ *
+ * @param string $pdfPath Path to the PDF whose first pages should be extracted.
+ * @return ?string Extracted text, or null when pdftotext is unavailable or fails.
  */
 function extract_pdf_text(string $pdfPath): ?string
 {
@@ -362,7 +535,12 @@ function extract_pdf_text(string $pdfPath): ?string
         2 => ['pipe', 'w'],
     ];
     try {
-        $process = @proc_open(['pdftotext', '-f', '1', '-l', '3', $pdfPath, '-'], $descriptors, $pipes, dirname($pdfPath));
+        $process = @proc_open(
+            ['pdftotext', '-f', '1', '-l', '3', $pdfPath, '-'],
+            $descriptors,
+            $pipes,
+            dirname($pdfPath),
+        );
     } catch (\Throwable) {
         return null;
     }
@@ -393,7 +571,11 @@ function collect_consistency_checks(string $root, string $version): array
 {
     $gap = MARKDOWN_MARKER_WORD_GAP;
     $markers = [
-        ['Runtime CMS_VERSION', 'app/bootstrap.php', "/const\\s+CMS_VERSION\\s*=\\s*['\"]([^'\"]+)['\"]\\s*;/"],
+        [
+            'Runtime CMS_VERSION',
+            'app/bootstrap.php',
+            "/const\\s+CMS_VERSION\\s*=\\s*['\"]([^'\"]+)['\"]\\s*;/",
+        ],
         [
             'README current version',
             'README.md',
@@ -402,53 +584,138 @@ function collect_consistency_checks(string $root, string $version): array
         [
             'Testing guide version',
             'TESTING.md',
-            '/This' . $gap . 'guide' . $gap . 'applies' . $gap . 'to' . $gap
-                . 'PHP' . $gap . 'Gallery' . $gap . 'Version' . $gap . '([0-9]+(?:\.[0-9]+){1,2})\./',
+            '/This'
+                . $gap
+                . 'guide'
+                . $gap
+                . 'applies'
+                . $gap
+                . 'to'
+                . $gap
+                . 'PHP'
+                . $gap
+                . 'Gallery'
+                . $gap
+                . 'Version'
+                . $gap
+                . '([0-9]+(?:\.[0-9]+){1,2})\./',
         ],
         [
             'Database document version',
             'DATABASE.md',
-            '/as' . $gap . 'of' . $gap . 'application' . $gap . 'version' . $gap . '([0-9]+(?:\.[0-9]+){1,2})\./',
+            '/as'
+                . $gap
+                . 'of'
+                . $gap
+                . 'application'
+                . $gap
+                . 'version'
+                . $gap
+                . '([0-9]+(?:\.[0-9]+){1,2})\./',
         ],
-        ['Architecture version example', 'ARCHITECTURE.md', "/const\\s+CMS_VERSION\\s*=\\s*['\"]([^'\"]+)['\"]\\s*;/"],
-        ['Manual source version', 'docs/PHP_Gallery_Manual.tex', '/\\\\newcommand\{\\\\version\}\{([^}]+)\}/'],
+        [
+            'Architecture version example',
+            'ARCHITECTURE.md',
+            "/const\\s+CMS_VERSION\\s*=\\s*['\"]([^'\"]+)['\"]\\s*;/",
+        ],
+        [
+            'Manual source version',
+            'docs/PHP_Gallery_Manual.tex',
+            '/\\\\newcommand\{\\\\version\}\{([^}]+)\}/',
+        ],
     ];
 
     $checks = [];
     foreach ($markers as [$label, $relative, $pattern]) {
         $actual = extract_marker($root . '/' . $relative, $pattern);
-        $checks[] = check_result($label, $actual === $version, $actual === null ? 'marker not found' : 'found ' . $actual . ', expected ' . $version);
+        $checks[] = check_result(
+            $label,
+            $actual === $version,
+            $actual === null
+                ? 'marker not found'
+                : 'found ' . $actual . ', expected ' . $version,
+        );
     }
 
     $metadataPath = $root . '/release-metadata.json';
     $metadata = json_decode(read_text($metadataPath), true);
-    $entry = is_array($metadata) && isset($metadata[$version]) && is_array($metadata[$version]) ? $metadata[$version] : null;
-    $metadataOkay = $entry !== null
+    $entry = is_array($metadata)
+    && isset($metadata[$version])
+    && is_array($metadata[$version])
+        ? $metadata[$version]
+        : null;
+    $metadataOkay =
+        $entry !== null
         && (string) ($entry['tag'] ?? '') === 'v_' . $version
         && trim((string) ($entry['released_at'] ?? '')) !== ''
         && trim((string) ($entry['released_label'] ?? '')) !== '';
-    $checks[] = check_result('Release metadata', $metadataOkay, $metadataOkay ? 'entry and v_' . $version . ' tag are present' : 'missing/incomplete release-metadata.json entry');
+    $checks[] = check_result(
+        'Release metadata',
+        $metadataOkay,
+        $metadataOkay
+            ? 'entry and v_' . $version . ' tag are present'
+            : 'missing/incomplete release-metadata.json entry',
+    );
 
     $section = patch_notes_section($root, $version);
-    $notesOkay = $section !== null && !str_contains($section, 'RELEASE_NOTES_TODO') && !preg_match('/\bTODO\b/i', $section);
-    $checks[] = check_result('Patch notes', $notesOkay, $section === null ? 'Version heading is missing' : ($notesOkay ? 'completed Version ' . $version . ' section found' : 'release-note scaffold/TODO is still present'));
+    $notesOkay =
+        $section !== null
+        && !str_contains($section, 'RELEASE_NOTES_TODO')
+        && !preg_match('/\bTODO\b/i', $section);
+    $checks[] = check_result(
+        'Patch notes',
+        $notesOkay,
+        $section === null
+            ? 'Version heading is missing'
+            : (
+                $notesOkay
+                    ? 'completed Version ' . $version . ' section found'
+                    : 'release-note scaffold/TODO is still present'
+            ),
+    );
 
     $manualTex = $root . '/docs/PHP_Gallery_Manual.tex';
     $manualPdf = $root . '/docs/PHP_Gallery_Manual.pdf';
     $pdfText = is_file($manualPdf) ? extract_pdf_text($manualPdf) : null;
     if ($pdfText !== null) {
-        $pdfOkay = preg_match('/(?:Version|version|Application version:)\s*' . preg_quote($version, '/') . '\b/', $pdfText) === 1;
-        $pdfDetail = $pdfOkay ? 'PDF text contains release version ' . $version : 'PDF text does not contain release version ' . $version . '; rebuild the manual';
+        $pdfOkay =
+            preg_match(
+                '/(?:Version|version|Application version:)\s*'
+                    . preg_quote($version, '/')
+                    . '\b/',
+                $pdfText,
+            ) === 1;
+        $pdfDetail = $pdfOkay
+            ? 'PDF text contains release version ' . $version
+            : 'PDF text does not contain release version '
+            . $version
+            . '; rebuild the manual';
     } else {
-        $pdfOkay = is_file($manualPdf) && filemtime($manualPdf) !== false && filemtime($manualTex) !== false && filemtime($manualPdf) >= filemtime($manualTex);
-        $pdfDetail = $pdfOkay ? 'pdftotext unavailable; PDF timestamp fallback is current' : 'rebuild docs/PHP_Gallery_Manual.pdf after the final LaTeX edit';
+        $pdfOkay =
+            is_file($manualPdf)
+            && filemtime($manualPdf) !== false
+            && filemtime($manualTex) !== false
+            && filemtime($manualPdf) >= filemtime($manualTex);
+        $pdfDetail = $pdfOkay
+            ? 'pdftotext unavailable; PDF timestamp fallback is current'
+            : 'rebuild docs/PHP_Gallery_Manual.pdf after the final LaTeX edit';
     }
     $checks[] = check_result('Manual PDF freshness', $pdfOkay, $pdfDetail);
 
     $manifestPath = $root . '/app/core-manifest.json';
-    $manifest = is_file($manifestPath) ? json_decode(read_text($manifestPath), true) : null;
-    $manifestVersion = is_array($manifest) ? (string) ($manifest['version'] ?? '') : '';
-    $checks[] = check_result('Core manifest version', $manifestVersion === $version, $manifestVersion === '' ? 'manifest version missing' : 'found ' . $manifestVersion . ', expected ' . $version);
+    $manifest = is_file($manifestPath)
+        ? json_decode(read_text($manifestPath), true)
+        : null;
+    $manifestVersion = is_array($manifest)
+        ? (string) ($manifest['version'] ?? '')
+        : '';
+    $checks[] = check_result(
+        'Core manifest version',
+        $manifestVersion === $version,
+        $manifestVersion === ''
+            ? 'manifest version missing'
+            : 'found ' . $manifestVersion . ', expected ' . $version,
+    );
 
     return $checks;
 }

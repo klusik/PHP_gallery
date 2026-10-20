@@ -63,7 +63,8 @@ use function Gallery\Services\download_capability_validate;
 use function Gallery\Services\download_manifest_profile_begin;
 use function Gallery\Services\download_manifest_profile_finish;
 use function Gallery\Services\download_manifest_profile_response_headers;
-use function Gallery\Services\download_manifest_cache_invalidate_source_mismatch;
+use function Gallery\Services\download_manifest_cache_invalidate_source_mismatch
+;
 use function Gallery\Services\gallery_zip_failure_reason;
 use function Gallery\Services\gallery_download_manifest;
 use function Gallery\Services\smart_gallery_download_authorized_source;
@@ -106,15 +107,19 @@ use const Gallery\Services\DOWNLOAD_CAPABILITY_SCOPE_LEGACY;
  * identical to the previous app/controllers.php implementation.
  */
 
-
 /**
  * Return a valid UTF-8 byte-bounded diagnostic string.
  *
  * The project does not require mbstring. Trimming at most the incomplete tail
  * keeps bounded attacker-controlled text JSON-safe without adding an extension.
+ * @param string $value Untrusted text to bound.
+ * @param int $maxLength Maximum UTF-8 byte length.
+ * @return string UTF-8-safe text truncated to the requested byte limit.
  */
-function cms_download_failure_bounded_text(string $value, int $maxLength): string
-{
+function cms_download_failure_bounded_text(
+    string $value,
+    int $maxLength,
+): string {
     $maxLength = max(0, $maxLength);
     $bounded = substr($value, 0, $maxLength);
     while ($bounded !== '' && preg_match('//u', $bounded) !== 1) {
@@ -128,9 +133,14 @@ function cms_download_failure_bounded_text(string $value, int $maxLength): strin
  *
  * Control characters are flattened so log exports cannot be structurally
  * confused by attacker-controlled header values.
+ * @param string $serverKey Key in the server request array.
+ * @param int $maxLength Maximum UTF-8 byte length.
+ * @return string Sanitized bounded server-header value.
  */
-function cms_download_failure_bounded_header(string $serverKey, int $maxLength): string
-{
+function cms_download_failure_bounded_header(
+    string $serverKey,
+    int $maxLength,
+): string {
     $value = (string) ($_SERVER[$serverKey] ?? '');
     $value = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $value) ?? '';
     return cms_download_failure_bounded_text(trim($value), $maxLength);
@@ -142,10 +152,14 @@ function cms_download_failure_bounded_header(string $serverKey, int $maxLength):
  * Download/share tokens may legitimately appear in gallery URLs. Persisting
  * the raw Referer would therefore turn an operational log into a credential
  * sink. Relative same-origin paths are retained only without query data.
+ * @return string Referer reduced to a bounded URL without query or fragment data.
  */
 function cms_download_failure_safe_referer(): string
 {
-    $referer = cms_download_failure_bounded_header('HTTP_REFERER', max(1, (int) cms_runtime_limit('download.failure_referer_input_max_length')));
+    $referer = cms_download_failure_bounded_header('HTTP_REFERER', max(
+        1,
+        (int) cms_runtime_limit('download.failure_referer_input_max_length'),
+    ));
     if ($referer === '') {
         return '';
     }
@@ -153,18 +167,29 @@ function cms_download_failure_safe_referer(): string
     $parts = @parse_url($referer);
     if (!is_array($parts)) {
         $pathOnly = explode('?', explode('#', $referer, 2)[0], 2)[0];
-        return cms_download_failure_bounded_text($pathOnly, max(1, (int) cms_runtime_limit('download.failure_referer_max_length')));
+        return cms_download_failure_bounded_text($pathOnly, max(
+            1,
+            (int) cms_runtime_limit('download.failure_referer_max_length'),
+        ));
     }
 
     $path = (string) ($parts['path'] ?? '');
     if (isset($parts['scheme'], $parts['host'])) {
         $port = isset($parts['port']) ? ':' . (int) $parts['port'] : '';
-        $safe = strtolower((string) $parts['scheme']) . '://' . (string) $parts['host'] . $port . $path;
+        $safe =
+            strtolower((string) $parts['scheme'])
+            . '://'
+            . (string) $parts['host']
+            . $port
+            . $path;
     } else {
         $safe = $path;
     }
 
-    return cms_download_failure_bounded_text($safe, max(1, (int) cms_runtime_limit('download.failure_referer_max_length')));
+    return cms_download_failure_bounded_text($safe, max(
+        1,
+        (int) cms_runtime_limit('download.failure_referer_max_length'),
+    ));
 }
 
 /**
@@ -177,7 +202,9 @@ function cms_download_failure_client_ip_fingerprint(): string
 {
     try {
         $clientIp = request_client_ip();
-        return $clientIp === '' ? '' : viewer_security_fingerprint('download-failure-ip', $clientIp);
+        return $clientIp === ''
+            ? ''
+            : viewer_security_fingerprint('download-failure-ip', $clientIp);
     } catch (Throwable) {
         return '';
     }
@@ -187,38 +214,66 @@ function cms_download_failure_client_ip_fingerprint(): string
  * Return a bounded exception message only for application exceptions whose
  * messages are deliberately visitor-safe. Unknown exception text is redacted
  * because PDO/filesystem/runtime messages may contain SQL, paths, or secrets.
+ * @param Throwable $exception Failure being summarized.
+ * @return string Bounded visitor-safe exception text or a redaction marker.
  */
 function cms_download_failure_exception_message(Throwable $exception): string
 {
-    if (!($exception instanceof GalleryDownloadManifestException)
-        && !($exception instanceof GalleryZipBuildException)
-        && !($exception instanceof SmartGalleryZipBuildException)
-        && !($exception instanceof LegacyDownloadBuildException)) {
+    if (
+        !$exception instanceof GalleryDownloadManifestException
+        && !$exception instanceof GalleryZipBuildException
+        && !$exception instanceof SmartGalleryZipBuildException
+        && !$exception instanceof LegacyDownloadBuildException
+    ) {
         return '[redacted unclassified exception message]';
     }
 
-    $message = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $exception->getMessage()) ?? '';
-    return cms_download_failure_bounded_text(trim($message), max(1, (int) cms_runtime_limit('download.failure_exception_message_max_length')));
+    $message =
+        preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $exception->getMessage())
+        ?? '';
+    return cms_download_failure_bounded_text(
+        trim($message),
+        max(
+            1,
+            (int) cms_runtime_limit(
+                'download.failure_exception_message_max_length',
+            ),
+        ),
+    );
 }
 
 /**
  * Build the bounded request context shared by legacy download failure events.
  *
+ * @param string $route Route identifier.
+ * @param string $failureStage Bounded stage at which download failed.
+ * @param string $reason Stable failure reason.
+ * @param Throwable $exception Failure being summarized.
  * @return array<string,int|string> Credential-free diagnostic context.
  */
-function cms_download_failure_request_context(string $route, string $failureStage, string $reason, Throwable $exception): array
-{
-    $requestId = function_exists('Gallery\\Services\\telemetry_request_id') ? telemetry_request_id() : '';
+function cms_download_failure_request_context(
+    string $route,
+    string $failureStage,
+    string $reason,
+    Throwable $exception,
+): array {
+    $requestId = function_exists('Gallery\\Services\\telemetry_request_id')
+        ? telemetry_request_id()
+        : '';
     return [
         'exception_class' => get_class($exception),
-        'exception_message' => cms_download_failure_exception_message($exception),
+        'exception_message' =>
+            cms_download_failure_exception_message($exception),
         'request_method' => substr(request_method(), 0, 16),
         'route' => substr($route, 0, 80),
         'request_id' => substr((string) $requestId, 0, 64),
         'download_mode' => 'legacy',
         'failure_stage' => substr($failureStage, 0, 48),
         'reason' => substr($reason, 0, 64),
-        'user_agent' => cms_download_failure_bounded_header('HTTP_USER_AGENT', max(1, (int) cms_runtime_limit('download.failure_user_agent_max_length'))),
+        'user_agent' => cms_download_failure_bounded_header('HTTP_USER_AGENT', max(
+            1,
+            (int) cms_runtime_limit('download.failure_user_agent_max_length'),
+        )),
         'referer' => cms_download_failure_safe_referer(),
         'client_ip_fingerprint' => cms_download_failure_client_ip_fingerprint(),
     ];
@@ -270,24 +325,34 @@ function cms_download_legacy_unavailable_response(LegacyDownloadBuildUnavailable
  * @param int $resourceId Exact gallery or Smart Gallery identifier.
  * @return string Validated legacy capability token.
  */
-function cms_download_required_legacy_capability(string $resourceType, int $resourceId): string
-{
+function cms_download_required_legacy_capability(
+    string $resourceType,
+    int $resourceId,
+): string {
     cms_download_progressive_capability_headers();
 
     $rawToken = $_POST['capability'] ?? '';
     $token = is_scalar($rawToken) ? trim((string) $rawToken) : '';
-    $maxLength = max(128, (int) cms_runtime_limit('download.capability_max_token_length'));
+    $maxLength = max(
+        128,
+        (int) cms_runtime_limit('download.capability_max_token_length'),
+    );
 
     try {
         if ($token === '' || strlen($token) > $maxLength) {
             throw new DownloadCapabilityException('malformed');
         }
-        download_capability_validate($token, $resourceType, $resourceId, DOWNLOAD_CAPABILITY_SCOPE_LEGACY);
+        download_capability_validate(
+            $token,
+            $resourceType,
+            $resourceId,
+            DOWNLOAD_CAPABILITY_SCOPE_LEGACY,
+        );
     } catch (DownloadCapabilityException) {
         http_response_code(403);
         header('Content-Type: text/plain; charset=utf-8');
         echo 'Invalid or expired download capability.';
-        exit;
+        exit();
     }
 
     return $token;
@@ -301,7 +366,6 @@ function cms_download_progressive_capability_headers(): void
     header('Referrer-Policy: no-referrer');
     header('X-Robots-Tag: noindex, nofollow');
 }
-
 
 /**
  * Parse one strictly bounded positive decimal request identifier.
@@ -321,7 +385,11 @@ function cms_download_positive_request_id(array $source, string $key): ?int
         return null;
     }
     $text = (string) $raw;
-    if ($text === '' || strlen($text) > strlen((string) PHP_INT_MAX) || preg_match('/^[0-9]+$/D', $text) !== 1) {
+    if (
+        $text === ''
+        || strlen($text) > strlen((string) PHP_INT_MAX)
+        || preg_match('/^[0-9]+$/D', $text) !== 1
+    ) {
         return null;
     }
     $normalized = ltrim($text, '0');
@@ -329,8 +397,13 @@ function cms_download_positive_request_id(array $source, string $key): ?int
         return null;
     }
     $max = (string) PHP_INT_MAX;
-    if (strlen($normalized) > strlen($max)
-        || (strlen($normalized) === strlen($max) && strcmp($normalized, $max) > 0)) {
+    if (
+        strlen($normalized) > strlen($max)
+        || (
+            strlen($normalized) === strlen($max)
+            && strcmp($normalized, $max) > 0
+        )
+    ) {
         return null;
     }
     $value = (int) $normalized;
@@ -420,21 +493,45 @@ function cms_download_source_snapshot_parameters(array $source): array
     $hasRevision = array_key_exists('mr', $source);
     $hasSize = array_key_exists('s', $source);
     if (!$hasRevision && !$hasSize) {
-        return ['present' => false, 'valid' => true, 'revision' => '', 'size' => 0];
+        return [
+            'present' => false,
+            'valid' => true,
+            'revision' => '',
+            'size' => 0,
+        ];
     }
-    if (!$hasRevision || !$hasSize || !is_scalar($source['mr']) || !is_scalar($source['s'])) {
-        return ['present' => true, 'valid' => false, 'revision' => '', 'size' => 0];
+    if (
+        !$hasRevision
+        || !$hasSize
+        || !is_scalar($source['mr'])
+        || !is_scalar($source['s'])
+    ) {
+        return [
+            'present' => true,
+            'valid' => false,
+            'revision' => '',
+            'size' => 0,
+        ];
     }
 
     $revision = (string) $source['mr'];
     $sizeText = (string) $source['s'];
-    $version = is_scalar($source['v'] ?? null) ? trim((string) $source['v']) : '';
-    if (preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1
+    $version = is_scalar($source['v'] ?? null)
+        ? trim((string) $source['v'])
+        : '';
+    if (
+        preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1
         || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1
         || $sizeText === ''
         || strlen($sizeText) > strlen((string) PHP_INT_MAX)
-        || preg_match('/^[0-9]+$/D', $sizeText) !== 1) {
-        return ['present' => true, 'valid' => false, 'revision' => '', 'size' => 0];
+        || preg_match('/^[0-9]+$/D', $sizeText) !== 1
+    ) {
+        return [
+            'present' => true,
+            'valid' => false,
+            'revision' => '',
+            'size' => 0,
+        ];
     }
 
     $normalized = ltrim($sizeText, '0');
@@ -442,9 +539,19 @@ function cms_download_source_snapshot_parameters(array $source): array
         $normalized = '0';
     }
     $max = (string) PHP_INT_MAX;
-    if (strlen($normalized) > strlen($max)
-        || (strlen($normalized) === strlen($max) && strcmp($normalized, $max) > 0)) {
-        return ['present' => true, 'valid' => false, 'revision' => '', 'size' => 0];
+    if (
+        strlen($normalized) > strlen($max)
+        || (
+            strlen($normalized) === strlen($max)
+            && strcmp($normalized, $max) > 0
+        )
+    ) {
+        return [
+            'present' => true,
+            'valid' => false,
+            'revision' => '',
+            'size' => 0,
+        ];
     }
 
     return [
@@ -455,13 +562,20 @@ function cms_download_source_snapshot_parameters(array $source): array
     ];
 }
 
-/** Return a controlled source-changed response without starting payload transfer. */
+/**
+ * Return a controlled source-changed response without starting payload transfer.
+ *
+ * @return void Send a no-store 409 response explaining that the source changed.
+ */
 function cms_download_source_changed_response(): void
 {
     http_response_code(409);
     header('Content-Type: text/plain; charset=utf-8');
     header('Cache-Control: private, no-store');
-    echo t('download.progress.source_changed', 'A source file changed after the download was prepared. Retry the download.');
+    echo t(
+        'download.progress.source_changed',
+        'A source file changed after the download was prepared. Retry the download.',
+    );
 }
 
 /**
@@ -473,28 +587,49 @@ function cms_download_source_changed_response(): void
  * 2 callers and manual compatibility testing. If both transports are supplied,
  * they must contain the exact same token.
  *
+ * @param string $resourceType Capability resource type.
+ * @param int $resourceId Authorized resource identifier.
+ * @param string $scope Required capability scope.
+ * @param bool $jsonResponse Whether invalid capabilities receive JSON errors.
  * @return array{token:string,transport:string} Validated token and selected transport.
  */
-function cms_download_required_capability(string $resourceType, int $resourceId, string $scope, bool $jsonResponse = false): array
-{
+function cms_download_required_capability(
+    string $resourceType,
+    int $resourceId,
+    string $scope,
+    bool $jsonResponse = false,
+): array {
     cms_download_progressive_capability_headers();
 
     $headerValue = $_SERVER['HTTP_X_PHP_GALLERY_DOWNLOAD_CAPABILITY'] ?? '';
     $queryValue = $_GET['capability'] ?? '';
     $headerToken = is_scalar($headerValue) ? trim((string) $headerValue) : '';
     $queryToken = is_scalar($queryValue) ? trim((string) $queryValue) : '';
-    $maxLength = max(128, (int) cms_runtime_limit('download.capability_max_token_length'));
+    $maxLength = max(
+        128,
+        (int) cms_runtime_limit('download.capability_max_token_length'),
+    );
 
-    $invalidTransport = ($headerToken !== '' && strlen($headerToken) > $maxLength)
+    $invalidTransport =
+        ($headerToken !== '' && strlen($headerToken) > $maxLength)
         || ($queryToken !== '' && strlen($queryToken) > $maxLength)
-        || ($headerToken !== '' && $queryToken !== '' && !hash_equals($headerToken, $queryToken));
+        || (
+            $headerToken !== ''
+            && $queryToken !== ''
+            && !hash_equals($headerToken, $queryToken)
+        );
     $token = $headerToken !== '' ? $headerToken : $queryToken;
 
     try {
         if ($invalidTransport || $token === '') {
             throw new DownloadCapabilityException('malformed');
         }
-        download_capability_validate($token, $resourceType, $resourceId, $scope);
+        download_capability_validate(
+            $token,
+            $resourceType,
+            $resourceId,
+            $scope,
+        );
     } catch (DownloadCapabilityException) {
         http_response_code(403);
         if ($jsonResponse) {
@@ -508,7 +643,7 @@ function cms_download_required_capability(string $resourceType, int $resourceId,
             header('Content-Type: text/plain; charset=utf-8');
             echo 'Invalid or expired download capability.';
         }
-        exit;
+        exit();
     }
 
     return [
@@ -527,13 +662,24 @@ function cms_download_required_capability(string $resourceType, int $resourceId,
  * @param string $resourceType Capability resource type.
  * @param int $resourceId Exact gallery or Smart Gallery identifier.
  * @param string $manifestRoute Progressive manifest route name.
+ * @return void Emit the progressive-download initialization JSON response.
  */
-function cms_download_start_response(string $resourceType, int $resourceId, string $manifestRoute): void
-{
+function cms_download_start_response(
+    string $resourceType,
+    int $resourceId,
+    string $manifestRoute,
+): void {
     $issuedAt = time();
-    $progressive = download_capability_issue($resourceType, $resourceId, DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE, $issuedAt);
+    $progressive = download_capability_issue(
+        $resourceType,
+        $resourceId,
+        DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE,
+        $issuedAt,
+    );
     $ttl = max(60, (int) cms_runtime_limit('download.capability_ttl_seconds'));
-    $idKey = $resourceType === DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY ? 'smart_gallery_id' : 'gallery_id';
+    $idKey = $resourceType === DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY
+        ? 'smart_gallery_id'
+        : 'gallery_id';
 
     cms_download_progressive_capability_headers();
     header('Content-Type: application/json; charset=utf-8');
@@ -589,10 +735,19 @@ function cms_download_start_require_post(): bool
  * @param int $resourceId Exact gallery or Smart Gallery identifier.
  * @param string $legacyRoute Legacy POST route name.
  * @param string $label Localized action label.
+ * @return void Render the legacy-download confirmation form.
  */
-function cms_download_render_legacy_confirmation(string $resourceType, int $resourceId, string $legacyRoute, string $label): void
-{
-    $capability = download_capability_issue($resourceType, $resourceId, DOWNLOAD_CAPABILITY_SCOPE_LEGACY);
+function cms_download_render_legacy_confirmation(
+    string $resourceType,
+    int $resourceId,
+    string $legacyRoute,
+    string $label,
+): void {
+    $capability = download_capability_issue(
+        $resourceType,
+        $resourceId,
+        DOWNLOAD_CAPABILITY_SCOPE_LEGACY,
+    );
 
     cms_download_progressive_capability_headers();
     view_render_download_legacy_confirmation([
@@ -607,6 +762,7 @@ function cms_download_render_legacy_confirmation(string $resourceType, int $reso
  * Issue capabilities for one currently authorized physical gallery.
  *
  * This endpoint performs no manifest traversal, source hashing, or ZIP work.
+ * @return void Validate the request and issue a gallery download capability response.
  */
 function cms_download_gallery_start(): void
 {
@@ -624,13 +780,18 @@ function cms_download_gallery_start(): void
         cms_not_found();
         return;
     }
-    cms_download_start_response(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, $galleryId, 'download_gallery_manifest');
+    cms_download_start_response(
+        DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
+        $galleryId,
+        'download_gallery_manifest',
+    );
 }
 
 /**
  * Issue capabilities for one public downloadable Smart Gallery.
  *
  * The existing Smart Gallery visibility/presentation policy remains authoritative.
+ * @return void Validate the request and issue a Smart Gallery download capability response.
  */
 function cms_download_smart_gallery_start(): void
 {
@@ -644,11 +805,20 @@ function cms_download_smart_gallery_start(): void
         return;
     }
     $gallery = smart_gallery_find_public_by_id($galleryId);
-    if (!$gallery || empty(smart_gallery_effective_presentation($gallery)['download_enabled'])) {
+    if (
+        !$gallery
+        || empty(smart_gallery_effective_presentation(
+            $gallery,
+        )['download_enabled'])
+    ) {
         cms_not_found();
         return;
     }
-    cms_download_start_response(DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY, $galleryId, 'download_smart_gallery_manifest');
+    cms_download_start_response(
+        DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
+        $galleryId,
+        'download_smart_gallery_manifest',
+    );
 }
 
 /** Emit prepared manifest profiling headers at the HTTP boundary. */
@@ -668,29 +838,58 @@ function cms_download_emit_manifest_profile_headers(): void
  * @param string $downloadName Download filename selected by the authorized route.
  * @return never Emits a successful ZIP or error descriptor and exits after releasing any lease.
  */
-function cms_download_send_zip_file(string $filePath, string $downloadName): never
-{
+function cms_download_send_zip_file(
+    string $filePath,
+    string $downloadName,
+): never {
     $stream = download_stream_descriptor($filePath, $downloadName);
     $status = (int) ($stream['status'] ?? 500);
     http_response_code($status);
-    header('Content-Type: ' . (string) ($stream['mime'] ?? 'application/octet-stream'));
+    header(
+        'Content-Type: '
+            . (string) ($stream['mime'] ?? 'application/octet-stream'),
+    );
     if ($status !== 200) {
         echo (string) ($stream['message'] ?? '');
-        exit;
+        exit();
     }
     header('X-Content-Type-Options: nosniff');
-    header('Content-Disposition: attachment; filename="' . addcslashes((string) ($stream['filename'] ?? 'download.zip'), "\"\\") . '"');
+    header(
+        'Content-Disposition: attachment; filename="'
+            . addcslashes(
+                (string) ($stream['filename'] ?? 'download.zip'),
+                "\"\\",
+            )
+            . '"',
+    );
     header('Content-Length: ' . (int) ($stream['length'] ?? 0));
     $lease = $stream['lease_handle'] ?? null;
-    try { readfile((string) ($stream['path'] ?? '')); }
-    finally { if (is_resource($lease)) { flock($lease, LOCK_UN); fclose($lease); } }
-    exit;
+    try {
+        readfile((string) ($stream['path'] ?? ''));
+    } finally {
+        if (is_resource($lease)) {
+            flock($lease, LOCK_UN);
+            fclose($lease);
+        }
+    }
+    exit();
 }
 
-/** Stream one prepared legacy artifact descriptor at the HTTP boundary. */
-function cms_download_send_legacy_artifact(string $filePath, string $downloadName): never
-{
-    $stream = legacy_download_artifact_stream_descriptor($filePath, $downloadName);
+/**
+ * Stream one prepared legacy artifact descriptor at the HTTP boundary.
+ *
+ * @param string $filePath Prepared archive path.
+ * @param string $downloadName Requested download filename.
+ * @return never Stream the artifact or its bounded failure response, then terminate.
+ */
+function cms_download_send_legacy_artifact(
+    string $filePath,
+    string $downloadName,
+): never {
+    $stream = legacy_download_artifact_stream_descriptor(
+        $filePath,
+        $downloadName,
+    );
     $status = (int) ($stream['status'] ?? 500);
     http_response_code($status);
     if ($status !== 200) {
@@ -698,28 +897,48 @@ function cms_download_send_legacy_artifact(string $filePath, string $downloadNam
         if ($retryAfter > 0) {
             header('Retry-After: ' . $retryAfter);
         }
-        header('Content-Type: ' . (string) ($stream['mime'] ?? 'text/plain; charset=utf-8'));
-        header('Cache-Control: ' . (string) ($stream['cache_control'] ?? 'private, no-store'));
+        header(
+            'Content-Type: '
+                . (string) ($stream['mime'] ?? 'text/plain; charset=utf-8'),
+        );
+        header(
+            'Cache-Control: '
+                . (string) ($stream['cache_control'] ?? 'private, no-store'),
+        );
         echo (string) ($stream['message'] ?? '');
-        exit;
+        exit();
     }
 
     $leaseHandle = $stream['lease_handle'] ?? null;
     try {
-        header('Content-Type: ' . (string) ($stream['mime'] ?? 'application/octet-stream'));
+        header(
+            'Content-Type: '
+                . (string) ($stream['mime'] ?? 'application/octet-stream'),
+        );
         header('X-Content-Type-Options: nosniff');
-        header('Cache-Control: ' . (string) ($stream['cache_control'] ?? 'private, no-store'));
-        header('Content-Disposition: attachment; filename="' . addcslashes((string) ($stream['filename'] ?? 'download.zip'), "\"\\") . '"');
+        header(
+            'Cache-Control: '
+                . (string) ($stream['cache_control'] ?? 'private, no-store'),
+        );
+        header(
+            'Content-Disposition: attachment; filename="'
+                . addcslashes(
+                    (string) ($stream['filename'] ?? 'download.zip'),
+                    "\"\\",
+                )
+                . '"',
+        );
         header('Content-Length: ' . (int) ($stream['length'] ?? 0));
         readfile((string) ($stream['path'] ?? ''));
     } finally {
         legacy_download_artifact_stream_release($leaseHandle);
     }
-    exit;
+    exit();
 }
 
 /**
  * Download a public ZIP for one gallery.
+ * @return void Authorize the request and stream the gallery ZIP or an error response.
  */
 function cms_download_gallery(): void
 {
@@ -733,13 +952,19 @@ function cms_download_gallery(): void
         return;
     }
 
-    $galleryId = cms_download_positive_request_id($method === 'POST' ? $_POST : $_GET, 'id');
+    $galleryId = cms_download_positive_request_id(
+        $method === 'POST' ? $_POST : $_GET,
+        'id',
+    );
     if ($galleryId === null) {
         cms_download_bad_request();
         return;
     }
     if ($method === 'POST') {
-        cms_download_required_legacy_capability(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, $galleryId);
+        cms_download_required_legacy_capability(
+            DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
+            $galleryId,
+        );
     }
 
     // Variable $gallery stores this steps working value.
@@ -754,7 +979,7 @@ function cms_download_gallery(): void
             DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
             $galleryId,
             'download_gallery',
-            t('gallery.download', 'Download gallery')
+            t('gallery.download', 'Download gallery'),
         );
         return;
     }
@@ -771,24 +996,41 @@ function cms_download_gallery(): void
             http_response_code(422);
             header('Content-Type: text/plain; charset=utf-8');
             header('Cache-Control: private, no-store');
-            echo t('download.progress.legacy_too_large', 'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.');
+            echo t(
+                'download.progress.legacy_too_large',
+                'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.',
+            );
             return;
         }
         $failureStage = 'archive_build';
         $zip = build_legacy_gallery_zip((int) $gallery['id'], $manifest);
         $failureStage = 'archive_send';
-        cms_download_send_legacy_artifact($zip, slugify((string) $gallery['title']) . '.zip');
+        cms_download_send_legacy_artifact(
+            $zip,
+            slugify((string) $gallery['title']) . '.zip',
+        );
     } catch (GalleryDownloadManifestException $exception) {
         $context = ['gallery_id' => (int) $gallery['id']]
-            + cms_download_failure_request_context('download_gallery', 'manifest', $exception->reason(), $exception);
-        admin_log_event('warning', 'gallery.download_legacy_failed', 'Legacy gallery ZIP preparation was refused during manifest preparation.', $context, [
-            'category' => 'security',
-            'severity' => 'warning',
-            'request_id' => (string) $context['request_id'],
-            'route_name' => 'download_gallery',
-            'subject_type' => 'gallery',
-            'subject_id' => (int) $gallery['id'],
-        ]);
+        + cms_download_failure_request_context(
+            'download_gallery',
+            'manifest',
+            $exception->reason(),
+            $exception,
+        );
+        admin_log_event(
+            'warning',
+            'gallery.download_legacy_failed',
+            'Legacy gallery ZIP preparation was refused during manifest preparation.',
+            $context,
+            [
+                'category' => 'security',
+                'severity' => 'warning',
+                'request_id' => (string) $context['request_id'],
+                'route_name' => 'download_gallery',
+                'subject_type' => 'gallery',
+                'subject_id' => (int) $gallery['id'],
+            ],
+        );
         http_response_code(422);
         header('Content-Type: text/plain; charset=utf-8');
         header('Cache-Control: private, no-store');
@@ -799,39 +1041,69 @@ function cms_download_gallery(): void
         cms_download_legacy_capacity_response($exception);
     } catch (LegacyDownloadBuildUnavailableException $exception) {
         $context = ['gallery_id' => (int) $gallery['id']]
-            + cms_download_failure_request_context('download_gallery', 'capability', $exception->reason(), $exception);
-        admin_log_event('warning', 'gallery.download_legacy_unavailable', 'Legacy gallery ZIP fallback is unavailable.', $context, [
-            'category' => 'security',
-            'severity' => 'warning',
-            'request_id' => (string) $context['request_id'],
-            'route_name' => 'download_gallery',
-            'subject_type' => 'gallery',
-            'subject_id' => (int) $gallery['id'],
-        ]);
+        + cms_download_failure_request_context(
+            'download_gallery',
+            'capability',
+            $exception->reason(),
+            $exception,
+        );
+        admin_log_event(
+            'warning',
+            'gallery.download_legacy_unavailable',
+            'Legacy gallery ZIP fallback is unavailable.',
+            $context,
+            [
+                'category' => 'security',
+                'severity' => 'warning',
+                'request_id' => (string) $context['request_id'],
+                'route_name' => 'download_gallery',
+                'subject_type' => 'gallery',
+                'subject_id' => (int) $gallery['id'],
+            ],
+        );
         cms_download_legacy_unavailable_response($exception);
     } catch (Throwable $exception) {
         $reason = $failureStage === 'manifest'
             ? 'manifest_unexpected_failure'
-            : ($failureStage === 'archive_send' ? 'archive_send_failed' : gallery_zip_failure_reason($exception));
+            : (
+                $failureStage === 'archive_send'
+                    ? 'archive_send_failed'
+                    : gallery_zip_failure_reason($exception)
+            );
         $context = ['gallery_id' => (int) $gallery['id']]
-            + cms_download_failure_request_context('download_gallery', $failureStage, $reason, $exception);
-        admin_log_event('error', 'gallery.download_legacy_failed', 'Legacy gallery ZIP preparation failed.', $context, [
-            'category' => 'security',
-            'severity' => 'error',
-            'request_id' => (string) $context['request_id'],
-            'route_name' => 'download_gallery',
-            'subject_type' => 'gallery',
-            'subject_id' => (int) $gallery['id'],
-        ]);
+        + cms_download_failure_request_context(
+            'download_gallery',
+            $failureStage,
+            $reason,
+            $exception,
+        );
+        admin_log_event(
+            'error',
+            'gallery.download_legacy_failed',
+            'Legacy gallery ZIP preparation failed.',
+            $context,
+            [
+                'category' => 'security',
+                'severity' => 'error',
+                'request_id' => (string) $context['request_id'],
+                'route_name' => 'download_gallery',
+                'subject_type' => 'gallery',
+                'subject_id' => (int) $gallery['id'],
+            ],
+        );
         http_response_code(422);
         header('Content-Type: text/plain; charset=utf-8');
         header('Cache-Control: private, no-store');
-        echo t('download.progress.legacy_failed', 'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.');
+        echo t(
+            'download.progress.legacy_failed',
+            'The server ZIP fallback could not be prepared. Open the gallery in a modern browser and use Download gallery there.',
+        );
     }
 }
 
 /**
  * Return browser-safe metadata for a progressive gallery download.
+ * @return void Authorize the gallery and emit the progressive-download manifest JSON.
  */
 function cms_download_gallery_manifest(): void
 {
@@ -843,7 +1115,12 @@ function cms_download_gallery_manifest(): void
         cms_download_bad_request(true);
         return;
     }
-    $capability = cms_download_required_capability(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, $galleryId, DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE, true);
+    $capability = cms_download_required_capability(
+        DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
+        $galleryId,
+        DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE,
+        true,
+    );
     $gallery = find_gallery($galleryId);
     if (!$gallery || !visitor_can_access_gallery($gallery)) {
         cms_not_found();
@@ -852,9 +1129,14 @@ function cms_download_gallery_manifest(): void
 
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');
-    download_manifest_profile_begin(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, $galleryId);
+    download_manifest_profile_begin(
+        DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
+        $galleryId,
+    );
     try {
-        $sourceCapability = $capability['transport'] === 'query' ? $capability['token'] : null;
+        $sourceCapability = $capability['transport'] === 'query'
+            ? $capability['token']
+            : null;
         $payload = gallery_download_manifest($gallery, $sourceCapability);
     } catch (GalleryDownloadManifestException $exception) {
         http_response_code(422);
@@ -863,11 +1145,15 @@ function cms_download_gallery_manifest(): void
         download_manifest_profile_finish();
         cms_download_emit_manifest_profile_headers();
     }
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    echo json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+    );
 }
 
 /**
  * Stream one independently authorized original source file for browser ZIP assembly.
+ * @return void Authorize and stream one gallery source file.
  */
 function cms_download_gallery_file(): void
 {
@@ -877,18 +1163,33 @@ function cms_download_gallery_file(): void
     $galleryId = cms_download_positive_request_id($_GET, 'gallery_id');
     $imageId = cms_download_positive_request_id($_GET, 'image_id');
     $snapshot = cms_download_source_snapshot_parameters($_GET);
-    if ($galleryId === null || $imageId === null || !cms_download_source_version_is_valid($_GET) || !$snapshot['valid']) {
+    if (
+        $galleryId === null
+        || $imageId === null
+        || !cms_download_source_version_is_valid($_GET)
+        || !$snapshot['valid']
+    ) {
         cms_download_bad_request();
         return;
     }
-    cms_download_required_capability(DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, $galleryId, DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE);
+    cms_download_required_capability(
+        DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
+        $galleryId,
+        DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE,
+    );
     $resolved = gallery_download_authorized_source($galleryId, $imageId);
     if ($resolved === null) {
         cms_not_found();
         return;
     }
 
-    cms_stream_progressive_download_source($resolved, DOWNLOAD_CAPABILITY_RESOURCE_GALLERY, $galleryId, $imageId, $snapshot);
+    cms_stream_progressive_download_source(
+        $resolved,
+        DOWNLOAD_CAPABILITY_RESOURCE_GALLERY,
+        $galleryId,
+        $imageId,
+        $snapshot,
+    );
 }
 
 /**
@@ -899,16 +1200,28 @@ function cms_download_gallery_file(): void
  * @param int $resourceId Authorized gallery or Smart Gallery identifier.
  * @param int $imageId Authorized source image identifier.
  * @param array{present:bool,valid:bool,revision:string,size:int} $snapshot Optional manifest snapshot parsed before authorization.
+ * @return void Validate the source snapshot and stream the authorized original or respond with an error.
  */
-function cms_stream_progressive_download_source(array $resolved, string $resourceType, int $resourceId, int $imageId, array $snapshot): void
-{
+function cms_stream_progressive_download_source(
+    array $resolved,
+    string $resourceType,
+    int $resourceId,
+    int $imageId,
+    array $snapshot,
+): void {
     $requestedVersion = trim((string) ($_GET['v'] ?? ''));
-    if ($requestedVersion !== '' && !hash_equals((string) $resolved['version'], $requestedVersion)) {
+    if (
+        $requestedVersion !== ''
+        && !hash_equals((string) $resolved['version'], $requestedVersion)
+    ) {
         cms_download_source_changed_response();
         return;
     }
 
-    if ($snapshot['present'] && (int) $resolved['size'] !== (int) $snapshot['size']) {
+    if (
+        $snapshot['present']
+        && (int) $resolved['size'] !== (int) $snapshot['size']
+    ) {
         download_manifest_cache_invalidate_source_mismatch(
             $resourceType,
             $resourceId,
@@ -916,16 +1229,19 @@ function cms_stream_progressive_download_source(array $resolved, string $resourc
             $imageId,
             $requestedVersion,
             (int) $snapshot['size'],
-            (int) $resolved['size']
+            (int) $resolved['size'],
         );
         cms_download_source_changed_response();
         return;
     }
 
-    if (function_exists(__NAMESPACE__ . '\cms_release_public_media_session_lock')) {
+    if (function_exists(__NAMESPACE__
+        . '\cms_release_public_media_session_lock')) {
         cms_release_public_media_session_lock();
     }
-    $safeName = preg_replace('/[\x00-\x1F\x7F]/u', '_', (string) $resolved['filename']) ?? 'photo';
+    $safeName =
+        preg_replace('/[\x00-\x1F\x7F]/u', '_', (string) $resolved['filename'])
+        ?? 'photo';
     $safeName = str_replace(['"', '\\'], '_', $safeName);
     if ($safeName === '') {
         $safeName = 'photo';
@@ -933,10 +1249,20 @@ function cms_stream_progressive_download_source(array $resolved, string $resourc
     header('Content-Type: application/octet-stream');
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: private, no-store, no-transform');
-    header('Content-Disposition: attachment; filename="' . $safeName . '"; filename*=UTF-8\'\'' . rawurlencode((string) $resolved['filename']));
+    header(
+        'Content-Disposition: attachment; filename="'
+            . $safeName
+            . '"; filename*=UTF-8\'\''
+            . rawurlencode((string) $resolved['filename']),
+    );
     header('Content-Length: ' . (int) $resolved['size']);
     $readBytes = readfile((string) $resolved['path']);
-    if (is_int($readBytes) && $readBytes > 0 && is_array($resolved['image'] ?? null) && is_array($resolved['gallery'] ?? null)) {
+    if (
+        is_int($readBytes)
+        && $readBytes > 0
+        && is_array($resolved['image'] ?? null)
+        && is_array($resolved['gallery'] ?? null)
+    ) {
         telemetry_record_media_served_event(
             $resolved['image'],
             $resolved['gallery'],
@@ -945,15 +1271,17 @@ function cms_stream_progressive_download_source(array $resolved, string $resourc
             'original',
             'unknown',
             'download_source',
-            isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : null,
-            http_response_code() ?: 200
+            isset($_SERVER['HTTP_REFERER'])
+                ? (string) $_SERVER['HTTP_REFERER']
+                : null,
+            http_response_code() ?: 200,
         );
     }
 }
 
-
 /**
  * Download the current visitor-authorized Smart Gallery result set as a ZIP.
+ * @return void Authorize the request and stream the Smart Gallery ZIP or an error response.
  */
 function cms_download_smart_gallery(): void
 {
@@ -967,17 +1295,28 @@ function cms_download_smart_gallery(): void
         return;
     }
 
-    $galleryId = cms_download_positive_request_id($method === 'POST' ? $_POST : $_GET, 'id');
+    $galleryId = cms_download_positive_request_id(
+        $method === 'POST' ? $_POST : $_GET,
+        'id',
+    );
     if ($galleryId === null) {
         cms_download_bad_request();
         return;
     }
     if ($method === 'POST') {
-        cms_download_required_legacy_capability(DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY, $galleryId);
+        cms_download_required_legacy_capability(
+            DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
+            $galleryId,
+        );
     }
 
     $gallery = smart_gallery_find_public_by_id($galleryId);
-    if (!$gallery || empty(smart_gallery_effective_presentation($gallery)['download_enabled'])) {
+    if (
+        !$gallery
+        || empty(smart_gallery_effective_presentation(
+            $gallery,
+        )['download_enabled'])
+    ) {
         cms_not_found();
         return;
     }
@@ -986,7 +1325,7 @@ function cms_download_smart_gallery(): void
             DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
             $galleryId,
             'download_smart_gallery',
-            t('smart_gallery.download', 'Download Smart Gallery')
+            t('smart_gallery.download', 'Download Smart Gallery'),
         );
         return;
     }
@@ -1003,67 +1342,117 @@ function cms_download_smart_gallery(): void
             http_response_code(422);
             header('Content-Type: text/plain; charset=utf-8');
             header('Cache-Control: private, no-store');
-            echo t('download.progress.legacy_too_large', 'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.');
+            echo t(
+                'download.progress.legacy_too_large',
+                'This gallery is too large for the legacy server ZIP. Open the gallery in a modern browser and use Download gallery there.',
+            );
             return;
         }
         $failureStage = 'archive_build';
         $zip = build_legacy_smart_gallery_zip($gallery, $manifest);
         $failureStage = 'archive_send';
-        cms_download_send_legacy_artifact($zip, slugify((string) $gallery['title']) . '.zip');
+        cms_download_send_legacy_artifact(
+            $zip,
+            slugify((string) $gallery['title']) . '.zip',
+        );
     } catch (GalleryDownloadManifestException $exception) {
         $context = ['smart_gallery_id' => (int) $gallery['id']]
-            + cms_download_failure_request_context('download_smart_gallery', 'manifest', $exception->reason(), $exception);
-        admin_log_event('warning', 'smart_gallery.download_failed', 'Legacy Smart Gallery ZIP preparation was refused during manifest preparation.', $context, [
-            'category' => 'security',
-            'severity' => 'warning',
-            'request_id' => (string) $context['request_id'],
-            'route_name' => 'download_smart_gallery',
-            'subject_type' => 'smart_gallery',
-            'subject_id' => (int) $gallery['id'],
-        ]);
+        + cms_download_failure_request_context(
+            'download_smart_gallery',
+            'manifest',
+            $exception->reason(),
+            $exception,
+        );
+        admin_log_event(
+            'warning',
+            'smart_gallery.download_failed',
+            'Legacy Smart Gallery ZIP preparation was refused during manifest preparation.',
+            $context,
+            [
+                'category' => 'security',
+                'severity' => 'warning',
+                'request_id' => (string) $context['request_id'],
+                'route_name' => 'download_smart_gallery',
+                'subject_type' => 'smart_gallery',
+                'subject_id' => (int) $gallery['id'],
+            ],
+        );
         http_response_code(422);
         header('Content-Type: text/plain; charset=utf-8');
         header('Cache-Control: private, no-store');
-        echo t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.');
+        echo t(
+            'smart_gallery.download_failed',
+            'Smart Gallery download could not be prepared.',
+        );
     } catch (LegacyDownloadBuildBusyException $exception) {
         cms_download_legacy_busy_response($exception);
     } catch (LegacyDownloadBuildCapacityException $exception) {
         cms_download_legacy_capacity_response($exception);
     } catch (LegacyDownloadBuildUnavailableException $exception) {
         $context = ['smart_gallery_id' => (int) $gallery['id']]
-            + cms_download_failure_request_context('download_smart_gallery', 'capability', $exception->reason(), $exception);
-        admin_log_event('warning', 'smart_gallery.download_legacy_unavailable', 'Legacy Smart Gallery ZIP fallback is unavailable.', $context, [
-            'category' => 'security',
-            'severity' => 'warning',
-            'request_id' => (string) $context['request_id'],
-            'route_name' => 'download_smart_gallery',
-            'subject_type' => 'smart_gallery',
-            'subject_id' => (int) $gallery['id'],
-        ]);
+        + cms_download_failure_request_context(
+            'download_smart_gallery',
+            'capability',
+            $exception->reason(),
+            $exception,
+        );
+        admin_log_event(
+            'warning',
+            'smart_gallery.download_legacy_unavailable',
+            'Legacy Smart Gallery ZIP fallback is unavailable.',
+            $context,
+            [
+                'category' => 'security',
+                'severity' => 'warning',
+                'request_id' => (string) $context['request_id'],
+                'route_name' => 'download_smart_gallery',
+                'subject_type' => 'smart_gallery',
+                'subject_id' => (int) $gallery['id'],
+            ],
+        );
         cms_download_legacy_unavailable_response($exception);
     } catch (Throwable $exception) {
         $reason = $failureStage === 'manifest'
             ? 'manifest_unexpected_failure'
-            : ($failureStage === 'archive_send' ? 'archive_send_failed' : smart_gallery_zip_failure_reason($exception));
+            : (
+                $failureStage === 'archive_send'
+                    ? 'archive_send_failed'
+                    : smart_gallery_zip_failure_reason($exception)
+            );
         $context = ['smart_gallery_id' => (int) $gallery['id']]
-            + cms_download_failure_request_context('download_smart_gallery', $failureStage, $reason, $exception);
-        admin_log_event('error', 'smart_gallery.download_failed', 'Smart Gallery ZIP preparation failed.', $context, [
-            'category' => 'security',
-            'severity' => 'error',
-            'request_id' => (string) $context['request_id'],
-            'route_name' => 'download_smart_gallery',
-            'subject_type' => 'smart_gallery',
-            'subject_id' => (int) $gallery['id'],
-        ]);
+        + cms_download_failure_request_context(
+            'download_smart_gallery',
+            $failureStage,
+            $reason,
+            $exception,
+        );
+        admin_log_event(
+            'error',
+            'smart_gallery.download_failed',
+            'Smart Gallery ZIP preparation failed.',
+            $context,
+            [
+                'category' => 'security',
+                'severity' => 'error',
+                'request_id' => (string) $context['request_id'],
+                'route_name' => 'download_smart_gallery',
+                'subject_type' => 'smart_gallery',
+                'subject_id' => (int) $gallery['id'],
+            ],
+        );
         http_response_code(422);
         header('Content-Type: text/plain; charset=utf-8');
         header('Cache-Control: private, no-store');
-        echo t('smart_gallery.download_failed', 'Smart Gallery download could not be prepared.');
+        echo t(
+            'smart_gallery.download_failed',
+            'Smart Gallery download could not be prepared.',
+        );
     }
 }
 
 /**
  * Return browser-safe metadata for a progressive Smart Gallery download.
+ * @return void Authorize the Smart Gallery and emit its progressive-download manifest JSON.
  */
 function cms_download_smart_gallery_manifest(): void
 {
@@ -1075,18 +1464,33 @@ function cms_download_smart_gallery_manifest(): void
         cms_download_bad_request(true);
         return;
     }
-    $capability = cms_download_required_capability(DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY, $galleryId, DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE, true);
+    $capability = cms_download_required_capability(
+        DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
+        $galleryId,
+        DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE,
+        true,
+    );
     $gallery = smart_gallery_find_public_by_id($galleryId);
-    if (!$gallery || empty(smart_gallery_effective_presentation($gallery)['download_enabled'])) {
+    if (
+        !$gallery
+        || empty(smart_gallery_effective_presentation(
+            $gallery,
+        )['download_enabled'])
+    ) {
         cms_not_found();
         return;
     }
 
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');
-    download_manifest_profile_begin(DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY, $galleryId);
+    download_manifest_profile_begin(
+        DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
+        $galleryId,
+    );
     try {
-        $sourceCapability = $capability['transport'] === 'query' ? $capability['token'] : null;
+        $sourceCapability = $capability['transport'] === 'query'
+            ? $capability['token']
+            : null;
         $payload = smart_gallery_download_manifest($gallery, $sourceCapability);
     } catch (GalleryDownloadManifestException $exception) {
         http_response_code(422);
@@ -1095,37 +1499,62 @@ function cms_download_smart_gallery_manifest(): void
         download_manifest_profile_finish();
         cms_download_emit_manifest_profile_headers();
     }
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    echo json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+    );
 }
 
 /**
  * Stream one independently authorized Smart Gallery source for browser ZIP assembly.
+ * @return void Authorize and stream one Smart Gallery source file.
  */
 function cms_download_smart_gallery_file(): void
 {
     if (!cms_download_progressive_require_get()) {
         return;
     }
-    $smartGalleryId = cms_download_positive_request_id($_GET, 'smart_gallery_id');
+    $smartGalleryId = cms_download_positive_request_id(
+        $_GET,
+        'smart_gallery_id',
+    );
     $imageId = cms_download_positive_request_id($_GET, 'image_id');
     $snapshot = cms_download_source_snapshot_parameters($_GET);
-    if ($smartGalleryId === null || $imageId === null || !cms_download_source_version_is_valid($_GET) || !$snapshot['valid']) {
+    if (
+        $smartGalleryId === null
+        || $imageId === null
+        || !cms_download_source_version_is_valid($_GET)
+        || !$snapshot['valid']
+    ) {
         cms_download_bad_request();
         return;
     }
-    cms_download_required_capability(DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY, $smartGalleryId, DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE);
-    $resolved = smart_gallery_download_authorized_source($smartGalleryId, $imageId);
+    cms_download_required_capability(
+        DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
+        $smartGalleryId,
+        DOWNLOAD_CAPABILITY_SCOPE_PROGRESSIVE,
+    );
+    $resolved = smart_gallery_download_authorized_source(
+        $smartGalleryId,
+        $imageId,
+    );
     if ($resolved === null) {
         cms_not_found();
         return;
     }
 
-    cms_stream_progressive_download_source($resolved, DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY, $smartGalleryId, $imageId, $snapshot);
+    cms_stream_progressive_download_source(
+        $resolved,
+        DOWNLOAD_CAPABILITY_RESOURCE_SMART_GALLERY,
+        $smartGalleryId,
+        $imageId,
+        $snapshot,
+    );
 }
-
 
 /**
  * Download a ZIP containing only Picture manager selected photos.
+ * @return void Handle the selected-photo download request and its HTTP response.
  */
 function cms_picture_manager_download_selection(): void
 {
@@ -1139,19 +1568,38 @@ function cms_picture_manager_download_selection(): void
         $imageIds = picture_manager_image_ids_from_post();
         // $zip stores the generated transient archive path.
         $zip = build_selected_images_zip((int) $sourceGallery['id'], $imageIds);
-        admin_log_event('info', 'picture_manager.selection_zip_downloaded', 'Picture manager prepared a selected-photo share fallback ZIP.', [
-            'source_gallery_id' => (int) $sourceGallery['id'],
-            'selected_count' => count($imageIds),
-        ], ['category' => 'other', 'severity' => 'info']);
-        cms_download_send_zip_file($zip, slugify((string) $sourceGallery['title']) . '-selected-photos.zip');
+        admin_log_event(
+            'info',
+            'picture_manager.selection_zip_downloaded',
+            'Picture manager prepared a selected-photo share fallback ZIP.',
+            [
+                'source_gallery_id' => (int) $sourceGallery['id'],
+                'selected_count' => count($imageIds),
+            ],
+            ['category' => 'other', 'severity' => 'info'],
+        );
+        cms_download_send_zip_file(
+            $zip,
+            slugify((string) $sourceGallery['title']) . '-selected-photos.zip',
+        );
     } catch (Throwable $exception) {
-        admin_log_event('error', 'picture_manager.selection_zip_failed', 'Picture manager selected-photo ZIP failed.', [
-            'source_gallery_id' => (int) ($_POST['source_gallery_id'] ?? 0),
-            'error' => $exception->getMessage(),
-        ], ['category' => 'other', 'severity' => 'error']);
+        admin_log_event(
+            'error',
+            'picture_manager.selection_zip_failed',
+            'Picture manager selected-photo ZIP failed.',
+            [
+                'source_gallery_id' => (int) ($_POST['source_gallery_id'] ?? 0),
+                'error' => $exception->getMessage(),
+            ],
+            ['category' => 'other', 'severity' => 'error'],
+        );
         http_response_code(422);
         header('Content-Type: text/plain; charset=utf-8');
-        echo t('download.selected_failed', 'Selected-photo download failed: {error}', ['error' => $exception->getMessage()]);
+        echo t(
+            'download.selected_failed',
+            'Selected-photo download failed: {error}',
+            ['error' => $exception->getMessage()],
+        );
     }
 }
 

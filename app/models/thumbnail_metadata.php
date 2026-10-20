@@ -48,10 +48,15 @@ use function Gallery\Core\db;
  * @param array<int,int> $imageIds Image identifiers.
  * @param array<int,int> $sizes Allowed thumbnail sizes.
  * @param array<int,string> $formats Allowed derivative formats.
- * @return array<int,array<string,mixed>>
+ * @return array<int,array<string,mixed>> Thumbnail variant database rows for
+ *     the requested image, size, and format combinations; empty when any input
+ *     list is empty or no rows match.
  */
-function thumbnail_metadata_model_renderable_rows(array $imageIds, array $sizes, array $formats): array
-{
+function thumbnail_metadata_model_renderable_rows(
+    array $imageIds,
+    array $sizes,
+    array $formats,
+): array {
     if ($imageIds === [] || $sizes === [] || $formats === []) {
         return [];
     }
@@ -61,8 +66,8 @@ function thumbnail_metadata_model_renderable_rows(array $imageIds, array $sizes,
     $formatPlaceholders = implode(',', array_fill(0, count($formats), '?'));
     $stmt = db()->prepare(
         "SELECT * FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders)"
-        . " AND size_px IN ($sizePlaceholders) AND format IN ($formatPlaceholders)"
-        . ' ORDER BY image_id, size_px, format'
+            . " AND size_px IN ($sizePlaceholders) AND format IN ($formatPlaceholders)"
+            . ' ORDER BY image_id, size_px, format',
     );
     $stmt->execute(array_merge($imageIds, $sizes, $formats));
     return $stmt->fetchAll() ?: [];
@@ -91,35 +96,65 @@ function thumbnail_metadata_model_table_columns(string $table): array
     return $columns;
 }
 
-/** Return whether at least one durable thumbnail row exists for an image. */
+/**
+ * Return whether at least one durable thumbnail row exists for an image.
+ *
+ * @param int $imageId Image identifier to check.
+ * @return bool True when one or more variant rows exist, otherwise false.
+ */
 function thumbnail_metadata_model_image_has_rows(int $imageId): bool
 {
-    $stmt = db()->prepare('SELECT 1 FROM image_thumbnail_variants WHERE image_id = ? LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT 1 FROM image_thumbnail_variants WHERE image_id = ? LIMIT 1',
+    );
     $stmt->execute([$imageId]);
     return (bool) $stmt->fetchColumn();
 }
 
-/** Delete one concrete thumbnail variant row. */
-function thumbnail_metadata_model_delete_variant(int $imageId, int $size, string $format): void
-{
-    $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ? AND size_px = ? AND format = ?');
+/**
+ * Delete one concrete thumbnail variant row.
+ *
+ * @param int $imageId Source image identifier.
+ * @param int $size Thumbnail width in pixels.
+ * @param string $format Derivative format identifier, such as jpg or webp.
+ * @return void Delete the matching thumbnail variant row.
+ */
+function thumbnail_metadata_model_delete_variant(
+    int $imageId,
+    int $size,
+    string $format,
+): void {
+    $stmt = db()->prepare(
+        'DELETE FROM image_thumbnail_variants WHERE image_id = ? AND size_px = ? AND format = ?',
+    );
     $stmt->execute([$imageId, $size, $format]);
 }
 
-/** Delete every thumbnail variant row for an image. */
+/**
+ * Delete every thumbnail variant row for an image.
+ *
+ * @param int $imageId Source image identifier.
+ * @return void Delete all thumbnail variant rows for the image.
+ */
 function thumbnail_metadata_model_delete_image_variants(int $imageId): void
 {
-    $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ?');
+    $stmt = db()->prepare(
+        'DELETE FROM image_thumbnail_variants WHERE image_id = ?',
+    );
     $stmt->execute([$imageId]);
 }
 
 /**
  * Update compact source-image facts using a fixed allowlist of optional columns.
  *
+ * @param int $imageId Source image identifier whose compact facts are updated.
  * @param array<string,mixed> $fields Field values keyed by column name.
+ * @return void Update the allowlisted compact facts for the source image.
  */
-function thumbnail_metadata_model_update_image_source(int $imageId, array $fields): void
-{
+function thumbnail_metadata_model_update_image_source(
+    int $imageId,
+    array $fields,
+): void {
     $allowedColumns = [
         'display_width',
         'display_height',
@@ -129,7 +164,8 @@ function thumbnail_metadata_model_update_image_source(int $imageId, array $field
     $filtered = [];
     foreach ($fields as $column => $value) {
         if (!in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported thumbnail image source column: ' . $column);
+            throw new InvalidArgumentException('Unsupported thumbnail image source column: '
+                . $column);
         }
         $filtered[$column] = $value;
     }
@@ -144,14 +180,19 @@ function thumbnail_metadata_model_update_image_source(int $imageId, array $field
         $params[] = $value;
     }
     $params[] = $imageId;
-    $stmt = db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?',
+    );
     $stmt->execute($params);
 }
 
 /**
  * Insert or refresh one compact thumbnail variant row.
  *
- * @param array<string,mixed> $fields Variant values keyed by column name.
+ * @param array<string,mixed> $fields Allowed variant values keyed by column
+ *     name; image_id, size_px, format, and created_at are required.
+ * @return void No value is returned; invalid or incomplete fields throw
+ *     InvalidArgumentException before the query runs.
  */
 function thumbnail_metadata_model_upsert_variant(array $fields): void
 {
@@ -175,30 +216,46 @@ function thumbnail_metadata_model_upsert_variant(array $fields): void
     $requiredColumns = ['image_id', 'size_px', 'format', 'created_at'];
     foreach ($fields as $column => $_value) {
         if (!in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported thumbnail variant column: ' . $column);
+            throw new InvalidArgumentException('Unsupported thumbnail variant column: '
+                . $column);
         }
     }
     foreach ($requiredColumns as $column) {
         if (!array_key_exists($column, $fields)) {
-            throw new InvalidArgumentException('Missing required thumbnail variant column: ' . $column);
+            throw new InvalidArgumentException('Missing required thumbnail variant column: '
+                . $column);
         }
     }
 
     $columnNames = array_keys($fields);
-    $insertColumns = implode(', ', array_map(static fn (string $column): string => '`' . $column . '`', $columnNames));
+    $insertColumns = implode(', ', array_map(
+        static fn(string $column): string => '`' . $column . '`',
+        $columnNames,
+    ));
     $placeholders = implode(', ', array_fill(0, count($columnNames), '?'));
     $updateColumns = array_values(array_filter(
         $columnNames,
-        static fn (string $column): bool => !in_array($column, ['image_id', 'size_px', 'format', 'created_at'], true)
+        static fn(string $column): bool => !in_array(
+            $column,
+            ['image_id', 'size_px', 'format', 'created_at'],
+            true,
+        ),
     ));
     $updates = implode(', ', array_map(
-        static fn (string $column): string => '`' . $column . '` = VALUES(`' . $column . '`)',
-        $updateColumns
+        static fn(string $column): string => (
+            '`' . $column . '` = VALUES(`' . $column . '`)'
+        ),
+        $updateColumns,
     ));
 
     $stmt = db()->prepare(
-        'INSERT INTO image_thumbnail_variants (' . $insertColumns . ') VALUES (' . $placeholders . ')'
-        . ' ON DUPLICATE KEY UPDATE ' . $updates
+        'INSERT INTO image_thumbnail_variants ('
+            . $insertColumns
+            . ') VALUES ('
+            . $placeholders
+            . ')'
+            . ' ON DUPLICATE KEY UPDATE '
+            . $updates,
     );
     $stmt->execute(array_values($fields));
 }
@@ -206,48 +263,79 @@ function thumbnail_metadata_model_upsert_variant(array $fields): void
 /**
  * Return an aggregate inventory of registered legacy JPEG thumbnail variants.
  *
- * @return array{registered_variant_count:int,valid_variant_count:int,affected_image_count:int,registered_bytes:int,missing_status_count:int,non_valid_status_count:int}
+ * @return array{registered_variant_count:int,valid_variant_count:int,affected_image_count:int,registered_bytes:int,missing_status_count:int,non_valid_status_count:int} Non-negative counts and byte total for registered JPG rows.
  */
 function thumbnail_metadata_model_legacy_jpg_inventory(): array
 {
     $stmt = db()->query(
-        "SELECT COUNT(*) AS registered_variant_count,"
-        . " SUM(CASE WHEN status = 'valid' THEN 1 ELSE 0 END) AS valid_variant_count,"
-        . " COUNT(DISTINCT image_id) AS affected_image_count,"
-        . " COALESCE(SUM(CASE WHEN status = 'valid' THEN COALESCE(file_size, 0) ELSE 0 END), 0) AS registered_bytes,"
-        . " SUM(CASE WHEN status = 'missing' THEN 1 ELSE 0 END) AS missing_status_count,"
-        . " SUM(CASE WHEN status <> 'valid' THEN 1 ELSE 0 END) AS non_valid_status_count"
-        . " FROM image_thumbnail_variants WHERE format = 'jpg'"
+        'SELECT COUNT(*) AS registered_variant_count,'
+            . " SUM(CASE WHEN status = 'valid' THEN 1 ELSE 0 END) AS valid_variant_count,"
+            . ' COUNT(DISTINCT image_id) AS affected_image_count,'
+            . " COALESCE(SUM(CASE WHEN status = 'valid' THEN COALESCE(file_size, 0) ELSE 0 END), 0) AS registered_bytes,"
+            . " SUM(CASE WHEN status = 'missing' THEN 1 ELSE 0 END) AS missing_status_count,"
+            . " SUM(CASE WHEN status <> 'valid' THEN 1 ELSE 0 END) AS non_valid_status_count"
+            . " FROM image_thumbnail_variants WHERE format = 'jpg'",
     );
     $row = $stmt->fetch() ?: [];
     return [
-        'registered_variant_count' => max(0, (int) ($row['registered_variant_count'] ?? 0)),
-        'valid_variant_count' => max(0, (int) ($row['valid_variant_count'] ?? 0)),
-        'affected_image_count' => max(0, (int) ($row['affected_image_count'] ?? 0)),
+        'registered_variant_count' => max(
+            0,
+            (int) ($row['registered_variant_count'] ?? 0),
+        ),
+        'valid_variant_count' => max(
+            0,
+            (int) ($row['valid_variant_count'] ?? 0),
+        ),
+        'affected_image_count' => max(
+            0,
+            (int) ($row['affected_image_count'] ?? 0),
+        ),
         'registered_bytes' => max(0, (int) ($row['registered_bytes'] ?? 0)),
-        'missing_status_count' => max(0, (int) ($row['missing_status_count'] ?? 0)),
-        'non_valid_status_count' => max(0, (int) ($row['non_valid_status_count'] ?? 0)),
+        'missing_status_count' => max(
+            0,
+            (int) ($row['missing_status_count'] ?? 0),
+        ),
+        'non_valid_status_count' => max(
+            0,
+            (int) ($row['non_valid_status_count'] ?? 0),
+        ),
     ];
 }
 
-/** @return array{row_count:int,status_counts:array<string,int>} */
+/**
+ * Return thumbnail metadata row and per-status counts for Admin diagnostics.
+ *
+ * @return array{row_count:int,status_counts:array<string,int>} Total row count
+ *     and a map from each stored status to its row count.
+ */
 function thumbnail_metadata_model_storage_counts(): array
 {
-    $rowCount = (int) db()->query('SELECT COUNT(*) FROM image_thumbnail_variants')->fetchColumn();
+    $rowCount = (int) db()
+        ->query('SELECT COUNT(*) FROM image_thumbnail_variants')
+        ->fetchColumn();
     $statusCounts = [];
-    $stmt = db()->query('SELECT status, COUNT(*) AS count_rows FROM image_thumbnail_variants GROUP BY status ORDER BY status');
+    $stmt = db()->query(
+        'SELECT status, COUNT(*) AS count_rows FROM image_thumbnail_variants GROUP BY status ORDER BY status',
+    );
     foreach ($stmt->fetchAll() as $row) {
-        $statusCounts[(string) ($row['status'] ?? '')] = (int) ($row['count_rows'] ?? 0);
+        $statusCounts[(string) ($row['status'] ?? '')] = (int) (
+            $row['count_rows'] ?? 0
+        );
     }
     return ['row_count' => $rowCount, 'status_counts' => $statusCounts];
 }
 
-/** @return array{data_bytes:int,index_bytes:int,total_bytes:int} */
+/**
+ * Return data, index, and combined storage sizes for the variant table.
+ *
+ * @return array{data_bytes:int,index_bytes:int,total_bytes:int} Storage sizes
+ *     in bytes; missing table metadata is represented as zero values.
+ */
 function thumbnail_metadata_model_storage_size(): array
 {
     $stmt = db()->prepare(
         'SELECT data_length, index_length FROM information_schema.tables'
-        . ' WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1'
+            . ' WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1',
     );
     $stmt->execute(['image_thumbnail_variants']);
     $table = $stmt->fetch() ?: [];
@@ -260,20 +348,34 @@ function thumbnail_metadata_model_storage_size(): array
     ];
 }
 
-
 /**
  * Return valid thumbnail rows for the public media manifest.
  *
  * @param array<int,int> $imageIds Image identifiers.
  * @param array<int,int> $sizes Requested thumbnail sizes.
  * @param array<int,string> $formats Allowed formats.
+ * @param bool $hasDerivativeVersion Whether the variant table has the optional
+ *     derivative_version column.
  * @return array<int,array<string,mixed>> Valid thumbnail metadata rows.
  */
-function thumbnail_metadata_model_public_manifest_rows(array $imageIds, array $sizes, array $formats, bool $hasDerivativeVersion): array
-{
-    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
-    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => $size > 0)));
-    $formats = array_values(array_intersect(['jpg', 'webp'], array_map('strval', $formats)));
+function thumbnail_metadata_model_public_manifest_rows(
+    array $imageIds,
+    array $sizes,
+    array $formats,
+    bool $hasDerivativeVersion,
+): array {
+    $imageIds = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
+    $sizes = array_values(array_unique(array_filter(
+        array_map('intval', $sizes),
+        static fn(int $size): bool => $size > 0,
+    )));
+    $formats = array_values(array_intersect(
+        ['jpg', 'webp'],
+        array_map('strval', $formats),
+    ));
     if ($imageIds === [] || $sizes === [] || $formats === []) {
         return [];
     }
@@ -281,12 +383,14 @@ function thumbnail_metadata_model_public_manifest_rows(array $imageIds, array $s
     $imagePlaceholders = implode(',', array_fill(0, count($imageIds), '?'));
     $sizePlaceholders = implode(',', array_fill(0, count($sizes), '?'));
     $formatPlaceholders = implode(',', array_fill(0, count($formats), '?'));
-    $derivativeVersionSelect = $hasDerivativeVersion ? 'derivative_version' : '0 AS derivative_version';
+    $derivativeVersionSelect = $hasDerivativeVersion
+        ? 'derivative_version'
+        : '0 AS derivative_version';
     $stmt = db()->prepare(
         "SELECT image_id, size_px, format, width, height, status, $derivativeVersionSelect"
-        . " FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders)"
-        . " AND size_px IN ($sizePlaceholders) AND format IN ($formatPlaceholders)"
-        . " AND status = 'valid' ORDER BY image_id, size_px, format"
+            . " FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders)"
+            . " AND size_px IN ($sizePlaceholders) AND format IN ($formatPlaceholders)"
+            . " AND status = 'valid' ORDER BY image_id, size_px, format",
     );
     $stmt->execute(array_merge($imageIds, $sizes, $formats));
     return $stmt->fetchAll() ?: [];

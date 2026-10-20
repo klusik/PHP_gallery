@@ -55,6 +55,8 @@ const ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY = 'admin_search_diagnostics_last_repo
 
 /**
  * Handle the Admin search-diagnostics page and report download.
+ *
+ * @return void Render the page or redirect after handling a request.
  */
 function cms_admin_search_diagnostics(): void
 {
@@ -69,16 +71,27 @@ function cms_admin_search_diagnostics(): void
         $action = (string) ($_POST['action'] ?? 'run');
         if ($action === 'clear') {
             unset($_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY]);
-            flash_message('admin_notice', t('admin.search_diagnostics.cleared_notice', 'Search diagnostic report cleared.'));
+            flash_message('admin_notice', t(
+                'admin.search_diagnostics.cleared_notice',
+                'Search diagnostic report cleared.',
+            ));
             redirect_to(url_for('admin_search_diagnostics'));
         }
 
         $query = trim((string) ($_POST['query'] ?? ''));
-        $runs = public_search_diagnostics_normalize_runs((int) ($_POST['runs'] ?? 3));
-        $includeExplain = isset($_POST['include_explain']) && (string) $_POST['include_explain'] === '1';
+        $runs = public_search_diagnostics_normalize_runs(
+            (int) ($_POST['runs'] ?? 3),
+        );
+        $includeExplain =
+            isset($_POST['include_explain'])
+            && (string) $_POST['include_explain'] === '1';
 
         try {
-            $report = public_search_diagnostics_run($query, $runs, $includeExplain);
+            $report = public_search_diagnostics_run(
+                $query,
+                $runs,
+                $includeExplain,
+            );
             $json = public_search_diagnostics_encode_report($report);
             $_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY] = [
                 'json' => $json,
@@ -87,21 +100,53 @@ function cms_admin_search_diagnostics(): void
                 'include_explain' => $includeExplain,
                 'generated_at' => time(),
             ];
-            admin_log_event('info', 'search_diagnostics.completed', 'Admin completed progressive public-search diagnostics.', [
-                'query_length' => function_exists('mb_strlen') ? mb_strlen($query) : strlen($query),
-                'runs' => $runs,
-                'include_explain' => $includeExplain,
-                'diagnostic_elapsed_ms' => (float) ($report['diagnostic_elapsed_ms'] ?? 0.0),
-            ], ['category' => 'admin', 'severity' => 'notice', 'route_name' => 'admin_search_diagnostics']);
-            flash_message('admin_notice', t('admin.search_diagnostics.completed_notice', 'Search diagnostics completed. The JSON report is ready to copy or download.'));
+            admin_log_event(
+                'info',
+                'search_diagnostics.completed',
+                'Admin completed progressive public-search diagnostics.',
+                [
+                    'query_length' => function_exists('mb_strlen')
+                        ? mb_strlen($query)
+                        : strlen($query),
+                    'runs' => $runs,
+                    'include_explain' => $includeExplain,
+                    'diagnostic_elapsed_ms' => (float) (
+                        $report['diagnostic_elapsed_ms'] ?? 0.0
+                    ),
+                ],
+                [
+                    'category' => 'admin',
+                    'severity' => 'notice',
+                    'route_name' => 'admin_search_diagnostics',
+                ],
+            );
+            flash_message('admin_notice', t(
+                'admin.search_diagnostics.completed_notice',
+                'Search diagnostics completed. The JSON report is ready to copy or download.',
+            ));
         } catch (Throwable $exception) {
-            admin_log_event('error', 'search_diagnostics.failed', 'Admin progressive public-search diagnostics failed.', [
-                'query_length' => function_exists('mb_strlen') ? mb_strlen($query) : strlen($query),
-                'runs' => $runs,
-                'include_explain' => $includeExplain,
-                'exception_class' => get_class($exception),
-            ], ['category' => 'admin', 'severity' => 'error', 'route_name' => 'admin_search_diagnostics']);
-            flash_message('admin_error', t('admin.search_diagnostics.failed_notice', 'Search diagnostics failed. Review Admin Logs for the bounded error event.'));
+            admin_log_event(
+                'error',
+                'search_diagnostics.failed',
+                'Admin progressive public-search diagnostics failed.',
+                [
+                    'query_length' => function_exists('mb_strlen')
+                        ? mb_strlen($query)
+                        : strlen($query),
+                    'runs' => $runs,
+                    'include_explain' => $includeExplain,
+                    'exception_class' => get_class($exception),
+                ],
+                [
+                    'category' => 'admin',
+                    'severity' => 'error',
+                    'route_name' => 'admin_search_diagnostics',
+                ],
+            );
+            flash_message('admin_error', t(
+                'admin.search_diagnostics.failed_notice',
+                'Search diagnostics failed. Review Admin Logs for the bounded error event.',
+            ));
             $_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY . '_form'] = [
                 'query' => $query,
                 'runs' => $runs,
@@ -115,7 +160,9 @@ function cms_admin_search_diagnostics(): void
     $stored = is_array($_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY] ?? null)
         ? $_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY]
         : [];
-    $form = is_array($_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY . '_form'] ?? null)
+    $form = is_array(
+        $_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY . '_form'] ?? null,
+    )
         ? $_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY . '_form']
         : [];
     unset($_SESSION[ADMIN_SEARCH_DIAGNOSTICS_SESSION_KEY . '_form']);
@@ -128,11 +175,14 @@ function cms_admin_search_diagnostics(): void
             $report = $decoded;
         }
     }
-    $query = (string) ($form['query'] ?? ($stored['query'] ?? '320'));
-    $runs = public_search_diagnostics_normalize_runs((int) ($form['runs'] ?? ($stored['runs'] ?? 3)));
+    $query = (string) ($form['query'] ?? $stored['query'] ?? '320');
+    $runs = public_search_diagnostics_normalize_runs(
+        (int) ($form['runs'] ?? $stored['runs'] ?? 3),
+    );
     $includeExplain = array_key_exists('include_explain', $form)
         ? !empty($form['include_explain'])
-        : (!array_key_exists('include_explain', $stored) || !empty($stored['include_explain']));
+        : !array_key_exists('include_explain', $stored)
+        || !empty($stored['include_explain']);
 
     view_render_admin_search_diagnostics_page(
         $report,
@@ -141,12 +191,14 @@ function cms_admin_search_diagnostics(): void
         $runs,
         $includeExplain,
         (string) flash_message('admin_notice'),
-        (string) flash_message('admin_error')
+        (string) flash_message('admin_error'),
     );
 }
 
 /**
  * Download the latest session-owned diagnostic JSON report.
+ *
+ * @return never Send the report and terminate, or redirect when unavailable.
  */
 function admin_search_diagnostics_download_latest(): never
 {
@@ -155,16 +207,22 @@ function admin_search_diagnostics_download_latest(): never
         : [];
     $json = (string) ($stored['json'] ?? '');
     if ($json === '') {
-        flash_message('admin_error', t('admin.search_diagnostics.no_report_notice', 'No search diagnostic report is available for download.'));
+        flash_message('admin_error', t(
+            'admin.search_diagnostics.no_report_notice',
+            'No search diagnostic report is available for download.',
+        ));
         redirect_to(url_for('admin_search_diagnostics'));
     }
 
     $timestamp = (int) ($stored['generated_at'] ?? time());
-    $filename = 'php-gallery-search-diagnostics-' . date('Ymd-His', $timestamp) . '.json';
+    $filename =
+        'php-gallery-search-diagnostics-'
+        . date('Ymd-His', $timestamp)
+        . '.json';
     header('Content-Type: application/json; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
     header('Cache-Control: private, no-store, max-age=0');
     header('X-Content-Type-Options: nosniff');
     echo $json;
-    exit;
+    exit();
 }

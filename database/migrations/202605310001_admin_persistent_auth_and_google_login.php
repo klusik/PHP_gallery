@@ -35,7 +35,7 @@
 declare(strict_types=1);
 
 return [
-    "CREATE TABLE IF NOT EXISTS admin_remember_tokens (
+    'CREATE TABLE IF NOT EXISTS admin_remember_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id BIGINT UNSIGNED NOT NULL,
         selector CHAR(36) NOT NULL,
@@ -48,8 +48,8 @@ return [
         UNIQUE KEY admin_remember_tokens_selector_unique (selector),
         KEY admin_remember_tokens_user_expires_index (user_id, expires_at, revoked_at),
         CONSTRAINT admin_remember_tokens_user_id_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS user_google_accounts (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS user_google_accounts (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id BIGINT UNSIGNED NOT NULL,
         google_sub VARCHAR(255) NOT NULL,
@@ -64,5 +64,5 @@ return [
         UNIQUE KEY user_google_accounts_sub_unique (google_sub),
         KEY user_google_accounts_email_index (email),
         CONSTRAINT user_google_accounts_user_id_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

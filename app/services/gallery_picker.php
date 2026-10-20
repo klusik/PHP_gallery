@@ -66,11 +66,21 @@ require_once dirname(__DIR__) . '/policy_constants.php';
  * @param int $excludedGalleryId Gallery that must not be selectable as a destination.
  * @return array<int,array<string,mixed>> At most thirty options with selection pinned.
  */
-function gallery_search_picker_rows(int $selectedGalleryId = 0, int $excludedGalleryId = 0): array
-{
-    $page = gallery_picker_search_page('', 0, $selectedGalleryId, $excludedGalleryId);
+function gallery_search_picker_rows(
+    int $selectedGalleryId = 0,
+    int $excludedGalleryId = 0,
+): array {
+    $page = gallery_picker_search_page(
+        '',
+        0,
+        $selectedGalleryId,
+        $excludedGalleryId,
+    );
     $rows = $page['rows'];
-    if ($page['selected'] !== null && !in_array($selectedGalleryId, array_column($rows, 'id'), true)) {
+    if (
+        $page['selected'] !== null
+        && !in_array($selectedGalleryId, array_column($rows, 'id'), true)
+    ) {
         // Compatibility callers receive a bounded page with the selection pinned.
         array_pop($rows);
         array_unshift($rows, $page['selected']);
@@ -85,16 +95,21 @@ function gallery_search_picker_rows(int $selectedGalleryId = 0, int $excludedGal
  * @param int $selectedGalleryId Explicitly committed gallery identifier.
  * @return array<string,mixed> Safe bounded label with full relative ancestry.
  */
-function gallery_picker_option(array $gallery, int $selectedGalleryId = 0): array
-{
+function gallery_picker_option(
+    array $gallery,
+    int $selectedGalleryId = 0,
+): array {
     $id = (int) ($gallery['id'] ?? 0);
     $title = (string) ($gallery['title'] ?? '');
     $path = trim((string) ($gallery['folder_path'] ?? ''), '/');
-    if ($id <= 0 || strlen($title) > GALLERY_PICKER_TITLE_MAX_BYTES
+    if (
+        $id <= 0
+        || strlen($title) > GALLERY_PICKER_TITLE_MAX_BYTES
         || strlen($path) > GALLERY_PICKER_PATH_MAX_BYTES
         || preg_match('//u', $title . $path) !== 1
         || preg_match_all('/./us', $title) > GALLERY_PICKER_TITLE_MAX_CHARACTERS
-        || preg_match_all('/./us', $path) > GALLERY_PICKER_PATH_MAX_CHARACTERS) {
+        || preg_match_all('/./us', $path) > GALLERY_PICKER_PATH_MAX_CHARACTERS
+    ) {
         throw new \UnexpectedValueException('Invalid destination data.');
     }
     return [
@@ -102,7 +117,8 @@ function gallery_picker_option(array $gallery, int $selectedGalleryId = 0): arra
         'title' => $title,
         'path' => $path,
         'depth' => substr_count($path, '/'),
-        'label' => $title . ($path !== '' ? ' /' . $path : '') . ' (#' . $id . ')',
+        'label' =>
+            $title . ($path !== '' ? ' /' . $path : '') . ' (#' . $id . ')',
         'selected' => $id === $selectedGalleryId,
     ];
 }
@@ -117,8 +133,10 @@ function gallery_picker_option(array $gallery, int $selectedGalleryId = 0): arra
  * @param int $excludedGalleryId Source gallery that cannot receive its own photos.
  * @return ?array<string,mixed> One bounded label, or null for an invalid hint.
  */
-function gallery_picker_destination_hint(int $galleryId, int $excludedGalleryId = 0): ?array
-{
+function gallery_picker_destination_hint(
+    int $galleryId,
+    int $excludedGalleryId = 0,
+): ?array {
     if ($galleryId <= 0 || $galleryId === $excludedGalleryId) {
         return null;
     }
@@ -134,8 +152,14 @@ function gallery_picker_destination_hint(int $galleryId, int $excludedGalleryId 
  */
 function gallery_picker_empty_page(bool $ok = false): array
 {
-    return ['ok' => $ok, 'rows' => [], 'selected' => null, 'next_after_id' => null,
-        'more' => false, 'page_size' => GALLERY_PICKER_SEARCH_PAGE_SIZE];
+    return [
+        'ok' => $ok,
+        'rows' => [],
+        'selected' => null,
+        'next_after_id' => null,
+        'more' => false,
+        'page_size' => GALLERY_PICKER_SEARCH_PAGE_SIZE,
+    ];
 }
 
 /**
@@ -152,11 +176,19 @@ function gallery_picker_empty_page(bool $ok = false): array
  * @param bool $excludeDescendants Omit its physical branch for parent moves only.
  * @return array<string,mixed> At most thirty results and one selected context row.
  */
-function gallery_picker_search_page(string $query = '', int $afterId = 0, int $selectedGalleryId = 0, int $excludedGalleryId = 0, bool $excludeDescendants = false): array
-{
-    if (strlen($query) > GALLERY_PICKER_QUERY_MAX_BYTES || preg_match('//u', $query) !== 1
+function gallery_picker_search_page(
+    string $query = '',
+    int $afterId = 0,
+    int $selectedGalleryId = 0,
+    int $excludedGalleryId = 0,
+    bool $excludeDescendants = false,
+): array {
+    if (
+        strlen($query) > GALLERY_PICKER_QUERY_MAX_BYTES
+        || preg_match('//u', $query) !== 1
         || preg_match_all('/./us', $query) > GALLERY_PICKER_TITLE_MAX_CHARACTERS
-        || min($afterId, $selectedGalleryId, $excludedGalleryId) < 0) {
+        || min($afterId, $selectedGalleryId, $excludedGalleryId) < 0
+    ) {
         throw new \InvalidArgumentException('Invalid destination search.');
     }
     $excludedPath = null;
@@ -175,19 +207,34 @@ function gallery_picker_search_page(string $query = '', int $afterId = 0, int $s
         $selection = gallery_picker_model_selection($selectedGalleryId);
         if ($selection !== null) {
             $option = gallery_picker_option($selection, $selectedGalleryId);
-            if ($excludedPath === null || ($option['path'] !== $excludedPath
-                && !str_starts_with($option['path'] . '/', $excludedPath . '/'))) {
+            if (
+                $excludedPath === null
+                || (
+                    $option['path'] !== $excludedPath
+                    && !str_starts_with(
+                        $option['path'] . '/',
+                        $excludedPath . '/',
+                    )
+                )
+            ) {
                 $result['selected'] = $option;
             }
         }
     }
-    foreach (gallery_picker_model_search(trim($query), $afterId, $excludedGalleryId, $excludedPath) as $gallery) {
+    foreach (gallery_picker_model_search(
+        trim($query),
+        $afterId,
+        $excludedGalleryId,
+        $excludedPath,
+    ) as $gallery) {
         $result['rows'][] = gallery_picker_option($gallery, $selectedGalleryId);
     }
     // A full page permits continuation; the final continuation can be empty.
-    $result['more'] = count($result['rows']) === GALLERY_PICKER_SEARCH_PAGE_SIZE;
+    $result['more'] =
+        count($result['rows']) === GALLERY_PICKER_SEARCH_PAGE_SIZE;
     if ($result['more']) {
-        $result['next_after_id'] = $result['rows'][count($result['rows']) - 1]['id'];
+        $result['next_after_id'] = $result['rows'][count($result['rows'])
+            - 1]['id'];
     }
     return $result;
 }
@@ -232,10 +279,16 @@ function gallery_picker_source_rows(bool $secondaryTitleSort = false): array
  * @param int $parentGalleryId Nonnegative committed parent ID; zero groups root siblings.
  * @return array{ok:bool,candidates:list<array{id:int,parent_id:int,title:string,created_at:string}>,normalization:string,truncated:bool} Optional bounded suggestions and explicit incompleteness.
  */
-function gallery_title_completion_candidates(string $query = '', int $parentGalleryId = 0): array
-{
+function gallery_title_completion_candidates(
+    string $query = '',
+    int $parentGalleryId = 0,
+): array {
     $result = gallery_title_completion_empty_result();
-    if (strlen($query) > 1024 || preg_match('//u', $query) !== 1 || $parentGalleryId < 0) {
+    if (
+        strlen($query) > 1024
+        || preg_match('//u', $query) !== 1
+        || $parentGalleryId < 0
+    ) {
         throw new \InvalidArgumentException('Invalid title completion query.');
     }
     $characters = preg_match_all('/./us', $query);
@@ -245,7 +298,10 @@ function gallery_title_completion_candidates(string $query = '', int $parentGall
     if ($characters < 2 || preg_match('/\A\s*\z/u', $query) === 1) {
         return $result;
     }
-    $prefix = gallery_title_completion_normalize($query, $result['normalization']);
+    $prefix = gallery_title_completion_normalize(
+        $query,
+        $result['normalization'],
+    );
     if ($prefix === null || $prefix === '') {
         return $result;
     }
@@ -253,11 +309,21 @@ function gallery_title_completion_candidates(string $query = '', int $parentGall
     $remaining = GALLERY_TITLE_COMPLETION_SCAN_BUDGET;
     try {
         foreach ([true, false] as $siblings) {
-            $scopeRemaining = $siblings ? min(GALLERY_TITLE_COMPLETION_SIBLING_BUDGET, $remaining) : $remaining;
+            $scopeRemaining = $siblings
+                ? min(GALLERY_TITLE_COMPLETION_SIBLING_BUDGET, $remaining)
+                : $remaining;
             $before = null;
             do {
-                $pageSize = min(GALLERY_TITLE_COMPLETION_PAGE_SIZE, $scopeRemaining);
-                $rows = gallery_model_title_completion_rows($parentGalleryId, $siblings, $pageSize + 1, $before);
+                $pageSize = min(
+                    GALLERY_TITLE_COMPLETION_PAGE_SIZE,
+                    $scopeRemaining,
+                );
+                $rows = gallery_model_title_completion_rows(
+                    $parentGalleryId,
+                    $siblings,
+                    $pageSize + 1,
+                    $before,
+                );
                 $hasMore = count($rows) > $pageSize;
                 if ($hasMore) {
                     array_pop($rows);
@@ -266,21 +332,41 @@ function gallery_title_completion_candidates(string $query = '', int $parentGall
                     $title = trim((string) ($gallery['title'] ?? ''));
                     $id = (int) ($gallery['id'] ?? 0);
                     $createdAt = (string) ($gallery['created_at'] ?? '');
-                    if ($id <= 0 || strlen($title) > 1024 || preg_match('/\A.{1,255}\z/us', $title) !== 1
-                        || preg_match('/\A[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\z/', $createdAt) !== 1) {
+                    if (
+                        $id <= 0
+                        || strlen($title) > 1024
+                        || preg_match('/\A.{1,255}\z/us', $title) !== 1
+                        || preg_match(
+                            '/\A[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\z/',
+                            $createdAt,
+                        ) !== 1
+                    ) {
                         continue;
                     }
-                    $normalized = gallery_title_completion_normalize($title, $result['normalization']);
-                    if ($normalized === null || $normalized === $prefix || !str_starts_with($normalized, $prefix)) {
+                    $normalized = gallery_title_completion_normalize(
+                        $title,
+                        $result['normalization'],
+                    );
+                    if (
+                        $normalized === null
+                        || $normalized === $prefix
+                        || !str_starts_with($normalized, $prefix)
+                    ) {
                         continue;
                     }
                     $result['candidates'][] = [
                         'id' => $id,
-                        'parent_id' => max(0, (int) ($gallery['parent_id'] ?? 0)),
+                        'parent_id' => max(
+                            0,
+                            (int) ($gallery['parent_id'] ?? 0),
+                        ),
                         'title' => $title,
                         'created_at' => $createdAt,
                     ];
-                    if (count($result['candidates']) >= GALLERY_TITLE_COMPLETION_MAX_CANDIDATES) {
+                    if (
+                        count($result['candidates'])
+                        >= GALLERY_TITLE_COMPLETION_MAX_CANDIDATES
+                    ) {
                         // Do not issue another sorted query merely to prove exhaustiveness.
                         $result['truncated'] = true;
                         return $result;
@@ -300,7 +386,10 @@ function gallery_title_completion_candidates(string $query = '', int $parentGall
                     break;
                 }
                 $last = $rows[count($rows) - 1];
-                $before = ['id' => (int) $last['id'], 'created_at' => (string) $last['created_at']];
+                $before = [
+                    'id' => (int) $last['id'],
+                    'created_at' => (string) $last['created_at'],
+                ];
             } while ($scopeRemaining > 0);
         }
     } catch (\Throwable) {
@@ -310,13 +399,22 @@ function gallery_title_completion_candidates(string $query = '', int $parentGall
     return $result;
 }
 
-/** Return the explicit matching capability and an empty, bounded response. */
-function gallery_title_completion_empty_result(bool $ok = true, bool $truncated = false): array
-{
+/**
+ * Return the explicit matching capability and an empty, bounded response.
+ *
+ * @param bool $ok Whether the request succeeded.
+ * @param bool $truncated Whether candidate collection was truncated.
+ * @return array{ok:bool,candidates:list<never>,normalization:'nfkc-lowercase'|'ascii-lowercase',truncated:bool} Empty response for a title-completion request.
+ */
+function gallery_title_completion_empty_result(
+    bool $ok = true,
+    bool $truncated = false,
+): array {
     return [
         'ok' => $ok,
         'candidates' => [],
-        'normalization' => class_exists(\Normalizer::class) && function_exists('mb_strtolower')
+        'normalization' => class_exists(\Normalizer::class)
+        && function_exists('mb_strtolower')
             ? 'nfkc-lowercase'
             : 'ascii-lowercase',
         'truncated' => $truncated,
@@ -327,15 +425,30 @@ function gallery_title_completion_empty_result(bool $ok = true, bool $truncated 
  * Match using NFKC followed by locale-independent Unicode lowercase, like the
  * browser's normalize('NFKC').toLowerCase(). Without both extensions, only ASCII
  * queries and titles are eligible; never claim Unicode-equivalent matching.
+ *
+ * @param string $text Text to normalize.
+ * @param string $normalization Normalization strategy identifier.
+ * @return ?string Normalized text, or null when the strategy is unsupported or Unicode normalization fails.
  */
-function gallery_title_completion_normalize(string $text, string $normalization): ?string
-{
+function gallery_title_completion_normalize(
+    string $text,
+    string $normalization,
+): ?string {
     if ($normalization === 'nfkc-lowercase') {
         $normalized = \Normalizer::normalize($text, \Normalizer::FORM_KC);
-        return is_string($normalized) ? mb_strtolower($normalized, 'UTF-8') : null;
+        return is_string($normalized)
+            ? mb_strtolower($normalized, 'UTF-8')
+            : null;
     }
-    if ($normalization !== 'ascii-lowercase' || preg_match('/[^\x00-\x7F]/', $text) === 1) {
+    if (
+        $normalization !== 'ascii-lowercase'
+        || preg_match('/[^\x00-\x7F]/', $text) === 1
+    ) {
         return null;
     }
-    return strtr($text, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
+    return strtr(
+        $text,
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        'abcdefghijklmnopqrstuvwxyz',
+    );
 }

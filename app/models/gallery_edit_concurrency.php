@@ -36,11 +36,15 @@ require_once dirname(__DIR__) . '/policy_constants.php';
  * @return array{state:string,lock:?string,gallery:?array<string,mixed>} Internal result; gallery contains private persistence fields.
  * @throws Throwable On database uncertainty, with owned locks/transactions cleaned up.
  */
-function gallery_edit_model_reserve(int $galleryId, string $expectedRevision): array
-{
+function gallery_edit_model_reserve(
+    int $galleryId,
+    string $expectedRevision,
+): array {
     $pdo = db();
     if ($pdo->inTransaction()) {
-        throw new RuntimeException('Gallery edit reservation requires an independent commit.');
+        throw new RuntimeException(
+            'Gallery edit reservation requires an independent commit.',
+        );
     }
     $name = gallery_edit_model_lock();
     if ($name === null) {
@@ -48,20 +52,33 @@ function gallery_edit_model_reserve(int $galleryId, string $expectedRevision): a
     }
     try {
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare('SELECT * FROM galleries WHERE id = ? FOR UPDATE');
+        $stmt = $pdo->prepare(
+            'SELECT * FROM galleries WHERE id = ? FOR UPDATE',
+        );
         $stmt->execute([$galleryId]);
         $gallery = $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
-        if ($gallery === null || (string) $gallery['edit_revision'] !== $expectedRevision) {
+        if (
+            $gallery === null
+            || (string) $gallery['edit_revision'] !== $expectedRevision
+        ) {
             $pdo->rollBack();
             gallery_edit_model_release($name);
-            return ['state' => 'conflict', 'lock' => null, 'gallery' => $gallery];
+            return [
+                'state' => 'conflict',
+                'lock' => null,
+                'gallery' => $gallery,
+            ];
         }
         // Explicitly reserve the next revision before any later folder, asset,
         // or sidecar work. No database trigger or elevated privilege is needed.
-        $stmt = $pdo->prepare('UPDATE galleries SET edit_revision = edit_revision + 1 WHERE id = ? AND edit_revision = ?');
+        $stmt = $pdo->prepare(
+            'UPDATE galleries SET edit_revision = edit_revision + 1 WHERE id = ? AND edit_revision = ?',
+        );
         $stmt->execute([$galleryId, $expectedRevision]);
         if ($stmt->rowCount() !== 1) {
-            throw new RuntimeException('Gallery edit revision reservation failed.');
+            throw new RuntimeException(
+                'Gallery edit revision reservation failed.',
+            );
         }
         $pdo->commit();
         return ['state' => 'acquired', 'lock' => $name, 'gallery' => $gallery];

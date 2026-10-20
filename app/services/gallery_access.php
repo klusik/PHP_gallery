@@ -45,9 +45,7 @@ use function Gallery\Core\request_data;
 use function Gallery\Core\session_context_get;
 use function Gallery\Core\session_context_remove;
 use function Gallery\Core\session_context_set;
-
 use RuntimeException;
-
 use function Gallery\Core\cms_config;
 use function Gallery\Core\current_user;
 use function Gallery\Models\gallery_model_find_by_access_token_hash;
@@ -56,10 +54,9 @@ use function Gallery\Core\now_sql;
 
 /**
  * Gallery access model.
- * 
+ *
  * This module owns password protection, share token handling, visitor access checks, and public listing rules for galleries. It does not alter theme or admin styling settings.
  */
-
 
 /**
  * Base exception for public access policy that cannot be verified safely.
@@ -81,13 +78,30 @@ class PublicSchemaPolicyUnavailableException extends RuntimeException
      * @param string $feature Stable public feature identifier.
      * @param string $schemaState Confirmed missing or unknown schema state.
      * @param string $errorCode Safe inspection error category.
+     * @return void Initializes the bounded exception state.
      */
-    public function __construct(string $feature, string $schemaState = 'unknown', string $errorCode = 'inspection_failed')
-    {
-        $this->feature = preg_match('/^[A-Za-z0-9_.-]{1,120}$/D', $feature) === 1 ? $feature : 'public_schema';
-        $this->schemaState = in_array($schemaState, ['missing', 'unknown'], true) ? $schemaState : 'unknown';
-        $this->errorCode = preg_match('/^[a-z0-9_]{1,80}$/D', $errorCode) === 1 ? $errorCode : 'inspection_failed';
-        parent::__construct('Public schema policy is unavailable for ' . $this->feature . '.');
+    public function __construct(
+        string $feature,
+        string $schemaState = 'unknown',
+        string $errorCode = 'inspection_failed',
+    ) {
+        $this->feature = preg_match('/^[A-Za-z0-9_.-]{1,120}$/D', $feature)
+        === 1
+            ? $feature
+            : 'public_schema';
+        $this->schemaState = in_array(
+            $schemaState,
+            ['missing', 'unknown'],
+            true,
+        )
+            ? $schemaState
+            : 'unknown';
+        $this->errorCode = preg_match('/^[a-z0-9_]{1,80}$/D', $errorCode) === 1
+            ? $errorCode
+            : 'inspection_failed';
+        parent::__construct(
+            'Public schema policy is unavailable for ' . $this->feature . '.',
+        );
     }
 
     /**
@@ -124,13 +138,20 @@ class PublicSchemaPolicyUnavailableException extends RuntimeException
 /**
  * Signal that gallery password/access policy cannot be verified safely.
  */
-final class GalleryAccessSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
+final class GalleryAccessSchemaUnavailableException extends
+    PublicSchemaPolicyUnavailableException
 {
     /**
      * Create an exception for unavailable gallery access schema.
+     *
+     * @param string $schemaState Confirmed missing or unknown schema state.
+     * @param string $errorCode Safe inspection error category.
+     * @return void Initializes the exception through the parent constructor.
      */
-    public function __construct(string $schemaState = 'unknown', string $errorCode = 'inspection_failed')
-    {
+    public function __construct(
+        string $schemaState = 'unknown',
+        string $errorCode = 'inspection_failed',
+    ) {
         parent::__construct('gallery_access', $schemaState, $errorCode);
     }
 }
@@ -138,7 +159,8 @@ final class GalleryAccessSchemaUnavailableException extends PublicSchemaPolicyUn
 /**
  * Signal that gallery visibility compatibility cannot be verified safely.
  */
-final class GalleryVisibilitySchemaUnavailableException extends PublicSchemaPolicyUnavailableException
+final class GalleryVisibilitySchemaUnavailableException extends
+    PublicSchemaPolicyUnavailableException
 {
     /**
      * Create an exception for unavailable gallery visibility schema.
@@ -152,7 +174,8 @@ final class GalleryVisibilitySchemaUnavailableException extends PublicSchemaPoli
 /**
  * Signal that share-token schema policy cannot be verified safely.
  */
-final class GalleryShareTokenSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
+final class GalleryShareTokenSchemaUnavailableException extends
+    PublicSchemaPolicyUnavailableException
 {
     /**
      * Create an exception for unavailable gallery share-token schema.
@@ -185,7 +208,9 @@ function normalize_gallery_visibility(string $visibility): string
     if ($visibility === 'draft' || $visibility === 'unlisted') {
         return 'unpublished';
     }
-    return in_array($visibility, gallery_visibility_values(), true) ? $visibility : 'unpublished';
+    return in_array($visibility, gallery_visibility_values(), true)
+        ? $visibility
+        : 'unpublished';
 }
 
 /**
@@ -198,7 +223,12 @@ function gallery_effective_visibility(array $gallery): string
 {
     // Ordinary galleries do not load the PDF lifecycle guard. The reserved child
     // namespace is permanent; isolated CLI consumers keep their direct include contract.
-    if (preg_match('/(?:^|[\\\\\/])pdf-pages-[a-f0-9]{64}$/D', (string) ($gallery['folder_path'] ?? '')) === 1) {
+    if (
+        preg_match(
+            '/(?:^|[\\\\\/])pdf-pages-[a-f0-9]{64}$/D',
+            (string) ($gallery['folder_path'] ?? ''),
+        ) === 1
+    ) {
         if (function_exists('Gallery\\Core\\cms_runtime_kernel')) {
             \Gallery\Core\cms_runtime_kernel()->load('gallery-pdf-documents');
         } else {
@@ -208,8 +238,13 @@ function gallery_effective_visibility(array $gallery): string
             return 'private';
         }
     }
-    $visibility = normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
-    if ($visibility === 'public' && (string) ($gallery['access_listing'] ?? 'listed') === 'unlisted') {
+    $visibility = normalize_gallery_visibility(
+        (string) ($gallery['visibility'] ?? 'unpublished'),
+    );
+    if (
+        $visibility === 'public'
+        && (string) ($gallery['access_listing'] ?? 'listed') === 'unlisted'
+    ) {
         return 'unpublished';
     }
     return $visibility;
@@ -228,7 +263,10 @@ function gallery_visibility_storage_value(string $visibility): string
     if (schema_inspection_is_unknown($status)) {
         throw new GalleryVisibilitySchemaUnavailableException();
     }
-    if ($visibility === 'unpublished' && schema_inspection_is_missing($status)) {
+    if (
+        $visibility === 'unpublished'
+        && schema_inspection_is_missing($status)
+    ) {
         // A successful inspection that lacks the unpublished enum value is the
         // proven pre-migration vocabulary. Store the historical draft value.
         return 'draft';
@@ -248,7 +286,11 @@ function gallery_visibility_storage_value(string $visibility): string
 function gallery_visibility_schema_status(): array
 {
     return schema_inspection_feature('gallery_visibility', [
-        schema_inspection_column_definition_contains('galleries', 'visibility', 'unpublished'),
+        schema_inspection_column_definition_contains(
+            'galleries',
+            'visibility',
+            'unpublished',
+        ),
     ]);
 }
 
@@ -297,13 +339,17 @@ function gallery_visibility_label(string $visibility): string
 /**
  * Return true when anonymous visitors may request this gallery by its normal URL.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return bool True when the condition matches.
+ * @param array{id?:int|string|null,folder_path?:string|null,visibility?:string|null,access_listing?:string|null} $gallery Gallery identity, path and visibility fields used by the public URL policy.
+ * @return bool True when the gallery's effective visibility permits a normal public URL request.
  */
 function gallery_allows_direct_public_request(array $gallery): bool
 {
     gallery_visibility_assert_public_policy_available();
-    return in_array(gallery_effective_visibility($gallery), ['public', 'unpublished'], true);
+    return in_array(
+        gallery_effective_visibility($gallery),
+        ['public', 'unpublished'],
+        true,
+    );
 }
 
 /**
@@ -318,7 +364,11 @@ function gallery_allows_direct_public_request(array $gallery): bool
  */
 function admin_feature_schema_ready(): bool
 {
-    return picture_game_schema_ready() && admin_log_schema_ready() && exif_gps_schema_ready() && gallery_access_schema_ready() && nsfw_guard_schema_ready();
+    return picture_game_schema_ready()
+        && admin_log_schema_ready()
+        && exif_gps_schema_ready()
+        && gallery_access_schema_ready()
+        && nsfw_guard_schema_ready();
 }
 
 /**
@@ -368,7 +418,10 @@ function gallery_access_schema_is_confirmed_legacy(?array $status = null): bool
         return false;
     }
     foreach ($requirements as $requirement) {
-        if (!is_array($requirement) || !schema_inspection_is_missing($requirement)) {
+        if (
+            !is_array($requirement)
+            || !schema_inspection_is_missing($requirement)
+        ) {
             return false;
         }
     }
@@ -382,6 +435,8 @@ function gallery_access_schema_is_confirmed_legacy(?array $status = null): bool
  * confirmed legacy schema preserves the historical no-password path because it
  * could not have stored gallery access restrictions. Unknown and partial schema
  * fail closed.
+ *
+ * @return void Returns normally only when public access policy can be checked safely.
  */
 function gallery_access_assert_public_policy_available(): void
 {
@@ -389,11 +444,16 @@ function gallery_access_assert_public_policy_available(): void
     if (schema_inspection_is_unknown($status)) {
         throw new GalleryAccessSchemaUnavailableException();
     }
-    if (schema_inspection_is_missing($status) && !gallery_access_schema_is_confirmed_legacy($status)) {
-        throw new GalleryAccessSchemaUnavailableException('missing', 'partial_schema');
+    if (
+        schema_inspection_is_missing($status)
+        && !gallery_access_schema_is_confirmed_legacy($status)
+    ) {
+        throw new GalleryAccessSchemaUnavailableException(
+            'missing',
+            'partial_schema',
+        );
     }
 }
-
 
 /**
  * Signal that NSFW Guard cannot make a safe public access decision.
@@ -402,7 +462,8 @@ function gallery_access_assert_public_policy_available(): void
  * request dispatcher converts it into the route-appropriate generic 503
  * response, while Admin System Health exposes bounded diagnostic guidance.
  */
-final class NsfwGuardSchemaUnavailableException extends PublicSchemaPolicyUnavailableException
+final class NsfwGuardSchemaUnavailableException extends
+    PublicSchemaPolicyUnavailableException
 {
     /**
      * Create an exception for unavailable NSFW Guard schema.
@@ -489,9 +550,9 @@ function gallery_nsfw_requirement(array $gallery): ?array
 /**
  * Return true when one image is restricted by its own flag or by gallery ancestry.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return bool True when the condition matches.
+ * @param array{nsfw_enabled?:int|string|null} $image Image NSFW flag.
+ * @param array{id?:int|string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited NSFW policy fields.
+ * @return bool True when the image or an ancestor gallery requires NSFW access.
  */
 function image_nsfw_restricted(array $image, array $gallery): bool
 {
@@ -499,25 +560,33 @@ function image_nsfw_restricted(array $image, array $gallery): bool
     if (!nsfw_guard_schema_ready()) {
         return false;
     }
-    return (int) ($image['nsfw_enabled'] ?? 0) === 1 || gallery_nsfw_requirement($gallery) !== null;
+    return (
+        (int) ($image['nsfw_enabled'] ?? 0) === 1
+            || gallery_nsfw_requirement($gallery) !== null
+    );
 }
 
 /**
  * Return true when one public image may be exposed to the current visitor.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return bool True when the condition matches.
+ * @param array{visibility?:string|null,nsfw_enabled?:int|string|null} $image Image visibility and optional NSFW fields.
+ * @param array{id?:int|string|null,visibility?:string|null,access_listing?:string|null,access_mode?:string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and visibility, access and inherited NSFW policy fields.
+ * @return bool True when image visibility, gallery grants and NSFW rules permit access.
  */
-function public_image_visible_to_current_visitor(array $image, array $gallery): bool
-{
+function public_image_visible_to_current_visitor(
+    array $image,
+    array $gallery,
+): bool {
     if ((string) ($image['visibility'] ?? '') !== 'public') {
         return false;
     }
     if (!visitor_can_access_gallery($gallery)) {
         return false;
     }
-    if (image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content()) {
+    if (
+        image_nsfw_restricted($image, $gallery)
+        && !visitor_can_access_nsfw_content()
+    ) {
         return false;
     }
     return true;
@@ -529,27 +598,37 @@ function public_image_visible_to_current_visitor(array $image, array $gallery): 
  * @param array{id?:int|string|null,visibility?:string|null,access_listing?:string|null,access_mode?:string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and inherited visibility, access and NSFW policy fields.
  * @return bool True when image visibility, gallery grants, and NSFW rules all permit access.
  */
-function public_image_visible_to_current_visitor_without_admin_bypass(array $image, array $gallery): bool
-{
+function public_image_visible_to_current_visitor_without_admin_bypass(
+    array $image,
+    array $gallery,
+): bool {
     if ((string) ($image['visibility'] ?? '') !== 'public') {
         return false;
     }
     if (!visitor_can_access_gallery_without_admin_bypass($gallery)) {
         return false;
     }
-    return !image_nsfw_restricted($image, $gallery) || visitor_can_access_nsfw_content_without_admin_bypass();
+    return (
+        !image_nsfw_restricted($image, $gallery)
+            || visitor_can_access_nsfw_content_without_admin_bypass()
+    );
 }
 
 /**
  * Return true when public media for one gallery needs private cache semantics.
  *
- * @param array $gallery Gallery row or gallery data.
- * @param ?array $image Image row or image data.
- * @return bool True when the condition matches.
+ * @param array{id?:int|string|null,access_mode?:string|null,parent_id?:int|string|null,nsfw_enabled?:int|string|null} $gallery Gallery identity and access or inherited NSFW policy fields.
+ * @param ?array{nsfw_enabled?:int|string|null} $image Optional image NSFW flag.
+ * @return bool True when access or NSFW policy requires private cache handling.
  */
-function public_media_needs_private_cache(array $gallery, ?array $image = null): bool
-{
-    if (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery)) {
+function public_media_needs_private_cache(
+    array $gallery,
+    ?array $image = null,
+): bool {
+    if (
+        gallery_access_requirement($gallery)
+        || gallery_nsfw_requirement($gallery)
+    ) {
         return true;
     }
     return $image !== null && image_nsfw_restricted($image, $gallery);
@@ -608,7 +687,12 @@ function current_user_is_known_under_18(): bool
         return (int) $user['age'] < 18;
     }
     // $birthDate stores the first supported date-of-birth field found on the user record.
-    $birthDate = (string) ($user['date_of_birth'] ?? $user['birthdate'] ?? $user['birthday'] ?? '');
+    $birthDate = (string) (
+        $user['date_of_birth']
+        ?? $user['birthdate']
+        ?? $user['birthday']
+        ?? ''
+    );
     if ($birthDate === '') {
         return false;
     }
@@ -652,15 +736,18 @@ function visitor_can_access_nsfw_content_without_admin_bypass(): bool
 }
 
 /**
- * Handles gallery has password policy logic for the gallery application.
+ * Return whether the gallery's access mode requires password authorization.
  *
- * @param mixed $gallery Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array{access_mode?:string|null} $gallery Gallery access-mode field.
+ * @return bool True when the access schema is available and password mode is enabled.
  */
 function gallery_has_password_policy(array $gallery): bool
 {
     gallery_access_assert_public_policy_available();
-    return gallery_access_schema_ready() && (string) ($gallery['access_mode'] ?? 'normal') === 'password';
+    return (
+        gallery_access_schema_ready()
+            && (string) ($gallery['access_mode'] ?? 'normal') === 'password'
+    );
 }
 
 /**
@@ -746,15 +833,21 @@ function gallery_public_access_session_is_valid(int $galleryId): bool
 }
 
 /**
- * Handles request share token allows gallery logic for the gallery application.
+ * Return whether the current request's share token grants access to a gallery.
  *
- * @param mixed $gallery Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array{id?:int|string|null,access_mode?:string|null,access_token_hash?:string|null,access_token_expires_at?:string|null,parent_id?:int|string|null} $gallery Gallery identity and current or inherited share-token policy fields.
+ * @return bool True when the request token matches an active gallery share token.
  */
 function request_share_token_allows_gallery(array $gallery): bool
 {
     // $token stores an intermediate value used by the surrounding gallery workflow.
-    $token = trim((string) (request_data('query')['share'] ?? request_data('query')['token'] ?? ''));
+    $token = trim(
+        (string) (
+            request_data('query')['share']
+            ?? request_data('query')['token']
+            ?? ''
+        ),
+    );
     if ($token === '') {
         return false;
     }
@@ -772,10 +865,16 @@ function request_share_token_allows_gallery(array $gallery): bool
     if (!$requirement || empty($requirement['access_token_hash'])) {
         return false;
     }
-    if (!empty($requirement['access_token_expires_at']) && strtotime((string) $requirement['access_token_expires_at']) < time()) {
+    if (
+        !empty($requirement['access_token_expires_at'])
+        && strtotime((string) $requirement['access_token_expires_at']) < time()
+    ) {
         return false;
     }
-    if (!hash_equals((string) $requirement['access_token_hash'], hash('sha256', $token))) {
+    if (!hash_equals((string) $requirement['access_token_hash'], hash(
+        'sha256',
+        $token,
+    ))) {
         return false;
     }
     grant_gallery_public_access((int) $requirement['id']);
@@ -799,11 +898,17 @@ function visitor_can_access_gallery(array $gallery): bool
         if (!$requirement) {
             return false;
         }
-        if (!gallery_public_access_session_is_valid((int) $requirement['id']) && !request_share_token_allows_gallery($gallery)) {
+        if (
+            !gallery_public_access_session_is_valid((int) $requirement['id'])
+            && !request_share_token_allows_gallery($gallery)
+        ) {
             return false;
         }
     }
-    if (gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content()) {
+    if (
+        gallery_nsfw_requirement($gallery) !== null
+        && !visitor_can_access_nsfw_content()
+    ) {
         return false;
     }
     if (!$requirement) {
@@ -832,11 +937,17 @@ function visitor_can_access_gallery_without_admin_bypass(array $gallery): bool
         if (!$requirement) {
             return false;
         }
-        if (!gallery_public_access_session_is_valid((int) $requirement['id']) && !request_share_token_allows_gallery($gallery)) {
+        if (
+            !gallery_public_access_session_is_valid((int) $requirement['id'])
+            && !request_share_token_allows_gallery($gallery)
+        ) {
             return false;
         }
     }
-    if (gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content_without_admin_bypass()) {
+    if (
+        gallery_nsfw_requirement($gallery) !== null
+        && !visitor_can_access_nsfw_content_without_admin_bypass()
+    ) {
         return false;
     }
     if (!$requirement) {
@@ -868,24 +979,44 @@ function gallery_anonymous_preview_access_resolution(array $gallery): array
             break;
         }
         if (isset($visitedIds[$parentId])) {
-            return ['valid_chain' => false, 'selected_accessible' => false, 'ancestor' => null];
+            return [
+                'valid_chain' => false,
+                'selected_accessible' => false,
+                'ancestor' => null,
+            ];
         }
         $visitedIds[$parentId] = true;
         $current = find_gallery($parentId);
         if ($current === null) {
-            return ['valid_chain' => false, 'selected_accessible' => false, 'ancestor' => null];
+            return [
+                'valid_chain' => false,
+                'selected_accessible' => false,
+                'ancestor' => null,
+            ];
         }
         $ancestors[] = $current;
     }
     if (visitor_can_access_gallery_without_admin_bypass($gallery)) {
-        return ['valid_chain' => true, 'selected_accessible' => true, 'ancestor' => null];
+        return [
+            'valid_chain' => true,
+            'selected_accessible' => true,
+            'ancestor' => null,
+        ];
     }
     foreach ($ancestors as $ancestor) {
         if (visitor_can_access_gallery_without_admin_bypass($ancestor)) {
-            return ['valid_chain' => true, 'selected_accessible' => false, 'ancestor' => $ancestor];
+            return [
+                'valid_chain' => true,
+                'selected_accessible' => false,
+                'ancestor' => $ancestor,
+            ];
         }
     }
-    return ['valid_chain' => true, 'selected_accessible' => false, 'ancestor' => null];
+    return [
+        'valid_chain' => true,
+        'selected_accessible' => false,
+        'ancestor' => null,
+    ];
 }
 
 /**
@@ -909,31 +1040,38 @@ function gallery_is_public_listed(array $gallery): bool
 }
 
 /**
- * Handles regenerate gallery share token logic for the gallery application.
+ * Generate and persist a new share token for a gallery.
  *
- * @param mixed $galleryId Input used by this operation.
- * @param mixed $expiresAt Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param int $galleryId Gallery receiving the new token.
+ * @param ?string $expiresAt Optional SQL timestamp after which the token expires.
+ * @return string Newly generated plaintext share token.
  */
-function regenerate_gallery_share_token(int $galleryId, ?string $expiresAt): string
-{
+function regenerate_gallery_share_token(
+    int $galleryId,
+    ?string $expiresAt,
+): string {
     gallery_share_token_assert_mutation_available();
     // $token stores an intermediate value used by the surrounding gallery workflow.
     $token = bin2hex(random_bytes(24));
     // $storedToken stores an intermediate value used by the surrounding gallery workflow.
     $storedToken = encrypt_gallery_share_token($token);
-    gallery_model_update_fields($galleryId, [
-        'access_share_token' => $storedToken,
-        'access_token_hash' => hash('sha256', $token),
-        'access_token_expires_at' => $expiresAt,
-    ], now_sql());
+    gallery_model_update_fields(
+        $galleryId,
+        [
+            'access_share_token' => $storedToken,
+            'access_token_hash' => hash('sha256', $token),
+            'access_token_expires_at' => $expiresAt,
+        ],
+        now_sql(),
+    );
     return $token;
 }
 
 /**
- * Handles revoke gallery share token logic for the gallery application.
+ * Revoke the share token associated with a gallery.
  *
- * @param mixed $galleryId Input used by this operation.
+ * @param int $galleryId Gallery whose validating token fields are cleared.
+ * @return void Clears the persisted token validation state.
  */
 function revoke_gallery_share_token(int $galleryId): void
 {
@@ -945,7 +1083,9 @@ function revoke_gallery_share_token(int $galleryId): void
         if (schema_inspection_is_unknown($accessStatus)) {
             throw new GalleryAccessSchemaUnavailableException();
         }
-        throw new RuntimeException('Gallery password/access schema is not ready for share-token revocation.');
+        throw new RuntimeException(
+            'Gallery password/access schema is not ready for share-token revocation.',
+        );
     }
 
     $shareStatus = gallery_access_share_token_schema_status();
@@ -979,7 +1119,9 @@ function gallery_access_share_token_schema_status(): array
  */
 function gallery_access_share_token_schema_ready(): bool
 {
-    return schema_inspection_is_available(gallery_access_share_token_schema_status());
+    return schema_inspection_is_available(
+        gallery_access_share_token_schema_status(),
+    );
 }
 
 /**
@@ -989,6 +1131,8 @@ function gallery_access_share_token_schema_ready(): bool
  * issuing a hash-only link. Unknown schema is an operational failure. Revocation
  * has a separate security-tightening path that can always clear the verified
  * validating hash once the core access schema is available.
+ *
+ * @return void Returns normally only when share-token mutation schema is ready.
  */
 function gallery_share_token_assert_mutation_available(): void
 {
@@ -997,22 +1141,26 @@ function gallery_share_token_assert_mutation_available(): void
         throw new GalleryAccessSchemaUnavailableException();
     }
     if (!schema_inspection_is_available($accessStatus)) {
-        throw new RuntimeException('Gallery password/access schema is not ready for share-token mutation.');
+        throw new RuntimeException(
+            'Gallery password/access schema is not ready for share-token mutation.',
+        );
     }
     $status = gallery_access_share_token_schema_status();
     if (schema_inspection_is_unknown($status)) {
         throw new GalleryShareTokenSchemaUnavailableException();
     }
     if (schema_inspection_is_missing($status)) {
-        throw new RuntimeException('Gallery share-token migration has not been applied.');
+        throw new RuntimeException(
+            'Gallery share-token migration has not been applied.',
+        );
     }
 }
 
 /**
- * Handles gallery share token for admin logic for the gallery application.
+ * Return a verified plaintext share token for administration when available.
  *
- * @param mixed $gallery Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array{id?:int|string|null,access_share_token?:string|null,access_token_hash?:string|null} $gallery Gallery identity and encrypted token/hash fields.
+ * @return ?string Verified plaintext token, or null when no valid stored token is available.
  */
 function gallery_share_token_for_admin(array $gallery): ?string
 {
@@ -1043,9 +1191,13 @@ function gallery_share_token_for_admin(array $gallery): ?string
         if ($encrypted === null) {
             return null;
         }
-        gallery_model_update_fields((int) $gallery['id'], [
-            'access_share_token' => $encrypted,
-        ], now_sql());
+        gallery_model_update_fields(
+            (int) $gallery['id'],
+            [
+                'access_share_token' => $encrypted,
+            ],
+            now_sql(),
+        );
         return $stored;
     }
 
@@ -1053,10 +1205,10 @@ function gallery_share_token_for_admin(array $gallery): ?string
 }
 
 /**
- * Handles encrypt gallery share token logic for the gallery application.
+ * Encrypt a share token for display-token persistence.
  *
- * @param mixed $token Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param string $token Plaintext share token.
+ * @return ?string Versioned encrypted token, or null when encryption is unavailable or fails.
  */
 function encrypt_gallery_share_token(string $token): ?string
 {
@@ -1068,7 +1220,14 @@ function encrypt_gallery_share_token(string $token): ?string
     // $tag stores an intermediate value used by the surrounding gallery workflow.
     $tag = '';
     // $ciphertext stores an intermediate value used by the surrounding gallery workflow.
-    $ciphertext = openssl_encrypt($token, 'aes-256-gcm', gallery_share_token_key(), OPENSSL_RAW_DATA, $iv, $tag);
+    $ciphertext = openssl_encrypt(
+        $token,
+        'aes-256-gcm',
+        gallery_share_token_key(),
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+    );
     if ($ciphertext === false || $tag === '') {
         return null;
     }
@@ -1076,14 +1235,17 @@ function encrypt_gallery_share_token(string $token): ?string
 }
 
 /**
- * Handles decrypt gallery share token logic for the gallery application.
+ * Decrypt a versioned persisted share token.
  *
- * @param mixed $stored Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param string $stored Versioned encrypted token value.
+ * @return ?string Plaintext token, or null when the value cannot be decrypted.
  */
 function decrypt_gallery_share_token(string $stored): ?string
 {
-    if (!str_starts_with($stored, 'enc:v1:') || !function_exists('openssl_decrypt')) {
+    if (
+        !str_starts_with($stored, 'enc:v1:')
+        || !function_exists('openssl_decrypt')
+    ) {
         return null;
     }
     // $payload stores an intermediate value used by the surrounding gallery workflow.
@@ -1098,18 +1260,29 @@ function decrypt_gallery_share_token(string $stored): ?string
     // $ciphertext stores an intermediate value used by the surrounding gallery workflow.
     $ciphertext = substr($payload, 28);
     // $token stores an intermediate value used by the surrounding gallery workflow.
-    $token = openssl_decrypt($ciphertext, 'aes-256-gcm', gallery_share_token_key(), OPENSSL_RAW_DATA, $iv, $tag);
+    $token = openssl_decrypt(
+        $ciphertext,
+        'aes-256-gcm',
+        gallery_share_token_key(),
+        OPENSSL_RAW_DATA,
+        $iv,
+        $tag,
+    );
     return $token === false ? null : $token;
 }
 
 /**
- * Handles gallery share token key logic for the gallery application.
+ * Derive the binary encryption key for gallery share tokens.
  *
- * @return mixed Result produced by this operation.
+ * @return string 32-byte key derived from the configured visitor vote secret.
  */
 function gallery_share_token_key(): string
 {
-    return hash('sha256', 'gallery-share-token|' . (string) cms_config()['visitor_vote_secret'], true);
+    return hash(
+        'sha256',
+        'gallery-share-token|' . (string) cms_config()['visitor_vote_secret'],
+        true,
+    );
 }
 
 /**
@@ -1124,7 +1297,10 @@ function gallery_access_find_by_token(string $token, int $galleryId = 0): ?array
     if ($token === '') {
         return null;
     }
-    return gallery_model_find_by_access_token_hash(hash('sha256', $token), $galleryId);
+    return gallery_model_find_by_access_token_hash(
+        hash('sha256', $token),
+        $galleryId,
+    );
 }
 
 /**
@@ -1135,7 +1311,10 @@ function gallery_access_find_by_token(string $token, int $galleryId = 0): ?array
  */
 function gallery_public_export_schema_status(): array
 {
-    $requirements = array_merge(gallery_access_schema_status()['requirements'], nsfw_guard_schema_status()['requirements']);
+    $requirements = array_merge(
+        gallery_access_schema_status()['requirements'],
+        nsfw_guard_schema_status()['requirements'],
+    );
     foreach (['id', 'parent_id', 'title', 'visibility'] as $column) {
         $requirements[] = schema_inspection_column('galleries', $column);
     }
@@ -1160,7 +1339,12 @@ function gallery_public_export_policy(int $galleryId): array
     }
     $schema = gallery_public_export_schema_status();
     if (!schema_inspection_is_available($schema)) {
-        return ['allowed' => false, 'reason' => schema_inspection_is_missing($schema) ? 'schema_missing' : 'schema_unknown'];
+        return [
+            'allowed' => false,
+            'reason' => schema_inspection_is_missing($schema)
+                ? 'schema_missing'
+                : 'schema_unknown',
+        ];
     }
     if (schema_inspection_is_unknown(gallery_visibility_schema_status())) {
         return ['allowed' => false, 'reason' => 'schema_unknown'];
@@ -1176,17 +1360,35 @@ function gallery_public_export_policy(int $galleryId): array
             // Read current model state, bypassing presentation/session caches.
             $row = \Gallery\Models\gallery_model_find_by_id($currentId);
             if ($row === null) {
-                return ['allowed' => false, 'reason' => $currentId === $galleryId ? 'gallery_missing' : 'invalid_hierarchy'];
+                return [
+                    'allowed' => false,
+                    'reason' => $currentId === $galleryId
+                        ? 'gallery_missing'
+                        : 'invalid_hierarchy',
+                ];
             }
-            foreach (['id', 'parent_id', 'visibility', 'access_mode', 'access_listing', 'nsfw_enabled'] as $key) {
+            foreach ([
+                'id',
+                'parent_id',
+                'visibility',
+                'access_mode',
+                'access_listing',
+                'nsfw_enabled',
+            ] as $key) {
                 if (!array_key_exists($key, $row)) {
-                    return ['allowed' => false, 'reason' => 'source_unavailable'];
+                    return [
+                        'allowed' => false,
+                        'reason' => 'source_unavailable',
+                    ];
                 }
             }
             if (!gallery_is_public_listed($row)) {
                 return ['allowed' => false, 'reason' => 'not_public'];
             }
-            if ($row['access_mode'] !== 'normal' || $row['access_listing'] !== 'listed') {
+            if (
+                $row['access_mode'] !== 'normal'
+                || $row['access_listing'] !== 'listed'
+            ) {
                 return ['allowed' => false, 'reason' => 'access_restricted'];
             }
             if (!in_array($row['nsfw_enabled'], [0, '0'], true)) {
@@ -1198,7 +1400,10 @@ function gallery_public_export_policy(int $galleryId): array
             } else {
                 $parentId = filter_var($parent, FILTER_VALIDATE_INT);
                 if ($parentId === false || $parentId < 0) {
-                    return ['allowed' => false, 'reason' => 'invalid_hierarchy'];
+                    return [
+                        'allowed' => false,
+                        'reason' => 'invalid_hierarchy',
+                    ];
                 }
                 $currentId = $parentId;
             }

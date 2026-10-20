@@ -54,18 +54,22 @@ function gallery_description_layout_options(): array
 /**
  * Normalize a submitted or stored description-layout value.
  *
- * @param mixed $value Value to process.
+ * @param scalar|array<array-key,mixed>|object{}|resource|null $value Stored/form value cast and lowercased for comparison with supported layouts; unsupported cast text uses the fallback.
  * @param string $fallback Fallback value.
- * @return string Text result for the caller.
+ * @return string Normalized layout, either 'vertical' or 'horizontal'; invalid input uses the supported fallback or 'vertical'.
  */
-function gallery_description_layout_normalize(mixed $value, string $fallback = 'vertical'): string
-{
+function gallery_description_layout_normalize(
+    mixed $value,
+    string $fallback = 'vertical',
+): string {
     // $layout stores the lowercase database or form value before validation.
     $layout = strtolower(trim((string) $value));
     if (in_array($layout, gallery_description_layout_options(), true)) {
         return $layout;
     }
-    return in_array($fallback, gallery_description_layout_options(), true) ? $fallback : 'vertical';
+    return in_array($fallback, gallery_description_layout_options(), true)
+        ? $fallback
+        : 'vertical';
 }
 
 /**
@@ -85,7 +89,10 @@ function gallery_description_layout_schema_ready(): bool
  */
 function theme_gallery_description_layout(): string
 {
-    return gallery_description_layout_normalize(app_setting('theme_gallery_description_layout', 'vertical'), 'vertical');
+    return gallery_description_layout_normalize(
+        app_setting('theme_gallery_description_layout', 'vertical'),
+        'vertical',
+    );
 }
 
 /**
@@ -99,7 +106,10 @@ function theme_gallery_description_layout(): string
 function tag_page_gallery_description_layout(): string
 {
     $fallback = theme_gallery_description_layout();
-    return gallery_description_layout_normalize(app_setting('tag_page_gallery_description_layout', $fallback), $fallback);
+    return gallery_description_layout_normalize(
+        app_setting('tag_page_gallery_description_layout', $fallback),
+        $fallback,
+    );
 }
 
 /**
@@ -117,20 +127,24 @@ function gallery_description_layout_storage_value(mixed $value): ?string
     if ($layout === '' || $layout === 'inherit') {
         return null;
     }
-    return in_array($layout, gallery_description_layout_options(), true) ? $layout : null;
+    return in_array($layout, gallery_description_layout_options(), true)
+        ? $layout
+        : null;
 }
 
 /**
  * Return the description layout that should be used for one gallery card.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{description_layout?:string|null} $gallery Gallery row with its optional stored layout override.
+ * @return 'vertical'|'horizontal' Stored override when available, otherwise the Theme layout.
  */
 function gallery_effective_description_layout(array $gallery): string
 {
     if (gallery_description_layout_schema_ready()) {
         // $storedLayout stores the optional per-gallery override.
-        $storedLayout = gallery_description_layout_storage_value($gallery['description_layout'] ?? null);
+        $storedLayout = gallery_description_layout_storage_value(
+            $gallery['description_layout'] ?? null,
+        );
         if ($storedLayout !== null) {
             return $storedLayout;
         }
@@ -147,7 +161,10 @@ function gallery_effective_description_layout(array $gallery): string
 function gallery_description_layout_label(string $layout): string
 {
     return match (gallery_description_layout_normalize($layout)) {
-        'horizontal' => t('gallery.description_layout.horizontal', 'Horizontal system'),
+        'horizontal' => t(
+            'gallery.description_layout.horizontal',
+            'Horizontal system',
+        ),
         default => t('gallery.description_layout.vertical', 'Vertical system'),
     };
 }
@@ -155,15 +172,26 @@ function gallery_description_layout_label(string $layout): string
 /**
  * Return a readable summary of the current source for Admin forms.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{description_layout?:string|null} $gallery Gallery row with its optional stored layout override.
+ * @return string Translated label identifying the gallery override or Theme default.
  */
 function gallery_description_layout_source_label(array $gallery): string
 {
-    if (gallery_description_layout_schema_ready() && gallery_description_layout_storage_value($gallery['description_layout'] ?? null) !== null) {
-        return t('admin.gallery_editor.description_layout_source_gallery', 'gallery override');
+    if (
+        gallery_description_layout_schema_ready()
+        && gallery_description_layout_storage_value(
+            $gallery['description_layout'] ?? null,
+        ) !== null
+    ) {
+        return t(
+            'admin.gallery_editor.description_layout_source_gallery',
+            'gallery override',
+        );
     }
-    return t('admin.gallery_editor.description_layout_source_theme', 'Theme default');
+    return t(
+        'admin.gallery_editor.description_layout_source_theme',
+        'Theme default',
+    );
 }
 
 /**
@@ -197,21 +225,29 @@ function gallery_description_utf8_excerpt(string $text, int $limit): string
  * @param int $limit Maximum number of items.
  * @return string Text result for the caller.
  */
-function gallery_description_markdown_excerpt(string $markdown, int $limit = 360): string
-{
+function gallery_description_markdown_excerpt(
+    string $markdown,
+    int $limit = 360,
+): string {
     // $normalized stores the description with predictable line endings so user-entered newlines survive in cards.
     $normalized = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
     if ($normalized === '') {
         return '';
     }
-    if (function_exists('mb_strlen') && mb_strlen($normalized, 'UTF-8') <= $limit) {
+    if (
+        function_exists('mb_strlen')
+        && mb_strlen($normalized, 'UTF-8') <= $limit
+    ) {
         return $normalized;
     }
     if (!function_exists('mb_strlen') && strlen($normalized) <= $limit) {
         return $normalized;
     }
     // $excerpt stores a safe-length text preview before a visible continuation marker is appended.
-    $excerpt = gallery_description_utf8_excerpt($normalized, max(1, $limit - 6));
+    $excerpt = gallery_description_utf8_excerpt($normalized, max(
+        1,
+        $limit - 6,
+    ));
     $excerpt = preg_replace('/[ \t]+\S*$/u', '', $excerpt) ?: $excerpt;
     return rtrim($excerpt, " \t\n\r\0\x0B.,;:") . ' (...)';
 }
@@ -241,16 +277,47 @@ function gallery_description_markdown_html(string $markdown): string
             continue;
         }
         $escaped = e($paragraph);
-        $escaped = preg_replace('/`([^`\n]+)`/u', '<code>$1</code>', $escaped) ?? $escaped;
-        $escaped = preg_replace('/\*\*([^*\n]+)\*\*/u', '<strong>$1</strong>', $escaped) ?? $escaped;
-        $escaped = preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $escaped) ?? $escaped;
-        $escaped = preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $escaped) ?? $escaped;
-        $escaped = preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $escaped) ?? $escaped;
-        $escaped = preg_replace_callback('/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s<>")]+)\)/iu', static function (array $matches): string {
-            // $href stores the decoded URL so it can be escaped specifically for the href attribute.
-            $href = html_entity_decode((string) $matches[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            return '<a href="' . e($href) . '" rel="noopener noreferrer" target="_blank">' . $matches[1] . '</a>';
-        }, $escaped) ?? $escaped;
+        $escaped =
+            preg_replace('/`([^`\n]+)`/u', '<code>$1</code>', $escaped)
+            ?? $escaped;
+        $escaped =
+            preg_replace(
+                '/\*\*([^*\n]+)\*\*/u',
+                '<strong>$1</strong>',
+                $escaped,
+            ) ?? $escaped;
+        $escaped =
+            preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $escaped)
+            ?? $escaped;
+        $escaped =
+            preg_replace(
+                '/(?<!\*)\*([^*\n]+)\*(?!\*)/u',
+                '<em>$1</em>',
+                $escaped,
+            ) ?? $escaped;
+        $escaped =
+            preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $escaped)
+            ?? $escaped;
+        $escaped =
+            preg_replace_callback(
+                '/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s<>")]+)\)/iu',
+                static function (array $matches): string {
+                    // $href stores the decoded URL so it can be escaped specifically for the href attribute.
+                    $href = html_entity_decode(
+                        (string) $matches[2],
+                        ENT_QUOTES | ENT_HTML5,
+                        'UTF-8',
+                    );
+                    return (
+                        '<a href="'
+                            . e($href)
+                            . '" rel="noopener noreferrer" target="_blank">'
+                            . $matches[1]
+                            . '</a>'
+                    );
+                },
+                $escaped,
+            ) ?? $escaped;
         $html[] = '<p>' . str_replace("\n", '<br>', $escaped) . '</p>';
     }
     return implode('', $html);

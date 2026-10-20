@@ -23,7 +23,8 @@ namespace Gallery\Tests\ViewerTicketContext {
      */
     function check(bool $condition, string $message): void
     {
-        $GLOBALS['ticket_context_assertions'] = ($GLOBALS['ticket_context_assertions'] ?? 0) + 1;
+        $GLOBALS['ticket_context_assertions'] =
+            ($GLOBALS['ticket_context_assertions'] ?? 0) + 1;
         if (!$condition) {
             throw new \RuntimeException($message);
         }
@@ -36,9 +37,17 @@ namespace Gallery\Tests\ViewerTicketContext {
     function reset(): void
     {
         $GLOBALS['ticket_context_fixture'] = [
-            'enabled' => true, 'available' => true, 'viewer' => null, 'limiter_allowed' => true,
-            'limiter_calls' => 0, 'business_calls' => 0, 'business_throws' => false,
-            'signature_calls' => 0, 'signature_throw_at' => 0, 'events' => [], 'renders' => [],
+            'enabled' => true,
+            'available' => true,
+            'viewer' => null,
+            'limiter_allowed' => true,
+            'limiter_calls' => 0,
+            'business_calls' => 0,
+            'business_throws' => false,
+            'signature_calls' => 0,
+            'signature_throw_at' => 0,
+            'events' => [],
+            'renders' => [],
         ];
     }
 
@@ -50,7 +59,10 @@ namespace Gallery\Tests\ViewerTicketContext {
      */
     function render(string $kind, array $model): void
     {
-        $GLOBALS['ticket_context_fixture']['renders'][] = ['kind' => $kind, 'model' => $model];
+        $GLOBALS['ticket_context_fixture']['renders'][] = [
+            'kind' => $kind,
+            'model' => $model,
+        ];
     }
 }
 
@@ -61,9 +73,14 @@ namespace Gallery\Services {
      */
     function viewer_accounts_config(): array
     {
-        return ['anti_automation_enabled' => $GLOBALS['ticket_context_fixture']['enabled'],
-            'anti_automation_min_form_age_seconds' => 2, 'anti_automation_form_lifetime_seconds' => 600,
-            'anti_automation_pow_min_bits' => 10, 'anti_automation_pow_max_bits' => 12];
+        return [
+            'anti_automation_enabled' =>
+                $GLOBALS['ticket_context_fixture']['enabled'],
+            'anti_automation_min_form_age_seconds' => 2,
+            'anti_automation_form_lifetime_seconds' => 600,
+            'anti_automation_pow_min_bits' => 10,
+            'anti_automation_pow_max_bits' => 12,
+        ];
     }
 
     /**
@@ -76,11 +93,18 @@ namespace Gallery\Services {
     {
         if ($scope === 'viewer-anti-automation-ticket-v1') {
             $count = ++$GLOBALS['ticket_context_fixture']['signature_calls'];
-            if ($count === $GLOBALS['ticket_context_fixture']['signature_throw_at']) {
+            if (
+                $count
+                === $GLOBALS['ticket_context_fixture']['signature_throw_at']
+            ) {
                 throw new \RuntimeException('Fixture signing interruption.');
             }
         }
-        return hash_hmac('sha256', $scope . "\0" . $value, 'public-ticket-context-test-key');
+        return hash_hmac(
+            'sha256',
+            $scope . "\0" . $value,
+            'public-ticket-context-test-key',
+        );
     }
 
     /**
@@ -90,7 +114,10 @@ namespace Gallery\Services {
      */
     function security_opaque_token_generate(int $entropyBytes = 32): string
     {
-        return rtrim(strtr(base64_encode(random_bytes($entropyBytes)), '+/', '-_'), '=');
+        return rtrim(
+            strtr(base64_encode(random_bytes($entropyBytes)), '+/', '-_'),
+            '=',
+        );
     }
 
     /**
@@ -110,12 +137,19 @@ namespace Gallery\Services {
      * @param string $subject Private synthetic address, never printed.
      * @return array{allowed:bool,attempts:int,retry_after_seconds:int,reason:string} Controlled allow/refuse signal.
      */
-    function viewer_rate_limit_consume(string $bucket, string $subjectKind, string $subject): array
-    {
+    function viewer_rate_limit_consume(
+        string $bucket,
+        string $subjectKind,
+        string $subject,
+    ): array {
         $GLOBALS['ticket_context_fixture']['limiter_calls']++;
         $allowed = $GLOBALS['ticket_context_fixture']['limiter_allowed'];
-        return ['allowed' => $allowed, 'attempts' => 1, 'retry_after_seconds' => $allowed ? 0 : 900,
-            'reason' => $allowed ? 'ok' : 'locked'];
+        return [
+            'allowed' => $allowed,
+            'attempts' => 1,
+            'retry_after_seconds' => $allowed ? 0 : 900,
+            'reason' => $allowed ? 'ok' : 'locked',
+        ];
     }
 
     /**
@@ -126,43 +160,74 @@ namespace Gallery\Services {
      * @param array<string,int|string> $context Bounded action/reason/attempt counts.
      * @return void Retain the record privately without persistence or logging.
      */
-    function viewer_security_event_record_best_effort(string $eventKey, ?int $viewerAccountId = null, string $outcome = '', array $context = []): void
-    {
-        $GLOBALS['ticket_context_fixture']['events'][] = [$eventKey, $viewerAccountId, $outcome, $context];
+    function viewer_security_event_record_best_effort(
+        string $eventKey,
+        ?int $viewerAccountId = null,
+        string $outcome = '',
+        array $context = [],
+    ): void {
+        $GLOBALS['ticket_context_fixture']['events'][] = [
+            $eventKey,
+            $viewerAccountId,
+            $outcome,
+            $context,
+        ];
     }
 
     /**
      * Keep route-readiness policy controllable without reading configuration.
      * @return bool Whether the fixture permits entry to open registration.
      */
-    function viewer_http_open_registration_available(): bool { return $GLOBALS['ticket_context_fixture']['available']; }
+    function viewer_http_open_registration_available(): bool
+    {
+        return $GLOBALS['ticket_context_fixture']['available'];
+    }
+
     /**
      * Keep resend readiness controllable independently of ticket storage.
      * @return bool Whether the fixture permits entry to verification resend.
      */
-    function viewer_http_verification_resend_available(): bool { return $GLOBALS['ticket_context_fixture']['available']; }
+    function viewer_http_verification_resend_available(): bool
+    {
+        return $GLOBALS['ticket_context_fixture']['available'];
+    }
+
     /**
      * Expose only the explicitly selected fixture Viewer to the actual controller.
      * @return ?array{id:int} Existing fixture Viewer or null for anonymous access; never creates identity.
      */
-    function current_viewer(): ?array { return $GLOBALS['ticket_context_fixture']['viewer']; }
+    function current_viewer(): ?array
+    {
+        return $GLOBALS['ticket_context_fixture']['viewer'];
+    }
+
     /**
      * Provide a fixed semantic client address for controller-to-service calls.
      * @return string Synthetic controller-resolved client address; no request or network lookup.
      */
-    function request_client_ip(): string { return '192.0.2.77'; }
+    function request_client_ip(): string
+    {
+        return '192.0.2.77';
+    }
+
     /**
      * Supply the isolated Viewer/pre-auth token to controller form preparation.
      * @return string Public test-only CSRF fixture value, kept out of test output.
      */
-    function viewer_csrf_token(): string { return 'fixture-viewer-csrf'; }
+    function viewer_csrf_token(): string
+    {
+        return 'fixture-viewer-csrf';
+    }
 
     /**
      * Verify the isolated Viewer/pre-auth token, never administrator CSRF authority.
      * @param string $token Submitted fixture token.
      * @return bool Whether this fixture's exact Viewer token was supplied.
      */
-    function viewer_csrf_verify(string $token): bool { return hash_equals(viewer_csrf_token(), $token); }
+    function viewer_csrf_verify(string $token): bool
+    {
+        return hash_equals(viewer_csrf_token(), $token);
+    }
 
     /**
      * Perform only the real controller's required local email syntax distinction.
@@ -171,7 +236,9 @@ namespace Gallery\Services {
      */
     function viewer_email_normalize(string $email): ?string
     {
-        return filter_var($email, FILTER_VALIDATE_EMAIL) === false ? null : strtolower($email);
+        return filter_var($email, FILTER_VALIDATE_EMAIL) === false
+            ? null
+            : strtolower($email);
     }
 
     /**
@@ -181,8 +248,11 @@ namespace Gallery\Services {
      * @param string $clientIp Synthetic controller-resolved IP.
      * @return array{accepted:bool} Refusal without any registration, verification or mail authority.
      */
-    function viewer_registration_request_begin(string $email, ?string $invitationToken, string $clientIp): array
-    {
+    function viewer_registration_request_begin(
+        string $email,
+        ?string $invitationToken,
+        string $clientIp,
+    ): array {
         $GLOBALS['ticket_context_fixture']['business_calls']++;
         if ($GLOBALS['ticket_context_fixture']['business_throws']) {
             throw new \RuntimeException('Fixture downstream interruption.');
@@ -214,7 +284,11 @@ namespace Gallery\Services {
     function t(string $key, string $fallback = '', array $replace = []): string
     {
         foreach ($replace as $name => $value) {
-            $fallback = str_replace('{' . $name . '}', (string) $value, $fallback);
+            $fallback = str_replace(
+                '{' . $name . '}',
+                (string) $value,
+                $fallback,
+            );
         }
         return $fallback !== '' ? $fallback : $key;
     }
@@ -226,25 +300,42 @@ namespace Gallery\Core {
      * @param string $path Existing first-party asset path, never fetched.
      * @return string Inert presentation URL.
      */
-    function asset_url(string $path): string { return '/fixture/' . $path; }
+    function asset_url(string $path): string
+    {
+        return '/fixture/' . $path;
+    }
+
     /**
      * Read only the method selected by this in-memory controller fixture.
      * @return string Fixture-selected HTTP method, without starting a web server.
      */
-    function request_method(): string { return (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'); }
+    function request_method(): string
+    {
+        return (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    }
+
     /**
      * Build inert local route text for captured presentation.
      * @param string $page Application page identifier.
      * @param array<string,int|string> $params Unused fixture query options; no transport is performed.
      * @return string Inert local route.
      */
-    function url_for(string $page, array $params = []): string { return '/fixture/' . $page; }
+    function url_for(string $page, array $params = []): string
+    {
+        return '/fixture/' . $page;
+    }
+
     /**
      * Intercept an existing-Viewer redirect before ticket or business work.
      * @param string $url Inert local destination; never visited or printed.
      * @return never Signal the redirect to the isolated assertion.
      */
-    function redirect_to(string $url): never { throw new \Gallery\Tests\ViewerTicketContext\Redirect('Fixture redirect.'); }
+    function redirect_to(string $url): never
+    {
+        throw new \Gallery\Tests\ViewerTicketContext\Redirect(
+            'Fixture redirect.',
+        );
+    }
 }
 
 namespace Gallery\Controllers {
@@ -266,12 +357,17 @@ namespace Gallery\Views {
         \Gallery\Tests\ViewerTicketContext\render('form', $state);
         return '<fixture-form>';
     }
+
     /**
      * Capture the presentation-only Viewer CSRF field boundary.
      * @param string $token Private fixture token supplied by the controller.
      * @return string Inert markup without the token value.
      */
-    function view_viewer_csrf_field(string $token): string { return '<fixture-csrf>'; }
+    function view_viewer_csrf_field(string $token): string
+    {
+        return '<fixture-csrf>';
+    }
+
     /**
      * Capture the controller's register presentation without evaluating domain policy.
      * @param array<string,mixed> $model Prepared controller presentation fields; kept private.
@@ -319,5 +415,4 @@ namespace Gallery\Views {
     {
         \Gallery\Tests\ViewerTicketContext\render('invalid_request', []);
     }
-
 }

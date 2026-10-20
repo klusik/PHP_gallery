@@ -40,14 +40,31 @@ use function Gallery\Core\db;
  * @param bool $contentLocalizationReady Whether source-language storage is verified available.
  * @return array<int,array<string,mixed>> Rows keyed by gallery id.
  */
-function favorite_gallery_model_rows_by_ids(array $ids, bool $urlPathReady, bool $accessSchemaReady, bool $contentLocalizationReady = false): array
-{
-    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
-    if ($ids === []) return [];
+function favorite_gallery_model_rows_by_ids(
+    array $ids,
+    bool $urlPathReady,
+    bool $accessSchemaReady,
+    bool $contentLocalizationReady = false,
+): array {
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $ids),
+        static fn(int $id): bool => $id > 0,
+    )));
+    if ($ids === [])
+        return [];
 
-    $selects = ['id', 'parent_id', 'folder_path', 'slug', 'title', 'visibility'];
+    $selects = [
+        'id',
+        'parent_id',
+        'folder_path',
+        'slug',
+        'title',
+        'visibility',
+    ];
     $selects[] = $urlPathReady ? 'url_path' : "'' AS url_path";
-    $selects[] = $contentLocalizationReady ? 'content_language' : 'NULL AS content_language';
+    $selects[] = $contentLocalizationReady
+        ? 'content_language'
+        : 'NULL AS content_language';
     if ($accessSchemaReady) {
         $selects[] = 'access_mode';
         $selects[] = 'access_listing';
@@ -62,12 +79,19 @@ function favorite_gallery_model_rows_by_ids(array $ids, bool $urlPathReady, bool
         $selects[] = 'NULL AS access_token_expires_at';
     }
     $placeholders = implode(', ', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('SELECT ' . implode(', ', $selects) . ' FROM galleries WHERE id IN (' . $placeholders . ')');
+    $stmt = db()->prepare(
+        'SELECT '
+            . implode(', ', $selects)
+            . ' FROM galleries WHERE id IN ('
+            . $placeholders
+            . ')',
+    );
     $stmt->execute($ids);
     $rows = [];
     foreach ($stmt->fetchAll() as $row) {
         $galleryId = (int) ($row['id'] ?? 0);
-        if ($galleryId > 0) $rows[$galleryId] = $row;
+        if ($galleryId > 0)
+            $rows[$galleryId] = $row;
     }
     return $rows;
 }

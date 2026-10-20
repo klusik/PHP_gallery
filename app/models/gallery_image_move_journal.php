@@ -49,11 +49,16 @@ function gallery_image_move_model_lock(array $galleryIds): array
             if ($id <= 0) {
                 throw new RuntimeException('Invalid gallery move scope.');
             }
-            $name = hash('sha256', $databaseName . ':gallery_image_move:' . $id);
+            $name = hash(
+                'sha256',
+                $databaseName . ':gallery_image_move:' . $id,
+            );
             $stmt = db()->prepare('SELECT GET_LOCK(?, 0)');
             $stmt->execute([$name]);
             if ((int) $stmt->fetchColumn() !== 1) {
-                throw new RuntimeException('Another image move or recovery is using this gallery.');
+                throw new RuntimeException(
+                    'Another image move or recovery is using this gallery.',
+                );
             }
             $locks[] = $name;
         }
@@ -71,12 +76,25 @@ function gallery_image_move_model_lock(array $galleryIds): array
  * @param int $destinationId Requested destination gallery.
  * @return void
  */
-function gallery_image_move_model_assert_idle(int $sourceId, int $destinationId): void
-{
-    $stmt = db()->prepare('SELECT operation_id FROM gallery_image_move_journal WHERE state NOT IN (?, ?) AND (source_gallery_id IN (?, ?) OR destination_gallery_id IN (?, ?)) LIMIT 1');
-    $stmt->execute([IMAGE_MOVE_FINALIZED, IMAGE_MOVE_ROLLED_BACK, $sourceId, $destinationId, $sourceId, $destinationId]);
+function gallery_image_move_model_assert_idle(
+    int $sourceId,
+    int $destinationId,
+): void {
+    $stmt = db()->prepare(
+        'SELECT operation_id FROM gallery_image_move_journal WHERE state NOT IN (?, ?) AND (source_gallery_id IN (?, ?) OR destination_gallery_id IN (?, ?)) LIMIT 1',
+    );
+    $stmt->execute([
+        IMAGE_MOVE_FINALIZED,
+        IMAGE_MOVE_ROLLED_BACK,
+        $sourceId,
+        $destinationId,
+        $sourceId,
+        $destinationId,
+    ]);
     if ($stmt->fetchColumn() !== false) {
-        throw new RuntimeException('An earlier image move needs reconciliation before another move can use this gallery.');
+        throw new RuntimeException(
+            'An earlier image move needs reconciliation before another move can use this gallery.',
+        );
     }
 }
 
@@ -104,10 +122,25 @@ function gallery_image_move_model_unlock(array $locks): void
  * @param string $now SQL timestamp.
  * @return void
  */
-function gallery_image_move_model_prepare(string $operationId, int $sourceId, int $destinationId, string $manifestJson, string $now): void
-{
-    $stmt = db()->prepare('INSERT INTO gallery_image_move_journal (operation_id, source_gallery_id, destination_gallery_id, state, manifest_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$operationId, $sourceId, $destinationId, IMAGE_MOVE_PREPARED, $manifestJson, $now, $now]);
+function gallery_image_move_model_prepare(
+    string $operationId,
+    int $sourceId,
+    int $destinationId,
+    string $manifestJson,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'INSERT INTO gallery_image_move_journal (operation_id, source_gallery_id, destination_gallery_id, state, manifest_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    );
+    $stmt->execute([
+        $operationId,
+        $sourceId,
+        $destinationId,
+        IMAGE_MOVE_PREPARED,
+        $manifestJson,
+        $now,
+        $now,
+    ]);
 }
 
 /**
@@ -118,7 +151,9 @@ function gallery_image_move_model_prepare(string $operationId, int $sourceId, in
  */
 function gallery_image_move_model_find(string $operationId): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM gallery_image_move_journal WHERE operation_id = ?');
+    $stmt = db()->prepare(
+        'SELECT * FROM gallery_image_move_journal WHERE operation_id = ?',
+    );
     $stmt->execute([$operationId]);
     return $stmt->fetch() ?: null;
 }
@@ -130,7 +165,10 @@ function gallery_image_move_model_find(string $operationId): ?array
  */
 function gallery_image_move_model_pending(): array
 {
-    $stmt = db()->prepare('SELECT operation_id, source_gallery_id, destination_gallery_id, state, database_committed, last_error_code, updated_at FROM gallery_image_move_journal WHERE state NOT IN (?, ?) ORDER BY updated_at, operation_id LIMIT ' . IMAGE_MOVE_DIAGNOSTIC_LIMIT);
+    $stmt = db()->prepare(
+        'SELECT operation_id, source_gallery_id, destination_gallery_id, state, database_committed, last_error_code, updated_at FROM gallery_image_move_journal WHERE state NOT IN (?, ?) ORDER BY updated_at, operation_id LIMIT '
+            . IMAGE_MOVE_DIAGNOSTIC_LIMIT,
+    );
     $stmt->execute([IMAGE_MOVE_FINALIZED, IMAGE_MOVE_ROLLED_BACK]);
     return $stmt->fetchAll() ?: [];
 }
@@ -144,13 +182,33 @@ function gallery_image_move_model_pending(): array
  * @param ?string $errorCode Safe bounded category, never an exception message or path.
  * @return void
  */
-function gallery_image_move_model_state(string $operationId, string $state, string $now, ?string $errorCode = null): void
-{
-    if (!in_array($state, [IMAGE_MOVE_MOVING, IMAGE_MOVE_FINALIZED, IMAGE_MOVE_ROLLED_BACK, IMAGE_MOVE_NEEDS_RECONCILIATION], true)
-        || ($errorCode !== null && !preg_match('/^[a-z_]+$/D', $errorCode))) {
+function gallery_image_move_model_state(
+    string $operationId,
+    string $state,
+    string $now,
+    ?string $errorCode = null,
+): void {
+    if (
+        !in_array(
+            $state,
+            [
+                IMAGE_MOVE_MOVING,
+                IMAGE_MOVE_FINALIZED,
+                IMAGE_MOVE_ROLLED_BACK,
+                IMAGE_MOVE_NEEDS_RECONCILIATION,
+            ],
+            true,
+        )
+        || (
+            $errorCode !== null
+            && !preg_match('/^[a-z_]+$/D', $errorCode)
+        )
+    ) {
         throw new RuntimeException('Invalid image move journal transition.');
     }
-    $stmt = db()->prepare('UPDATE gallery_image_move_journal SET state = ?, last_error_code = ?, updated_at = ? WHERE operation_id = ?');
+    $stmt = db()->prepare(
+        'UPDATE gallery_image_move_journal SET state = ?, last_error_code = ?, updated_at = ? WHERE operation_id = ?',
+    );
     $stmt->execute([$state, $errorCode, $now, $operationId]);
 }
 
@@ -163,14 +221,31 @@ function gallery_image_move_model_state(string $operationId, string $state, stri
  * @param string $now SQL timestamp.
  * @return void
  */
-function gallery_image_move_model_commit_marker(string $operationId, int $sourceId, int $destinationId, string $now): void
-{
+function gallery_image_move_model_commit_marker(
+    string $operationId,
+    int $sourceId,
+    int $destinationId,
+    string $now,
+): void {
     if (!db()->inTransaction()) {
-        throw new RuntimeException('Image move commit marker requires its ownership transaction.');
+        throw new RuntimeException(
+            'Image move commit marker requires its ownership transaction.',
+        );
     }
-    $stmt = db()->prepare('UPDATE gallery_image_move_journal SET state = ?, database_committed = 1, updated_at = ? WHERE operation_id = ? AND source_gallery_id = ? AND destination_gallery_id = ? AND state = ? AND database_committed = 0');
-    $stmt->execute([IMAGE_MOVE_DB_COMMITTED, $now, $operationId, $sourceId, $destinationId, IMAGE_MOVE_MOVING]);
+    $stmt = db()->prepare(
+        'UPDATE gallery_image_move_journal SET state = ?, database_committed = 1, updated_at = ? WHERE operation_id = ? AND source_gallery_id = ? AND destination_gallery_id = ? AND state = ? AND database_committed = 0',
+    );
+    $stmt->execute([
+        IMAGE_MOVE_DB_COMMITTED,
+        $now,
+        $operationId,
+        $sourceId,
+        $destinationId,
+        IMAGE_MOVE_MOVING,
+    ]);
     if ($stmt->rowCount() !== 1) {
-        throw new RuntimeException('Image move journal no longer owns this transaction.');
+        throw new RuntimeException(
+            'Image move journal no longer owns this transaction.',
+        );
     }
 }

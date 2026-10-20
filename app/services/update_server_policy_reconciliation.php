@@ -99,26 +99,44 @@ function application_update_server_policy_read_json(string $path): array
  *
  * @param string $path Destination JSON path.
  * @param array<string,mixed> $payload JSON payload.
+ * @return void Atomically writes the JSON payload or throws RuntimeException when persistence fails.
  */
-function application_update_server_policy_write_json_atomic(string $path, array $payload): void
-{
+function application_update_server_policy_write_json_atomic(
+    string $path,
+    array $payload,
+): void {
     $directory = dirname($path);
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new RuntimeException('Could not prepare server-policy reconciliation metadata directory.');
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new RuntimeException(
+            'Could not prepare server-policy reconciliation metadata directory.',
+        );
     }
 
-    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $json = json_encode(
+        $payload,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    );
     if ($json === false) {
-        throw new RuntimeException('Could not encode server-policy reconciliation metadata.');
+        throw new RuntimeException(
+            'Could not encode server-policy reconciliation metadata.',
+        );
     }
 
     $temporary = $path . '.tmp-' . bin2hex(random_bytes(4));
     if (@file_put_contents($temporary, $json . "\n", LOCK_EX) === false) {
-        throw new RuntimeException('Could not persist server-policy reconciliation metadata.');
+        throw new RuntimeException(
+            'Could not persist server-policy reconciliation metadata.',
+        );
     }
     if (!@rename($temporary, $path)) {
         @unlink($temporary);
-        throw new RuntimeException('Could not commit server-policy reconciliation metadata.');
+        throw new RuntimeException(
+            'Could not commit server-policy reconciliation metadata.',
+        );
     }
 }
 
@@ -156,12 +174,19 @@ function application_update_server_policy_known_root_hashes(): array
  * @param string $relativePath Project-relative policy path.
  * @return ?string Normalized sha256 hash, or null when unavailable.
  */
-function application_update_server_policy_previous_manifest_hash(string $manifestPath, string $relativePath): ?string
-{
+function application_update_server_policy_previous_manifest_hash(
+    string $manifestPath,
+    string $relativePath,
+): ?string {
     $manifest = application_update_server_policy_read_json($manifestPath);
-    $files = isset($manifest['files']) && is_array($manifest['files']) ? $manifest['files'] : [];
+    $files = isset($manifest['files']) && is_array($manifest['files'])
+        ? $manifest['files']
+        : [];
     $entry = $files[$relativePath] ?? null;
-    if (is_string($entry) && preg_match('/^sha256:[a-f0-9]{64}$/i', $entry) === 1) {
+    if (
+        is_string($entry)
+        && preg_match('/^sha256:[a-f0-9]{64}$/i', $entry) === 1
+    ) {
         return strtolower($entry);
     }
     if (is_array($entry)) {
@@ -184,15 +209,20 @@ function application_update_server_policy_previous_manifest_hash(string $manifes
  *
  * @param string $path Existing destination file.
  * @param string $relativePath Expected project-relative file identity.
+ * @return bool True when the bounded file prefix contains both PHP Gallery identity markers.
  */
-function application_update_server_policy_has_gallery_identity(string $path, string $relativePath): bool
-{
+function application_update_server_policy_has_gallery_identity(
+    string $path,
+    string $relativePath,
+): bool {
     $contents = @file_get_contents($path, false, null, 0, 8192);
     if ($contents === false) {
         return false;
     }
-    return str_contains($contents, '# Project: PHP Gallery')
-        && str_contains($contents, '# File: ' . $relativePath);
+    return (
+        str_contains($contents, '# Project: PHP Gallery')
+            && str_contains($contents, '# File: ' . $relativePath)
+    );
 }
 
 /**
@@ -208,11 +238,12 @@ function application_update_server_policy_has_gallery_identity(string $path, str
  * @param string $destination Existing active destination.
  * @param string $relativePath Project-relative policy file.
  * @param string $rollbackRoot Rollback snapshot root.
+ * @return bool True when the destination is absent or verified as a replaceable Gallery policy artifact.
  */
 function application_update_server_policy_bootstrap_replacement_allowed(
     string $destination,
     string $relativePath,
-    string $rollbackRoot
+    string $rollbackRoot,
 ): bool {
     if (!file_exists($destination) && !is_link($destination)) {
         return true;
@@ -222,32 +253,51 @@ function application_update_server_policy_bootstrap_replacement_allowed(
     }
 
     if ($relativePath === '.htaccess') {
-        $actual = strtolower(application_update_server_policy_normalized_hash($destination));
+        $actual = strtolower(application_update_server_policy_normalized_hash(
+            $destination,
+        ));
         if ($actual === '') {
             return false;
         }
 
         $previousManifest = $rollbackRoot . '/app/core-manifest.json';
-        $expected = application_update_server_policy_previous_manifest_hash($previousManifest, '.htaccess');
+        $expected = application_update_server_policy_previous_manifest_hash(
+            $previousManifest,
+            '.htaccess',
+        );
         if ($expected !== null && hash_equals($expected, $actual)) {
             return true;
         }
 
-        return in_array($actual, application_update_server_policy_known_root_hashes(), true);
+        return in_array(
+            $actual,
+            application_update_server_policy_known_root_hashes(),
+            true,
+        );
     }
 
-    return application_update_server_policy_has_gallery_identity($destination, $relativePath);
+    return application_update_server_policy_has_gallery_identity(
+        $destination,
+        $relativePath,
+    );
 }
 
 /**
  * Ensure a directory exists for one exact updater-managed policy file.
  *
  * @param string $directory Parent directory path.
+ * @return void Ensures the directory exists or throws RuntimeException.
  */
 function application_update_server_policy_ensure_directory(string $directory): void
 {
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        throw new RuntimeException('Could not prepare an application server-policy directory.');
+    if (
+        !is_dir($directory)
+        && !@mkdir($directory, 0775, true)
+        && !is_dir($directory)
+    ) {
+        throw new RuntimeException(
+            'Could not prepare an application server-policy directory.',
+        );
     }
 }
 
@@ -256,29 +306,44 @@ function application_update_server_policy_ensure_directory(string $directory): v
  *
  * @param string $source Active destination file.
  * @param string $backup Durable rollback destination.
+ * @return void Copies and verifies the original policy file unless a backup already exists.
  */
-function application_update_server_policy_backup_original(string $source, string $backup): void
-{
+function application_update_server_policy_backup_original(
+    string $source,
+    string $backup,
+): void {
     if (is_file($backup)) {
         return;
     }
     if (file_exists($backup) || is_link($backup)) {
-        throw new RuntimeException('Server-policy rollback destination has an unexpected filesystem type.');
+        throw new RuntimeException(
+            'Server-policy rollback destination has an unexpected filesystem type.',
+        );
     }
     application_update_server_policy_ensure_directory(dirname($backup));
     $temporary = $backup . '.tmp-' . bin2hex(random_bytes(4));
     if (!@copy($source, $temporary)) {
-        throw new RuntimeException('Could not prepare server-policy rollback snapshot.');
+        throw new RuntimeException(
+            'Could not prepare server-policy rollback snapshot.',
+        );
     }
     $sourceHash = @hash_file('sha256', $source);
     $temporaryHash = @hash_file('sha256', $temporary);
-    if (!is_string($sourceHash) || !is_string($temporaryHash) || !hash_equals($sourceHash, $temporaryHash)) {
+    if (
+        !is_string($sourceHash)
+        || !is_string($temporaryHash)
+        || !hash_equals($sourceHash, $temporaryHash)
+    ) {
         @unlink($temporary);
-        throw new RuntimeException('Server-policy rollback snapshot failed integrity verification.');
+        throw new RuntimeException(
+            'Server-policy rollback snapshot failed integrity verification.',
+        );
     }
     if (!@rename($temporary, $backup)) {
         @unlink($temporary);
-        throw new RuntimeException('Could not commit server-policy rollback snapshot.');
+        throw new RuntimeException(
+            'Could not commit server-policy rollback snapshot.',
+        );
     }
 }
 
@@ -287,34 +352,56 @@ function application_update_server_policy_backup_original(string $source, string
  *
  * @param string $source Validated release file.
  * @param string $destination Active installation file.
+ * @return void Atomically replaces the active file from the validated release source.
  */
-function application_update_server_policy_replace_file(string $source, string $destination): void
-{
+function application_update_server_policy_replace_file(
+    string $source,
+    string $destination,
+): void {
     if (!is_file($source) || is_link($source)) {
-        throw new RuntimeException('Validated release server-policy file is missing or unsafe.');
+        throw new RuntimeException(
+            'Validated release server-policy file is missing or unsafe.',
+        );
     }
     if (is_link($destination) || is_dir($destination)) {
-        throw new RuntimeException('Active server-policy destination has an unsafe filesystem type.');
+        throw new RuntimeException(
+            'Active server-policy destination has an unsafe filesystem type.',
+        );
     }
 
     application_update_server_policy_ensure_directory(dirname($destination));
     $sourceHash = @hash_file('sha256', $source);
     if (!is_string($sourceHash) || $sourceHash === '') {
-        throw new RuntimeException('Could not verify validated release server-policy file.');
+        throw new RuntimeException(
+            'Could not verify validated release server-policy file.',
+        );
     }
 
-    $temporary = dirname($destination) . '/.php-gallery-policy-' . bin2hex(random_bytes(6)) . '.tmp';
+    $temporary =
+        dirname($destination)
+        . '/.php-gallery-policy-'
+        . bin2hex(random_bytes(6))
+        . '.tmp';
     if (!@copy($source, $temporary)) {
-        throw new RuntimeException('Could not prepare active server-policy replacement.');
+        throw new RuntimeException(
+            'Could not prepare active server-policy replacement.',
+        );
     }
     $temporaryHash = @hash_file('sha256', $temporary);
-    if (!is_string($temporaryHash) || !hash_equals($sourceHash, $temporaryHash)) {
+    if (
+        !is_string($temporaryHash)
+        || !hash_equals($sourceHash, $temporaryHash)
+    ) {
         @unlink($temporary);
-        throw new RuntimeException('Active server-policy replacement failed integrity verification.');
+        throw new RuntimeException(
+            'Active server-policy replacement failed integrity verification.',
+        );
     }
     if (!@rename($temporary, $destination)) {
         @unlink($temporary);
-        throw new RuntimeException('Could not atomically replace an active server-policy file.');
+        throw new RuntimeException(
+            'Could not atomically replace an active server-policy file.',
+        );
     }
     clearstatcache(true, $destination);
 }
@@ -339,67 +426,108 @@ function application_update_reconcile_server_policy_files(
     string $projectRoot,
     string $rollbackRoot,
     string $metadataPath,
-    bool $bootstrapSafety
+    bool $bootstrapSafety,
 ): array {
     $metadata = application_update_server_policy_read_json($metadataPath);
     if ($metadata === []) {
-        throw new RuntimeException('Server-policy reconciliation requires durable rollback metadata.');
+        throw new RuntimeException(
+            'Server-policy reconciliation requires durable rollback metadata.',
+        );
     }
 
-    $createdPaths = array_fill_keys(array_map('strval', (array) ($metadata['created_paths'] ?? [])), true);
-    $activationFiles = array_fill_keys(array_map('strval', (array) ($metadata['activation_files'] ?? [])), true);
+    $createdPaths = array_fill_keys(
+        array_map('strval', (array) ($metadata['created_paths'] ?? [])),
+        true,
+    );
+    $activationFiles = array_fill_keys(
+        array_map('strval', (array) ($metadata['activation_files'] ?? [])),
+        true,
+    );
     $updated = [];
     $unchanged = [];
     $missing = [];
     $skippedCustomized = [];
 
     foreach (application_update_server_policy_files() as $relativePath) {
-        $source = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $source =
+            $sourceRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if (!file_exists($source)) {
             $missing[] = $relativePath;
             continue;
         }
         if (!is_file($source) || is_link($source)) {
-            throw new RuntimeException('Validated release contains an unsafe server-policy path.');
+            throw new RuntimeException(
+                'Validated release contains an unsafe server-policy path.',
+            );
         }
 
-        $destination = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $destination =
+            $projectRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if (is_link($destination) || is_dir($destination)) {
-            throw new RuntimeException('Active server-policy destination has an unsafe filesystem type.');
+            throw new RuntimeException(
+                'Active server-policy destination has an unsafe filesystem type.',
+            );
         }
 
         $sourceHash = @hash_file('sha256', $source);
-        $destinationHash = is_file($destination) ? @hash_file('sha256', $destination) : false;
-        if (is_string($sourceHash) && is_string($destinationHash) && hash_equals($sourceHash, $destinationHash)) {
+        $destinationHash = is_file($destination)
+            ? @hash_file('sha256', $destination)
+            : false;
+        if (
+            is_string($sourceHash)
+            && is_string($destinationHash)
+            && hash_equals($sourceHash, $destinationHash)
+        ) {
             $unchanged[] = $relativePath;
             continue;
         }
 
-        if ($bootstrapSafety
-            && !application_update_server_policy_bootstrap_replacement_allowed($destination, $relativePath, $rollbackRoot)) {
+        if (
+            $bootstrapSafety
+            && !application_update_server_policy_bootstrap_replacement_allowed(
+                $destination,
+                $relativePath,
+                $rollbackRoot,
+            )
+        ) {
             $skippedCustomized[] = $relativePath;
             continue;
         }
 
-        $backup = $rollbackRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        $backup =
+            $rollbackRoot
+            . '/'
+            . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if (is_file($destination)) {
-            application_update_server_policy_backup_original($destination, $backup);
+            application_update_server_policy_backup_original(
+                $destination,
+                $backup,
+            );
         } else {
             $createdPaths[$relativePath] = true;
         }
         $activationFiles[$relativePath] = true;
 
         $metadata['created_paths'] = array_values(array_keys($createdPaths));
-        $metadata['activation_files'] = array_values(array_keys($activationFiles));
+        $metadata['activation_files'] = array_values(array_keys(
+            $activationFiles,
+        ));
         $metadata['server_policy_bootstrap'] = [
             'updated_at' => time(),
             'files' => array_values(array_unique(array_merge(
-                (array) (($metadata['server_policy_bootstrap']['files'] ?? [])),
+                (array) ($metadata['server_policy_bootstrap']['files'] ?? []),
                 $updated,
-                [$relativePath]
+                [$relativePath],
             ))),
         ];
-        application_update_server_policy_write_json_atomic($metadataPath, $metadata);
+        application_update_server_policy_write_json_atomic(
+            $metadataPath,
+            $metadata,
+        );
 
         application_update_server_policy_replace_file($source, $destination);
         $updated[] = $relativePath;
@@ -415,7 +543,8 @@ function application_update_reconcile_server_policy_files(
         'skipped_customized_files' => $skippedCustomized,
     ];
 
-    $markerPath = dirname($metadataPath, 2) . '/server-policy-reconciliation.json';
+    $markerPath =
+        dirname($metadataPath, 2) . '/server-policy-reconciliation.json';
     application_update_server_policy_write_json_atomic($markerPath, [
         'schema' => 1,
         'updated_at' => time(),
@@ -435,13 +564,19 @@ function application_update_reconcile_server_policy_files(
 function application_update_server_policy_job_context(array $job): ?array
 {
     $operation = (string) ($job['operation'] ?? '');
-    if ($operation === '' || $operation === 'rollback' || empty($job['checkpoints']['activation_complete'])) {
+    if (
+        $operation === ''
+        || $operation === 'rollback'
+        || empty($job['checkpoints']['activation_complete'])
+    ) {
         return null;
     }
 
     $jobId = (string) ($job['id'] ?? '');
     if (preg_match('/^[0-9]{14}-[a-f0-9]{12}$/', $jobId) !== 1) {
-        throw new RuntimeException('Server-policy reconciliation received an invalid update job identifier.');
+        throw new RuntimeException(
+            'Server-policy reconciliation received an invalid update job identifier.',
+        );
     }
 
     $projectRoot = dirname(__DIR__, 2);
@@ -450,20 +585,33 @@ function application_update_server_policy_job_context(array $job): ?array
     $realJobDir = realpath($jobDir);
     $realExtractDir = realpath($jobDir . '/extract');
     $realSourceRoot = $sourceRoot !== '' ? realpath($sourceRoot) : false;
-    if ($realJobDir === false || $realExtractDir === false || $realSourceRoot === false) {
-        throw new RuntimeException('Server-policy reconciliation update source is unavailable.');
+    if (
+        $realJobDir === false
+        || $realExtractDir === false
+        || $realSourceRoot === false
+    ) {
+        throw new RuntimeException(
+            'Server-policy reconciliation update source is unavailable.',
+        );
     }
 
     $normalizedExtract = rtrim(str_replace('\\', '/', $realExtractDir), '/');
     $normalizedSource = rtrim(str_replace('\\', '/', $realSourceRoot), '/');
-    if ($normalizedSource !== $normalizedExtract && !str_starts_with($normalizedSource . '/', $normalizedExtract . '/')) {
-        throw new RuntimeException('Server-policy reconciliation refused a source outside the validated update extraction.');
+    if (
+        $normalizedSource !== $normalizedExtract
+        && !str_starts_with($normalizedSource . '/', $normalizedExtract . '/')
+    ) {
+        throw new RuntimeException(
+            'Server-policy reconciliation refused a source outside the validated update extraction.',
+        );
     }
 
     $rollbackRoot = $jobDir . '/rollback/original';
     $metadataPath = $jobDir . '/rollback/metadata.json';
     if (!is_dir($rollbackRoot) || !is_file($metadataPath)) {
-        throw new RuntimeException('Server-policy reconciliation rollback snapshot is unavailable.');
+        throw new RuntimeException(
+            'Server-policy reconciliation rollback snapshot is unavailable.',
+        );
     }
 
     return [
@@ -481,8 +629,10 @@ function application_update_server_policy_job_context(array $job): ?array
  * @param bool $bootstrapSafety Respect one-generation custom-file safeguards.
  * @return array<string,mixed> Reconciliation diagnostics.
  */
-function application_update_reconcile_server_policy_files_for_job(array $job, bool $bootstrapSafety): array
-{
+function application_update_reconcile_server_policy_files_for_job(
+    array $job,
+    bool $bootstrapSafety,
+): array {
     $context = application_update_server_policy_job_context($job);
     if ($context === null) {
         return [
@@ -501,7 +651,7 @@ function application_update_reconcile_server_policy_files_for_job(array $job, bo
         $context['project_root'],
         $context['rollback_root'],
         $context['metadata_path'],
-        $bootstrapSafety
+        $bootstrapSafety,
     );
 }
 

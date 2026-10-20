@@ -39,10 +39,12 @@ function policy_changes_assert(bool $condition, string $message): void
  */
 function policy_changes_explanation(): string
 {
-    return "/**\n * Bound one disposable worker wait independently of request rendering.\n"
-        . " * @var int\n * Units: seconds. Scope: disposable worker scheduling.\n"
-        . " * Consumers: fixture wait loop.\n"
-        . " * Rationale: Keep the fixture's finite wait separate from its retry count.\n */\n";
+    return (
+        "/**\n * Bound one disposable worker wait independently of request rendering.\n"
+            . " * @var int\n * Units: seconds. Scope: disposable worker scheduling.\n"
+            . " * Consumers: fixture wait loop.\n"
+            . " * Rationale: Keep the fixture's finite wait separate from its retry count.\n */\n"
+    );
 }
 
 $doc = policy_changes_explanation();
@@ -52,36 +54,110 @@ foreach ([
 ] as $extension => $source) {
     $complete = declaration_snapshots($source, $extension);
     $owners = declaration_snapshots($source, $extension, false);
-    policy_changes_assert(array_column($complete, 'identity') === array_column($owners, 'identity')
-        && array_column($complete, 'record') === array_column($owners, 'record'),
-        'Ownership-only scanning must preserve namespaces, classes, methods and nested callback identities and records.');
+    policy_changes_assert(
+        array_column($complete, 'identity') === array_column(
+            $owners,
+            'identity',
+        )
+            && array_column($complete, 'record') === array_column(
+                $owners,
+                'record',
+            ),
+        'Ownership-only scanning must preserve namespaces, classes, methods and nested callback identities and records.',
+    );
 }
 $oldHeader = "/** Project: PHP Gallery\n * Repository: https://github.com/klusik/PHP_gallery\n * Purpose: Explain the old native module role.\n */\nconst LEGACY_LIMIT = 9;";
-$newHeader = str_replace(' * Repository:', " * File: public/assets/fixture.js\n * Repository:", $oldHeader);
-policy_changes_assert(changed_policy_source($oldHeader, $newHeader, 'public/assets/fixture.js')['findings'] === [],
-    'Completing a legacy file header must not fabricate a policy documentation regression.');
+$newHeader = str_replace(
+    ' * Repository:',
+    " * File: public/assets/fixture.js\n * Repository:",
+    $oldHeader,
+);
+policy_changes_assert(
+    changed_policy_source(
+        $oldHeader,
+        $newHeader,
+        'public/assets/fixture.js',
+    )['findings'] === [],
+    'Completing a legacy file header must not fabricate a policy documentation regression.',
+);
 $interpolated = <<<'PHP'
 <?php
 $label = "{$row['title']}}";
 $timeoutSeconds = 7;
 PHP;
-policy_changes_assert(changed_policy_source('', $interpolated, 'app/fixture.php')['added'] === 1,
-    'PHP parser-validated interpolation with literal braces must not be blocked by JavaScript delimiter assumptions.');
+policy_changes_assert(
+    changed_policy_source('', $interpolated, 'app/fixture.php')['added'] === 1,
+    'PHP parser-validated interpolation with literal braces must not be blocked by JavaScript delimiter assumptions.',
+);
 $legacy = '<?php namespace Fixture; const WAIT_SECONDS = 9; function run(): void { $retryLimit = 4; usleep(20); }';
-$result = changed_policy_source($legacy, "<?php /* Leading attribution only. */" . substr($legacy, 5), 'app/fixture.php');
-policy_changes_assert($result['unchanged'] === 3 && $result['findings'] === [], 'Header-only edits must not enforce unchanged legacy policy sites.');
-$result = changed_policy_source($legacy, str_replace('usleep(20);', 'usleep(20); $label = "unrelated";', $legacy), 'app/fixture.php');
-policy_changes_assert($result['unchanged'] === 3 && $result['findings'] === [], 'Unrelated body statements must not turn legacy candidates into new policy.');
-$result = changed_policy_source($legacy, str_replace('WAIT_SECONDS = 9', 'WAIT_SECONDS = 10', $legacy), 'app/fixture.php');
-policy_changes_assert($result['changed'] === 1 && count($result['findings']) === 6, 'An unexplained changed uppercase initializer must fail all missing semantic fields.');
+$result = changed_policy_source(
+    $legacy,
+    '<?php /* Leading attribution only. */' . substr($legacy, 5),
+    'app/fixture.php',
+);
+policy_changes_assert(
+    $result['unchanged'] === 3 && $result['findings'] === [],
+    'Header-only edits must not enforce unchanged legacy policy sites.',
+);
+$result = changed_policy_source(
+    $legacy,
+    str_replace('usleep(20);', 'usleep(20); $label = "unrelated";', $legacy),
+    'app/fixture.php',
+);
+policy_changes_assert(
+    $result['unchanged'] === 3 && $result['findings'] === [],
+    'Unrelated body statements must not turn legacy candidates into new policy.',
+);
+$result = changed_policy_source(
+    $legacy,
+    str_replace('WAIT_SECONDS = 9', 'WAIT_SECONDS = 10', $legacy),
+    'app/fixture.php',
+);
+policy_changes_assert(
+    $result['changed'] === 1 && count($result['findings']) === 6,
+    'An unexplained changed uppercase initializer must fail all missing semantic fields.',
+);
 $explained = "<?php namespace Fixture;\n" . $doc . "const WAIT_SECONDS = 9;\n";
-policy_changes_assert(changed_policy_source('', $explained, 'app/policy_constants.php')['findings'] === [], 'A documented immutable owner must not need a path exemption.');
-policy_changes_assert(changed_policy_source('', '<?php ' . $doc . '$retryLimit = 4;', 'app/fixture.php')['findings'] === [], 'An attached substantive local policy explanation is recognized without a local-file exemption.');
-$result = changed_policy_source($explained, str_replace('Units: seconds.', 'Units:', $explained), 'app/policy_constants.php');
-policy_changes_assert($result['doc_regressions'] === 1 && count($result['findings']) === 1
-    && $result['findings'][0]['rule'] === 'constant.documentation:units', 'An empty field must not borrow the following scope or revive every legacy issue.');
-$noRationale = str_replace(" * Rationale: Keep the fixture's finite wait separate from its retry count.\n", '', $explained);
-policy_changes_assert(changed_policy_source($explained, $noRationale, 'app/policy_constants.php')['doc_regressions'] === 1, 'Removing a policy explanation must fail even when executable tokens are unchanged.');
+policy_changes_assert(
+    changed_policy_source(
+        '',
+        $explained,
+        'app/policy_constants.php',
+    )['findings'] === [],
+    'A documented immutable owner must not need a path exemption.',
+);
+policy_changes_assert(
+    changed_policy_source(
+        '',
+        '<?php ' . $doc . '$retryLimit = 4;',
+        'app/fixture.php',
+    )['findings'] === [],
+    'An attached substantive local policy explanation is recognized without a local-file exemption.',
+);
+$result = changed_policy_source(
+    $explained,
+    str_replace('Units: seconds.', 'Units:', $explained),
+    'app/policy_constants.php',
+);
+policy_changes_assert(
+    $result['doc_regressions'] === 1
+        && count($result['findings']) === 1
+        && $result['findings'][0]['rule'] === 'constant.documentation:units',
+    'An empty field must not borrow the following scope or revive every legacy issue.',
+);
+$noRationale = str_replace(
+    " * Rationale: Keep the fixture's finite wait separate from its retry count.\n",
+    '',
+    $explained,
+);
+policy_changes_assert(
+    changed_policy_source(
+        $explained,
+        $noRationale,
+        'app/policy_constants.php',
+    )['doc_regressions'] === 1,
+    'Removing a policy explanation must fail even when executable tokens are unchanged.',
+);
 $php = <<<'PHP'
 <?php
 /* $retryLimit = 999; usleep(999); const FAKE = 9; */
@@ -92,59 +168,177 @@ $bytesLimit = 64 * 1024;
 $driver->usleep(55);
 PHP;
 $result = changed_policy_source('', $php, 'app/fixture.php');
-policy_changes_assert($result['added'] === 2, 'Only operational assignment/arithmetic and direct qualified timers qualify, not strings, loops or object methods.');
-$definitions = policy_site_snapshots("<?php\n" . $doc . 'const FIRST_LIMIT = 4, SECOND_LIMIT = 6;', 'app/fixture.php');
-policy_changes_assert(count($definitions['snapshots']) === 2 && $definitions['snapshots'][1]['record']['missing'] !== [],
-    'Multi-constant declarations must discover every name without borrowing an earlier sibling explanation.');
+policy_changes_assert(
+    $result['added'] === 2,
+    'Only operational assignment/arithmetic and direct qualified timers qualify, not strings, loops or object methods.',
+);
+$definitions = policy_site_snapshots(
+    "<?php\n" . $doc . 'const FIRST_LIMIT = 4, SECOND_LIMIT = 6;',
+    'app/fixture.php',
+);
+policy_changes_assert(
+    count($definitions['snapshots']) === 2
+        && $definitions['snapshots'][1]['record']['missing'] !== [],
+    'Multi-constant declarations must discover every name without borrowing an earlier sibling explanation.',
+);
 $define = "<?php\n" . $doc . "\\define('WAIT_SECONDS', 9);";
-policy_changes_assert(changed_policy_source('', $define, 'app/fixture.php')['findings'] === [], 'Fully qualified static-name define must attach canonical documentation.');
-$dynamic = policy_site_snapshots('<?php define($selectedName, 55);', 'app/fixture.php');
-policy_changes_assert(($dynamic['review']['dynamic_or_qualified_define'] ?? 0) === 1, 'Dynamic definitions require explicit review, not a false completeness claim.');
-$map = policy_site_snapshots("<?php return ['retry_limit' => 8];", 'app/configuration_defaults.php');
-policy_changes_assert($map['snapshots'] === [] && ($map['review']['numeric_policy_map_entry'] ?? 0) === 1,
-    'Deployment-tunable map entries stay an explicit coverage gap rather than arbitrary constant violations.');
+policy_changes_assert(
+    changed_policy_source('', $define, 'app/fixture.php')['findings'] === [],
+    'Fully qualified static-name define must attach canonical documentation.',
+);
+$dynamic = policy_site_snapshots(
+    '<?php define($selectedName, 55);',
+    'app/fixture.php',
+);
+policy_changes_assert(
+    ($dynamic['review']['dynamic_or_qualified_define'] ?? 0) === 1,
+    'Dynamic definitions require explicit review, not a false completeness claim.',
+);
+$map = policy_site_snapshots(
+    "<?php return ['retry_limit' => 8];",
+    'app/configuration_defaults.php',
+);
+policy_changes_assert(
+    $map['snapshots'] === []
+        && ($map['review']['numeric_policy_map_entry'] ?? 0) === 1,
+    'Deployment-tunable map entries stay an explicit coverage gap rather than arbitrary constant violations.',
+);
 $namespaced = '<?php namespace First; const LIMIT = 2; namespace Second; const LIMIT = 3;';
-$result = changed_policy_source($namespaced, str_replace('LIMIT = 3', 'LIMIT = 4', $namespaced), 'app/fixture.php');
-policy_changes_assert($result['changed'] === 1 && $result['unchanged'] === 1 && str_contains($result['findings'][0]['identity'], 'Second'),
-    'Namespace identities must separate equal constant names.');
+$result = changed_policy_source(
+    $namespaced,
+    str_replace('LIMIT = 3', 'LIMIT = 4', $namespaced),
+    'app/fixture.php',
+);
+policy_changes_assert(
+    $result['changed'] === 1
+        && $result['unchanged'] === 1
+        && str_contains($result['findings'][0]['identity'], 'Second'),
+    'Namespace identities must separate equal constant names.',
+);
 $before = policy_site_snapshots($legacy, 'app/original.php')['snapshots'];
 $moved = policy_site_snapshots($legacy, 'app/moved.php')['snapshots'];
-$result = compare_declaration_snapshots($before, $moved, 'PhpGallery\\SourceContracts\\policy_site_issues');
-policy_changes_assert($result['moved'] === 3 && $result['findings'] === [], 'Unchanged moved policy sites retain legacy status.');
-$result = compare_declaration_snapshots($before, array_merge($before, $moved), 'PhpGallery\\SourceContracts\\policy_site_issues');
-policy_changes_assert($result['added'] === 3 && $result['findings'] !== [], 'Copying alongside an original must not consume its unchanged legacy identity twice.');
+$result = compare_declaration_snapshots(
+    $before,
+    $moved,
+    'PhpGallery\\SourceContracts\\policy_site_issues',
+);
+policy_changes_assert(
+    $result['moved'] === 3 && $result['findings'] === [],
+    'Unchanged moved policy sites retain legacy status.',
+);
+$result = compare_declaration_snapshots(
+    $before,
+    array_merge($before, $moved),
+    'PhpGallery\\SourceContracts\\policy_site_issues',
+);
+policy_changes_assert(
+    $result['added'] === 3 && $result['findings'] !== [],
+    'Copying alongside an original must not consume its unchanged legacy identity twice.',
+);
 $jsDoc = str_replace('@var int', '@var {number}', $doc);
 $js = $jsDoc . 'export const WORKER_WAIT_MS = 20;';
-policy_changes_assert(changed_policy_source('', "/** Project: PHP Gallery\n * File: public/assets/worker-policy.js\n */\n" . $js, 'public/assets/worker-policy.js')['findings'] === [],
-    'A separate leading attribution block must not swallow a first policy definition docblock.');
-policy_changes_assert(changed_policy_source('', $jsDoc . 'const timer = setTimeout(run, 20);', 'public/assets/fixture.js')['findings'] === [],
-    'An explanation above a timer assignment attaches to that direct call site.');
-policy_changes_assert(changed_policy_source('', 'service.window.setTimeout(run, 20);', 'public/assets/fixture.js')['added'] === 0,
-    'A nested object property named window is not the browser global timer owner.');
-$combined = str_replace(['Scope: disposable worker scheduling.', 'Consumers: fixture wait loop.', 'Rationale:'],
-    ['Scope/consumers: disposable worker scheduling.', '', 'Compatibility:'], $doc);
-policy_changes_assert(changed_policy_source('', '<?php ' . $combined . 'const LIMIT = 5;', 'app/fixture.php')['findings'] === [],
-    'Explicit combined scope/consumer labels and compatibility rationale retain their meaning.');
+policy_changes_assert(
+    changed_policy_source(
+        '',
+        "/** Project: PHP Gallery\n * File: public/assets/worker-policy.js\n */\n"
+            . $js,
+        'public/assets/worker-policy.js',
+    )['findings'] === [],
+    'A separate leading attribution block must not swallow a first policy definition docblock.',
+);
+policy_changes_assert(
+    changed_policy_source(
+        '',
+        $jsDoc . 'const timer = setTimeout(run, 20);',
+        'public/assets/fixture.js',
+    )['findings'] === [],
+    'An explanation above a timer assignment attaches to that direct call site.',
+);
+policy_changes_assert(
+    changed_policy_source(
+        '',
+        'service.window.setTimeout(run, 20);',
+        'public/assets/fixture.js',
+    )['added'] === 0,
+    'A nested object property named window is not the browser global timer owner.',
+);
+$combined = str_replace(
+    [
+        'Scope: disposable worker scheduling.',
+        'Consumers: fixture wait loop.',
+        'Rationale:',
+    ],
+    ['Scope/consumers: disposable worker scheduling.', '', 'Compatibility:'],
+    $doc,
+);
+policy_changes_assert(
+    changed_policy_source(
+        '',
+        '<?php ' . $combined . 'const LIMIT = 5;',
+        'app/fixture.php',
+    )['findings'] === [],
+    'Explicit combined scope/consumer labels and compatibility rationale retain their meaning.',
+);
 $visibility = '<?php class Limits { public const BATCH_LIMIT = 4; }';
-policy_changes_assert(changed_policy_source($visibility, str_replace('public const', 'private const', $visibility), 'app/fixture.php')['changed'] === 1,
-    'Changed policy visibility is a material definition change, not formatting.');
-policy_changes_assert(changed_policy_source('', $js, 'public/assets/worker-policy.js')['findings'] === [],
-    'Focused documented browser policy modules pass by contract, not filename exception.');
-$jsSites = 'const delayMs = 45; let retryLimit = 5; window.setTimeout(() => {}, 20); '
+policy_changes_assert(
+    changed_policy_source(
+        $visibility,
+        str_replace('public const', 'private const', $visibility),
+        'app/fixture.php',
+    )['changed'] === 1,
+    'Changed policy visibility is a material definition change, not formatting.',
+);
+policy_changes_assert(
+    changed_policy_source('', $js, 'public/assets/worker-policy.js')['findings']
+        === [],
+    'Focused documented browser policy modules pass by contract, not filename exception.',
+);
+$jsSites =
+    'const delayMs = 45; let retryLimit = 5; window.setTimeout(() => {}, 20); '
     . 'service.setTimeout(() => {}, 20); const note = "setTimeout(f, 88)";';
-policy_changes_assert(changed_policy_source('', $jsSites, 'public/assets/fixture.js')['added'] === 3,
-    'Lowercase JS declarations and browser-global timers qualify; unrelated methods and quoted code do not.');
-$template = 'const text = ' . chr(96) . 'setTimeout(f, 55)' . '$' . '{setTimeout(f, 5)}' . chr(96) . ';';
-policy_changes_assert(changed_policy_source('', $template, 'public/assets/fixture.js')['added'] === 1,
-    'Nested executable template expressions must be scanned while raw template text stays inert.');
-$redaction = changed_policy_source('', '<?php const PRIVATE_TEST_VALUE = "never-print-policy-sentinel"; $timeoutSeconds = 987654321;', 'app/fixture.php');
+policy_changes_assert(
+    changed_policy_source('', $jsSites, 'public/assets/fixture.js')['added']
+        === 3,
+    'Lowercase JS declarations and browser-global timers qualify; unrelated methods and quoted code do not.',
+);
+$template =
+    'const text = '
+    . chr(96)
+    . 'setTimeout(f, 55)'
+    . '$'
+    . '{setTimeout(f, 5)}'
+    . chr(96)
+    . ';';
+policy_changes_assert(
+    changed_policy_source('', $template, 'public/assets/fixture.js')['added']
+        === 1,
+    'Nested executable template expressions must be scanned while raw template text stays inert.',
+);
+$redaction = changed_policy_source(
+    '',
+    '<?php const PRIVATE_TEST_VALUE = "never-print-policy-sentinel"; $timeoutSeconds = 987654321;',
+    'app/fixture.php',
+);
 $json = json_encode($redaction, JSON_THROW_ON_ERROR);
-policy_changes_assert(!str_contains($json, '987654321') && !str_contains($json, 'never-print-policy-sentinel')
-    && !str_contains($json, 'fingerprint'), 'Reports must expose identities/rules, never values, source snippets or hashes.');
+policy_changes_assert(
+    !str_contains($json, '987654321')
+        && !str_contains($json, 'never-print-policy-sentinel')
+        && !str_contains($json, 'fingerprint'),
+    'Reports must expose identities/rules, never values, source snippets or hashes.',
+);
 
-$root = sys_get_temp_dir() . '/gallery-policy-changes-' . bin2hex(random_bytes(8));
+$root =
+    sys_get_temp_dir() . '/gallery-policy-changes-' . bin2hex(random_bytes(8));
 $directories = ['app', 'public', 'public/assets', 'tests'];
-$files = ['app/fixture.php', 'app/new.php', 'app/configuration_defaults.php', 'public/assets/theme.css', 'public/assets/tool.py', 'tests/outside.php', 'config.php'];
+$files = [
+    'app/fixture.php',
+    'app/new.php',
+    'app/configuration_defaults.php',
+    'public/assets/theme.css',
+    'public/assets/tool.py',
+    'tests/outside.php',
+    'config.php',
+];
 mkdir($root);
 try {
     foreach ($directories as $directory) {
@@ -152,12 +346,25 @@ try {
     }
     file_put_contents($root . '/app/fixture.php', $legacy);
     file_put_contents($root . '/app/new.php', $explained);
-    file_put_contents($root . '/app/configuration_defaults.php', "<?php return ['retry_limit' => 8];");
-    file_put_contents($root . '/public/assets/theme.css', '.fixture { transition-duration: 2s; }');
+    file_put_contents(
+        $root . '/app/configuration_defaults.php',
+        "<?php return ['retry_limit' => 8];",
+    );
+    file_put_contents(
+        $root . '/public/assets/theme.css',
+        '.fixture { transition-duration: 2s; }',
+    );
     file_put_contents($root . '/public/assets/tool.py', 'timeout_seconds = 50');
-    file_put_contents($root . '/tests/outside.php', '<?php const FIXTURE_SAMPLE = 13;');
+    file_put_contents(
+        $root . '/tests/outside.php',
+        '<?php const FIXTURE_SAMPLE = 13;',
+    );
     file_put_contents($root . '/config.php', 'private-config-sentinel');
-    $head = ['app/fixture.php' => $legacy, 'app/deleted.php' => $explained, 'config.php' => 'private-head-sentinel'];
+    $head = [
+        'app/fixture.php' => $legacy,
+        'app/deleted.php' => $explained,
+        'config.php' => 'private-head-sentinel',
+    ];
     $verbs = [];
     $requestedBases = [];
     /**
@@ -166,7 +373,11 @@ try {
      * @param string $directory Disposable repository root.
      * @return array{status:int,stdout:string} Synthetic comparison-base data or bounded failure.
      */
-    $git = static function (array $arguments, string $directory) use (&$head, &$verbs, &$requestedBases): array {
+    $git = static function (array $arguments, string $directory) use (
+        &$head,
+        &$verbs,
+        &$requestedBases,
+    ): array {
         $verbs[] = $arguments[0];
         if ($arguments[0] === 'rev-parse') {
             return ['status' => 0, 'stdout' => $directory . "\n"];
@@ -178,7 +389,8 @@ try {
             }
             $tree = '';
             foreach (array_keys($head) as $path) {
-                $tree .= '100644 blob ' . str_repeat('a', 40) . "\t" . $path . "\0";
+                $tree .=
+                    '100644 blob ' . str_repeat('a', 40) . "\t" . $path . "\0";
             }
             return ['status' => 0, 'stdout' => $tree];
         }
@@ -187,53 +399,106 @@ try {
             if ($arguments[5] !== 'HEAD') {
                 return ['status' => 1, 'stdout' => ''];
             }
-            return ['status' => 0, 'stdout' => implode("\0", array_keys($head)) . "\0"];
+            return [
+                'status' => 0,
+                'stdout' => implode("\0", array_keys($head)) . "\0",
+            ];
         }
         if ($arguments[0] === 'cat-file') {
             [$base, $path] = explode(':', $arguments[2], 2);
             $requestedBases[] = $base;
-            policy_changes_assert($path !== 'config.php', 'Private HEAD content must never be requested.');
-            return isset($head[$path]) ? ['status' => 0, 'stdout' => $head[$path]] : ['status' => 1, 'stdout' => ''];
+            policy_changes_assert(
+                $path !== 'config.php',
+                'Private HEAD content must never be requested.',
+            );
+            return (
+                isset($head[$path])
+                    ? ['status' => 0, 'stdout' => $head[$path]]
+                    : ['status' => 1, 'stdout' => '']
+            );
         }
         throw new RuntimeException('Unexpected mutating Git operation.');
     };
     $report = changed_policy_report($root, [], $git);
-    policy_changes_assert($report['status'] === 'PASS' && $report['summary']['moved'] === 1
-        && $report['summary']['coverage_review_count'] === 4, 'Whole fixture scope must match moves and explicitly disclose map, native-format and tooling gaps.');
-    policy_changes_assert(array_diff($verbs, ['rev-parse', 'ls-tree', 'diff', 'cat-file']) === [], 'Policy gate must not write Git state.');
-    policy_changes_assert($requestedBases !== [] && array_unique($requestedBases) === ['HEAD'],
-        'The default policy comparison base must remain HEAD across tree, diff and blob reads.');
-    policy_changes_assert(!str_contains(json_encode($report, JSON_THROW_ON_ERROR), 'private-'), 'No private worktree or HEAD values may enter artifacts.');
+    policy_changes_assert(
+        $report['status'] === 'PASS'
+            && $report['summary']['moved'] === 1
+            && $report['summary']['coverage_review_count'] === 4,
+        'Whole fixture scope must match moves and explicitly disclose map, native-format and tooling gaps.',
+    );
+    policy_changes_assert(array_diff($verbs, [
+        'rev-parse',
+        'ls-tree',
+        'diff',
+        'cat-file',
+    ]) === [], 'Policy gate must not write Git state.');
+    policy_changes_assert(
+        $requestedBases !== [] && array_unique($requestedBases) === ['HEAD'],
+        'The default policy comparison base must remain HEAD across tree, diff and blob reads.',
+    );
+    policy_changes_assert(
+        !str_contains(json_encode($report, JSON_THROW_ON_ERROR), 'private-'),
+        'No private worktree or HEAD values may enter artifacts.',
+    );
     file_put_contents($root . '/app/new.php', '<?php const NEW_LIMIT = 5;');
     $report = changed_policy_report($root, ['app/new.php'], $git);
-    policy_changes_assert($report['status'] === 'FAIL' && $report['summary']['sites_with_findings'] === 1, 'Untracked unexplained runtime policy must fail.');
+    policy_changes_assert(
+        $report['status'] === 'FAIL'
+            && $report['summary']['sites_with_findings'] === 1,
+        'Untracked unexplained runtime policy must fail.',
+    );
     file_put_contents($root . '/app/new.php', '<?php const BROKEN = ;');
-    policy_changes_assert(changed_policy_report($root, ['app/new.php'], $git)['status'] === 'BLOCKED', 'Unparseable changed PHP cannot pass.');
+    policy_changes_assert(
+        changed_policy_report($root, ['app/new.php'], $git)['status']
+            === 'BLOCKED',
+        'Unparseable changed PHP cannot pass.',
+    );
     file_put_contents($root . '/public/assets/added.js', 'setTimeout(run, 55;');
     $files[] = 'public/assets/added.js';
-    policy_changes_assert(changed_policy_report($root, ['public/assets/added.js'], $git)['status'] === 'BLOCKED',
-        'Unbalanced JavaScript policy syntax must disclose blocked coverage.');
+    policy_changes_assert(
+        changed_policy_report($root, ['public/assets/added.js'], $git)['status']
+            === 'BLOCKED',
+        'Unbalanced JavaScript policy syntax must disclose blocked coverage.',
+    );
     /**
      * Simulate unavailable immutable history without exposing transport diagnostics.
      * @param list<string> $arguments Requested operation.
      * @param string $directory Disposable root.
      * @return array{status:int,stdout:string} Unavailable Git response.
      */
-    $unavailable = static function (array $arguments, string $directory): array {
+    $unavailable = static function (
+        array $arguments,
+        string $directory,
+    ): array {
         return ['status' => 1, 'stdout' => 'untrusted-git-sentinel'];
     };
     $blocked = changed_policy_report($root, [], $unavailable);
-    policy_changes_assert($blocked['status'] === 'BLOCKED' && !str_contains(json_encode($blocked, JSON_THROW_ON_ERROR), 'untrusted-git-sentinel'),
-        'Unavailable Git must block rather than pass or disclose transport output.');
-    policy_changes_assert(changed_policy_report($root, ['config.php'], $git)['status'] === 'BLOCKED', 'Focused paths cannot override discovery privacy.');
+    policy_changes_assert(
+        $blocked['status'] === 'BLOCKED'
+            && !str_contains(
+                json_encode($blocked, JSON_THROW_ON_ERROR),
+                'untrusted-git-sentinel',
+            ),
+        'Unavailable Git must block rather than pass or disclose transport output.',
+    );
+    policy_changes_assert(
+        changed_policy_report($root, ['config.php'], $git)['status']
+            === 'BLOCKED',
+        'Focused paths cannot override discovery privacy.',
+    );
     file_put_contents($root . '/app/new.php', '<?php const NEW_LIMIT = 5;');
     $baseTree = [
         'HEAD' => ['app/new.php' => '<?php const NEW_LIMIT = 5;'],
         'HEAD^' => [],
-        'refs/heads/unreadable' => ['app/new.php' => '<?php const OLDER_LIMIT = 3;'],
+        'refs/heads/unreadable' => [
+            'app/new.php' => '<?php const OLDER_LIMIT = 3;',
+        ],
     ];
     $baseRequests = [];
-    $baseAwareGit = static function (array $arguments, string $directory) use (&$baseTree, &$baseRequests): array {
+    $baseAwareGit = static function (array $arguments, string $directory) use (
+        &$baseTree,
+        &$baseRequests,
+    ): array {
         if ($arguments[0] === 'rev-parse') {
             return ['status' => 0, 'stdout' => $directory . "\n"];
         }
@@ -245,16 +510,23 @@ try {
             }
             $tree = '';
             foreach (array_keys($baseTree[$base]) as $path) {
-                $tree .= '100644 blob ' . str_repeat('b', 40) . "\t" . $path . "\0";
+                $tree .=
+                    '100644 blob ' . str_repeat('b', 40) . "\t" . $path . "\0";
             }
             return ['status' => 0, 'stdout' => $tree];
         }
         if ($arguments[0] === 'diff') {
             $base = $arguments[5];
             $baseRequests[] = $base;
-            return array_key_exists($base, $baseTree)
-                ? ['status' => 0, 'stdout' => implode("\0", array_keys($baseTree[$base])) . "\0"]
-                : ['status' => 1, 'stdout' => ''];
+            return (
+                array_key_exists($base, $baseTree)
+                    ? [
+                        'status' => 0,
+                        'stdout' =>
+                            implode("\0", array_keys($baseTree[$base])) . "\0",
+                    ]
+                    : ['status' => 1, 'stdout' => '']
+            );
         }
         if ($arguments[0] === 'cat-file') {
             [$base, $path] = explode(':', $arguments[2], 2);
@@ -262,44 +534,93 @@ try {
             if ($base === 'refs/heads/unreadable') {
                 return ['status' => 1, 'stdout' => ''];
             }
-            return isset($baseTree[$base][$path])
-                ? ['status' => 0, 'stdout' => $baseTree[$base][$path]]
-                : ['status' => 1, 'stdout' => ''];
+            return (
+                isset($baseTree[$base][$path])
+                    ? ['status' => 0, 'stdout' => $baseTree[$base][$path]]
+                    : ['status' => 1, 'stdout' => '']
+            );
         }
         throw new RuntimeException('Unexpected base-aware Git operation.');
     };
-    $againstHead = changed_policy_report($root, ['app/new.php'], $baseAwareGit, 'HEAD');
-    $againstParent = changed_policy_report($root, ['app/new.php'], $baseAwareGit, 'HEAD^');
-    policy_changes_assert($againstHead['summary']['base'] === 'HEAD' && $againstHead['status'] === 'PASS'
-        && $againstParent['summary']['base'] === 'HEAD^' && $againstParent['status'] === 'FAIL',
-        'The same worktree source must compare differently against HEAD and its earlier parent when its policy site was introduced there.');
-    policy_changes_assert(array_values(array_unique($baseRequests)) === ['HEAD', 'HEAD^'],
-        'Tree and delta reads must use only the explicitly selected immutable base.');
+    $againstHead = changed_policy_report(
+        $root,
+        ['app/new.php'],
+        $baseAwareGit,
+        'HEAD',
+    );
+    $againstParent = changed_policy_report(
+        $root,
+        ['app/new.php'],
+        $baseAwareGit,
+        'HEAD^',
+    );
+    policy_changes_assert(
+        $againstHead['summary']['base'] === 'HEAD'
+            && $againstHead['status'] === 'PASS'
+            && $againstParent['summary']['base'] === 'HEAD^'
+            && $againstParent['status'] === 'FAIL',
+        'The same worktree source must compare differently against HEAD and its earlier parent when its policy site was introduced there.',
+    );
+    policy_changes_assert(
+        array_values(array_unique($baseRequests)) === ['HEAD', 'HEAD^'],
+        'Tree and delta reads must use only the explicitly selected immutable base.',
+    );
     $callsForMalformed = 0;
-    $countingGit = static function (array $arguments, string $directory) use (&$callsForMalformed): array {
+    $countingGit = static function (array $arguments, string $directory) use (
+        &$callsForMalformed,
+    ): array {
         $callsForMalformed++;
         return ['status' => 1, 'stdout' => ''];
     };
-    $malformed = changed_policy_report($root, ['app/new.php'], $countingGit, '--upload-pack=evil');
-    policy_changes_assert($malformed['status'] === 'BLOCKED' && $callsForMalformed === 0,
-        'Malformed comparison refs must block before invoking Git.');
-    $unavailableBase = changed_policy_report($root, ['app/new.php'], $baseAwareGit, 'refs/heads/missing');
-    policy_changes_assert($unavailableBase['status'] === 'BLOCKED'
-        && end($baseRequests) === 'refs/heads/missing'
-        && !in_array('HEAD', array_slice($baseRequests, -2), true),
-        'An unavailable selected base must block without retrying against HEAD.');
-    $unreadableBlob = changed_policy_report($root, ['app/new.php'], $baseAwareGit, 'refs/heads/unreadable');
-    policy_changes_assert($unreadableBlob['status'] === 'BLOCKED'
-        && array_slice($baseRequests, -3) === [
-            'refs/heads/unreadable',
-            'refs/heads/unreadable',
-            'refs/heads/unreadable',
-        ],
-        'An unreadable source blob at a valid selected base must block without retrying against HEAD.');
+    $malformed = changed_policy_report(
+        $root,
+        ['app/new.php'],
+        $countingGit,
+        '--upload-pack=evil',
+    );
+    policy_changes_assert(
+        $malformed['status'] === 'BLOCKED' && $callsForMalformed === 0,
+        'Malformed comparison refs must block before invoking Git.',
+    );
+    $unavailableBase = changed_policy_report(
+        $root,
+        ['app/new.php'],
+        $baseAwareGit,
+        'refs/heads/missing',
+    );
+    policy_changes_assert(
+        $unavailableBase['status'] === 'BLOCKED'
+            && end($baseRequests) === 'refs/heads/missing'
+            && !in_array('HEAD', array_slice($baseRequests, -2), true),
+        'An unavailable selected base must block without retrying against HEAD.',
+    );
+    $unreadableBlob = changed_policy_report(
+        $root,
+        ['app/new.php'],
+        $baseAwareGit,
+        'refs/heads/unreadable',
+    );
+    policy_changes_assert(
+        $unreadableBlob['status'] === 'BLOCKED'
+            && array_slice($baseRequests, -3) === [
+                'refs/heads/unreadable',
+                'refs/heads/unreadable',
+                'refs/heads/unreadable',
+            ],
+        'An unreadable source blob at a valid selected base must block without retrying against HEAD.',
+    );
     ob_start();
-    $status = PhpGallery\SourceContracts\policy_main(['fixture', '--changed', '--json', '--root=' . $root]);
+    $status = PhpGallery\SourceContracts\policy_main([
+        'fixture',
+        '--changed',
+        '--json',
+        '--root=' . $root,
+    ]);
     $cli = json_decode((string) ob_get_clean(), true, 512, JSON_THROW_ON_ERROR);
-    policy_changes_assert($status === 2 && $cli['status'] === 'BLOCKED', 'CLI changed mode must preserve strict blocked status for a root without Git HEAD.');
+    policy_changes_assert(
+        $status === 2 && $cli['status'] === 'BLOCKED',
+        'CLI changed mode must preserve strict blocked status for a root without Git HEAD.',
+    );
 } finally {
     foreach (array_reverse($files) as $file) {
         unlink($root . '/' . $file);
@@ -309,4 +630,5 @@ try {
     }
     rmdir($root);
 }
-echo "PASS policy_constants_changes: semantic sites, explanations, selected-base matching, privacy and coverage gaps.\n";
+echo
+    "PASS policy_constants_changes: semantic sites, explanations, selected-base matching, privacy and coverage gaps.\n";

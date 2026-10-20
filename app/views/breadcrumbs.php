@@ -38,7 +38,12 @@ function view_render_breadcrumbs(array $viewModel): void
 {
     $ariaLabel = (string) ($viewModel['aria_label'] ?? '');
     $styleClass = (string) ($viewModel['style_class'] ?? '');
-    echo '<nav class="breadcrumbs ' . e($styleClass) . '" aria-label="' . e($ariaLabel) . '">';
+    echo
+        '<nav class="breadcrumbs '
+            . e($styleClass)
+            . '" aria-label="'
+            . e($ariaLabel)
+            . '">';
     echo '<ol class="breadcrumbs__list">';
 
     foreach ((array) ($viewModel['items'] ?? []) as $item) {
@@ -55,9 +60,17 @@ function view_render_breadcrumbs(array $viewModel): void
         $current = !empty($item['current']);
         echo '<li class="breadcrumbs__item">';
         if ($current) {
-            echo '<span class="breadcrumbs__current" aria-current="page">' . e($label) . '</span>';
+            echo
+                '<span class="breadcrumbs__current" aria-current="page">'
+                    . e($label)
+                    . '</span>';
         } elseif ($url !== null) {
-            echo '<a class="breadcrumbs__link" href="' . e($url) . '">' . e($label) . '</a>';
+            echo
+                '<a class="breadcrumbs__link" href="'
+                    . e($url)
+                    . '">'
+                    . e($label)
+                    . '</a>';
         } else {
             echo '<span class="breadcrumbs__label">' . e($label) . '</span>';
         }
@@ -80,10 +93,12 @@ function view_render_breadcrumb_style_picker(array $viewModel): void
     $label = (string) ($viewModel['label'] ?? '');
     $options = array_values(array_filter(
         (array) ($viewModel['options'] ?? []),
-        static fn (mixed $option): bool => is_array($option)
+        static fn(mixed $option): bool => (
+            is_array($option)
             && is_string($option['value'] ?? null)
             && is_string($option['label'] ?? null)
             && is_array($option['preview'] ?? null)
+        ),
     ));
     $selectedValue = (string) ($viewModel['current'] ?? '');
     $selectedIndex = 0;
@@ -95,7 +110,10 @@ function view_render_breadcrumb_style_picker(array $viewModel): void
     }
 
     echo '<fieldset class="breadcrumb-style-picker">';
-    echo '<legend class="breadcrumb-style-picker__label">' . e($label) . '</legend>';
+    echo
+        '<legend class="breadcrumb-style-picker__label">'
+            . e($label)
+            . '</legend>';
     echo '<div class="breadcrumb-style-picker__grid">';
     foreach ($options as $index => $option) {
         $value = $option['value'];
@@ -105,11 +123,21 @@ function view_render_breadcrumb_style_picker(array $viewModel): void
         $items = (array) ($preview['items'] ?? []);
 
         echo '<label class="breadcrumb-style-picker__option">';
-        echo '<input class="breadcrumb-style-picker__input" type="radio" name="' . e($fieldName)
-            . '" value="' . e($value) . '"' . ($index === $selectedIndex ? ' checked' : '') . '>';
+        echo
+            '<input class="breadcrumb-style-picker__input" type="radio" name="'
+                . e($fieldName)
+                . '" value="'
+                . e($value)
+                . '"'
+                . ($index === $selectedIndex ? ' checked' : '')
+                . '>';
         echo '<span class="breadcrumb-style-picker__card">';
-        echo '<span class="breadcrumb-style-picker__name">' . e($optionLabel) . '</span>';
-        echo '<span class="breadcrumb-style-picker__preview" aria-hidden="true">';
+        echo
+            '<span class="breadcrumb-style-picker__name">'
+                . e($optionLabel)
+                . '</span>';
+        echo
+            '<span class="breadcrumb-style-picker__preview" aria-hidden="true">';
         echo '<span class="breadcrumbs ' . e($styleClass) . '">';
         echo '<span class="breadcrumbs__list">';
         foreach ($items as $item) {
@@ -122,8 +150,16 @@ function view_render_breadcrumb_style_picker(array $viewModel): void
             }
             $isCurrent = !empty($item['current']);
             echo '<span class="breadcrumbs__item">';
-            echo '<span class="' . ($isCurrent ? 'breadcrumbs__current' : 'breadcrumbs__link') . '">'
-                . e($itemLabel) . '</span>';
+            echo
+                '<span class="'
+                    . (
+                        $isCurrent
+                            ? 'breadcrumbs__current'
+                            : 'breadcrumbs__link'
+                    )
+                    . '">'
+                    . e($itemLabel)
+                    . '</span>';
             echo '</span>';
         }
         echo '</span></span></span></span></label>';

@@ -55,7 +55,7 @@ use function Gallery\Models\image_model_update_scan_row;
 
 /**
  * Image scanning model.
- * 
+ *
  * This module discovers image files on disk and reconciles them into database rows. It does not render public pages and does not modify theme or visual settings.
  */
 
@@ -68,7 +68,11 @@ use function Gallery\Models\image_model_update_scan_row;
  */
 function scan_image_exif_orientation(string $path, string $mime): int
 {
-    if ($mime !== 'image/jpeg' || !function_exists('exif_read_data') || !is_file($path)) {
+    if (
+        $mime !== 'image/jpeg'
+        || !function_exists('exif_read_data')
+        || !is_file($path)
+    ) {
         return 1;
     }
 
@@ -83,7 +87,11 @@ function scan_image_exif_orientation(string $path, string $mime): int
         return 1;
     }
 
-    $orientation = (int) ($exif['IFD0']['Orientation'] ?? $exif['Orientation'] ?? 1);
+    $orientation = (int) (
+        $exif['IFD0']['Orientation']
+        ?? $exif['Orientation']
+        ?? 1
+    );
     return $orientation >= 1 && $orientation <= 8 ? $orientation : 1;
 }
 
@@ -102,17 +110,32 @@ function scan_image_orientation_swaps_axes(int $orientation): bool
  * Persist master display geometry used by compact thumbnail metadata.
  *
  * @param int $imageId Image identifier.
- * @param array $metadata Metadata returned by scan_image_file_metadata().
+ * @param array{width:int,height:int,mime:string,display_width:int,display_height:int,exif_orientation:int} $metadata Normalized source and display geometry from scan_image_file_metadata().
+ * @return void Persists available master display metadata for the image.
  */
-function scan_image_sync_master_display_metadata(int $imageId, array $metadata): void
-{
-    if ($imageId <= 0 || !function_exists('Gallery\\Services\\db_column_exists') || !db_column_exists('images', 'display_width')) {
+function scan_image_sync_master_display_metadata(
+    int $imageId,
+    array $metadata,
+): void {
+    if (
+        $imageId <= 0
+        || !function_exists('Gallery\\Services\\db_column_exists')
+        || !db_column_exists('images', 'display_width')
+    ) {
         return;
     }
 
     $fields = [
-        'display_width' => (int) ($metadata['display_width'] ?? $metadata['width'] ?? 0),
-        'display_height' => (int) ($metadata['display_height'] ?? $metadata['height'] ?? 0),
+        'display_width' => (int) (
+            $metadata['display_width']
+            ?? $metadata['width']
+            ?? 0
+        ),
+        'display_height' => (int) (
+            $metadata['display_height']
+            ?? $metadata['height']
+            ?? 0
+        ),
         'exif_orientation' => (int) ($metadata['exif_orientation'] ?? 1),
         'thumbnail_metadata_refreshed_at' => now_sql(),
     ];
@@ -135,6 +158,7 @@ function scan_image_sync_master_display_metadata(int $imageId, array $metadata):
  * Mark compact thumbnail metadata stale after a source file changed.
  *
  * @param int $imageId Image identifier.
+ * @return void Invalidates derivative version and stored variant metadata when available.
  */
 function scan_image_invalidate_thumbnail_derivatives(int $imageId): void
 {
@@ -142,16 +166,23 @@ function scan_image_invalidate_thumbnail_derivatives(int $imageId): void
         return;
     }
 
-    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('images', 'thumbnail_derivative_version')) {
+    if (
+        function_exists('Gallery\\Services\\db_column_exists')
+        && db_column_exists('images', 'thumbnail_derivative_version')
+    ) {
         image_model_increment_thumbnail_derivative_version($imageId);
     }
-    if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_image_variants')) {
+    if (function_exists(
+        'Gallery\\Services\\thumbnail_metadata_delete_image_variants',
+    )) {
         thumbnail_metadata_delete_image_variants($imageId);
-    } elseif (function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('image_thumbnail_variants')) {
+    } elseif (
+        function_exists('Gallery\\Services\\db_table_exists')
+        && db_table_exists('image_thumbnail_variants')
+    ) {
         image_model_delete_thumbnail_variants($imageId);
     }
 }
-
 
 /**
  * Read scan-safe metadata for one supported image file.
@@ -168,11 +199,23 @@ function scan_image_file_metadata(string $path, string $filename): ?array
 {
     if (is_dng_image_path($filename)) {
         // $metadata stores dimensions reported by the configured RAW decoder when available.
-        $metadata = function_exists('Gallery\\Services\\dng_image_metadata') ? dng_image_metadata($path) : null;
+        $metadata = function_exists('Gallery\\Services\\dng_image_metadata')
+            ? dng_image_metadata($path)
+            : null;
         if (is_array($metadata)) {
-            $metadata['display_width'] = (int) ($metadata['display_width'] ?? $metadata['width'] ?? 0);
-            $metadata['display_height'] = (int) ($metadata['display_height'] ?? $metadata['height'] ?? 0);
-            $metadata['exif_orientation'] = (int) ($metadata['exif_orientation'] ?? 1);
+            $metadata['display_width'] = (int) (
+                $metadata['display_width']
+                ?? $metadata['width']
+                ?? 0
+            );
+            $metadata['display_height'] = (int) (
+                $metadata['display_height']
+                ?? $metadata['height']
+                ?? 0
+            );
+            $metadata['exif_orientation'] = (int) (
+                $metadata['exif_orientation'] ?? 1
+            );
             return $metadata;
         }
 
@@ -180,10 +223,15 @@ function scan_image_file_metadata(string $path, string $filename): ?array
         // ping every camera model. Keep the original import visible in admin and
         // let thumbnail generation report the concrete conversion failure.
         if (function_exists('Gallery\\Services\\admin_log_event')) {
-            admin_log_event('warning', 'image_scan.dng_metadata_unreadable', 'A DNG file was imported with fallback metadata because the server could not read its dimensions.', [
-                'filename' => $filename,
-                'path' => $path,
-            ]);
+            admin_log_event(
+                'warning',
+                'image_scan.dng_metadata_unreadable',
+                'A DNG file was imported with fallback metadata because the server could not read its dimensions.',
+                [
+                    'filename' => $filename,
+                    'path' => $path,
+                ],
+            );
         }
 
         return [
@@ -198,7 +246,11 @@ function scan_image_file_metadata(string $path, string $filename): ?array
 
     // $info stores metadata returned by PHP for browser-displayable images.
     $info = @getimagesize($path);
-    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+    if (
+        $info === false
+        || empty($info['mime'])
+        || !str_starts_with((string) $info['mime'], 'image/')
+    ) {
         return null;
     }
 
@@ -211,8 +263,12 @@ function scan_image_file_metadata(string $path, string $filename): ?array
         'width' => $width,
         'height' => $height,
         'mime' => $mime,
-        'display_width' => scan_image_orientation_swaps_axes($orientation) ? $height : $width,
-        'display_height' => scan_image_orientation_swaps_axes($orientation) ? $width : $height,
+        'display_width' => scan_image_orientation_swaps_axes($orientation)
+            ? $height
+            : $width,
+        'display_height' => scan_image_orientation_swaps_axes($orientation)
+            ? $width
+            : $height,
         'exif_orientation' => $orientation,
     ];
 }
@@ -231,16 +287,36 @@ function scan_image_file_metadata(string $path, string $filename): ?array
  * @param ?array $metadata Browser-provided source metadata.
  * @return array{width:int,height:int,mime:string,display_width:int,display_height:int,exif_orientation:int}|null Structured result data for the caller.
  */
-function scan_image_upload_fast_metadata(string $path, string $filename, ?array $metadata = null): ?array
-{
+function scan_image_upload_fast_metadata(
+    string $path,
+    string $filename,
+    ?array $metadata = null,
+): ?array {
     if (is_array($metadata)) {
         // $width and $height store orientation-aware dimensions decoded by the browser worker.
-        $width = (int) ($metadata['display_width'] ?? $metadata['width'] ?? $metadata['original_width'] ?? 0);
-        $height = (int) ($metadata['display_height'] ?? $metadata['height'] ?? $metadata['original_height'] ?? 0);
+        $width = (int) (
+            $metadata['display_width']
+            ?? $metadata['width']
+            ?? $metadata['original_width']
+            ?? 0
+        );
+        $height = (int) (
+            $metadata['display_height']
+            ?? $metadata['height']
+            ?? $metadata['original_height']
+            ?? 0
+        );
         $displayWidth = (int) ($metadata['display_width'] ?? $width);
         $displayHeight = (int) ($metadata['display_height'] ?? $height);
         $orientation = scan_image_upload_exif_orientation($metadata);
-        $mime = strtolower(trim((string) ($metadata['mime'] ?? $metadata['mime_type'] ?? $metadata['original_mime'] ?? '')));
+        $mime = strtolower(trim(
+            (string) (
+                $metadata['mime']
+                ?? $metadata['mime_type']
+                ?? $metadata['original_mime']
+                ?? ''
+            ),
+        ));
         if ($mime === '') {
             $mime = scan_image_upload_mime_from_extension($filename);
         }
@@ -250,7 +326,9 @@ function scan_image_upload_fast_metadata(string $path, string $filename, ?array 
                 'height' => $height,
                 'mime' => $mime,
                 'display_width' => $displayWidth > 0 ? $displayWidth : $width,
-                'display_height' => $displayHeight > 0 ? $displayHeight : $height,
+                'display_height' => $displayHeight > 0
+                    ? $displayHeight
+                    : $height,
                 'exif_orientation' => $orientation,
             ];
         }
@@ -262,7 +340,11 @@ function scan_image_upload_fast_metadata(string $path, string $filename, ?array 
 
     // $info stores basic image dimensions without reading EXIF/GPS payloads.
     $info = @getimagesize($path);
-    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+    if (
+        $info === false
+        || empty($info['mime'])
+        || !str_starts_with((string) $info['mime'], 'image/')
+    ) {
         return null;
     }
 
@@ -288,7 +370,12 @@ function scan_image_upload_fast_metadata(string $path, string $filename, ?array 
 function scan_image_upload_exif_orientation(array $metadata): int
 {
     $exif = is_array($metadata['exif'] ?? null) ? $metadata['exif'] : [];
-    $orientation = (int) ($metadata['exif_orientation'] ?? $metadata['original_exif_orientation'] ?? $exif['exif_orientation'] ?? 1);
+    $orientation = (int) (
+        $metadata['exif_orientation']
+        ?? $metadata['original_exif_orientation']
+        ?? $exif['exif_orientation']
+        ?? 1
+    );
     return $orientation >= 1 && $orientation <= 8 ? $orientation : 1;
 }
 
@@ -308,25 +395,71 @@ function scan_image_upload_exif_metadata(?array $metadata): array
         return [];
     }
 
-    $source = is_array($metadata['exif'] ?? null) ? $metadata['exif'] : $metadata;
+    $source = is_array($metadata['exif'] ?? null)
+        ? $metadata['exif']
+        : $metadata;
     $result = [
-        'exif_taken_at' => scan_image_upload_exif_datetime($source['exif_taken_at'] ?? null),
-        'exif_camera_make' => scan_image_upload_exif_string($source['exif_camera_make'] ?? null, 128),
-        'exif_camera_model' => scan_image_upload_exif_string($source['exif_camera_model'] ?? null, 128),
-        'exif_lens_model' => scan_image_upload_exif_string($source['exif_lens_model'] ?? null, 128),
-        'exif_focal_length' => scan_image_upload_exif_string($source['exif_focal_length'] ?? null, 64),
-        'exif_aperture' => scan_image_upload_exif_string($source['exif_aperture'] ?? null, 64),
-        'exif_exposure_time' => scan_image_upload_exif_string($source['exif_exposure_time'] ?? null, 64),
+        'exif_taken_at' => scan_image_upload_exif_datetime(
+            $source['exif_taken_at'] ?? null,
+        ),
+        'exif_camera_make' => scan_image_upload_exif_string(
+            $source['exif_camera_make'] ?? null,
+            128,
+        ),
+        'exif_camera_model' => scan_image_upload_exif_string(
+            $source['exif_camera_model'] ?? null,
+            128,
+        ),
+        'exif_lens_model' => scan_image_upload_exif_string(
+            $source['exif_lens_model'] ?? null,
+            128,
+        ),
+        'exif_focal_length' => scan_image_upload_exif_string(
+            $source['exif_focal_length'] ?? null,
+            64,
+        ),
+        'exif_aperture' => scan_image_upload_exif_string(
+            $source['exif_aperture'] ?? null,
+            64,
+        ),
+        'exif_exposure_time' => scan_image_upload_exif_string(
+            $source['exif_exposure_time'] ?? null,
+            64,
+        ),
         'exif_iso' => scan_image_upload_exif_iso($source['exif_iso'] ?? null),
-        'gps_lat' => scan_image_upload_exif_float($source['gps_lat'] ?? null, -90.0, 90.0, 7),
-        'gps_lng' => scan_image_upload_exif_float($source['gps_lng'] ?? null, -180.0, 180.0, 7),
-        'gps_altitude' => scan_image_upload_exif_float($source['gps_altitude'] ?? null, -11000.0, 100000.0, 2),
-        'gps_extracted_at' => scan_image_upload_exif_datetime($source['gps_extracted_at'] ?? null),
+        'gps_lat' => scan_image_upload_exif_float(
+            $source['gps_lat'] ?? null,
+            -90.0,
+            90.0,
+            7,
+        ),
+        'gps_lng' => scan_image_upload_exif_float(
+            $source['gps_lng'] ?? null,
+            -180.0,
+            180.0,
+            7,
+        ),
+        'gps_altitude' => scan_image_upload_exif_float(
+            $source['gps_altitude'] ?? null,
+            -11000.0,
+            100000.0,
+            2,
+        ),
+        'gps_extracted_at' => scan_image_upload_exif_datetime(
+            $source['gps_extracted_at'] ?? null,
+        ),
     ];
-    if ($result['gps_lat'] !== null && $result['gps_lng'] !== null && $result['gps_extracted_at'] === null) {
+    if (
+        $result['gps_lat'] !== null
+        && $result['gps_lng'] !== null
+        && $result['gps_extracted_at'] === null
+    ) {
         $result['gps_extracted_at'] = now_sql();
     }
-    return array_filter($result, static fn ($value): bool => $value !== null && $value !== '');
+    return array_filter(
+        $result,
+        static fn($value): bool => $value !== null && $value !== '',
+    );
 }
 
 /**
@@ -348,8 +481,8 @@ function scan_image_upload_exif_metadata_has_values(array $metadata): bool
 /**
  * Normalize an EXIF datetime supplied by the browser worker.
  *
- * @param mixed $value Raw datetime value.
- * @return string|null SQL datetime or null.
+ * @param string|int|float|bool|null $value Raw browser-worker datetime value, string-cast before validation.
+ * @return ?string Validated SQL datetime in `Y-m-d H:i:s` form, or null when invalid.
  */
 function scan_image_upload_exif_datetime(mixed $value): ?string
 {
@@ -357,10 +490,28 @@ function scan_image_upload_exif_datetime(mixed $value): ?string
     if ($value === '') {
         return null;
     }
-    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/', $value, $match) !== 1) {
+    if (
+        preg_match(
+            '/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/',
+            $value,
+            $match,
+        ) !== 1
+    ) {
         return null;
     }
-    return $match[1] . '-' . $match[2] . '-' . $match[3] . ' ' . $match[4] . ':' . $match[5] . ':' . $match[6];
+    return (
+        $match[1]
+            . '-'
+            . $match[2]
+            . '-'
+            . $match[3]
+            . ' '
+            . $match[4]
+            . ':'
+            . $match[5]
+            . ':'
+            . $match[6]
+    );
 }
 
 /**
@@ -400,14 +551,18 @@ function scan_image_upload_exif_iso(mixed $value): ?int
 /**
  * Normalize a bounded EXIF float value.
  *
- * @param mixed $value Raw numeric value.
- * @param float $min Minimum accepted value.
- * @param float $max Maximum accepted value.
- * @param int $decimals Decimal precision.
- * @return float|null Normalized value or null.
+ * @param string|int|float|bool|null $value Raw browser-worker numeric value checked with is_numeric().
+ * @param float $min Inclusive lower bound.
+ * @param float $max Inclusive upper bound.
+ * @param int $decimals Decimal places retained after rounding.
+ * @return ?float Rounded numeric value inside the bounds, or null when invalid or outside them.
  */
-function scan_image_upload_exif_float(mixed $value, float $min, float $max, int $decimals): ?float
-{
+function scan_image_upload_exif_float(
+    mixed $value,
+    float $min,
+    float $max,
+    int $decimals,
+): ?float {
     if ($value === '' || !is_numeric($value)) {
         return null;
     }
@@ -447,8 +602,10 @@ function scan_image_upload_mime_from_extension(string $filename): string
  * @param string $relativePath Normalized relative image path.
  * @return ?array Structured image row for the scanner, or null when absent.
  */
-function scan_gallery_image_row_by_path(int $galleryId, string $relativePath): ?array
-{
+function scan_gallery_image_row_by_path(
+    int $galleryId,
+    string $relativePath,
+): ?array {
     // $normalizedPath stores the canonical path used by the images table hash.
     $normalizedPath = normalize_relative_path($relativePath);
     if ($normalizedPath === '') {
@@ -456,7 +613,10 @@ function scan_gallery_image_row_by_path(int $galleryId, string $relativePath): ?
     }
 
     // The model performs an uncached lookup so newly written files are reconciled accurately.
-    return image_model_find_by_path_hash($galleryId, hash('sha256', $normalizedPath));
+    return image_model_find_by_path_hash($galleryId, hash(
+        'sha256',
+        $normalizedPath,
+    ));
 }
 
 /**
@@ -471,10 +631,21 @@ function scan_gallery_image_row_by_path(int $galleryId, string $relativePath): ?
  * @param array{upload_fast_path?:bool,metadata?:array<string,mixed>,...} $options Scanner options; upload_fast_path skips expensive metadata reads.
  * @return int Number of changed image rows.
  */
-function scan_gallery_image_file_entry(array $gallery, string $root, string $filePath, string $filename, bool $exifSchemaReady, int &$nextSortOrder, array $options = []): int
-{
+function scan_gallery_image_file_entry(
+    array $gallery,
+    string $root,
+    string $filePath,
+    string $filename,
+    bool $exifSchemaReady,
+    int &$nextSortOrder,
+    array $options = [],
+): int {
     $galleryId = (int) ($gallery['id'] ?? 0);
-    if ($galleryId <= 0 || !is_file($filePath) || !is_supported_image_path($filename)) {
+    if (
+        $galleryId <= 0
+        || !is_file($filePath)
+        || !is_supported_image_path($filename)
+    ) {
         return 0;
     }
 
@@ -487,10 +658,16 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
     // $fastUploadPath stores whether this reconciliation should avoid CPU-heavy metadata reads.
     $fastUploadPath = !empty($options['upload_fast_path']);
     // $providedMetadata stores optional browser-decoded source dimensions.
-    $providedMetadata = is_array($options['metadata'] ?? null) ? $options['metadata'] : null;
+    $providedMetadata = is_array($options['metadata'] ?? null)
+        ? $options['metadata']
+        : null;
     // $info stores source dimensions, MIME information, and display orientation.
     $info = $fastUploadPath
-        ? scan_image_upload_fast_metadata($filePath, $filename, $providedMetadata)
+        ? scan_image_upload_fast_metadata(
+            $filePath,
+            $filename,
+            $providedMetadata,
+        )
         : scan_image_file_metadata($filePath, $filename);
     if ($info === null) {
         return 0;
@@ -508,7 +685,7 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
             upload_ingestion_schema_status(),
             'image_scan.register_source',
             'New image registration requires the current gallery/image database schema. Run pending migrations first.',
-            'New image registration is temporarily unavailable because the database schema could not be verified. No image row was created.'
+            'New image registration is temporarily unavailable because the database schema could not be verified. No image row was created.',
         );
     }
     // $exifMetadata stores optional camera and GPS metadata when the schema supports it.
@@ -519,9 +696,14 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
             : extract_image_exif_metadata($filePath);
     }
     // $hasProvidedExif stores whether the fast upload path can fill EXIF/GPS columns without server parsing.
-    $hasProvidedExif = $fastUploadPath && $exifSchemaReady && scan_image_upload_exif_metadata_has_values($exifMetadata);
+    $hasProvidedExif =
+        $fastUploadPath
+        && $exifSchemaReady
+        && scan_image_upload_exif_metadata_has_values($exifMetadata);
     // $checksum stores the source hash when the caller requested a full scanner pass.
-    $checksum = $fastUploadPath ? ($existing['checksum_sha256'] ?? null) : (hash_file('sha256', $filePath) ?: null);
+    $checksum = $fastUploadPath
+        ? $existing['checksum_sha256'] ?? null
+        : (hash_file('sha256', $filePath) ?: null);
     if (!$existing) {
         $createdAt = now_sql();
         $updatedAt = now_sql();
@@ -545,11 +727,14 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
             $fields += [
                 'exif_taken_at' => $exifMetadata['exif_taken_at'] ?? null,
                 'exif_camera_make' => $exifMetadata['exif_camera_make'] ?? null,
-                'exif_camera_model' => $exifMetadata['exif_camera_model'] ?? null,
+                'exif_camera_model' =>
+                    $exifMetadata['exif_camera_model'] ?? null,
                 'exif_lens_model' => $exifMetadata['exif_lens_model'] ?? null,
-                'exif_focal_length' => $exifMetadata['exif_focal_length'] ?? null,
+                'exif_focal_length' =>
+                    $exifMetadata['exif_focal_length'] ?? null,
                 'exif_aperture' => $exifMetadata['exif_aperture'] ?? null,
-                'exif_exposure_time' => $exifMetadata['exif_exposure_time'] ?? null,
+                'exif_exposure_time' =>
+                    $exifMetadata['exif_exposure_time'] ?? null,
                 'exif_iso' => $exifMetadata['exif_iso'] ?? null,
                 'gps_lat' => $exifMetadata['gps_lat'] ?? null,
                 'gps_lng' => $exifMetadata['gps_lng'] ?? null,
@@ -565,8 +750,23 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
     }
 
     $fileSize = (int) (filesize($filePath) ?: 0);
-    $sourceChanged = (int) $existing['file_size'] !== $fileSize || (string) $existing['modified_at'] !== $modifiedAt;
-    if (!$sourceChanged && (($fastUploadPath && !$hasProvidedExif) || !$exifSchemaReady || (($existing['gps_extracted_at'] ?? null) !== null && !$hasProvidedExif))) {
+    $sourceChanged =
+        (int) $existing['file_size'] !== $fileSize
+        || (string) $existing['modified_at'] !== $modifiedAt;
+    if (
+        !$sourceChanged
+        && (
+            (
+                $fastUploadPath
+                && !$hasProvidedExif
+            )
+            || !$exifSchemaReady
+            || (
+                ($existing['gps_extracted_at'] ?? null) !== null
+                && !$hasProvidedExif
+            )
+        )
+    ) {
         return 0;
     }
 
@@ -581,18 +781,60 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
     ];
     if ($exifSchemaReady) {
         $fields += [
-            'exif_taken_at' => $fastUploadPath ? ($exifMetadata['exif_taken_at'] ?? $existing['exif_taken_at'] ?? null) : ($exifMetadata['exif_taken_at'] ?? null),
-            'exif_camera_make' => $fastUploadPath ? ($exifMetadata['exif_camera_make'] ?? $existing['exif_camera_make'] ?? null) : ($exifMetadata['exif_camera_make'] ?? null),
-            'exif_camera_model' => $fastUploadPath ? ($exifMetadata['exif_camera_model'] ?? $existing['exif_camera_model'] ?? null) : ($exifMetadata['exif_camera_model'] ?? null),
-            'exif_lens_model' => $fastUploadPath ? ($exifMetadata['exif_lens_model'] ?? $existing['exif_lens_model'] ?? null) : ($exifMetadata['exif_lens_model'] ?? null),
-            'exif_focal_length' => $fastUploadPath ? ($exifMetadata['exif_focal_length'] ?? $existing['exif_focal_length'] ?? null) : ($exifMetadata['exif_focal_length'] ?? null),
-            'exif_aperture' => $fastUploadPath ? ($exifMetadata['exif_aperture'] ?? $existing['exif_aperture'] ?? null) : ($exifMetadata['exif_aperture'] ?? null),
-            'exif_exposure_time' => $fastUploadPath ? ($exifMetadata['exif_exposure_time'] ?? $existing['exif_exposure_time'] ?? null) : ($exifMetadata['exif_exposure_time'] ?? null),
-            'exif_iso' => $fastUploadPath ? ($exifMetadata['exif_iso'] ?? $existing['exif_iso'] ?? null) : ($exifMetadata['exif_iso'] ?? null),
-            'gps_lat' => $fastUploadPath ? ($exifMetadata['gps_lat'] ?? $existing['gps_lat'] ?? null) : ($exifMetadata['gps_lat'] ?? null),
-            'gps_lng' => $fastUploadPath ? ($exifMetadata['gps_lng'] ?? $existing['gps_lng'] ?? null) : ($exifMetadata['gps_lng'] ?? null),
-            'gps_altitude' => $fastUploadPath ? ($exifMetadata['gps_altitude'] ?? $existing['gps_altitude'] ?? null) : ($exifMetadata['gps_altitude'] ?? null),
-            'gps_extracted_at' => $fastUploadPath ? ($exifMetadata['gps_extracted_at'] ?? $existing['gps_extracted_at'] ?? null) : ($exifMetadata['gps_extracted_at'] ?? null),
+            'exif_taken_at' => $fastUploadPath
+                ? $exifMetadata['exif_taken_at']
+                ?? $existing['exif_taken_at']
+                ?? null
+                : $exifMetadata['exif_taken_at'] ?? null,
+            'exif_camera_make' => $fastUploadPath
+                ? $exifMetadata['exif_camera_make']
+                ?? $existing['exif_camera_make']
+                ?? null
+                : $exifMetadata['exif_camera_make'] ?? null,
+            'exif_camera_model' => $fastUploadPath
+                ? $exifMetadata['exif_camera_model']
+                ?? $existing['exif_camera_model']
+                ?? null
+                : $exifMetadata['exif_camera_model'] ?? null,
+            'exif_lens_model' => $fastUploadPath
+                ? $exifMetadata['exif_lens_model']
+                ?? $existing['exif_lens_model']
+                ?? null
+                : $exifMetadata['exif_lens_model'] ?? null,
+            'exif_focal_length' => $fastUploadPath
+                ? $exifMetadata['exif_focal_length']
+                ?? $existing['exif_focal_length']
+                ?? null
+                : $exifMetadata['exif_focal_length'] ?? null,
+            'exif_aperture' => $fastUploadPath
+                ? $exifMetadata['exif_aperture']
+                ?? $existing['exif_aperture']
+                ?? null
+                : $exifMetadata['exif_aperture'] ?? null,
+            'exif_exposure_time' => $fastUploadPath
+                ? $exifMetadata['exif_exposure_time']
+                ?? $existing['exif_exposure_time']
+                ?? null
+                : $exifMetadata['exif_exposure_time'] ?? null,
+            'exif_iso' => $fastUploadPath
+                ? $exifMetadata['exif_iso'] ?? $existing['exif_iso'] ?? null
+                : $exifMetadata['exif_iso'] ?? null,
+            'gps_lat' => $fastUploadPath
+                ? $exifMetadata['gps_lat'] ?? $existing['gps_lat'] ?? null
+                : $exifMetadata['gps_lat'] ?? null,
+            'gps_lng' => $fastUploadPath
+                ? $exifMetadata['gps_lng'] ?? $existing['gps_lng'] ?? null
+                : $exifMetadata['gps_lng'] ?? null,
+            'gps_altitude' => $fastUploadPath
+                ? $exifMetadata['gps_altitude']
+                ?? $existing['gps_altitude']
+                ?? null
+                : $exifMetadata['gps_altitude'] ?? null,
+            'gps_extracted_at' => $fastUploadPath
+                ? $exifMetadata['gps_extracted_at']
+                ?? $existing['gps_extracted_at']
+                ?? null
+                : $exifMetadata['gps_extracted_at'] ?? null,
         ];
     }
     image_model_update_scan_row((int) $existing['id'], $fields, now_sql());
@@ -607,18 +849,27 @@ function scan_gallery_image_file_entry(array $gallery, string $root, string $fil
 /**
  * Refresh gallery-level derived data after scanner changes.
  *
- * @param array $gallery Gallery row.
+ * @param array{id:int|string,folder_path?:string|null,title?:string|null,cover_image?:string|null} $gallery Gallery identity and fields used to refresh its derived cover and paths.
  * @param int $count Number of changed image rows.
- * @param array $options Refresh options for targeted upload workflows.
+ * @param array{public_path_scope?:string} $options Optional targeted public-path refresh scope.
+ * @return void Refreshes gallery cover and public paths affected by scanner changes.
  */
-function scan_gallery_refresh_after_changes(array $gallery, int $count, array $options = []): void
-{
+function scan_gallery_refresh_after_changes(
+    array $gallery,
+    int $count,
+    array $options = [],
+): void {
     apply_gallery_cover_from_sidecar($gallery);
     ensure_gallery_cover((int) $gallery['id']);
     if ($count > 0 && public_path_schema_ready()) {
         // $publicPathScope stores whether a targeted upload can avoid global URL regeneration.
         $publicPathScope = (string) ($options['public_path_scope'] ?? 'all');
-        if ($publicPathScope === 'gallery_images' && function_exists('Gallery\Services\regenerate_gallery_image_public_slugs')) {
+        if (
+            $publicPathScope === 'gallery_images'
+            && function_exists(
+                'Gallery\Services\regenerate_gallery_image_public_slugs',
+            )
+        ) {
             regenerate_gallery_image_public_slugs((int) $gallery['id']);
         } else {
             regenerate_public_paths();
@@ -677,10 +928,20 @@ function scan_gallery_images_owned(int $galleryId): int
     // manually arranged drag-and-drop order.
     $nextSortOrder = next_gallery_image_sort_order($galleryId);
     foreach (new DirectoryIterator($root) as $file) {
-        if (!$file->isFile() || !is_supported_image_path($file->getFilename())) {
+        if (
+            !$file->isFile()
+            || !is_supported_image_path($file->getFilename())
+        ) {
             continue;
         }
-        $count += scan_gallery_image_file_entry($gallery, $root, $file->getPathname(), $file->getFilename(), $exifSchemaReady, $nextSortOrder);
+        $count += scan_gallery_image_file_entry(
+            $gallery,
+            $root,
+            $file->getPathname(),
+            $file->getFilename(),
+            $exifSchemaReady,
+            $nextSortOrder,
+        );
     }
     scan_gallery_refresh_after_changes($gallery, $count);
     return $count;
@@ -718,8 +979,10 @@ function scan_gallery_selected_images(int $galleryId, array $relativePaths): int
  * @return int Number of changed image rows.
  * @author Rudolf Klusal
  */
-function scan_gallery_selected_images_owned(int $galleryId, array $relativePaths): int
-{
+function scan_gallery_selected_images_owned(
+    int $galleryId,
+    array $relativePaths,
+): int {
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         return 0;
@@ -740,22 +1003,41 @@ function scan_gallery_selected_images_owned(int $galleryId, array $relativePaths
         } catch (Throwable) {
             continue;
         }
-        if ($relative === '' || isset($seen[$relative]) || !is_supported_image_path($relative)) {
+        if (
+            $relative === ''
+            || isset($seen[$relative])
+            || !is_supported_image_path($relative)
+        ) {
             continue;
         }
         $seen[$relative] = true;
-        $candidate = $realRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $candidate =
+            $realRoot
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         $realPath = realpath($candidate);
         if (!is_string($realPath) || !is_file($realPath)) {
             continue;
         }
-        if ($realPath !== $realRoot && !str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR)) {
+        if (
+            $realPath !== $realRoot
+            && !str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR)
+        ) {
             continue;
         }
-        $count += scan_gallery_image_file_entry($gallery, $realRoot, $realPath, basename($relative), $exifSchemaReady, $nextSortOrder);
+        $count += scan_gallery_image_file_entry(
+            $gallery,
+            $realRoot,
+            $realPath,
+            basename($relative),
+            $exifSchemaReady,
+            $nextSortOrder,
+        );
     }
 
-    scan_gallery_refresh_after_changes($gallery, $count, ['public_path_scope' => 'gallery_images']);
+    scan_gallery_refresh_after_changes($gallery, $count, [
+        'public_path_scope' => 'gallery_images',
+    ]);
     return $count;
 }
 
@@ -771,11 +1053,18 @@ function scan_gallery_selected_images_owned(int $galleryId, array $relativePaths
  * @param array<string,array<string,mixed>> $metadataByRelativePath Prepared dimensions and source metadata keyed by selected relative path.
  * @return int Number of changed image rows.
  */
-function scan_gallery_selected_uploaded_images(int $galleryId, array $relativePaths, array $metadataByRelativePath = []): int
-{
+function scan_gallery_selected_uploaded_images(
+    int $galleryId,
+    array $relativePaths,
+    array $metadataByRelativePath = [],
+): int {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return scan_gallery_selected_uploaded_images_owned($galleryId, $relativePaths, $metadataByRelativePath);
+        return scan_gallery_selected_uploaded_images_owned(
+            $galleryId,
+            $relativePaths,
+            $metadataByRelativePath,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -793,8 +1082,11 @@ function scan_gallery_selected_uploaded_images(int $galleryId, array $relativePa
  * @return int Number of changed image rows.
  * @author Rudolf Klusal
  */
-function scan_gallery_selected_uploaded_images_owned(int $galleryId, array $relativePaths, array $metadataByRelativePath = []): int
-{
+function scan_gallery_selected_uploaded_images_owned(
+    int $galleryId,
+    array $relativePaths,
+    array $metadataByRelativePath = [],
+): int {
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
         return 0;
@@ -815,26 +1107,48 @@ function scan_gallery_selected_uploaded_images_owned(int $galleryId, array $rela
         } catch (Throwable) {
             continue;
         }
-        if ($relative === '' || isset($seen[$relative]) || !is_supported_image_path($relative)) {
+        if (
+            $relative === ''
+            || isset($seen[$relative])
+            || !is_supported_image_path($relative)
+        ) {
             continue;
         }
         $seen[$relative] = true;
-        $candidate = $realRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
+        $candidate =
+            $realRoot
+            . DIRECTORY_SEPARATOR
+            . str_replace('/', DIRECTORY_SEPARATOR, $relative);
         $realPath = realpath($candidate);
         if (!is_string($realPath) || !is_file($realPath)) {
             continue;
         }
-        if ($realPath !== $realRoot && !str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR)) {
+        if (
+            $realPath !== $realRoot
+            && !str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR)
+        ) {
             continue;
         }
-        $metadata = is_array($metadataByRelativePath[$relative] ?? null) ? $metadataByRelativePath[$relative] : null;
-        $count += scan_gallery_image_file_entry($gallery, $realRoot, $realPath, basename($relative), $exifSchemaReady, $nextSortOrder, [
-            'upload_fast_path' => true,
-            'metadata' => $metadata,
-        ]);
+        $metadata = is_array($metadataByRelativePath[$relative] ?? null)
+            ? $metadataByRelativePath[$relative]
+            : null;
+        $count += scan_gallery_image_file_entry(
+            $gallery,
+            $realRoot,
+            $realPath,
+            basename($relative),
+            $exifSchemaReady,
+            $nextSortOrder,
+            [
+                'upload_fast_path' => true,
+                'metadata' => $metadata,
+            ],
+        );
     }
 
-    scan_gallery_refresh_after_changes($gallery, $count, ['public_path_scope' => 'gallery_images']);
+    scan_gallery_refresh_after_changes($gallery, $count, [
+        'public_path_scope' => 'gallery_images',
+    ]);
     return $count;
 }
 
@@ -882,4 +1196,3 @@ function scan_all_imported_gallery_images(): array
     }
     return ['galleries' => $scanned, 'images' => $changed];
 }
-

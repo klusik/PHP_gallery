@@ -30,7 +30,12 @@ function php_tokens(string $source): array
         $id = is_array($token) ? $token[0] : 0;
         $text = is_array($token) ? $token[1] : $token;
         if ($id !== T_WHITESPACE) {
-            $result[] = ['id' => $id, 'text' => $text, 'line' => $line, 'offset' => $offset];
+            $result[] = [
+                'id' => $id,
+                'text' => $text,
+                'line' => $line,
+                'offset' => $offset,
+            ];
         }
         $offset += strlen($text);
         $line += substr_count($text, "\n");
@@ -72,11 +77,28 @@ function delimiter_pairs(array $tokens): array
  */
 function attached_doc(array $tokens, int $index, array $pairs): string
 {
-    $modifiers = ['public', 'protected', 'private', 'static', 'final', 'abstract', 'readonly', 'export', 'default', 'async', 'get', 'set', '*'];
+    $modifiers = [
+        'public',
+        'protected',
+        'private',
+        'static',
+        'final',
+        'abstract',
+        'readonly',
+        'export',
+        'default',
+        'async',
+        'get',
+        'set',
+        '*',
+    ];
     for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
         $token = $tokens[$cursor];
         if ($token['id'] === T_DOC_COMMENT) {
-            if (str_contains($token['text'], 'Project: PHP Gallery') && str_contains($token['text'], 'File:')) {
+            if (
+                str_contains($token['text'], 'Project: PHP Gallery')
+                && str_contains($token['text'], 'File:')
+            ) {
                 return '';
             }
             return $token['text'];
@@ -84,7 +106,11 @@ function attached_doc(array $tokens, int $index, array $pairs): string
         if (in_array(strtolower($token['text']), $modifiers, true)) {
             continue;
         }
-        if ($token['text'] === ']' && isset($pairs[$cursor]) && $tokens[$pairs[$cursor]]['text'] === '#[') {
+        if (
+            $token['text'] === ']'
+            && isset($pairs[$cursor])
+            && $tokens[$pairs[$cursor]]['text'] === '#['
+        ) {
             $cursor = $pairs[$cursor];
             continue;
         }
@@ -130,10 +156,31 @@ function declaration_start(array $tokens, int $start, array $pairs): int
 {
     while ($start > 0) {
         $previous = $tokens[$start - 1];
-        if (in_array(strtolower($previous['text']), ['public', 'protected', 'private', 'static', 'final', 'abstract', 'readonly', 'export', 'default', 'async', 'get', 'set', '*'], true)) {
+        if (in_array(
+            strtolower($previous['text']),
+            [
+                'public',
+                'protected',
+                'private',
+                'static',
+                'final',
+                'abstract',
+                'readonly',
+                'export',
+                'default',
+                'async',
+                'get',
+                'set',
+                '*',
+            ],
+            true,
+        )) {
             $start--;
-        } elseif ($previous['text'] === ']' && isset($pairs[$start - 1])
-            && $tokens[$pairs[$start - 1]]['text'] === '#[') {
+        } elseif (
+            $previous['text'] === ']'
+            && isset($pairs[$start - 1])
+            && $tokens[$pairs[$start - 1]]['text'] === '#['
+        ) {
             $start = $pairs[$start - 1];
         } else {
             break;
@@ -155,8 +202,15 @@ function declaration_end(array $tokens, int $start, array $pairs): int
         return $pairs[$start];
     }
     for ($cursor = $start; $cursor < count($tokens); $cursor++) {
-        if (in_array($tokens[$cursor]['text'], [';', ',', ')', ']', '}'], true)) {
-            return max($start, $cursor - ($tokens[$cursor]['text'] === ';' ? 0 : 1));
+        if (in_array(
+            $tokens[$cursor]['text'],
+            [';', ',', ')', ']', '}'],
+            true,
+        )) {
+            return max(
+                $start,
+                $cursor - ($tokens[$cursor]['text'] === ';' ? 0 : 1),
+            );
         }
         if (isset($pairs[$cursor]) && $pairs[$cursor] > $cursor) {
             $cursor = $pairs[$cursor];
@@ -175,20 +229,51 @@ function declaration_end(array $tokens, int $start, array $pairs): int
  * @param list<array{name:string,type:string}> $parameters Declared parameters.
  * @return list<string> Names unused by this body; dynamic introspection yields none.
  */
-function unused_parameter_names(array $tokens, int $start, int $end, array $parameters): array
-{
+function unused_parameter_names(
+    array $tokens,
+    int $start,
+    int $end,
+    array $parameters,
+): array {
     $unused = array_fill_keys(array_column($parameters, 'name'), true);
     for ($index = $start; $index <= $end && isset($tokens[$index]); $index++) {
         $token = $tokens[$index];
         if ($token['id'] === T_VARIABLE) {
             unset($unused[ltrim($token['text'], '$')]);
         }
-        if ($token['text'] === '$' || in_array($token['id'], [T_EVAL, T_DOLLAR_OPEN_CURLY_BRACES], true)) {
+        if (
+            $token['text'] === '$'
+            || in_array(
+                $token['id'],
+                [T_EVAL, T_DOLLAR_OPEN_CURLY_BRACES],
+                true,
+            )
+        ) {
             return [];
         }
-        if (in_array($token['id'], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE], true)) {
+        if (in_array(
+            $token['id'],
+            [
+                T_STRING,
+                T_NAME_QUALIFIED,
+                T_NAME_FULLY_QUALIFIED,
+                T_NAME_RELATIVE,
+            ],
+            true,
+        )) {
             $parts = explode('\\', strtolower($token['text']));
-            if (in_array(end($parts), ['func_get_args', 'func_get_arg', 'get_defined_vars', 'compact', 'debug_backtrace', 'debug_print_backtrace'], true)) {
+            if (in_array(
+                end($parts),
+                [
+                    'func_get_args',
+                    'func_get_arg',
+                    'get_defined_vars',
+                    'compact',
+                    'debug_backtrace',
+                    'debug_print_backtrace',
+                ],
+                true,
+            )) {
                 return [];
             }
         }
@@ -217,20 +302,38 @@ function php_declarations(string $source): array
     for ($index = 0; $index < $count; $index++) {
         $token = $tokens[$index];
         if ($token['text'] === '{') {
-            $scope[] = isset($classBodies[$index]) ? 'class' : (isset($functionBodies[$index]) ? 'function' : 'block');
+            $scope[] = isset($classBodies[$index])
+                ? 'class'
+                : (isset($functionBodies[$index]) ? 'function' : 'block');
         } elseif ($token['text'] === '}') {
             array_pop($scope);
         }
-        if (in_array($token['id'], [T_CLASS, T_INTERFACE, T_TRAIT, T_ENUM], true)
-            && ($tokens[$index - 1]['text'] ?? '') !== '::') {
-            $name = ($tokens[$index + 1]['id'] ?? 0) === T_STRING ? $tokens[$index + 1]['text'] : '(anonymous class)';
-            $records[] = ['kind' => strtolower(substr(token_name($token['id']), 2)), 'name' => $name, 'line' => $token['line'],
-                'params' => [], 'return_type' => '', 'doc' => attached_doc($tokens, $index, $pairs),
-                'start_token' => declaration_start($tokens, $index, $pairs), 'end_token' => $index];
+        if (
+            in_array(
+                $token['id'],
+                [T_CLASS, T_INTERFACE, T_TRAIT, T_ENUM],
+                true,
+            )
+            && ($tokens[$index - 1]['text'] ?? '') !== '::'
+        ) {
+            $name = ($tokens[$index + 1]['id'] ?? 0) === T_STRING
+                ? $tokens[$index + 1]['text']
+                : '(anonymous class)';
+            $records[] = [
+                'kind' => strtolower(substr(token_name($token['id']), 2)),
+                'name' => $name,
+                'line' => $token['line'],
+                'params' => [],
+                'return_type' => '',
+                'doc' => attached_doc($tokens, $index, $pairs),
+                'start_token' => declaration_start($tokens, $index, $pairs),
+                'end_token' => $index,
+            ];
             for ($cursor = $index + 1; $cursor < $count; $cursor++) {
                 if ($tokens[$cursor]['text'] === '{') {
                     $classBodies[$cursor] = true;
-                    $records[count($records) - 1]['end_token'] = $pairs[$cursor] ?? $cursor;
+                    $records[count($records) - 1]['end_token'] =
+                        $pairs[$cursor] ?? $cursor;
                     break;
                 }
                 if (isset($pairs[$cursor]) && $pairs[$cursor] > $cursor) {
@@ -240,12 +343,23 @@ function php_declarations(string $source): array
         }
         if ($token['id'] === T_VARIABLE && end($scope) === 'class') {
             $start = $index;
-            while ($start > 0 && !in_array($tokens[$start - 1]['text'], [';', '{', '}'], true) && $tokens[$start - 1]['id'] !== T_DOC_COMMENT) {
+            while (
+                $start > 0
+                && !in_array($tokens[$start - 1]['text'], [';', '{', '}'], true)
+                && $tokens[$start - 1]['id'] !== T_DOC_COMMENT
+            ) {
                 $start--;
             }
-            $records[] = ['kind' => 'property', 'name' => $token['text'], 'line' => $token['line'],
-                'params' => [], 'return_type' => '', 'doc' => attached_doc($tokens, $start, $pairs),
-                'start_token' => $start, 'end_token' => declaration_end($tokens, $index, $pairs)];
+            $records[] = [
+                'kind' => 'property',
+                'name' => $token['text'],
+                'line' => $token['line'],
+                'params' => [],
+                'return_type' => '',
+                'doc' => attached_doc($tokens, $start, $pairs),
+                'start_token' => $start,
+                'end_token' => declaration_end($tokens, $index, $pairs),
+            ];
         }
         if (!in_array($token['id'], [T_FUNCTION, T_FN], true)) {
             continue;
@@ -268,23 +382,49 @@ function php_declarations(string $source): array
                 if ($part['text'] === '#[') {
                     $attributeDepth++;
                 } elseif ($attributeDepth > 0) {
-                    $attributeDepth += $part['text'] === '[' ? 1 : ($part['text'] === ']' ? -1 : 0);
+                    $attributeDepth += $part['text'] === '['
+                        ? 1
+                        : ($part['text'] === ']' ? -1 : 0);
                 } elseif ($part['id'] === T_VARIABLE) {
-                    $params[] = ['name' => ltrim($part['text'], '$'), 'type' => $type];
+                    $params[] = [
+                        'name' => ltrim($part['text'], '$'),
+                        'type' => $type,
+                    ];
                     break;
-                } elseif (!in_array($part['text'], ['public', 'protected', 'private', 'readonly', '&', '...'], true)
-                    && !in_array($part['id'], [T_COMMENT, T_DOC_COMMENT], true)) {
+                } elseif (
+                    !in_array(
+                        $part['text'],
+                        [
+                            'public',
+                            'protected',
+                            'private',
+                            'readonly',
+                            '&',
+                            '...',
+                        ],
+                        true,
+                    )
+                    && !in_array($part['id'], [T_COMMENT, T_DOC_COMMENT], true)
+                ) {
                     $type .= $part['text'];
                 }
             }
         }
         $cursor = $pairs[$open] + 1;
-        if (($tokens[$cursor]['id'] ?? 0) === T_USE && ($tokens[$cursor + 1]['text'] ?? '') === '(') {
-            $cursor = ($pairs[$cursor + 1] ?? $cursor + 1) + 1;
+        if (
+            ($tokens[$cursor]['id'] ?? 0) === T_USE
+            && ($tokens[$cursor + 1]['text'] ?? '') === '('
+        ) {
+            $cursor = ($pairs[$cursor + 1] ?? ($cursor + 1)) + 1;
         }
         $return = '';
         if (($tokens[$cursor]['text'] ?? '') === ':') {
-            for ($cursor++; $cursor < $count && !in_array($tokens[$cursor]['text'], ['{', ';', '=>'], true); $cursor++) {
+            for (
+                $cursor++;
+                $cursor < $count
+                && !in_array($tokens[$cursor]['text'], ['{', ';', '=>'], true);
+                $cursor++
+            ) {
                 $return .= $tokens[$cursor]['text'];
             }
         }
@@ -296,19 +436,38 @@ function php_declarations(string $source): array
             if (($tokens[$index - 1]['text'] ?? '') === 'static') {
                 $docStart--;
             }
-            if (($tokens[$docStart - 1]['text'] ?? '') === '=' && ($tokens[$docStart - 2]['id'] ?? 0) === T_VARIABLE) {
+            if (
+                ($tokens[$docStart - 1]['text'] ?? '') === '='
+                && ($tokens[$docStart - 2]['id'] ?? 0) === T_VARIABLE
+            ) {
                 $docStart -= 2;
                 $name = $tokens[$docStart]['text'];
             }
         }
-        $bodyStart = $cursor + (($tokens[$cursor]['text'] ?? '') === '=>' ? 1 : 0);
+        $bodyStart =
+            $cursor + (($tokens[$cursor]['text'] ?? '') === '=>' ? 1 : 0);
         $bodyEnd = declaration_end($tokens, $bodyStart, $pairs);
-        $records[] = ['kind' => $named ? 'callable' : 'callback', 'language' => 'php', 'name' => $name, 'line' => $token['line'],
-            'params' => $params, 'return_type' => $return, 'doc' => attached_doc($tokens, $docStart, $pairs),
+        $records[] = [
+            'kind' => $named ? 'callable' : 'callback',
+            'language' => 'php',
+            'name' => $name,
+            'line' => $token['line'],
+            'params' => $params,
+            'return_type' => $return,
+            'doc' => attached_doc($tokens, $docStart, $pairs),
             'start_token' => declaration_start($tokens, $docStart, $pairs),
             'end_token' => $bodyEnd,
-            'unused_params' => strtolower($name) === '__construct' || ($tokens[$bodyStart]['text'] ?? '') === ';'
-                ? [] : unused_parameter_names($tokens, $bodyStart, $bodyEnd, $params)];
+            'unused_params' =>
+                strtolower($name) === '__construct'
+                || ($tokens[$bodyStart]['text'] ?? '') === ';'
+                    ? []
+                    : unused_parameter_names(
+                        $tokens,
+                        $bodyStart,
+                        $bodyEnd,
+                        $params,
+                    ),
+        ];
         // Signature variables are not class properties; promoted fields remain
         // represented by their constructor parameter contracts.
         $index = $cursor - 1;
@@ -327,18 +486,32 @@ function php_declarations(string $source): array
 function declaration_issues(array $record): array
 {
     $typing = $record['type_issues'] ?? [];
-    if (($record['language'] ?? '') === 'php' && in_array($record['kind'], ['callable', 'callback'], true)) {
+    if (
+        ($record['language'] ?? '') === 'php'
+        && in_array($record['kind'], ['callable', 'callback'], true)
+    ) {
         foreach ($record['params'] as $parameter) {
             if ($parameter['type'] === '') {
                 $typing[] = 'typing.parameter_missing:' . $parameter['name'];
             }
         }
         // PHP forbids return declarations on constructors/destructors.
-        if ($record['return_type'] === '' && !in_array(strtolower($record['name']), ['__construct', '__destruct'], true)) {
+        if (
+            $record['return_type'] === ''
+            && !in_array(
+                strtolower($record['name']),
+                ['__construct', '__destruct'],
+                true,
+            )
+        ) {
             $typing[] = 'typing.return_missing';
         }
     }
-    if (!in_array($record['kind'], ['callable', 'function', 'class', 'interface', 'trait', 'enum'], true)) {
+    if (!in_array(
+        $record['kind'],
+        ['callable', 'function', 'class', 'interface', 'trait', 'enum'],
+        true,
+    )) {
         return array_values(array_unique($typing));
     }
     $doc = $record['doc'];
@@ -347,12 +520,22 @@ function declaration_issues(array $record): array
     }
     $clean = preg_replace('/^\s*\/?\*+\/?\s?/m', '', $doc) ?? $doc;
     if (($record['language'] ?? '') === 'script') {
-        $clean = preg_replace('/^\s*(?:<#|#>|#|\.SYNOPSIS)\s*/mi', '', $doc) ?? $doc;
+        $clean =
+            preg_replace('/^\s*(?:<#|#>|#|\.SYNOPSIS)\s*/mi', '', $doc) ?? $doc;
     }
     $summary = trim(explode('@', $clean, 2)[0]);
     $issues = $typing;
-    if (strlen($summary) < 12 || preg_match('/^(?:handles? (?:this|the) operation|todo|fixme|documentation)\W*$/i', $summary) === 1
-        || preg_match('/^Handles .+ logic for the gallery application\./i', $summary) === 1) {
+    if (
+        strlen($summary) < 12
+        || preg_match(
+            '/^(?:handles? (?:this|the) operation|todo|fixme|documentation)\W*$/i',
+            $summary,
+        ) === 1
+        || preg_match(
+            '/^Handles .+ logic for the gallery application\./i',
+            $summary,
+        ) === 1
+    ) {
         $issues[] = 'documentation.summary';
     }
     if (($record['language'] ?? '') === 'script') {
@@ -360,20 +543,31 @@ function declaration_issues(array $record): array
         // result and execution contracts remain explicit manual coverage.
         return $issues;
     }
-    if (in_array($record['kind'], ['class', 'interface', 'trait', 'enum'], true)) {
+    if (in_array(
+        $record['kind'],
+        ['class', 'interface', 'trait', 'enum'],
+        true,
+    )) {
         return $issues;
     }
     $parameters = $record['params'];
     $parameterTags = documentation_tags($clean, 'param');
     $expected = array_column($parameters, 'name');
     foreach ($parameters as $position => &$parameter) {
-        if ($parameter['name'] !== '(pattern)' || !isset($parameter['tuple_arity'], $parameterTags[$position])) {
+        if (
+            $parameter['name'] !== '(pattern)'
+            || !isset($parameter['tuple_arity'], $parameterTags[$position])
+        ) {
             continue;
         }
         $aggregate = documented_parameter($parameterTags[$position], $expected);
-        if ($aggregate['name'] !== '' && !str_contains($aggregate['name'], '.')
+        if (
+            $aggregate['name'] !== ''
+            && !str_contains($aggregate['name'], '.')
             && !in_array($aggregate['name'], $expected, true)
-            && documented_tuple_arity($aggregate['type']) === $parameter['tuple_arity']) {
+            && documented_tuple_arity($aggregate['type'])
+                === $parameter['tuple_arity']
+        ) {
             $parameter['name'] = $aggregate['name']; // Positional JSDoc name describes the whole destructured input.
             $expected[$position] = $aggregate['name'];
         }
@@ -391,7 +585,11 @@ function declaration_issues(array $record): array
             $issues[] = 'parameter.duplicate:' . $name;
         }
         $documented[$name] = $parameterDoc['type'];
-        if ($parameterDoc['type'] === '' || documented_return('{' . $parameterDoc['type'] . '}')['type'] === '') {
+        if (
+            $parameterDoc['type'] === ''
+            || documented_return('{' . $parameterDoc['type'] . '}')['type']
+                === ''
+        ) {
             $issues[] = 'parameter.type:' . $name;
         }
         if ($parameterDoc['description'] === '') {
@@ -406,7 +604,13 @@ function declaration_issues(array $record): array
         }
     }
     foreach ($parameters as $parameter) {
-        if (isset($documented[$parameter['name']]) && primitive_type_mismatch($parameter['type'], $documented[$parameter['name']])) {
+        if (
+            isset($documented[$parameter['name']])
+            && primitive_type_mismatch(
+                $parameter['type'],
+                $documented[$parameter['name']],
+            )
+        ) {
             $issues[] = 'parameter.type_mismatch:' . $parameter['name'];
         }
     }
@@ -415,7 +619,10 @@ function declaration_issues(array $record): array
             $issues[] = 'parameter.extra:' . $name;
         }
     }
-    $returnTags = array_merge(documentation_tags($clean, 'return'), documentation_tags($clean, 'returns'));
+    $returnTags = array_merge(
+        documentation_tags($clean, 'return'),
+        documentation_tags($clean, 'returns'),
+    );
     if ($returnTags === [] || trim($returnTags[0]) === '') {
         $issues[] = 'return.missing';
     } elseif (primitive_type_mismatch($record['return_type'], $returnTags[0])) {
@@ -428,10 +635,20 @@ function declaration_issues(array $record): array
         $return = documented_return($tag);
         if ($return['type'] === '') {
             $issues[] = 'return.type';
-        } elseif ($return['description'] === '' && !in_array(strtolower($return['type']), ['void', 'never', 'none'], true)) {
+        } elseif (
+            $return['description'] === ''
+            && !in_array(
+                strtolower($return['type']),
+                ['void', 'never', 'none'],
+                true,
+            )
+        ) {
             $issues[] = 'return.description';
         }
-        if (($record['language'] ?? '') === 'javascript' && !str_starts_with(trim($tag), '{')) {
+        if (
+            ($record['language'] ?? '') === 'javascript'
+            && !str_starts_with(trim($tag), '{')
+        ) {
             $issues[] = 'return.format';
         }
     }
@@ -443,7 +660,10 @@ function declaration_issues(array $record): array
         }
     }
     foreach ($documented as $name => $type) {
-        if (unspecified_shape($type) && !documented_unused_opaque_parameter($record, $name, $type)) {
+        if (
+            unspecified_shape($type)
+            && !documented_unused_opaque_parameter($record, $name, $type)
+        ) {
             $issues[] = 'shape.unspecified';
         }
     }
@@ -481,17 +701,29 @@ function documented_return(string $tag): array
         } elseif (in_array($character, ['{', '[', '(', '<'], true)) {
             $stack[] = $character;
         } elseif (in_array($character, ['}', ']', ')', '>'], true)) {
-            if (array_pop($stack) !== ['}' => '{', ']' => '[', ')' => '(', '>' => '<'][$character]) {
+            if (
+                array_pop($stack)
+                !== ['}' => '{', ']' => '[', ')' => '(', '>' => '<'][$character]
+            ) {
                 return ['type' => '', 'description' => ''];
             }
             if ($braced && $stack === []) {
-                return ['type' => trim(substr($tag, 1, $index - 1)), 'description' => trim(substr($tag, $index + 1))];
+                return [
+                    'type' => trim(substr($tag, 1, $index - 1)),
+                    'description' => trim(substr($tag, $index + 1)),
+                ];
             }
         } elseif ($stack === [] && ctype_space($character)) {
-            return ['type' => substr($tag, 0, $index), 'description' => trim(substr($tag, $index + 1))];
+            return [
+                'type' => substr($tag, 0, $index),
+                'description' => trim(substr($tag, $index + 1)),
+            ];
         }
     }
-    return ['type' => $stack === [] && $quote === null ? $tag : '', 'description' => ''];
+    return [
+        'type' => $stack === [] && $quote === null ? $tag : '',
+        'description' => '',
+    ];
 }
 
 /**
@@ -508,13 +740,15 @@ function documented_tuple_arity(string $type): ?int
     $depth = 0;
     $members = [];
     $start = 1;
-    for ($index = 1; $index < strlen($type) - 1; $index++) {
+    for ($index = 1; $index < (strlen($type) - 1); $index++) {
         $character = $type[$index];
         if ($character === ',' && $depth === 0) {
             $members[] = trim(substr($type, $start, $index - $start));
             $start = $index + 1;
         } else {
-            $depth += str_contains('<([{', $character) ? 1 : (str_contains('>)]}', $character) ? -1 : 0);
+            $depth += str_contains('<([{', $character)
+                ? 1
+                : (str_contains('>)]}', $character) ? -1 : 0);
             if ($depth < 0) {
                 return null;
             }
@@ -522,7 +756,13 @@ function documented_tuple_arity(string $type): ?int
     }
     $members[] = trim(substr($type, $start, strlen($type) - $start - 1));
     foreach ($members as $member) {
-        if ($depth !== 0 || $member === '' || str_starts_with($member, '...') || str_ends_with($member, '?') || unspecified_shape($member)) {
+        if (
+            $depth !== 0
+            || $member === ''
+            || str_starts_with($member, '...')
+            || str_ends_with($member, '?')
+            || unspecified_shape($member)
+        ) {
             return null;
         }
     }
@@ -538,15 +778,26 @@ function documented_tuple_arity(string $type): ?int
  * @param string $type Explicit parameter documentation type.
  * @return bool Whether mixed is the complete opaque contract for this unused value.
  */
-function documented_unused_opaque_parameter(array $record, string $name, string $type): bool
-{
-    if (strtolower(trim($type)) !== 'mixed' || !in_array($name, $record['unused_params'] ?? [], true)) {
+function documented_unused_opaque_parameter(
+    array $record,
+    string $name,
+    string $type,
+): bool {
+    if (
+        strtolower(trim($type)) !== 'mixed'
+        || !in_array($name, $record['unused_params'] ?? [], true)
+    ) {
         return false;
     }
-    $pattern = '/@source-contract-opaque-param\s+\$?' . preg_quote($name, '/') . '\s+([^\r\n@]+)/';
-    return preg_match($pattern, $record['doc'], $match) === 1
-        && strlen(trim($match[1])) >= 12
-        && preg_match('/\b(?:unused|ignored)\b/i', $match[1]) === 1;
+    $pattern =
+        '/@source-contract-opaque-param\s+\$?'
+        . preg_quote($name, '/')
+        . '\s+([^\r\n@]+)/';
+    return (
+        preg_match($pattern, $record['doc'], $match) === 1
+            && strlen(trim($match[1])) >= 12
+            && preg_match('/\b(?:unused|ignored)\b/i', $match[1]) === 1
+    );
 }
 
 /**
@@ -557,7 +808,11 @@ function documented_unused_opaque_parameter(array $record, string $name, string 
  */
 function documentation_tags(string $documentation, string $name): array
 {
-    preg_match_all('/@' . preg_quote($name, '/') . '\b([^@]*)/', $documentation, $matches);
+    preg_match_all(
+        '/@' . preg_quote($name, '/') . '\b([^@]*)/',
+        $documentation,
+        $matches,
+    );
     return array_map('trim', $matches[1]);
 }
 
@@ -572,10 +827,15 @@ function documentation_type_description(string $tag): string
     $depth = 0;
     for ($index = 0; $index < strlen($tag); $index++) {
         $character = $tag[$index];
-        $depth += str_contains('<{([', $character) ? 1 : (str_contains('>})]', $character) ? -1 : 0);
+        $depth += str_contains('<{([', $character)
+            ? 1
+            : (str_contains('>})]', $character) ? -1 : 0);
         if ($depth === 0 && ctype_space($character)) {
             $description = trim(substr($tag, $index));
-            return preg_replace('/^\$[A-Za-z_][A-Za-z0-9_]*\s+/', '', $description) ?? $description;
+            return (
+                preg_replace('/^\$[A-Za-z_][A-Za-z0-9_]*\s+/', '', $description)
+                    ?? $description
+            );
         }
     }
     return '';
@@ -594,21 +854,53 @@ function documented_parameter(string $tag, array $expected): array
     if (str_starts_with($tag, '{')) {
         $depth = 0;
         for ($cursor = 0; $cursor < strlen($tag); $cursor++) {
-            $depth += $tag[$cursor] === '{' ? 1 : ($tag[$cursor] === '}' ? -1 : 0);
+            $depth += $tag[$cursor] === '{'
+                ? 1
+                : ($tag[$cursor] === '}' ? -1 : 0);
             if ($depth === 0) {
                 $type = trim(substr($tag, 1, $cursor - 1));
                 $tag = trim(substr($tag, $cursor + 1));
                 break;
             }
         }
-    } elseif (preg_match('/^(.*?)\s*(?:&|\.\.\.)?\$([A-Za-z_][A-Za-z0-9_]*)\s*(.*)$/s', $tag, $match) === 1) {
-        return ['type' => trim($match[1]), 'name' => $match[2], 'description' => trim($match[3])];
-    } elseif (preg_match('/^(\S+)\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+(.*))?$/s', $tag, $match) === 1
-        && !in_array($match[1], $expected, true)) {
-        return ['type' => $match[1], 'name' => $match[2], 'description' => trim($match[3] ?? '')];
+    } elseif (
+        preg_match(
+            '/^(.*?)\s*(?:&|\.\.\.)?\$([A-Za-z_][A-Za-z0-9_]*)\s*(.*)$/s',
+            $tag,
+            $match,
+        ) === 1
+    ) {
+        return [
+            'type' => trim($match[1]),
+            'name' => $match[2],
+            'description' => trim($match[3]),
+        ];
+    } elseif (
+        preg_match(
+            '/^(\S+)\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+(.*))?$/s',
+            $tag,
+            $match,
+        ) === 1
+        && !in_array($match[1], $expected, true)
+    ) {
+        return [
+            'type' => $match[1],
+            'name' => $match[2],
+            'description' => trim($match[3] ?? ''),
+        ];
     }
-    if (preg_match('/^\[?(?:\.\.\.)?([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*)(?:=[^\]]*)?\]?(?:\s+(.*))?$/s', $tag, $match) === 1) {
-        return ['type' => $type, 'name' => ltrim($match[1], '$'), 'description' => trim($match[2] ?? '')];
+    if (
+        preg_match(
+            '/^\[?(?:\.\.\.)?([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z0-9_$]+)*)(?:=[^\]]*)?\]?(?:\s+(.*))?$/s',
+            $tag,
+            $match,
+        ) === 1
+    ) {
+        return [
+            'type' => $type,
+            'name' => ltrim($match[1], '$'),
+            'description' => trim($match[2] ?? ''),
+        ];
     }
     return ['name' => '', 'type' => '', 'description' => ''];
 }
@@ -620,7 +912,12 @@ function documented_parameter(string $tag, array $expected): array
  */
 function unspecified_shape(string $type): bool
 {
-    return preg_match('/^\{?\s*(?:array|object|mixed|any|\*)(?=\s|\}|$)/i', trim($type)) === 1;
+    return (
+        preg_match(
+            '/^\{?\s*(?:array|object|mixed|any|\*)(?=\s|\}|$)/i',
+            trim($type),
+        ) === 1
+    );
 }
 
 /**
@@ -642,28 +939,52 @@ function primitive_type_mismatch(string $native, string $documented): bool
     $documented = trim($documented);
     if (preg_match('/^(?:\??array)[<{]/', $documented) === 1) {
         // Array element/field types narrow the same native array container.
-        return !in_array('array', explode('|', $native), true) && $native !== 'mixed';
+        return (
+            !in_array('array', explode('|', $native), true)
+                && $native !== 'mixed'
+        );
     }
     $documented = strtolower(explode(' ', $documented, 2)[0]);
     if (str_starts_with($documented, '?')) {
         $documented = substr($documented, 1) . '|null';
     }
     $aliases = ['integer' => 'int', 'boolean' => 'bool', 'double' => 'float'];
-    $known = ['int', 'string', 'float', 'bool', 'array', 'object', 'mixed', 'null', 'void', 'never', 'false', 'true'];
+    $known = [
+        'int',
+        'string',
+        'float',
+        'bool',
+        'array',
+        'object',
+        'mixed',
+        'null',
+        'void',
+        'never',
+        'false',
+        'true',
+    ];
     $nativeAtoms = explode('|', $native);
     $documentedAtoms = explode('|', $documented);
     foreach ($documentedAtoms as &$atom) {
         $atom = $aliases[$atom] ?? $atom;
     }
     unset($atom);
-    if (array_diff(array_merge($nativeAtoms, $documentedAtoms), $known) !== []) {
+    if (
+        array_diff(array_merge($nativeAtoms, $documentedAtoms), $known) !== []
+    ) {
         return false;
     }
     if (in_array('mixed', $nativeAtoms, true)) {
         return false;
     }
     foreach ($documentedAtoms as $atom) {
-        if (!in_array($atom, $nativeAtoms, true) && !(in_array($atom, ['false', 'true'], true) && in_array('bool', $nativeAtoms, true))) {
+        if (
+            !in_array($atom, $nativeAtoms, true)
+            && !(
+                in_array($atom, ['false', 'true'], true)
+                && in_array('bool', $nativeAtoms, true)
+            )
+        ) {
             return true;
         }
     }

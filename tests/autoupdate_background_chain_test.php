@@ -22,8 +22,10 @@ namespace Gallery\Services {
      */
     function feature_capability_effective_enabled(string $key): bool
     {
-        return $key === 'built_in_update_installer'
-            && empty($GLOBALS['update_chain_fixture_disabled']);
+        return (
+            $key === 'built_in_update_installer'
+                && empty($GLOBALS['update_chain_fixture_disabled'])
+        );
     }
 
     /**
@@ -71,7 +73,10 @@ namespace {
         }
     }
 
-    $root = sys_get_temp_dir() . '/gallery-update-chain-' . bin2hex(random_bytes(8));
+    $root =
+        sys_get_temp_dir()
+        . '/gallery-update-chain-'
+        . bin2hex(random_bytes(8));
     mkdir($root, 0700, true);
     // Existing canonical fixture override confines every real updater operation.
     // Type: string. Units: absolute path. Scope: this standalone test process.
@@ -86,11 +91,21 @@ namespace {
         return true;
     };
     $jobId = '20261019000000-abcdef123456';
-    $job = ['id' => $jobId, 'operation' => 'stable_update',
-        'trigger' => 'background', 'status' => 'running', 'stage' => 'cleanup',
-        'attempts' => 0, 'parameters' => [], 'checkpoints' => [], 'result' => [],
-        'progress' => []];
-    $path = \Gallery\Services\application_update_jobs_root() . '/background-chain.json';
+    $job = [
+        'id' => $jobId,
+        'operation' => 'stable_update',
+        'trigger' => 'background',
+        'status' => 'running',
+        'stage' => 'cleanup',
+        'attempts' => 0,
+        'parameters' => [],
+        'checkpoints' => [],
+        'result' => [],
+        'progress' => [],
+    ];
+    $path =
+        \Gallery\Services\application_update_jobs_root()
+        . '/background-chain.json';
     /**
      * Bound this fixture's failure watchdog without limiting production jobs.
      * Type: int. Units: requests. Scope: the 720-file cleanup scenario only.
@@ -98,44 +113,89 @@ namespace {
      *   expected cleanup debt while detecting non-terminating regressions.
      */
     const UPDATE_CHAIN_FIXTURE_MAX_HOPS = 20;
+
     try {
         \Gallery\Services\application_update_save_job($job);
         \Gallery\Services\application_update_set_active_job($jobId);
         update_chain_seed_debt($root);
-        $started = \Gallery\Services\application_update_background_chain_start($deliver);
-        update_chain_assert($started['queued'] && count($queue) === 1,
-            'One visitor did not reserve exactly one worker handoff.');
+        $started =
+            \Gallery\Services\application_update_background_chain_start(
+                $deliver,
+            );
+        update_chain_assert(
+            $started['queued'] && count($queue) === 1,
+            'One visitor did not reserve exactly one worker handoff.',
+        );
         $first = $queue[0];
         $record = \Gallery\Services\application_update_read_json($path);
-        update_chain_assert($record['last_arrival_at'] === 0
-            && !str_contains(file_get_contents($path), $first),
-            'A dispatch was advertised as arrival or the plaintext token was persisted.');
-        update_chain_assert(\Gallery\Services\application_update_background_chain_pending($jobId),
-            'Ordinary visits cannot observe the live server-chain lease.');
+        update_chain_assert(
+            $record['last_arrival_at'] === 0
+                && !str_contains(file_get_contents($path), $first),
+            'A dispatch was advertised as arrival or the plaintext token was persisted.',
+        );
+        update_chain_assert(
+            \Gallery\Services\application_update_background_chain_pending(
+                $jobId,
+            ),
+            'Ordinary visits cannot observe the live server-chain lease.',
+        );
         \Gallery\Services\application_update_background_chain_start($deliver);
-        update_chain_assert(count($queue) === 1, 'A second visitor duplicated the queued chain.');
-        update_chain_assert(!\Gallery\Services\application_update_background_chain_run(str_repeat('0', 64), $deliver)['ok'],
-            'A guessed token advanced an actual update.');
-        $lock = \Gallery\Services\application_update_acquire_lock(dirname($path) . '/background-chain.lock');
-        update_chain_assert(\Gallery\Services\application_update_background_chain_run($first, $deliver)['reason'] === 'update_chain_active',
-            'A second contender entered the owned chain.');
+        update_chain_assert(
+            count($queue) === 1,
+            'A second visitor duplicated the queued chain.',
+        );
+        update_chain_assert(
+            !\Gallery\Services\application_update_background_chain_run(
+                str_repeat('0', 64),
+                $deliver,
+            )['ok'],
+            'A guessed token advanced an actual update.',
+        );
+        $lock = \Gallery\Services\application_update_acquire_lock(
+            dirname($path) . '/background-chain.lock',
+        );
+        update_chain_assert(
+            \Gallery\Services\application_update_background_chain_run(
+                $first,
+                $deliver,
+            )['reason'] === 'update_chain_active',
+            'A second contender entered the owned chain.',
+        );
         \Gallery\Services\application_update_release_lock($lock);
         $hops = 0;
         while ($queue !== []) {
             $ticket = array_shift($queue);
-            $result = \Gallery\Services\application_update_background_chain_run($ticket, $deliver);
-            update_chain_assert($result['ok'], 'A real cleanup slice failed: ' . json_encode($result));
-            update_chain_assert(!\Gallery\Services\application_update_background_chain_run($ticket, $deliver)['ok'],
-                'A consumed token was replayable.');
+            $result = \Gallery\Services\application_update_background_chain_run(
+                $ticket,
+                $deliver,
+            );
+            update_chain_assert(
+                $result['ok'],
+                'A real cleanup slice failed: ' . json_encode($result),
+            );
+            update_chain_assert(
+                !\Gallery\Services\application_update_background_chain_run(
+                    $ticket,
+                    $deliver,
+                )['ok'],
+                'A consumed token was replayable.',
+            );
             $hops++;
-            update_chain_assert($hops <= UPDATE_CHAIN_FIXTURE_MAX_HOPS,
-                'The real cleanup chain did not reach its terminal checkpoint.');
+            update_chain_assert(
+                $hops <= UPDATE_CHAIN_FIXTURE_MAX_HOPS,
+                'The real cleanup chain did not reach its terminal checkpoint.',
+            );
         }
         $completed = \Gallery\Services\application_update_load_job($jobId);
-        update_chain_assert($hops > 1 && $completed['status'] === 'completed'
-            && \Gallery\Services\application_update_active_job() === null
-            && !\Gallery\Services\application_update_background_chain_pending($jobId),
-            'One visitor did not complete multiple real worker slices and release ownership.');
+        update_chain_assert(
+            $hops > 1
+                && $completed['status'] === 'completed'
+                && \Gallery\Services\application_update_active_job() === null
+                && !\Gallery\Services\application_update_background_chain_pending(
+                    $jobId,
+                ),
+            'One visitor did not complete multiple real worker slices and release ownership.',
+        );
 
         // Restart only a disposable cleanup job; active installation files never change.
         \Gallery\Services\application_update_save_job($job);
@@ -145,49 +205,93 @@ namespace {
         $expired = array_shift($queue);
         $record = \Gallery\Services\application_update_read_json($path);
         $record['queued_until'] = time() - 1;
-        $record['last_dispatch_at'] = time() - \Gallery\Services\APPLICATION_UPDATE_CHAIN_LEASE_SECONDS;
+        $record['last_dispatch_at'] =
+            time() - \Gallery\Services\APPLICATION_UPDATE_CHAIN_LEASE_SECONDS;
         \Gallery\Services\application_update_write_json_atomic($path, $record);
-        update_chain_assert(!\Gallery\Services\application_update_background_chain_run($expired, $deliver)['ok'],
-            'An expired handoff remained usable.');
-        update_chain_assert(\Gallery\Services\application_update_background_chain_start($deliver)['queued'],
-            'A later visitor did not recover a dead worker lease.');
-        $workerLock = \Gallery\Services\application_update_acquire_lock(
-            \Gallery\Services\application_update_job_dir($jobId) . '/worker.lock'
+        update_chain_assert(
+            !\Gallery\Services\application_update_background_chain_run(
+                $expired,
+                $deliver,
+            )['ok'],
+            'An expired handoff remained usable.',
         );
-        $busy = \Gallery\Services\application_update_background_chain_run(array_shift($queue), $deliver);
+        update_chain_assert(
+            \Gallery\Services\application_update_background_chain_start(
+                $deliver,
+            )['queued'],
+            'A later visitor did not recover a dead worker lease.',
+        );
+        $workerLock = \Gallery\Services\application_update_acquire_lock(
+            \Gallery\Services\application_update_job_dir($jobId)
+                . '/worker.lock',
+        );
+        $busy = \Gallery\Services\application_update_background_chain_run(
+            array_shift($queue),
+            $deliver,
+        );
         \Gallery\Services\application_update_release_lock($workerLock);
-        update_chain_assert(!$busy['queued'] && $busy['reason'] === 'update_chain_stopped',
-            'An occupied worker caused a rapid succession of empty HTTP hops.');
+        update_chain_assert(
+            !$busy['queued'] && $busy['reason'] === 'update_chain_stopped',
+            'An occupied worker caused a rapid succession of empty HTTP hops.',
+        );
 
         unlink($path);
         $failedDeliver = static fn(string $ticket): bool => false;
-        update_chain_assert(!\Gallery\Services\application_update_background_chain_start($failedDeliver)['ok'],
-            'A failed dispatch was advertised as a successful background worker.');
+        update_chain_assert(
+            !\Gallery\Services\application_update_background_chain_start(
+                $failedDeliver,
+            )['ok'],
+            'A failed dispatch was advertised as a successful background worker.',
+        );
         $record = \Gallery\Services\application_update_read_json($path);
-        update_chain_assert($record['ticket_hash'] === '' && $record['queued_until'] === 0
-            && $record['last_error'] === 'update_chain_dispatch_unavailable',
-            'Unavailable transport did not leave recoverable, redacted evidence.');
-        update_chain_assert(\Gallery\Services\application_update_background_chain_start($deliver)['reason'] === 'update_chain_throttled',
-            'Failed handoffs were retried on every visit.');
+        update_chain_assert(
+            $record['ticket_hash'] === ''
+                && $record['queued_until'] === 0
+                && $record['last_error']
+                    === 'update_chain_dispatch_unavailable',
+            'Unavailable transport did not leave recoverable, redacted evidence.',
+        );
+        update_chain_assert(
+            \Gallery\Services\application_update_background_chain_start(
+                $deliver,
+            )['reason'] === 'update_chain_throttled',
+            'Failed handoffs were retried on every visit.',
+        );
         unlink($path);
         $job['trigger'] = 'admin';
         \Gallery\Services\application_update_save_job($job);
-        update_chain_assert(!\Gallery\Services\application_update_background_chain_start($deliver)['queued'],
-            'A visitor chained a manual Admin job.');
+        update_chain_assert(
+            !\Gallery\Services\application_update_background_chain_start(
+                $deliver,
+            )['queued'],
+            'A visitor chained a manual Admin job.',
+        );
         $job['trigger'] = 'background';
         $job['operation'] = 'beta_install';
         \Gallery\Services\application_update_save_job($job);
-        update_chain_assert(!\Gallery\Services\application_update_background_chain_start($deliver)['queued'],
-            'A visitor chained a pinned beta operation.');
+        update_chain_assert(
+            !\Gallery\Services\application_update_background_chain_start(
+                $deliver,
+            )['queued'],
+            'A visitor chained a pinned beta operation.',
+        );
         $job['operation'] = 'stable_update';
         \Gallery\Services\application_update_save_job($job);
         \Gallery\Services\application_update_background_chain_start($deliver);
         $GLOBALS['update_chain_fixture_disabled'] = true;
-        $off = \Gallery\Services\application_update_background_chain_run(array_shift($queue), $deliver);
-        update_chain_assert(!$off['queued']
-            && \Gallery\Services\application_update_load_job($jobId)['attempts'] === 0,
-            'A valid ticket ignored installer capability OFF.');
-        echo "Visitor-started updater chain, real bounded slices and handoff safety: PASS\n";
+        $off = \Gallery\Services\application_update_background_chain_run(
+            array_shift($queue),
+            $deliver,
+        );
+        update_chain_assert(
+            !$off['queued']
+                && \Gallery\Services\application_update_load_job(
+                    $jobId,
+                )['attempts'] === 0,
+            'A valid ticket ignored installer capability OFF.',
+        );
+        echo
+            "Visitor-started updater chain, real bounded slices and handoff safety: PASS\n";
     } finally {
         // The canonical bounded remover receives only this random owned root.
         while (is_dir($root)) {

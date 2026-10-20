@@ -74,14 +74,18 @@ use function Gallery\Models\viewer_registration_model_invitation_lock;
 use function Gallery\Models\viewer_registration_model_invitation_lock_by_hash;
 use function Gallery\Models\viewer_registration_model_invitation_preflight;
 use function Gallery\Models\viewer_registration_model_invitation_revoke;
-use function Gallery\Models\viewer_registration_model_maintenance_delete_invitations;
-use function Gallery\Models\viewer_registration_model_maintenance_delete_verification;
+use function Gallery\Models\viewer_registration_model_maintenance_delete_invitations
+;
+use function Gallery\Models\viewer_registration_model_maintenance_delete_verification
+;
 use function Gallery\Models\viewer_registration_model_request_count;
 use function Gallery\Models\viewer_registration_model_request_delete;
 use function Gallery\Models\viewer_registration_model_request_insert_pending;
 use function Gallery\Models\viewer_registration_model_request_lock;
-use function Gallery\Models\viewer_registration_model_request_lock_by_normalized_email;
-use function Gallery\Models\viewer_registration_model_request_mark_verification_sent;
+use function Gallery\Models\viewer_registration_model_request_lock_by_normalized_email
+;
+use function Gallery\Models\viewer_registration_model_request_mark_verification_sent
+;
 use function Gallery\Models\viewer_registration_model_request_update_pending;
 use function Gallery\Models\viewer_registration_model_resend_cleanup;
 use function Gallery\Models\viewer_registration_model_resend_count;
@@ -90,15 +94,21 @@ use function Gallery\Models\viewer_registration_model_resend_insert;
 use function Gallery\Models\viewer_registration_model_resend_lock;
 use function Gallery\Models\viewer_registration_model_resend_mark_sent;
 use function Gallery\Models\viewer_registration_model_transaction;
-use function Gallery\Models\viewer_registration_model_verification_delete_for_request;
+use function Gallery\Models\viewer_registration_model_verification_delete_for_request
+;
 use function Gallery\Models\viewer_registration_model_verification_primary;
 use function Gallery\Models\viewer_registration_model_verification_resend;
 
 const VIEWER_REGISTRATION_STATUS_PENDING = 'pending_verification';
+
 const VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED = 'email_verified';
+
 const VIEWER_REGISTRATION_STATUS_CANCELLED = 'cancelled';
+
 const VIEWER_REGISTRATION_STATE_KEY = 'pending_requests';
+
 const VIEWER_REGISTRATION_ACTIVATION_NAMESPACE = 'viewer_registration_activation';
+
 const VIEWER_REGISTRATION_RESEND_TOKEN_CAP = 12;
 
 /**
@@ -153,7 +163,8 @@ function viewer_registration_public_result_code(): string
  */
 function viewer_registration_requests_enabled(): bool
 {
-    return viewer_accounts_enabled() && in_array(viewer_registration_mode(), ['invite_only', 'open'], true);
+    return viewer_accounts_enabled()
+        && in_array(viewer_registration_mode(), ['invite_only', 'open'], true);
 }
 
 /**
@@ -173,7 +184,10 @@ function viewer_registration_request_cap(): int
  */
 function viewer_registration_request_lifetime_seconds(): int
 {
-    return (int) viewer_accounts_config()['registration_request_lifetime_minutes'] * 60;
+    return (
+        (int) viewer_accounts_config()['registration_request_lifetime_minutes']
+            * 60
+    );
 }
 
 /**
@@ -183,7 +197,10 @@ function viewer_registration_request_lifetime_seconds(): int
  */
 function viewer_registration_verification_lifetime_seconds(): int
 {
-    return (int) viewer_accounts_config()['verification_token_lifetime_minutes'] * 60;
+    return (
+        (int) viewer_accounts_config()['verification_token_lifetime_minutes']
+            * 60
+    );
 }
 
 /**
@@ -206,9 +223,11 @@ function viewer_registration_resend_token_cap(): int
  */
 function viewer_registration_verified_lifetime_seconds(): int
 {
-    return (int) viewer_accounts_config()['verified_registration_lifetime_minutes'] * 60;
+    return (
+        (int) viewer_accounts_config()['verified_registration_lifetime_minutes']
+            * 60
+    );
 }
-
 
 /**
  * Return the viewer-registration activation PHP-session namespace key.
@@ -227,7 +246,10 @@ function viewer_registration_activation_namespace_key(): string
  */
 function viewer_registration_activation_lifetime_seconds(): int
 {
-    return (int) viewer_accounts_config()['registration_activation_lifetime_minutes'] * 60;
+    return (
+        (int) viewer_accounts_config()['registration_activation_lifetime_minutes']
+            * 60
+    );
 }
 
 /**
@@ -238,29 +260,38 @@ function viewer_registration_activation_lifetime_seconds(): int
  * @param string $normalizedEmail Authoritative normalized email.
  * @return string HMAC integrity context.
  */
-function viewer_registration_activation_context(int $requestId, string $verifiedAt, string $normalizedEmail): string
-{
+function viewer_registration_activation_context(
+    int $requestId,
+    string $verifiedAt,
+    string $normalizedEmail,
+): string {
     if ($requestId <= 0 || $verifiedAt === '' || $normalizedEmail === '') {
         return '';
     }
     return viewer_security_fingerprint(
         'viewer-registration-activation',
-        $requestId . "\0" . $verifiedAt . "\0" . $normalizedEmail
+        $requestId . "\0" . $verifiedAt . "\0" . $normalizedEmail,
     );
 }
 
 /**
  * Clear only the pre-authentication registration activation grant.
+ *
+ * @return void No return value; clears only the pre-authentication registration activation grant.
  */
 function viewer_registration_activation_clear(): void
 {
-    viewer_identity_session_unset(viewer_registration_activation_namespace_key());
+    viewer_identity_session_unset(
+        viewer_registration_activation_namespace_key(),
+    );
 }
 
 /**
  * Establish a short-lived server-side activation grant after explicit verification confirmation.
  *
- * @param array $row Newly verified authoritative staging row.
+ * @param array{id:int,verified_at:string,normalized_email:string,expires_at:string} $row Newly verified authoritative staging row used to establish the activation grant.
+ *
+ * @return void No return value; establishes a short-lived grant for the verified staging row.
  */
 function viewer_registration_activation_establish(array $row): void
 {
@@ -268,14 +299,30 @@ function viewer_registration_activation_establish(array $row): void
     $verifiedAt = (string) ($row['verified_at'] ?? '');
     $normalizedEmail = (string) ($row['normalized_email'] ?? '');
     $rowExpiry = strtotime((string) ($row['expires_at'] ?? ''));
-    $context = viewer_registration_activation_context($requestId, $verifiedAt, $normalizedEmail);
-    if ($requestId <= 0 || $rowExpiry === false || $rowExpiry < time() || $context === '') {
-        throw new RuntimeException('Verified viewer registration cannot establish activation authority.');
+    $context = viewer_registration_activation_context(
+        $requestId,
+        $verifiedAt,
+        $normalizedEmail,
+    );
+    if (
+        $requestId <= 0
+        || $rowExpiry === false
+        || $rowExpiry < time()
+        || $context === ''
+    ) {
+        throw new RuntimeException(
+            'Verified viewer registration cannot establish activation authority.',
+        );
     }
 
-    $expiresAt = min($rowExpiry, time() + viewer_registration_activation_lifetime_seconds());
+    $expiresAt = min(
+        $rowExpiry,
+        time() + viewer_registration_activation_lifetime_seconds(),
+    );
     if (!viewer_identity_session_regenerate()) {
-        throw new RuntimeException('Viewer registration activation session rotation failed.');
+        throw new RuntimeException(
+            'Viewer registration activation session rotation failed.',
+        );
     }
     viewer_identity_session_set(viewer_registration_activation_namespace_key(), [
         'request_id' => $requestId,
@@ -291,33 +338,45 @@ function viewer_registration_activation_establish(array $row): void
  */
 function viewer_registration_activation_state(): ?array
 {
-    $state = viewer_identity_session_get(viewer_registration_activation_namespace_key());
+    $state = viewer_identity_session_get(
+        viewer_registration_activation_namespace_key(),
+    );
     if (!is_array($state)) {
         return null;
     }
     $requestId = (int) ($state['request_id'] ?? 0);
     $expiresAt = (int) ($state['expires_at'] ?? 0);
     $context = (string) ($state['context'] ?? '');
-    if ($requestId <= 0 || $expiresAt < time() || preg_match('/^[a-f0-9]{64}$/D', $context) !== 1) {
+    if (
+        $requestId <= 0
+        || $expiresAt < time()
+        || preg_match('/^[a-f0-9]{64}$/D', $context) !== 1
+    ) {
         viewer_registration_activation_clear();
         return null;
     }
-    return ['request_id' => $requestId, 'expires_at' => $expiresAt, 'context' => $context];
+    return [
+        'request_id' => $requestId,
+        'expires_at' => $expiresAt,
+        'context' => $context,
+    ];
 }
 
 /**
  * Return whether a server-side activation grant matches the locked authoritative staging row.
  *
- * @param array $state Parsed activation state.
- * @param array $row Locked registration-request row.
- * @return bool True only for the same verified staging authority.
+ * @param array{request_id:int,expires_at:int,context:string} $state Parsed server-side activation grant.
+ * @param array{id:int,verified_at:string,normalized_email:string} $row Locked authoritative registration-request row.
+ * @return bool Whether the activation grant matches the same verified request, email and context.
  */
-function viewer_registration_activation_matches_row(array $state, array $row): bool
-{
+function viewer_registration_activation_matches_row(
+    array $state,
+    array $row,
+): bool {
     $expected = viewer_registration_activation_context(
         (int) ($row['id'] ?? 0),
         (string) ($row['verified_at'] ?? ''),
-        (string) ($row['normalized_email'] ?? '')
+        (string) ($row['normalized_email'] ?? ''),
     );
     return $expected !== ''
         && (int) ($state['request_id'] ?? 0) === (int) ($row['id'] ?? 0)
@@ -342,15 +401,22 @@ function viewer_invitation_lifetime_seconds(): int
  * viewer_registration_request_begin(), which can prove the claim belongs to the same
  * pending request under one transaction.
  *
- * @param array $row Invitation database row.
- * @param string $email Candidate email address.
- * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
- * @return bool True only when the invitation is usable and any email binding matches.
+ * @param array{expires_at:string,claimed_at?:string|null,revoked_at?:string|null,target_email_fingerprint?:string|null} $row Invitation status and optional email-binding fields.
+ * @param string $email Candidate address to compare with any invitation email binding.
+ * @param ?int $nowTimestamp Optional Unix timestamp for deterministic expiration checks.
+ * @return bool Whether the unclaimed, unrevoked invitation is unexpired and matches its optional email binding.
  */
-function viewer_invitation_row_is_usable(array $row, string $email, ?int $nowTimestamp = null): bool
-{
+function viewer_invitation_row_is_usable(
+    array $row,
+    string $email,
+    ?int $nowTimestamp = null,
+): bool {
     $normalized = viewer_email_normalize($email);
-    if ($normalized === null || !empty($row['claimed_at']) || !empty($row['revoked_at'])) {
+    if (
+        $normalized === null
+        || !empty($row['claimed_at'])
+        || !empty($row['revoked_at'])
+    ) {
         return false;
     }
 
@@ -360,8 +426,14 @@ function viewer_invitation_row_is_usable(array $row, string $email, ?int $nowTim
         return false;
     }
 
-    $expectedFingerprint = trim((string) ($row['target_email_fingerprint'] ?? ''));
-    return $expectedFingerprint === '' || hash_equals($expectedFingerprint, viewer_email_fingerprint($normalized));
+    $expectedFingerprint = trim(
+        (string) ($row['target_email_fingerprint'] ?? ''),
+    );
+    return $expectedFingerprint === ''
+        || hash_equals(
+            $expectedFingerprint,
+            viewer_email_fingerprint($normalized),
+        );
 }
 
 /**
@@ -371,15 +443,19 @@ function viewer_invitation_row_is_usable(array $row, string $email, ?int $nowTim
  * capability. Phase 4.2 child resend tokens can remain usable even after the historical
  * primary token has expired, while the owning registration request itself is still live.
  *
- * @param array $row Registration-request row.
- * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
- * @return bool True only for a live, uncancelled pending request.
+ * @param array{status:string,expires_at:string,verification_token_consumed_at?:string|null,cancelled_at?:string|null} $row Registration status and request-level expiry/consumption fields.
+ * @param ?int $nowTimestamp Optional Unix timestamp for deterministic expiration checks.
+ * @return bool Whether the request remains pending, uncancelled, unconsumed and unexpired.
  */
-function viewer_registration_request_row_is_pending_active(array $row, ?int $nowTimestamp = null): bool
-{
-    if ((string) ($row['status'] ?? '') !== VIEWER_REGISTRATION_STATUS_PENDING
+function viewer_registration_request_row_is_pending_active(
+    array $row,
+    ?int $nowTimestamp = null,
+): bool {
+    if (
+        (string) ($row['status'] ?? '') !== VIEWER_REGISTRATION_STATUS_PENDING
         || !empty($row['verification_token_consumed_at'])
-        || !empty($row['cancelled_at'])) {
+        || !empty($row['cancelled_at'])
+    ) {
         return false;
     }
 
@@ -391,17 +467,24 @@ function viewer_registration_request_row_is_pending_active(array $row, ?int $now
 /**
  * Return whether the historical primary pending-registration verification token is usable.
  *
- * @param array $row Registration-request row.
- * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
- * @return bool True only for an unconsumed, unexpired primary verification token.
+ * @param array{status:string,expires_at:string,verification_token_expires_at:string,verification_token_consumed_at?:string|null,cancelled_at?:string|null} $row Registration status and primary-verifier expiry/consumption fields.
+ * @param ?int $nowTimestamp Optional Unix timestamp for deterministic expiration checks.
+ * @return bool Whether the pending request’s historical primary verification token remains unconsumed and unexpired.
  */
-function viewer_registration_request_row_is_verifiable(array $row, ?int $nowTimestamp = null): bool
-{
-    if (!viewer_registration_request_row_is_pending_active($row, $nowTimestamp)) {
+function viewer_registration_request_row_is_verifiable(
+    array $row,
+    ?int $nowTimestamp = null,
+): bool {
+    if (!viewer_registration_request_row_is_pending_active(
+        $row,
+        $nowTimestamp,
+    )) {
         return false;
     }
 
-    $tokenExpiresAt = strtotime((string) ($row['verification_token_expires_at'] ?? ''));
+    $tokenExpiresAt = strtotime(
+        (string) ($row['verification_token_expires_at'] ?? ''),
+    );
     $nowTimestamp ??= time();
     return $tokenExpiresAt !== false && $tokenExpiresAt >= $nowTimestamp;
 }
@@ -413,15 +496,22 @@ function viewer_registration_request_row_is_verifiable(array $row, ?int $nowTime
  * and remains usable. A row with no successful send, an expired request/token, a consumed
  * token, or missing token hash may proceed through the normal retry path.
  *
- * @param array $row Registration-request row.
- * @param ?int $nowTimestamp Optional deterministic timestamp for tests.
- * @return bool True only when the existing emailed verification authority must be preserved.
+ * @param array{status:string,expires_at:string,verification_token_expires_at:string,verification_token_consumed_at?:string|null,cancelled_at?:string|null,verification_send_count:int,verification_token_hash:string} $row Registration state, verifier lifetime, prior delivery count and stored verifier hash.
+ * @param ?int $nowTimestamp Optional Unix timestamp for deterministic expiration checks.
+ * @return bool Whether an already-sent primary verification authority remains usable and must be preserved.
  */
-function viewer_registration_pending_has_sent_valid_verification_authority(array $row, ?int $nowTimestamp = null): bool
-{
-    return (int) ($row['verification_send_count'] ?? 0) > 0
-        && trim((string) ($row['verification_token_hash'] ?? '')) !== ''
-        && viewer_registration_request_row_is_verifiable($row, $nowTimestamp);
+function viewer_registration_pending_has_sent_valid_verification_authority(
+    array $row,
+    ?int $nowTimestamp = null,
+): bool {
+    return (
+        (int) ($row['verification_send_count'] ?? 0) > 0
+            && trim((string) ($row['verification_token_hash'] ?? '')) !== ''
+            && viewer_registration_request_row_is_verifiable(
+                $row,
+                $nowTimestamp,
+            )
+    );
 }
 
 /**
@@ -481,15 +571,19 @@ function viewer_registration_request_allowed_by_current_mode(array $row): bool
  */
 function viewer_invitation_inspect(string $token): ?array
 {
-    if (!viewer_registration_requests_enabled()
+    if (
+        !viewer_registration_requests_enabled()
         || $token === ''
         || strlen($token) > 512
         || !viewer_registration_storage_available()
-        || !viewer_security_transport_allowed()) {
+        || !viewer_security_transport_allowed()
+    ) {
         return null;
     }
 
-    $row = viewer_registration_model_invitation_inspect(security_authority_token_hash($token));
+    $row = viewer_registration_model_invitation_inspect(security_authority_token_hash(
+        $token,
+    ));
     if (!$row || !empty($row['revoked_at'])) {
         return null;
     }
@@ -500,10 +594,21 @@ function viewer_invitation_inspect(string $token): ?array
 
     $claimed = !empty($row['claimed_at']);
     if ($claimed) {
-        $registrationExpiry = strtotime((string) ($row['registration_expires_at'] ?? ''));
-        if (!in_array((string) ($row['registration_status'] ?? ''), [VIEWER_REGISTRATION_STATUS_PENDING, VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED], true)
+        $registrationExpiry = strtotime(
+            (string) ($row['registration_expires_at'] ?? ''),
+        );
+        if (
+            !in_array(
+                (string) ($row['registration_status'] ?? ''),
+                [
+                    VIEWER_REGISTRATION_STATUS_PENDING,
+                    VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
+                ],
+                true,
+            )
             || $registrationExpiry === false
-            || $registrationExpiry < time()) {
+            || $registrationExpiry < time()
+        ) {
             return null;
         }
     }
@@ -512,7 +617,8 @@ function viewer_invitation_inspect(string $token): ?array
         'id' => (int) $row['id'],
         'expires_at' => (string) $row['expires_at'],
         'claimed' => $claimed,
-        'email_bound' => trim((string) ($row['target_email_fingerprint'] ?? '')) !== '',
+        'email_bound' =>
+            trim((string) ($row['target_email_fingerprint'] ?? '')) !== '',
     ];
 }
 
@@ -524,7 +630,11 @@ function viewer_invitation_inspect(string $token): ?array
  */
 function viewer_invitation_list_for_admin(int $limit = 100): array
 {
-    if ($limit < 1 || $limit > 500 || !viewer_registration_storage_available()) {
+    if (
+        $limit < 1
+        || $limit > 500
+        || !viewer_registration_storage_available()
+    ) {
         return [];
     }
 
@@ -560,19 +670,28 @@ function viewer_invitation_list_for_admin(int $limit = 100): array
  * @param ?int $lifetimeSeconds Optional invitation lifetime override.
  * @return array{id:int,token:string,expires_at:string} Newly issued capability.
  */
-function viewer_invitation_issue(int $adminUserId, ?string $targetEmail = null, ?int $lifetimeSeconds = null): array
-{
+function viewer_invitation_issue(
+    int $adminUserId,
+    ?string $targetEmail = null,
+    ?int $lifetimeSeconds = null,
+): array {
     if (!viewer_registration_requests_enabled()) {
-        throw new RuntimeException('Viewer invitation issuance is unavailable.');
+        throw new RuntimeException(
+            'Viewer invitation issuance is unavailable.',
+        );
     }
     if (!viewer_registration_storage_available()) {
-        throw new RuntimeException('Viewer registration storage is unavailable.');
+        throw new RuntimeException(
+            'Viewer registration storage is unavailable.',
+        );
     }
     if (viewer_account_capacity_reconcile() >= viewer_account_cap()) {
         throw new RuntimeException('Viewer account capacity is full.');
     }
     if ($adminUserId <= 0) {
-        throw new InvalidArgumentException('Viewer invitation administrator id is invalid.');
+        throw new InvalidArgumentException(
+            'Viewer invitation administrator id is invalid.',
+        );
     }
 
     $targetAddress = null;
@@ -580,7 +699,9 @@ function viewer_invitation_issue(int $adminUserId, ?string $targetEmail = null, 
     if ($targetEmail !== null && trim($targetEmail) !== '') {
         $normalized = viewer_email_normalize($targetEmail);
         if ($normalized === null) {
-            throw new InvalidArgumentException('Viewer invitation target email is invalid.');
+            throw new InvalidArgumentException(
+                'Viewer invitation target email is invalid.',
+            );
         }
         $targetAddress = $normalized;
         $targetFingerprint = viewer_email_fingerprint($normalized);
@@ -588,10 +709,14 @@ function viewer_invitation_issue(int $adminUserId, ?string $targetEmail = null, 
 
     $lifetimeSeconds ??= viewer_invitation_lifetime_seconds();
     if ($lifetimeSeconds < 300 || $lifetimeSeconds > 31536000) {
-        throw new InvalidArgumentException('Viewer invitation lifetime is outside safe bounds.');
+        throw new InvalidArgumentException(
+            'Viewer invitation lifetime is outside safe bounds.',
+        );
     }
     if (!viewer_registration_model_admin_exists($adminUserId)) {
-        throw new InvalidArgumentException('Viewer invitation creator must be an existing administrator.');
+        throw new InvalidArgumentException(
+            'Viewer invitation creator must be an existing administrator.',
+        );
     }
 
     $token = security_opaque_token_generate(32);
@@ -603,7 +728,7 @@ function viewer_invitation_issue(int $adminUserId, ?string $targetEmail = null, 
         $targetFingerprint,
         $adminUserId,
         $createdAt,
-        $expiresAt
+        $expiresAt,
     );
     return ['id' => $id, 'token' => $token, 'expires_at' => $expiresAt];
 }
@@ -620,10 +745,16 @@ function viewer_invitation_issue(int $adminUserId, ?string $targetEmail = null, 
  */
 function viewer_invitation_validate(string $token, string $email): ?array
 {
-    if (!viewer_registration_requests_enabled() || $token === '' || !viewer_registration_storage_available()) {
+    if (
+        !viewer_registration_requests_enabled()
+        || $token === ''
+        || !viewer_registration_storage_available()
+    ) {
         return null;
     }
-    $row = viewer_registration_model_invitation_by_hash(security_authority_token_hash($token));
+    $row = viewer_registration_model_invitation_by_hash(security_authority_token_hash(
+        $token,
+    ));
     return $row && viewer_invitation_row_is_usable($row, $email) ? $row : null;
 }
 
@@ -639,9 +770,15 @@ function viewer_invitation_validate(string $token, string $email): ?array
  * @param string $email Candidate email address.
  * @return ?array Matching invitation row, otherwise null.
  */
-function viewer_invitation_registration_preflight(string $token, string $email): ?array
-{
-    if (!viewer_registration_requests_enabled() || $token === '' || !viewer_registration_storage_available()) {
+function viewer_invitation_registration_preflight(
+    string $token,
+    string $email,
+): ?array {
+    if (
+        !viewer_registration_requests_enabled()
+        || $token === ''
+        || !viewer_registration_storage_available()
+    ) {
         return null;
     }
 
@@ -650,7 +787,9 @@ function viewer_invitation_registration_preflight(string $token, string $email):
         return null;
     }
 
-    $row = viewer_registration_model_invitation_preflight(security_authority_token_hash($token));
+    $row = viewer_registration_model_invitation_preflight(security_authority_token_hash(
+        $token,
+    ));
     if (!$row || !empty($row['revoked_at'])) {
         return null;
     }
@@ -658,18 +797,37 @@ function viewer_invitation_registration_preflight(string $token, string $email):
     if ($expiresAt === false || $expiresAt < time()) {
         return null;
     }
-    $expectedFingerprint = trim((string) ($row['target_email_fingerprint'] ?? ''));
-    if ($expectedFingerprint !== '' && !hash_equals($expectedFingerprint, viewer_email_fingerprint($normalized))) {
+    $expectedFingerprint = trim(
+        (string) ($row['target_email_fingerprint'] ?? ''),
+    );
+    if (
+        $expectedFingerprint !== ''
+        && !hash_equals(
+            $expectedFingerprint,
+            viewer_email_fingerprint($normalized),
+        )
+    ) {
         return null;
     }
     if (empty($row['claimed_at'])) {
         return $row;
     }
-    $requestExpiresAt = strtotime((string) ($row['registration_expires_at'] ?? ''));
-    if ((string) ($row['registration_normalized_email'] ?? '') !== $normalized
-        || !in_array((string) ($row['registration_status'] ?? ''), [VIEWER_REGISTRATION_STATUS_PENDING, VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED], true)
+    $requestExpiresAt = strtotime(
+        (string) ($row['registration_expires_at'] ?? ''),
+    );
+    if (
+        (string) ($row['registration_normalized_email'] ?? '') !== $normalized
+        || !in_array(
+            (string) ($row['registration_status'] ?? ''),
+            [
+                VIEWER_REGISTRATION_STATUS_PENDING,
+                VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
+            ],
+            true,
+        )
         || $requestExpiresAt === false
-        || $requestExpiresAt < time()) {
+        || $requestExpiresAt < time()
+    ) {
         return null;
     }
     return $row;
@@ -689,7 +847,11 @@ function viewer_registration_request_authorize_network(string $clientIp): array
 {
     $clientIp = request_client_ip_normalize($clientIp);
     if ($clientIp === '') {
-        return ['allowed' => false, 'reason' => 'client_ip_unavailable', 'retry_after_seconds' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'client_ip_unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
 
     $checks = [
@@ -704,12 +866,17 @@ function viewer_registration_request_authorize_network(string $clientIp): array
                 return [
                     'allowed' => false,
                     'reason' => (string) $decision['reason'],
-                    'retry_after_seconds' => (int) $decision['retry_after_seconds'],
+                    'retry_after_seconds' =>
+                        (int) $decision['retry_after_seconds'],
                 ];
             }
         }
     } catch (Throwable) {
-        return ['allowed' => false, 'reason' => 'limiter_unavailable', 'retry_after_seconds' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'limiter_unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
 
     return ['allowed' => true, 'reason' => 'ok', 'retry_after_seconds' => 0];
@@ -729,7 +896,11 @@ function viewer_registration_request_authorize_identity(string $email): array
 {
     $normalized = viewer_email_normalize($email);
     if ($normalized === null) {
-        return ['allowed' => false, 'reason' => 'invalid_subject', 'retry_after_seconds' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'invalid_subject',
+            'retry_after_seconds' => 0,
+        ];
     }
 
     $checks = [
@@ -744,17 +915,21 @@ function viewer_registration_request_authorize_identity(string $email): array
                 return [
                     'allowed' => false,
                     'reason' => (string) $decision['reason'],
-                    'retry_after_seconds' => (int) $decision['retry_after_seconds'],
+                    'retry_after_seconds' =>
+                        (int) $decision['retry_after_seconds'],
                 ];
             }
         }
     } catch (Throwable) {
-        return ['allowed' => false, 'reason' => 'limiter_unavailable', 'retry_after_seconds' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'limiter_unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
 
     return ['allowed' => true, 'reason' => 'ok', 'retry_after_seconds' => 0];
 }
-
 
 /**
  * Ensure and lock the singleton pending-registration capacity row.
@@ -763,7 +938,10 @@ function viewer_registration_request_authorize_identity(string $email): array
  */
 function viewer_registration_capacity_lock(): int
 {
-    return viewer_registration_model_capacity_lock(VIEWER_REGISTRATION_STATE_KEY, now_sql());
+    return viewer_registration_model_capacity_lock(
+        VIEWER_REGISTRATION_STATE_KEY,
+        now_sql(),
+    );
 }
 
 /**
@@ -773,7 +951,10 @@ function viewer_registration_capacity_lock(): int
  */
 function viewer_registration_capacity_recount_locked(): int
 {
-    return viewer_registration_model_capacity_recount_locked(VIEWER_REGISTRATION_STATE_KEY, now_sql());
+    return viewer_registration_model_capacity_recount_locked(
+        VIEWER_REGISTRATION_STATE_KEY,
+        now_sql(),
+    );
 }
 
 /**
@@ -786,7 +967,11 @@ function viewer_registration_capacity_recount_locked(): int
  */
 function viewer_registration_cleanup_requests_locked(int $limit = 1000): int
 {
-    return viewer_registration_model_cleanup_requests_locked(VIEWER_REGISTRATION_STATE_KEY, now_sql(), $limit);
+    return viewer_registration_model_cleanup_requests_locked(
+        VIEWER_REGISTRATION_STATE_KEY,
+        now_sql(),
+        $limit,
+    );
 }
 
 /**
@@ -802,7 +987,9 @@ function viewer_registration_cleanup_requests_locked(int $limit = 1000): int
 function viewer_registration_cancel_open_origin_staging(): int
 {
     if (!viewer_registration_storage_available()) {
-        throw new RuntimeException('Viewer registration storage is unavailable.');
+        throw new RuntimeException(
+            'Viewer registration storage is unavailable.',
+        );
     }
     return viewer_registration_model_transaction(static function (): int {
         viewer_registration_capacity_lock();
@@ -810,7 +997,7 @@ function viewer_registration_cancel_open_origin_staging(): int
             VIEWER_REGISTRATION_STATUS_CANCELLED,
             VIEWER_REGISTRATION_STATUS_PENDING,
             VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
-            now_sql()
+            now_sql(),
         );
     });
 }
@@ -825,10 +1012,13 @@ function viewer_registration_cancel_open_origin_staging(): int
  * @param string $email Candidate viewer email.
  * @param ?string $invitationToken Optional invitation capability.
  * @param ?string $clientIp Explicit client IP for tests/internal callers, otherwise trusted resolver result.
- * @return array{accepted:bool,mail_eligible:bool,reason:string,public_result:string,request_id:?int,verification_token:?string,expires_at:?string}
+ * @return array{accepted:bool,mail_eligible:bool,reason:string,public_result:string,request_id:?int,verification_token:?string,expires_at:?string} Request acceptance and mail eligibility, stable public/internal reasons, and any newly staged verification capability.
  */
-function viewer_registration_request_begin(string $email, ?string $invitationToken = null, ?string $clientIp = null): array
-{
+function viewer_registration_request_begin(
+    string $email,
+    ?string $invitationToken = null,
+    ?string $clientIp = null,
+): array {
     $publicResult = viewer_registration_public_result_code();
     if (!viewer_registration_requests_enabled()) {
         return [
@@ -878,12 +1068,19 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         ];
     }
 
-    $resolvedIp = $clientIp === null ? request_client_ip() : request_client_ip_normalize($clientIp);
-    $networkDecision = viewer_registration_request_authorize_network($resolvedIp);
+    $resolvedIp = $clientIp === null
+        ? request_client_ip()
+        : request_client_ip_normalize($clientIp);
+    $networkDecision =
+        viewer_registration_request_authorize_network($resolvedIp);
     if (!$networkDecision['allowed']) {
         $networkReason = $networkDecision['reason'] === 'limiter_unavailable'
             ? 'limiter_unavailable'
-            : ($networkDecision['reason'] === 'client_ip_unavailable' ? 'client_ip_unavailable' : 'rate_limited');
+            : (
+                $networkDecision['reason'] === 'client_ip_unavailable'
+                    ? 'client_ip_unavailable'
+                    : 'rate_limited'
+            );
         return [
             'accepted' => false,
             'mail_eligible' => false,
@@ -908,7 +1105,13 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         ];
     }
 
-    if ($mode === 'invite_only' && viewer_invitation_registration_preflight((string) $invitationToken, $normalized) === null) {
+    if (
+        $mode === 'invite_only'
+        && viewer_invitation_registration_preflight(
+            (string) $invitationToken,
+            $normalized,
+        ) === null
+    ) {
         return [
             'accepted' => false,
             'mail_eligible' => false,
@@ -920,12 +1123,15 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         ];
     }
 
-    $identityDecision = viewer_registration_request_authorize_identity($normalized);
+    $identityDecision =
+        viewer_registration_request_authorize_identity($normalized);
     if (!$identityDecision['allowed']) {
         return [
             'accepted' => false,
             'mail_eligible' => false,
-            'reason' => $identityDecision['reason'] === 'limiter_unavailable' ? 'limiter_unavailable' : 'rate_limited',
+            'reason' => $identityDecision['reason'] === 'limiter_unavailable'
+                ? 'limiter_unavailable'
+                : 'rate_limited',
             'public_result' => $publicResult,
             'request_id' => null,
             'verification_token' => null,
@@ -933,18 +1139,32 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
         ];
     }
 
-    return viewer_registration_model_transaction(static function () use ($email, $normalized, $invitationToken, $resolvedIp, $publicResult): array {
+    return viewer_registration_model_transaction(static function () use (
+        $email,
+        $normalized,
+        $invitationToken,
+        $resolvedIp,
+        $publicResult,
+    ): array {
         $rowCount = viewer_registration_capacity_lock();
 
         // Re-read policy after taking the staging admission lock. This closes the race
         // where an open-origin request started just before an administrator restricted
         // registration and would otherwise create fresh staging after cleanup completed.
         $mode = viewer_registration_mode();
-        if ($mode === 'disabled' || ($mode === 'invite_only' && trim((string) $invitationToken) === '')) {
+        if (
+            $mode === 'disabled'
+            || (
+                $mode === 'invite_only'
+                && trim((string) $invitationToken) === ''
+            )
+        ) {
             return viewer_registration_model_abort([
                 'accepted' => false,
                 'mail_eligible' => false,
-                'reason' => $mode === 'disabled' ? 'registration_disabled' : 'invitation_required',
+                'reason' => $mode === 'disabled'
+                    ? 'registration_disabled'
+                    : 'invitation_required',
                 'public_result' => $publicResult,
                 'request_id' => null,
                 'verification_token' => null,
@@ -964,11 +1184,14 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
             ];
         }
 
-        $existing = viewer_registration_model_request_lock_by_normalized_email($normalized);
+        $existing =
+            viewer_registration_model_request_lock_by_normalized_email(
+                $normalized,
+            );
         $invitation = null;
         if (trim((string) $invitationToken) !== '') {
             $invitation = viewer_registration_model_invitation_lock_by_hash(
-                security_authority_token_hash((string) $invitationToken)
+                security_authority_token_hash((string) $invitationToken),
             );
             if (!$invitation) {
                 return viewer_registration_model_abort([
@@ -982,19 +1205,39 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
                 ]);
             }
 
-            $sameClaim = $existing
-                && (int) ($existing['viewer_invitation_id'] ?? 0) === (int) $invitation['id']
-                && (string) ($existing['normalized_email'] ?? '') === $normalized;
-            $invitationExpiresAt = strtotime((string) ($invitation['expires_at'] ?? ''));
-            $expectedFingerprint = trim((string) ($invitation['target_email_fingerprint'] ?? ''));
-            $invitationStateValid = empty($invitation['revoked_at'])
+            $sameClaim =
+                $existing
+                && (int) ($existing['viewer_invitation_id'] ?? 0)
+                    === (int) $invitation['id']
+                && (string) ($existing['normalized_email'] ?? '')
+                    === $normalized;
+            $invitationExpiresAt = strtotime(
+                (string) ($invitation['expires_at'] ?? ''),
+            );
+            $expectedFingerprint = trim(
+                (string) ($invitation['target_email_fingerprint'] ?? ''),
+            );
+            $invitationStateValid =
+                empty($invitation['revoked_at'])
                 && $invitationExpiresAt !== false
                 && $invitationExpiresAt >= time()
-                && ($expectedFingerprint === '' || hash_equals($expectedFingerprint, viewer_email_fingerprint($normalized)));
+                && (
+                    $expectedFingerprint === ''
+                    || hash_equals(
+                        $expectedFingerprint,
+                        viewer_email_fingerprint($normalized),
+                    )
+                );
 
             // Re-check authority while holding the invitation row lock. The earlier preflight is
             // only an abuse-budget optimization and must never become the authorization decision.
-            if (!$invitationStateValid || (!$sameClaim && !empty($invitation['claimed_at']))) {
+            if (
+                !$invitationStateValid
+                || (
+                    !$sameClaim
+                    && !empty($invitation['claimed_at'])
+                )
+            ) {
                 return viewer_registration_model_abort([
                     'accepted' => false,
                     'mail_eligible' => false,
@@ -1017,7 +1260,12 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
             ]);
         }
 
-        if ($existing && viewer_registration_pending_has_sent_valid_verification_authority($existing)) {
+        if (
+            $existing
+            && viewer_registration_pending_has_sent_valid_verification_authority(
+                $existing,
+            )
+        ) {
             return [
                 'accepted' => true,
                 'mail_eligible' => false,
@@ -1029,9 +1277,12 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
             ];
         }
 
-        if ($existing
-            && (string) ($existing['status'] ?? '') === VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED
-            && strtotime((string) ($existing['expires_at'] ?? '')) >= time()) {
+        if (
+            $existing
+            && (string) ($existing['status'] ?? '')
+                === VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED
+            && strtotime((string) ($existing['expires_at'] ?? '')) >= time()
+        ) {
             return [
                 'accepted' => true,
                 'mail_eligible' => false,
@@ -1060,9 +1311,20 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
 
         $token = security_opaque_token_generate(32);
         $now = now_sql();
-        $tokenExpiresAt = date('Y-m-d H:i:s', time() + viewer_registration_verification_lifetime_seconds());
-        $requestExpiresAt = date('Y-m-d H:i:s', time() + viewer_registration_request_lifetime_seconds());
-        $ipHash = $resolvedIp === '' ? null : viewer_security_fingerprint('viewer-registration-ip', $resolvedIp);
+        $tokenExpiresAt = date(
+            'Y-m-d H:i:s',
+            time() + viewer_registration_verification_lifetime_seconds(),
+        );
+        $requestExpiresAt = date(
+            'Y-m-d H:i:s',
+            time() + viewer_registration_request_lifetime_seconds(),
+        );
+        $ipHash = $resolvedIp === ''
+            ? null
+            : viewer_security_fingerprint(
+                'viewer-registration-ip',
+                $resolvedIp,
+            );
         $invitationId = $invitation ? (int) $invitation['id'] : null;
         $emailFingerprint = viewer_email_fingerprint($normalized);
         $tokenHash = security_authority_token_hash($token);
@@ -1080,7 +1342,7 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
                 $tokenHash,
                 $tokenExpiresAt,
                 $requestExpiresAt,
-                $now
+                $now,
             );
         } else {
             $requestId = viewer_registration_model_request_insert_pending(
@@ -1093,14 +1355,22 @@ function viewer_registration_request_begin(string $email, ?string $invitationTok
                 $tokenHash,
                 $tokenExpiresAt,
                 $requestExpiresAt,
-                $now
+                $now,
             );
-            viewer_registration_model_capacity_increment(VIEWER_REGISTRATION_STATE_KEY, $now);
+            viewer_registration_model_capacity_increment(
+                VIEWER_REGISTRATION_STATE_KEY,
+                $now,
+            );
         }
 
         if ($invitation && empty($invitation['claimed_at'])) {
-            if (!viewer_registration_model_invitation_claim((int) $invitation['id'], $now)) {
-                throw new RuntimeException('Viewer invitation claim lost a concurrent race.');
+            if (!viewer_registration_model_invitation_claim(
+                (int) $invitation['id'],
+                $now,
+            )) {
+                throw new RuntimeException(
+                    'Viewer invitation claim lost a concurrent race.',
+                );
             }
         }
 
@@ -1129,24 +1399,34 @@ function viewer_registration_verification_resend_authorize(string $email): array
 {
     $normalized = viewer_email_normalize($email);
     if ($normalized === null) {
-        return ['allowed' => false, 'reason' => 'invalid_email', 'retry_after_seconds' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'invalid_email',
+            'retry_after_seconds' => 0,
+        ];
     }
 
     try {
         $decision = viewer_rate_limit_consume(
             'viewer_resend_verification_identifier',
             'identifier',
-            $normalized
+            $normalized,
         );
     } catch (Throwable) {
-        return ['allowed' => false, 'reason' => 'limiter_unavailable', 'retry_after_seconds' => 0];
+        return [
+            'allowed' => false,
+            'reason' => 'limiter_unavailable',
+            'retry_after_seconds' => 0,
+        ];
     }
 
     if (empty($decision['allowed'])) {
         return [
             'allowed' => false,
             'reason' => 'rate_limited',
-            'retry_after_seconds' => (int) ($decision['retry_after_seconds'] ?? 0),
+            'retry_after_seconds' => (int) (
+                $decision['retry_after_seconds'] ?? 0
+            ),
         ];
     }
 
@@ -1160,8 +1440,8 @@ function viewer_registration_verification_resend_authorize(string $email): array
  * reference the claimed, unrevoked, unexpired invitation that staged the same normalized email.
  * The caller must already hold the registration-state/request locks for mutation workflows.
  *
- * @param array $row Locked registration-request row.
- * @return bool True when invitation authority remains eligible for resend.
+ * @param array{viewer_invitation_id?:int|null,normalized_email:string} $row Locked registration request origin and normalized email.
+ * @return bool Whether the invitation authority for this request remains claimed, live and bound to the same email.
  */
 function viewer_registration_request_invitation_resend_allowed_locked(array $row): bool
 {
@@ -1170,19 +1450,28 @@ function viewer_registration_request_invitation_resend_allowed_locked(array $row
         return true;
     }
     $invitation = viewer_registration_model_invitation_lock($invitationId);
-    if (!$invitation || !empty($invitation['revoked_at']) || empty($invitation['claimed_at'])) {
+    if (
+        !$invitation
+        || !empty($invitation['revoked_at'])
+        || empty($invitation['claimed_at'])
+    ) {
         return false;
     }
     $expiresAt = strtotime((string) ($invitation['expires_at'] ?? ''));
     if ($expiresAt === false || $expiresAt < time()) {
         return false;
     }
-    $expectedFingerprint = trim((string) ($invitation['target_email_fingerprint'] ?? ''));
+    $expectedFingerprint = trim(
+        (string) ($invitation['target_email_fingerprint'] ?? ''),
+    );
     if ($expectedFingerprint === '') {
         return true;
     }
-    $requestFingerprint = viewer_email_fingerprint((string) ($row['normalized_email'] ?? ''));
-    return $requestFingerprint !== '' && hash_equals($expectedFingerprint, $requestFingerprint);
+    $requestFingerprint = viewer_email_fingerprint(
+        (string) ($row['normalized_email'] ?? ''),
+    );
+    return $requestFingerprint !== ''
+        && hash_equals($expectedFingerprint, $requestFingerprint);
 }
 
 /**
@@ -1193,12 +1482,12 @@ function viewer_registration_request_invitation_resend_allowed_locked(array $row
  * Plaintext child authority is returned only for immediate mail orchestration and is never persisted.
  *
  * @param string $email Candidate viewer email.
- * @return array{accepted:bool,mail_eligible:bool,reason:string,public_result:string,request_id:?int,verification_authority_id:?int,verification_token:?string,recipient_email:?string,invitation_backed:bool,expires_at:?string}
+ * @return array{accepted:bool,mail_eligible:bool,reason:string,public_result:string,request_id:?int,verification_authority_id:?int,verification_token:?string,recipient_email:?string,invitation_backed:bool,expires_at:?string} Resend preparation outcome, eligibility, authority/token details and recipient metadata.
  */
 function viewer_registration_verification_resend_prepare(string $email): array
 {
     $publicResult = viewer_registration_public_result_code();
-    $empty = static fn (string $reason): array => [
+    $empty = static fn(string $reason): array => [
         'accepted' => false,
         'mail_eligible' => false,
         'reason' => $reason,
@@ -1217,7 +1506,10 @@ function viewer_registration_verification_resend_prepare(string $email): array
     if (!viewer_security_transport_allowed()) {
         return $empty('secure_transport_required');
     }
-    if (!viewer_auth_storage_available() || !viewer_registration_storage_available()) {
+    if (
+        !viewer_auth_storage_available()
+        || !viewer_registration_storage_available()
+    ) {
         return $empty('storage_unavailable');
     }
 
@@ -1226,30 +1518,49 @@ function viewer_registration_verification_resend_prepare(string $email): array
         return $empty('invalid_email');
     }
 
-    $resendDecision = viewer_registration_verification_resend_authorize($normalized);
+    $resendDecision =
+        viewer_registration_verification_resend_authorize($normalized);
     if (empty($resendDecision['allowed'])) {
         return $empty((string) ($resendDecision['reason'] ?? 'rate_limited'));
     }
 
-    return viewer_registration_model_transaction(static function () use ($normalized, $empty, $publicResult): array {
+    return viewer_registration_model_transaction(static function () use (
+        $normalized,
+        $empty,
+        $publicResult,
+    ): array {
         viewer_registration_capacity_lock();
-        $request = viewer_registration_model_request_lock_by_normalized_email($normalized);
-        if (!$request || !viewer_registration_request_row_is_pending_active($request)) {
+        $request =
+            viewer_registration_model_request_lock_by_normalized_email(
+                $normalized,
+            );
+        if (
+            !$request
+            || !viewer_registration_request_row_is_pending_active($request)
+        ) {
             return $empty($request ? 'request_ineligible' : 'not_found');
         }
         if (!viewer_registration_request_allowed_by_current_mode($request)) {
             return $empty('registration_mode_restricted');
         }
-        if (!viewer_registration_request_invitation_resend_allowed_locked($request)) {
+        if (!viewer_registration_request_invitation_resend_allowed_locked(
+            $request,
+        )) {
             return $empty('invitation_invalid');
         }
-        if (viewer_registration_model_account_exists((string) $request['normalized_email'])) {
+        if (viewer_registration_model_account_exists(
+            (string) $request['normalized_email'],
+        )) {
             return $empty('existing_account');
         }
 
         $now = now_sql();
         viewer_registration_model_resend_cleanup((int) $request['id'], $now);
-        if (viewer_registration_model_resend_count((int) $request['id']) >= viewer_registration_resend_token_cap()) {
+        if (
+            viewer_registration_model_resend_count(
+                (int) $request['id'],
+            ) >= viewer_registration_resend_token_cap()
+        ) {
             return $empty('authority_cap');
         }
 
@@ -1258,7 +1569,10 @@ function viewer_registration_verification_resend_prepare(string $email): array
             return $empty('request_expired');
         }
         $token = security_opaque_token_generate(32);
-        $tokenExpiry = min($requestExpiry, time() + viewer_registration_verification_lifetime_seconds());
+        $tokenExpiry = min(
+            $requestExpiry,
+            time() + viewer_registration_verification_lifetime_seconds(),
+        );
         if ($tokenExpiry < time()) {
             return $empty('request_expired');
         }
@@ -1267,10 +1581,12 @@ function viewer_registration_verification_resend_prepare(string $email): array
             (int) $request['id'],
             security_authority_token_hash($token),
             $tokenExpiresAt,
-            $now
+            $now,
         );
         if ($authorityId <= 0) {
-            throw new RuntimeException('Viewer verification resend authority was not created.');
+            throw new RuntimeException(
+                'Viewer verification resend authority was not created.',
+            );
         }
         return [
             'accepted' => true,
@@ -1281,7 +1597,8 @@ function viewer_registration_verification_resend_prepare(string $email): array
             'verification_authority_id' => $authorityId,
             'verification_token' => $token,
             'recipient_email' => (string) $request['normalized_email'],
-            'invitation_backed' => viewer_registration_request_is_invitation_backed($request),
+            'invitation_backed' =>
+                viewer_registration_request_is_invitation_backed($request),
             'expires_at' => $tokenExpiresAt,
         ];
     });
@@ -1297,12 +1614,21 @@ function viewer_registration_verification_resend_prepare(string $email): array
  * @param int $authorityId Prepared child authority id.
  * @return bool True when one unsent authority was deleted.
  */
-function viewer_registration_verification_resend_discard(int $requestId, int $authorityId): bool
-{
-    if ($requestId <= 0 || $authorityId <= 0 || !viewer_registration_storage_available()) {
+function viewer_registration_verification_resend_discard(
+    int $requestId,
+    int $authorityId,
+): bool {
+    if (
+        $requestId <= 0
+        || $authorityId <= 0
+        || !viewer_registration_storage_available()
+    ) {
         return false;
     }
-    return viewer_registration_model_resend_delete_unsent($requestId, $authorityId);
+    return viewer_registration_model_resend_delete_unsent(
+        $requestId,
+        $authorityId,
+    );
 }
 
 /**
@@ -1317,33 +1643,62 @@ function viewer_registration_verification_resend_discard(int $requestId, int $au
  * @param int $requestId Owning registration request id.
  * @param int $authorityId Prepared child verification authority id.
  * @param callable $deliver Zero-argument mail transport callback returning an array with sent status.
- * @return array{sent:bool,reason:string,delivery:array<string,mixed>}
+ * @return array{sent:bool,reason:string,delivery:array<string,scalar|null>} Whether delivery was handed off, the stable outcome reason and transport result metadata.
  */
-function viewer_registration_verification_resend_deliver_locked(int $requestId, int $authorityId, callable $deliver): array
-{
-    if ($requestId <= 0 || $authorityId <= 0 || !viewer_registration_storage_available()) {
-        return ['sent' => false, 'reason' => 'storage_unavailable', 'delivery' => []];
+function viewer_registration_verification_resend_deliver_locked(
+    int $requestId,
+    int $authorityId,
+    callable $deliver,
+): array {
+    if (
+        $requestId <= 0
+        || $authorityId <= 0
+        || !viewer_registration_storage_available()
+    ) {
+        return [
+            'sent' => false,
+            'reason' => 'storage_unavailable',
+            'delivery' => [],
+        ];
     }
 
-    return viewer_registration_model_independent_transaction(static function () use ($requestId, $authorityId, $deliver): array {
+    return viewer_registration_model_independent_transaction(static function () use (
+        $requestId,
+        $authorityId,
+        $deliver,
+    ): array {
         viewer_registration_capacity_lock();
         $row = viewer_registration_model_resend_lock($requestId, $authorityId);
-        $authorityExpiry = $row ? strtotime((string) ($row['resend_token_expires_at'] ?? '')) : false;
-        $eligible = $row
+        $authorityExpiry = $row
+            ? strtotime((string) ($row['resend_token_expires_at'] ?? ''))
+            : false;
+        $eligible =
+            $row
             && empty($row['resend_token_sent_at'])
             && viewer_registration_request_row_is_pending_active($row)
             && $authorityExpiry !== false
             && $authorityExpiry >= time()
             && viewer_registration_request_allowed_by_current_mode($row)
-            && viewer_registration_request_invitation_resend_allowed_locked($row)
+            && viewer_registration_request_invitation_resend_allowed_locked(
+                $row,
+            )
             && viewer_security_transport_allowed()
             && viewer_auth_storage_available();
         if ($eligible) {
-            $eligible = !viewer_registration_model_account_exists((string) $row['normalized_email']);
+            $eligible = !viewer_registration_model_account_exists(
+                (string) $row['normalized_email'],
+            );
         }
         if (!$eligible) {
-            viewer_registration_model_resend_delete_unsent($requestId, $authorityId);
-            return ['sent' => false, 'reason' => 'request_ineligible', 'delivery' => []];
+            viewer_registration_model_resend_delete_unsent(
+                $requestId,
+                $authorityId,
+            );
+            return [
+                'sent' => false,
+                'reason' => 'request_ineligible',
+                'delivery' => [],
+            ];
         }
 
         $delivery = $deliver();
@@ -1351,16 +1706,35 @@ function viewer_registration_verification_resend_deliver_locked(int $requestId, 
             $delivery = [];
         }
         if (empty($delivery['sent'])) {
-            viewer_registration_model_resend_delete_unsent($requestId, $authorityId);
-            return ['sent' => false, 'reason' => 'mail_delivery_failed', 'delivery' => $delivery];
+            viewer_registration_model_resend_delete_unsent(
+                $requestId,
+                $authorityId,
+            );
+            return [
+                'sent' => false,
+                'reason' => 'mail_delivery_failed',
+                'delivery' => $delivery,
+            ];
         }
 
         $now = now_sql();
-        if (!viewer_registration_model_resend_mark_sent($requestId, $authorityId, $now)) {
-            throw new RuntimeException('Verification resend handoff state could not be recorded.');
+        if (!viewer_registration_model_resend_mark_sent(
+            $requestId,
+            $authorityId,
+            $now,
+        )) {
+            throw new RuntimeException(
+                'Verification resend handoff state could not be recorded.',
+            );
         }
-        if (!viewer_registration_model_request_mark_verification_sent($requestId, VIEWER_REGISTRATION_STATUS_PENDING, $now)) {
-            throw new RuntimeException('Verification resend request handoff state could not be recorded.');
+        if (!viewer_registration_model_request_mark_verification_sent(
+            $requestId,
+            VIEWER_REGISTRATION_STATUS_PENDING,
+            $now,
+        )) {
+            throw new RuntimeException(
+                'Verification resend request handoff state could not be recorded.',
+            );
         }
         return ['sent' => true, 'reason' => 'sent', 'delivery' => $delivery];
     });
@@ -1377,13 +1751,17 @@ function viewer_registration_verification_resend_deliver_locked(int $requestId, 
  */
 function viewer_registration_mark_verification_sent(int $requestId): bool
 {
-    if (!viewer_registration_requests_enabled() || $requestId <= 0 || !viewer_registration_storage_available()) {
+    if (
+        !viewer_registration_requests_enabled()
+        || $requestId <= 0
+        || !viewer_registration_storage_available()
+    ) {
         return false;
     }
     return viewer_registration_model_request_mark_verification_sent(
         $requestId,
         VIEWER_REGISTRATION_STATUS_PENDING,
-        now_sql()
+        now_sql(),
     );
 }
 
@@ -1398,23 +1776,34 @@ function viewer_registration_mark_verification_sent(int $requestId): bool
  * @param bool $forUpdate Whether authoritative rows should be locked for confirmation.
  * @return ?array Matching request plus internal authority metadata, otherwise null.
  */
-function viewer_registration_verification_lookup(string $token, bool $forUpdate = false): ?array
-{
+function viewer_registration_verification_lookup(
+    string $token,
+    bool $forUpdate = false,
+): ?array {
     if ($token === '' || strlen($token) > 512) {
         return null;
     }
     $hash = security_authority_token_hash($token);
-    $primary = viewer_registration_model_verification_primary($hash, $forUpdate);
+    $primary = viewer_registration_model_verification_primary(
+        $hash,
+        $forUpdate,
+    );
     if ($primary && viewer_registration_request_row_is_verifiable($primary)) {
         $primary['_verification_authority_kind'] = 'primary';
         $primary['_verification_authority_id'] = null;
         return $primary;
     }
     $child = viewer_registration_model_verification_resend($hash, $forUpdate);
-    if (!$child || !viewer_registration_request_row_is_pending_active($child) || empty($child['resend_token_sent_at'])) {
+    if (
+        !$child
+        || !viewer_registration_request_row_is_pending_active($child)
+        || empty($child['resend_token_sent_at'])
+    ) {
         return null;
     }
-    $childExpiry = strtotime((string) ($child['resend_token_expires_at'] ?? ''));
+    $childExpiry = strtotime(
+        (string) ($child['resend_token_expires_at'] ?? ''),
+    );
     if ($childExpiry === false || $childExpiry < time()) {
         return null;
     }
@@ -1434,13 +1823,19 @@ function viewer_registration_verification_lookup(string $token, bool $forUpdate 
  */
 function viewer_registration_verification_validate(string $token): ?array
 {
-    if (!viewer_registration_requests_enabled() || $token === '' || !viewer_registration_storage_available()
-        || !viewer_security_transport_allowed()) {
+    if (
+        !viewer_registration_requests_enabled()
+        || $token === ''
+        || !viewer_registration_storage_available()
+        || !viewer_security_transport_allowed()
+    ) {
         return null;
     }
 
     $row = viewer_registration_verification_lookup($token, false);
-    return $row && viewer_registration_request_allowed_by_current_mode($row) ? $row : null;
+    return $row && viewer_registration_request_allowed_by_current_mode($row)
+        ? $row
+        : null;
 }
 
 /**
@@ -1455,31 +1850,45 @@ function viewer_registration_verification_validate(string $token): ?array
  */
 function viewer_registration_verification_confirm(string $token): ?array
 {
-    if (!viewer_registration_requests_enabled() || $token === '' || !viewer_registration_storage_available()
-        || !viewer_security_transport_allowed()) {
+    if (
+        !viewer_registration_requests_enabled()
+        || $token === ''
+        || !viewer_registration_storage_available()
+        || !viewer_security_transport_allowed()
+    ) {
         return null;
     }
 
     try {
-        return viewer_registration_model_transaction(static function () use ($token): ?array {
+        return viewer_registration_model_transaction(static function () use (
+            $token,
+        ): ?array {
             $row = viewer_registration_verification_lookup($token, true);
-            if (!$row || !viewer_registration_request_allowed_by_current_mode($row)) {
+            if (
+                !$row
+                || !viewer_registration_request_allowed_by_current_mode($row)
+            ) {
                 return null;
             }
             $now = now_sql();
-            $verifiedExpiry = date('Y-m-d H:i:s', time() + viewer_registration_verified_lifetime_seconds());
+            $verifiedExpiry = date(
+                'Y-m-d H:i:s',
+                time() + viewer_registration_verified_lifetime_seconds(),
+            );
             if (!viewer_registration_model_confirm_request(
                 (int) $row['id'],
                 VIEWER_REGISTRATION_STATUS_PENDING,
                 VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
                 $verifiedExpiry,
-                $now
+                $now,
             )) {
                 return viewer_registration_model_abort(null);
             }
             // The request transition is authoritative; deleting children additionally removes
             // sibling lookup rows immediately instead of waiting for scheduled cleanup.
-            viewer_registration_model_verification_delete_for_request((int) $row['id']);
+            viewer_registration_model_verification_delete_for_request(
+                (int) $row['id'],
+            );
             $row['status'] = VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED;
             $row['verification_token_consumed_at'] = $now;
             $row['verified_at'] = $now;
@@ -1507,7 +1916,9 @@ function viewer_invitation_revoke(int $invitationId): bool
     if ($invitationId <= 0 || !viewer_registration_storage_available()) {
         return false;
     }
-    return viewer_registration_model_transaction(static function () use ($invitationId): bool {
+    return viewer_registration_model_transaction(static function () use (
+        $invitationId,
+    ): bool {
         $now = now_sql();
         if (!viewer_registration_model_invitation_revoke($invitationId, $now)) {
             return false;
@@ -1517,7 +1928,7 @@ function viewer_invitation_revoke(int $invitationId): bool
             VIEWER_REGISTRATION_STATUS_CANCELLED,
             VIEWER_REGISTRATION_STATUS_PENDING,
             VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED,
-            $now
+            $now,
         );
         return true;
     });
@@ -1543,6 +1954,7 @@ function viewer_invitation_delete(int $invitationId): bool
     viewer_invitation_revoke($invitationId);
     return viewer_registration_model_invitation_delete($invitationId);
 }
+
 /**
  * Run bounded cleanup for pending registrations and invitation capabilities.
  *
@@ -1558,12 +1970,16 @@ function viewer_registration_maintenance_cleanup(): array
     return viewer_registration_model_transaction(static function (): array {
         viewer_registration_capacity_lock();
         $now = now_sql();
-        $verificationTokensDeleted = viewer_registration_model_maintenance_delete_verification($now);
+        $verificationTokensDeleted =
+            viewer_registration_model_maintenance_delete_verification($now);
         $before = viewer_registration_model_request_count();
         $remaining = viewer_registration_cleanup_requests_locked();
         $requestsDeleted = max(0, $before - $remaining);
         $oldInvitationCutoff = date('Y-m-d H:i:s', time() - 604800);
-        $invitationsDeleted = viewer_registration_model_maintenance_delete_invitations($now, $oldInvitationCutoff);
+        $invitationsDeleted = viewer_registration_model_maintenance_delete_invitations(
+            $now,
+            $oldInvitationCutoff,
+        );
         return [
             'registration_requests' => $requestsDeleted,
             'verification_tokens' => $verificationTokensDeleted,
@@ -1585,70 +2001,145 @@ function viewer_registration_maintenance_cleanup(): array
 function viewer_registration_activate_verified(string $password): array
 {
     if (!viewer_accounts_enabled()) {
-        return ['activated' => false, 'reason' => 'viewer_disabled', 'account_id' => null];
+        return [
+            'activated' => false,
+            'reason' => 'viewer_disabled',
+            'account_id' => null,
+        ];
     }
     if (!viewer_auth_storage_available()) {
-        return ['activated' => false, 'reason' => 'storage_unavailable', 'account_id' => null];
+        return [
+            'activated' => false,
+            'reason' => 'storage_unavailable',
+            'account_id' => null,
+        ];
     }
     if (!viewer_security_transport_allowed()) {
-        return ['activated' => false, 'reason' => 'secure_transport_required', 'account_id' => null];
+        return [
+            'activated' => false,
+            'reason' => 'secure_transport_required',
+            'account_id' => null,
+        ];
     }
 
     $activation = viewer_registration_activation_state();
     if ($activation === null) {
-        return ['activated' => false, 'reason' => 'activation_state_invalid', 'account_id' => null];
+        return [
+            'activated' => false,
+            'reason' => 'activation_state_invalid',
+            'account_id' => null,
+        ];
     }
 
-    return viewer_registration_model_transaction(static function () use ($activation, $password): array {
+    return viewer_registration_model_transaction(static function () use (
+        $activation,
+        $password,
+    ): array {
         $registrationCount = viewer_registration_capacity_lock();
         $registrationCount = viewer_registration_capacity_recount_locked();
-        $request = viewer_registration_model_request_lock($activation['request_id']);
-        $requestExpiry = $request ? strtotime((string) ($request['expires_at'] ?? '')) : false;
-        $verifiedAt = $request ? strtotime((string) ($request['verified_at'] ?? '')) : false;
-        if (!$request
-            || (string) ($request['status'] ?? '') !== VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED
+        $request = viewer_registration_model_request_lock(
+            $activation['request_id'],
+        );
+        $requestExpiry = $request
+            ? strtotime((string) ($request['expires_at'] ?? ''))
+            : false;
+        $verifiedAt = $request
+            ? strtotime((string) ($request['verified_at'] ?? ''))
+            : false;
+        if (
+            !$request
+            || (string) ($request['status'] ?? '')
+                !== VIEWER_REGISTRATION_STATUS_EMAIL_VERIFIED
             || !empty($request['cancelled_at'])
             || $requestExpiry === false
             || $requestExpiry < time()
             || $verifiedAt === false
-            || !viewer_registration_activation_matches_row($activation, $request)) {
+            || !viewer_registration_activation_matches_row(
+                $activation,
+                $request,
+            )
+        ) {
             viewer_registration_activation_clear();
-            return ['activated' => false, 'reason' => 'activation_state_invalid', 'account_id' => null];
+            return [
+                'activated' => false,
+                'reason' => 'activation_state_invalid',
+                'account_id' => null,
+            ];
         }
         if (!viewer_registration_request_allowed_by_current_mode($request)) {
             viewer_registration_activation_clear();
-            return ['activated' => false, 'reason' => 'registration_mode_restricted', 'account_id' => null];
+            return [
+                'activated' => false,
+                'reason' => 'registration_mode_restricted',
+                'account_id' => null,
+            ];
         }
 
         $invitationId = (int) ($request['viewer_invitation_id'] ?? 0);
         if ($invitationId > 0) {
-            $invitation = viewer_registration_model_invitation_lock($invitationId);
-            $inviteExpiry = $invitation ? strtotime((string) ($invitation['expires_at'] ?? '')) : false;
-            $expectedFingerprint = trim((string) ($invitation['target_email_fingerprint'] ?? ''));
-            $requestFingerprint = viewer_email_fingerprint((string) ($request['normalized_email'] ?? ''));
-            if (!$invitation
+            $invitation =
+                viewer_registration_model_invitation_lock($invitationId);
+            $inviteExpiry = $invitation
+                ? strtotime((string) ($invitation['expires_at'] ?? ''))
+                : false;
+            $expectedFingerprint = trim(
+                (string) ($invitation['target_email_fingerprint'] ?? ''),
+            );
+            $requestFingerprint = viewer_email_fingerprint(
+                (string) ($request['normalized_email'] ?? ''),
+            );
+            if (
+                !$invitation
                 || !empty($invitation['revoked_at'])
                 || empty($invitation['claimed_at'])
                 || $inviteExpiry === false
                 || $inviteExpiry < time()
-                || ($expectedFingerprint !== '' && ($requestFingerprint === '' || !hash_equals($expectedFingerprint, $requestFingerprint)))) {
+                || (
+                    $expectedFingerprint !== ''
+                    && (
+                        $requestFingerprint === ''
+                        || !hash_equals(
+                            $expectedFingerprint,
+                            $requestFingerprint,
+                        )
+                    )
+                )
+            ) {
                 viewer_registration_activation_clear();
-                return ['activated' => false, 'reason' => 'invitation_invalid', 'account_id' => null];
+                return [
+                    'activated' => false,
+                    'reason' => 'invitation_invalid',
+                    'account_id' => null,
+                ];
             }
         }
 
-        if (viewer_registration_model_account_exists((string) $request['normalized_email'])) {
+        if (viewer_registration_model_account_exists(
+            (string) $request['normalized_email'],
+        )) {
             viewer_registration_activation_clear();
-            return ['activated' => false, 'reason' => 'account_exists', 'account_id' => null];
+            return [
+                'activated' => false,
+                'reason' => 'account_exists',
+                'account_id' => null,
+            ];
         }
 
         viewer_account_capacity_lock();
         $accountCount = viewer_account_capacity_recount_locked();
         if ($accountCount >= viewer_account_cap()) {
-            return ['activated' => false, 'reason' => 'account_capacity', 'account_id' => null];
+            return [
+                'activated' => false,
+                'reason' => 'account_capacity',
+                'account_id' => null,
+            ];
         }
         if (!viewer_password_input_is_acceptable($password)) {
-            return ['activated' => false, 'reason' => 'password_policy', 'account_id' => null];
+            return [
+                'activated' => false,
+                'reason' => 'password_policy',
+                'account_id' => null,
+            ];
         }
 
         $passwordHash = viewer_password_hash($password);
@@ -1659,24 +2150,45 @@ function viewer_registration_activate_verified(string $password): array
             $passwordHash,
             VIEWER_ACCOUNT_STATUS_ACTIVE,
             (string) $request['verified_at'],
-            $now
+            $now,
         );
         if ($accountId <= 0) {
-            throw new RuntimeException('Viewer account activation did not create a durable account.');
+            throw new RuntimeException(
+                'Viewer account activation did not create a durable account.',
+            );
         }
-        viewer_registration_model_account_capacity_set(VIEWER_ACCOUNT_CAPACITY_STATE_KEY, $accountCount + 1, $now);
+        viewer_registration_model_account_capacity_set(
+            VIEWER_ACCOUNT_CAPACITY_STATE_KEY,
+            $accountCount + 1,
+            $now,
+        );
         if (!viewer_registration_model_request_delete((int) $request['id'])) {
-            throw new RuntimeException('Viewer activation could not retire the staging registration.');
+            throw new RuntimeException(
+                'Viewer activation could not retire the staging registration.',
+            );
         }
-        viewer_registration_model_capacity_set(VIEWER_REGISTRATION_STATE_KEY, max(0, $registrationCount - 1), $now);
+        viewer_registration_model_capacity_set(
+            VIEWER_REGISTRATION_STATE_KEY,
+            max(0, $registrationCount - 1),
+            $now,
+        );
 
         if (function_exists(__NAMESPACE__ . '\viewer_security_event_record')) {
-            viewer_security_event_record('viewer.account_activated', $accountId, 'success', [
-                'account_state' => VIEWER_ACCOUNT_STATUS_ACTIVE,
-                'security_version' => 1,
-            ]);
+            viewer_security_event_record(
+                'viewer.account_activated',
+                $accountId,
+                'success',
+                [
+                    'account_state' => VIEWER_ACCOUNT_STATUS_ACTIVE,
+                    'security_version' => 1,
+                ],
+            );
         }
         viewer_registration_activation_clear();
-        return ['activated' => true, 'reason' => 'activated', 'account_id' => $accountId];
+        return [
+            'activated' => true,
+            'reason' => 'activated',
+            'account_id' => $accountId,
+        ];
     });
 }

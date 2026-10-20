@@ -39,20 +39,42 @@ function public_visual_preview_inherit_referrer_context(
     string $method,
     string $referer,
     string $requestOrigin,
-    string $mountPath
+    string $mountPath,
 ): array {
-    $unchanged = ['query' => $query, 'inherited' => false, 'anonymous' => false];
-    if (!in_array(strtoupper($method), ['GET', 'HEAD'], true) || $referer === '' || $requestOrigin === '') {
+    $unchanged = [
+        'query' => $query,
+        'inherited' => false,
+        'anonymous' => false,
+    ];
+    if (
+        !in_array(strtoupper($method), ['GET', 'HEAD'], true)
+        || $referer === ''
+        || $requestOrigin === ''
+    ) {
         return $unchanged;
     }
 
     $originParts = parse_url($requestOrigin);
     $refererParts = parse_url($referer);
-    if (!is_array($originParts) || !is_array($refererParts)
-        || !isset($originParts['scheme'], $originParts['host'], $refererParts['scheme'], $refererParts['host'])) {
+    if (
+        !is_array($originParts)
+        || !is_array($refererParts)
+        || !isset(
+            $originParts['scheme'],
+            $originParts['host'],
+            $refererParts['scheme'],
+            $refererParts['host'],
+        )
+    ) {
         return $unchanged;
     }
-    foreach (['user', 'pass', 'path', 'query', 'fragment'] as $forbiddenOriginPart) {
+    foreach ([
+        'user',
+        'pass',
+        'path',
+        'query',
+        'fragment',
+    ] as $forbiddenOriginPart) {
         if (array_key_exists($forbiddenOriginPart, $originParts)) {
             return $unchanged;
         }
@@ -74,7 +96,10 @@ function public_visual_preview_inherit_referrer_context(
     };
     $requestOriginTuple = $normalizeOrigin($originParts);
     $refererOriginTuple = $normalizeOrigin($refererParts);
-    if ($requestOriginTuple === null || $requestOriginTuple !== $refererOriginTuple) {
+    if (
+        $requestOriginTuple === null
+        || $requestOriginTuple !== $refererOriginTuple
+    ) {
         return $unchanged;
     }
 
@@ -83,8 +108,15 @@ function public_visual_preview_inherit_referrer_context(
         $mountPath = '';
     }
     $refererPath = (string) ($refererParts['path'] ?? '');
-    if ($refererPath === '' || $refererPath[0] !== '/' || ($mountPath !== ''
-        && $refererPath !== $mountPath && !str_starts_with($refererPath, $mountPath . '/'))) {
+    if (
+        $refererPath === ''
+        || $refererPath[0] !== '/'
+        || (
+            $mountPath !== ''
+            && $refererPath !== $mountPath
+            && !str_starts_with($refererPath, $mountPath . '/')
+        )
+    ) {
         return $unchanged;
     }
 
@@ -103,9 +135,15 @@ function public_visual_preview_inherit_referrer_context(
             $audienceValues[] = $value;
         }
     }
-    if (count($previewValues) !== 1 || $previewValues[0] !== 'visual'
+    if (
+        count($previewValues) !== 1
+        || $previewValues[0] !== 'visual'
         || count($audienceValues) > 1
-        || ($audienceValues !== [] && $audienceValues[0] !== 'anonymous')) {
+        || (
+            $audienceValues !== []
+            && $audienceValues[0] !== 'anonymous'
+        )
+    ) {
         return $unchanged;
     }
 
@@ -119,7 +157,11 @@ function public_visual_preview_inherit_referrer_context(
         // A stylesheet or CSS URL cannot upgrade an anonymous preview to the Admin audience.
         $inheritedQuery['view_as'] = 'anonymous';
     }
-    return ['query' => $inheritedQuery, 'inherited' => true, 'anonymous' => $anonymous];
+    return [
+        'query' => $inheritedQuery,
+        'inherited' => true,
+        'anonymous' => $anonymous,
+    ];
 }
 
 /**
@@ -130,8 +172,12 @@ function public_visual_preview_inherit_referrer_context(
  * @param array<string,mixed> $query Parsed request query values used to reject unsafe asset variants and benchmark writes.
  * @return array{active:bool,allowed:bool,status:int,cache_control:string,reason:string} Preview classification, authorization result, response status, cache policy, and bounded reason code.
  */
-function public_visual_preview_request_decision(string $page, string $method, bool $isAdmin, array $query): array
-{
+function public_visual_preview_request_decision(
+    string $page,
+    string $method,
+    bool $isAdmin,
+    array $query,
+): array {
     $marker = $query['preview'] ?? null;
     if ($marker === null) {
         return [
@@ -163,11 +209,18 @@ function public_visual_preview_request_decision(string $page, string $method, bo
         $base['reason'] = 'read_only_method_required';
         return $base;
     }
-    if (isset($query['benchmark_token']) || isset($query['benchmark_run']) || isset($query['benchmark'])) {
+    if (
+        isset($query['benchmark_token'])
+        || isset($query['benchmark_run'])
+        || isset($query['benchmark'])
+    ) {
         $base['reason'] = 'benchmark_context_refused';
         return $base;
     }
-    if ($page === 'theme_background_asset' && (string) ($query['variant'] ?? '') === 'original') {
+    if (
+        $page === 'theme_background_asset'
+        && (string) ($query['variant'] ?? '') === 'original'
+    ) {
         $base['reason'] = 'original_background_refused';
         return $base;
     }

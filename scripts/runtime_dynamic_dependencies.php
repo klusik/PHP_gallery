@@ -38,8 +38,10 @@ function runtime_dynamic_dependency_additional_roots(): array
 {
     $targets = runtime_dynamic_dependency_callback_targets();
     return [
-        'updater-work' => $targets['Gallery\\Services\\application_update_job_finalize'],
-        'domain-admin-test-runs' => $targets['Gallery\\Services\\admin_test_run_clear_safe_caches'],
+        'updater-work' =>
+            $targets['Gallery\\Services\\application_update_job_finalize'],
+        'domain-admin-test-runs' =>
+            $targets['Gallery\\Services\\admin_test_run_clear_safe_caches'],
     ];
 }
 
@@ -91,118 +93,118 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     // Storage observation callbacks are supplied lexically by reviewed call sites.
     // They run once and add no hidden Gallery roots or user-selected targets.
     $signatures = <<<'SITES'
-Gallery\Controllers\admin_gallery_discovery_capture_html|variable_callable|$renderer()
-Gallery\Controllers\admin_maintenance_center_json_action|variable_callable|$callback()
-Gallery\Controllers\admin_upload_capture_html|variable_callable|$renderer()
-Gallery\Controllers\smart_gallery_capture_html|variable_callable|$renderer()
-Gallery\Controllers\viewer_collection_capture_html|variable_callable|$renderer()
-Gallery\Controllers\viewer_lifecycle_capture_html|variable_callable|$renderer()
-Gallery\Core\db|dynamic_class|new $pdoClass
-Gallery\Core\db|variable_callable|$pdoClass()
-Gallery\Core\load_migration_definition|dynamic_callback_argument|is_callable($after)
-Gallery\Core\run_migrations|variable_callable|$after()
-Gallery\Core\storage_observer_call|variable_callable|$callback()
-Gallery\Models\admin_gallery_report_model_image_rows_after_id|variable_callable|$optional()
-Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$compensate()
-Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$operation()
-Gallery\Models\gallery_feature_plan_model_transaction|variable_callable|$operation()
-Gallery\Models\app_settings_model_set_many_with_activation|variable_callable|$activate()
-Gallery\Models\viewer_account_model_transaction|variable_callable|$operation()
-Gallery\Models\viewer_collection_model_transaction|variable_callable|$operation()
-Gallery\Models\viewer_favourite_model_set|variable_callable|$lockedAccountAllowed()
-Gallery\Models\viewer_lifecycle_model_transaction|variable_callable|$operation()
-Gallery\Models\viewer_registration_model_independent_transaction|variable_callable|$operation()
-Gallery\Models\viewer_registration_model_transaction|variable_callable|$operation()
-Gallery\Services\admin_log_archive_register_request_trigger|variable_callable|$loadDependencies()
-Gallery\Services\admin_mutation_schema_health_statuses|dynamic_callback_argument|is_callable($resolver)
-Gallery\Services\admin_mutation_schema_health_statuses|variable_callable|$resolver()
-Gallery\Services\admin_ordered_gallery_rows|variable_callable|$appendChildren()
-Gallery\Services\admin_presentation_schema_health_statuses|dynamic_callback_argument|is_callable($resolver)
-Gallery\Services\admin_presentation_schema_health_statuses|variable_callable|$resolver()
-Gallery\Services\admin_render_profile_db|variable_callable|$callback()
-Gallery\Services\admin_render_profile_span|variable_callable|$callback()
-Gallery\Services\admin_setup_wizard_apply|dynamic_callback_argument|is_callable($restoreUrl)
-Gallery\Services\admin_setup_wizard_apply|variable_callable|$restoreUrl()
-Gallery\Services\admin_storage_refresh_with_lock|variable_callable|$operation()
-Gallery\Services\admin_storage_refresh_measure|variable_callable|$callback()
-Gallery\Services\admin_test_run_clear_safe_caches|dynamic_function_exists|function_exists(dynamic)
-Gallery\Services\admin_test_run_clear_safe_caches|variable_callable|$callback()
-Gallery\Services\admin_test_run_create|variable_callable|$callback()
-Gallery\Services\admin_test_run_create|variable_callable|$phase()
-Gallery\Services\application_autoupdate_maybe_run|variable_callable|$loadDependencies()
-Gallery\Services\application_update_background_chain_deliver|variable_callable|$deliver()
-Gallery\Services\application_update_cache_blocking_job_diagnostic|variable_callable|$read()
-Gallery\Services\application_update_job_finalize|dynamic_function_exists|function_exists(dynamic)
-Gallery\Services\application_update_job_finalize|variable_callable|$callback()
-Gallery\Services\application_update_release_files|variable_callable|$priority()
-Gallery\Services\browser_thumbnail_rebuild_stream_file_payload|variable_callable|$emit()
-Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$emit()
-Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$writeEntry()
-Gallery\Services\cache_lifecycle_checkpoint_capacity|variable_callable|$probe()
-Gallery\Services\cache_lifecycle_with_lock|variable_callable|$operation()
-Gallery\Services\content_translation_rows|dynamic_callback_argument|is_callable($contentLocalizationLoaderForTests)
-Gallery\Services\content_translation_rows|variable_callable|$contentLocalizationLoaderForTests()
-Gallery\Services\custom_css_visual_preview_css_has_imports|variable_callable|$decodeIdentifier()
-Gallery\Services\database_maintenance_cleanup_rules|variable_callable|$addOrphan()
-Gallery\Services\database_maintenance_migration_audit|variable_callable|$appendObject()
-Gallery\Services\database_maintenance_migration_audit|variable_callable|$touchTable()
-Gallery\Services\database_maintenance_table_policies|variable_callable|$derived()
-Gallery\Services\database_maintenance_table_policies|variable_callable|$protected()
-Gallery\Services\flight_map_each_csv_row|variable_callable|$callback()
-Gallery\Services\gallery_benchmark_media_request_finish|variable_callable|$duration()
-Gallery\Services\gallery_benchmark_request_trace_snapshot|variable_callable|$duration()
-Gallery\Services\gallery_benchmark_update_log|variable_callable|$callback()
-Gallery\Services\gallery_editor_unique_slug|variable_callable|$collision()
-Gallery\Services\gallery_effective_gps_map_enabled|variable_callable|$galleryLookup()
-Gallery\Services\gallery_image_move_execute_files|variable_callable|$checkpoint()
-Gallery\Services\gallery_legacy_allows_gps_maps|variable_callable|$galleryLookup()
-Gallery\Services\gallery_migration_package_plan|variable_callable|$flush()
-Gallery\Services\gallery_move_images_locked|dynamic_callback_argument|is_callable($options)
-Gallery\Services\gallery_move_images_locked|variable_callable|$checkpoint()
-Gallery\Services\gallery_public_path_assignments|variable_callable|$buildPath()
-Gallery\Services\image_decode_gd_path_result|dynamic_function_exists|function_exists(dynamic)
-Gallery\Services\legacy_download_artifact_cache_status_for_path|variable_callable|$probe()
-Gallery\Services\maintenance_center_analysis_step_unlocked|dynamic_callback_argument|is_callable($analyzer)
-Gallery\Services\maintenance_center_analysis_step_unlocked|variable_callable|$analyzer()
-Gallery\Services\maintenance_center_execution_step_unlocked|dynamic_callback_argument|is_callable($executor)
-Gallery\Services\maintenance_center_execution_step_unlocked|variable_callable|$executor()
-Gallery\Services\maintenance_center_load_task_dependencies|variable_callable|$loadDependencies()
-Gallery\Services\maintenance_center_expand_selection|variable_callable|$expand()
-Gallery\Services\maintenance_center_registry_order|variable_callable|$visit()
-Gallery\Services\pagination_page_url|variable_callable|$urlBuilder()
-Gallery\Services\public_render_profile_db|variable_callable|$callback()
-Gallery\Services\public_render_profile_span|variable_callable|$callback()
-Gallery\Services\public_render_profile_with_thumbnail_purpose|variable_callable|$callback()
-Gallery\Services\public_visual_preview_inherit_referrer_context|variable_callable|$normalizeOrigin()
-Gallery\Services\schema_inspection_column_definition_contains|dynamic_callback_argument|is_callable($override)
-Gallery\Services\schema_inspection_column_definition_contains|variable_callable|$override()
-Gallery\Services\schema_inspection_column_nullable|dynamic_callback_argument|is_callable($override)
-Gallery\Services\schema_inspection_column_nullable|variable_callable|$override()
-Gallery\Services\schema_inspection_execute_query|dynamic_callback_argument|is_callable($override)
-Gallery\Services\schema_inspection_execute_query|variable_callable|$override()
-Gallery\Services\schema_inspection_prime_table_snapshots|dynamic_callback_argument|is_callable($override)
-Gallery\Services\simbrief_description_build_localized_markdown|variable_callable|$replace()
-Gallery\Services\site_maintenance_process_cleanup_step|variable_callable|$run()
-Gallery\Services\site_maintenance_register_request_trigger|variable_callable|$loadDependencies()
-Gallery\Services\site_maintenance_register_cache_trigger|variable_callable|$loadDependencies()
-Gallery\Services\site_maintenance_run_cleanup_operation|variable_callable|$callback()
-Gallery\Services\site_maintenance_with_lock|variable_callable|$callback()
-Gallery\Services\theme_background_with_writer_lock|variable_callable|$operation()
-Gallery\Services\site_url_mutate_config_source|variable_callable|$mutator()
-Gallery\Services\smart_gallery_map_query_context|variable_callable|$lookup()
-Gallery\Services\smart_gallery_presentation_master_status|variable_callable|$capabilityEnabled()
-Gallery\Services\upload_automation_with_gallery_lock|variable_callable|$callback()
-Gallery\Services\viewer_authenticate_password|variable_callable|$failure()
-Gallery\Services\viewer_email_change_request_start|variable_callable|$failure()
-Gallery\Services\viewer_password_reset_request|variable_callable|$result()
-Gallery\Services\viewer_reauthentication_status|variable_callable|$failure()
-Gallery\Services\viewer_registration_verification_resend_deliver_locked|variable_callable|$deliver()
-Gallery\Services\viewer_registration_verification_resend_prepare|variable_callable|$empty()
-Gallery\Services\weighted_tag_suggestions_for_gallery|variable_callable|$addRows()
-Gallery\Services\navigation_data_navigraph_exchange_code|variable_callable|$postForm()
-Gallery\Views\admin_gallery_report_table|dynamic_callback_argument|is_callable($column)
-Gallery\Views\view_telemetry_export_table|dynamic_callback_argument|is_callable($column)
-SITES;
+    Gallery\Controllers\admin_gallery_discovery_capture_html|variable_callable|$renderer()
+    Gallery\Controllers\admin_maintenance_center_json_action|variable_callable|$callback()
+    Gallery\Controllers\admin_upload_capture_html|variable_callable|$renderer()
+    Gallery\Controllers\smart_gallery_capture_html|variable_callable|$renderer()
+    Gallery\Controllers\viewer_collection_capture_html|variable_callable|$renderer()
+    Gallery\Controllers\viewer_lifecycle_capture_html|variable_callable|$renderer()
+    Gallery\Core\db|dynamic_class|new $pdoClass
+    Gallery\Core\db|variable_callable|$pdoClass()
+    Gallery\Core\load_migration_definition|dynamic_callback_argument|is_callable($after)
+    Gallery\Core\run_migrations|variable_callable|$after()
+    Gallery\Core\storage_observer_call|variable_callable|$callback()
+    Gallery\Models\admin_gallery_report_model_image_rows_after_id|variable_callable|$optional()
+    Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$compensate()
+    Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$operation()
+    Gallery\Models\gallery_feature_plan_model_transaction|variable_callable|$operation()
+    Gallery\Models\app_settings_model_set_many_with_activation|variable_callable|$activate()
+    Gallery\Models\viewer_account_model_transaction|variable_callable|$operation()
+    Gallery\Models\viewer_collection_model_transaction|variable_callable|$operation()
+    Gallery\Models\viewer_favourite_model_set|variable_callable|$lockedAccountAllowed()
+    Gallery\Models\viewer_lifecycle_model_transaction|variable_callable|$operation()
+    Gallery\Models\viewer_registration_model_independent_transaction|variable_callable|$operation()
+    Gallery\Models\viewer_registration_model_transaction|variable_callable|$operation()
+    Gallery\Services\admin_log_archive_register_request_trigger|variable_callable|$loadDependencies()
+    Gallery\Services\admin_mutation_schema_health_statuses|dynamic_callback_argument|is_callable($resolver)
+    Gallery\Services\admin_mutation_schema_health_statuses|variable_callable|$resolver()
+    Gallery\Services\admin_ordered_gallery_rows|variable_callable|$appendChildren()
+    Gallery\Services\admin_presentation_schema_health_statuses|dynamic_callback_argument|is_callable($resolver)
+    Gallery\Services\admin_presentation_schema_health_statuses|variable_callable|$resolver()
+    Gallery\Services\admin_render_profile_db|variable_callable|$callback()
+    Gallery\Services\admin_render_profile_span|variable_callable|$callback()
+    Gallery\Services\admin_setup_wizard_apply|dynamic_callback_argument|is_callable($restoreUrl)
+    Gallery\Services\admin_setup_wizard_apply|variable_callable|$restoreUrl()
+    Gallery\Services\admin_storage_refresh_with_lock|variable_callable|$operation()
+    Gallery\Services\admin_storage_refresh_measure|variable_callable|$callback()
+    Gallery\Services\admin_test_run_clear_safe_caches|dynamic_function_exists|function_exists(dynamic)
+    Gallery\Services\admin_test_run_clear_safe_caches|variable_callable|$callback()
+    Gallery\Services\admin_test_run_create|variable_callable|$callback()
+    Gallery\Services\admin_test_run_create|variable_callable|$phase()
+    Gallery\Services\application_autoupdate_maybe_run|variable_callable|$loadDependencies()
+    Gallery\Services\application_update_background_chain_deliver|variable_callable|$deliver()
+    Gallery\Services\application_update_cache_blocking_job_diagnostic|variable_callable|$read()
+    Gallery\Services\application_update_job_finalize|dynamic_function_exists|function_exists(dynamic)
+    Gallery\Services\application_update_job_finalize|variable_callable|$callback()
+    Gallery\Services\application_update_release_files|variable_callable|$priority()
+    Gallery\Services\browser_thumbnail_rebuild_stream_file_payload|variable_callable|$emit()
+    Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$emit()
+    Gallery\Services\browser_thumbnail_rebuild_stream_source_zip|variable_callable|$writeEntry()
+    Gallery\Services\cache_lifecycle_checkpoint_capacity|variable_callable|$probe()
+    Gallery\Services\cache_lifecycle_with_lock|variable_callable|$operation()
+    Gallery\Services\content_translation_rows|dynamic_callback_argument|is_callable($contentLocalizationLoaderForTests)
+    Gallery\Services\content_translation_rows|variable_callable|$contentLocalizationLoaderForTests()
+    Gallery\Services\custom_css_visual_preview_css_has_imports|variable_callable|$decodeIdentifier()
+    Gallery\Services\database_maintenance_cleanup_rules|variable_callable|$addOrphan()
+    Gallery\Services\database_maintenance_migration_audit|variable_callable|$appendObject()
+    Gallery\Services\database_maintenance_migration_audit|variable_callable|$touchTable()
+    Gallery\Services\database_maintenance_table_policies|variable_callable|$derived()
+    Gallery\Services\database_maintenance_table_policies|variable_callable|$protected()
+    Gallery\Services\flight_map_each_csv_row|variable_callable|$callback()
+    Gallery\Services\gallery_benchmark_media_request_finish|variable_callable|$duration()
+    Gallery\Services\gallery_benchmark_request_trace_snapshot|variable_callable|$duration()
+    Gallery\Services\gallery_benchmark_update_log|variable_callable|$callback()
+    Gallery\Services\gallery_editor_unique_slug|variable_callable|$collision()
+    Gallery\Services\gallery_effective_gps_map_enabled|variable_callable|$galleryLookup()
+    Gallery\Services\gallery_image_move_execute_files|variable_callable|$checkpoint()
+    Gallery\Services\gallery_legacy_allows_gps_maps|variable_callable|$galleryLookup()
+    Gallery\Services\gallery_migration_package_plan|variable_callable|$flush()
+    Gallery\Services\gallery_move_images_locked|dynamic_callback_argument|is_callable($options)
+    Gallery\Services\gallery_move_images_locked|variable_callable|$checkpoint()
+    Gallery\Services\gallery_public_path_assignments|variable_callable|$buildPath()
+    Gallery\Services\image_decode_gd_path_result|dynamic_function_exists|function_exists(dynamic)
+    Gallery\Services\legacy_download_artifact_cache_status_for_path|variable_callable|$probe()
+    Gallery\Services\maintenance_center_analysis_step_unlocked|dynamic_callback_argument|is_callable($analyzer)
+    Gallery\Services\maintenance_center_analysis_step_unlocked|variable_callable|$analyzer()
+    Gallery\Services\maintenance_center_execution_step_unlocked|dynamic_callback_argument|is_callable($executor)
+    Gallery\Services\maintenance_center_execution_step_unlocked|variable_callable|$executor()
+    Gallery\Services\maintenance_center_load_task_dependencies|variable_callable|$loadDependencies()
+    Gallery\Services\maintenance_center_expand_selection|variable_callable|$expand()
+    Gallery\Services\maintenance_center_registry_order|variable_callable|$visit()
+    Gallery\Services\pagination_page_url|variable_callable|$urlBuilder()
+    Gallery\Services\public_render_profile_db|variable_callable|$callback()
+    Gallery\Services\public_render_profile_span|variable_callable|$callback()
+    Gallery\Services\public_render_profile_with_thumbnail_purpose|variable_callable|$callback()
+    Gallery\Services\public_visual_preview_inherit_referrer_context|variable_callable|$normalizeOrigin()
+    Gallery\Services\schema_inspection_column_definition_contains|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\schema_inspection_column_definition_contains|variable_callable|$override()
+    Gallery\Services\schema_inspection_column_nullable|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\schema_inspection_column_nullable|variable_callable|$override()
+    Gallery\Services\schema_inspection_execute_query|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\schema_inspection_execute_query|variable_callable|$override()
+    Gallery\Services\schema_inspection_prime_table_snapshots|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\simbrief_description_build_localized_markdown|variable_callable|$replace()
+    Gallery\Services\site_maintenance_process_cleanup_step|variable_callable|$run()
+    Gallery\Services\site_maintenance_register_request_trigger|variable_callable|$loadDependencies()
+    Gallery\Services\site_maintenance_register_cache_trigger|variable_callable|$loadDependencies()
+    Gallery\Services\site_maintenance_run_cleanup_operation|variable_callable|$callback()
+    Gallery\Services\site_maintenance_with_lock|variable_callable|$callback()
+    Gallery\Services\theme_background_with_writer_lock|variable_callable|$operation()
+    Gallery\Services\site_url_mutate_config_source|variable_callable|$mutator()
+    Gallery\Services\smart_gallery_map_query_context|variable_callable|$lookup()
+    Gallery\Services\smart_gallery_presentation_master_status|variable_callable|$capabilityEnabled()
+    Gallery\Services\upload_automation_with_gallery_lock|variable_callable|$callback()
+    Gallery\Services\viewer_authenticate_password|variable_callable|$failure()
+    Gallery\Services\viewer_email_change_request_start|variable_callable|$failure()
+    Gallery\Services\viewer_password_reset_request|variable_callable|$result()
+    Gallery\Services\viewer_reauthentication_status|variable_callable|$failure()
+    Gallery\Services\viewer_registration_verification_resend_deliver_locked|variable_callable|$deliver()
+    Gallery\Services\viewer_registration_verification_resend_prepare|variable_callable|$empty()
+    Gallery\Services\weighted_tag_suggestions_for_gallery|variable_callable|$addRows()
+    Gallery\Services\navigation_data_navigraph_exchange_code|variable_callable|$postForm()
+    Gallery\Views\admin_gallery_report_table|dynamic_callback_argument|is_callable($column)
+    Gallery\Views\view_telemetry_export_table|dynamic_callback_argument|is_callable($column)
+    SITES;
 
     $reviewed = [];
     foreach (explode("\n", $signatures) as $signature) {
@@ -212,23 +214,61 @@ SITES;
         }
         $reviewed[$signature] = match (true) {
             str_contains($signature, '|dynamic_class|'),
-            str_starts_with($signature, 'Gallery\\Core\\db|variable_callable|') => 'runtime-class:PDO-driver-from-config',
-            str_contains($signature, 'cms_route_from_request|') => 'injected-module-loader:routing-paths',
+            str_starts_with($signature, 'Gallery\\Core\\db|variable_callable|'),
+                => 'runtime-class:PDO-driver-from-config',
+            str_contains($signature, 'cms_route_from_request|')
+                => 'injected-module-loader:routing-paths',
             str_contains($signature, 'application_autoupdate_maybe_run|'),
-            str_contains($signature, 'site_maintenance_register_request_trigger|'),
-            str_contains($signature, 'site_maintenance_register_cache_trigger|'),
-            str_contains($signature, 'admin_log_archive_register_request_trigger|') => 'injected-module-loader:explicit-module-id',
-            str_contains($signature, 'maintenance_center_load_task_dependencies|') => 'injected-module-loader:maintenance-center-task-worker',
-            str_contains($signature, 'application_update_job_finalize|') => 'string-callbacks:required-updater-cache-roots',
-            str_contains($signature, 'admin_test_run_clear_safe_caches|') => 'string-callbacks:required-diagnostic-cache-roots',
-            str_contains($signature, 'app_settings_model_set_many_with_activation|') => 'settings-model:transaction-activation-callback',
-            str_contains($signature, 'theme_background_with_writer_lock|') => 'theme-background-service:exclusive-writer-lock-operation',
-            str_contains($signature, 'custom_css_visual_preview_css_has_imports|') => 'custom-css-preview:local-escape-decoder-no-module-edge',
-            str_contains($signature, 'public_visual_preview_inherit_referrer_context|') => 'visual-preview-referrer:local-origin-normalizer-no-module-edge',
-            str_contains($signature, 'image_decode_gd_path_result|') => 'runtime-function:optional-gd-decoder',
-            str_contains($signature, 'navigation_data_navigraph_exchange_code|') => 'injected-oauth-transport:default-http-post-remains-static',
-            str_contains($signature, 'application_update_cache_blocking_job_diagnostic|') => 'updater-gc:local-bounded-json-reader-no-module-edge',
-            str_contains($signature, 'cache_lifecycle_with_lock|') => 'cache-lifecycle:caller-owned-static-operation-closure',
+            str_contains(
+                $signature,
+                'site_maintenance_register_request_trigger|',
+            ),
+            str_contains(
+                $signature,
+                'site_maintenance_register_cache_trigger|',
+            ),
+            str_contains(
+                $signature,
+                'admin_log_archive_register_request_trigger|',
+            ),
+                => 'injected-module-loader:explicit-module-id',
+            str_contains(
+                $signature,
+                'maintenance_center_load_task_dependencies|',
+            )
+                => 'injected-module-loader:maintenance-center-task-worker',
+            str_contains($signature, 'application_update_job_finalize|')
+                => 'string-callbacks:required-updater-cache-roots',
+            str_contains($signature, 'admin_test_run_clear_safe_caches|')
+                => 'string-callbacks:required-diagnostic-cache-roots',
+            str_contains(
+                $signature,
+                'app_settings_model_set_many_with_activation|',
+            )
+                => 'settings-model:transaction-activation-callback',
+            str_contains($signature, 'theme_background_with_writer_lock|')
+                => 'theme-background-service:exclusive-writer-lock-operation',
+            str_contains(
+                $signature,
+                'custom_css_visual_preview_css_has_imports|',
+            )
+                => 'custom-css-preview:local-escape-decoder-no-module-edge',
+            str_contains(
+                $signature,
+                'public_visual_preview_inherit_referrer_context|',
+            )
+                => 'visual-preview-referrer:local-origin-normalizer-no-module-edge',
+            str_contains($signature, 'image_decode_gd_path_result|')
+                => 'runtime-function:optional-gd-decoder',
+            str_contains($signature, 'navigation_data_navigraph_exchange_code|')
+                => 'injected-oauth-transport:default-http-post-remains-static',
+            str_contains(
+                $signature,
+                'application_update_cache_blocking_job_diagnostic|',
+            )
+                => 'updater-gc:local-bounded-json-reader-no-module-edge',
+            str_contains($signature, 'cache_lifecycle_with_lock|')
+                => 'cache-lifecycle:caller-owned-static-operation-closure',
             default => 'caller-owned-or-local-callback:no-module-edge',
         };
     }
@@ -258,10 +298,17 @@ function runtime_dynamic_dependency_sites(string $root): array
                 continue;
             }
             $analysis = collect_symbol_dependencies($parsed, $symbol, $symbols);
-            $deferred = array_map('strtolower', $policy['deferred_calls'][$symbol['name']] ?? []);
+            $deferred = array_map(
+                'strtolower',
+                $policy['deferred_calls'][$symbol['name']] ?? [],
+            );
             $edges = array_values(array_filter(
                 $analysis['edges'],
-                static fn(array $edge): bool => !in_array(strtolower($edge['target']), $deferred, true)
+                static fn(array $edge): bool => !in_array(
+                    strtolower($edge['target']),
+                    $deferred,
+                    true,
+                ),
             ));
             $dependencies[$symbol['id']] = [
                 'edges' => $edges,
@@ -270,7 +317,13 @@ function runtime_dynamic_dependency_sites(string $root): array
         }
     }
 
-    return runtime_dynamic_dependency_sites_from_graph($root, $files, $symbols, $dependencies, $policy['modules']);
+    return runtime_dynamic_dependency_sites_from_graph(
+        $root,
+        $files,
+        $symbols,
+        $dependencies,
+        $policy['modules'],
+    );
 }
 
 /**
@@ -286,13 +339,29 @@ function runtime_dynamic_dependency_sites(string $root): array
  * @param array<string,list<string>> $moduleRoots Reviewed lifecycle module names mapped to declaration roots.
  * @return list<array{caller:string,kind:string,expression:string,line:int}> All reachable unresolved sites with stable ordering and diagnostic source lines.
  */
-function runtime_dynamic_dependency_sites_from_graph(string $root, array $files, array $symbols, array $dependencies, array $moduleRoots): array
-{
-    $dispatch = (string) file_get_contents($root . '/app/bootstrap/dispatch.php');
-    if (preg_match('/\$routes\s*=\s*\[(.*?)\n\s*\];/s', $dispatch, $routeBlock) !== 1) {
-        throw new \RuntimeException('Canonical route table is unavailable to the dynamic-site review.');
+function runtime_dynamic_dependency_sites_from_graph(
+    string $root,
+    array $files,
+    array $symbols,
+    array $dependencies,
+    array $moduleRoots,
+): array {
+    $dispatch = (string) file_get_contents($root
+        . '/app/bootstrap/dispatch.php');
+    if (
+        preg_match('/\$routes\s*=\s*\[(.*?)\n\s*\];/s', $dispatch, $routeBlock)
+        !== 1
+    ) {
+        throw new \RuntimeException(
+            'Canonical route table is unavailable to the dynamic-site review.',
+        );
     }
-    preg_match_all("/'([a-z][a-z0-9_]*)'\\s*=>\\s*'([^']+)'/", $routeBlock[1], $pairs, PREG_SET_ORDER);
+    preg_match_all(
+        "/'([a-z][a-z0-9_]*)'\\s*=>\\s*'([^']+)'/",
+        $routeBlock[1],
+        $pairs,
+        PREG_SET_ORDER,
+    );
     $roots = [];
     foreach ($pairs as $pair) {
         $roots[] = ltrim(str_replace('\\\\', '\\', $pair[2]), '\\');
@@ -309,7 +378,16 @@ function runtime_dynamic_dependency_sites_from_graph(string $root, array $files,
         $closure = dependency_closure($start, $symbols, $dependencies, $files);
         foreach ($closure['unresolved'] as $site) {
             $kind = (string) ($site['kind'] ?? '');
-            if (!in_array($kind, ['variable_callable', 'dynamic_callback_argument', 'dynamic_function_exists', 'dynamic_class'], true)) {
+            if (!in_array(
+                $kind,
+                [
+                    'variable_callable',
+                    'dynamic_callback_argument',
+                    'dynamic_function_exists',
+                    'dynamic_class',
+                ],
+                true,
+            )) {
                 continue;
             }
             $caller = (string) ($site['symbol'] ?? '');
@@ -337,11 +415,15 @@ function runtime_dynamic_dependency_policy_drift(array $sites): array
 {
     $actual = [];
     foreach ($sites as $site) {
-        $actual[] = $site['caller'] . '|' . $site['kind'] . '|' . $site['expression'];
+        $actual[] =
+            $site['caller'] . '|' . $site['kind'] . '|' . $site['expression'];
     }
     $expected = runtime_dynamic_dependency_reviewed_sites();
     return [
-        'unexpected' => array_values(array_diff($actual, array_keys($expected))),
+        'unexpected' => array_values(array_diff(
+            $actual,
+            array_keys($expected),
+        )),
         'stale' => array_values(array_diff(array_keys($expected), $actual)),
     ];
 }
@@ -376,41 +458,84 @@ function runtime_dynamic_dependency_missing_targets(string $root): array
 function main(array $arguments): int
 {
     if ($arguments !== [] && $arguments !== ['--discover']) {
-        fwrite(STDERR, "Usage: php scripts/runtime_dynamic_dependencies.php [--discover]\n");
+        fwrite(
+            STDERR,
+            "Usage: php scripts/runtime_dynamic_dependencies.php [--discover]\n",
+        );
         return 2;
     }
     $sites = runtime_dynamic_dependency_sites(dirname(__DIR__));
     if ($arguments === ['--discover']) {
         foreach ($sites as $site) {
-            fwrite(STDOUT, $site['caller'] . '|' . $site['kind'] . '|' . $site['expression'] . "\n");
+            fwrite(
+                STDOUT,
+                $site['caller']
+                    . '|'
+                    . $site['kind']
+                    . '|'
+                    . $site['expression']
+                    . "\n",
+            );
         }
         return 0;
     }
     $drift = runtime_dynamic_dependency_policy_drift($sites);
-    $missingTargets = runtime_dynamic_dependency_missing_targets(dirname(__DIR__));
-    if ($drift['unexpected'] !== [] || $drift['stale'] !== [] || $missingTargets !== []) {
+    $missingTargets = runtime_dynamic_dependency_missing_targets(dirname(
+        __DIR__,
+    ));
+    if (
+        $drift['unexpected'] !== []
+        || $drift['stale'] !== []
+        || $missingTargets !== []
+    ) {
         foreach ($drift['unexpected'] as $signature) {
-            fwrite(STDERR, 'Unreviewed runtime dynamic dependency: ' . $signature . "\n");
+            fwrite(
+                STDERR,
+                'Unreviewed runtime dynamic dependency: ' . $signature . "\n",
+            );
         }
         foreach ($drift['stale'] as $signature) {
-            fwrite(STDERR, 'Stale runtime dynamic dependency review: ' . $signature . "\n");
+            fwrite(
+                STDERR,
+                'Stale runtime dynamic dependency review: ' . $signature . "\n",
+            );
         }
         foreach ($missingTargets as $caller => $targets) {
             foreach ($targets as $target) {
-                fwrite(STDERR, 'Missing explicit dynamic callback target: ' . $caller . ' -> ' . $target . "\n");
+                fwrite(
+                    STDERR,
+                    'Missing explicit dynamic callback target: '
+                        . $caller
+                        . ' -> '
+                        . $target
+                        . "\n",
+                );
             }
         }
         return 1;
     }
-    fwrite(STDOUT, 'Runtime dynamic dependency review current: ' . count($sites) . " reachable sites.\n");
+    fwrite(
+        STDOUT,
+        'Runtime dynamic dependency review current: '
+            . count($sites)
+            . " reachable sites.\n",
+    );
     return 0;
 }
 
-if (isset($_SERVER['SCRIPT_FILENAME']) && realpath((string) $_SERVER['SCRIPT_FILENAME']) === realpath(__FILE__)) {
+if (
+    isset($_SERVER['SCRIPT_FILENAME'])
+    && realpath((string) $_SERVER['SCRIPT_FILENAME']) === realpath(__FILE__)
+) {
     try {
         exit(main(array_slice($argv, 1)));
     } catch (\Throwable $exception) {
-        fwrite(STDERR, 'Runtime dynamic dependency review failed: ' . $exception->getMessage() . "\n");
+        fwrite(
+            STDERR,
+            'Runtime dynamic dependency review failed: '
+                . $exception->getMessage()
+                . "\n",
+        );
         exit(1);
     }
 }

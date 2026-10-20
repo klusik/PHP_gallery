@@ -79,8 +79,10 @@ function cms_github_project_url(): string
  * @param float $requestedBudgetSeconds Preferred wall-clock budget for remote metadata I/O.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function check_application_update(bool $force = false, float $requestedBudgetSeconds = 8.0): array
-{
+function check_application_update(
+    bool $force = false,
+    float $requestedBudgetSeconds = 8.0,
+): array {
     // $force bypasses only PHP Gallery's local metadata cache. It never bypasses
     // GitHub Retry-After or x-ratelimit-reset wait windows.
     // $waitState stores GitHub policy backoff data from previous responses.
@@ -94,7 +96,10 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
     $requestedBudgetSeconds = max(2.0, min(10.0, $requestedBudgetSeconds));
     $phpMax = (int) ini_get('max_execution_time');
     if ($phpMax > 0) {
-        $requestedBudgetSeconds = min($requestedBudgetSeconds, max(1.0, (float) $phpMax - 5.0));
+        $requestedBudgetSeconds = min($requestedBudgetSeconds, max(
+            1.0,
+            (float) $phpMax - 5.0,
+        ));
     }
     $deadline = microtime(true) + $requestedBudgetSeconds;
     // $lastError stores the newest transport or parsing error from the remote checks.
@@ -117,53 +122,107 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
         // Share the remaining budget across unprobed branches so a dead preferred
         // branch cannot consume the complete request and starve the fallback branch.
         $branchesRemaining = max(1, count($branches) - $branchIndex);
-        $branchDeadline = min($deadline, microtime(true) + max(0.75, $remaining / $branchesRemaining));
+        $branchDeadline = min(
+            $deadline,
+            microtime(true) + max(0.75, $remaining / $branchesRemaining),
+        );
         try {
             // $versionResult stores valid version candidates plus fetch diagnostics for the current branch.
-            $versionResult = application_update_remote_version_result($branch, $branchDeadline);
-            if (!empty($versionResult['reachable']) && $reachableBranch === null) {
+            $versionResult = application_update_remote_version_result(
+                $branch,
+                $branchDeadline,
+            );
+            if (
+                !empty($versionResult['reachable'])
+                && $reachableBranch === null
+            ) {
                 $reachableBranch = $branch;
             }
             // $versionCandidates stores the valid remote version candidates found for this branch.
             $versionCandidates = (array) ($versionResult['candidates'] ?? []);
             if ($versionCandidates === []) {
-                $markerDiagnostics[$branch] = (string) ($versionResult['diagnostic'] ?? ('No version marker was found on branch ' . $branch . '.'));
+                $markerDiagnostics[$branch] = (string) (
+                    $versionResult['diagnostic']
+                    ?? 'No version marker was found on branch '
+                    . $branch
+                    . '.'
+                );
                 continue;
             }
 
             // $latestVersion stores the highest valid version advertised by this branch.
-            $latestVersion = application_update_highest_version($versionCandidates);
+            $latestVersion =
+                application_update_highest_version($versionCandidates);
             // $currentVersion stores the installed release so stale remote branches never look like a downgrade target.
             $currentVersion = cms_current_version();
             // $displayVersion stores the version shown in admin cards and cached diagnostics.
-            $displayVersion = version_compare($latestVersion, $currentVersion, '<') ? $currentVersion : $latestVersion;
+            $displayVersion = version_compare(
+                $latestVersion,
+                $currentVersion,
+                '<',
+            )
+                ? $currentVersion
+                : $latestVersion;
             // $statusDiagnostic stores a non-fatal note when GitHub reports an older marker than this install.
-            $statusDiagnostic = version_compare($latestVersion, $currentVersion, '<') ? ('GitHub branch ' . $branch . ' reports version ' . $latestVersion . ', which is older than installed version ' . $currentVersion . '.') : '';
+            $statusDiagnostic = version_compare(
+                $latestVersion,
+                $currentVersion,
+                '<',
+            )
+                ? 'GitHub branch '
+                . $branch
+                . ' reports version '
+                . $latestVersion
+                . ', which is older than installed version '
+                . $currentVersion
+                . '.'
+                : '';
             // $status stores the normalized update state used by the admin UI and automatic updater.
             $status = [
                 'current_version' => $currentVersion,
                 'latest_version' => $displayVersion,
                 'branch' => $branch,
                 'repository' => CMS_GITHUB_REPOSITORY,
-                'update_available' => version_compare($latestVersion, $currentVersion, '>'),
+                'update_available' => version_compare(
+                    $latestVersion,
+                    $currentVersion,
+                    '>',
+                ),
                 'version_sources' => $versionCandidates,
-                'version_source' => $statusDiagnostic !== '' ? 'installed fallback' : application_update_version_source_label($versionCandidates, $latestVersion),
+                'version_source' => $statusDiagnostic !== ''
+                    ? 'installed fallback'
+                    : application_update_version_source_label(
+                        $versionCandidates,
+                        $latestVersion,
+                    ),
                 'error' => null,
                 'diagnostic' => $statusDiagnostic,
                 'remote_older_than_installed' => $statusDiagnostic !== '',
             ];
-            if ($latestStatus === null || version_compare($latestVersion, (string) $latestStatus['latest_version'], '>')) {
+            if (
+                $latestStatus === null
+                || version_compare(
+                    $latestVersion,
+                    (string) $latestStatus['latest_version'],
+                    '>',
+                )
+            ) {
                 $latestStatus = $status;
             }
             // main/master are ordered compatibility fallbacks. A valid preferred
             // marker owns discovery; probing a second branch adds quota and may
             // select an unrelated historical branch.
-            application_patch_notes_refresh_pending($branch, $latestVersion, $deadline);
+            application_patch_notes_refresh_pending(
+                $branch,
+                $latestVersion,
+                $deadline,
+            );
             break;
         } catch (Throwable $exception) {
             $safe = application_update_safe_error($exception);
             $lastError = $safe['message'] . ' Reference: ' . $safe['reference'];
-            $markerDiagnostics[$branch] = 'Remote update check failed. Reference: ' . $safe['reference'];
+            $markerDiagnostics[$branch] =
+                'Remote update check failed. Reference: ' . $safe['reference'];
         }
     }
 
@@ -178,7 +237,9 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
             'branch' => $reachableBranch,
             'repository' => CMS_GITHUB_REPOSITORY,
             'update_available' => false,
-            'version_sources' => ['installed fallback' => cms_current_version()],
+            'version_sources' => [
+                'installed fallback' => cms_current_version(),
+            ],
             'version_source' => 'installed fallback',
             'error' => null,
             'diagnostic' => implode(' ', array_filter($markerDiagnostics)),
@@ -199,7 +260,6 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
     ];
 }
 
-
 /**
  * Try to obtain the existing cross-process discovery lock without waiting.
  *
@@ -210,7 +270,10 @@ function check_application_update(bool $force = false, float $requestedBudgetSec
  */
 function application_update_discovery_try_lock(): mixed
 {
-    $lock = @fopen(application_update_project_root() . '/cache/update-discovery.lock', 'c');
+    $lock = @fopen(
+        application_update_project_root() . '/cache/update-discovery.lock',
+        'c',
+    );
     if ($lock === false) {
         return null;
     }
@@ -241,8 +304,11 @@ function application_update_discovery_unlock(mixed $lock): void
  * @param bool $onlyIfDue Whether a scheduled check should skip a recent concurrent discovery.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 3600, bool $onlyIfDue = false): array
-{
+function application_update_status_for_admin(
+    bool $force = false,
+    int $ttlSeconds = 3600,
+    bool $onlyIfDue = false,
+): array {
     if (!$force) {
         // $cachedStatus stores GitHub metadata already fetched by automatic or manual checks.
         // The admin update page is intentionally passive on GET renders: it may show stale
@@ -266,7 +332,13 @@ function application_update_status_for_admin(bool $force = false, int $ttlSecond
     try {
         // Another PHP worker may have completed a due check before this lock was
         // acquired. Recheck the durable timestamps while holding it.
-        if ($onlyIfDue && !application_autoupdate_discovery_due(time(), application_update_discovery_last_attempt_at())) {
+        if (
+            $onlyIfDue
+            && !application_autoupdate_discovery_due(
+                time(),
+                application_update_discovery_last_attempt_at(),
+            )
+        ) {
             return application_update_status_for_admin(false, $ttlSeconds);
         }
         $status = check_application_update($force);
@@ -284,10 +356,17 @@ function application_update_status_for_admin(bool $force = false, int $ttlSecond
  */
 function application_update_check_if_due(): array
 {
-    if (!application_autoupdate_discovery_due(time(), application_update_discovery_last_attempt_at())) {
+    if (!application_autoupdate_discovery_due(
+        time(),
+        application_update_discovery_last_attempt_at(),
+    )) {
         return application_update_status_for_admin(false);
     }
-    return application_update_status_for_admin(true, application_autoupdate_interval_seconds(), true);
+    return application_update_status_for_admin(
+        true,
+        application_autoupdate_interval_seconds(),
+        true,
+    );
 }
 
 /**
@@ -300,19 +379,45 @@ function application_update_check_if_due(): array
  * @param string $branch Installed branch when known.
  * @return array<string,mixed> Locally reconciled release metadata.
  */
-function application_update_installed_status(string $installedVersion, string $branch): array
-{
-    $installedVersion = application_update_normalize_version($installedVersion) ?? throw new RuntimeException('Installed package version is unavailable.');
+function application_update_installed_status(
+    string $installedVersion,
+    string $branch,
+): array {
+    $installedVersion = application_update_normalize_version(
+        $installedVersion,
+    ) ?? throw new RuntimeException(
+        'Installed package version is unavailable.',
+    );
     $status = cached_application_update_check(3600, false);
-    $latest = application_update_normalize_version((string) ($status['latest_version'] ?? ''));
+    $latest = application_update_normalize_version(
+        (string) ($status['latest_version'] ?? ''),
+    );
     $status['current_version'] = $installedVersion;
-    $status['latest_version'] = $latest !== null && version_compare($latest, $installedVersion, '>') ? $latest : $installedVersion;
-    $status['update_available'] = version_compare($status['latest_version'], $installedVersion, '>');
+    $status['latest_version'] = $latest !== null
+    && version_compare($latest, $installedVersion, '>')
+        ? $latest
+        : $installedVersion;
+    $status['update_available'] = version_compare(
+        $status['latest_version'],
+        $installedVersion,
+        '>',
+    );
     $status['repository'] = CMS_GITHUB_REPOSITORY;
-    $status['branch'] = in_array($branch, application_update_branch_candidates(), true) ? $branch : ($status['branch'] ?? application_update_branch_candidates()[0]);
+    $status['branch'] = in_array(
+        $branch,
+        application_update_branch_candidates(),
+        true,
+    )
+        ? $branch
+        : $status['branch'] ?? application_update_branch_candidates()[0];
     $status['error'] = null;
     $status['diagnostic'] = '';
-    unset($status['local_cache_only'], $status['remote_marker_missing'], $status['remote_older_than_installed'], $status['github_policy_wait']);
+    unset(
+        $status['local_cache_only'],
+        $status['remote_marker_missing'],
+        $status['remote_older_than_installed'],
+        $status['github_policy_wait'],
+    );
     return $status;
 }
 
@@ -342,7 +447,10 @@ function application_update_rate_limited_status(array $waitState): array
         'update_available' => false,
         'version_sources' => [],
         'version_source' => '',
-        'error' => 'GitHub update checks are paused until ' . (string) ($waitState['next_allowed_label'] ?? '') . ' because the previous response asked this installation to wait.',
+        'error' =>
+            'GitHub update checks are paused until '
+                . (string) ($waitState['next_allowed_label'] ?? '')
+                . ' because the previous response asked this installation to wait.',
         'diagnostic' => 'The updater is respecting GitHub rate-limit headers and did not make a new request.',
         'github_policy_wait' => $waitState,
     ];
@@ -363,9 +471,13 @@ function application_update_github_api_status(): array
  *
  * @param string $url URL used by this workflow.
  * @param int $status Status value.
- * @param array $headers Headers value.
+ * @param array<string,string> $headers Normalized response headers.
+ * @return void Records GitHub policy headers for future request admission.
  */
-function application_update_record_github_response(string $url, int $status, array $headers): void
-{
+function application_update_record_github_response(
+    string $url,
+    int $status,
+    array $headers,
+): void {
     cms_github_api_record_response($url, $status, $headers);
 }

@@ -211,7 +211,9 @@ use function Gallery\Views\view_render_admin_tab_intro;
 use function Gallery\Services\admin_log_event;
 
 /**
- * Handles cms admin scan images logic for the gallery application.
+ * Scan submitted gallery folders and report imported image counts.
+ *
+ * @return void Emits mutation JSON when requested, otherwise redirects.
  */
 function cms_admin_scan_images(): void
 {
@@ -234,7 +236,9 @@ function cms_admin_scan_images(): void
         $normalizedGalleryIds = [];
         foreach ($galleryIds as $galleryId) {
             $normalizedGalleryId = (int) $galleryId;
-            $gallery = $normalizedGalleryId > 0 ? find_gallery($normalizedGalleryId, true) : null;
+            $gallery = $normalizedGalleryId > 0
+                ? find_gallery($normalizedGalleryId, true)
+                : null;
             if (!is_array($gallery)) {
                 continue;
             }
@@ -244,8 +248,12 @@ function cms_admin_scan_images(): void
                 gallery_public_url($gallery),
                 admin_mutation_postcondition('gallery_image_count', [
                     'gallery_id' => $normalizedGalleryId,
-                    'count' => gallery_lightbox_total_count($gallery, false, false),
-                ])
+                    'count' => gallery_lightbox_total_count(
+                        $gallery,
+                        false,
+                        false,
+                    ),
+                ]),
             );
         }
         $primaryGalleryId = (int) ($normalizedGalleryIds[0] ?? 0);
@@ -256,12 +264,17 @@ function cms_admin_scan_images(): void
         echo json_encode(array_merge(
             admin_mutation_success_envelope(
                 $message,
-                admin_mutation_descriptor('image.scan_import', 'image', 'import', $normalizedGalleryIds),
+                admin_mutation_descriptor(
+                    'image.scan_import',
+                    'image',
+                    'import',
+                    $normalizedGalleryIds,
+                ),
                 admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
                 $contexts,
-                ['redirect_url' => url_for('admin')]
+                ['redirect_url' => url_for('admin')],
             ),
-            ['imported_count' => $count, 'edit_url' => $editUrl]
+            ['imported_count' => $count, 'edit_url' => $editUrl],
         ), JSON_THROW_ON_ERROR);
         return;
     }
@@ -278,9 +291,11 @@ function cms_admin_scan_images(): void
  */
 function admin_edit_gallery_tab_id(string $tab): string
 {
-    if ($tab === 'admin-edit-documents'
+    if (
+        $tab === 'admin-edit-documents'
         && !feature_capability_effective_enabled('gallery_pdf_documents')
-        && !feature_capability_effective_enabled('gallery_music')) {
+        && !feature_capability_effective_enabled('gallery_music')
+    ) {
         return '';
     }
     // $allowedTabs stores admin edit tab identifiers that may be returned after POST actions.
@@ -314,7 +329,10 @@ function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
     if ($resolvedTab !== '') {
         $params['tab'] = $resolvedTab;
     }
-    return url_for('admin_edit_gallery', $params) . ($resolvedTab !== '' ? '#' . $resolvedTab : '');
+    return (
+        url_for('admin_edit_gallery', $params)
+            . ($resolvedTab !== '' ? '#' . $resolvedTab : '')
+    );
 }
 
 /**
@@ -324,8 +342,10 @@ function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
  * @param string $pattern Pattern value.
  * @return string Text result for the caller.
  */
-function admin_edit_gallery_tab_url_with_renamer_pattern(int $galleryId, string $pattern): string
-{
+function admin_edit_gallery_tab_url_with_renamer_pattern(
+    int $galleryId,
+    string $pattern,
+): string {
     $params = ['id' => $galleryId, 'tab' => 'admin-edit-renamer'];
     if ($pattern !== media_renamer_default_pattern()) {
         $params['renamer_pattern'] = $pattern;
@@ -356,17 +376,31 @@ function admin_return_tab_from_post(string $fallback = ''): string
  * @return array{ok:true,message:string,mutation:array{type:string,entity:string,action:string,entity_ids:list<int>},panel:?array{workflow:string,refresh_url:string,keep_open:bool},contexts:list<array{type:string,gallery_id:?int,render_url:string,render_mode:string,postcondition:?array<string,mixed>}>,fallback:array{redirect_url:string},type:string,gallery_id:int,gallery_title:string,edit_revision:string,gallery_url:string,edit_url:string,refresh_url:string,old_gallery_url:string,identity_changed:bool,old_parent_gallery_id:int,old_parent_gallery_url:string,parent_gallery_id:int,parent_gallery_url:string,gallery_visibility:string,gallery_visibility_changed:bool,gallery_visibility_label:string,gallery_visibility_hint:string} Canonical completion envelope and public/editor fields; credential columns are not serialized.
  * @author Rudolf Klusal
  */
-function admin_edit_gallery_success_response(array $gallery, string $notice, string $returnTab, array $saveResult = []): array
-{
+function admin_edit_gallery_success_response(
+    array $gallery,
+    string $notice,
+    string $returnTab,
+    array $saveResult = [],
+): array {
     // $galleryId stores the stable gallery identity used across path and parent changes.
     $galleryId = (int) ($gallery['id'] ?? 0);
     // $originalGallery stores the pre-mutation row so source-parent and route identity are never inferred after save.
-    $originalGallery = is_array($saveResult['original_gallery'] ?? null) ? $saveResult['original_gallery'] : $gallery;
+    $originalGallery = is_array($saveResult['original_gallery'] ?? null)
+        ? $saveResult['original_gallery']
+        : $gallery;
     // $oldParentId and $newParentId describe the hierarchy edge before and after persistence.
-    $oldParentId = (int) ($saveResult['old_parent_id'] ?? $originalGallery['parent_id'] ?? 0);
+    $oldParentId = (int) (
+        $saveResult['old_parent_id']
+        ?? $originalGallery['parent_id']
+        ?? 0
+    );
     $newParentId = (int) ($gallery['parent_id'] ?? 0);
     // $oldGalleryUrl stores the public route that represented this stable id before the mutation.
-    $oldGalleryUrl = (string) ($saveResult['original_gallery_url'] ?? gallery_public_url($originalGallery));
+    $oldGalleryUrl = (string) (
+        $saveResult['original_gallery_url'] ?? gallery_public_url(
+            $originalGallery,
+        )
+    );
     // $galleryUrl stores the authoritative route after the mutation.
     $galleryUrl = gallery_public_url($gallery);
     // $identityChanged forces a canonical fetch when the currently visible old route can no longer render this gallery.
@@ -385,12 +419,16 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
             'gallery_id' => $galleryId,
             'visibility' => $galleryVisibility,
         ])
-        : ($galleryUpdatedAt !== ''
-            ? admin_mutation_postcondition('gallery_updated_at', [
-                'gallery_id' => $galleryId,
-                'updated_at' => $galleryUpdatedAt,
-            ])
-            : admin_mutation_postcondition('gallery_identity', ['gallery_id' => $galleryId]));
+        : (
+            $galleryUpdatedAt !== ''
+                ? admin_mutation_postcondition('gallery_updated_at', [
+                    'gallery_id' => $galleryId,
+                    'updated_at' => $galleryUpdatedAt,
+                ])
+                : admin_mutation_postcondition('gallery_identity', [
+                    'gallery_id' => $galleryId,
+                ])
+        );
     // $editUrl keeps the active editor tab while the side panel remains mounted.
     $editUrl = admin_edit_gallery_tab_url($galleryId, $returnTab);
 
@@ -400,40 +438,61 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
             $galleryId,
             $galleryUrl,
             $galleryPostcondition,
-            $identityChanged ? 'canonical' : 'preserve_view'
+            $identityChanged ? 'canonical' : 'preserve_view',
         ),
     ];
 
     // $oldParent and $newParent are loaded after persistence only for authoritative render URLs.
     $oldParent = $oldParentId > 0 ? find_gallery($oldParentId, true) : null;
     $newParent = $newParentId > 0 ? find_gallery($newParentId, true) : null;
-    $oldParentUrl = is_array($oldParent) ? gallery_public_url($oldParent) : url_for('home');
-    $newParentUrl = is_array($newParent) ? gallery_public_url($newParent) : url_for('home');
+    $oldParentUrl = is_array($oldParent)
+        ? gallery_public_url($oldParent)
+        : url_for('home');
+    $newParentUrl = is_array($newParent)
+        ? gallery_public_url($newParent)
+        : url_for('home');
 
     if ($oldParentId === $newParentId) {
-        $galleryRenderedInParent = admin_mutation_gallery_is_rendered_in_context($gallery, $newParentId);
+        $galleryRenderedInParent = admin_mutation_gallery_is_rendered_in_context(
+            $gallery,
+            $newParentId,
+        );
         $contexts[] = admin_mutation_public_gallery_context(
             $newParentId,
             $newParentUrl,
             $galleryRenderedInParent
-                ? ($visibilityChanged
-                    ? admin_mutation_postcondition('gallery_visibility', [
-                        'gallery_id' => $galleryId,
-                        'visibility' => $galleryVisibility,
-                    ])
-                    : ($galleryUpdatedAt !== ''
-                        ? admin_mutation_postcondition('gallery_updated_at', [
+                ? (
+                    $visibilityChanged
+                        ? admin_mutation_postcondition('gallery_visibility', [
                             'gallery_id' => $galleryId,
-                            'updated_at' => $galleryUpdatedAt,
+                            'visibility' => $galleryVisibility,
                         ])
-                        : admin_mutation_postcondition('gallery_identity', ['gallery_id' => $galleryId])))
-                : admin_mutation_gallery_membership_postcondition($galleryId, $newParentId, false)
+                        : (
+                            $galleryUpdatedAt !== ''
+                                ? admin_mutation_postcondition('gallery_updated_at', [
+                                    'gallery_id' => $galleryId,
+                                    'updated_at' => $galleryUpdatedAt,
+                                ])
+                                : admin_mutation_postcondition('gallery_identity', [
+                                    'gallery_id' => $galleryId,
+                                ])
+                        )
+                )
+                : admin_mutation_gallery_membership_postcondition(
+                    $galleryId,
+                    $newParentId,
+                    false,
+                ),
         );
     } else {
         $contexts[] = admin_mutation_public_gallery_context(
             $oldParentId,
             $oldParentUrl,
-            admin_mutation_gallery_membership_postcondition($galleryId, $oldParentId, false)
+            admin_mutation_gallery_membership_postcondition(
+                $galleryId,
+                $oldParentId,
+                false,
+            ),
         );
         $contexts[] = admin_mutation_public_gallery_context(
             $newParentId,
@@ -441,18 +500,26 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
             admin_mutation_gallery_membership_postcondition(
                 $galleryId,
                 $newParentId,
-                admin_mutation_gallery_is_rendered_in_context($gallery, $newParentId)
-            )
+                admin_mutation_gallery_is_rendered_in_context(
+                    $gallery,
+                    $newParentId,
+                ),
+            ),
         );
     }
 
     // $envelope stores the Stage 2 canonical completion result used by the shared coordinator.
     $envelope = admin_mutation_success_envelope(
         $notice,
-        admin_mutation_descriptor('gallery.update', 'gallery', 'update', [$galleryId]),
+        admin_mutation_descriptor(
+            'gallery.update',
+            'gallery',
+            'update',
+            [$galleryId],
+        ),
         admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
         $contexts,
-        ['redirect_url' => $editUrl]
+        ['redirect_url' => $editUrl],
     );
 
     // Workflow-specific result fields remain available to the editor UI; completion semantics live only in the canonical envelope.
@@ -473,9 +540,13 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
         'parent_gallery_url' => $newParentUrl,
         'gallery_visibility' => $galleryVisibility,
         'gallery_visibility_changed' => $visibilityChanged,
-        'gallery_visibility_label' => gallery_visibility_label($galleryVisibility),
+        'gallery_visibility_label' =>
+            gallery_visibility_label($galleryVisibility),
         'gallery_visibility_hint' => $galleryVisibility === 'unpublished'
-            ? t('gallery.card.unpublished_admin_hint', 'Only logged-in admins can see this gallery in listings.')
+            ? t(
+                'gallery.card.unpublished_admin_hint',
+                'Only logged-in admins can see this gallery in listings.',
+            )
             : '',
     ]);
 }
@@ -494,15 +565,24 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
  * @param array{destination_gallery?:array{id:int|string,parent_id?:int|string|null,folder_path?:string,title?:string}|null} $details Optional move destination row used to build its public refresh context.
  * @return array{ok:true,message:string,mutation:array{type:string,entity:string,action:string,entity_ids:list<int>},panel:?array{workflow:string,refresh_url:string,keep_open:bool},contexts:list<array{type:string,gallery_id:?int,render_url:string,render_mode:string,postcondition:?array<string,mixed>}>,fallback:array{redirect_url:string},type:string,gallery_id:int,gallery_title:string,gallery_url:string,edit_url:string,refresh_url:string,bulk_action:string,image_ids:list<int>,cover_image_id:int,cover_selection_mode:string,cover_selection_revision:string,edit_revision:string,cover_selection_ids:list<int>} Canonical completion envelope plus bulk result fields; cover responses include the opaque cover_selection_revision and decimal edit_revision.
  */
-function admin_bulk_images_success_response(array $gallery, string $notice, string $returnTab, string $action, array $imageIds = [], array $details = []): array
-{
+function admin_bulk_images_success_response(
+    array $gallery,
+    string $notice,
+    string $returnTab,
+    string $action,
+    array $imageIds = [],
+    array $details = [],
+): array {
     // $galleryId stores the source gallery for every bulk image mutation.
     $galleryId = (int) ($gallery['id'] ?? 0);
     // $normalizedImageIds stores stable image identities without duplicates or invalid values.
     $normalizedImageIds = [];
     foreach ($imageIds as $imageId) {
         $normalizedImageId = (int) $imageId;
-        if ($normalizedImageId > 0 && !in_array($normalizedImageId, $normalizedImageIds, true)) {
+        if (
+            $normalizedImageId > 0
+            && !in_array($normalizedImageId, $normalizedImageIds, true)
+        ) {
             $normalizedImageIds[] = $normalizedImageId;
         }
     }
@@ -512,7 +592,12 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
     // $contexts stores observable server-rendered postconditions for the affected public galleries.
     $contexts = [];
     // $imageStateRevision verifies image mutations even when the affected card is on another pagination page.
-    $imageStateRevision = trim((string) (gallery_lightbox_state_summary($gallery, false, false)['revision'] ?? ''));
+    $imageStateRevision = trim(
+        (string) (
+            gallery_lightbox_state_summary($gallery, false, false)['revision']
+            ?? ''
+        ),
+    );
     // $mutationType and $mutationAction describe the persisted operation independently from the submitted bulk-action value.
     $mutationType = 'image.bulk_update';
     $mutationAction = 'update';
@@ -526,7 +611,7 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
             admin_mutation_postcondition('gallery_image_count', [
                 'gallery_id' => $galleryId,
                 'count' => gallery_lightbox_total_count($gallery, false, false),
-            ])
+            ]),
         );
     } elseif ($action === 'move_existing' || $action === 'move_new') {
         $mutationType = 'image.move';
@@ -537,9 +622,11 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
             admin_mutation_postcondition('gallery_image_count', [
                 'gallery_id' => $galleryId,
                 'count' => gallery_lightbox_total_count($gallery, false, false),
-            ])
+            ]),
         );
-        $destinationGallery = is_array($details['destination_gallery'] ?? null) ? $details['destination_gallery'] : null;
+        $destinationGallery = is_array($details['destination_gallery'] ?? null)
+            ? $details['destination_gallery']
+            : null;
         if ($destinationGallery !== null) {
             $destinationGalleryId = (int) ($destinationGallery['id'] ?? 0);
             $contexts[] = admin_mutation_public_gallery_context(
@@ -547,20 +634,33 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
                 gallery_public_url($destinationGallery),
                 admin_mutation_postcondition('gallery_image_count', [
                     'gallery_id' => $destinationGalleryId,
-                    'count' => gallery_lightbox_total_count($destinationGallery, false, false),
-                ])
+                    'count' => gallery_lightbox_total_count(
+                        $destinationGallery,
+                        false,
+                        false,
+                    ),
+                ]),
             );
             if ($action === 'move_new') {
-                $destinationParentId = (int) ($destinationGallery['parent_id'] ?? 0);
-                $destinationParent = $destinationParentId > 0 ? find_gallery($destinationParentId, true) : null;
+                $destinationParentId = (int) (
+                    $destinationGallery['parent_id'] ?? 0
+                );
+                $destinationParent = $destinationParentId > 0
+                    ? find_gallery($destinationParentId, true)
+                    : null;
                 $contexts[] = admin_mutation_public_gallery_context(
                     $destinationParentId,
-                    is_array($destinationParent) ? gallery_public_url($destinationParent) : url_for('home'),
+                    is_array($destinationParent)
+                        ? gallery_public_url($destinationParent)
+                        : url_for('home'),
                     admin_mutation_gallery_membership_postcondition(
                         $destinationGalleryId,
                         $destinationParentId,
-                        admin_mutation_gallery_is_rendered_in_context($destinationGallery, $destinationParentId)
-                    )
+                        admin_mutation_gallery_is_rendered_in_context(
+                            $destinationGallery,
+                            $destinationParentId,
+                        ),
+                    ),
                 );
             }
         }
@@ -574,7 +674,7 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
                 'image_ids' => $normalizedImageIds,
                 'visibility' => $action,
                 'revision' => $imageStateRevision,
-            ])
+            ]),
         );
     } elseif (in_array($action, ['nsfw_on', 'nsfw_off'], true)) {
         $mutationType = 'image.nsfw';
@@ -586,7 +686,7 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
                 'image_ids' => $normalizedImageIds,
                 'enabled' => $action === 'nsfw_on',
                 'revision' => $imageStateRevision,
-            ])
+            ]),
         );
     } elseif ($action === 'cover') {
         $mutationType = 'gallery.cover';
@@ -597,7 +697,7 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
             admin_mutation_postcondition('cover_selection', [
                 'gallery_id' => $galleryId,
                 'revision' => gallery_cover_selection_revision($gallery),
-            ])
+            ]),
         );
         // The visible page may be a parent listing rather than the edited
         // gallery. Refresh its existing server-rendered card and every ancestor
@@ -611,16 +711,20 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
                 $ancestorId === (int) ($gallery['parent_id'] ?? 0)
                     ? admin_mutation_postcondition('cover_selection', [
                         'gallery_id' => $galleryId,
-                        'revision' => gallery_cover_selection_revision($gallery),
-                    ]) : null
+                        'revision' =>
+                            gallery_cover_selection_revision($gallery),
+                    ]) : null,
             );
         }
-        $contexts[] = admin_mutation_public_gallery_context(0, url_for('home'),
+        $contexts[] = admin_mutation_public_gallery_context(
+            0,
+            url_for('home'),
             (int) ($gallery['parent_id'] ?? 0) === 0
                 ? admin_mutation_postcondition('cover_selection', [
                     'gallery_id' => $galleryId,
                     'revision' => gallery_cover_selection_revision($gallery),
-                ]) : null);
+                ]) : null,
+        );
     } elseif ($action === 'thumbs') {
         $mutationType = 'image.thumbnails';
         $mutationAction = 'generate';
@@ -629,10 +733,17 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
     // $envelope stores the canonical Stage 2 result consumed by the shared completion coordinator.
     $envelope = admin_mutation_success_envelope(
         $notice,
-        admin_mutation_descriptor($mutationType, $action === 'cover' ? 'gallery' : 'image', $mutationAction, $action === 'cover' ? [$galleryId] : $normalizedImageIds),
-        $action === 'cover' ? null : admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
+        admin_mutation_descriptor(
+            $mutationType,
+            $action === 'cover' ? 'gallery' : 'image',
+            $mutationAction,
+            $action === 'cover' ? [$galleryId] : $normalizedImageIds,
+        ),
+        $action === 'cover'
+            ? null
+            : admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
         $contexts,
-        ['redirect_url' => $editUrl]
+        ['redirect_url' => $editUrl],
     );
 
     // Workflow-specific result fields remain available to the editor UI; completion semantics live only in the canonical envelope.
@@ -647,11 +758,17 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
         'image_ids' => $normalizedImageIds,
         'cover_image_id' => (int) ($gallery['cover_image_id'] ?? 0),
         'cover_selection_mode' => gallery_cover_selection_mode($gallery),
-        'cover_selection_revision' => gallery_cover_selection_revision($gallery),
+        'cover_selection_revision' =>
+            gallery_cover_selection_revision($gallery),
         'edit_revision' => gallery_edit_revision($gallery),
-        'cover_selection_ids' => gallery_cover_selection_mode($gallery) === 'multi'
+        'cover_selection_ids' => gallery_cover_selection_mode($gallery)
+        === 'multi'
             ? gallery_cover_selection_ids($gallery)
-            : ((int) ($gallery['cover_image_id'] ?? 0) > 0 ? [(int) $gallery['cover_image_id']] : []),
+            : (
+                (int) ($gallery['cover_image_id'] ?? 0) > 0
+                    ? [(int) $gallery['cover_image_id']]
+                    : []
+            ),
     ]);
 }
 
@@ -667,23 +784,38 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
  * @param 'cover'|'cover_arm'|'cover_add'|'cover_reset' $action Submitted semantic title-picture action.
  * @return void Sends a canonical success/error JSON response or redirects after the attempted mutation.
  */
-function admin_save_gallery_title_picture(array $gallery, array $imageIds, string $returnTab, string $action = 'cover'): void
-{
+function admin_save_gallery_title_picture(
+    array $gallery,
+    array $imageIds,
+    string $returnTab,
+    string $action = 'cover',
+): void {
     $galleryId = (int) ($gallery['id'] ?? 0);
     $phase = 'validate_selection';
     try {
         $expectedRevision = $_POST['cover_selection_revision'] ?? null;
-        if ($expectedRevision !== null && (!is_string($expectedRevision)
-            || preg_match('/\A[a-f0-9]{20}\z/', $expectedRevision) !== 1)) {
+        if (
+            $expectedRevision !== null
+            && (
+                !is_string($expectedRevision)
+                || preg_match('/\A[a-f0-9]{20}\z/', $expectedRevision) !== 1
+            )
+        ) {
             throw new \DomainException('Invalid title-picture state revision.');
         }
         $ownedIds = [];
         foreach ($imageIds as $imageId) {
             $id = (int) $imageId;
             $image = $id > 0 ? find_image($id, true) : null;
-            if (!$image || (int) ($image['gallery_id'] ?? 0) !== $galleryId
-                || str_contains((string) ($image['relative_path'] ?? ''), '/')) {
-                throw new \DomainException(t('admin.gallery_editor.selected_photo_unavailable', 'The selected photo is unavailable.'));
+            if (
+                !$image
+                || (int) ($image['gallery_id'] ?? 0) !== $galleryId
+                || str_contains((string) ($image['relative_path'] ?? ''), '/')
+            ) {
+                throw new \DomainException(t(
+                    'admin.gallery_editor.selected_photo_unavailable',
+                    'The selected photo is unavailable.',
+                ));
             }
             if (in_array($id, $ownedIds, true)) {
                 throw new \DomainException('Duplicate title-picture photo.');
@@ -691,35 +823,62 @@ function admin_save_gallery_title_picture(array $gallery, array $imageIds, strin
             $ownedIds[] = $id;
         }
         if ($ownedIds === []) {
-            throw new \DomainException(t('admin.gallery_editor.select_at_least_one', 'Select at least one photo.'));
+            throw new \DomainException(t(
+                'admin.gallery_editor.select_at_least_one',
+                'Select at least one photo.',
+            ));
         }
         if (count($ownedIds) > 4) {
-            throw new \DomainException(t('admin.gallery_editor.cover_selection_limit', 'Choose at most four title-picture photos.'));
+            throw new \DomainException(t(
+                'admin.gallery_editor.cover_selection_limit',
+                'Choose at most four title-picture photos.',
+            ));
         }
         if ($action !== 'cover' && count($ownedIds) !== 1) {
-            throw new \DomainException('This title-picture action needs exactly one photo.');
+            throw new \DomainException(
+                'This title-picture action needs exactly one photo.',
+            );
         }
 
         $phase = 'persist_cover';
         $updated = $action === 'cover'
-            ? gallery_editor_set_cover_images($galleryId, $ownedIds, $gallery, $expectedRevision)
-            : gallery_editor_change_cover_selection($galleryId, $ownedIds[0], match ($action) {
-                'cover_arm' => 'arm',
-                'cover_add' => 'add',
-                'cover_reset' => 'reset',
-                default => throw new \DomainException('Unknown title-picture selection action.'),
-            }, $expectedRevision);
+            ? gallery_editor_set_cover_images(
+                $galleryId,
+                $ownedIds,
+                $gallery,
+                $expectedRevision,
+            )
+            : gallery_editor_change_cover_selection(
+                $galleryId,
+                $ownedIds[0],
+                match ($action) {
+                    'cover_arm' => 'arm',
+                    'cover_add' => 'add',
+                    'cover_reset' => 'reset',
+                    default => throw new \DomainException(
+                        'Unknown title-picture selection action.',
+                    ),
+                },
+                $expectedRevision,
+            );
 
         $phase = 'build_success_response';
         $notice = t('admin.gallery_editor.title_picture_saved');
         if (admin_wants_json()) {
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: no-store, private');
-            $response = admin_bulk_images_success_response($updated, $notice, $returnTab, 'cover', $ownedIds);
+            $response = admin_bulk_images_success_response(
+                $updated,
+                $notice,
+                $returnTab,
+                'cover',
+                $ownedIds,
+            );
             // Advance a mounted settings draft only from the exact snapshot
             // this cover operation superseded. Passive reconciliation cannot
             // bless stale fields from an independently changed editor.
-            $response['previous_edit_revision'] = gallery_edit_revision($gallery);
+            $response['previous_edit_revision'] =
+                gallery_edit_revision($gallery);
             echo json_encode($response, JSON_THROW_ON_ERROR);
             return;
         }
@@ -730,9 +889,13 @@ function admin_save_gallery_title_picture(array $gallery, array $imageIds, strin
         // boundary, where PHP's error_log was the only available evidence.
         // Correlate a safe UI message with a detailed Admin log entry.
         $reference = strtoupper(bin2hex(random_bytes(8)));
-        $status = $exception instanceof GalleryEditConflict ? 409
-            : ($exception instanceof GalleryEditUnavailable ? 503
-                : ($exception instanceof \DomainException ? 422 : 500));
+        $status = $exception instanceof GalleryEditConflict
+            ? 409
+            : (
+                $exception instanceof GalleryEditUnavailable
+                    ? 503
+                    : ($exception instanceof \DomainException ? 422 : 500)
+            );
         $context = [
             'reference' => $reference,
             'gallery_id' => $galleryId,
@@ -740,43 +903,95 @@ function admin_save_gallery_title_picture(array $gallery, array $imageIds, strin
             'phase' => $phase,
             'image_ids' => array_values(array_map('intval', $imageIds)),
             'exception' => get_class($exception),
-            'reason' => $status === 500 ? 'unexpected_failure' : ($status === 503 ? 'storage_unavailable' : ($status === 409 ? 'stale_selection' : 'invalid_selection')),
+            'reason' => $status === 500
+                ? 'unexpected_failure'
+                : (
+                    $status === 503
+                        ? 'storage_unavailable'
+                        : (
+                            $status === 409
+                                ? 'stale_selection'
+                                : 'invalid_selection'
+                        )
+                ),
             'source_file' => basename($exception->getFile()),
             'source_line' => $exception->getLine(),
             'http_status' => $status,
         ];
         try {
-            admin_log_event('error', 'gallery.cover_update_failed', 'Gallery title-picture update failed.', $context, [
-                'category' => 'gallery',
-                'severity' => 'error',
-                'subject_type' => 'gallery',
-                'subject_id' => $galleryId,
-                'request_id' => $reference,
-            ]);
+            admin_log_event(
+                'error',
+                'gallery.cover_update_failed',
+                'Gallery title-picture update failed.',
+                $context,
+                [
+                    'category' => 'gallery',
+                    'severity' => 'error',
+                    'subject_type' => 'gallery',
+                    'subject_id' => $galleryId,
+                    'request_id' => $reference,
+                ],
+            );
         } catch (Throwable) {
             // Error reporting must remain available if Admin log persistence fails.
         }
-        error_log('[PHP Gallery] gallery.cover_update_failed reference=' . $reference
-            . ' gallery_id=' . $galleryId . ' action=' . $action
-            . ' phase=' . $phase . ' exception=' . get_class($exception)
-            . ' location=' . basename($exception->getFile()) . ':' . $exception->getLine()
-            . ' reason=' . $context['reason']);
+        error_log(
+            '[PHP Gallery] gallery.cover_update_failed reference='
+                . $reference
+                . ' gallery_id='
+                . $galleryId
+                . ' action='
+                . $action
+                . ' phase='
+                . $phase
+                . ' exception='
+                . get_class($exception)
+                . ' location='
+                . basename($exception->getFile())
+                . ':'
+                . $exception->getLine()
+                . ' reason='
+                . $context['reason'],
+        );
 
         $notice = $status === 500
-            ? t('admin.gallery_editor.cover_update_failed', 'The title picture could not be saved. Reference: {reference}', ['reference' => $reference])
-            : ($status === 503
-                ? t('admin.gallery_editor.cover_storage_unavailable', 'Title-picture storage is unavailable. Check database migrations and System Health.')
-                : ($status === 409
-                    ? t('admin.gallery_editor.cover_selection_conflict', 'The title pictures changed in another session. The saved selection will be reloaded.')
-                    : $exception->getMessage())) . ' (' . $reference . ')';
+            ? t(
+                'admin.gallery_editor.cover_update_failed',
+                'The title picture could not be saved. Reference: {reference}',
+                ['reference' => $reference],
+            )
+            : (
+                $status === 503
+                    ? t(
+                        'admin.gallery_editor.cover_storage_unavailable',
+                        'Title-picture storage is unavailable. Check database migrations and System Health.',
+                    )
+                    : (
+                        $status === 409
+                            ? t(
+                                'admin.gallery_editor.cover_selection_conflict',
+                                'The title pictures changed in another session. The saved selection will be reloaded.',
+                            )
+                            : $exception->getMessage()
+                    )
+            )
+            . ' ('
+            . $reference
+            . ')';
         if (admin_wants_json()) {
             http_response_code($status);
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: no-store, private');
-            echo json_encode(array_merge(admin_mutation_error_envelope($notice, 'gallery_cover_update_failed'), [
-                'reference' => $reference,
-                'reconciliation_required' => true,
-            ]));
+            echo json_encode(array_merge(
+                admin_mutation_error_envelope(
+                    $notice,
+                    'gallery_cover_update_failed',
+                ),
+                [
+                    'reference' => $reference,
+                    'reconciliation_required' => true,
+                ],
+            ));
             return;
         }
         flash_message('admin_notice', $notice);
@@ -787,8 +1002,8 @@ function admin_save_gallery_title_picture(array $gallery, array $imageIds, strin
 /**
  * Build the JSON payload consumed after an image is saved in side-panel mode.
  *
- * @param array $image Image row or image data.
- * @return array Structured result data for the caller.
+ * @param array{id:int|string,gallery_id:int|string,title?:string,description?:string,visibility?:string,sort_order?:int|string,...} $image Persisted image row returned to the editor.
+ * @return array{ok:bool,message?:string,mutation?:array<string,mixed>,panel?:array<string,mixed>,contexts?:list<array<string,mixed>>,redirect_url?:string,type:string,image_id:int,gallery_id:int,image_title:string,image_description:string,image_visibility:string,image_sort_order:int,image_url:string,gallery_url:string,edit_url:string} Completion payload with saved image and navigation state.
  */
 function admin_edit_image_success_response(array $image): array
 {
@@ -797,28 +1012,50 @@ function admin_edit_image_success_response(array $image): array
     // $galleryUrl stores the authoritative public render source for this image owner.
     $galleryUrl = $gallery ? gallery_public_url($gallery) : '';
     // $editUrl keeps the mounted side-panel editor on the freshly persisted image.
-    $editUrl = url_for('admin_edit_image', ['id' => (int) $image['id'], 'panel' => 1]);
+    $editUrl = url_for('admin_edit_image', [
+        'id' => (int) $image['id'],
+        'panel' => 1,
+    ]);
     // $imageStateRevision lets off-page image edits verify against the full gallery state.
-    $imageStateRevision = $gallery ? trim((string) (gallery_lightbox_state_summary($gallery, false, false)['revision'] ?? '')) : '';
+    $imageStateRevision = $gallery
+        ? trim(
+            (string) (
+                gallery_lightbox_state_summary(
+                    $gallery,
+                    false,
+                    false,
+                )['revision'] ?? ''
+            ),
+        )
+        : '';
     // $contexts tells the shared coordinator which public gallery render may now be stale.
-    $contexts = $gallery ? [
-        admin_mutation_public_gallery_context(
-            (int) $gallery['id'],
-            $galleryUrl,
-            admin_mutation_postcondition('image_visibility', [
-                'image_id' => (int) $image['id'],
-                'visibility' => (string) ($image['visibility'] ?? ''),
-                'revision' => $imageStateRevision,
-            ])
-        ),
-    ] : [];
+    $contexts = $gallery
+        ? [
+            admin_mutation_public_gallery_context(
+                (int) $gallery['id'],
+                $galleryUrl,
+                admin_mutation_postcondition('image_visibility', [
+                    'image_id' => (int) $image['id'],
+                    'visibility' => (string) ($image['visibility'] ?? ''),
+                    'revision' => $imageStateRevision,
+                ]),
+            ),
+        ] : [];
     // $payload is canonical; the additional top-level fields are workflow-specific editor data, not mutation completion metadata.
     $payload = admin_mutation_success_envelope(
         t('admin.gallery_editor.image_saved'),
-        admin_mutation_descriptor('image.update', 'image', 'update', [(int) $image['id']]),
+        admin_mutation_descriptor(
+            'image.update',
+            'image',
+            'update',
+            [(int) $image['id']],
+        ),
         admin_mutation_panel_metadata('image-edit', $editUrl, true),
         $contexts,
-        ['redirect_url' => url_for('admin_edit_image', ['id' => (int) $image['id'], 'saved' => 1])]
+        ['redirect_url' => url_for('admin_edit_image', [
+            'id' => (int) $image['id'],
+            'saved' => 1,
+        ])],
     );
     return array_merge($payload, [
         'type' => 'image',
@@ -839,15 +1076,19 @@ function admin_edit_image_success_response(array $image): array
  *
  * @param string $message Message value.
  * @param int $statusCode Status code value.
+ * @return void Sets the HTTP status and emits a JSON mutation error.
  */
-function admin_panel_error_response(string $message, int $statusCode = 422): void
-{
+function admin_panel_error_response(
+    string $message,
+    int $statusCode = 422,
+): void {
     http_response_code($statusCode);
     header('Content-Type: application/json');
-    echo json_encode(admin_mutation_error_envelope($message, 'admin_mutation_failed'));
+    echo json_encode(admin_mutation_error_envelope(
+        $message,
+        'admin_mutation_failed',
+    ));
 }
-
-
 
 /**
  * Render the SimBrief draft generator for the existing description textarea.
@@ -857,19 +1098,31 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
  * @param array<string,mixed> $flightMap Controller-prepared route-map state.
  * @return void Emit the generator when SimBrief is enabled.
  */
-function render_admin_simbrief_description_tool(int $galleryId, array $formModel = [], array $flightMap = []): void
-{
-    if (function_exists('Gallery\\Services\\feature_capability_effective_enabled') && !feature_capability_effective_enabled('simbrief')) {
+function render_admin_simbrief_description_tool(
+    int $galleryId,
+    array $formModel = [],
+    array $flightMap = [],
+): void {
+    if (
+        function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
+        && !feature_capability_effective_enabled('simbrief')
+    ) {
         view_render_admin_gallery_route_disclosure($flightMap, $formModel);
         return;
     }
-    view_render_admin_simbrief_description_tool($galleryId, $formModel, $flightMap);
+    view_render_admin_simbrief_description_tool(
+        $galleryId,
+        $formModel,
+        $flightMap,
+    );
 }
 
 /**
  * Return true when a partial gallery save contains any value from a field group.
  *
- * @param array $input Input value.
+ * @param array<string, mixed> $input Submitted checkbox values.
  * @param array $keys Keys value.
  * @return bool True when the condition matches.
  */
@@ -886,13 +1139,16 @@ function admin_gallery_input_has_any_key(array $input, array $keys): bool
 /**
  * Read a checkbox value while allowing partial workflows to preserve existing data.
  *
- * @param array $input Input value.
+ * @param array<string,mixed> $input Submitted checkbox values keyed by field name.
  * @param string $key Lookup key.
- * @param bool $defaultWhenMissing Default when missing value.
+ * @param bool $defaultWhenMissing Checkbox state to use when the key is absent.
  * @return int Integer result for the caller.
  */
-function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWhenMissing): int
-{
+function admin_gallery_checkbox_input(
+    array $input,
+    string $key,
+    bool $defaultWhenMissing,
+): int {
     if (!array_key_exists($key, $input)) {
         return $defaultWhenMissing ? 1 : 0;
     }
@@ -910,15 +1166,32 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
  * @return array{gallery:array{id:int|string,folder_path:string,title:string,description:string,slug:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,edit_revision?:int|string|null,...},notice:string,return_tab:string,moved:bool,original_gallery:array{id:int|string,parent_id?:int|string|null,folder_path?:string,title?:string,slug?:string,visibility?:string,updated_at?:string,...},original_gallery_url:string,old_parent_id:int} Persisted gallery row, save notice/navigation and pre-save identity for completion.
  * @author Rudolf Klusal
  */
-function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
-{
+function admin_save_gallery_from_input(
+    array $gallery,
+    array $input,
+    array $files,
+    string $returnTab,
+    bool $completeForm = true,
+): array {
     if (array_key_exists('gallery_breadcrumb_style', $input)) {
-        $input['gallery_breadcrumb_style'] = gallery_breadcrumb_style_validate($input['gallery_breadcrumb_style']);
+        $input['gallery_breadcrumb_style'] = gallery_breadcrumb_style_validate(
+            $input['gallery_breadcrumb_style'],
+        );
     }
-    $lease = gallery_edit_begin($gallery, $input['edit_revision'] ?? null, $completeForm);
+    $lease = gallery_edit_begin(
+        $gallery,
+        $input['edit_revision'] ?? null,
+        $completeForm,
+    );
     try {
         // Ownership spans folder/assets, dependent writes and the final sidecar.
-        return admin_save_gallery_owned_input($lease['gallery'], $input, $files, $returnTab, $completeForm);
+        return admin_save_gallery_owned_input(
+            $lease['gallery'],
+            $input,
+            $files,
+            $returnTab,
+            $completeForm,
+        );
     } finally {
         gallery_edit_end($lease);
     }
@@ -934,51 +1207,98 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
  * @param bool $completeForm True for the full editor, false for a partial action.
  * @return array{gallery:array{id:int|string,folder_path:string,title:string,description:string,slug:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,edit_revision?:int|string|null,...},notice:string,return_tab:string,moved:bool,original_gallery:array{id:int|string,parent_id?:int|string|null,folder_path?:string,title?:string,slug?:string,visibility?:string,updated_at?:string,...},original_gallery_url:string,old_parent_id:int} Persisted gallery row and before/after identity used by the response builder.
  */
-function admin_save_gallery_owned_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm): array
-{
+function admin_save_gallery_owned_input(
+    array $gallery,
+    array $input,
+    array $files,
+    string $returnTab,
+    bool $completeForm,
+): array {
     // Validate explicit presentation writes before any folder/upload effects.
     // Older forms omit the marker and preserve the exact stored preferences.
     $presentationJson = null;
-    if (array_key_exists('gallery_presentation_present', $input)
-        && feature_capability_effective_enabled('lightbox_modes')) {
+    if (
+        array_key_exists('gallery_presentation_present', $input)
+        && feature_capability_effective_enabled('lightbox_modes')
+    ) {
         \Gallery\Services\gallery_presentation_assert_writable(
-            'gallery.presentation.save'
+            'gallery.presentation.save',
         );
         $presentationJson = json_encode(
             \Gallery\Services\gallery_presentation_normalize([
                 'version' => 1,
-                'enabled' => ($input['gallery_presentation_enabled'] ?? '') === '1',
+                'enabled' =>
+                    ($input['gallery_presentation_enabled'] ?? '') === '1',
                 'music' => ($input['gallery_presentation_music'] ?? '') === '1',
-                'autoplay' => ($input['gallery_presentation_autoplay'] ?? '') === '1',
-                'interval' => (string) ($input['gallery_presentation_interval'] ?? ''),
-                'transition' => (string) ($input['gallery_presentation_transition'] ?? ''),
+                'autoplay' =>
+                    ($input['gallery_presentation_autoplay'] ?? '') === '1',
+                'interval' => (string) (
+                    $input['gallery_presentation_interval'] ?? ''
+                ),
+                'transition' => (string) (
+                    $input['gallery_presentation_transition'] ?? ''
+                ),
             ]),
-            JSON_THROW_ON_ERROR
+            JSON_THROW_ON_ERROR,
         );
     }
     // Refuse explicit optional modes before folder, upload or branding effects.
     // A missing migration must never silently turn Automatic into a cleared
     // legacy cover; unknown inspection cannot authorize the optional write.
-    if (in_array($input['cover_image_id'] ?? null, ['automatic', 'multi'], true)
-        || ($gallery['cover_image_ids'] ?? null) !== null) {
+    if (
+        in_array($input['cover_image_id'] ?? null, ['automatic', 'multi'], true)
+        || ($gallery['cover_image_ids'] ?? null) !== null
+    ) {
         gallery_editor_assert_cover_selection_schema();
     }
-    $submittedBreadcrumbStyle = array_key_exists('gallery_breadcrumb_style', $input)
+    $submittedBreadcrumbStyle = array_key_exists(
+        'gallery_breadcrumb_style',
+        $input,
+    )
         ? (string) $input['gallery_breadcrumb_style']
         : null;
-    $smartGalleriesEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+    $smartGalleriesEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
         || feature_capability_effective_enabled('smart_galleries');
-    $smartGalleryChildrenInput = (array) ($input['smart_gallery_children'] ?? []);
-    $updateSmartChildren = $completeForm && $smartGalleriesEnabled && isset($input['smart_gallery_children_present']);
+    $smartGalleryChildrenInput = (array) (
+        $input['smart_gallery_children'] ?? []
+    );
+    $updateSmartChildren =
+        $completeForm
+        && $smartGalleriesEnabled
+        && isset($input['smart_gallery_children_present']);
     if ($updateSmartChildren) {
         $proposedSmartGalleryParentId = (int) ($input['parent_id'] ?? 0);
-        if ($proposedSmartGalleryParentId > 0 && !find_gallery($proposedSmartGalleryParentId)) $proposedSmartGalleryParentId = 0;
-        smart_gallery_validate_children_assignment((int) $gallery['id'], $smartGalleryChildrenInput, $proposedSmartGalleryParentId > 0 ? $proposedSmartGalleryParentId : null, true);
+        if (
+            $proposedSmartGalleryParentId > 0
+            && !find_gallery($proposedSmartGalleryParentId)
+        )
+            $proposedSmartGalleryParentId = 0;
+        smart_gallery_validate_children_assignment(
+            (int) $gallery['id'],
+            $smartGalleryChildrenInput,
+            $proposedSmartGalleryParentId > 0
+                ? $proposedSmartGalleryParentId
+                : null,
+            true,
+        );
     }
-    $shouldUpdateLocalization = content_localization_enabled()
-        && (array_key_exists('content_language', $input) || array_key_exists('translations', $input));
-    if ($shouldUpdateLocalization && !content_localization_schema_ready('gallery')) {
-        throw new RuntimeException(t('admin.content_localization.save_unavailable', 'Multilingual content was not saved because its database migration is unavailable.'));
+    $shouldUpdateLocalization =
+        content_localization_enabled()
+        && (
+            array_key_exists('content_language', $input)
+            || array_key_exists('translations', $input)
+        );
+    if (
+        $shouldUpdateLocalization
+        && !content_localization_schema_ready('gallery')
+    ) {
+        throw new RuntimeException(t(
+            'admin.content_localization.save_unavailable',
+            'Multilingual content was not saved because its database migration is unavailable.',
+        ));
     }
     if (!empty($input['nsfw_field_present']) && !nsfw_guard_schema_ready()) {
         throw new RuntimeException(admin_nsfw_guard_mutation_error());
@@ -986,36 +1306,76 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // Resolve feature masters before optional schema work. Stale forms may still
     // submit fields for a feature that was disabled after the form was opened;
     // those values are ignored without probing or rewriting preserved feature data.
-    $pictureGameFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+    $pictureGameFeatureEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
         || feature_capability_effective_enabled('picture_game');
-    $gpsMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+    $gpsMapFeatureEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
         || feature_capability_effective_enabled('gallery_maps');
-    $flightMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+    $flightMapFeatureEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
         || feature_capability_effective_enabled('flight_maps');
-    $votingFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+    $votingFeatureEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
         || feature_capability_effective_enabled('image_voting');
-    $lightboxModeFeatureEnabled = !function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+    $lightboxModeFeatureEnabled =
+        !function_exists(
+            'Gallery\\Services\\feature_capability_effective_enabled',
+        )
         || feature_capability_effective_enabled('lightbox_modes');
     // Stale admin forms must not turn a Phase 11 inspection outage into an implicit
     // field omission. Only effectively enabled fields that were actually submitted
     // are preflighted so unrelated or disabled-feature edits remain schema-lazy.
-    if ($pictureGameFeatureEnabled && array_key_exists('picture_game_enabled', $input)) {
-        presentation_schema_assert_known(presentation_picture_game_schema_status(), 'gallery_picture_game_setting_save');
+    if (
+        $pictureGameFeatureEnabled
+        && array_key_exists('picture_game_enabled', $input)
+    ) {
+        presentation_schema_assert_known(
+            presentation_picture_game_schema_status(),
+            'gallery_picture_game_setting_save',
+        );
     }
     if ($votingFeatureEnabled && array_key_exists('voting_enabled', $input)) {
-        presentation_schema_assert_known(presentation_voting_schema_status(), 'gallery_voting_setting_save');
+        presentation_schema_assert_known(
+            presentation_voting_schema_status(),
+            'gallery_voting_setting_save',
+        );
     }
     if ($gpsMapFeatureEnabled && array_key_exists('gps_map_enabled', $input)) {
-        presentation_schema_assert_known(presentation_gps_override_schema_status(), 'gallery_gps_override_save');
+        presentation_schema_assert_known(
+            presentation_gps_override_schema_status(),
+            'gallery_gps_override_save',
+        );
     }
-    if ($lightboxModeFeatureEnabled && array_key_exists('lightbox_browsing_mode', $input)) {
-        presentation_schema_assert_known(presentation_lightbox_override_schema_status(), 'gallery_lightbox_override_save');
+    if (
+        $lightboxModeFeatureEnabled
+        && array_key_exists('lightbox_browsing_mode', $input)
+    ) {
+        presentation_schema_assert_known(
+            presentation_lightbox_override_schema_status(),
+            'gallery_lightbox_override_save',
+        );
     }
-    if ($flightMapFeatureEnabled && array_key_exists('flight_route_text', $input)) {
-        presentation_schema_assert_known(presentation_flight_map_schema_status(), 'gallery_flight_map_setting_save');
+    if (
+        $flightMapFeatureEnabled
+        && array_key_exists('flight_route_text', $input)
+    ) {
+        presentation_schema_assert_known(
+            presentation_flight_map_schema_status(),
+            'gallery_flight_map_setting_save',
+        );
     }
     // $pictureGameReady stores this steps working value.
-    $pictureGameReady = $pictureGameFeatureEnabled && picture_game_schema_ready();
+    $pictureGameReady =
+        $pictureGameFeatureEnabled && picture_game_schema_ready();
     // $gpsMapReady stores this steps working value.
     $gpsMapReady = $gpsMapFeatureEnabled && exif_gps_schema_ready();
     // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
@@ -1025,11 +1385,14 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // $votingReady stores this steps working value.
     $votingReady = $votingFeatureEnabled && gallery_voting_schema_ready();
     // $lightboxModeReady stores this steps working value.
-    $lightboxModeReady = $lightboxModeFeatureEnabled && gallery_lightbox_browsing_mode_schema_ready();
+    $lightboxModeReady =
+        $lightboxModeFeatureEnabled
+        && gallery_lightbox_browsing_mode_schema_ready();
     // Structured gallery-access state prevents partial/unknown migrations from becoming permissive saves.
     $accessSchemaStatus = gallery_access_schema_status();
     $accessReady = schema_inspection_is_available($accessSchemaStatus);
-    $accessLegacy = gallery_access_schema_is_confirmed_legacy($accessSchemaStatus);
+    $accessLegacy =
+        gallery_access_schema_is_confirmed_legacy($accessSchemaStatus);
     // $galleryId stores the gallery being edited.
     $galleryId = (int) ($gallery['id'] ?? 0);
     // $originalGallery preserves stable pre-mutation placement and route metadata for the completion contract.
@@ -1039,7 +1402,8 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // $oldParentId stores the hierarchy source before a possible reparent operation.
     $oldParentId = (int) ($gallery['parent_id'] ?? 0);
     // $faviconDescriptionsBeforeSave snapshots only persisted description content. Remote favicon discovery must not run for unrelated edits such as visibility changes.
-    $faviconDescriptionsBeforeSave = link_favicon_gallery_descriptions($galleryId);
+    $faviconDescriptionsBeforeSave =
+        link_favicon_gallery_descriptions($galleryId);
     sort($faviconDescriptionsBeforeSave, SORT_STRING);
     // $title stores the submitted or preserved public gallery title.
     $title = trim((string) ($input['title'] ?? $gallery['title'] ?? ''));
@@ -1053,12 +1417,18 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // opting into the rest of the access-control form, which could otherwise alter passwords/tokens.
     $visibilityInputPresent = array_key_exists('visibility', $input);
     // $visibility stores the normalized gallery visibility value.
-    $visibility = gallery_visibility_storage_value((string) ($input['visibility'] ?? $gallery['visibility'] ?? 'unpublished'));
+    $visibility = gallery_visibility_storage_value(
+        (string) (
+            $input['visibility']
+            ?? $gallery['visibility']
+            ?? 'unpublished'
+        ),
+    );
     // $galleryDateRange stores the optional manual date range selected by an admin.
     $galleryDateRange = gallery_date_schema_ready()
         ? gallery_date_range_storage_values(
-            $input['gallery_date'] ?? ($gallery['gallery_date'] ?? ''),
-            $input['gallery_date_end'] ?? ($gallery['gallery_date_end'] ?? '')
+            $input['gallery_date'] ?? $gallery['gallery_date'] ?? '',
+            $input['gallery_date_end'] ?? $gallery['gallery_date_end'] ?? '',
         )
         : ['start' => null, 'end' => null];
     // $galleryDate stores the optional manual date or range start selected by an admin.
@@ -1066,41 +1436,82 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // $galleryDateEnd stores the optional manual range end selected by an admin.
     $galleryDateEnd = $galleryDateRange['end'];
     // $pictureGameDefault stores the current value for partial update preservation.
-    $pictureGameDefault = !$completeForm && (int) ($gallery['picture_game_enabled'] ?? 0) === 1;
+    $pictureGameDefault =
+        !$completeForm && (int) ($gallery['picture_game_enabled'] ?? 0) === 1;
     // $gpsMapDefault stores the current value for partial update preservation.
-    $gpsMapDefault = !$completeForm && (int) ($gallery['gps_map_enabled'] ?? 0) === 1;
+    $gpsMapDefault =
+        !$completeForm && (int) ($gallery['gps_map_enabled'] ?? 0) === 1;
     // $gpsMapOverride stores the inherited or explicit EXIF/GPS display state for nullable override installs.
     $gpsMapOverride = $gpsMapOverrideReady
-        ? gallery_gps_map_storage_value($input['gps_map_enabled'] ?? ($completeForm ? 'inherit' : ($gallery['gps_map_enabled'] ?? null)))
+        ? gallery_gps_map_storage_value(
+            $input['gps_map_enabled']
+                ?? (
+                    $completeForm
+                        ? 'inherit'
+                        : $gallery['gps_map_enabled'] ?? null
+                ),
+        )
         : null;
     // $votingDefault stores the current value for partial update preservation.
-    $votingDefault = !$completeForm && (int) ($gallery['voting_enabled'] ?? 0) === 1;
+    $votingDefault =
+        !$completeForm && (int) ($gallery['voting_enabled'] ?? 0) === 1;
     // $showFilenamesDefault stores the current value for partial update preservation.
-    $showFilenamesDefault = !$completeForm && (int) ($gallery['show_filenames'] ?? 0) === 1;
+    $showFilenamesDefault =
+        !$completeForm && (int) ($gallery['show_filenames'] ?? 0) === 1;
     // $nsfwDefault stores the current value for partial update preservation.
-    $nsfwDefault = !$completeForm && (int) ($gallery['nsfw_enabled'] ?? 0) === 1;
+    $nsfwDefault =
+        !$completeForm && (int) ($gallery['nsfw_enabled'] ?? 0) === 1;
     // Variable $pictureGameEnabled stores this steps working value.
-    $pictureGameEnabled = $pictureGameReady ? admin_gallery_checkbox_input($input, 'picture_game_enabled', $pictureGameDefault) : 0;
+    $pictureGameEnabled = $pictureGameReady
+        ? admin_gallery_checkbox_input(
+            $input,
+            'picture_game_enabled',
+            $pictureGameDefault,
+        )
+        : 0;
     // Variable $gpsMapEnabled stores this steps working value.
-    $gpsMapEnabled = $gpsMapReady && !$gpsMapOverrideReady ? admin_gallery_checkbox_input($input, 'gps_map_enabled', $gpsMapDefault) : 0;
+    $gpsMapEnabled = $gpsMapReady && !$gpsMapOverrideReady
+        ? admin_gallery_checkbox_input(
+            $input,
+            'gps_map_enabled',
+            $gpsMapDefault,
+        )
+        : 0;
     // Variable $votingEnabled stores this steps working value.
     $votingEnabled = $votingReady
         ? admin_gallery_checkbox_input($input, 'voting_enabled', $votingDefault)
         : (int) ($gallery['voting_enabled'] ?? 0);
     // Variable $showFilenames stores this steps working value.
     $showFilenames = gallery_filename_display_schema_ready()
-        ? admin_gallery_checkbox_input($input, 'show_filenames', $showFilenamesDefault)
+        ? admin_gallery_checkbox_input(
+            $input,
+            'show_filenames',
+            $showFilenamesDefault,
+        )
         : 0;
     // $countBadgeVisibility stores the optional gallery-card count badge override for this gallery.
     $countBadgeVisibility = gallery_count_badge_schema_ready()
-        ? gallery_count_badge_storage_value($input['count_badge_visibility'] ?? ($gallery['count_badge_visibility'] ?? 'inherit'))
+        ? gallery_count_badge_storage_value(
+            $input['count_badge_visibility']
+            ?? $gallery['count_badge_visibility']
+            ?? 'inherit',
+        )
         : null;
     // $lightboxBrowsingMode stores the optional gallery-level lightbox browsing-mode override.
     $lightboxBrowsingMode = $lightboxModeReady
-        ? gallery_lightbox_browsing_mode_storage_value($input['lightbox_browsing_mode'] ?? ($completeForm ? 'inherit' : ($gallery['lightbox_browsing_mode'] ?? 'inherit')))
+        ? gallery_lightbox_browsing_mode_storage_value(
+            $input['lightbox_browsing_mode']
+                ?? (
+                    $completeForm
+                        ? 'inherit'
+                        : $gallery['lightbox_browsing_mode'] ?? 'inherit'
+                ),
+        )
         : null;
     // Variable $nsfwEnabled stores whether this gallery requires the NSFW Guard confirmation.
-    $nsfwEnabled = nsfw_guard_schema_ready() ? admin_gallery_checkbox_input($input, 'nsfw_enabled', $nsfwDefault) : 0;
+    $nsfwEnabled = nsfw_guard_schema_ready()
+        ? admin_gallery_checkbox_input($input, 'nsfw_enabled', $nsfwDefault)
+        : 0;
     if ($pictureGameEnabled) {
         // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
         $votingEnabled = 1;
@@ -1111,9 +1522,16 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     }
 
     // $shouldMoveGallery stores whether placement fields are owned by this save request.
-    $shouldMoveGallery = $completeForm || admin_gallery_input_has_any_key($input, ['parent_id', 'folder_name']);
+    $shouldMoveGallery =
+        $completeForm
+        || admin_gallery_input_has_any_key($input, [
+            'parent_id',
+            'folder_name',
+        ]);
     // Variable $parentId stores this steps working value.
-    $parentId = isset($gallery['parent_id']) ? (int) $gallery['parent_id'] : null;
+    $parentId = isset($gallery['parent_id'])
+        ? (int) $gallery['parent_id']
+        : null;
     // $moveResult stores an intermediate value used by the surrounding gallery workflow.
     $moveResult = null;
     if ($shouldMoveGallery) {
@@ -1122,52 +1540,88 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
         // Variable $parentId stores this steps working value.
         $parentId = $parentId > 0 && find_gallery($parentId) ? $parentId : null;
         // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
-        $currentFolderName = gallery_folder_name_from_path((string) $gallery['folder_path']);
+        $currentFolderName = gallery_folder_name_from_path(
+            (string) $gallery['folder_path'],
+        );
         // $submittedFolderName stores an intermediate value used by the surrounding gallery workflow.
-        $submittedFolderName = trim((string) ($input['folder_name'] ?? $currentFolderName));
+        $submittedFolderName = trim(
+            (string) ($input['folder_name'] ?? $currentFolderName),
+        );
         // $folderNameChanged stores an intermediate value used by the surrounding gallery workflow.
-        $folderNameChanged = $submittedFolderName !== '' && $submittedFolderName !== $currentFolderName;
-        if ((int) ($gallery['parent_id'] ?? 0) !== (int) ($parentId ?? 0) || $folderNameChanged) {
+        $folderNameChanged =
+            $submittedFolderName !== ''
+            && $submittedFolderName !== $currentFolderName;
+        if (
+            (int) ($gallery['parent_id'] ?? 0) !== (int) ($parentId ?? 0)
+            || $folderNameChanged
+        ) {
             try {
                 // $moveResult stores an intermediate value used by the surrounding gallery workflow.
-                $moveResult = move_gallery_folder_to_parent($galleryId, $parentId, $folderNameChanged ? $submittedFolderName : null);
+                $moveResult = move_gallery_folder_to_parent(
+                    $galleryId,
+                    $parentId,
+                    $folderNameChanged ? $submittedFolderName : null,
+                );
                 if (!empty($moveResult['moved'])) {
-                    admin_log_event('info', 'gallery.folder_moved', 'Admin moved a gallery folder.', [
-                        'gallery_id' => $galleryId,
-                        'from' => (string) $moveResult['from'],
-                        'to' => (string) $moveResult['to'],
-                        'galleries' => (int) $moveResult['galleries'],
-                    ]);
+                    admin_log_event(
+                        'info',
+                        'gallery.folder_moved',
+                        'Admin moved a gallery folder.',
+                        [
+                            'gallery_id' => $galleryId,
+                            'from' => (string) $moveResult['from'],
+                            'to' => (string) $moveResult['to'],
+                            'galleries' => (int) $moveResult['galleries'],
+                        ],
+                    );
                 }
                 // $gallery stores an intermediate value used by the surrounding gallery workflow.
                 $gallery = find_gallery($galleryId) ?: $gallery;
             } catch (Throwable $exception) {
-                admin_log_event('error', 'gallery.folder_move_failed', 'Admin gallery folder move failed.', [
-                    'gallery_id' => $galleryId,
-                    'error' => $exception->getMessage(),
-                ]);
-                throw new RuntimeException(t('admin.gallery_editor.folder_move_failed', ['error' => $exception->getMessage()]), 0, $exception);
+                admin_log_event(
+                    'error',
+                    'gallery.folder_move_failed',
+                    'Admin gallery folder move failed.',
+                    [
+                        'gallery_id' => $galleryId,
+                        'error' => $exception->getMessage(),
+                    ],
+                );
+                throw new RuntimeException(
+                    t('admin.gallery_editor.folder_move_failed', [
+                        'error' => $exception->getMessage(),
+                    ]),
+                    0,
+                    $exception,
+                );
             }
         }
     }
 
     // $shouldUpdateCover stores whether the title-picture fields are part of this request.
-    $shouldUpdateCover = $completeForm || array_key_exists('cover_image_id', $input) || !empty($files['cover_upload']['name'] ?? '');
+    $shouldUpdateCover =
+        $completeForm
+        || array_key_exists('cover_image_id', $input)
+        || !empty($files['cover_upload']['name'] ?? '');
     // $shouldUpdateFlightMap stores whether this request owns route-map input.
-    $shouldUpdateFlightMap = $flightMapReady && ($completeForm || array_key_exists('flight_route_text', $input));
+    $shouldUpdateFlightMap =
+        $flightMapReady
+        && ($completeForm || array_key_exists('flight_route_text', $input));
     // Variable $coverImageId stores this steps working value.
     $coverImageId = (int) ($gallery['cover_image_id'] ?? 0);
     // Preserve the multi-cover marker across unrelated complete-form saves.
     $coverImageIds = $gallery['cover_image_ids'] ?? null;
     // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
-    $coverImagePath = gallery_cover_asset_schema_ready() ? gallery_cover_path($gallery) : null;
+    $coverImagePath = gallery_cover_asset_schema_ready()
+        ? gallery_cover_path($gallery)
+        : null;
     if ($shouldUpdateCover) {
         $coverChoice = (string) ($input['cover_image_id'] ?? '0');
         $storedCoverMode = gallery_cover_selection_mode($gallery);
         $storedCoverChoice = match ($storedCoverMode) {
             'multi' => 'multi',
             'automatic' => 'automatic',
-            'single' => (string) ((int) ($gallery['cover_image_id'] ?? 0)),
+            'single' => (string) (int) ($gallery['cover_image_id'] ?? 0),
             default => '0',
         };
         if ($coverChoice === 'multi' && $storedCoverMode === 'multi') {
@@ -1183,37 +1637,64 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
         } elseif (ctype_digit($coverChoice) && (int) $coverChoice > 0) {
             $coverImageId = (int) $coverChoice;
             $coverImage = find_image($coverImageId);
-            if (!$coverImage || (int) ($coverImage['gallery_id'] ?? 0) !== $galleryId) {
-                throw new RuntimeException(t('admin.gallery_editor.selected_photo_unavailable', 'Selected photo is unavailable.'));
+            if (
+                !$coverImage
+                || (int) ($coverImage['gallery_id'] ?? 0) !== $galleryId
+            ) {
+                throw new RuntimeException(t(
+                    'admin.gallery_editor.selected_photo_unavailable',
+                    'Selected photo is unavailable.',
+                ));
             }
             $coverImageIds = null;
         } else {
-            throw new RuntimeException(t('admin.gallery_editor.selected_photo_unavailable', 'Selected photo is unavailable.'));
+            throw new RuntimeException(t(
+                'admin.gallery_editor.selected_photo_unavailable',
+                'Selected photo is unavailable.',
+            ));
         }
         // An intentional switch from a separately uploaded title picture back
         // to photos must remove the old asset precedence; unrelated saves keep it.
         if ($coverChoice !== $storedCoverChoice && $coverChoice !== 'multi') {
             $coverImagePath = null;
         }
-        if (gallery_cover_asset_schema_ready() && !empty($files['cover_upload']['name'] ?? '')) {
+        if (
+            gallery_cover_asset_schema_ready()
+            && !empty($files['cover_upload']['name'] ?? '')
+        ) {
             // $uploadError stores an intermediate value used by the surrounding gallery workflow.
-            $uploadError = (int) ($files['cover_upload']['error'] ?? UPLOAD_ERR_NO_FILE);
+            $uploadError = (int) (
+                $files['cover_upload']['error'] ?? UPLOAD_ERR_NO_FILE
+            );
             if ($uploadError !== UPLOAD_ERR_NO_FILE) {
                 if ($uploadError !== UPLOAD_ERR_OK) {
-                    throw new RuntimeException(upload_error_message($uploadError));
+                    throw new RuntimeException(upload_error_message(
+                        $uploadError,
+                    ));
                 }
                 // $tmpName stores an intermediate value used by the surrounding gallery workflow.
                 $tmpName = (string) ($files['cover_upload']['tmp_name'] ?? '');
                 if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-                    throw new RuntimeException(t('admin.gallery_editor.uploaded_thumbnail_unavailable'));
+                    throw new RuntimeException(t(
+                        'admin.gallery_editor.uploaded_thumbnail_unavailable',
+                    ));
                 }
                 // $info stores an intermediate value used by the surrounding gallery workflow.
                 $info = @getimagesize($tmpName);
-                if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-                    throw new RuntimeException(t('admin.gallery_editor.uploaded_thumbnail_invalid'));
+                if (
+                    $info === false
+                    || empty($info['mime'])
+                    || !str_starts_with((string) $info['mime'], 'image/')
+                ) {
+                    throw new RuntimeException(t(
+                        'admin.gallery_editor.uploaded_thumbnail_invalid',
+                    ));
                 }
                 // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
-                $coverImagePath = store_uploaded_gallery_cover($galleryId, $files['cover_upload']);
+                $coverImagePath = store_uploaded_gallery_cover(
+                    $galleryId,
+                    $files['cover_upload'],
+                );
                 // $coverImageId stores an intermediate value used by the surrounding gallery workflow.
                 $coverImageId = null;
                 $coverImageIds = null;
@@ -1222,12 +1703,18 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     }
 
     // $brandingAssetPaths stores optional banner, logo, and separator paths before form changes.
-    $brandingAssetPaths = gallery_branding_schema_ready() ? gallery_branding_asset_paths($gallery) : [];
+    $brandingAssetPaths = gallery_branding_schema_ready()
+        ? gallery_branding_asset_paths($gallery)
+        : [];
     // $shouldUpdateBranding stores whether branding fields are part of this request.
     $shouldUpdateBranding = $completeForm;
     if (!$shouldUpdateBranding && gallery_branding_schema_ready()) {
         foreach (array_keys(gallery_branding_asset_types()) as $brandingKind) {
-            if (!empty($files['branding_' . $brandingKind . '_upload']['name'] ?? '') || array_key_exists('remove_branding_' . $brandingKind, $input)) {
+            if (
+                !empty($files['branding_' . $brandingKind . '_upload']['name']
+                    ?? '')
+                || array_key_exists('remove_branding_' . $brandingKind, $input)
+            ) {
                 $shouldUpdateBranding = true;
                 break;
             }
@@ -1235,7 +1722,9 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     }
     if (gallery_branding_schema_ready() && $shouldUpdateBranding) {
         try {
-            foreach (array_keys(gallery_branding_asset_types()) as $brandingKind) {
+            foreach (array_keys(
+                gallery_branding_asset_types(),
+            ) as $brandingKind) {
                 // $uploadField stores the file-input name for this gallery branding asset.
                 $uploadField = 'branding_' . $brandingKind . '_upload';
                 // $removeField stores the remove-checkbox name for this gallery branding asset.
@@ -1243,7 +1732,11 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
                 // $hasUpload stores whether this asset is being replaced by a new file.
                 $hasUpload = !empty($files[$uploadField]['name'] ?? '');
                 if ($hasUpload) {
-                    $brandingAssetPaths[$brandingKind] = store_uploaded_gallery_branding_asset($galleryId, $brandingKind, $files[$uploadField]);
+                    $brandingAssetPaths[$brandingKind] = store_uploaded_gallery_branding_asset(
+                        $galleryId,
+                        $brandingKind,
+                        $files[$uploadField],
+                    );
                     continue;
                 }
                 if (!empty($input[$removeField])) {
@@ -1252,50 +1745,119 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
                 }
             }
         } catch (RuntimeException $exception) {
-            throw new RuntimeException(t('admin.gallery_editor.branding_update_failed', ['error' => $exception->getMessage()]), 0, $exception);
+            throw new RuntimeException(
+                t('admin.gallery_editor.branding_update_failed', [
+                    'error' => $exception->getMessage(),
+                ]),
+                0,
+                $exception,
+            );
         }
     }
 
     // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
-    $backgroundSource = gallery_background_source_schema_ready() ? gallery_background_source($gallery) : null;
+    $backgroundSource = gallery_background_source_schema_ready()
+        ? gallery_background_source($gallery)
+        : null;
     // $shouldUpdateBackgroundSource stores whether the background source selector is part of this request.
-    $shouldUpdateBackgroundSource = $completeForm || array_key_exists('background_source', $input);
-    if (gallery_background_source_schema_ready() && $shouldUpdateBackgroundSource) {
+    $shouldUpdateBackgroundSource =
+        $completeForm || array_key_exists('background_source', $input);
+    if (
+        gallery_background_source_schema_ready()
+        && $shouldUpdateBackgroundSource
+    ) {
         // $submittedBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
-        $submittedBackgroundSource = (string) ($input['background_source'] ?? '');
-        $backgroundSource = in_array($submittedBackgroundSource, ['upload', 'existing', 'collage'], true)
+        $submittedBackgroundSource = (string) (
+            $input['background_source'] ?? ''
+        );
+        $backgroundSource = in_array(
+            $submittedBackgroundSource,
+            ['upload', 'existing', 'collage'],
+            true,
+        )
             ? $submittedBackgroundSource
             : null;
     }
 
     // Variable $slug stores this steps working value.
-    $slug = gallery_editor_unique_slug($slug !== '' ? $slug : $title, $galleryId);
+    $slug = gallery_editor_unique_slug(
+        $slug !== '' ? $slug : $title,
+        $galleryId,
+    );
     // $descriptionLayoutOverride stores the optional gallery-card layout override for this gallery.
     $descriptionLayoutOverride = gallery_description_layout_schema_ready()
-        ? gallery_description_layout_storage_value($input['description_layout'] ?? ($completeForm ? 'inherit' : ($gallery['description_layout'] ?? 'inherit')))
+        ? gallery_description_layout_storage_value(
+            $input['description_layout']
+                ?? (
+                    $completeForm
+                        ? 'inherit'
+                        : $gallery['description_layout'] ?? 'inherit'
+                ),
+        )
         : null;
     // $shouldUpdateGrid stores whether grid fields are part of this request.
-    $shouldUpdateGrid = $completeForm || admin_gallery_input_has_any_key($input, ['grid_override_enabled', 'grid_columns', 'grid_rows', 'grid_use_for_subgalleries']);
+    $shouldUpdateGrid =
+        $completeForm
+        || admin_gallery_input_has_any_key($input, [
+            'grid_override_enabled',
+            'grid_columns',
+            'grid_rows',
+            'grid_use_for_subgalleries',
+        ]);
     // $gridUsesCustomSettings stores whether this gallery should stop inheriting the display grid.
-    $gridUsesCustomSettings = admin_gallery_checkbox_input($input, 'grid_override_enabled', !$completeForm && ((int) ($gallery['grid_columns'] ?? 0) > 0 || (int) ($gallery['grid_rows'] ?? 0) > 0)) === 1;
+    $gridUsesCustomSettings =
+        admin_gallery_checkbox_input(
+            $input,
+            'grid_override_enabled',
+            !$completeForm
+                && (
+                    (int) ($gallery['grid_columns'] ?? 0) > 0
+                    || (int) ($gallery['grid_rows'] ?? 0) > 0
+                ),
+        ) === 1;
     // $gridColumns stores the optional custom column count for public cards/photos in this gallery.
     $gridColumns = $gridUsesCustomSettings
-        ? pagination_dimension_value($input['grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS)
+        ? pagination_dimension_value(
+            $input['grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS,
+            CMS_PAGINATION_DEFAULT_COLUMNS,
+            CMS_PAGINATION_MAX_COLUMNS,
+        )
         : null;
     // $gridRows stores the optional custom row count used when pagination slices this gallery.
     $gridRows = $gridUsesCustomSettings
-        ? pagination_dimension_value($input['grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS)
+        ? pagination_dimension_value(
+            $input['grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS,
+            CMS_PAGINATION_DEFAULT_ROWS,
+            CMS_PAGINATION_MAX_ROWS,
+        )
         : null;
     // $gridUseForSubgalleries stores whether descendants may inherit this gallery grid.
-    $gridUseForSubgalleries = admin_gallery_checkbox_input($input, 'grid_use_for_subgalleries', !$completeForm && (int) ($gallery['grid_use_for_subgalleries'] ?? 0) === 1);
+    $gridUseForSubgalleries = admin_gallery_checkbox_input(
+        $input,
+        'grid_use_for_subgalleries',
+        !$completeForm
+            && (int) ($gallery['grid_use_for_subgalleries'] ?? 0) === 1,
+    );
     // $shouldUpdateThumbnailBounds stores whether thumbnail-bound fields are part of this request.
-    $shouldUpdateThumbnailBounds = $completeForm || admin_gallery_input_has_any_key($input, ['gallery_thumbnail_min_size', 'gallery_thumbnail_max_size', 'gallery_thumbnail_bounds_recursive']);
+    $shouldUpdateThumbnailBounds =
+        $completeForm
+        || admin_gallery_input_has_any_key($input, [
+            'gallery_thumbnail_min_size',
+            'gallery_thumbnail_max_size',
+            'gallery_thumbnail_bounds_recursive',
+        ]);
     // $thumbnailBounds stores the optional minimum and maximum responsive thumbnail sizes for this gallery.
-    $thumbnailBounds = thumbnail_bounds_schema_ready() && $shouldUpdateThumbnailBounds
+    $thumbnailBounds = thumbnail_bounds_schema_ready()
+    && $shouldUpdateThumbnailBounds
         ? thumbnail_bound_pair_from_post('gallery_thumbnail', $_POST)
-        : [($gallery['thumbnail_min_size'] ?? null), ($gallery['thumbnail_max_size'] ?? null)];
+        : [
+            $gallery['thumbnail_min_size'] ?? null,
+            $gallery['thumbnail_max_size'] ?? null,
+        ];
     // $thumbnailBoundsRecursive stores whether descendants should receive the same saved thumbnail bounds.
-    $thumbnailBoundsRecursive = thumbnail_bounds_schema_ready() && !empty($input['gallery_thumbnail_bounds_recursive']);
+    $thumbnailBoundsRecursive =
+        thumbnail_bounds_schema_ready()
+        && !empty($input['gallery_thumbnail_bounds_recursive']);
     // $shouldUpdateAccess stores whether password/share access controls are part of this request.
     $accessInputPresent = admin_gallery_input_has_any_key(
         $input,
@@ -1304,47 +1866,83 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
             'access_type',
             'clear_access_password',
             'access_password',
-            'access_token_expires_at'
-        ]
+            'access_token_expires_at',
+        ],
     );
-    $shouldUpdateAccess = $accessInputPresent || ($completeForm && $accessReady);
+    $shouldUpdateAccess =
+        $accessInputPresent || ($completeForm && $accessReady);
     // $shouldUpdateAccessListing keeps the legacy access_listing compatibility flag in lockstep
     // with an explicitly submitted visibility value. This is intentionally separate from
     // $shouldUpdateAccess so an inline Published/Unpublished/Private change cannot clear a
     // password, revoke a token, or otherwise mutate access controls that were not submitted.
-    $shouldUpdateAccessListing = $accessReady && ($completeForm || $visibilityInputPresent);
-    if (!$accessReady && !$accessLegacy && ($completeForm || $accessInputPresent)) {
-        throw new RuntimeException(t('admin.gallery_editor.access_schema_save_refused', 'Gallery save was refused because password/access schema is incomplete or could not be inspected. Check System Health before changing gallery visibility or protection.'));
+    $shouldUpdateAccessListing =
+        $accessReady && ($completeForm || $visibilityInputPresent);
+    if (
+        !$accessReady
+        && !$accessLegacy
+        && (
+            $completeForm
+            || $accessInputPresent
+        )
+    ) {
+        throw new RuntimeException(t(
+            'admin.gallery_editor.access_schema_save_refused',
+            'Gallery save was refused because password/access schema is incomplete or could not be inspected. Check System Health before changing gallery visibility or protection.',
+        ));
     }
     // $accessAction stores an intermediate value used by the surrounding gallery workflow.
-    $accessAction = $accessReady ? (string) ($input['access_action'] ?? 'save') : 'save';
-    if ($accessReady && $shouldUpdateAccess && $accessAction === 'generate_link') {
+    $accessAction = $accessReady
+        ? (string) ($input['access_action'] ?? 'save')
+        : 'save';
+    if (
+        $accessReady
+        && $shouldUpdateAccess
+        && $accessAction === 'generate_link'
+    ) {
         // Refuse before the gallery UPDATE so a missing/unknown token column cannot
         // leave the rest of the form saved while link generation fails afterwards.
         gallery_share_token_assert_mutation_available();
     }
     // Variable $accessType stores this steps working value.
-    $accessType = $accessReady && ($input['access_type'] ?? '') === 'password' ? 'password' : 'normal';
+    $accessType = $accessReady && ($input['access_type'] ?? '') === 'password'
+        ? 'password'
+        : 'normal';
     // Variable $accessListing stores this steps working value.
-    $accessListing = normalize_gallery_visibility($visibility) === 'public' ? 'listed' : 'unlisted';
+    $accessListing = normalize_gallery_visibility($visibility) === 'public'
+        ? 'listed'
+        : 'unlisted';
     // Variable $accessPasswordHash stores this steps working value.
-    $accessPasswordHash = $accessReady ? ($gallery['access_password_hash'] ?? null) : null;
+    $accessPasswordHash = $accessReady
+        ? $gallery['access_password_hash'] ?? null
+        : null;
     if ($accessReady && !empty($input['clear_access_password'])) {
         // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
         $accessPasswordHash = null;
     }
     // Variable $newAccessPassword stores this steps working value.
     $newAccessPassword = trim((string) ($input['access_password'] ?? ''));
-    if ($accessReady && $accessType === 'password' && $newAccessPassword !== '') {
+    if (
+        $accessReady
+        && $accessType === 'password'
+        && $newAccessPassword !== ''
+    ) {
         // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
-        $accessPasswordHash = password_hash($newAccessPassword, PASSWORD_DEFAULT);
+        $accessPasswordHash = password_hash(
+            $newAccessPassword,
+            PASSWORD_DEFAULT,
+        );
     }
     if ($accessType !== 'password') {
         // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
         $accessPasswordHash = null;
     }
     // Variable $accessMode stores this steps working value.
-    $accessMode = $accessReady && ($accessType === 'password' || !empty($gallery['access_token_hash']) || $accessAction === 'generate_link')
+    $accessMode = $accessReady
+    && (
+        $accessType === 'password'
+        || !empty($gallery['access_token_hash'])
+        || $accessAction === 'generate_link'
+    )
         ? 'password'
         : 'normal';
     if ($accessAction === 'revoke_link' && $accessType !== 'password') {
@@ -1355,10 +1953,18 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // $fields stores an intermediate value used by the surrounding gallery workflow.
     $fields = [
         'title' => $title,
-        'description' => (string) ($input['description'] ?? $gallery['description'] ?? ''),
+        'description' => (string) (
+            $input['description']
+            ?? $gallery['description']
+            ?? ''
+        ),
         'slug' => $slug,
         'visibility' => $visibility,
-        'sort_order' => (int) ($input['sort_order'] ?? $gallery['sort_order'] ?? 0),
+        'sort_order' => (int) (
+            $input['sort_order']
+            ?? $gallery['sort_order']
+            ?? 0
+        ),
     ];
     if ($shouldMoveGallery) {
         $fields['parent_id'] = $parentId;
@@ -1418,7 +2024,9 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     }
     if ($accessReady && $shouldUpdateAccess) {
         $fields['access_mode'] = $accessMode;
-        $fields['access_password_hash'] = $accessMode === 'password' ? $accessPasswordHash : null;
+        $fields['access_password_hash'] = $accessMode === 'password'
+            ? $accessPasswordHash
+            : null;
         if ($accessMode !== 'password') {
             if (gallery_access_share_token_schema_ready()) {
                 $fields['access_share_token'] = null;
@@ -1437,7 +2045,10 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
             $fields[$column] = $brandingAssetPaths[$brandingKind] ?? null;
         }
     }
-    if (gallery_background_source_schema_ready() && $shouldUpdateBackgroundSource) {
+    if (
+        gallery_background_source_schema_ready()
+        && $shouldUpdateBackgroundSource
+    ) {
         $fields['background_source'] = $backgroundSource;
     }
     gallery_editor_update_fields($galleryId, $fields);
@@ -1445,13 +2056,27 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
         gallery_breadcrumb_style_save($galleryId, $submittedBreadcrumbStyle);
     }
     if ($shouldUpdateLocalization) {
-        content_save_localizations('gallery', $galleryId, $input['content_language'] ?? null, $input['translations'] ?? []);
+        content_save_localizations(
+            'gallery',
+            $galleryId,
+            $input['content_language'] ?? null,
+            $input['translations'] ?? [],
+        );
     }
     if (public_path_schema_ready()) {
         refresh_gallery_public_paths();
     }
-    if (thumbnail_bounds_schema_ready() && $thumbnailBoundsRecursive && $shouldUpdateThumbnailBounds) {
-        save_gallery_thumbnail_bounds($gallery, $thumbnailBounds[0], $thumbnailBounds[1], true);
+    if (
+        thumbnail_bounds_schema_ready()
+        && $thumbnailBoundsRecursive
+        && $shouldUpdateThumbnailBounds
+    ) {
+        save_gallery_thumbnail_bounds(
+            $gallery,
+            $thumbnailBounds[0],
+            $thumbnailBounds[1],
+            true,
+        );
     }
     if ($accessReady && $shouldUpdateAccess) {
         if ($accessAction === 'revoke_link') {
@@ -1465,20 +2090,36 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
             // $expiresTimestamp stores an intermediate value used by the surrounding gallery workflow.
             $expiresTimestamp = $expires !== '' ? strtotime($expires) : false;
             // $expiresAt stores an intermediate value used by the surrounding gallery workflow.
-            $expiresAt = $expiresTimestamp !== false ? date('Y-m-d H:i:s', $expiresTimestamp) : null;
-            $_SESSION['new_gallery_share_token_' . $galleryId] = regenerate_gallery_share_token($galleryId, $expiresAt);
+            $expiresAt = $expiresTimestamp !== false
+                ? date('Y-m-d H:i:s', $expiresTimestamp)
+                : null;
+            $_SESSION['new_gallery_share_token_'
+                . $galleryId] = regenerate_gallery_share_token(
+                $galleryId,
+                $expiresAt,
+            );
         }
     }
     // $flightMapResult stores the route resolver summary for the saved gallery.
     $flightMapResult = null;
     if ($shouldUpdateFlightMap) {
-        $flightMapResult = save_gallery_flight_path_route($galleryId, (string) ($input['flight_route_text'] ?? ''));
+        $flightMapResult = save_gallery_flight_path_route(
+            $galleryId,
+            (string) ($input['flight_route_text'] ?? ''),
+        );
     }
     if ($completeForm || array_key_exists('tags', $input)) {
-        sync_entity_tags('gallery', $galleryId, (string) ($input['tags'] ?? ''));
+        sync_entity_tags(
+            'gallery',
+            $galleryId,
+            (string) ($input['tags'] ?? ''),
+        );
     }
     if ($updateSmartChildren) {
-        smart_gallery_assign_children_to_gallery($galleryId, $smartGalleryChildrenInput);
+        smart_gallery_assign_children_to_gallery(
+            $galleryId,
+            $smartGalleryChildrenInput,
+        );
     }
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId, true) ?: $gallery;
@@ -1489,7 +2130,8 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     // gallery form contains many fields even when the admin changed only visibility,
     // so an unconditional favicon refresh would put unrelated remote HTTP latency on
     // the critical save-response path after the database mutation had already succeeded.
-    $faviconDescriptionsAfterSave = link_favicon_gallery_descriptions($galleryId);
+    $faviconDescriptionsAfterSave =
+        link_favicon_gallery_descriptions($galleryId);
     sort($faviconDescriptionsAfterSave, SORT_STRING);
     if ($faviconDescriptionsBeforeSave !== $faviconDescriptionsAfterSave) {
         // Cache unknown-site favicons only when link-bearing content actually changed.
@@ -1501,15 +2143,30 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
     }
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = t('admin.gallery_editor.notice_saved', 'Gallery saved.');
-    if ($flightMapResult !== null && (int) ($flightMapResult['point_count'] ?? 0) > 0) {
-        $notice .= ' ' . t('admin.gallery_editor.flight_route_saved_notice', 'Flight route saved with {points} resolved points; {unresolved} unresolved points were skipped.', [
-            'points' => (string) (int) ($flightMapResult['point_count'] ?? 0),
-            'unresolved' => (string) (int) ($flightMapResult['unresolved_count'] ?? 0),
-        ]);
+    if (
+        $flightMapResult !== null
+        && (int) ($flightMapResult['point_count'] ?? 0) > 0
+    ) {
+        $notice .= ' '
+        . t(
+            'admin.gallery_editor.flight_route_saved_notice',
+            'Flight route saved with {points} resolved points; {unresolved} unresolved points were skipped.',
+            [
+                'points' => (string) (int) (
+                    $flightMapResult['point_count'] ?? 0
+                ),
+                'unresolved' => (string) (int) (
+                    $flightMapResult['unresolved_count'] ?? 0
+                ),
+            ],
+        );
     }
     if (!empty($moveResult['moved'])) {
         // $notice stores an intermediate value used by the surrounding gallery workflow.
-        $notice = t('admin.gallery_editor.notice_saved_and_moved', 'Gallery saved and folder moved.');
+        $notice = t(
+            'admin.gallery_editor.notice_saved_and_moved',
+            'Gallery saved and folder moved.',
+        );
     }
     return [
         'gallery' => $gallery,
@@ -1531,8 +2188,12 @@ function admin_save_gallery_owned_input(array $gallery, array $input, array $fil
  * @param array<string,mixed> $input Original input, projected before no-JavaScript rendering.
  * @return void
  */
-function admin_gallery_edit_conflict_response(GalleryEditConflict|GalleryEditUnavailable $exception, int $galleryId, string $returnTab, array $input): void
-{
+function admin_gallery_edit_conflict_response(
+    GalleryEditConflict|GalleryEditUnavailable $exception,
+    int $galleryId,
+    string $returnTab,
+    array $input,
+): void {
     $conflict = $exception instanceof GalleryEditConflict;
     http_response_code($conflict ? 409 : 503);
     header('Cache-Control: private, no-store');
@@ -1540,7 +2201,10 @@ function admin_gallery_edit_conflict_response(GalleryEditConflict|GalleryEditUna
     $latest = $conflict ? $exception->latest : [];
     if (admin_wants_json()) {
         header('Content-Type: application/json; charset=utf-8');
-        $payload = admin_mutation_error_envelope($exception->getMessage(), $conflict ? 'gallery_edit_conflict' : 'gallery_edit_unavailable');
+        $payload = admin_mutation_error_envelope(
+            $exception->getMessage(),
+            $conflict ? 'gallery_edit_conflict' : 'gallery_edit_unavailable',
+        );
         $payload['conflict'] = [
             'gallery_id' => $galleryId,
             'busy' => $conflict && $exception->busy,
@@ -1550,17 +2214,32 @@ function admin_gallery_edit_conflict_response(GalleryEditConflict|GalleryEditUna
         echo json_encode($payload, JSON_THROW_ON_ERROR);
         return;
     }
-    \Gallery\Core\render_header(t('admin.gallery_editor.edit_review_title', 'Review gallery changes'));
+    \Gallery\Core\render_header(t(
+        'admin.gallery_editor.edit_review_title',
+        'Review gallery changes',
+    ));
     \Gallery\Views\view_render_admin_gallery_edit_conflict([
         'message' => $exception->getMessage(),
         'reload_url' => $reloadUrl,
         'latest' => $latest,
         'draft' => gallery_edit_review_draft($input),
         'labels' => [
-            'draft' => t('admin.gallery_editor.edit_review_draft', 'Your entered values'),
-            'latest' => t('admin.gallery_editor.edit_review_latest', 'Latest stored values'),
-            'open' => t('admin.gallery_editor.edit_review_open', 'Open the latest editor in a new tab'),
-            'help' => t('admin.gallery_editor.edit_review_help', 'Keep this page while reviewing the latest editor. Copy the changes you still want. Re-enter passwords and reselect uploads; they are not included below. Access settings are never merged automatically.'),
+            'draft' => t(
+                'admin.gallery_editor.edit_review_draft',
+                'Your entered values',
+            ),
+            'latest' => t(
+                'admin.gallery_editor.edit_review_latest',
+                'Latest stored values',
+            ),
+            'open' => t(
+                'admin.gallery_editor.edit_review_open',
+                'Open the latest editor in a new tab',
+            ),
+            'help' => t(
+                'admin.gallery_editor.edit_review_help',
+                'Keep this page while reviewing the latest editor. Copy the changes you still want. Re-enter passwords and reselect uploads; they are not included below. Access settings are never merged automatically.',
+            ),
         ],
     ]);
     \Gallery\Core\render_footer();
@@ -1579,6 +2258,12 @@ function admin_nsfw_guard_mutation_error(): string
     // $status stores the complete NSFW schema state used for actionable wording.
     $status = nsfw_guard_schema_status();
     return ($status['state'] ?? '') === 'unknown'
-        ? t('admin.gallery_editor.nsfw_change_inspection_failed', 'NSFW Guard was not changed because the required database schema could not be inspected. Check System Health and try again.')
-        : t('admin.gallery_editor.nsfw_change_migration_required', 'NSFW Guard was not changed because its database migration has not been applied.');
+        ? t(
+            'admin.gallery_editor.nsfw_change_inspection_failed',
+            'NSFW Guard was not changed because the required database schema could not be inspected. Check System Health and try again.',
+        )
+        : t(
+            'admin.gallery_editor.nsfw_change_migration_required',
+            'NSFW Guard was not changed because its database migration has not been applied.',
+        );
 }

@@ -30,8 +30,11 @@ function &cooperative_pairing_transport_override(): mixed
  * @param string $bearer Secret presented only in the Authorization header.
  * @return array<string,mixed> Result described by the operation above.
  */
-function cooperative_pairing_request(string $base, ?array $message = null, string $bearer = ''): array
-{
+function cooperative_pairing_request(
+    string $base,
+    ?array $message = null,
+    string $bearer = '',
+): array {
     cooperative_pairing_require_enabled();
     $base = cooperative_pairing_base_url($base);
     $transport = &cooperative_pairing_transport_override();
@@ -39,14 +42,22 @@ function cooperative_pairing_request(string $base, ?array $message = null, strin
         if (is_callable($transport)) {
             $result = $transport($base, $message, $bearer);
         } else {
-            $result = outbound_http_json_request($base . '/index.php?page=cooperative_peer_api', $message, $bearer);
+            $result = outbound_http_json_request(
+                $base . '/index.php?page=cooperative_peer_api',
+                $message,
+                $bearer,
+            );
         }
     } catch (\Throwable) {
         throw new CooperativeException('peer_unavailable');
     }
-    if (!is_array($result) || ($result['ok'] ?? null) !== true
+    if (
+        !is_array($result)
+        || ($result['ok'] ?? null) !== true
         || ($result['protocol'] ?? null) !== COOPERATIVE_PROTOCOL_VERSION
-        || strlen(json_encode($result, JSON_THROW_ON_ERROR)) > COOPERATIVE_PAIRING_MAX_BYTES) {
+        || strlen(json_encode($result, JSON_THROW_ON_ERROR))
+            > COOPERATIVE_PAIRING_MAX_BYTES
+    ) {
         throw new CooperativeException('peer_response_invalid');
     }
     return $result;
@@ -61,10 +72,16 @@ function cooperative_pairing_discover(string $base): array
 {
     $base = cooperative_pairing_base_url($base);
     $response = cooperative_pairing_request($base);
-    if (!is_string($response['instance_id'] ?? null) || ($response['base_url'] ?? null) !== $base) {
+    if (
+        !is_string($response['instance_id'] ?? null)
+        || ($response['base_url'] ?? null) !== $base
+    ) {
         throw new CooperativeException('peer_identity_invalid');
     }
-    return ['instance_id' => cooperative_id_validate($response['instance_id']), 'base_url' => $base];
+    return [
+        'instance_id' => cooperative_id_validate($response['instance_id']),
+        'base_url' => $base,
+    ];
 }
 
 /** Return minimal protocol discovery data; no peer list or capability secrets are public.
@@ -76,5 +93,10 @@ function cooperative_pairing_identity(): array
     cooperative_pairing_require_enabled();
     $base = cooperative_pairing_local_base();
     cooperative_pairing_storage_assert();
-    return ['ok' => true, 'protocol' => COOPERATIVE_PROTOCOL_VERSION, 'instance_id' => cooperative_instance_id(), 'base_url' => $base];
+    return [
+        'ok' => true,
+        'protocol' => COOPERATIVE_PROTOCOL_VERSION,
+        'instance_id' => cooperative_instance_id(),
+        'base_url' => $base,
+    ];
 }

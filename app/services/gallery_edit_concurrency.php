@@ -33,18 +33,26 @@ final class GalleryEditConflict extends RuntimeException
      * @param bool $busy True when another connection still owns the edit operation.
      * @return void
      */
-    public function __construct(public readonly array $latest, public readonly bool $busy = false)
-    {
-        parent::__construct($busy
-            ? t('admin.gallery_editor.edit_busy', 'Another gallery operation is still running. Your entries have been kept. Retry after it finishes.')
-            : t('admin.gallery_editor.edit_conflict', 'This gallery changed after the form was opened. Your entries have been kept. Open the latest version and review your changes before saving.'));
+    public function __construct(
+        public readonly array $latest,
+        public readonly bool $busy = false,
+    ) {
+        parent::__construct(
+            $busy
+                ? t(
+                    'admin.gallery_editor.edit_busy',
+                    'Another gallery operation is still running. Your entries have been kept. Retry after it finishes.',
+                )
+                : t(
+                    'admin.gallery_editor.edit_conflict',
+                    'This gallery changed after the form was opened. Your entries have been kept. Open the latest version and review your changes before saving.',
+                ),
+        );
     }
 }
 
 /** Refusal caused by missing or unknown schema/ownership; never contains a raw database exception. */
-final class GalleryEditUnavailable extends RuntimeException
-{
-}
+final class GalleryEditUnavailable extends RuntimeException {}
 
 /**
  * Return the decimal revision carried by this exact row, without issuing a newer read.
@@ -55,8 +63,10 @@ final class GalleryEditUnavailable extends RuntimeException
 function gallery_edit_revision(array $gallery): string
 {
     $revision = $gallery['edit_revision'] ?? null;
-    return (is_int($revision) || is_string($revision)) && preg_match('/^[1-9][0-9]{0,19}$/D', (string) $revision) === 1
-        ? (string) $revision : '';
+    return (is_int($revision) || is_string($revision))
+    && preg_match('/^[1-9][0-9]{0,19}$/D', (string) $revision) === 1
+        ? (string) $revision
+        : '';
 }
 
 /**
@@ -67,9 +77,11 @@ function gallery_edit_revision(array $gallery): string
 function gallery_edit_schema_state(): string
 {
     $column = schema_inspection_column('galleries', 'edit_revision');
-    return schema_inspection_is_available($column)
-        ? 'available'
-        : (schema_inspection_is_missing($column) ? 'missing' : 'unknown');
+    return (
+        schema_inspection_is_available($column)
+            ? 'available'
+            : (schema_inspection_is_missing($column) ? 'missing' : 'unknown')
+    );
 }
 
 /**
@@ -81,13 +93,35 @@ function gallery_edit_schema_state(): string
 function gallery_edit_comparison(array $gallery): array
 {
     return array_intersect_key($gallery, array_flip([
-        'id', 'edit_revision', 'title', 'description', 'slug', 'parent_id', 'sort_order',
-        'visibility', 'access_mode', 'access_listing', 'nsfw_enabled', 'gallery_date',
-        'gallery_date_end', 'content_language', 'description_layout', 'grid_columns',
-        'grid_rows', 'grid_use_for_subgalleries', 'thumbnail_min_size', 'thumbnail_max_size',
-        'voting_enabled', 'show_filenames', 'count_badge_visibility', 'lightbox_browsing_mode',
+        'id',
+        'edit_revision',
+        'title',
+        'description',
+        'slug',
+        'parent_id',
+        'sort_order',
+        'visibility',
+        'access_mode',
+        'access_listing',
+        'nsfw_enabled',
+        'gallery_date',
+        'gallery_date_end',
+        'content_language',
+        'description_layout',
+        'grid_columns',
+        'grid_rows',
+        'grid_use_for_subgalleries',
+        'thumbnail_min_size',
+        'thumbnail_max_size',
+        'voting_enabled',
+        'show_filenames',
+        'count_badge_visibility',
+        'lightbox_browsing_mode',
         'presentation_json',
-        'picture_game_enabled', 'gps_map_enabled', 'background_source', 'cover_image_id',
+        'picture_game_enabled',
+        'gps_map_enabled',
+        'background_source',
+        'cover_image_id',
     ]));
 }
 
@@ -101,14 +135,30 @@ function gallery_edit_review_draft(array $input): array
 {
     $draft = gallery_edit_comparison($input);
     unset($draft['id'], $draft['edit_revision']);
-    foreach (['folder_name', 'tags', 'translations', 'smart_gallery_children', 'flight_route_text',
-        'access_type', 'access_action', 'clear_access_password', 'access_token_expires_at',
-        'grid_override_enabled', 'gallery_thumbnail_min_size', 'gallery_thumbnail_max_size',
-        'gallery_thumbnail_bounds_recursive', 'remove_branding_banner', 'remove_branding_logo',
-        'remove_branding_separator', 'gallery_presentation_present',
+    foreach ([
+        'folder_name',
+        'tags',
+        'translations',
+        'smart_gallery_children',
+        'flight_route_text',
+        'access_type',
+        'access_action',
+        'clear_access_password',
+        'access_token_expires_at',
+        'grid_override_enabled',
+        'gallery_thumbnail_min_size',
+        'gallery_thumbnail_max_size',
+        'gallery_thumbnail_bounds_recursive',
+        'remove_branding_banner',
+        'remove_branding_logo',
+        'remove_branding_separator',
+        'gallery_presentation_present',
         'gallery_presentation_autoplay',
-        'gallery_presentation_enabled', 'gallery_presentation_music',
-        'gallery_presentation_interval', 'gallery_presentation_transition'] as $key) {
+        'gallery_presentation_enabled',
+        'gallery_presentation_music',
+        'gallery_presentation_interval',
+        'gallery_presentation_transition',
+    ] as $key) {
         if (array_key_exists($key, $input)) {
             $draft[$key] = $input[$key];
         }
@@ -126,13 +176,24 @@ function gallery_edit_review_draft(array $input): array
  * @throws GalleryEditConflict On missing/malformed/stale revision or an active competing editor.
  * @throws GalleryEditUnavailable On schema/connection uncertainty, before target mutation.
  */
-function gallery_edit_begin(array $gallery, mixed $expectedRevision, bool $completeForm = true): array
-{
+function gallery_edit_begin(
+    array $gallery,
+    mixed $expectedRevision,
+    bool $completeForm = true,
+): array {
     $state = gallery_edit_schema_state();
     if ($state !== 'available') {
-        throw new GalleryEditUnavailable($state === 'missing'
-            ? t('admin.gallery_editor.edit_schema_missing', 'Gallery editing requires the revision migration. Run database migrations from this Gallery page, then reopen the form.')
-            : t('admin.gallery_editor.edit_schema_unknown', 'Gallery edit protection could not be verified. Keep your entries and try again after database diagnostics are resolved.'));
+        throw new GalleryEditUnavailable(
+            $state === 'missing'
+                ? t(
+                    'admin.gallery_editor.edit_schema_missing',
+                    'Gallery editing requires the revision migration. Run database migrations from this Gallery page, then reopen the form.',
+                )
+                : t(
+                    'admin.gallery_editor.edit_schema_unknown',
+                    'Gallery edit protection could not be verified. Keep your entries and try again after database diagnostics are resolved.',
+                ),
+        );
     }
     if (!$completeForm && $expectedRevision === null) {
         $expectedRevision = gallery_edit_revision($gallery);
@@ -142,14 +203,26 @@ function gallery_edit_begin(array $gallery, mixed $expectedRevision, bool $compl
         throw new GalleryEditConflict(gallery_edit_comparison($gallery));
     }
     try {
-        $reservation = gallery_edit_model_reserve((int) $gallery['id'], $expected);
+        $reservation = gallery_edit_model_reserve(
+            (int) $gallery['id'],
+            $expected,
+        );
     } catch (Throwable) {
-        throw new GalleryEditUnavailable(t('admin.gallery_editor.edit_schema_unknown', 'Gallery edit protection could not be verified. Keep your entries and try again after database diagnostics are resolved.'));
+        throw new GalleryEditUnavailable(t(
+            'admin.gallery_editor.edit_schema_unknown',
+            'Gallery edit protection could not be verified. Keep your entries and try again after database diagnostics are resolved.',
+        ));
     }
     if ($reservation['state'] !== 'acquired') {
-        throw new GalleryEditConflict(gallery_edit_comparison($reservation['gallery'] ?? []), $reservation['state'] === 'busy');
+        throw new GalleryEditConflict(
+            gallery_edit_comparison($reservation['gallery'] ?? []),
+            $reservation['state'] === 'busy',
+        );
     }
-    return ['lock' => (string) $reservation['lock'], 'gallery' => $reservation['gallery']];
+    return [
+        'lock' => (string) $reservation['lock'],
+        'gallery' => $reservation['gallery'],
+    ];
 }
 
 /**
@@ -180,7 +253,10 @@ function gallery_edit_writer_begin(): string
     try {
         $name = gallery_edit_model_lock();
     } catch (Throwable) {
-        throw new GalleryEditUnavailable(t('admin.gallery_editor.edit_schema_unknown', 'Gallery edit protection could not be verified. Keep your entries and try again after database diagnostics are resolved.'));
+        throw new GalleryEditUnavailable(t(
+            'admin.gallery_editor.edit_schema_unknown',
+            'Gallery edit protection could not be verified. Keep your entries and try again after database diagnostics are resolved.',
+        ));
     }
     if ($name === null) {
         throw new GalleryEditConflict([], true);
@@ -200,6 +276,9 @@ function gallery_edit_writer_end(string $lockName): void
     try {
         gallery_edit_model_release($lockName);
     } catch (Throwable) {
-        throw new GalleryEditUnavailable(t('admin.gallery_editor.edit_connection_lost', 'The gallery operation connection was interrupted. Reopen the gallery and verify its state before trying again.'));
+        throw new GalleryEditUnavailable(t(
+            'admin.gallery_editor.edit_connection_lost',
+            'The gallery operation connection was interrupted. Reopen the gallery and verify its state before trying again.',
+        ));
     }
 }

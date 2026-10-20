@@ -38,25 +38,48 @@ use InvalidArgumentException;
 use PDO;
 use function Gallery\Core\db;
 
-/** Return table/column metadata rows for a bounded validated table list. */
+/**
+ * Return column metadata rows for a bounded validated table list.
+ *
+ * @param array<int,string> $tables Table names to inspect.
+ * @return array<int,array<string,mixed>> Rows with TABLE_NAME, COLUMN_NAME,
+ *     COLUMN_TYPE and IS_NULLABLE fields, or an empty list when no tables are
+ *     supplied or no rows are returned.
+ */
 function schema_inspection_model_table_snapshot_rows(array $tables): array
 {
-    if ($tables === []) return [];
+    if ($tables === [])
+        return [];
     $placeholders = implode(',', array_fill(0, count($tables), '?'));
     $statement = db()->prepare(
         'SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE '
-        . 'FROM information_schema.COLUMNS '
-        . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (' . $placeholders . ') '
-        . 'ORDER BY TABLE_NAME, ORDINAL_POSITION'
+            . 'FROM information_schema.COLUMNS '
+            . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('
+            . $placeholders
+            . ') '
+            . 'ORDER BY TABLE_NAME, ORDINAL_POSITION',
     );
     $statement->execute(array_values($tables));
     $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
     return is_array($rows) ? $rows : [];
 }
 
-/** Build one normalized prepared metadata query definition. */
-function schema_inspection_model_query_definition(string $objectType, string $table, string $object): array
-{
+/**
+ * Build one normalized prepared metadata query definition.
+ *
+ * @param string $objectType Supported schema object type: table, column, or
+ *     index.
+ * @param string $table Table name to inspect.
+ * @param string $object Column or index name; unused for table lookups.
+ * @return array{sql:string,parameters:array<int,string>} SQL statement and
+ *     ordered bound string parameters.
+ * @throws InvalidArgumentException When the object type is unsupported.
+ */
+function schema_inspection_model_query_definition(
+    string $objectType,
+    string $table,
+    string $object,
+): array {
     if ($objectType === 'table') {
         return [
             'sql' => 'SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1',
@@ -78,34 +101,68 @@ function schema_inspection_model_query_definition(string $objectType, string $ta
     throw new InvalidArgumentException('Invalid schema object type.');
 }
 
-/** Execute one validated schema metadata existence query. */
-function schema_inspection_model_object_exists(string $objectType, string $table, string $object): bool
-{
-    $query = schema_inspection_model_query_definition($objectType, $table, $object);
+/**
+ * Execute one validated schema metadata existence query.
+ *
+ * @param string $objectType Supported schema object type: table, column, or
+ *     index.
+ * @param string $table Table name to inspect.
+ * @param string $object Column or index name; unused for table lookups.
+ * @return bool True when the requested schema object exists, otherwise false.
+ */
+function schema_inspection_model_object_exists(
+    string $objectType,
+    string $table,
+    string $object,
+): bool {
+    $query = schema_inspection_model_query_definition(
+        $objectType,
+        $table,
+        $object,
+    );
     $statement = db()->prepare($query['sql']);
     $statement->execute($query['parameters']);
     return (bool) $statement->fetchColumn();
 }
 
-/** Return whether one column definition contains the supplied validated token. */
-function schema_inspection_model_column_definition_contains(string $table, string $column, string $token): bool
-{
+/**
+ * Return whether one column definition contains the supplied validated token.
+ *
+ * @param string $table Table name containing the column.
+ * @param string $column Column name to inspect.
+ * @param string $token Definition token to search for.
+ * @return bool True when the column definition contains the token, otherwise
+ *     false.
+ */
+function schema_inspection_model_column_definition_contains(
+    string $table,
+    string $column,
+    string $token,
+): bool {
     $statement = db()->prepare(
         'SELECT 1 FROM information_schema.COLUMNS '
-        . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? '
-        . 'AND LOCATE(?, COLUMN_TYPE) > 0 LIMIT 1'
+            . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? '
+            . 'AND LOCATE(?, COLUMN_TYPE) > 0 LIMIT 1',
     );
     $statement->execute([$table, $column, $token]);
     return (bool) $statement->fetchColumn();
 }
 
-/** Return whether one validated column accepts SQL NULL values. */
-function schema_inspection_model_column_nullable(string $table, string $column): bool
-{
+/**
+ * Return whether one validated column accepts SQL NULL values.
+ *
+ * @param string $table Table name containing the column.
+ * @param string $column Column name to inspect.
+ * @return bool True when the column is nullable, otherwise false.
+ */
+function schema_inspection_model_column_nullable(
+    string $table,
+    string $column,
+): bool {
     $statement = db()->prepare(
         'SELECT 1 FROM information_schema.COLUMNS '
-        . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? '
-        . "AND IS_NULLABLE = 'YES' LIMIT 1"
+            . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? '
+            . "AND IS_NULLABLE = 'YES' LIMIT 1",
     );
     $statement->execute([$table, $column]);
     return (bool) $statement->fetchColumn();

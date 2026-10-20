@@ -18,11 +18,25 @@ namespace Gallery\Services;
  * @param string $focusGroup Optional locally completed mutation to keep visible outside the current page.
  * @return array{items:list<array<string,mixed>>,next_cursor:?string} Bounded review rows and continuation cursor.
  */
-function cooperative_proposal_review_inbox(string $cursor = '', string $focusGroup = ''): array
-{
+function cooperative_proposal_review_inbox(
+    string $cursor = '',
+    string $focusGroup = '',
+): array {
     $page = cooperative_proposal_exchange_inbox($cursor);
-    if ($focusGroup !== '' && !in_array($focusGroup, array_column($page['items'], 'group_id'), true)) {
-        array_unshift($page['items'], cooperative_proposal_exchange_projection(cooperative_proposal_exchange_load($focusGroup)));
+    if (
+        $focusGroup !== ''
+        && !in_array(
+            $focusGroup,
+            array_column($page['items'], 'group_id'),
+            true,
+        )
+    ) {
+        array_unshift(
+            $page['items'],
+            cooperative_proposal_exchange_projection(cooperative_proposal_exchange_load(
+                $focusGroup,
+            )),
+        );
     }
     if ($page['items'] === []) {
         return $page;
@@ -30,26 +44,55 @@ function cooperative_proposal_review_inbox(string $cursor = '', string $focusGro
     $local = cooperative_instance_id();
     $rows = [];
     foreach ($page['items'] as $proposal) {
-        $gallery = \Gallery\Models\gallery_model_find_by_id($proposal['gallery_id']);
+        $gallery = \Gallery\Models\gallery_model_find_by_id(
+            $proposal['gallery_id'],
+        );
         $live = $proposal['body']['expires_at'] > time();
         $actions = [];
-        if ($proposal['state'] === 'pending' && $live && in_array($proposal['own']['decision'], ['pending', 'consent_stale'], true)) {
+        if (
+            $proposal['state'] === 'pending'
+            && $live
+            && in_array(
+                $proposal['own']['decision'],
+                ['pending', 'consent_stale'],
+                true,
+            )
+        ) {
             $actions[] = 'approve';
         }
-        if (($proposal['state'] === 'pending' && $live || $proposal['state'] === 'active') && $proposal['own']['decision'] !== 'declined') {
+        if (
+            (
+                $proposal['state'] === 'pending'
+                && $live
+                || $proposal['state'] === 'active'
+            )
+            && $proposal['own']['decision'] !== 'declined'
+        ) {
             $actions[] = 'decline';
         }
-        if (in_array($proposal['maintenance']['action'], ['start', 'verify', 'finalize'], true)) {
+        if (in_array(
+            $proposal['maintenance']['action'],
+            ['start', 'verify', 'finalize'],
+            true,
+        )) {
             $actions[] = 'advance';
         }
-        if (cooperative_proposal_workflow_next($proposal) !== null) { $actions[] = 'synchronize'; }
+        if (cooperative_proposal_workflow_next($proposal) !== null) {
+            $actions[] = 'synchronize';
+        }
         $participants = [];
         foreach ($proposal['body']['members'] as $member) {
             $isLocal = $member['instance_id'] === $local;
-            $peer = $isLocal ? null : cooperative_peer_status($member['instance_id']);
+            $peer = $isLocal
+                ? null
+                : cooperative_peer_status($member['instance_id']);
             $peerActions = [];
             if (!$isLocal && ($peer['state'] ?? '') === 'active') {
-                if ($proposal['body']['coordinator_id'] === $local && $proposal['state'] === 'pending' && $live) {
+                if (
+                    $proposal['body']['coordinator_id'] === $local
+                    && $proposal['state'] === 'pending'
+                    && $live
+                ) {
                     $peerActions[] = 'deliver';
                     $peerActions[] = 'email';
                 }
@@ -57,15 +100,33 @@ function cooperative_proposal_review_inbox(string $cursor = '', string $focusGro
                     $peerActions[] = 'refresh';
                 }
             }
-            $participants[] = ['instance_id' => $member['instance_id'], 'album_id' => $member['album_id'],
-                'mail_accepted' => (bool) ($proposal['mail'][$member['instance_id']]['accepted'] ?? false),
-                'local' => $isLocal, 'base_url' => $peer['base_url'] ?? '', 'scopes' => $member['scopes'],
-                'decision' => $isLocal ? $proposal['own']['decision'] : ($proposal['observations'][$member['instance_id']]['decision'] ?? 'unknown'),
-                'observed_at' => $isLocal ? null : ($proposal['observations'][$member['instance_id']]['observed_at'] ?? null),
-                'actions' => $peerActions];
+            $participants[] = [
+                'instance_id' => $member['instance_id'],
+                'album_id' => $member['album_id'],
+                'mail_accepted' => (bool) (
+                    $proposal['mail'][$member['instance_id']]['accepted']
+                    ?? false
+                ),
+                'local' => $isLocal,
+                'base_url' => $peer['base_url'] ?? '',
+                'scopes' => $member['scopes'],
+                'decision' => $isLocal
+                    ? $proposal['own']['decision']
+                    : $proposal['observations'][$member['instance_id']]['decision']
+                    ?? 'unknown',
+                'observed_at' => $isLocal
+                    ? null
+                    : $proposal['observations'][$member['instance_id']]['observed_at']
+                    ?? null,
+                'actions' => $peerActions,
+            ];
         }
-        $rows[] = ['proposal' => $proposal, 'title' => (string) ($gallery['title'] ?? ''),
-            'participants' => $participants, 'actions' => $actions];
+        $rows[] = [
+            'proposal' => $proposal,
+            'title' => (string) ($gallery['title'] ?? ''),
+            'participants' => $participants,
+            'actions' => $actions,
+        ];
     }
     return ['items' => $rows, 'next_cursor' => $page['next_cursor']];
 }

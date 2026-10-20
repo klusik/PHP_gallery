@@ -36,7 +36,10 @@
 declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') {
-    fwrite(STDERR, "The test runner is available only from the command line.\n");
+    fwrite(
+        STDERR,
+        "The test runner is available only from the command line.\n",
+    );
     exit(2);
 }
 
@@ -46,7 +49,8 @@ if (!is_file($auditPath)) {
     exit(2);
 }
 
-$command = escapeshellarg(PHP_BINARY)
+$command =
+    escapeshellarg(PHP_BINARY)
     . ' '
     . escapeshellarg($auditPath)
     . ' --suite=php-regression --no-report';

@@ -65,11 +65,14 @@ use function Gallery\Services\admin_log_event;
 /**
  * Send a navigation-data JSON response and stop the request.
  *
- * @param array $payload Payload value.
- * @param int $statusCode Status code value.
+ * @param array{ok?:bool,message?:string,error?:string,ident?:string,point?:array<string,mixed>,providers?:array<string,mixed>,state?:array<string,mixed>,mutation?:array{type:string,entity:string,action:string,entity_ids:list<int>},panel?:array{workflow:string,refresh_url:string,keep_open:bool},contexts?:list<array<string,mixed>>} $payload JSON response fields for lookup or refresh success/failure.
+ * @param int $statusCode HTTP status code.
+ * @return void Emit the JSON response.
  */
-function navigation_data_json_response(array $payload, int $statusCode = 200): void
-{
+function navigation_data_json_response(
+    array $payload,
+    int $statusCode = 200,
+): void {
     http_response_code($statusCode);
     header('Content-Type: application/json');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -87,7 +90,10 @@ function cms_admin_navdata(): void
     view_render_admin_navigation_data([
         'status' => $navdataStatus['hybrid'] ?? [],
         'navdata_status' => $navdataStatus,
-        'notices' => admin_dashboard_notice_messages($_GET, (string) flash_message('admin_notice')),
+        'notices' => admin_dashboard_notice_messages(
+            $_GET,
+            (string) flash_message('admin_notice'),
+        ),
     ]);
 }
 
@@ -101,13 +107,19 @@ function cms_admin_route_navdata_refresh(): void
     require_admin();
     header('Cache-Control: private, no-store');
     if (request_method() !== 'POST') {
-        navigation_data_json_response(['ok' => false, 'message' => 'POST required.'], 405);
+        navigation_data_json_response([
+            'ok' => false,
+            'message' => 'POST required.',
+        ], 405);
         return;
     }
     verify_csrf();
     $galleryId = max(0, (int) ($_POST['gallery_id'] ?? 0));
     if ($galleryId > 0 && find_gallery($galleryId, true) === null) {
-        navigation_data_json_response(['ok' => false, 'message' => 'Gallery not found.'], 404);
+        navigation_data_json_response([
+            'ok' => false,
+            'message' => 'Gallery not found.',
+        ], 404);
         return;
     }
     // Authenticate and validate CSRF first, then release the session for parallel saves.
@@ -116,25 +128,60 @@ function cms_admin_route_navdata_refresh(): void
     try {
         $outcome = flight_map_navdata_refresh(true, $galleryId);
         $contexts = [];
-        $gallery = !empty($outcome['route_updated']) ? find_gallery($galleryId, true) : null;
+        $gallery = !empty($outcome['route_updated'])
+            ? find_gallery($galleryId, true)
+            : null;
         if (is_array($gallery)) {
-            $contexts[] = admin_mutation_public_gallery_context($galleryId, gallery_public_url($gallery));
+            $contexts[] = admin_mutation_public_gallery_context(
+                $galleryId,
+                gallery_public_url($gallery),
+            );
             $parentId = (int) ($gallery['parent_id'] ?? 0);
             $parent = $parentId > 0 ? find_gallery($parentId, true) : null;
-            $contexts[] = admin_mutation_public_gallery_context($parentId, is_array($parent) ? gallery_public_url($parent) : url_for('home'));
+            $contexts[] = admin_mutation_public_gallery_context(
+                $parentId,
+                is_array($parent)
+                    ? gallery_public_url($parent)
+                    : url_for('home'),
+            );
         }
-        $payload = admin_mutation_success_envelope('',
+        $payload = admin_mutation_success_envelope(
+            '',
             is_array($gallery)
-                ? admin_mutation_descriptor('gallery.flight_route_resolve', 'gallery', 'update', [$galleryId])
-                : admin_mutation_descriptor('navigation_data.refresh', 'navigation_data', 'refresh'),
-            null, $contexts, []);
+                ? admin_mutation_descriptor(
+                    'gallery.flight_route_resolve',
+                    'gallery',
+                    'update',
+                    [$galleryId],
+                )
+                : admin_mutation_descriptor(
+                    'navigation_data.refresh',
+                    'navigation_data',
+                    'refresh',
+                ),
+            null,
+            $contexts,
+            [],
+        );
         $payload['state'] = $outcome['state'];
         navigation_data_json_response($payload);
     } catch (Throwable $exception) {
-        admin_log_event('warning', 'flight_map.route_navdata_failed', 'Background route navigation-data refresh failed.', [
-            'gallery_id' => $galleryId, 'exception_class' => $exception::class,
-        ]);
-        navigation_data_json_response(['ok' => false, 'message' => t('admin.dashboard.navdata_refresh_unavailable', 'Navigation data could not be refreshed. The gallery can still be saved.')], 503);
+        admin_log_event(
+            'warning',
+            'flight_map.route_navdata_failed',
+            'Background route navigation-data refresh failed.',
+            [
+                'gallery_id' => $galleryId,
+                'exception_class' => $exception::class,
+            ],
+        );
+        navigation_data_json_response([
+            'ok' => false,
+            'message' => t(
+                'admin.dashboard.navdata_refresh_unavailable',
+                'Navigation data could not be refreshed. The gallery can still be saved.',
+            ),
+        ], 503);
     }
 }
 
@@ -184,6 +231,8 @@ function cms_navdata_lookup(): void
 
 /**
  * Legacy OAuth helper retained for installs that applied the earlier prototype.
+ *
+ * @return void Validate the Admin request and redirect to the authorization flow or diagnostics page.
  */
 function cms_admin_navigraph_connect(): void
 {
@@ -197,18 +246,29 @@ function cms_admin_navigraph_connect(): void
     try {
         redirect_to(navigation_data_navigraph_authorization_url());
     } catch (Throwable $exception) {
-        admin_log_event('warning', 'navigation_data.navigraph_connect_failed', 'Navigraph connection could not be started.', [
-            'exception' => $exception->getMessage(),
-        ]);
-        flash_message('admin_notice', t('admin.dashboard.notice_navigraph_connect_failed', 'Navigraph connection could not be started: {error}', [
-            'error' => $exception->getMessage(),
-        ]));
+        admin_log_event(
+            'warning',
+            'navigation_data.navigraph_connect_failed',
+            'Navigraph connection could not be started.',
+            [
+                'exception' => $exception->getMessage(),
+            ],
+        );
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navigraph_connect_failed',
+            'Navigraph connection could not be started: {error}',
+            [
+                'error' => $exception->getMessage(),
+            ],
+        ));
         redirect_to(url_for('admin_navdata'));
     }
 }
 
 /**
  * Legacy OAuth callback retained for installs that applied the earlier prototype.
+ *
+ * @return void Process the legacy OAuth callback and redirect to navigation-data diagnostics.
  */
 function cms_admin_navigraph_callback(): void
 {
@@ -216,16 +276,23 @@ function cms_admin_navigraph_callback(): void
 
     $error = trim((string) ($_GET['error'] ?? ''));
     if ($error !== '') {
-        flash_message('admin_notice', t('admin.dashboard.notice_navigraph_callback_failed', 'Navigraph login failed: {error}', [
-            'error' => $error,
-        ]));
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navigraph_callback_failed',
+            'Navigraph login failed: {error}',
+            [
+                'error' => $error,
+            ],
+        ));
         redirect_to(url_for('admin_navdata'));
     }
 
     $code = trim((string) ($_GET['code'] ?? ''));
     $state = trim((string) ($_GET['state'] ?? ''));
     if ($code === '' || $state === '') {
-        flash_message('admin_notice', t('admin.dashboard.notice_navigraph_callback_missing', 'Navigraph login did not return the expected code and state.'));
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navigraph_callback_missing',
+            'Navigraph login did not return the expected code and state.',
+        ));
         redirect_to(url_for('admin_navdata'));
     }
 
@@ -235,19 +302,41 @@ function cms_admin_navigraph_callback(): void
         try {
             $packageResult = navigation_data_navigraph_refresh_packages();
         } catch (Throwable $packageException) {
-            admin_log_event('warning', 'navigation_data.navigraph_package_refresh_failed', 'Navigraph package metadata refresh failed after login.', [
-                'exception' => $packageException->getMessage(),
-            ]);
+            admin_log_event(
+                'warning',
+                'navigation_data.navigraph_package_refresh_failed',
+                'Navigraph package metadata refresh failed after login.',
+                [
+                    'exception' => $packageException->getMessage(),
+                ],
+            );
         }
-        admin_log_event('info', 'navigation_data.navigraph_connected', 'Navigraph account linked for navigation data enhancement.', $packageResult);
-        flash_message('admin_notice', t('admin.dashboard.notice_navigraph_connected', 'Navigraph account linked. Route lookup will still fall back to local data when needed.'));
+        admin_log_event(
+            'info',
+            'navigation_data.navigraph_connected',
+            'Navigraph account linked for navigation data enhancement.',
+            $packageResult,
+        );
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navigraph_connected',
+            'Navigraph account linked. Route lookup will still fall back to local data when needed.',
+        ));
     } catch (Throwable $exception) {
-        admin_log_event('warning', 'navigation_data.navigraph_callback_failed', 'Navigraph callback failed.', [
-            'exception' => $exception->getMessage(),
-        ]);
-        flash_message('admin_notice', t('admin.dashboard.notice_navigraph_callback_failed', 'Navigraph login failed: {error}', [
-            'error' => $exception->getMessage(),
-        ]));
+        admin_log_event(
+            'warning',
+            'navigation_data.navigraph_callback_failed',
+            'Navigraph callback failed.',
+            [
+                'exception' => $exception->getMessage(),
+            ],
+        );
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navigraph_callback_failed',
+            'Navigraph login failed: {error}',
+            [
+                'error' => $exception->getMessage(),
+            ],
+        ));
     }
 
     redirect_to(url_for('admin_navdata'));
@@ -255,6 +344,8 @@ function cms_admin_navigraph_callback(): void
 
 /**
  * Legacy disconnect helper retained for installs that applied the earlier prototype.
+ *
+ * @return void Disconnect the legacy provider account and redirect to diagnostics.
  */
 function cms_admin_navigraph_disconnect(): void
 {
@@ -266,13 +357,22 @@ function cms_admin_navigraph_disconnect(): void
     verify_csrf();
 
     navigation_data_navigraph_disconnect();
-    admin_log_event('info', 'navigation_data.navigraph_disconnected', 'Navigraph account disconnected for this admin session.');
-    flash_message('admin_notice', t('admin.dashboard.notice_navigraph_disconnected', 'Navigraph disconnected for this admin session. Local navigation data remains available.'));
+    admin_log_event(
+        'info',
+        'navigation_data.navigraph_disconnected',
+        'Navigraph account disconnected for this admin session.',
+    );
+    flash_message('admin_notice', t(
+        'admin.dashboard.notice_navigraph_disconnected',
+        'Navigraph disconnected for this admin session. Local navigation data remains available.',
+    ));
     redirect_to(url_for('admin_navdata'));
 }
 
 /**
  * Legacy metadata refresh helper retained for installs that applied the earlier prototype.
+ *
+ * @return void Refresh legacy provider package metadata and redirect to diagnostics.
  */
 function cms_admin_navigraph_refresh(): void
 {
@@ -285,18 +385,36 @@ function cms_admin_navigraph_refresh(): void
 
     try {
         $result = navigation_data_navigraph_refresh_packages();
-        admin_log_event('info', 'navigation_data.navigraph_refreshed', 'Navigraph package metadata refreshed.', $result);
-        flash_message('admin_notice', t('admin.dashboard.notice_navigraph_refreshed', 'Navigraph package metadata refreshed. AIRAC cycle: {cycle}. Status: {status}.', [
-            'cycle' => (string) ($result['cycle'] ?? ''),
-            'status' => (string) ($result['status'] ?? ''),
-        ]));
+        admin_log_event(
+            'info',
+            'navigation_data.navigraph_refreshed',
+            'Navigraph package metadata refreshed.',
+            $result,
+        );
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navigraph_refreshed',
+            'Navigraph package metadata refreshed. AIRAC cycle: {cycle}. Status: {status}.',
+            [
+                'cycle' => (string) ($result['cycle'] ?? ''),
+                'status' => (string) ($result['status'] ?? ''),
+            ],
+        ));
     } catch (Throwable $exception) {
-        admin_log_event('warning', 'navigation_data.navigraph_refresh_failed', 'Navigraph package metadata refresh failed.', [
-            'exception' => $exception->getMessage(),
-        ]);
-        flash_message('admin_notice', t('admin.dashboard.notice_navigraph_refresh_failed', 'Navigraph refresh failed: {error}', [
-            'error' => $exception->getMessage(),
-        ]));
+        admin_log_event(
+            'warning',
+            'navigation_data.navigraph_refresh_failed',
+            'Navigraph package metadata refresh failed.',
+            [
+                'exception' => $exception->getMessage(),
+            ],
+        );
+        flash_message('admin_notice', t(
+            'admin.dashboard.notice_navigraph_refresh_failed',
+            'Navigraph refresh failed: {error}',
+            [
+                'error' => $exception->getMessage(),
+            ],
+        ));
     }
 
     redirect_to(url_for('admin_navdata'));

@@ -43,13 +43,21 @@ function cooperative_credential_generate(): string
  */
 function cooperative_storage_secret_valid(mixed $secret): bool
 {
-    if (!is_string($secret) || strlen($secret) < 32 || strlen(trim($secret)) < 32) {
+    if (
+        !is_string($secret)
+        || strlen($secret) < 32
+        || strlen(trim($secret)) < 32
+    ) {
         return false;
     }
-    if (in_array(strtolower(trim($secret)), [
-        'replace-with-a-long-random-secret',
-        'replace-with-a-temporary-setup-key',
-    ], true)) {
+    if (in_array(
+        strtolower(trim($secret)),
+        [
+            'replace-with-a-long-random-secret',
+            'replace-with-a-temporary-setup-key',
+        ],
+        true,
+    )) {
         return false;
     }
     return preg_match('/\A(.{1,4})\1+\z/s', $secret) !== 1;
@@ -77,7 +85,12 @@ function cooperative_storage_key(): string
  */
 function cooperative_credential_context(string $local, string $remote): string
 {
-    return 'cooperative:outbound:v1:' . cooperative_id_validate($local) . ':' . cooperative_id_validate($remote);
+    return (
+        'cooperative:outbound:v1:'
+            . cooperative_id_validate($local)
+            . ':'
+            . cooperative_id_validate($remote)
+    );
 }
 
 /** Build a pending peer without granting album access.
@@ -87,8 +100,11 @@ function cooperative_credential_context(string $local, string $remote): string
  * @param string $baseUrl HTTPS installation base address, without secrets or query parameters.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_peer_new(string $local, string $remote, string $baseUrl): array
-{
+function cooperative_peer_new(
+    string $local,
+    string $remote,
+    string $baseUrl,
+): array {
     cooperative_id_validate($local);
     cooperative_id_validate($remote);
     if ($local === $remote) {
@@ -117,16 +133,30 @@ function cooperative_peer_new(string $local, string $remote, string $baseUrl): a
  */
 function cooperative_peer_confirm(array $peer, string $fact): array
 {
-    if ($peer['state'] !== 'pending' || !in_array($fact, [
-        'local_consent', 'remote_consent', 'inbound_verified', 'outbound_verified',
-    ], true) || empty($peer['incoming_hash']) || empty($peer['outgoing_cipher'])) {
+    if (
+        $peer['state'] !== 'pending'
+        || !in_array(
+            $fact,
+            [
+                'local_consent',
+                'remote_consent',
+                'inbound_verified',
+                'outbound_verified',
+            ],
+            true,
+        )
+        || empty($peer['incoming_hash'])
+        || empty($peer['outgoing_cipher'])
+    ) {
         throw new CooperativeException('invalid_pairing_confirmation');
     }
     $peer['confirmations'][$fact] = true;
-    if (($peer['confirmations']['local_consent'] ?? false) === true
+    if (
+        ($peer['confirmations']['local_consent'] ?? false) === true
         && ($peer['confirmations']['remote_consent'] ?? false) === true
         && ($peer['confirmations']['inbound_verified'] ?? false) === true
-        && ($peer['confirmations']['outbound_verified'] ?? false) === true) {
+        && ($peer['confirmations']['outbound_verified'] ?? false) === true
+    ) {
         $peer['state'] = 'active';
     }
     return $peer;
@@ -139,7 +169,12 @@ function cooperative_peer_confirm(array $peer, string $fact): array
  */
 function cooperative_peer_summary(array $peer): array
 {
-    return array_intersect_key($peer, array_flip(['instance_id', 'base_url', 'state', 'revision']));
+    return array_intersect_key($peer, array_flip([
+        'instance_id',
+        'base_url',
+        'state',
+        'revision',
+    ]));
 }
 
 /** Create an isolated pending peer; address changes require a new pairing workflow.
@@ -166,8 +201,11 @@ function cooperative_peer_register(string $remote, string $baseUrl): array
  * @param ?string $remoteToken Partner-issued credential, or null when initiating the exchange.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_peer_prepare_credentials(string $remote, int $expectedRevision, ?string $remoteToken = null): array
-{
+function cooperative_peer_prepare_credentials(
+    string $remote,
+    int $expectedRevision,
+    ?string $remoteToken = null,
+): array {
     if ($remoteToken !== null && !cooperative_credential_valid($remoteToken)) {
         throw new CooperativeException('invalid_credential');
     }
@@ -177,14 +215,25 @@ function cooperative_peer_prepare_credentials(string $remote, int $expectedRevis
     }
     $local = cooperative_instance_id();
     $key = cooperative_storage_key();
-    $cipher = $remoteToken === null ? null : security_secret_seal($remoteToken, $key, cooperative_credential_context($local, $remote));
+    $cipher = $remoteToken === null
+        ? null
+        : security_secret_seal(
+            $remoteToken,
+            $key,
+            cooperative_credential_context($local, $remote),
+        );
     $token = cooperative_credential_generate();
     $peer['incoming_hash'] = security_authority_token_hash($token);
     $peer['outgoing_cipher'] = $cipher;
     $peer['confirmations'] = [];
     $peer['state'] = 'pending';
     cooperative_peer_save($peer, $expectedRevision);
-    return ['peer' => cooperative_peer_summary(array_replace($peer, ['revision' => $expectedRevision + 1])), 'token' => $token];
+    return [
+        'peer' => cooperative_peer_summary(array_replace($peer, [
+            'revision' => $expectedRevision + 1,
+        ])),
+        'token' => $token,
+    ];
 }
 
 /** Record a trusted handshake fact with optimistic concurrency protection.
@@ -194,11 +243,19 @@ function cooperative_peer_prepare_credentials(string $remote, int $expectedRevis
  * @param string $fact Verified pairing event for the current credential generation.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_peer_record_confirmation(string $remote, int $expectedRevision, string $fact): array
-{
-    $peer = cooperative_peer_confirm(cooperative_peer_load_for_change($remote, $expectedRevision), $fact);
+function cooperative_peer_record_confirmation(
+    string $remote,
+    int $expectedRevision,
+    string $fact,
+): array {
+    $peer = cooperative_peer_confirm(
+        cooperative_peer_load_for_change($remote, $expectedRevision),
+        $fact,
+    );
     cooperative_peer_save($peer, $expectedRevision);
-    return cooperative_peer_summary(array_replace($peer, ['revision' => $expectedRevision + 1]));
+    return cooperative_peer_summary(array_replace($peer, [
+        'revision' => $expectedRevision + 1,
+    ]));
 }
 
 /** Suspend without deleting credentials; resumption requires fresh pairing confirmations.
@@ -232,8 +289,14 @@ function cooperative_peer_authenticate(string $remote, string $token): ?array
     }
     cooperative_storage_assert('peers');
     $peer = \Gallery\Models\cooperative_model_peer_find($remote);
-    if ($peer === null || $peer['state'] !== 'active'
-        || !security_authority_token_verify((string) $peer['incoming_hash'], $token)) {
+    if (
+        $peer === null
+        || $peer['state'] !== 'active'
+        || !security_authority_token_verify(
+            (string) $peer['incoming_hash'],
+            $token,
+        )
+    ) {
         return null;
     }
     return cooperative_peer_summary($peer);
@@ -247,12 +310,17 @@ function cooperative_peer_authenticate(string $remote, string $token): ?array
 function cooperative_peer_outbound_credential(string $remote): string
 {
     cooperative_storage_assert('peers');
-    $peer = \Gallery\Models\cooperative_model_peer_find(cooperative_id_validate($remote));
+    $peer = \Gallery\Models\cooperative_model_peer_find(cooperative_id_validate(
+        $remote,
+    ));
     if ($peer === null || $peer['state'] !== 'active') {
         throw new CooperativeException('peer_inactive');
     }
-    $token = security_secret_open((string) $peer['outgoing_cipher'], cooperative_storage_key(),
-        cooperative_credential_context(cooperative_instance_id(), $remote));
+    $token = security_secret_open(
+        (string) $peer['outgoing_cipher'],
+        cooperative_storage_key(),
+        cooperative_credential_context(cooperative_instance_id(), $remote),
+    );
     if ($token === null || !cooperative_credential_valid($token)) {
         throw new CooperativeException('credential_unavailable');
     }
@@ -270,6 +338,7 @@ function cooperative_peer_revoke(string $remote): void
     cooperative_storage_assert('revoke');
     \Gallery\Models\cooperative_model_peer_revoke($remote);
 }
+
 /**
  * Verify an inbound pairing challenge against the current pending credential.
  * The transport must additionally bind the exchange to its invitation and nonce.
@@ -279,14 +348,27 @@ function cooperative_peer_revoke(string $remote): void
  * @param string $token Credential presented in an authenticated pairing exchange.
  * @return array<string,mixed> Nonsecret peer status after recording the inbound proof.
  */
-function cooperative_peer_verify_pairing_token(string $remote, int $expectedRevision, string $token): array
-{
+function cooperative_peer_verify_pairing_token(
+    string $remote,
+    int $expectedRevision,
+    string $token,
+): array {
     $peer = cooperative_peer_load_for_change($remote, $expectedRevision);
-    if ($peer['state'] !== 'pending' || !cooperative_credential_valid($token)
-        || !security_authority_token_verify((string) $peer['incoming_hash'], $token)) {
+    if (
+        $peer['state'] !== 'pending'
+        || !cooperative_credential_valid($token)
+        || !security_authority_token_verify(
+            (string) $peer['incoming_hash'],
+            $token,
+        )
+    ) {
         throw new CooperativeException('pairing_credential_invalid');
     }
-    return cooperative_peer_record_confirmation($remote, $expectedRevision, 'inbound_verified');
+    return cooperative_peer_record_confirmation(
+        $remote,
+        $expectedRevision,
+        'inbound_verified',
+    );
 }
 
 /**
@@ -298,14 +380,19 @@ function cooperative_peer_verify_pairing_token(string $remote, int $expectedRevi
  * @param int $expectedRevision Exact pending credential generation to verify.
  * @return string Plaintext remote credential for server-side pairing transport only.
  */
-function cooperative_peer_pairing_credential(string $remote, int $expectedRevision): string
-{
+function cooperative_peer_pairing_credential(
+    string $remote,
+    int $expectedRevision,
+): string {
     $peer = cooperative_peer_load_for_change($remote, $expectedRevision);
     if ($peer['state'] !== 'pending') {
         throw new CooperativeException('pairing_unavailable');
     }
-    $token = security_secret_open((string) $peer['outgoing_cipher'], cooperative_storage_key(),
-        cooperative_credential_context(cooperative_instance_id(), $remote));
+    $token = security_secret_open(
+        (string) $peer['outgoing_cipher'],
+        cooperative_storage_key(),
+        cooperative_credential_context(cooperative_instance_id(), $remote),
+    );
     if ($token === null || !cooperative_credential_valid($token)) {
         throw new CooperativeException('credential_unavailable');
     }
@@ -321,7 +408,9 @@ function cooperative_peer_pairing_credential(string $remote, int $expectedRevisi
 function cooperative_peer_status(string $remote): ?array
 {
     cooperative_storage_assert('peers');
-    $peer = \Gallery\Models\cooperative_model_peer_find(cooperative_id_validate($remote));
+    $peer = \Gallery\Models\cooperative_model_peer_find(cooperative_id_validate(
+        $remote,
+    ));
     return $peer === null ? null : cooperative_peer_summary($peer);
 }
 
@@ -334,17 +423,29 @@ function cooperative_peer_status(string $remote): ?array
  * @param string $remoteToken Verified remote-issued credential for outbound requests.
  * @return array<string,mixed> Nonsecret pending peer projection at the next revision.
  */
-function cooperative_peer_accept_remote_credential(string $remote, int $expectedRevision, string $remoteToken): array
-{
+function cooperative_peer_accept_remote_credential(
+    string $remote,
+    int $expectedRevision,
+    string $remoteToken,
+): array {
     if (!cooperative_credential_valid($remoteToken)) {
         throw new CooperativeException('invalid_credential');
     }
     $peer = cooperative_peer_load_for_change($remote, $expectedRevision);
-    if ($peer['state'] !== 'pending' || empty($peer['incoming_hash']) || $peer['outgoing_cipher'] !== null) {
+    if (
+        $peer['state'] !== 'pending'
+        || empty($peer['incoming_hash'])
+        || $peer['outgoing_cipher'] !== null
+    ) {
         throw new CooperativeException('pairing_unavailable');
     }
-    $peer['outgoing_cipher'] = security_secret_seal($remoteToken, cooperative_storage_key(),
-        cooperative_credential_context(cooperative_instance_id(), $remote));
+    $peer['outgoing_cipher'] = security_secret_seal(
+        $remoteToken,
+        cooperative_storage_key(),
+        cooperative_credential_context(cooperative_instance_id(), $remote),
+    );
     cooperative_peer_save($peer, $expectedRevision);
-    return cooperative_peer_summary(array_replace($peer, ['revision' => $expectedRevision + 1]));
+    return cooperative_peer_summary(array_replace($peer, [
+        'revision' => $expectedRevision + 1,
+    ]));
 }

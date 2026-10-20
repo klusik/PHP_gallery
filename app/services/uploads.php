@@ -56,13 +56,16 @@ require_once __DIR__ . '/gallery_edit_concurrency.php';
  *
  * This module validates uploaded files, chooses safe target names, stores gallery images, and records the uploaded image IDs. It deliberately keeps thumbnail generation as a separate service concern.
  *
- * @param ?array $files Files value.
- * @return array Structured result data for the caller.
+ * @param ?array{name?:list<string>,error?:list<int>,tmp_name?:list<string>,size?:list<int>} $files PHP multi-file upload descriptor.
+ * @return list<array{tmp_name:string,name:string,size:int}> Validated image uploads in request order.
  */
 function gallery_upload_entries(?array $files): array
 {
     if (!$files || empty($files['name']) || !is_array($files['name'])) {
-        throw new RuntimeException(t('upload.error.choose_image', 'Choose at least one image to upload.'));
+        throw new RuntimeException(t(
+            'upload.error.choose_image',
+            'Choose at least one image to upload.',
+        ));
     }
     // $entries stores an intermediate value used by the surrounding gallery workflow.
     $entries = [];
@@ -78,36 +81,65 @@ function gallery_upload_entries(?array $files): array
         // $tmpName stores an intermediate value used by the surrounding gallery workflow.
         $tmpName = (string) ($files['tmp_name'][$index] ?? '');
         if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-            throw new RuntimeException(t('upload.error.file_unavailable', 'Uploaded file is not available.'));
+            throw new RuntimeException(t(
+                'upload.error.file_unavailable',
+                'Uploaded file is not available.',
+            ));
         }
         // $originalName stores an intermediate value used by the surrounding gallery workflow.
         $originalName = (string) $name;
         if (!is_supported_image_path($originalName)) {
             // $message stores an intermediate value used by the surrounding gallery workflow.
-            $message = t('upload.error.supported_images_basic', 'Only JPG, PNG, GIF, and WebP images can be uploaded.');
+            $message = t(
+                'upload.error.supported_images_basic',
+                'Only JPG, PNG, GIF, and WebP images can be uploaded.',
+            );
             if (heic_conversion_supported() && raw_conversion_supported()) {
                 // $message stores an intermediate value used by the surrounding gallery workflow.
-                $message = t('upload.error.supported_images_heic_dng', 'Only JPG, PNG, GIF, WebP, HEIC, HEIF, and DNG images can be uploaded.');
+                $message = t(
+                    'upload.error.supported_images_heic_dng',
+                    'Only JPG, PNG, GIF, WebP, HEIC, HEIF, and DNG images can be uploaded.',
+                );
             } elseif (heic_conversion_supported()) {
                 // $message stores an intermediate value used by the surrounding gallery workflow.
-                $message = t('upload.error.supported_images_heic', 'Only JPG, PNG, GIF, WebP, HEIC, and HEIF images can be uploaded.');
+                $message = t(
+                    'upload.error.supported_images_heic',
+                    'Only JPG, PNG, GIF, WebP, HEIC, and HEIF images can be uploaded.',
+                );
             } elseif (raw_conversion_supported()) {
                 // $message stores an intermediate value used by the surrounding gallery workflow.
-                $message = t('upload.error.supported_images_dng', 'Only JPG, PNG, GIF, WebP, and DNG images can be uploaded.');
+                $message = t(
+                    'upload.error.supported_images_dng',
+                    'Only JPG, PNG, GIF, WebP, and DNG images can be uploaded.',
+                );
             }
-            throw new RuntimeException(t('upload.error.offending_file', '{message} Offending file: {filename}.', ['message' => $message, 'filename' => $originalName]));
+            throw new RuntimeException(t(
+                'upload.error.offending_file',
+                '{message} Offending file: {filename}.',
+                ['message' => $message, 'filename' => $originalName],
+            ));
         }
         if (is_dng_image_path($originalName)) {
             // $dngMetadata stores the readable DNG dimensions reported by Imagick.
             $dngMetadata = dng_image_metadata($tmpName);
             if ($dngMetadata === null) {
-                throw new RuntimeException(t('upload.error.dng_decode_failed', 'One uploaded DNG file could not be decoded by the server.'));
+                throw new RuntimeException(t(
+                    'upload.error.dng_decode_failed',
+                    'One uploaded DNG file could not be decoded by the server.',
+                ));
             }
         } else {
             // $info stores an intermediate value used by the surrounding gallery workflow.
             $info = @getimagesize($tmpName);
-            if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-                throw new RuntimeException(t('upload.error.invalid_image', 'One uploaded file is not a valid image.'));
+            if (
+                $info === false
+                || empty($info['mime'])
+                || !str_starts_with((string) $info['mime'], 'image/')
+            ) {
+                throw new RuntimeException(t(
+                    'upload.error.invalid_image',
+                    'One uploaded file is not a valid image.',
+                ));
             }
         }
         $entries[] = [
@@ -117,14 +149,19 @@ function gallery_upload_entries(?array $files): array
         ];
     }
     if (!$entries) {
-        throw new RuntimeException(t('upload.error.choose_image', 'Choose at least one image to upload.'));
+        throw new RuntimeException(t(
+            'upload.error.choose_image',
+            'Choose at least one image to upload.',
+        ));
     }
     usort($entries, static function (array $left, array $right): int {
-        return gallery_upload_entry_order_compare((string) ($left['name'] ?? ''), (string) ($right['name'] ?? ''));
+        return gallery_upload_entry_order_compare(
+            (string) ($left['name'] ?? ''),
+            (string) ($right['name'] ?? ''),
+        );
     });
     return $entries;
 }
-
 
 /**
  * Compare two uploaded filenames using the same natural order used by the browser.
@@ -212,7 +249,14 @@ function imagick_format_supported(string $format): bool
     try {
         // $formats stores the formats reported by the installed ImageMagick delegates.
         $formats = Imagick::queryFormats(strtoupper($format));
-        return is_array($formats) && in_array(strtoupper($format), array_map('strtoupper', $formats), true);
+        return (
+            is_array($formats)
+                && in_array(
+                    strtoupper($format),
+                    array_map('strtoupper', $formats),
+                    true,
+                )
+        );
     } catch (Throwable) {
         return false;
     }
@@ -225,7 +269,11 @@ function imagick_format_supported(string $format): bool
  */
 function dng_conversion_supported(): bool
 {
-    return imagick_format_supported('DNG') && imagick_format_supported('WEBP') && imagick_format_supported('JPEG');
+    return (
+        imagick_format_supported('DNG')
+            && imagick_format_supported('WEBP')
+            && imagick_format_supported('JPEG')
+    );
 }
 
 /**
@@ -238,7 +286,9 @@ function admin_upload_client_format_mode_normalize(mixed $value): string
 {
     // $mode stores the submitted or configured upload picker preference.
     $mode = strtolower(trim((string) $value));
-    return in_array($mode, ['server_supported', 'phone_jpeg'], true) ? $mode : 'server_supported';
+    return in_array($mode, ['server_supported', 'phone_jpeg'], true)
+        ? $mode
+        : 'server_supported';
 }
 
 /**
@@ -247,17 +297,22 @@ function admin_upload_client_format_mode_normalize(mixed $value): string
  * Unlike the compatibility normalizer above, this boundary rejects unknown values so a
  * staged settings workflow cannot silently replace malformed input with a default.
  *
- * @param mixed $value Candidate source-format mode.
+ * @param scalar $value Source-format candidate; only server_supported
+ *     and phone_jpeg are accepted after trimming and lowercasing.
  * @return string Canonical supported mode.
  */
 function admin_upload_client_format_mode_validate(mixed $value): string
 {
     if (!is_scalar($value)) {
-        throw new InvalidArgumentException('Invalid upload source format mode.');
+        throw new InvalidArgumentException(
+            'Invalid upload source format mode.',
+        );
     }
     $mode = strtolower(trim((string) $value));
     if (!in_array($mode, ['server_supported', 'phone_jpeg'], true)) {
-        throw new InvalidArgumentException('Invalid upload source format mode.');
+        throw new InvalidArgumentException(
+            'Invalid upload source format mode.',
+        );
     }
     return $mode;
 }
@@ -278,7 +333,8 @@ function save_admin_upload_client_format_mode(mixed $value): string
 /**
  * Strictly normalize the upload-time automatic rename preference.
  *
- * @param mixed $value Candidate checkbox value.
+ * @param bool|int|string $value Boolean, integer 0 or 1, or string 0 or 1 checkbox
+ *     value; all other values are rejected.
  * @return string Canonical 1 or 0 value.
  */
 function admin_upload_auto_rename_setting_normalize(mixed $value): string
@@ -295,7 +351,9 @@ function admin_upload_auto_rename_setting_normalize(mixed $value): string
             return $value;
         }
     }
-    throw new InvalidArgumentException('Invalid automatic upload rename value.');
+    throw new InvalidArgumentException(
+        'Invalid automatic upload rename value.',
+    );
 }
 
 /**
@@ -321,7 +379,10 @@ function save_admin_upload_auto_rename_setting(mixed $value): string
  */
 function admin_upload_client_format_mode(): string
 {
-    return admin_upload_client_format_mode_normalize(app_setting('admin_upload_client_format_mode', 'server_supported'));
+    return admin_upload_client_format_mode_normalize(app_setting(
+        'admin_upload_client_format_mode',
+        'server_supported',
+    ));
 }
 
 /**
@@ -355,12 +416,25 @@ function set_admin_upload_auto_rename_enabled(bool $enabled): void
  * @param bool $rawSupported Raw supported value.
  * @return string Text result for the caller.
  */
-function admin_upload_accept_value_for_mode(string $mode, bool $heicSupported, bool $rawSupported): string
-{
+function admin_upload_accept_value_for_mode(
+    string $mode,
+    bool $heicSupported,
+    bool $rawSupported,
+): string {
     // $normalizedMode stores the safe policy value used for the accept list.
     $normalizedMode = admin_upload_client_format_mode_normalize($mode);
     if ($normalizedMode === 'phone_jpeg') {
-        return implode(',', ['image/jpeg', '.jpg', '.jpeg', 'image/png', '.png', 'image/webp', '.webp', 'image/gif', '.gif']);
+        return implode(',', [
+            'image/jpeg',
+            '.jpg',
+            '.jpeg',
+            'image/png',
+            '.png',
+            'image/webp',
+            '.webp',
+            'image/gif',
+            '.gif',
+        ]);
     }
 
     // $acceptTypes stores the historic upload picker capability list.
@@ -384,9 +458,13 @@ function admin_upload_accept_value_for_mode(string $mode, bool $heicSupported, b
 function dng_embedded_preview_supported(): bool
 {
     // $imagickPreviewSupported stores whether Imagick can decode JPEG previews and write WebP derivatives.
-    $imagickPreviewSupported = imagick_format_supported('JPEG') && imagick_format_supported('WEBP');
+    $imagickPreviewSupported =
+        imagick_format_supported('JPEG') && imagick_format_supported('WEBP');
     // $gdPreviewSupported stores whether GD can decode JPEG previews and write WebP derivatives.
-    $gdPreviewSupported = extension_loaded('gd') && function_exists('imagecreatefromjpeg') && function_exists('imagewebp');
+    $gdPreviewSupported =
+        extension_loaded('gd')
+        && function_exists('imagecreatefromjpeg')
+        && function_exists('imagewebp');
     return $imagickPreviewSupported || $gdPreviewSupported;
 }
 
@@ -400,7 +478,7 @@ function dng_embedded_preview_supported(): bool
  */
 function dng_tiff_uint16(string $data, int $offset, string $endian): ?int
 {
-    if ($offset < 0 || $offset + 2 > strlen($data)) {
+    if ($offset < 0 || ($offset + 2) > strlen($data)) {
         return null;
     }
     // $format stores the unpack format for this file byte order.
@@ -420,7 +498,7 @@ function dng_tiff_uint16(string $data, int $offset, string $endian): ?int
  */
 function dng_tiff_uint32(string $data, int $offset, string $endian): ?int
 {
-    if ($offset < 0 || $offset + 4 > strlen($data)) {
+    if ($offset < 0 || ($offset + 4) > strlen($data)) {
         return null;
     }
     // $format stores the unpack format for this file byte order.
@@ -456,10 +534,16 @@ function dng_tiff_type_size(int $type): int
  * @param int $type Type value.
  * @param int $count Count value.
  * @param int $valueOffset Value offset value.
- * @return array<int int>.
+ * @return list<int> Decoded unsigned SHORT or LONG values in TIFF entry order.
  */
-function dng_tiff_entry_values(string $data, int $entryOffset, string $endian, int $type, int $count, int $valueOffset): array
-{
+function dng_tiff_entry_values(
+    string $data,
+    int $entryOffset,
+    string $endian,
+    int $type,
+    int $count,
+    int $valueOffset,
+): array {
     // $typeSize stores the byte length of one TIFF value for this entry.
     $typeSize = dng_tiff_type_size($type);
     if ($typeSize <= 0 || $count <= 0 || $count > 64) {
@@ -492,7 +576,8 @@ function dng_tiff_entry_values(string $data, int $entryOffset, string $endian, i
  * Find embedded JPEG preview byte ranges inside a DNG/TIFF container.
  *
  * @param string $data Input data.
- * @return array<int array{offset:int,length:int,source:string}>.
+ * @return list<array{offset:int,length:int,source:string}> Candidate JPEG
+ *     byte ranges in the DNG/TIFF container.
  */
 function dng_embedded_jpeg_candidates(string $data): array
 {
@@ -527,7 +612,12 @@ function dng_embedded_jpeg_candidates(string $data): array
     while ($queue) {
         // $ifdOffset stores the current IFD byte offset.
         $ifdOffset = array_shift($queue);
-        if (!is_int($ifdOffset) || $ifdOffset <= 0 || isset($visited[$ifdOffset]) || $ifdOffset + 2 > $fileLength) {
+        if (
+            !is_int($ifdOffset)
+            || $ifdOffset <= 0
+            || isset($visited[$ifdOffset])
+            || ($ifdOffset + 2) > $fileLength
+        ) {
             continue;
         }
         $visited[$ifdOffset] = true;
@@ -544,7 +634,7 @@ function dng_embedded_jpeg_candidates(string $data): array
         for ($index = 0; $index < $entryCount; $index++) {
             // $entryOffset stores the byte offset of this 12-byte IFD entry.
             $entryOffset = $ifdOffset + 2 + ($index * 12);
-            if ($entryOffset + 12 > $fileLength) {
+            if (($entryOffset + 12) > $fileLength) {
                 break;
             }
             // $tag stores the TIFF tag identifier.
@@ -555,17 +645,43 @@ function dng_embedded_jpeg_candidates(string $data): array
             $count = dng_tiff_uint32($data, $entryOffset + 4, $endian);
             // $valueOffset stores either the inline value or an offset to the value array.
             $valueOffset = dng_tiff_uint32($data, $entryOffset + 8, $endian);
-            if ($tag === null || $type === null || $count === null || $valueOffset === null) {
+            if (
+                $tag === null
+                || $type === null
+                || $count === null
+                || $valueOffset === null
+            ) {
                 continue;
             }
             if ($tag === 0x0201) {
-                $values = dng_tiff_entry_values($data, $entryOffset, $endian, $type, $count, $valueOffset);
+                $values = dng_tiff_entry_values(
+                    $data,
+                    $entryOffset,
+                    $endian,
+                    $type,
+                    $count,
+                    $valueOffset,
+                );
                 $jpegOffset = $values[0] ?? null;
             } elseif ($tag === 0x0202) {
-                $values = dng_tiff_entry_values($data, $entryOffset, $endian, $type, $count, $valueOffset);
+                $values = dng_tiff_entry_values(
+                    $data,
+                    $entryOffset,
+                    $endian,
+                    $type,
+                    $count,
+                    $valueOffset,
+                );
                 $jpegLength = $values[0] ?? null;
             } elseif ($tag === 0x014A) {
-                $values = dng_tiff_entry_values($data, $entryOffset, $endian, $type, $count, $valueOffset);
+                $values = dng_tiff_entry_values(
+                    $data,
+                    $entryOffset,
+                    $endian,
+                    $type,
+                    $count,
+                    $valueOffset,
+                );
                 foreach ($values as $subIfdOffset) {
                     if ($subIfdOffset > 0 && !isset($visited[$subIfdOffset])) {
                         $queue[] = $subIfdOffset;
@@ -574,24 +690,42 @@ function dng_embedded_jpeg_candidates(string $data): array
             }
         }
 
-        if (is_int($jpegOffset) && is_int($jpegLength) && $jpegOffset > 0 && $jpegLength > 32 && $jpegOffset + $jpegLength <= $fileLength) {
+        if (
+            is_int($jpegOffset)
+            && is_int($jpegLength)
+            && $jpegOffset > 0
+            && $jpegLength > 32
+            && ($jpegOffset + $jpegLength) <= $fileLength
+        ) {
             if (substr($data, $jpegOffset, 2) === "\xFF\xD8") {
-                $candidates[] = ['offset' => $jpegOffset, 'length' => $jpegLength, 'source' => 'tiff_ifd'];
+                $candidates[] = [
+                    'offset' => $jpegOffset,
+                    'length' => $jpegLength,
+                    'source' => 'tiff_ifd',
+                ];
             }
         }
 
         // $nextOffsetPosition stores the 4-byte pointer after the current IFD entries.
         $nextOffsetPosition = $ifdOffset + 2 + ($entryCount * 12);
         $nextIfdOffset = dng_tiff_uint32($data, $nextOffsetPosition, $endian);
-        if (is_int($nextIfdOffset) && $nextIfdOffset > 0 && !isset($visited[$nextIfdOffset])) {
+        if (
+            is_int($nextIfdOffset)
+            && $nextIfdOffset > 0
+            && !isset($visited[$nextIfdOffset])
+        ) {
             $queue[] = $nextIfdOffset;
         }
     }
 
-    usort($candidates, static fn (array $left, array $right): int => $right['length'] <=> $left['length']);
+    usort(
+        $candidates,
+        static fn(array $left, array $right): int => (
+            $right['length'] <=> $left['length']
+        ),
+    );
     return $candidates;
 }
-
 
 /**
  * Return the first JPEG start-of-frame marker that determines decoder compatibility.
@@ -608,7 +742,7 @@ function dng_jpeg_sof_marker(string $jpeg): ?int
     }
     // $offset stores the current marker search position after SOI.
     $offset = 2;
-    while ($offset + 3 < $length) {
+    while (($offset + 3) < $length) {
         if ($jpeg[$offset] !== "\xFF") {
             $offset++;
             continue;
@@ -631,15 +765,33 @@ function dng_jpeg_sof_marker(string $jpeg): ?int
         if ($marker === 0x01) {
             continue;
         }
-        if ($offset + 2 > $length) {
+        if (($offset + 2) > $length) {
             return null;
         }
         // $segmentLength stores the marker segment length including the two length bytes.
         $segmentLength = unpack('n', substr($jpeg, $offset, 2))[1] ?? 0;
-        if ($segmentLength < 2 || $offset + $segmentLength > $length) {
+        if ($segmentLength < 2 || ($offset + $segmentLength) > $length) {
             return null;
         }
-        if (in_array($marker, [0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF], true)) {
+        if (in_array(
+            $marker,
+            [
+                0xC0,
+                0xC1,
+                0xC2,
+                0xC3,
+                0xC5,
+                0xC6,
+                0xC7,
+                0xC9,
+                0xCA,
+                0xCB,
+                0xCD,
+                0xCE,
+                0xCF,
+            ],
+            true,
+        )) {
             return $marker;
         }
         $offset += $segmentLength;
@@ -672,7 +824,8 @@ function dng_jpeg_preview_candidate_is_safe(string $jpeg): bool
  * Find JPEG preview byte ranges by scanning for JPEG markers.
  *
  * @param string $data Input data.
- * @return array<int array{offset:int,length:int,source:string}>.
+ * @return list<array{offset:int,length:int,source:string}> Candidate JPEG
+ *     byte ranges found by marker scanning.
  */
 function dng_jpeg_signature_candidates(string $data): array
 {
@@ -689,11 +842,20 @@ function dng_jpeg_signature_candidates(string $data): array
         // $length stores the candidate byte length including the end marker.
         $length = $end + 2 - $start;
         if ($length > 1024) {
-            $candidates[] = ['offset' => $start, 'length' => $length, 'source' => 'marker_scan'];
+            $candidates[] = [
+                'offset' => $start,
+                'length' => $length,
+                'source' => 'marker_scan',
+            ];
         }
         $offset = $end + 2;
     }
-    usort($candidates, static fn (array $left, array $right): int => $right['length'] <=> $left['length']);
+    usort(
+        $candidates,
+        static fn(array $left, array $right): int => (
+            $right['length'] <=> $left['length']
+        ),
+    );
     return $candidates;
 }
 
@@ -704,14 +866,16 @@ function dng_jpeg_signature_candidates(string $data): array
  * @param string $targetPath Target filesystem path.
  * @return bool True when the condition matches.
  */
-function dng_extract_embedded_jpeg_preview(string $sourcePath, string $targetPath): bool
-{
+function dng_extract_embedded_jpeg_preview(
+    string $sourcePath,
+    string $targetPath,
+): bool {
     if (!is_file($sourcePath)) {
         return false;
     }
     // $fileSize stores the source size so the fallback does not load extreme files into memory.
     $fileSize = filesize($sourcePath) ?: 0;
-    if ($fileSize <= 0 || $fileSize > 220 * 1024 * 1024) {
+    if ($fileSize <= 0 || $fileSize > (220 * 1024 * 1024)) {
         return false;
     }
     // $data stores the DNG/TIFF bytes for preview extraction.
@@ -720,17 +884,27 @@ function dng_extract_embedded_jpeg_preview(string $sourcePath, string $targetPat
         return false;
     }
     // $candidates stores TIFF-declared previews first, then marker-derived fallbacks.
-    $candidates = array_merge(dng_embedded_jpeg_candidates($data), dng_jpeg_signature_candidates($data));
+    $candidates = array_merge(
+        dng_embedded_jpeg_candidates($data),
+        dng_jpeg_signature_candidates($data),
+    );
     foreach ($candidates as $candidate) {
         // $jpeg stores one candidate preview image.
-        $jpeg = substr($data, (int) $candidate['offset'], (int) $candidate['length']);
+        $jpeg = substr(
+            $data,
+            (int) $candidate['offset'],
+            (int) $candidate['length'],
+        );
         if (substr($jpeg, 0, 2) !== "\xFF\xD8") {
             continue;
         }
         if (!dng_jpeg_preview_candidate_is_safe($jpeg)) {
             continue;
         }
-        if (@file_put_contents($targetPath, $jpeg) !== false && is_file($targetPath)) {
+        if (
+            @file_put_contents($targetPath, $jpeg) !== false
+            && is_file($targetPath)
+        ) {
             return true;
         }
     }
@@ -761,7 +935,11 @@ function dng_embedded_preview_metadata(string $path): ?array
         if ($info === false || empty($info[0]) || empty($info[1])) {
             return null;
         }
-        return ['width' => (int) $info[0], 'height' => (int) $info[1], 'mime' => 'image/x-adobe-dng'];
+        return [
+            'width' => (int) $info[0],
+            'height' => (int) $info[1],
+            'mime' => 'image/x-adobe-dng',
+        ];
     } catch (Throwable) {
         @unlink($temporaryPath);
         return null;
@@ -793,7 +971,11 @@ function dng_image_metadata(string $path): ?array
             $image->clear();
             $image->destroy();
             if ($width > 0 && $height > 0) {
-                return ['width' => $width, 'height' => $height, 'mime' => 'image/x-adobe-dng'];
+                return [
+                    'width' => $width,
+                    'height' => $height,
+                    'mime' => 'image/x-adobe-dng',
+                ];
             }
         } catch (Throwable) {
             if ($image instanceof Imagick) {
@@ -803,23 +985,40 @@ function dng_image_metadata(string $path): ?array
         }
     }
 
-    return dng_embedded_preview_supported() ? dng_embedded_preview_metadata($path) : null;
+    return dng_embedded_preview_supported()
+        ? dng_embedded_preview_metadata($path)
+        : null;
 }
 
 /**
- * Handles upload error message logic for the gallery application.
+ * Return the localized message for a PHP upload error code.
  *
- * @param mixed $error Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param int $error PHP upload error code.
+ * @return string Localized human-readable upload error message.
  */
 function upload_error_message(int $error): string
 {
     return match ($error) {
-        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => t('upload.error.too_large_server', 'An uploaded file is larger than the server allows.'),
-        UPLOAD_ERR_PARTIAL => t('upload.error.partial', 'An uploaded file was only partially received.'),
-        UPLOAD_ERR_NO_TMP_DIR => t('upload.error.no_temp_dir', 'The server has no temporary upload directory.'),
-        UPLOAD_ERR_CANT_WRITE => t('upload.error.cannot_write', 'The server could not write an uploaded file.'),
-        UPLOAD_ERR_EXTENSION => t('upload.error.extension_stopped', 'A PHP extension stopped the upload.'),
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => t(
+            'upload.error.too_large_server',
+            'An uploaded file is larger than the server allows.',
+        ),
+        UPLOAD_ERR_PARTIAL => t(
+            'upload.error.partial',
+            'An uploaded file was only partially received.',
+        ),
+        UPLOAD_ERR_NO_TMP_DIR => t(
+            'upload.error.no_temp_dir',
+            'The server has no temporary upload directory.',
+        ),
+        UPLOAD_ERR_CANT_WRITE => t(
+            'upload.error.cannot_write',
+            'The server could not write an uploaded file.',
+        ),
+        UPLOAD_ERR_EXTENSION => t(
+            'upload.error.extension_stopped',
+            'A PHP extension stopped the upload.',
+        ),
         default => t('upload.error.generic', 'Upload failed.'),
     };
 }
@@ -860,14 +1059,16 @@ function unique_gallery_upload_target(array $gallery, string $filename): array
     $candidate = $safeName;
     // $counter stores an intermediate value used by the surrounding gallery workflow.
     $counter = 2;
-    while (file_exists($galleryRoot . DIRECTORY_SEPARATOR . $candidate) || find_image_by_path((int) $gallery['id'], $candidate)) {
+    while (
+        file_exists($galleryRoot . DIRECTORY_SEPARATOR . $candidate)
+        || find_image_by_path((int) $gallery['id'], $candidate)
+    ) {
         // $candidate stores an intermediate value used by the surrounding gallery workflow.
         $candidate = $base . '-' . $counter . '.' . $extension;
         $counter++;
     }
     return [$candidate, $galleryRoot . DIRECTORY_SEPARATOR . $candidate];
 }
-
 
 /**
  * Return a readable byte count for server-side upload progress events.
@@ -884,7 +1085,7 @@ function gallery_upload_format_bytes(int $bytes): string
     $units = ['KB', 'MB', 'GB', 'TB'];
     $value = $bytes / 1024;
     $unitIndex = 0;
-    while ($value >= 1024 && $unitIndex < count($units) - 1) {
+    while ($value >= 1024 && $unitIndex < (count($units) - 1)) {
         $value /= 1024;
         $unitIndex++;
     }
@@ -897,11 +1098,15 @@ function gallery_upload_format_bytes(int $bytes): string
  *
  * @param float $startedAt Request start timestamp.
  * @param string $message Event message.
- * @param array $context Event context.
- * @return array<string,mixed> Structured result data for the caller.
+ * @param array<string,mixed> $context Optional event details for the browser
+ *     mini log.
+ * @return array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>} Timestamped progress event for the browser mini log.
  */
-function gallery_upload_progress_event(float $startedAt, string $message, array $context = []): array
-{
+function gallery_upload_progress_event(
+    float $startedAt,
+    string $message,
+    array $context = [],
+): array {
     return [
         'time' => date('H:i:s'),
         'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
@@ -918,11 +1123,18 @@ function gallery_upload_progress_event(float $startedAt, string $message, array 
  * @param bool|null $renameOnUpload Explicit rename preference, or null for the stored domain policy.
  * @return array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>} Stored/scanned identities and processing diagnostics; partial failures remain visible.
  */
-function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $renameOnUpload = null): array
-{
+function store_uploaded_gallery_images(
+    int $galleryId,
+    array $entries,
+    ?bool $renameOnUpload = null,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return store_uploaded_gallery_images_owned($galleryId, $entries, $renameOnUpload);
+        return store_uploaded_gallery_images_owned(
+            $galleryId,
+            $entries,
+            $renameOnUpload,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -937,61 +1149,118 @@ function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $re
  * @return array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>} Stable image identities, final relative filenames and scan/rename outcomes.
  * @internal Call only through store_uploaded_gallery_images(), including nested editor/upload use.
  */
-function store_uploaded_gallery_images_owned(int $galleryId, array $entries, ?bool $renameOnUpload = null): array
-{
+function store_uploaded_gallery_images_owned(
+    int $galleryId,
+    array $entries,
+    ?bool $renameOnUpload = null,
+): array {
     $startedAt = microtime(true);
-    $events = [gallery_upload_progress_event($startedAt, 'PHP accepted classic upload request with ' . count($entries) . ' file entr' . (count($entries) === 1 ? 'y' : 'ies') . '.')];
+    $events = [gallery_upload_progress_event(
+        $startedAt,
+        'PHP accepted classic upload request with '
+            . count($entries)
+            . ' file entr'
+            . (count($entries) === 1 ? 'y' : 'ies')
+            . '.',
+    )];
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
-        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
+        throw new RuntimeException(t(
+            'gallery.error.not_found',
+            'Gallery not found.',
+        ));
     }
     mutation_schema_assert_available(
         upload_ingestion_schema_status(),
         'upload.store_gallery_images',
         'Image upload requires the current gallery/image database schema. Run pending migrations first.',
-        'Image upload is temporarily unavailable because the required database schema could not be verified. No uploaded file was moved into the gallery.'
+        'Image upload is temporarily unavailable because the required database schema could not be verified. No uploaded file was moved into the gallery.',
     );
-    thumbnail_metadata_preflight_write_schema('upload.thumbnail_metadata_preflight');
+    thumbnail_metadata_preflight_write_schema(
+        'upload.thumbnail_metadata_preflight',
+    );
     // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {
-        throw new RuntimeException(t('gallery.error.folder_not_writable', 'Gallery folder is not writable.'));
+        throw new RuntimeException(t(
+            'gallery.error.folder_not_writable',
+            'Gallery folder is not writable.',
+        ));
     }
 
     // $stored stores the temporary safe filenames first used to accept the uploaded originals.
     $stored = [];
     $storedBytes = 0;
     foreach ($entries as $entry) {
-        [$filename, $target] = unique_gallery_upload_target($gallery, (string) $entry['name']);
+        [$filename, $target] = unique_gallery_upload_target(
+            $gallery,
+            (string) $entry['name'],
+        );
         if (!move_uploaded_file((string) $entry['tmp_name'], $target)) {
-            throw new RuntimeException(t('upload.error.store_image_failed', 'Could not store uploaded image.'));
+            throw new RuntimeException(t(
+                'upload.error.store_image_failed',
+                'Could not store uploaded image.',
+            ));
         }
         $stored[] = $filename;
-        $storedBytes += is_file($target) ? (int) (@filesize($target) ?: 0) : (int) ($entry['size'] ?? 0);
+        $storedBytes += is_file($target)
+            ? (int) (@filesize($target) ?: 0)
+            : (int) ($entry['size'] ?? 0);
     }
     // $uploadedCount stores the number of files accepted on disk before optional renaming changes filenames.
     $uploadedCount = count($stored);
-    $events[] = gallery_upload_progress_event($startedAt, 'Moved uploaded source file(s) into the gallery folder, ' . $uploadedCount . ' file(s), ' . gallery_upload_format_bytes($storedBytes) . '.');
+    $events[] = gallery_upload_progress_event(
+        $startedAt,
+        'Moved uploaded source file(s) into the gallery folder, '
+            . $uploadedCount
+            . ' file(s), '
+            . gallery_upload_format_bytes($storedBytes)
+            . '.',
+    );
 
     // $changed stores source rows reconciled for the files accepted in this request only.
-    $changed = function_exists('Gallery\Services\scan_gallery_selected_uploaded_images')
+    $changed = function_exists(
+        'Gallery\Services\scan_gallery_selected_uploaded_images',
+    )
         ? scan_gallery_selected_uploaded_images($galleryId, $stored)
         : scan_gallery_images($galleryId);
-    $events[] = gallery_upload_progress_event($startedAt, 'Indexed uploaded source file(s) in the database, changed rows: ' . $changed . '.');
+    $events[] = gallery_upload_progress_event(
+        $startedAt,
+        'Indexed uploaded source file(s) in the database, changed rows: '
+            . $changed
+            . '.',
+    );
     // $imageIds stores image records created or refreshed for the files accepted in this request.
     $imageIds = uploaded_gallery_image_ids($galleryId, $stored);
     // $scanFailedFilenames stores files that reached disk but were not imported as gallery image rows.
-    $scanFailedFilenames = gallery_upload_scan_failed_filenames($galleryId, $stored);
+    $scanFailedFilenames = gallery_upload_scan_failed_filenames(
+        $galleryId,
+        $stored,
+    );
     // $renameResult stores the optional media-renamer execution summary for this upload batch.
     $renameResult = null;
 
     if (($renameOnUpload ?? admin_upload_auto_rename_enabled()) && $imageIds) {
-        $events[] = gallery_upload_progress_event($startedAt, 'Auto-renaming uploaded image rows.');
-        $renameResult = gallery_upload_auto_rename_image_ids($galleryId, $imageIds);
+        $events[] = gallery_upload_progress_event(
+            $startedAt,
+            'Auto-renaming uploaded image rows.',
+        );
+        $renameResult = gallery_upload_auto_rename_image_ids(
+            $galleryId,
+            $imageIds,
+        );
         $imageIds = uploaded_gallery_existing_image_ids($galleryId, $imageIds);
-        $stored = uploaded_gallery_filenames_for_image_ids($galleryId, $imageIds);
-        $events[] = gallery_upload_progress_event($startedAt, 'Auto-renaming finished, renamed rows: ' . (int) ($renameResult['renamed'] ?? 0) . '.');
+        $stored = uploaded_gallery_filenames_for_image_ids(
+            $galleryId,
+            $imageIds,
+        );
+        $events[] = gallery_upload_progress_event(
+            $startedAt,
+            'Auto-renaming finished, renamed rows: '
+                . (int) ($renameResult['renamed'] ?? 0)
+                . '.',
+        );
     }
 
     return [
@@ -1000,9 +1269,15 @@ function store_uploaded_gallery_images_owned(int $galleryId, array $entries, ?bo
         'image_ids' => $imageIds,
         'scanned' => $changed,
         'scan_failed_filenames' => $scanFailedFilenames,
-        'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
-        'rename_warnings' => $renameResult === null ? [] : array_values((array) ($renameResult['warnings'] ?? [])),
-        'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
+        'renamed' => $renameResult === null
+            ? 0
+            : (int) ($renameResult['renamed'] ?? 0),
+        'rename_warnings' => $renameResult === null
+            ? []
+            : array_values((array) ($renameResult['warnings'] ?? [])),
+        'rename_failures' => $renameResult === null
+            ? []
+            : array_values((array) ($renameResult['failures'] ?? [])),
         'upload_events' => array_values($events),
     ];
 }
@@ -1014,8 +1289,10 @@ function store_uploaded_gallery_images_owned(int $galleryId, array $entries, ?bo
  * @param array<int,string> $filenames Filenames value.
  * @return array<int,string> Structured result data for the caller.
  */
-function gallery_upload_scan_failed_filenames(int $galleryId, array $filenames): array
-{
+function gallery_upload_scan_failed_filenames(
+    int $galleryId,
+    array $filenames,
+): array {
     $failed = [];
     foreach ($filenames as $filename) {
         $relativePath = normalize_relative_path((string) $filename);
@@ -1036,14 +1313,19 @@ function gallery_upload_scan_failed_filenames(int $galleryId, array $filenames):
  * @param string $relativePath Relative path filesystem path.
  * @return ?array Structured result data for the caller.
  */
-function uploaded_gallery_image_row_by_path(int $galleryId, string $relativePath): ?array
-{
+function uploaded_gallery_image_row_by_path(
+    int $galleryId,
+    string $relativePath,
+): ?array {
     $relativePath = normalize_relative_path($relativePath);
     if ($galleryId <= 0 || $relativePath === '') {
         return null;
     }
 
-    return image_model_find_by_path_hash($galleryId, hash('sha256', $relativePath));
+    return image_model_find_by_path_hash($galleryId, hash(
+        'sha256',
+        $relativePath,
+    ));
 }
 
 /**
@@ -1053,15 +1335,29 @@ function uploaded_gallery_image_row_by_path(int $galleryId, string $relativePath
  * @param array<int,int|string> $imageIds Image ids value.
  * @return array<string,mixed>|null Structured result data for the caller.
  */
-function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): ?array
-{
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
-    if (!$ids || !function_exists('Gallery\\Services\\media_renamer_execute_gallery_image_batch')) {
+function gallery_upload_auto_rename_image_ids(
+    int $galleryId,
+    array $imageIds,
+): ?array {
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
+    if (
+        !$ids
+        || !function_exists(
+            'Gallery\\Services\\media_renamer_execute_gallery_image_batch',
+        )
+    ) {
         return null;
     }
 
     try {
-        $result = media_renamer_execute_gallery_image_batch($galleryId, $ids, media_renamer_default_pattern());
+        $result = media_renamer_execute_gallery_image_batch(
+            $galleryId,
+            $ids,
+            media_renamer_default_pattern(),
+        );
         // Upload-time renaming is a policy, not a best-effort cosmetic pass. Any
         // selected row that remains blocked, missing, or skipped must be surfaced
         // to API/browser callers instead of looking like a successful zero-rename.
@@ -1072,8 +1368,12 @@ function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): 
                 continue;
             }
             $old = trim((string) ($detail['old'] ?? ''));
-            $notes = array_values(array_filter(array_map('strval', (array) ($detail['notes'] ?? [])), static fn (string $note): bool => trim($note) !== ''));
-            $message = 'Automatic upload rename could not enforce the filename policy'
+            $notes = array_values(array_filter(
+                array_map('strval', (array) ($detail['notes'] ?? [])),
+                static fn(string $note): bool => trim($note) !== '',
+            ));
+            $message =
+                'Automatic upload rename could not enforce the filename policy'
                 . ($old !== '' ? ' for ' . $old : '')
                 . '.';
             if ($notes) {
@@ -1082,16 +1382,24 @@ function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): 
             $policyFailures[] = $message;
         }
         if ($policyFailures) {
-            $result['failures'] = array_values(array_unique(array_merge((array) ($result['failures'] ?? []), $policyFailures)));
+            $result['failures'] = array_values(array_unique(array_merge(
+                (array) ($result['failures'] ?? []),
+                $policyFailures,
+            )));
         }
         return $result;
     } catch (Throwable $exception) {
         if (function_exists('Gallery\\Services\\admin_log_event')) {
-            admin_log_event('warning', 'gallery.upload_auto_rename_failed', 'Upload-time media renaming failed after images were stored.', [
-                'gallery_id' => $galleryId,
-                'image_ids' => $ids,
-                'error' => $exception->getMessage(),
-            ]);
+            admin_log_event(
+                'warning',
+                'gallery.upload_auto_rename_failed',
+                'Upload-time media renaming failed after images were stored.',
+                [
+                    'gallery_id' => $galleryId,
+                    'image_ids' => $ids,
+                    'error' => $exception->getMessage(),
+                ],
+            );
         }
         return [
             'renamed' => 0,
@@ -1108,9 +1416,14 @@ function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): 
  * @param array<int,int|string> $imageIds Image ids value.
  * @return array<int,int> Structured result data for the caller.
  */
-function uploaded_gallery_existing_image_ids(int $galleryId, array $imageIds): array
-{
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+function uploaded_gallery_existing_image_ids(
+    int $galleryId,
+    array $imageIds,
+): array {
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$ids) {
         return [];
     }
@@ -1125,8 +1438,10 @@ function uploaded_gallery_existing_image_ids(int $galleryId, array $imageIds): a
  * @param array<int,int|string> $imageIds Image ids value.
  * @return array<int,string> Structured result data for the caller.
  */
-function uploaded_gallery_filenames_for_image_ids(int $galleryId, array $imageIds): array
-{
+function uploaded_gallery_filenames_for_image_ids(
+    int $galleryId,
+    array $imageIds,
+): array {
     $ids = uploaded_gallery_existing_image_ids($galleryId, $imageIds);
     if (!$ids) {
         return [];
@@ -1147,11 +1462,11 @@ function uploaded_gallery_filenames_for_image_ids(int $galleryId, array $imageId
 }
 
 /**
- * Handles uploaded gallery image ids logic for the gallery application.
+ * Find stored image IDs for uploaded filenames in one gallery.
  *
- * @param mixed $galleryId Input used by this operation.
- * @param mixed $filenames Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param int $galleryId Gallery whose stored images are searched.
+ * @param list<string> $filenames Gallery-relative filenames in upload order.
+ * @return list<int> Positive image IDs matching the uploaded filenames.
  */
 function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
 {
@@ -1161,13 +1476,19 @@ function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
 
     $imageIds = [];
     foreach ($filenames as $filename) {
-        $row = uploaded_gallery_image_row_by_path($galleryId, normalize_relative_path((string) $filename));
+        $row = uploaded_gallery_image_row_by_path(
+            $galleryId,
+            normalize_relative_path((string) $filename),
+        );
         if (is_array($row)) {
             $imageIds[] = (int) ($row['id'] ?? 0);
         }
     }
 
-    return array_values(array_filter($imageIds, static fn (int $id): bool => $id > 0));
+    return array_values(array_filter(
+        $imageIds,
+        static fn(int $id): bool => $id > 0,
+    ));
 }
 
 /**
@@ -1200,21 +1521,31 @@ function store_uploaded_gallery_cover_owned(int $galleryId, array $file): string
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
-        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
+        throw new RuntimeException(t(
+            'gallery.error.not_found',
+            'Gallery not found.',
+        ));
     }
     // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     // $coverDir stores an intermediate value used by the surrounding gallery workflow.
     $coverDir = $galleryRoot . DIRECTORY_SEPARATOR . 'thumbnail';
     if (!is_dir($coverDir) && !mkdir($coverDir, 0775, true)) {
-        throw new RuntimeException(t('gallery.error.create_thumbnail_folder_failed', 'Could not create thumbnail folder.'));
+        throw new RuntimeException(t(
+            'gallery.error.create_thumbnail_folder_failed',
+            'Could not create thumbnail folder.',
+        ));
     }
     if (!path_inside($galleryRoot, $coverDir)) {
-        throw new RuntimeException(t('gallery.error.thumbnail_path_outside_gallery', 'Thumbnail path is outside its gallery.'));
+        throw new RuntimeException(t(
+            'gallery.error.thumbnail_path_outside_gallery',
+            'Thumbnail path is outside its gallery.',
+        ));
     }
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = $coverDir . DIRECTORY_SEPARATOR . 'cover.jpg';
-    foreach (glob($coverDir . DIRECTORY_SEPARATOR . 'cover.*') ?: [] as $oldFile) {
+    foreach (glob($coverDir . DIRECTORY_SEPARATOR . 'cover.*')
+        ?: [] as $oldFile) {
         if (is_file($oldFile) && $oldFile !== $target) {
             @unlink($oldFile);
         }
@@ -1223,26 +1554,51 @@ function store_uploaded_gallery_cover_owned(int $galleryId, array $file): string
     $tmpPath = (string) ($file['tmp_name'] ?? '');
     // $info stores an intermediate value used by the surrounding gallery workflow.
     $info = @getimagesize($tmpPath);
-    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-        throw new RuntimeException(t('gallery.error.cover_read_failed', 'Could not read the uploaded gallery thumbnail image.'));
+    if (
+        $info === false
+        || empty($info['mime'])
+        || !str_starts_with((string) $info['mime'], 'image/')
+    ) {
+        throw new RuntimeException(t(
+            'gallery.error.cover_read_failed',
+            'Could not read the uploaded gallery thumbnail image.',
+        ));
     }
     if (!extension_loaded('gd')) {
-        throw new RuntimeException(t('gallery.error.cover_resize_requires_gd', 'Gallery thumbnail resizing requires the GD extension.'));
+        throw new RuntimeException(t(
+            'gallery.error.cover_resize_requires_gd',
+            'Gallery thumbnail resizing requires the GD extension.',
+        ));
     }
     // $source stores an intermediate value used by the surrounding gallery workflow.
     $source = image_create_from_path($tmpPath, (string) $info['mime']);
     if (!$source) {
-        throw new RuntimeException(t('gallery.error.cover_decode_failed', 'Could not decode the uploaded gallery thumbnail image.'));
+        throw new RuntimeException(t(
+            'gallery.error.cover_decode_failed',
+            'Could not decode the uploaded gallery thumbnail image.',
+        ));
     }
-    if (!write_resized_jpeg($source, (int) $info[0], (int) $info[1], 800, $target)) {
+    if (!write_resized_jpeg(
+        $source,
+        (int) $info[0],
+        (int) $info[1],
+        800,
+        $target,
+    )) {
         imagedestroy($source);
-        throw new RuntimeException(t('gallery.error.cover_store_failed', 'Could not store gallery thumbnail.'));
+        throw new RuntimeException(t(
+            'gallery.error.cover_store_failed',
+            'Could not store gallery thumbnail.',
+        ));
     }
     imagedestroy($source);
     // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'thumbnail/cover.jpg';
     if (!is_file($target)) {
-        throw new RuntimeException(t('gallery.error.cover_store_failed', 'Could not store gallery thumbnail.'));
+        throw new RuntimeException(t(
+            'gallery.error.cover_store_failed',
+            'Could not store gallery thumbnail.',
+        ));
     }
     set_gallery_cover_path($galleryId, $relative);
     return $relative;
@@ -1256,11 +1612,18 @@ function store_uploaded_gallery_cover_owned(int $galleryId, array $file): string
  * @param array{tmp_name:string,name?:string,type?:string,size?:int,error?:int} $file Validated temporary branding upload descriptor.
  * @return string Gallery-relative branding path after storage and catalog completion.
  */
-function store_uploaded_gallery_branding_asset(int $galleryId, string $kind, array $file): string
-{
+function store_uploaded_gallery_branding_asset(
+    int $galleryId,
+    string $kind,
+    array $file,
+): string {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return store_uploaded_gallery_branding_asset_owned($galleryId, $kind, $file);
+        return store_uploaded_gallery_branding_asset_owned(
+            $galleryId,
+            $kind,
+            $file,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -1275,19 +1638,28 @@ function store_uploaded_gallery_branding_asset(int $galleryId, string $kind, arr
  * @return string Gallery-relative stored branding asset path.
  * @internal Call only through store_uploaded_gallery_branding_asset().
  */
-function store_uploaded_gallery_branding_asset_owned(int $galleryId, string $kind, array $file): string
-{
+function store_uploaded_gallery_branding_asset_owned(
+    int $galleryId,
+    string $kind,
+    array $file,
+): string {
     // $kind stores an intermediate value used by the surrounding gallery workflow.
     $kind = gallery_branding_asset_kind($kind);
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
-        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
+        throw new RuntimeException(t(
+            'gallery.error.not_found',
+            'Gallery not found.',
+        ));
     }
     // $uploadError stores an intermediate value used by the surrounding gallery workflow.
     $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
     if ($uploadError === UPLOAD_ERR_NO_FILE) {
-        throw new RuntimeException(t('branding.error.choose_image', 'Choose a branding image to upload.'));
+        throw new RuntimeException(t(
+            'branding.error.choose_image',
+            'Choose a branding image to upload.',
+        ));
     }
     if ($uploadError !== UPLOAD_ERR_OK) {
         throw new RuntimeException(upload_error_message($uploadError));
@@ -1295,62 +1667,100 @@ function store_uploaded_gallery_branding_asset_owned(int $galleryId, string $kin
     // $tmpPath stores an intermediate value used by the surrounding gallery workflow.
     $tmpPath = (string) ($file['tmp_name'] ?? '');
     if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
-        throw new RuntimeException(t('branding.error.file_unavailable', 'Uploaded branding image is not available.'));
+        throw new RuntimeException(t(
+            'branding.error.file_unavailable',
+            'Uploaded branding image is not available.',
+        ));
     }
     // $originalName stores an intermediate value used by the surrounding gallery workflow.
     $originalName = (string) ($file['name'] ?? '');
     if (!gallery_branding_upload_extension_allowed($originalName)) {
-        throw new RuntimeException(t('branding.error.supported_images', 'Only JPG, PNG, GIF, and WebP branding images can be uploaded.'));
+        throw new RuntimeException(t(
+            'branding.error.supported_images',
+            'Only JPG, PNG, GIF, and WebP branding images can be uploaded.',
+        ));
     }
     // $size stores an intermediate value used by the surrounding gallery workflow.
     $size = (int) ($file['size'] ?? 0);
     if ($size > gallery_branding_uploaded_asset_max_bytes()) {
-        throw new RuntimeException(t('branding.error.too_large', 'The branding image is larger than 8 MB.'));
+        throw new RuntimeException(t(
+            'branding.error.too_large',
+            'The branding image is larger than 8 MB.',
+        ));
     }
     // $info stores an intermediate value used by the surrounding gallery workflow.
     $info = @getimagesize($tmpPath);
     if ($info === false || empty($info['mime'])) {
-        throw new RuntimeException(t('branding.error.invalid_image', 'The uploaded branding image is not a valid image.'));
+        throw new RuntimeException(t(
+            'branding.error.invalid_image',
+            'The uploaded branding image is not a valid image.',
+        ));
     }
     // $extension stores an intermediate value used by the surrounding gallery workflow.
     $extension = gallery_branding_mime_extension((string) $info['mime']);
     if ($extension === null) {
-        throw new RuntimeException(t('branding.error.supported_images', 'Only JPG, PNG, GIF, and WebP branding images can be uploaded.'));
+        throw new RuntimeException(t(
+            'branding.error.supported_images',
+            'Only JPG, PNG, GIF, and WebP branding images can be uploaded.',
+        ));
     }
     // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {
-        throw new RuntimeException(t('gallery.error.folder_not_writable', 'Gallery folder is not writable.'));
+        throw new RuntimeException(t(
+            'gallery.error.folder_not_writable',
+            'Gallery folder is not writable.',
+        ));
     }
     // $brandingDir stores an intermediate value used by the surrounding gallery workflow.
     $brandingDir = $galleryRoot . DIRECTORY_SEPARATOR . 'branding';
     if (!is_dir($brandingDir) && !mkdir($brandingDir, 0775, true)) {
-        throw new RuntimeException(t('branding.error.create_folder_failed', 'Could not create branding folder.'));
+        throw new RuntimeException(t(
+            'branding.error.create_folder_failed',
+            'Could not create branding folder.',
+        ));
     }
     if (!path_inside($galleryRoot, $brandingDir)) {
-        throw new RuntimeException(t('branding.error.path_outside_gallery', 'Branding path is outside its gallery.'));
+        throw new RuntimeException(t(
+            'branding.error.path_outside_gallery',
+            'Branding path is outside its gallery.',
+        ));
     }
     // $stem stores an intermediate value used by the surrounding gallery workflow.
     $stem = gallery_branding_asset_filename_stem($kind);
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = $brandingDir . DIRECTORY_SEPARATOR . $stem . '.' . $extension;
     // $stagedTarget stores the uploaded file before the previous asset is replaced.
-    $stagedTarget = $brandingDir . DIRECTORY_SEPARATOR . '.upload-' . $stem . '-' . bin2hex(random_bytes(6)) . '.' . $extension;
+    $stagedTarget =
+        $brandingDir
+        . DIRECTORY_SEPARATOR
+        . '.upload-'
+        . $stem
+        . '-'
+        . bin2hex(random_bytes(6))
+        . '.'
+        . $extension;
     if (!move_uploaded_file($tmpPath, $stagedTarget)) {
-        throw new RuntimeException(t('branding.error.store_failed', 'Could not store gallery branding image.'));
+        throw new RuntimeException(t(
+            'branding.error.store_failed',
+            'Could not store gallery branding image.',
+        ));
     }
-    foreach (glob($brandingDir . DIRECTORY_SEPARATOR . $stem . '.*') ?: [] as $oldFile) {
+    foreach (glob($brandingDir . DIRECTORY_SEPARATOR . $stem . '.*')
+        ?: [] as $oldFile) {
         if (is_file($oldFile)) {
             @unlink($oldFile);
         }
     }
     if (!@rename($stagedTarget, $target)) {
         @unlink($stagedTarget);
-        throw new RuntimeException(t('branding.error.finalize_failed', 'Could not finalize gallery branding image.'));
+        throw new RuntimeException(t(
+            'branding.error.finalize_failed',
+            'Could not finalize gallery branding image.',
+        ));
     }
     // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'branding/' . $stem . '.' . $extension;
     set_gallery_branding_asset_path($galleryId, $kind, $relative);
     return $relative;
 }
-

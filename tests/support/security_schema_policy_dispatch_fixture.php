@@ -56,18 +56,19 @@ namespace Gallery\Services {
         return null;
     }
 
-
-
     /**
      * Return deterministic translated wording for the dispatcher fixture.
      *
      * @param string $key Translation key.
-     * @param mixed $fallback Fallback wording or replacement map.
-     * @param array $replacements Placeholder replacements.
+     * @param string|int|float|bool|null|array<string,scalar> $fallback Fallback wording or replacement values keyed by placeholder.
+     * @param array<string,scalar> $replacements Placeholder values keyed by name.
      * @return string Resolved fixture text.
      */
-    function t(string $key, mixed $fallback = '', array $replacements = []): string
-    {
+    function t(
+        string $key,
+        mixed $fallback = '',
+        array $replacements = [],
+    ): string {
         if (is_array($fallback)) {
             $replacements = $fallback;
             $fallback = $key;
@@ -95,12 +96,24 @@ namespace Gallery\Services {
      * @param string $level Event level.
      * @param string $eventKey Stable event key.
      * @param string $message Safe event message.
-     * @param array $context Structured bounded context.
-     * @param array $options Event classification and correlation options.
+     * @param array<string,scalar|null|array<string,scalar|null>> $context Structured bounded context fields.
+     * @param array<string,scalar|null> $options Event classification and correlation options.
+     * @return void Append the event fields to fixture log state.
      */
-    function admin_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-    {
-        $GLOBALS['security_schema_fixture_logs'][] = compact('level', 'eventKey', 'message', 'context', 'options');
+    function admin_log_event(
+        string $level,
+        string $eventKey,
+        string $message,
+        array $context = [],
+        array $options = [],
+    ): void {
+        $GLOBALS['security_schema_fixture_logs'][] = compact(
+            'level',
+            'eventKey',
+            'message',
+            'context',
+            'options',
+        );
     }
 
     /**
@@ -122,8 +135,11 @@ namespace Gallery\Services {
      * @param bool $isAdmin Whether the current principal is Admin.
      * @return array<string,mixed> Disabled-route decision.
      */
-    function feature_flag_disabled_route_decision(string $page, bool $wantsJson, bool $isAdmin): array
-    {
+    function feature_flag_disabled_route_decision(
+        string $page,
+        bool $wantsJson,
+        bool $isAdmin,
+    ): array {
         $GLOBALS['security_schema_fixture_disabled_route'] = $page;
         return [
             'status' => 404,
@@ -135,7 +151,6 @@ namespace Gallery\Services {
             'admin' => false,
         ];
     }
-
 }
 
 namespace Gallery\Controllers {
@@ -192,16 +207,31 @@ namespace {
     require_once __DIR__ . '/dispatch_kernel.php';
 
     use function Gallery\Core\cms_dispatch_page;
-    use function Gallery\Services\schema_inspection_set_query_executor_for_tests;
+    use function Gallery\Services\schema_inspection_set_query_executor_for_tests
+    ;
 
     $state = (string) ($argv[1] ?? 'unknown_access');
     $route = (string) ($argv[2] ?? 'gallery');
 
-    if (!in_array($state, ['available', 'partial_access', 'unknown_access', 'unknown_visibility'], true)) {
+    if (!in_array(
+        $state,
+        ['available', 'partial_access', 'unknown_access', 'unknown_visibility'],
+        true,
+    )) {
         fwrite(STDERR, "Invalid fixture schema state.\n");
         exit(2);
     }
-    if (!in_array($route, ['gallery', 'public_media', 'public_thumb', 'gallery_lightbox_data', 'download_gallery'], true)) {
+    if (!in_array(
+        $route,
+        [
+            'gallery',
+            'public_media',
+            'public_thumb',
+            'gallery_lightbox_data',
+            'download_gallery',
+        ],
+        true,
+    )) {
         fwrite(STDERR, "Invalid fixture route.\n");
         exit(2);
     }
@@ -209,15 +239,40 @@ namespace {
     $GLOBALS['security_schema_fixture_handler_reached'] = false;
     $GLOBALS['security_schema_fixture_logs'] = [];
 
-    schema_inspection_set_query_executor_for_tests(static function (string $objectType, string $table, string $object, string $token = '') use ($state): bool {
-        if ($state === 'partial_access' && $objectType === 'column' && $table === 'galleries' && $object === 'access_token_expires_at') {
+    schema_inspection_set_query_executor_for_tests(static function (
+        string $objectType,
+        string $table,
+        string $object,
+        string $token = '',
+    ) use ($state): bool {
+        if (
+            $state === 'partial_access'
+            && $objectType === 'column'
+            && $table === 'galleries'
+            && $object === 'access_token_expires_at'
+        ) {
             return false;
         }
-        if ($state === 'unknown_access' && $objectType === 'column' && $table === 'galleries' && $object === 'access_mode') {
-            throw new \RuntimeException('fixture-secret password=phase9 SELECT access_mode FROM galleries');
+        if (
+            $state === 'unknown_access'
+            && $objectType === 'column'
+            && $table === 'galleries'
+            && $object === 'access_mode'
+        ) {
+            throw new \RuntimeException(
+                'fixture-secret password=phase9 SELECT access_mode FROM galleries',
+            );
         }
-        if ($state === 'unknown_visibility' && $objectType === 'column_definition_contains' && $table === 'galleries' && $object === 'visibility' && $token === 'unpublished') {
-            throw new \RuntimeException('fixture-secret dsn=mysql:private visibility enum inspection failed');
+        if (
+            $state === 'unknown_visibility'
+            && $objectType === 'column_definition_contains'
+            && $table === 'galleries'
+            && $object === 'visibility'
+            && $token === 'unpublished'
+        ) {
+            throw new \RuntimeException(
+                'fixture-secret dsn=mysql:private visibility enum inspection failed',
+            );
         }
         return true;
     });
@@ -232,10 +287,14 @@ namespace {
         'route' => $route,
         'status' => http_response_code(),
         'body' => $body,
-        'handler_reached' => (bool) $GLOBALS['security_schema_fixture_handler_reached'],
+        'handler_reached' =>
+            (bool) $GLOBALS['security_schema_fixture_handler_reached'],
         'log' => $GLOBALS['security_schema_fixture_logs'][0] ?? [],
     ];
 
     schema_inspection_set_query_executor_for_tests(null);
-    echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    echo json_encode(
+        $result,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+    );
 }

@@ -19,26 +19,32 @@
  *   - Keep lazy metadata hydration on the same quality-source contract
  *   - Start the tracked byte-progress download synchronously with the zoom input, before any decode/installation work
  *   - Abort a superseded tracked download instead of letting it finish, without recording the abort as a failure
-  *
+ *
  * Author:
  *   Rudolf Klusal
-*/
+ */
 
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-$lightboxSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
-$publicEntrypointSource = (string) file_get_contents($root . '/public/assets/public-gallery.js');
-$authenticatedEntrypointSource = (string) file_get_contents($root . '/public/assets/gallery.js');
+$lightboxSource = (string) file_get_contents($root
+    . '/public/assets/gallery-modules/lightbox.js');
+$publicEntrypointSource = (string) file_get_contents($root
+    . '/public/assets/public-gallery.js');
+$authenticatedEntrypointSource = (string) file_get_contents($root
+    . '/public/assets/gallery.js');
 
 /**
  * Throw when a quality-promotion lifecycle expectation fails.
  *
  * @param bool $condition Assertion result.
  * @param string $message Failure diagnostic.
+ * @return void Throw when the quality-promotion lifecycle expectation fails.
  */
-function lightbox_zoom_quality_lifecycle_assert(bool $condition, string $message): void
-{
+function lightbox_zoom_quality_lifecycle_assert(
+    bool $condition,
+    string $message,
+): void {
     if (!$condition) {
         throw new RuntimeException($message);
     }
@@ -48,47 +54,102 @@ lightbox_zoom_quality_lifecycle_assert(
     !str_contains($lightboxSource, 'swapLightboxImageAfterDecode')
         && !str_contains($lightboxSource, 'lightboxFullSwapIdleDelay')
         && !str_contains($lightboxSource, 'scheduleFullMediaSwap'),
-    'Opening a photo must not unconditionally schedule the full source.'
+    'Opening a photo must not unconditionally schedule the full source.',
 );
 lightbox_zoom_quality_lifecycle_assert(
     str_contains($lightboxSource, 'lightboxZoomRequiredSourceWidth(')
         && str_contains($lightboxSource, "candidate.kind === 'full'")
-        && str_contains($lightboxSource, 'lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE')
-        && str_contains($lightboxSource, 'const lightboxQualityUpgradeDelay = 140;'),
-    'At 100% quality may remain demand-driven, but any zoom above 100% must select the full/original candidate.'
+        && str_contains(
+            $lightboxSource,
+            'lightboxZoomState.scale > LIGHTBOX_ZOOM_MIN_SCALE',
+        )
+        && str_contains(
+            $lightboxSource,
+            'const lightboxQualityUpgradeDelay = 140;',
+        ),
+    'At 100% quality may remain demand-driven, but any zoom above 100% must select the full/original candidate.',
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($lightboxSource, 'card.dataset.lightboxQualitySources = JSON.stringify(item.quality_sources)')
-        && str_contains($lightboxSource, "JSON.parse(card.dataset.lightboxQualitySources || '[]')"),
-    'Lazy and server-rendered cards must share the quality candidate parser.'
+    str_contains(
+        $lightboxSource,
+        'card.dataset.lightboxQualitySources = JSON.stringify(item.quality_sources)',
+    )
+        && str_contains(
+            $lightboxSource,
+            "JSON.parse(card.dataset.lightboxQualitySources || '[]')",
+        ),
+    'Lazy and server-rendered cards must share the quality candidate parser.',
 );
-$explicitUpgradeStart = strpos($lightboxSource, 'function requestLightboxQualityUpgradeNow()');
+$explicitUpgradeStart = strpos(
+    $lightboxSource,
+    'function requestLightboxQualityUpgradeNow()',
+);
 $explicitUpgradeEnd = $explicitUpgradeStart === false
     ? false
-    : strpos($lightboxSource, 'function pictureStripRadius()', $explicitUpgradeStart);
-$explicitUpgradeSource = ($explicitUpgradeStart !== false && $explicitUpgradeEnd !== false)
-    ? substr($lightboxSource, $explicitUpgradeStart, $explicitUpgradeEnd - $explicitUpgradeStart)
-    : '';
-$trackedDownloadStartPosition = strpos($explicitUpgradeSource, 'loadTrackedDecodedLightboxImage(fullSrc, {');
-$explicitInstallPosition = strpos($explicitUpgradeSource, 'installDecodedLightboxQualityImage(loadedImage, fullSrc');
-$liveOriginalAssignmentPosition = strpos($explicitUpgradeSource, 'requestImage.src = fullSrc;');
-$liveImageOwnershipPosition = strpos($explicitUpgradeSource, 'image.dataset.lightboxImageId = imageId;');
-$qualityOwnershipPosition = strpos($explicitUpgradeSource, 'activeLightboxQualityAbortController = qualityAbortController;');
-$failureRestorePosition = strpos($explicitUpgradeSource, 'const restoreProtectedPreviewIfCurrent = () =>');
-$liveErrorAbortPosition = strpos($explicitUpgradeSource, 'qualityAbortController.abort();', $failureRestorePosition === false ? 0 : $failureRestorePosition);
+    : strpos(
+        $lightboxSource,
+        'function pictureStripRadius()',
+        $explicitUpgradeStart,
+    );
+$explicitUpgradeSource =
+    $explicitUpgradeStart !== false && $explicitUpgradeEnd !== false
+        ? substr(
+            $lightboxSource,
+            $explicitUpgradeStart,
+            $explicitUpgradeEnd - $explicitUpgradeStart,
+        )
+        : '';
+$trackedDownloadStartPosition = strpos(
+    $explicitUpgradeSource,
+    'loadTrackedDecodedLightboxImage(fullSrc, {',
+);
+$explicitInstallPosition = strpos(
+    $explicitUpgradeSource,
+    'installDecodedLightboxQualityImage(loadedImage, fullSrc',
+);
+$liveOriginalAssignmentPosition = strpos(
+    $explicitUpgradeSource,
+    'requestImage.src = fullSrc;',
+);
+$liveImageOwnershipPosition = strpos(
+    $explicitUpgradeSource,
+    'image.dataset.lightboxImageId = imageId;',
+);
+$qualityOwnershipPosition = strpos(
+    $explicitUpgradeSource,
+    'activeLightboxQualityAbortController = qualityAbortController;',
+);
+$failureRestorePosition = strpos(
+    $explicitUpgradeSource,
+    'const restoreProtectedPreviewIfCurrent = () =>',
+);
+$liveErrorAbortPosition = strpos(
+    $explicitUpgradeSource,
+    'qualityAbortController.abort();',
+    $failureRestorePosition === false ? 0 : $failureRestorePosition,
+);
 $setZoomStart = strpos($lightboxSource, 'function setLightboxZoomScale(');
-$setZoomEnd = $setZoomStart === false ? false : strpos($lightboxSource, 'function resetLightboxZoom(', $setZoomStart);
-$setZoomSource = ($setZoomStart !== false && $setZoomEnd !== false)
-    ? substr($lightboxSource, $setZoomStart, $setZoomEnd - $setZoomStart)
-    : '';
-$setZoomRequestPosition = strpos($setZoomSource, 'requestLightboxQualityUpgradeNow();');
-$setZoomRenderPosition = strpos($setZoomSource, 'applyLightboxZoomState(announce, metrics);');
+$setZoomEnd = $setZoomStart === false
+    ? false
+    : strpos($lightboxSource, 'function resetLightboxZoom(', $setZoomStart);
+$setZoomSource =
+    $setZoomStart !== false && $setZoomEnd !== false
+        ? substr($lightboxSource, $setZoomStart, $setZoomEnd - $setZoomStart)
+        : '';
+$setZoomRequestPosition = strpos(
+    $setZoomSource,
+    'requestLightboxQualityUpgradeNow();',
+);
+$setZoomRenderPosition = strpos(
+    $setZoomSource,
+    'applyLightboxZoomState(announce, metrics);',
+);
 
 lightbox_zoom_quality_lifecycle_assert(
     $setZoomRequestPosition !== false
         && $setZoomRenderPosition !== false
         && $setZoomRequestPosition < $setZoomRenderPosition,
-    'Discrete zoom must complete its same-task source promotion before enlarging the preview layout, while retaining pre-source-change geometry.'
+    'Discrete zoom must complete its same-task source promotion before enlarging the preview layout, while retaining pre-source-change geometry.',
 );
 
 lightbox_zoom_quality_lifecycle_assert(
@@ -99,109 +160,237 @@ lightbox_zoom_quality_lifecycle_assert(
         && $liveImageOwnershipPosition < $qualityOwnershipPosition
         && $qualityOwnershipPosition < $liveOriginalAssignmentPosition
         && $liveOriginalAssignmentPosition < $trackedDownloadStartPosition
-        && str_contains($explicitUpgradeSource, 'requestImage.addEventListener(\'error\', onLiveQualityImageError')
-        && str_contains($explicitUpgradeSource, 'requestImage.removeEventListener(\'error\', onLiveQualityImageError)')
+        && str_contains(
+            $explicitUpgradeSource,
+            'requestImage.addEventListener(\'error\', onLiveQualityImageError',
+        )
+        && str_contains(
+            $explicitUpgradeSource,
+            'requestImage.removeEventListener(\'error\', onLiveQualityImageError)',
+        )
         && $failureRestorePosition !== false
         && $liveErrorAbortPosition !== false,
-    'Deliberate zoom must assign the active authorized original synchronously after ownership is established, before tracked Fetch/decode, and restore the protected preview immediately on a current live-node error.'
+    'Deliberate zoom must assign the active authorized original synchronously after ownership is established, before tracked Fetch/decode, and restore the protected preview immediately on a current live-node error.',
 );
 
 lightbox_zoom_quality_lifecycle_assert(
     substr_count($lightboxSource, 'requestLightboxQualityUpgradeNow();') >= 4
-        && str_contains($explicitUpgradeSource, "const fullSrc = String(card?.dataset.fullSrc || '').trim();")
-        && str_contains($explicitUpgradeSource, 'activeLightboxTransitionToken += 1;')
+        && str_contains(
+            $explicitUpgradeSource,
+            "const fullSrc = String(card?.dataset.fullSrc || '').trim();",
+        )
+        && str_contains(
+            $explicitUpgradeSource,
+            'activeLightboxTransitionToken += 1;',
+        )
         && str_contains($explicitUpgradeSource, 'removeTransitionImage();')
-        && !str_contains($explicitUpgradeSource, 'failedLightboxQualitySources.has(failureKey)')
-        && str_contains($explicitUpgradeSource, 'pendingLightboxQualitySource === fullSrc')
-        && str_contains($explicitUpgradeSource, 'image.dataset.lightboxExplicitZoomQuality === imageId')
-        && str_contains($explicitUpgradeSource, 'if (image.getAttribute(\'src\') !== fullSrc)')
-        && str_contains($lightboxSource, 'delete image.dataset.lightboxExplicitZoomQuality;')
-        && str_contains($explicitUpgradeSource, 'image.dataset.lightboxExplicitZoomQuality = imageId;')
-        && str_contains($explicitUpgradeSource, "devMarkSource(fullSrc, 'loading', 'zoom-tracked-original');")
-        && str_contains($explicitUpgradeSource, "devMarkSource(fullSrc, 'ready', 'zoom-tracked-original', image);")
+        && !str_contains(
+            $explicitUpgradeSource,
+            'failedLightboxQualitySources.has(failureKey)',
+        )
+        && str_contains(
+            $explicitUpgradeSource,
+            'pendingLightboxQualitySource === fullSrc',
+        )
+        && str_contains(
+            $explicitUpgradeSource,
+            'image.dataset.lightboxExplicitZoomQuality === imageId',
+        )
+        && str_contains(
+            $explicitUpgradeSource,
+            'if (image.getAttribute(\'src\') !== fullSrc)',
+        )
+        && str_contains(
+            $lightboxSource,
+            'delete image.dataset.lightboxExplicitZoomQuality;',
+        )
+        && str_contains(
+            $explicitUpgradeSource,
+            'image.dataset.lightboxExplicitZoomQuality = imageId;',
+        )
+        && str_contains(
+            $explicitUpgradeSource,
+            "devMarkSource(fullSrc, 'loading', 'zoom-tracked-original');",
+        )
+        && str_contains(
+            $explicitUpgradeSource,
+            "devMarkSource(fullSrc, 'ready', 'zoom-tracked-original', image);",
+        )
         && $trackedDownloadStartPosition !== false
         && $explicitInstallPosition !== false
         && $trackedDownloadStartPosition < $explicitInstallPosition
-        && !str_contains($explicitUpgradeSource, 'promoteLightboxQualityIfNeeded(')
-        && substr_count($lightboxSource, 'scheduleLightboxQualityUpgrade(') >= 4,
-    'Button/keyboard, wheel, and pinch zoom must synchronously start the tracked original-quality download before any decode/installation work, without waiting for a detached decode or mode transition.'
+        && !str_contains(
+            $explicitUpgradeSource,
+            'promoteLightboxQualityIfNeeded(',
+        )
+        && substr_count($lightboxSource, 'scheduleLightboxQualityUpgrade(')
+            >= 4,
+    'Button/keyboard, wheel, and pinch zoom must synchronously start the tracked original-quality download before any decode/installation work, without waiting for a detached decode or mode transition.',
 );
 lightbox_zoom_quality_lifecycle_assert(
     str_contains($lightboxSource, 'loadTrackedDecodedLightboxImage(desired.src')
-        && str_contains($lightboxSource, 'ownsLightboxQualityRequest(qualityToken, qualityAbortController')
-        && str_contains($lightboxSource, '!isCurrentLightboxImageRequest(index, imageToken)'),
-    'Passive high-resolution decode must stay transient and reject stale image generations.'
+        && str_contains(
+            $lightboxSource,
+            'ownsLightboxQualityRequest(qualityToken, qualityAbortController',
+        )
+        && str_contains(
+            $lightboxSource,
+            '!isCurrentLightboxImageRequest(index, imageToken)',
+        ),
+    'Passive high-resolution decode must stay transient and reject stale image generations.',
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($lightboxSource, 'const qualityAbortController = new AbortController();')
-        && substr_count($lightboxSource, 'activeLightboxQualityAbortController.abort();') >= 2
+    str_contains(
+        $lightboxSource,
+        'const qualityAbortController = new AbortController();',
+    )
+        && substr_count(
+            $lightboxSource,
+            'activeLightboxQualityAbortController.abort();',
+        ) >= 2
         && str_contains($lightboxSource, "if (error?.name !== 'AbortError') {")
-        && str_contains($lightboxSource, 'failedLightboxQualitySources.add(failureKey);'),
-    'A newer quality request, navigation, or close must abort the previous tracked download instead of letting it finish, and an aborted transfer must not be recorded as a failed source.'
+        && str_contains(
+            $lightboxSource,
+            'failedLightboxQualitySources.add(failureKey);',
+        ),
+    'A newer quality request, navigation, or close must abort the previous tracked download instead of letting it finish, and an aborted transfer must not be recorded as a failed source.',
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($lightboxSource, 'failedLightboxQualitySources.add(failureKey)')
-        && str_contains($lightboxSource, 'updateNormalLightboxStageSizeFromLoadedImage(loadedImage);')
+    str_contains(
+        $lightboxSource,
+        'failedLightboxQualitySources.add(failureKey)',
+    )
+        && str_contains(
+            $lightboxSource,
+            'updateNormalLightboxStageSizeFromLoadedImage(loadedImage);',
+        )
         && str_contains($lightboxSource, 'applyLightboxZoomState(false);'),
-    'Promotion must retain the preview after a bounded failure and reapply the live zoom state after installation.'
+    'Promotion must retain the preview after a bounded failure and reapply the live zoom state after installation.',
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($lightboxSource, "const zoomSurface = overlay.querySelector('[data-lightbox-zoom-surface]');")
-        && str_contains($lightboxSource, 'const frameWidth = Math.max(1, metrics.imageWidth * lightboxZoomState.scale);')
-        && str_contains($lightboxSource, 'const frameHeight = Math.max(1, metrics.imageHeight * lightboxZoomState.scale);')
-        && str_contains($lightboxSource, 'zoomSurface.style.width = `${frameWidth}px`;')
-        && str_contains($lightboxSource, 'zoomSurface.style.height = `${frameHeight}px`;')
-        && str_contains($lightboxSource, 'zoomSurface.style.transform = `translate3d(calc(-50% + ${lightboxZoomState.translateX}px), calc(-50% + ${lightboxZoomState.translateY}px), 0)`;')
+    str_contains(
+        $lightboxSource,
+        "const zoomSurface = overlay.querySelector('[data-lightbox-zoom-surface]');",
+    )
+        && str_contains(
+            $lightboxSource,
+            'const frameWidth = Math.max(1, metrics.imageWidth * lightboxZoomState.scale);',
+        )
+        && str_contains(
+            $lightboxSource,
+            'const frameHeight = Math.max(1, metrics.imageHeight * lightboxZoomState.scale);',
+        )
+        && str_contains(
+            $lightboxSource,
+            'zoomSurface.style.width = `${frameWidth}px`;',
+        )
+        && str_contains(
+            $lightboxSource,
+            'zoomSurface.style.height = `${frameHeight}px`;',
+        )
+        && str_contains(
+            $lightboxSource,
+            'zoomSurface.style.transform = `translate3d(calc(-50% + ${lightboxZoomState.translateX}px), calc(-50% + ${lightboxZoomState.translateY}px), 0)`;',
+        )
         && str_contains($lightboxSource, "image.style.width = '100%';")
         && str_contains($lightboxSource, "image.style.height = '100%';")
-        && str_contains($lightboxSource, 'function applyLightboxZoomState(announce = false, measuredMetrics = null)')
-        && str_contains($lightboxSource, 'const metrics = measuredMetrics || measureLightboxZoomMetrics();')
+        && str_contains(
+            $lightboxSource,
+            'function applyLightboxZoomState(announce = false, measuredMetrics = null)',
+        )
+        && str_contains(
+            $lightboxSource,
+            'const metrics = measuredMetrics || measureLightboxZoomMetrics();',
+        )
         && !str_contains($lightboxSource, 'scale(${lightboxZoomState.scale})')
-        && !str_contains($lightboxSource, "zoomSurface.style.overflow = 'hidden'")
+        && !str_contains(
+            $lightboxSource,
+            "zoomSurface.style.overflow = 'hidden'",
+        )
         && !str_contains($lightboxSource, 'qualityRepaintImage')
         && !str_contains($lightboxSource, 'qualityRepaintTransformReady'),
-    'Zoom must enlarge a stage-centered fitted photograph frame, keep the image filling that frame, and preserve center-relative panning.'
+    'Zoom must enlarge a stage-centered fitted photograph frame, keep the image filling that frame, and preserve center-relative panning.',
 );
 lightbox_zoom_quality_lifecycle_assert(
-    str_contains($lightboxSource, "let image = overlay.querySelector('[data-lightbox-img]');")
+    str_contains(
+        $lightboxSource,
+        "let image = overlay.querySelector('[data-lightbox-img]');",
+    )
         && str_contains($lightboxSource, 'loadedImage.onload = null;')
         && str_contains($lightboxSource, 'loadedImage.onerror = null;')
-        && str_contains($lightboxSource, "loadedImage.dataset.lightboxImageId = imageId;")
-        && str_contains($lightboxSource, 'loadedImage.style.cssText = previousImage.style.cssText;')
-        && str_contains($lightboxSource, "loadedImage.style.removeProperty('transform');")
-        && str_contains($lightboxSource, 'previousImage.replaceWith(loadedImage);')
+        && str_contains(
+            $lightboxSource,
+            'loadedImage.dataset.lightboxImageId = imageId;',
+        )
+        && str_contains(
+            $lightboxSource,
+            'loadedImage.style.cssText = previousImage.style.cssText;',
+        )
+        && str_contains(
+            $lightboxSource,
+            "loadedImage.style.removeProperty('transform');",
+        )
+        && str_contains(
+            $lightboxSource,
+            'previousImage.replaceWith(loadedImage);',
+        )
         && str_contains($lightboxSource, 'image = loadedImage;')
         && str_contains($lightboxSource, 'loadedImage.isConnected')
-        && str_contains($lightboxSource, 'installDecodedLightboxQualityImage(loadedImage, desired.src'),
-    'Passive promotion may replace the untransformed image child with an already-decoded larger source.'
+        && str_contains(
+            $lightboxSource,
+            'installDecodedLightboxQualityImage(loadedImage, desired.src',
+        ),
+    'Passive promotion may replace the untransformed image child with an already-decoded larger source.',
 );
 lightbox_zoom_quality_lifecycle_assert(
     str_contains($lightboxSource, 'image.dataset.lightboxImageId = imageId;')
-        && substr_count($lightboxSource, 'String(cards[index]?.dataset.imageId || index)') >= 3
-        && str_contains($lightboxSource, 'image.dataset.lightboxImageId !== imageId')
-        && str_contains($lightboxSource, 'ownsLightboxQualityRequest(qualityToken, qualityAbortController'),
-    'Preview and full-quality phases must retain per-photo ownership across repeated navigation.'
+        && substr_count(
+            $lightboxSource,
+            'String(cards[index]?.dataset.imageId || index)',
+        ) >= 3
+        && str_contains(
+            $lightboxSource,
+            'image.dataset.lightboxImageId !== imageId',
+        )
+        && str_contains(
+            $lightboxSource,
+            'ownsLightboxQualityRequest(qualityToken, qualityAbortController',
+        ),
+    'Preview and full-quality phases must retain per-photo ownership across repeated navigation.',
 );
-$qualityInstallPosition = strpos($lightboxSource, 'return installDecodedLightboxQualityImage(loadedImage, desired.src');
+$qualityInstallPosition = strpos(
+    $lightboxSource,
+    'return installDecodedLightboxQualityImage(loadedImage, desired.src',
+);
 $qualityReadyPosition = $qualityInstallPosition === false
     ? false
-    : strpos($lightboxSource, 'finalizeLightboxQualityRequest(', $qualityInstallPosition + 1);
+    : strpos(
+        $lightboxSource,
+        'finalizeLightboxQualityRequest(',
+        $qualityInstallPosition + 1,
+    );
 lightbox_zoom_quality_lifecycle_assert(
     $qualityInstallPosition !== false
         && $qualityReadyPosition !== false
         && $qualityInstallPosition < $qualityReadyPosition,
-    'Quality loading feedback must remain active until the decoded node is installed.'
+    'Quality loading feedback must remain active until the decoded node is installed.',
 );
 lightbox_zoom_quality_lifecycle_assert(
     substr_count($lightboxSource, 'clearPendingLightboxQualityUpgrade();') >= 3
         && str_contains($lightboxSource, "image.removeAttribute('src');"),
-    'Teardown, navigation, and close must invalidate pending quality work.'
+    'Teardown, navigation, and close must invalidate pending quality work.',
 );
 lightbox_zoom_quality_lifecycle_assert(
     str_contains($publicEntrypointSource, '20261018-presentation-confirm-v1')
-        && str_contains($authenticatedEntrypointSource, '20261018-presentation-confirm-v1')
-        && str_contains($lightboxSource, 'lightbox-zoom-model.js?v=20260817-lightbox-zoom-centered-frame-v5'),
-    'All public lightbox module paths must invalidate stale browser caches together.'
+        && str_contains(
+            $authenticatedEntrypointSource,
+            '20261018-presentation-confirm-v1',
+        )
+        && str_contains(
+            $lightboxSource,
+            'lightbox-zoom-model.js?v=20260817-lightbox-zoom-centered-frame-v5',
+        ),
+    'All public lightbox module paths must invalidate stale browser caches together.',
 );
 
 echo "Lightbox zoom quality lifecycle checks passed.\n";

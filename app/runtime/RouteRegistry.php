@@ -27,11 +27,18 @@ final class RouteRegistry
      * @param RouteDefinition $fallback Existing not-found controller definition.
      * @return void Initializes the registry.
      */
-    public function __construct(array $definitions, private readonly RouteDefinition $fallback)
-    {
+    public function __construct(
+        array $definitions,
+        private readonly RouteDefinition $fallback,
+    ) {
         foreach ($definitions as $definition) {
-            if (!$definition instanceof RouteDefinition || isset($this->routes[$definition->name])) {
-                throw new \InvalidArgumentException('Invalid or duplicate runtime route.');
+            if (
+                !$definition instanceof RouteDefinition
+                || isset($this->routes[$definition->name])
+            ) {
+                throw new \InvalidArgumentException(
+                    'Invalid or duplicate runtime route.',
+                );
             }
             $this->routes[$definition->name] = $definition;
         }

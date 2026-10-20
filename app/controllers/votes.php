@@ -65,11 +65,20 @@ use function Gallery\Services\vote_score;
  * @param int $score Score value.
  * @param int $currentVote Current vote value.
  * @param bool $votingAllowed Voting allowed value.
- * @return string Text result for the caller.
+ * @return string Rendered vote-form HTML.
  */
-function render_vote_form_html(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): string
-{
-    return view_vote_form_html(vote_form_view_model($imageId, $score, $currentVote, $votingAllowed));
+function render_vote_form_html(
+    int $imageId,
+    int $score,
+    int $currentVote,
+    bool $votingAllowed = true,
+): string {
+    return view_vote_form_html(vote_form_view_model(
+        $imageId,
+        $score,
+        $currentVote,
+        $votingAllowed,
+    ));
 }
 
 /**
@@ -79,19 +88,37 @@ function render_vote_form_html(int $imageId, int $score, int $currentVote, bool 
  * @param int $score Score value.
  * @param int $currentVote Current vote value.
  * @param bool $votingAllowed Voting allowed value.
+ * @return void Render the vote controls using the prepared presentation model.
  */
-function render_vote_form(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): void
-{
-    view_render_vote_form(vote_form_view_model($imageId, $score, $currentVote, $votingAllowed));
+function render_vote_form(
+    int $imageId,
+    int $score,
+    int $currentVote,
+    bool $votingAllowed = true,
+): void {
+    view_render_vote_form(vote_form_view_model(
+        $imageId,
+        $score,
+        $currentVote,
+        $votingAllowed,
+    ));
 }
 
 /**
  * Prepare vote controls for the presentation layer.
  *
- * @return array<string, mixed> Prepared vote presentation model.
+ * @param int $imageId Image receiving the vote controls.
+ * @param int $score Current aggregate score for the image.
+ * @param int $currentVote Current visitor's vote, or zero when no vote is recorded.
+ * @param bool $votingAllowed Whether the vote controls should be enabled.
+ * @return array{enabled:bool,image_id:int,score:int,current_vote:int,action_url:string,likes_label:string,up_label:string} Prepared vote presentation model.
  */
-function vote_form_view_model(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): array
-{
+function vote_form_view_model(
+    int $imageId,
+    int $score,
+    int $currentVote,
+    bool $votingAllowed = true,
+): array {
     return [
         'enabled' => $votingAllowed,
         'image_id' => $imageId,
@@ -105,6 +132,8 @@ function vote_form_view_model(int $imageId, int $score, int $currentVote, bool $
 
 /**
  * Record or update the current visitor's vote for an image.
+ *
+ * @return void Validates and records the vote, then emits JSON or redirects.
  */
 function cms_vote(): void
 {
@@ -118,12 +147,20 @@ function cms_vote(): void
         if (!schema_inspection_is_missing($schemaStatus)) {
             presentation_schema_log_degraded($schemaStatus, 'image_vote_write');
         }
-        http_response_code(schema_inspection_is_missing($schemaStatus) ? 409 : 503);
+        http_response_code(
+            schema_inspection_is_missing($schemaStatus) ? 409 : 503,
+        );
         header('Content-Type: application/json');
         echo json_encode([
             'error' => schema_inspection_is_missing($schemaStatus)
-                ? t('public.presentation_schema_missing', 'This optional feature requires a pending database migration.')
-                : t('public.presentation_schema_unavailable', 'This optional gallery feature is temporarily unavailable because its database schema could not be verified. The main gallery remains available.'),
+                ? t(
+                    'public.presentation_schema_missing',
+                    'This optional feature requires a pending database migration.',
+                )
+                : t(
+                    'public.presentation_schema_unavailable',
+                    'This optional gallery feature is temporarily unavailable because its database schema could not be verified. The main gallery remains available.',
+                ),
         ]);
         return;
     }
@@ -135,10 +172,25 @@ function cms_vote(): void
     $image = find_image($imageId);
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = $image ? find_gallery((int) $image['gallery_id']) : null;
-    if (!in_array($vote, [0, 1], true) || !$image || !$gallery || !gallery_voting_allowed($gallery) || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
+    if (
+        !in_array($vote, [0, 1], true)
+        || !$image
+        || !$gallery
+        || !gallery_voting_allowed($gallery)
+        || (
+            (
+                $image['visibility'] !== 'public'
+                || !visitor_can_access_gallery($gallery)
+            )
+            && !current_user()
+        )
+    ) {
         http_response_code(422);
         header('Content-Type: application/json');
-        echo json_encode(['error' => t('public.vote.invalid', 'Invalid vote.')]);
+        echo json_encode(['error' => t(
+            'public.vote.invalid',
+            'Invalid vote.',
+        )]);
         return;
     }
     // $existingVote stores the current vote for the logged-in user or visitor.
@@ -153,8 +205,15 @@ function cms_vote(): void
 
     if ($vote === 0) {
         delete_current_vote_for_image($imageId);
-        $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 0];
-        if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        $result = [
+            'image_id' => $imageId,
+            'score' => vote_score($imageId),
+            'vote' => 0,
+        ];
+        if (str_contains(
+            (string) ($_SERVER['HTTP_ACCEPT'] ?? ''),
+            'application/json',
+        )) {
             header('Content-Type: application/json');
             echo json_encode($result);
             return;
@@ -166,8 +225,15 @@ function cms_vote(): void
     // lightbox votes consistent even if older cached JavaScript still posts 1.
     if ($existingVote === 1) {
         delete_current_vote_for_image($imageId);
-        $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 0];
-        if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        $result = [
+            'image_id' => $imageId,
+            'score' => vote_score($imageId),
+            'vote' => 0,
+        ];
+        if (str_contains(
+            (string) ($_SERVER['HTTP_ACCEPT'] ?? ''),
+            'application/json',
+        )) {
             header('Content-Type: application/json');
             echo json_encode($result);
             return;
@@ -176,8 +242,15 @@ function cms_vote(): void
     }
     save_current_vote_for_image($imageId, $vote);
     // Variable $result stores this steps working value.
-    $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 1];
-    if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+    $result = [
+        'image_id' => $imageId,
+        'score' => vote_score($imageId),
+        'vote' => 1,
+    ];
+    if (str_contains(
+        (string) ($_SERVER['HTTP_ACCEPT'] ?? ''),
+        'application/json',
+    )) {
         header('Content-Type: application/json');
         echo json_encode($result);
         return;

@@ -50,7 +50,7 @@ foreach (\PhpGallery\MvcBoundary\scan_project($root) as $violation) {
         '%s:%d %s',
         (string) ($violation['path'] ?? 'unknown'),
         (int) ($violation['line'] ?? 0),
-        (string) ($violation['rule'] ?? 'unknown')
+        (string) ($violation['rule'] ?? 'unknown'),
     );
 }
 
@@ -59,22 +59,48 @@ $compatibility = (string) file_get_contents($root . '/app/bootstrap_full.php');
 $modelsPos = strpos($compatibility, "require_once __DIR__ . '/models.php'");
 $servicesPos = strpos($compatibility, "require_once __DIR__ . '/services.php'");
 $viewsPos = strpos($compatibility, "require_once __DIR__ . '/views.php'");
-$controllersPos = strpos($compatibility, "require_once __DIR__ . '/controllers.php'");
+$controllersPos = strpos(
+    $compatibility,
+    "require_once __DIR__ . '/controllers.php'",
+);
 $routingPos = strpos($bootstrap, "require __DIR__ . '/bootstrap/routing.php'");
-if ($modelsPos === false || $servicesPos === false || $viewsPos === false || $controllersPos === false || $routingPos === false
-    || !($modelsPos < $servicesPos && $servicesPos < $viewsPos && $viewsPos < $controllersPos)) {
+if (
+    $modelsPos === false
+    || $servicesPos === false
+    || $viewsPos === false
+    || $controllersPos === false
+    || $routingPos === false
+    || !(
+        $modelsPos < $servicesPos
+        && $servicesPos < $viewsPos
+        && $viewsPos < $controllersPos
+    )
+) {
     $violations[] = 'Explicit full compatibility layer order must be Models -> Services -> Views -> Controllers';
 }
-foreach (['models.php', 'services.php', 'views.php', 'controllers.php'] as $umbrella) {
+foreach ([
+    'models.php',
+    'services.php',
+    'views.php',
+    'controllers.php',
+] as $umbrella) {
     if (str_contains($bootstrap, "'/" . $umbrella . "'")) {
-        $violations[] = 'Ordinary web bootstrap must not include umbrella: ' . $umbrella;
+        $violations[] =
+            'Ordinary web bootstrap must not include umbrella: ' . $umbrella;
     }
 }
 
 $servicesLoader = (string) file_get_contents($root . '/app/services.php');
 $modelsPos = strpos($servicesLoader, "require_once __DIR__ . '/models.php'");
-$firstServicePos = strpos($servicesLoader, "require_once __DIR__ . '/services/");
-if ($modelsPos === false || $firstServicePos === false || $modelsPos > $firstServicePos) {
+$firstServicePos = strpos(
+    $servicesLoader,
+    "require_once __DIR__ . '/services/",
+);
+if (
+    $modelsPos === false
+    || $firstServicePos === false
+    || $modelsPos > $firstServicePos
+) {
     $violations[] = 'app/services.php must load app/models.php before service modules';
 }
 
@@ -84,19 +110,29 @@ foreach ([
     'app/controllers.php' => '/controllers/',
 ] as $relativePath => $expectedSegment) {
     $source = (string) file_get_contents($root . '/' . $relativePath);
-    if (preg_match_all('/require_once\s+__DIR__\s*\.\s*[\'\"]([^\'\"]+)[\'\"]\s*;/', $source, $matches) === false) {
+    if (
+        preg_match_all(
+            '/require_once\s+__DIR__\s*\.\s*[\'\"]([^\'\"]+)[\'\"]\s*;/',
+            $source,
+            $matches,
+        ) === false
+    ) {
         $violations[] = 'Unable to inspect loader ' . $relativePath;
         continue;
     }
     foreach ($matches[1] ?? [] as $loadedPath) {
         if (!str_contains((string) $loadedPath, $expectedSegment)) {
-            $violations[] = $relativePath . ' loads outside its layer: ' . $loadedPath;
+            $violations[] =
+                $relativePath . ' loads outside its layer: ' . $loadedPath;
         }
     }
 }
 
 if ($violations !== []) {
-    throw new RuntimeException("Stage 13 loader/dependency violations:\n  - " . implode("\n  - ", $violations));
+    throw new RuntimeException(
+        "Stage 13 loader/dependency violations:\n  - "
+            . implode("\n  - ", $violations),
+    );
 }
 
 fwrite(STDOUT, "Stage 13 loader/dependency boundary checks passed.\n");

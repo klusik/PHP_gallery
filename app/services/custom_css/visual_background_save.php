@@ -27,8 +27,13 @@ function custom_css_background_change_normalize(array $change): array
     if (!array_key_exists('operation', $change)) {
         $keys = array_keys($change);
         sort($keys);
-        if ($keys !== ['expected_revision', 'file'] || !is_array($change['file'] ?? null)) {
-            throw new \InvalidArgumentException('Choose one explicit global Theme background operation.');
+        if (
+            $keys !== ['expected_revision', 'file']
+            || !is_array($change['file'] ?? null)
+        ) {
+            throw new \InvalidArgumentException(
+                'Choose one explicit global Theme background operation.',
+            );
         }
         $change = [
             'operation' => 'replace',
@@ -43,30 +48,56 @@ function custom_css_background_change_normalize(array $change): array
     $keys = array_keys($change);
     sort($keys);
     if ($target !== 'theme') {
-        throw new \InvalidArgumentException('Visual background changes can target only the global Theme image.');
+        throw new \InvalidArgumentException(
+            'Visual background changes can target only the global Theme image.',
+        );
     }
     if ($operation === 'keep' && $keys === ['operation', 'target']) {
         return ['operation' => 'keep', 'target' => 'theme'];
     }
-    if ($operation === 'replace' && $keys === ['expected_revision', 'file', 'operation', 'target']
-        && is_array($change['file'] ?? null)) {
+    if (
+        $operation === 'replace'
+        && $keys === ['expected_revision', 'file', 'operation', 'target']
+        && is_array($change['file'] ?? null)
+    ) {
         $revision = $change['expected_revision'] ?? null;
-        if (!is_string($revision) || preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1) {
-            throw new \InvalidArgumentException('Reload the Theme background before saving this image.');
+        if (
+            !is_string($revision)
+            || preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1
+        ) {
+            throw new \InvalidArgumentException(
+                'Reload the Theme background before saving this image.',
+            );
         }
         return [
-            'operation' => 'replace', 'target' => 'theme', 'file' => $change['file'],
+            'operation' => 'replace',
+            'target' => 'theme',
+            'file' => $change['file'],
             'expected_revision' => $revision,
         ];
     }
-    if ($operation === 'remove' && $keys === ['expected_revision', 'operation', 'target']) {
+    if (
+        $operation === 'remove'
+        && $keys === ['expected_revision', 'operation', 'target']
+    ) {
         $revision = $change['expected_revision'] ?? null;
-        if (!is_string($revision) || preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1) {
-            throw new \InvalidArgumentException('Reload the Theme background before removing this image.');
+        if (
+            !is_string($revision)
+            || preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1
+        ) {
+            throw new \InvalidArgumentException(
+                'Reload the Theme background before removing this image.',
+            );
         }
-        return ['operation' => 'remove', 'target' => 'theme', 'expected_revision' => $revision];
+        return [
+            'operation' => 'remove',
+            'target' => 'theme',
+            'expected_revision' => $revision,
+        ];
     }
-    throw new \InvalidArgumentException('The global Theme background operation is incomplete or ambiguous.');
+    throw new \InvalidArgumentException(
+        'The global Theme background operation is incomplete or ambiguous.',
+    );
 }
 
 /**
@@ -81,14 +112,21 @@ function custom_css_background_change_normalize(array $change): array
  * @throws CustomCssRecoveryException When CSS activation or settings rollback cannot be recovered.
  * @throws \RuntimeException When lock acquisition, staging, activation or persistence fails.
  */
-function custom_css_overrides_save_with_background_attachment(string $text, string $expectedRevision, array $attachment): array
-{
-    return custom_css_overrides_save_with_background_change($text, $expectedRevision, [
-        'operation' => 'replace',
-        'target' => 'theme',
-        'file' => $attachment['file'] ?? [],
-        'expected_revision' => $attachment['expected_revision'] ?? null,
-    ]);
+function custom_css_overrides_save_with_background_attachment(
+    string $text,
+    string $expectedRevision,
+    array $attachment,
+): array {
+    return custom_css_overrides_save_with_background_change(
+        $text,
+        $expectedRevision,
+        [
+            'operation' => 'replace',
+            'target' => 'theme',
+            'file' => $attachment['file'] ?? [],
+            'expected_revision' => $attachment['expected_revision'] ?? null,
+        ],
+    );
 }
 
 /**
@@ -103,13 +141,19 @@ function custom_css_overrides_save_with_background_attachment(string $text, stri
  * @throws CustomCssRecoveryException When CSS activation cannot be restored or database rollback is uncertain.
  * @throws \RuntimeException When a configured image cannot be verified or lock, staging, activation or persistence fails.
  */
-function custom_css_overrides_save_with_background_change(string $text, string $expectedRevision, array $backgroundChange): array
-{
+function custom_css_overrides_save_with_background_change(
+    string $text,
+    string $expectedRevision,
+    array $backgroundChange,
+): array {
     custom_css_overrides_validate($text);
-    $backgroundChange = custom_css_background_change_normalize($backgroundChange);
+    $backgroundChange =
+        custom_css_background_change_normalize($backgroundChange);
     $operation = $backgroundChange['operation'];
     if ($operation === 'keep') {
-        throw new \InvalidArgumentException('Keep does not require a composite background mutation.');
+        throw new \InvalidArgumentException(
+            'Keep does not require a composite background mutation.',
+        );
     }
     $backgroundRevision = $backgroundChange['expected_revision'];
     $upload = $operation === 'replace' ? $backgroundChange['file'] : null;
@@ -118,11 +162,15 @@ function custom_css_overrides_save_with_background_change(string $text, string $
     $directory = dirname($target);
     $lockPath = $directory . '/.custom-overrides.lock';
     if (!is_dir($directory) || !is_writable($directory) || is_link($lockPath)) {
-        throw new \RuntimeException('The override asset directory is unavailable or unwritable.');
+        throw new \RuntimeException(
+            'The override asset directory is unavailable or unwritable.',
+        );
     }
     $cssLock = @fopen($lockPath, 'c');
     if ($cssLock === false) {
-        throw new \RuntimeException('The override writer lock could not be opened.');
+        throw new \RuntimeException(
+            'The override writer lock could not be opened.',
+        );
     }
 
     $stagedCss = '';
@@ -136,7 +184,9 @@ function custom_css_overrides_save_with_background_change(string $text, string $
     $result = ['text' => '', 'revision' => '', 'url' => ''];
     try {
         if (!flock($cssLock, LOCK_EX | LOCK_NB)) {
-            throw new \RuntimeException('The override writer lock could not be acquired.');
+            throw new \RuntimeException(
+                'The override writer lock could not be acquired.',
+            );
         }
         theme_background_with_writer_lock(static function () use (
             &$result,
@@ -153,14 +203,21 @@ function custom_css_overrides_save_with_background_change(string $text, string $
             &$backgroundActivated,
             &$preserveBackgroundForRecovery,
             &$cssActivated,
-            &$committed
+            &$committed,
         ): void {
             $currentCss = custom_css_overrides_state();
             if (!hash_equals($currentCss['revision'], $expectedRevision)) {
-                throw new CustomCssOverrideConflictException('The saved overrides changed in another editor.');
+                throw new CustomCssOverrideConflictException(
+                    'The saved overrides changed in another editor.',
+                );
             }
-            if (!hash_equals(theme_background_revision(), $backgroundRevision)) {
-                throw new CustomCssOverrideConflictException('The Theme background changed in another editor.');
+            if (!hash_equals(
+                theme_background_revision(),
+                $backgroundRevision,
+            )) {
+                throw new CustomCssOverrideConflictException(
+                    'The Theme background changed in another editor.',
+                );
             }
 
             $previousBackgroundPaths = [];
@@ -168,14 +225,21 @@ function custom_css_overrides_save_with_background_change(string $text, string $
                 $stagedBackground = theme_background_stage_pending_upload(
                     $upload,
                     theme_background_optimized_max_side_value(
-                        \Gallery\Models\app_settings_model_get('theme_background_optimized_max_side') ?: '1920'
-                    )
+                        \Gallery\Models\app_settings_model_get(
+                            'theme_background_optimized_max_side',
+                        ) ?: '1920',
+                    ),
                 );
             } else {
-                $previousBackgroundPaths = theme_background_verified_current_paths();
+                $previousBackgroundPaths =
+                    theme_background_verified_current_paths();
             }
             $cssChanged = $currentCss['text'] !== $text;
-            if ($operation === 'remove' && $previousBackgroundPaths === [] && !$cssChanged) {
+            if (
+                $operation === 'remove'
+                && $previousBackgroundPaths === []
+                && !$cssChanged
+            ) {
                 $result = $currentCss;
                 return;
             }
@@ -183,36 +247,57 @@ function custom_css_overrides_save_with_background_change(string $text, string $
             $nextState = [
                 'text' => $text,
                 'revision' => $revision,
-                'url' => $text === '' ? '' : \Gallery\Core\asset_url('assets/custom-overrides.css') . '?v=' . $revision,
+                'url' => $text === ''
+                    ? ''
+                    : \Gallery\Core\asset_url('assets/custom-overrides.css')
+                    . '?v='
+                    . $revision,
             ];
 
             if ($cssChanged) {
                 $stagedCss = custom_css_temporary_path();
-                if (@file_put_contents($stagedCss, $text) !== strlen($text)
+                if (
+                    @file_put_contents($stagedCss, $text) !== strlen($text)
                     || @hash_file('sha256', $stagedCss) !== $revision
-                    || !@chmod($stagedCss, 0644)) {
-                    throw new \RuntimeException('The override asset could not be staged and verified.');
+                    || !@chmod($stagedCss, 0644)
+                ) {
+                    throw new \RuntimeException(
+                        'The override asset could not be staged and verified.',
+                    );
                 }
                 if (is_file($target)) {
                     $recoveryCopy = custom_css_temporary_path();
                     $oldMode = fileperms($target);
-                    if ($oldMode === false || !custom_css_copy_verified($target, $recoveryCopy)
-                        || !@chmod($recoveryCopy, $oldMode & 0777)) {
-                        throw new \RuntimeException('The prior override could not be protected for rollback.');
+                    if (
+                        $oldMode === false
+                        || !custom_css_copy_verified($target, $recoveryCopy)
+                        || !@chmod($recoveryCopy, $oldMode & 0777)
+                    ) {
+                        throw new \RuntimeException(
+                            'The prior override could not be protected for rollback.',
+                        );
                     }
                 }
             }
 
             if ($operation === 'replace' && $stagedBackground !== null) {
                 $maxSide = theme_background_optimized_max_side_value(
-                    \Gallery\Models\app_settings_model_get('theme_background_optimized_max_side') ?: '1920'
+                    \Gallery\Models\app_settings_model_get(
+                        'theme_background_optimized_max_side',
+                    ) ?: '1920',
                 );
                 $settings = [
-                    'theme_background_path' => 'cache/theme-background/' . basename($stagedBackground['original_final']),
-                    'theme_background_original_path' => 'cache/theme-background/' . basename($stagedBackground['original_final']),
-                    'theme_background_optimized_path' => $stagedBackground['optimized_final'] !== null
-                        ? 'cache/theme-background/' . basename($stagedBackground['optimized_final'])
-                        : '',
+                    'theme_background_path' =>
+                        'cache/theme-background/'
+                            . basename($stagedBackground['original_final']),
+                    'theme_background_original_path' =>
+                        'cache/theme-background/'
+                            . basename($stagedBackground['original_final']),
+                    'theme_background_optimized_path' =>
+                        $stagedBackground['optimized_final'] !== null
+                            ? 'cache/theme-background/'
+                            . basename($stagedBackground['optimized_final'])
+                            : '',
                     'theme_background_optimized_max_side' => (string) $maxSide,
                 ];
             } else {
@@ -230,22 +315,28 @@ function custom_css_overrides_save_with_background_change(string $text, string $
                     $target,
                     $cssChanged,
                     &$backgroundActivated,
-                    &$cssActivated
+                    &$cssActivated,
                 ): void {
                     if ($stagedBackground !== null) {
-                        theme_background_activate_staged_upload($stagedBackground);
+                        theme_background_activate_staged_upload(
+                            $stagedBackground,
+                        );
                         $backgroundActivated = true;
                     }
                     if ($cssChanged) {
                         if (!@rename($stagedCss, $target)) {
-                            throw new \RuntimeException('The override asset could not be activated.');
+                            throw new \RuntimeException(
+                                'The override asset could not be activated.',
+                            );
                         }
                         $cssActivated = true;
                     }
                 });
                 $committed = true;
             } catch (\Throwable $exception) {
-                $backgroundStateUncertain = $exception instanceof \Gallery\Models\AppSettingsRollbackException;
+                $backgroundStateUncertain =
+                    $exception
+                    instanceof \Gallery\Models\AppSettingsRollbackException;
                 if ($backgroundStateUncertain && $backgroundActivated) {
                     // Do this before CSS restoration can throw so final cleanup cannot remove a possibly referenced asset.
                     $preserveBackgroundForRecovery = true;
@@ -254,11 +345,19 @@ function custom_css_overrides_save_with_background_change(string $text, string $
                     if ($recoveryCopy !== '') {
                         if (!@rename($recoveryCopy, $target)) {
                             $keepRecoveryCopy = is_file($recoveryCopy);
-                            throw new CustomCssRecoveryException($keepRecoveryCopy, $exception, $backgroundStateUncertain);
+                            throw new CustomCssRecoveryException(
+                                $keepRecoveryCopy,
+                                $exception,
+                                $backgroundStateUncertain,
+                            );
                         }
                         $recoveryCopy = '';
                     } elseif (is_file($target) && !@unlink($target)) {
-                        throw new CustomCssRecoveryException(false, $exception, $backgroundStateUncertain);
+                        throw new CustomCssRecoveryException(
+                            false,
+                            $exception,
+                            $backgroundStateUncertain,
+                        );
                     }
                 }
                 if ($backgroundActivated && $stagedBackground !== null) {
@@ -266,19 +365,32 @@ function custom_css_overrides_save_with_background_change(string $text, string $
                         // Keep both immutable candidates because the database may still reference the new one.
                         $preserveBackgroundForRecovery = true;
                     } else {
-                        theme_background_discard_staged_upload($stagedBackground, true);
+                        theme_background_discard_staged_upload(
+                            $stagedBackground,
+                            true,
+                        );
                         $backgroundActivated = false;
                     }
                 }
-                if ($exception instanceof CustomCssOverrideConflictException
+                if (
+                    $exception instanceof CustomCssOverrideConflictException
                     || $exception instanceof CustomCssRecoveryException
-                    || $exception instanceof \InvalidArgumentException) {
+                    || $exception instanceof \InvalidArgumentException
+                ) {
                     throw $exception;
                 }
                 if ($backgroundStateUncertain) {
-                    throw new CustomCssRecoveryException(false, $exception, true);
+                    throw new CustomCssRecoveryException(
+                        false,
+                        $exception,
+                        true,
+                    );
                 }
-                throw new \RuntimeException('The CSS and Theme background were not saved; the previous assets were restored.', 0, $exception);
+                throw new \RuntimeException(
+                    'The CSS and Theme background were not saved; the previous assets were restored.',
+                    0,
+                    $exception,
+                );
             }
 
             if ($operation === 'replace' && $stagedBackground !== null) {
@@ -296,13 +408,19 @@ function custom_css_overrides_save_with_background_change(string $text, string $
         if ($stagedCss !== '' && is_file($stagedCss)) {
             @unlink($stagedCss);
         }
-        if ($recoveryCopy !== '' && is_file($recoveryCopy) && !$keepRecoveryCopy) {
+        if (
+            $recoveryCopy !== ''
+            && is_file($recoveryCopy)
+            && !$keepRecoveryCopy
+        ) {
             @unlink($recoveryCopy);
         }
         if ($stagedBackground !== null) {
             theme_background_discard_staged_upload(
                 $stagedBackground,
-                $backgroundActivated && !$committed && !$preserveBackgroundForRecovery
+                $backgroundActivated
+                    && !$committed
+                    && !$preserveBackgroundForRecovery,
             );
         }
         if (is_resource($cssLock)) {

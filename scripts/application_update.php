@@ -59,8 +59,11 @@ use function Gallery\Services\application_update_safe_error;
  * @param float $default Default value.
  * @return float Parsed value.
  */
-function application_update_cli_number_option(array $arguments, string $name, float $default): float
-{
+function application_update_cli_number_option(
+    array $arguments,
+    string $name,
+    float $default,
+): float {
     $prefix = '--' . $name . '=';
     foreach ($arguments as $argument) {
         if (str_starts_with((string) $argument, $prefix)) {
@@ -71,55 +74,100 @@ function application_update_cli_number_option(array $arguments, string $name, fl
 }
 
 $arguments = array_values(array_map('strval', $argv ?? []));
-$budgetSeconds = max(1.0, min(12.0, application_update_cli_number_option($arguments, 'time-budget', 8.0)));
+$budgetSeconds = max(1.0, min(12.0, application_update_cli_number_option(
+    $arguments,
+    'time-budget',
+    8.0,
+)));
 $forceCheck = in_array('--force-check', $arguments, true);
 
 try {
     if (!application_autoupdate_enabled()) {
-        echo json_encode(['ok' => true, 'skipped' => true, 'reason' => 'automatic_updates_disabled'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        echo
+            json_encode([
+                'ok' => true,
+                'skipped' => true,
+                'reason' => 'automatic_updates_disabled',
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         exit(0);
     }
     if (application_update_beta_active()) {
-        echo json_encode(['ok' => true, 'skipped' => true, 'reason' => 'beta_channel_active'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        echo
+            json_encode([
+                'ok' => true,
+                'skipped' => true,
+                'reason' => 'beta_channel_active',
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         exit(0);
     }
 
     $active = application_update_active_job();
     if ($active !== null) {
         if ((string) ($active['trigger'] ?? '') !== 'background') {
-            echo json_encode([
-                'ok' => true,
-                'skipped' => true,
-                'reason' => 'manual_update_job_active',
-                'job' => application_update_job_public_state($active),
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+            echo
+                json_encode([
+                    'ok' => true,
+                    'skipped' => true,
+                    'reason' => 'manual_update_job_active',
+                    'job' => application_update_job_public_state($active),
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
             exit(0);
         }
-        $job = application_update_continue_background_job($budgetSeconds) ?? application_update_job_public_state($active);
-        echo json_encode(['ok' => true, 'job' => $job], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        $job = application_update_continue_background_job(
+            $budgetSeconds,
+        ) ?? application_update_job_public_state($active);
+        echo
+            json_encode([
+                'ok' => true,
+                'job' => $job,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         exit((string) ($job['status'] ?? '') === 'failed' ? 1 : 0);
     }
 
     $status = application_autoupdate_status();
     $lastCheckedAt = application_update_discovery_last_attempt_at();
-    if (!$forceCheck && !application_autoupdate_discovery_due(time(), $lastCheckedAt)) {
-        echo json_encode(['ok' => true, 'skipped' => true, 'reason' => 'check_not_due', 'status' => $status], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    if (
+        !$forceCheck
+        && !application_autoupdate_discovery_due(time(), $lastCheckedAt)
+    ) {
+        echo
+            json_encode([
+                'ok' => true,
+                'skipped' => true,
+                'reason' => 'check_not_due',
+                'status' => $status,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         exit(0);
     }
 
     application_autoupdate_run_installing_check($forceCheck, time());
     $active = application_update_active_job();
-    if ($active !== null && (string) ($active['trigger'] ?? '') === 'background') {
+    if (
+        $active !== null
+        && (string) ($active['trigger'] ?? '') === 'background'
+    ) {
         // Discovery already consumed this invocation's network budget. Report the
         // new durable job and let the next cron invocation perform package work.
-        echo json_encode(['ok' => true, 'job' => application_update_job_public_state($active)], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+        echo
+            json_encode([
+                'ok' => true,
+                'job' => application_update_job_public_state($active),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
         exit(0);
     }
 
-    echo json_encode(['ok' => true, 'status' => application_autoupdate_status()], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    echo
+        json_encode([
+            'ok' => true,
+            'status' => application_autoupdate_status(),
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL;
     exit(0);
 } catch (Throwable $exception) {
     $safe = application_update_safe_error($exception);
-    fwrite(STDERR, json_encode(['ok' => false, 'error' => $safe], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . PHP_EOL);
+    fwrite(STDERR, json_encode([
+        'ok' => false,
+        'error' => $safe,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+        . PHP_EOL);
     exit(1);
 }

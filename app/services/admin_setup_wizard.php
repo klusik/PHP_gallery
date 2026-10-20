@@ -45,6 +45,7 @@ use RuntimeException;
  * Rationale: centralize the sentinel instead of duplicating a string literal.
  */
 const ADMIN_SETUP_WIZARD_SUMMARY_STEP = 'summary';
+
 /**
  * List canonical Theme setting identifiers editable by the wizard.
  * @var list<string> Canonical Theme setting identifiers.
@@ -67,6 +68,7 @@ const ADMIN_SETUP_WIZARD_THEME_IDS = [
     'theme_page_width',
     'theme_page_width_custom',
 ];
+
 /**
  * List wizard settings whose canonical values are structured arrays.
  * @var list<string> Canonical structured setting identifiers.
@@ -80,6 +82,7 @@ const ADMIN_SETUP_WIZARD_STRUCTURED_IDS = [
     'public_language_selector_languages',
     'public_language_selector_design',
 ];
+
 /**
  * Bound the number of scalar list items rendered inline in a summary.
  * @var int Positive summary item limit.
@@ -99,8 +102,9 @@ final class AdminSetupWizardException extends RuntimeException
      * @param string $errorKey Stable translation key.
      * @return void
      */
-    public function __construct(private readonly string $errorKey)
-    {
+    public function __construct(
+        private readonly string $errorKey,
+    ) {
         parent::__construct($errorKey);
     }
 

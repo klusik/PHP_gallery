@@ -78,8 +78,12 @@ function cooperative_proposal_own_decision(array $group): array
  * @param string $decision Explicit approved or declined decision.
  * @return array<string,mixed> Updated non-authorizing Admin projection.
  */
-function cooperative_proposal_exchange_decide(string $groupId, int $expected, string $digest, string $decision): array
-{
+function cooperative_proposal_exchange_decide(
+    string $groupId,
+    int $expected,
+    string $digest,
+    string $decision,
+): array {
     $stored = cooperative_proposal_exchange_load($groupId);
     if ($stored['storage_revision'] !== $expected) {
         throw new CooperativeException('revision_conflict');
@@ -121,10 +125,16 @@ function cooperative_proposal_exchange_decide(string $groupId, int $expected, st
     $group['exchange']['lease'] = null;
     $group['exchange']['decision'] = $decision;
     if ($decision === 'declined') {
-        $group['exchange']['withdrawal_pending'] = array_values(array_diff(array_column($pending['body']['members'], 'instance_id'), [$local]));
+        $group['exchange']['withdrawal_pending'] = array_values(array_diff(
+            array_column($pending['body']['members'], 'instance_id'),
+            [$local],
+        ));
     }
     $group['exchange']['generations'] = $generations;
-    return cooperative_proposal_exchange_projection(cooperative_proposal_exchange_save($stored, $group));
+    return cooperative_proposal_exchange_projection(cooperative_proposal_exchange_save(
+        $stored,
+        $group,
+    ));
 }
 
 /** Project immutable body, own decision and explicitly non-authoritative observations.
@@ -136,17 +146,27 @@ function cooperative_proposal_exchange_projection(array $stored): array
     $group = $stored['group'];
     $document = cooperative_proposal_document($group);
     $verification = $group['exchange']['verification'] ?? null;
-    return ['group_id' => $group['group_id'], 'revision' => $stored['storage_revision'],
-        'body' => $document['body'], 'digest' => $document['digest'],
+    return [
+        'group_id' => $group['group_id'],
+        'revision' => $stored['storage_revision'],
+        'body' => $document['body'],
+        'digest' => $document['digest'],
         'gallery_id' => $group['exchange']['gallery_id'],
         'own' => cooperative_proposal_own_decision($group),
         'mail' => $group['exchange']['mail'] ?? [],
         'withdrawal_pending' => $group['exchange']['withdrawal_pending'] ?? [],
         'observations' => $group['exchange']['observations'],
-        'membership_revision' => $group['revision'], 'state' => $group['state'],
-        'verification' => is_array($verification) ? ['round_id' => $verification['round_id'],
-            'expires_at' => $verification['expires_at'], 'checked_peers' => array_keys($verification['receipts'])] : null,
-        'authorization_expires_at' => $group['exchange']['lease']['expires_at'] ?? null,
+        'membership_revision' => $group['revision'],
+        'state' => $group['state'],
+        'verification' => is_array($verification)
+            ? [
+                'round_id' => $verification['round_id'],
+                'expires_at' => $verification['expires_at'],
+                'checked_peers' => array_keys($verification['receipts']),
+            ] : null,
+        'authorization_expires_at' =>
+            $group['exchange']['lease']['expires_at'] ?? null,
         'sharing_active' => cooperative_activation_lease_valid($group),
-        'maintenance' => cooperative_maintenance_plan($group)];
+        'maintenance' => cooperative_maintenance_plan($group),
+    ];
 }

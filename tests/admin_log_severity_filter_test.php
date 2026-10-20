@@ -49,57 +49,81 @@ require_once __DIR__ . '/../app/services/logs.php';
 /**
  * Throw when an expectation fails.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @template TExpected
+ * @template TActual
+ * @param TExpected $expected Expected value, including its complete collection shape when applicable.
+ * @param TActual $actual Actual value, including its complete collection shape when applicable.
  * @param string $label Label value.
+ * @return void Throws when strict comparison fails.
  */
-function assert_admin_log_severity_same(mixed $expected, mixed $actual, string $label): void
-{
+function assert_admin_log_severity_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
 assert_admin_log_severity_same(
     ['info', 'error', 'critical'],
-    admin_log_normalize_severity_filter(['critical', 'invalid', 'info', 'error', 'info']),
-    'multi-select normalization keeps valid severities in UI order'
+    admin_log_normalize_severity_filter([
+        'critical',
+        'invalid',
+        'info',
+        'error',
+        'info',
+    ]),
+    'multi-select normalization keeps valid severities in UI order',
 );
 
 assert_admin_log_severity_same(
     ['warning'],
     admin_log_normalize_severity_filter('warning'),
-    'legacy single severity normalization'
+    'legacy single severity normalization',
 );
 
 assert_admin_log_severity_same(
     ['warning', 'error'],
     admin_log_normalize_severity_filter('warning,error,unknown'),
-    'comma-separated defensive normalization'
+    'comma-separated defensive normalization',
 );
 
 $GLOBALS['cms_app_settings_cache'] = [
-    admin_log_severity_filter_setting_key() => json_encode(['debug', 'bogus', 'notice'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    admin_log_severity_filter_setting_key() => json_encode(
+        ['debug', 'bogus', 'notice'],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    ),
 ];
 assert_admin_log_severity_same(
     ['debug', 'notice'],
     admin_log_persisted_severity_filter(),
-    'persisted JSON severity decoding'
+    'persisted JSON severity decoding',
 );
 
-$GLOBALS['cms_app_settings_cache'] = [admin_log_severity_filter_setting_key() => 'not-json'];
-assert_admin_log_severity_same([], admin_log_persisted_severity_filter(), 'invalid persisted JSON resets to default all-severities state');
+$GLOBALS['cms_app_settings_cache'] = [
+    admin_log_severity_filter_setting_key() => 'not-json',
+];
+assert_admin_log_severity_same(
+    [],
+    admin_log_persisted_severity_filter(),
+    'invalid persisted JSON resets to default all-severities state',
+);
 
 assert_admin_log_severity_same(
     'All severities are shown.',
     admin_log_severity_filter_summary([]),
-    'empty selection summary'
+    'empty selection summary',
 );
 
 assert_admin_log_severity_same(
     'Active severities: Error, Critical',
     admin_log_severity_filter_summary(['error', 'critical']),
-    'active selection summary'
+    'active selection summary',
 );
 
 echo "Admin log severity filter tests passed.\n";

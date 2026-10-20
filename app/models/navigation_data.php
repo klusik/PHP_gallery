@@ -47,8 +47,14 @@ use function Gallery\Core\db;
 function navigation_data_model_cache_status(): array
 {
     return [
-        'count' => (int) db()->query('SELECT COUNT(*) FROM navigation_data_cache')->fetchColumn(),
-        'last_update' => (string) (db()->query('SELECT MAX(updated_at) FROM navigation_data_cache')->fetchColumn() ?: ''),
+        'count' => (int) db()
+            ->query('SELECT COUNT(*) FROM navigation_data_cache')
+            ->fetchColumn(),
+        'last_update' => (string) (
+            db()
+                ->query('SELECT MAX(updated_at) FROM navigation_data_cache')
+                ->fetchColumn() ?: ''
+        ),
     ];
 }
 
@@ -92,7 +98,19 @@ function navigation_data_model_cached_point(string $ident, string $now): ?array
     return is_array($row) ? $row : null;
 }
 
-/** Persist one normalized shared remote navigation-data cache entry. */
+/**
+ * Persist one normalized shared remote navigation-data cache entry.
+ *
+ * @param string $cacheKey Stable cache identity for the normalized lookup.
+ * @param string $ident Navigation identifier.
+ * @param string $kind Navigation-point kind.
+ * @param string $source Provider that supplied the normalized point.
+ * @param string $cycle Dataset cycle associated with the point.
+ * @param string $payloadJson Serialized normalized point data.
+ * @param string $expiresAt Cache expiry SQL timestamp.
+ * @param string $now Shared SQL timestamp for the write.
+ * @return void Inserts the cache row or refreshes its stored values.
+ */
 function navigation_data_model_cache_upsert(
     string $cacheKey,
     string $ident,
@@ -101,9 +119,9 @@ function navigation_data_model_cache_upsert(
     string $cycle,
     string $payloadJson,
     string $expiresAt,
-    string $now
+    string $now,
 ): void {
-    $stmt = db()->prepare("INSERT INTO navigation_data_cache (
+    $stmt = db()->prepare('INSERT INTO navigation_data_cache (
         cache_key,
         ident,
         kind,
@@ -120,30 +138,64 @@ function navigation_data_model_cache_upsert(
         cycle = VALUES(cycle),
         payload_json = VALUES(payload_json),
         expires_at = VALUES(expires_at),
-        updated_at = VALUES(updated_at)");
-    $stmt->execute([$cacheKey, $ident, $kind, $source, $cycle, $payloadJson, $expiresAt, $now, $now]);
+        updated_at = VALUES(updated_at)');
+    $stmt->execute([
+        $cacheKey,
+        $ident,
+        $kind,
+        $source,
+        $cycle,
+        $payloadJson,
+        $expiresAt,
+        $now,
+        $now,
+    ]);
 }
 
-/** Return whether one persistent Navigraph account row exists. */
+/**
+ * Return whether one persistent Navigraph account row exists.
+ *
+ * @param int $userId Administrator account identifier.
+ * @return bool True when a Navigraph account row exists for this user.
+ */
 function navigation_data_model_account_exists(int $userId): bool
 {
-    $stmt = db()->prepare("SELECT 1 FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph' LIMIT 1");
+    $stmt = db()->prepare(
+        "SELECT 1 FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph' LIMIT 1",
+    );
     $stmt->execute([$userId]);
     return (bool) $stmt->fetchColumn();
 }
 
-/** Return one persistent Navigraph account row. */
+/**
+ * Return one persistent Navigraph account row.
+ *
+ * @param int $userId Administrator account identifier.
+ * @return array<string,mixed>|null Encrypted account row, or null when absent.
+ */
 function navigation_data_model_account(int $userId): ?array
 {
-    $stmt = db()->prepare("SELECT * FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph' LIMIT 1");
+    $stmt = db()->prepare(
+        "SELECT * FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph' LIMIT 1",
+    );
     $stmt->execute([$userId]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
 }
 
-/** Persist encrypted Navigraph credentials and provider metadata. */
-function navigation_data_model_account_upsert(int $userId, array $values, string $now): void
-{
+/**
+ * Persist encrypted Navigraph credentials and provider metadata.
+ *
+ * @param int $userId Administrator account identifier.
+ * @param array<string,mixed> $values Encrypted credential fields and provider metadata.
+ * @param string $now Shared SQL timestamp for the account update.
+ * @return void Inserts or updates the user's Navigraph account row.
+ */
+function navigation_data_model_account_upsert(
+    int $userId,
+    array $values,
+    string $now,
+): void {
     $stmt = db()->prepare("INSERT INTO navigation_data_accounts (
         user_id,
         provider,
@@ -192,9 +244,16 @@ function navigation_data_model_account_upsert(int $userId, array $values, string
     ]);
 }
 
-/** Delete one persistent Navigraph account row. */
+/**
+ * Delete one persistent Navigraph account row.
+ *
+ * @param int $userId Administrator account identifier.
+ * @return void Removes the user's Navigraph account row.
+ */
 function navigation_data_model_account_delete(int $userId): void
 {
-    $stmt = db()->prepare("DELETE FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph'");
+    $stmt = db()->prepare(
+        "DELETE FROM navigation_data_accounts WHERE user_id = ? AND provider = 'navigraph'",
+    );
     $stmt->execute([$userId]);
 }

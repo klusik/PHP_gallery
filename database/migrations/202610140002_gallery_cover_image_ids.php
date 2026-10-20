@@ -30,5 +30,5 @@
 declare(strict_types=1);
 
 return [
-    "ALTER TABLE galleries ADD COLUMN cover_image_ids TEXT NULL AFTER cover_image_id",
+    'ALTER TABLE galleries ADD COLUMN cover_image_ids TEXT NULL AFTER cover_image_id',
 ];

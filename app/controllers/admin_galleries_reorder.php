@@ -48,7 +48,8 @@ use function Gallery\Services\gallery_count_dated_rows;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_folder_name_from_path;
 use function Gallery\Services\gallery_path_diagnostics;
-use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions;
+use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions
+;
 use function Gallery\Services\gallery_reorder_current_tree_rows;
 use function Gallery\Services\gallery_reorder_save_child_order;
 use function Gallery\Services\gallery_reorder_save_tree_order;
@@ -62,13 +63,15 @@ use function Gallery\Services\write_gallery_sidecar;
 use function Gallery\Services\admin_log_event;
 
 /**
- * Handles cms admin gallery reorder logic for the gallery application.
+ * Validate and apply the submitted Admin gallery tree order.
  *
  * The Admin dashboard sends the complete flattened gallery tree after a drag
  * operation. The submitted list is validated as an exact set match against the
  * database before any filesystem move or sort_order update is attempted. Parent
  * changes are delegated to move_gallery_folder_to_parent(), so the gallery
  * folder tree remains the source of truth and database paths follow disk state.
+ *
+ * @return void Emit a JSON result for the submitted gallery tree.
  */
 function cms_admin_reorder_galleries(): void
 {
@@ -89,7 +92,11 @@ function cms_admin_reorder_galleries(): void
     // Variable $decodedTree stores the decoded row list before it is normalized.
     $decodedTree = json_decode($rawTree, true);
     if (!is_array($decodedTree)) {
-        admin_reorder_galleries_response(false, t('admin.galleries.reorder_invalid_json'), $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(
+            false,
+            t('admin.galleries.reorder_invalid_json'),
+            $jsonResponseBufferStarted,
+        );
         return;
     }
 
@@ -97,7 +104,11 @@ function cms_admin_reorder_galleries(): void
     $submittedEntries = [];
     foreach ($decodedTree as $entry) {
         if (!is_array($entry)) {
-            admin_reorder_galleries_response(false, t('admin.galleries.reorder_invalid_row'), $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(
+                false,
+                t('admin.galleries.reorder_invalid_row'),
+                $jsonResponseBufferStarted,
+            );
             return;
         }
         // Variable $galleryId stores the gallery id from one submitted tree row.
@@ -105,20 +116,35 @@ function cms_admin_reorder_galleries(): void
         // Variable $parentId stores the requested parent id for one submitted tree row.
         $parentId = (int) ($entry['parent_id'] ?? 0);
         if ($galleryId <= 0 || $parentId < 0) {
-            admin_reorder_galleries_response(false, t('admin.galleries.reorder_invalid_gallery_id'), $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(
+                false,
+                t('admin.galleries.reorder_invalid_gallery_id'),
+                $jsonResponseBufferStarted,
+            );
             return;
         }
         $submittedEntries[] = ['id' => $galleryId, 'parent_id' => $parentId];
     }
     if (!$submittedEntries) {
-        admin_reorder_galleries_response(false, t('admin.galleries.reorder_empty'), $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(
+            false,
+            t('admin.galleries.reorder_empty'),
+            $jsonResponseBufferStarted,
+        );
         return;
     }
 
     // Variable $submittedIds stores the submitted gallery id list for set validation.
-    $submittedIds = array_map(static fn (array $entry): int => (int) $entry['id'], $submittedEntries);
+    $submittedIds = array_map(
+        static fn(array $entry): int => (int) $entry['id'],
+        $submittedEntries,
+    );
     if (count($submittedIds) !== count(array_unique($submittedIds))) {
-        admin_reorder_galleries_response(false, t('admin.galleries.reorder_duplicates'), $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(
+            false,
+            t('admin.galleries.reorder_duplicates'),
+            $jsonResponseBufferStarted,
+        );
         return;
     }
 
@@ -126,13 +152,20 @@ function cms_admin_reorder_galleries(): void
     // Variable $currentRows stores current database state for validation and change detection.
     $currentRows = gallery_reorder_current_tree_rows();
     // Variable $currentIds stores all gallery ids currently known by the database.
-    $currentIds = array_map(static fn (array $row): int => (int) $row['id'], $currentRows);
+    $currentIds = array_map(
+        static fn(array $row): int => (int) $row['id'],
+        $currentRows,
+    );
     // Variable $sortedSubmittedIds stores the submitted id set in sorted order.
     $sortedSubmittedIds = $submittedIds;
     sort($sortedSubmittedIds);
     sort($currentIds);
     if ($sortedSubmittedIds !== $currentIds) {
-        admin_reorder_galleries_response(false, t('admin.galleries.reorder_changed'), $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(
+            false,
+            t('admin.galleries.reorder_changed'),
+            $jsonResponseBufferStarted,
+        );
         return;
     }
 
@@ -146,15 +179,27 @@ function cms_admin_reorder_galleries(): void
         // Variable $parentId stores the requested parent id being validated.
         $parentId = (int) $entry['parent_id'];
         if ($parentId === $galleryId) {
-            admin_reorder_galleries_response(false, t('admin.galleries.reorder_self_parent'), $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(
+                false,
+                t('admin.galleries.reorder_self_parent'),
+                $jsonResponseBufferStarted,
+            );
             return;
         }
         if ($parentId > 0 && !isset($validIds[$parentId])) {
-            admin_reorder_galleries_response(false, t('admin.galleries.reorder_missing_parent'), $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(
+                false,
+                t('admin.galleries.reorder_missing_parent'),
+                $jsonResponseBufferStarted,
+            );
             return;
         }
         if ($parentId > 0 && !isset($seenIds[$parentId])) {
-            admin_reorder_galleries_response(false, t('admin.galleries.reorder_child_before_parent'), $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(
+                false,
+                t('admin.galleries.reorder_child_before_parent'),
+                $jsonResponseBufferStarted,
+            );
             return;
         }
         $seenIds[$galleryId] = true;
@@ -173,7 +218,9 @@ function cms_admin_reorder_galleries(): void
         $currentParentById[$galleryId] = (int) ($row['parent_id'] ?? 0);
         $currentSortOrderById[$galleryId] = (int) ($row['sort_order'] ?? 0);
         $currentTitleById[$galleryId] = (string) ($row['title'] ?? '');
-        $currentFolderPathById[$galleryId] = normalize_relative_path((string) ($row['folder_path'] ?? ''));
+        $currentFolderPathById[$galleryId] = normalize_relative_path(
+            (string) ($row['folder_path'] ?? ''),
+        );
     }
 
     // Variable $submittedParentById stores requested parent ids keyed by gallery id.
@@ -200,9 +247,17 @@ function cms_admin_reorder_galleries(): void
             if (($currentParentById[$galleryId] ?? 0) === $parentId) {
                 continue;
             }
-            $activeMoveDiagnostics = admin_gallery_reorder_move_diagnostics($galleryId, $parentId > 0 ? $parentId : null);
+            $activeMoveDiagnostics = admin_gallery_reorder_move_diagnostics(
+                $galleryId,
+                $parentId > 0 ? $parentId : null,
+            );
             $reorderDiagnostics[] = $activeMoveDiagnostics;
-            move_gallery_folder_to_parent($galleryId, $parentId > 0 ? $parentId : null, null, true);
+            move_gallery_folder_to_parent(
+                $galleryId,
+                $parentId > 0 ? $parentId : null,
+                null,
+                true,
+            );
             $movedCount++;
             $activeMoveDiagnostics = null;
         }
@@ -254,7 +309,8 @@ function cms_admin_reorder_galleries(): void
                     'gallery_title' => $currentTitleById[$galleryId] ?? '',
                     'old_parent_id' => $oldParentId,
                     'new_parent_id' => $newParentId,
-                    'old_folder_path' => $currentFolderPathById[$galleryId] ?? '',
+                    'old_folder_path' =>
+                        $currentFolderPathById[$galleryId] ?? '',
                 ];
                 $changedGalleryIds[$galleryId] = true;
             }
@@ -270,41 +326,83 @@ function cms_admin_reorder_galleries(): void
             }
         }
 
-        admin_log_event('info', 'gallery.reordered', t('admin.galleries.log_reordered_tree'), [
-            'submitted_entries' => count($submittedEntries),
-            'persisted_galleries' => count($submittedEntries),
-            'changed_galleries' => count($changedGalleryIds),
-            'changed_gallery_ids' => array_map('intval', array_keys($changedGalleryIds)),
-            'parent_changes' => $parentChanges,
-            'order_changes' => $sortOrderChanges,
-            'moved_folders' => $movedCount,
-            'maintenance_warnings' => array_values(array_unique($maintenanceWarnings)),
-        ], [
-            'subject_type' => 'gallery_tree',
-            'subject_id' => 0,
-        ]);
+        admin_log_event(
+            'info',
+            'gallery.reordered',
+            t('admin.galleries.log_reordered_tree'),
+            [
+                'submitted_entries' => count($submittedEntries),
+                'persisted_galleries' => count($submittedEntries),
+                'changed_galleries' => count($changedGalleryIds),
+                'changed_gallery_ids' => array_map(
+                    'intval',
+                    array_keys($changedGalleryIds),
+                ),
+                'parent_changes' => $parentChanges,
+                'order_changes' => $sortOrderChanges,
+                'moved_folders' => $movedCount,
+                'maintenance_warnings' => array_values(array_unique(
+                    $maintenanceWarnings,
+                )),
+            ],
+            [
+                'subject_type' => 'gallery_tree',
+                'subject_id' => 0,
+            ],
+        );
 
         if ($maintenanceWarnings) {
-            admin_log_event('warning', 'gallery.reorder_maintenance_warning', t('admin.galleries.log_reorder_refresh_warning'), [
-                'warnings' => array_values(array_unique($maintenanceWarnings)),
-            ]);
-            admin_reorder_galleries_response(true, t('admin.galleries.reorder_saved_with_warning'), $jsonResponseBufferStarted);
+            admin_log_event(
+                'warning',
+                'gallery.reorder_maintenance_warning',
+                t('admin.galleries.log_reorder_refresh_warning'),
+                [
+                    'warnings' => array_values(array_unique(
+                        $maintenanceWarnings,
+                    )),
+                ],
+            );
+            admin_reorder_galleries_response(
+                true,
+                t('admin.galleries.reorder_saved_with_warning'),
+                $jsonResponseBufferStarted,
+            );
             return;
         }
 
-        admin_reorder_galleries_response(true, $movedCount > 0 ? t('admin.galleries.reorder_moved_saved') : t('admin.galleries.reorder_order_saved'), $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(
+            true,
+            $movedCount > 0
+                ? t('admin.galleries.reorder_moved_saved')
+                : t('admin.galleries.reorder_order_saved'),
+            $jsonResponseBufferStarted,
+        );
     } catch (Throwable $exception) {
-        admin_log_event('error', 'gallery.reorder_failed', t('admin.galleries.log_reorder_failed'), [
-            'error' => $exception->getMessage(),
-            'exception_class' => get_class($exception),
-            'previous_error' => $exception->getPrevious() ? $exception->getPrevious()->getMessage() : null,
-            'submitted_entries' => $submittedEntries,
-            'moved_before_failure' => $movedCount,
-            'active_move' => $activeMoveDiagnostics,
-            'move_diagnostics' => $reorderDiagnostics,
-            'gallery_root' => gallery_path_diagnostics('', 'configured gallery root'),
-        ]);
-        admin_reorder_galleries_response(false, admin_reorder_galleries_user_error_message($exception), $jsonResponseBufferStarted);
+        admin_log_event(
+            'error',
+            'gallery.reorder_failed',
+            t('admin.galleries.log_reorder_failed'),
+            [
+                'error' => $exception->getMessage(),
+                'exception_class' => get_class($exception),
+                'previous_error' => $exception->getPrevious()
+                    ? $exception->getPrevious()->getMessage()
+                    : null,
+                'submitted_entries' => $submittedEntries,
+                'moved_before_failure' => $movedCount,
+                'active_move' => $activeMoveDiagnostics,
+                'move_diagnostics' => $reorderDiagnostics,
+                'gallery_root' => gallery_path_diagnostics(
+                    '',
+                    'configured gallery root',
+                ),
+            ],
+        );
+        admin_reorder_galleries_response(
+            false,
+            admin_reorder_galleries_user_error_message($exception),
+            $jsonResponseBufferStarted,
+        );
     }
 }
 
@@ -318,14 +416,17 @@ function cms_admin_reorder_galleries(): void
  *
  * @param int $galleryId Gallery identifier.
  * @param ?int $parentId Parent id identifier.
- * @return array Structured result data for the caller.
+ * @return array{gallery_id:int,requested_parent_id:?int,gallery_found:bool,parent_found:bool,gallery_title?:string,old_parent_id?:?int,old_folder_path?:string,expected_new_folder_path?:string,folder_name?:string,parent_title?:?string,parent_folder_path?:?string,source_path?:array<string,mixed>,target_path?:array<string,mixed>,parent_path?:array<string,mixed>} Diagnostic context for the move, with path details when the gallery exists.
  */
-function admin_gallery_reorder_move_diagnostics(int $galleryId, ?int $parentId): array
-{
+function admin_gallery_reorder_move_diagnostics(
+    int $galleryId,
+    ?int $parentId,
+): array {
     // $gallery stores the gallery row before the filesystem move is attempted.
     $gallery = find_gallery($galleryId);
     // $parent stores the requested parent row before the filesystem move is attempted.
-    $parent = $parentId !== null && $parentId > 0 ? find_gallery($parentId) : null;
+    $parent =
+        $parentId !== null && $parentId > 0 ? find_gallery($parentId) : null;
     // $diagnostics stores the full context used by admin logs.
     $diagnostics = [
         'gallery_id' => $galleryId,
@@ -343,22 +444,33 @@ function admin_gallery_reorder_move_diagnostics(int $galleryId, ?int $parentId):
     // $folderName stores the final directory segment that should be preserved when the gallery is moved.
     $folderName = gallery_folder_name_from_path($oldPath);
     // $newPath stores the expected destination path based on the submitted parent id.
-    $newPath = $parent ? normalize_relative_path((string) $parent['folder_path'] . '/' . $folderName) : $folderName;
+    $newPath = $parent
+        ? normalize_relative_path(
+            (string) $parent['folder_path'] . '/' . $folderName,
+        )
+        : $folderName;
 
     $diagnostics += [
         'gallery_title' => (string) ($gallery['title'] ?? ''),
-        'old_parent_id' => isset($gallery['parent_id']) ? (int) $gallery['parent_id'] : null,
+        'old_parent_id' => isset($gallery['parent_id'])
+            ? (int) $gallery['parent_id']
+            : null,
         'old_folder_path' => $oldPath,
         'expected_new_folder_path' => $newPath,
         'folder_name' => $folderName,
         'parent_title' => $parent ? (string) ($parent['title'] ?? '') : null,
-        'parent_folder_path' => $parent ? normalize_relative_path((string) $parent['folder_path']) : null,
+        'parent_folder_path' => $parent
+            ? normalize_relative_path((string) $parent['folder_path'])
+            : null,
         'source_path' => gallery_path_diagnostics($oldPath, 'move source'),
         'target_path' => gallery_path_diagnostics($newPath, 'move target'),
     ];
 
     if ($parent) {
-        $diagnostics['parent_path'] = gallery_path_diagnostics((string) $parent['folder_path'], 'requested parent');
+        $diagnostics['parent_path'] = gallery_path_diagnostics(
+            (string) $parent['folder_path'],
+            'requested parent',
+        );
     }
 
     return $diagnostics;
@@ -378,16 +490,31 @@ function admin_reorder_galleries_user_error_message(Throwable $exception): strin
     if (str_contains($message, 'outside the configured root')) {
         return t('admin.galleries.reorder_error_folder_outside_root');
     }
-    if (str_contains($message, 'target parent is outside the configured root or does not exist')) {
+    if (str_contains(
+        $message,
+        'target parent is outside the configured root or does not exist',
+    )) {
         return t('admin.galleries.reorder_error_destination_unavailable');
     }
-    if (str_contains($message, 'Gallery target path is outside the configured root')) {
+    if (str_contains(
+        $message,
+        'Gallery target path is outside the configured root',
+    )) {
         return t('admin.galleries.reorder_error_destination_outside_root');
     }
-    if (str_contains($message, 'Current gallery folder does not exist on disk')) {
+    if (str_contains(
+        $message,
+        'Current gallery folder does not exist on disk',
+    )) {
         return t('admin.galleries.reorder_error_folder_missing');
     }
-    if (str_contains($message, 'Destination folder already exists on disk') || str_contains($message, 'Another gallery already uses the destination folder path')) {
+    if (
+        str_contains($message, 'Destination folder already exists on disk')
+        || str_contains(
+            $message,
+            'Another gallery already uses the destination folder path',
+        )
+    ) {
         return t('admin.galleries.reorder_error_destination_exists');
     }
     if (str_contains($message, 'own subgalleries')) {
@@ -405,10 +532,14 @@ function admin_reorder_galleries_user_error_message(Throwable $exception): strin
  *
  * @param bool $ok Whether the operation completed successfully.
  * @param string $message Human-readable result message.
- * @param bool $cleanBufferedOutput Clean buffered output value.
+ * @param bool $cleanBufferedOutput Whether to discard and log buffered output.
+ * @return void Emit the JSON response and discard captured diagnostics.
  */
-function admin_reorder_galleries_response(bool $ok, string $message, bool $cleanBufferedOutput = false): void
-{
+function admin_reorder_galleries_response(
+    bool $ok,
+    string $message,
+    bool $cleanBufferedOutput = false,
+): void {
     // $unexpectedOutput stores accidental HTML warnings or notices generated
     // before the JSON response. This keeps the browser-side fetch parser from
     // seeing "<br /><b>Warning" before the actual JSON object.
@@ -418,12 +549,21 @@ function admin_reorder_galleries_response(bool $ok, string $message, bool $clean
     }
 
     if ($unexpectedOutput !== '') {
-        admin_log_event($ok ? 'warning' : 'error', 'gallery.reorder_response_output_discarded', 'Gallery reorder generated output before its JSON response.', [
-            'operation_saved' => $ok,
-            'message' => $message,
-            'discarded_output_preview' => mb_substr(trim(strip_tags($unexpectedOutput)), 0, 1000),
-            'discarded_output_bytes' => strlen($unexpectedOutput),
-        ]);
+        admin_log_event(
+            $ok ? 'warning' : 'error',
+            'gallery.reorder_response_output_discarded',
+            'Gallery reorder generated output before its JSON response.',
+            [
+                'operation_saved' => $ok,
+                'message' => $message,
+                'discarded_output_preview' => mb_substr(
+                    trim(strip_tags($unexpectedOutput)),
+                    0,
+                    1000,
+                ),
+                'discarded_output_bytes' => strlen($unexpectedOutput),
+            ],
+        );
     }
 
     header('Content-Type: application/json');
@@ -444,9 +584,17 @@ function admin_reorder_galleries_response(bool $ok, string $message, bool $clean
  * @param int $visibleCount Number of ids rendered on the visible page.
  * @return array<int>|null Complete order after the visible slice is replaced, or null when validation fails.
  */
-function admin_visible_page_reordered_ids(array $currentIds, array $submittedIds, int $visibleOffset, int $visibleCount): ?array
-{
-    if ($visibleOffset < 0 || $visibleCount < 1 || count($submittedIds) !== $visibleCount) {
+function admin_visible_page_reordered_ids(
+    array $currentIds,
+    array $submittedIds,
+    int $visibleOffset,
+    int $visibleCount,
+): ?array {
+    if (
+        $visibleOffset < 0
+        || $visibleCount < 1
+        || count($submittedIds) !== $visibleCount
+    ) {
         return null;
     }
 
@@ -490,14 +638,19 @@ function admin_decode_reorder_id_list(string $rawOrder): ?array
     }
 
     // $submittedIds stores the positive ids in their submitted order.
-    $submittedIds = array_values(array_filter(array_map('intval', $decodedOrder), static fn (int $id): bool => $id > 0));
-    if (!$submittedIds || count($submittedIds) !== count(array_unique($submittedIds))) {
+    $submittedIds = array_values(array_filter(
+        array_map('intval', $decodedOrder),
+        static fn(int $id): bool => $id > 0,
+    ));
+    if (
+        !$submittedIds
+        || count($submittedIds) !== count(array_unique($submittedIds))
+    ) {
         return null;
     }
 
     return $submittedIds;
 }
-
 
 /**
  * Persist a date-based order for direct subgalleries from a public gallery page.
@@ -506,6 +659,8 @@ function admin_decode_reorder_id_list(string $rawOrder): ?array
  * rewrites sort_order for the complete direct-child set of the current gallery,
  * using the same date-sort algorithm as the public preview: only rows with a
  * filled start date move, and undated rows keep their current positions.
+ *
+ * @return void Save the order or report the outcome and redirect to the gallery.
  */
 function cms_admin_sort_public_subgalleries_by_date(): void
 {
@@ -524,7 +679,10 @@ function cms_admin_sort_public_subgalleries_by_date(): void
     }
 
     if (!in_array($sortMode, ['asc', 'desc'], true)) {
-        flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_invalid', 'Choose a valid date sort direction before saving.'));
+        flash_message('public_notice', t(
+            'admin.galleries.public_subgallery_date_sort_invalid',
+            'Choose a valid date sort direction before saving.',
+        ));
         redirect_to(gallery_public_url($parentGallery));
     }
 
@@ -533,32 +691,64 @@ function cms_admin_sort_public_subgalleries_by_date(): void
     // $datedCount stores how many children can participate in the persistent date sort.
     $datedCount = gallery_count_dated_rows($currentRows);
     if ($datedCount < 2) {
-        flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_not_enough', 'At least two direct subgalleries with a filled From date are required before date sorting can be saved.'));
+        flash_message('public_notice', t(
+            'admin.galleries.public_subgallery_date_sort_not_enough',
+            'At least two direct subgalleries with a filled From date are required before date sorting can be saved.',
+        ));
         redirect_to(gallery_public_url($parentGallery));
     }
 
     // $sortedRows stores the final direct-child order after date sorting only the dated positions.
-    $sortedRows = gallery_sort_rows_by_date_preserving_undated_positions($currentRows, $sortMode);
+    $sortedRows = gallery_sort_rows_by_date_preserving_undated_positions(
+        $currentRows,
+        $sortMode,
+    );
     // $sortedIds stores the direct-child ids in the order that will become the real public order.
-    $sortedIds = array_map(static fn (array $gallery): int => (int) $gallery['id'], $sortedRows);
+    $sortedIds = array_map(
+        static fn(array $gallery): int => (int) $gallery['id'],
+        $sortedRows,
+    );
 
     try {
         gallery_reorder_save_child_order($parentGalleryId, $sortedIds);
 
-        admin_log_event('info', 'gallery.public_subgallery_date_sorted', t('admin.galleries.log_public_subgallery_date_sorted', 'Public subgalleries were sorted by date.'), [
-            'parent_gallery_id' => $parentGalleryId,
-            'sort_mode' => $sortMode,
-            'dated_count' => $datedCount,
-            'sorted_gallery_ids' => $sortedIds,
-        ]);
-        flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_saved', 'Subgallery date order was saved. This is now the real order for all visitors.'));
+        admin_log_event(
+            'info',
+            'gallery.public_subgallery_date_sorted',
+            t(
+                'admin.galleries.log_public_subgallery_date_sorted',
+                'Public subgalleries were sorted by date.',
+            ),
+            [
+                'parent_gallery_id' => $parentGalleryId,
+                'sort_mode' => $sortMode,
+                'dated_count' => $datedCount,
+                'sorted_gallery_ids' => $sortedIds,
+            ],
+        );
+        flash_message('public_notice', t(
+            'admin.galleries.public_subgallery_date_sort_saved',
+            'Subgallery date order was saved. This is now the real order for all visitors.',
+        ));
     } catch (Throwable $exception) {
-        admin_log_event('error', 'gallery.public_subgallery_date_sort_failed', t('admin.galleries.log_public_subgallery_date_sort_failed', 'Public subgallery date sort failed.'), [
-            'parent_gallery_id' => $parentGalleryId,
-            'sort_mode' => $sortMode,
-            'error' => $exception->getMessage(),
-        ]);
-        flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_failed_with_error', 'Subgallery date order could not be saved: {error}', ['error' => $exception->getMessage()]));
+        admin_log_event(
+            'error',
+            'gallery.public_subgallery_date_sort_failed',
+            t(
+                'admin.galleries.log_public_subgallery_date_sort_failed',
+                'Public subgallery date sort failed.',
+            ),
+            [
+                'parent_gallery_id' => $parentGalleryId,
+                'sort_mode' => $sortMode,
+                'error' => $exception->getMessage(),
+            ],
+        );
+        flash_message('public_notice', t(
+            'admin.galleries.public_subgallery_date_sort_failed_with_error',
+            'Subgallery date order could not be saved: {error}',
+            ['error' => $exception->getMessage()],
+        ));
     }
 
     redirect_to(gallery_public_url($parentGallery));
@@ -571,6 +761,8 @@ function cms_admin_sort_public_subgalleries_by_date(): void
  * It never changes parent_id values and never nests galleries. It only reshuffles
  * the direct children of the gallery currently being viewed, and only when the
  * submitted ids match the visible pagination slice rendered into the page.
+ *
+ * @return void Save the visible order or send an error response.
  */
 function cms_admin_reorder_public_galleries(): void
 {
@@ -587,9 +779,14 @@ function cms_admin_reorder_public_galleries(): void
     }
 
     // $submittedIds stores the visible subgallery ids in their new browser order.
-    $submittedIds = admin_decode_reorder_id_list((string) ($_POST['gallery_order'] ?? '[]'));
+    $submittedIds = admin_decode_reorder_id_list(
+        (string) ($_POST['gallery_order'] ?? '[]'),
+    );
     if ($submittedIds === null) {
-        admin_reorder_public_page_response(false, t('admin.galleries.public_subgallery_reorder_invalid'));
+        admin_reorder_public_page_response(
+            false,
+            t('admin.galleries.public_subgallery_reorder_invalid'),
+        );
         return;
     }
 
@@ -600,30 +797,56 @@ function cms_admin_reorder_public_galleries(): void
     // $currentRows stores every direct child currently owned by this parent gallery.
     $currentRows = child_galleries($parentGalleryId, false);
     // $currentIds stores the complete direct-child order before the requested change.
-    $currentIds = array_map(static fn (array $gallery): int => (int) $gallery['id'], $currentRows);
+    $currentIds = array_map(
+        static fn(array $gallery): int => (int) $gallery['id'],
+        $currentRows,
+    );
     // $nextIds stores the full direct-child order with only the current visible page rearranged.
-    $nextIds = admin_visible_page_reordered_ids($currentIds, $submittedIds, $visibleOffset, $visibleCount);
+    $nextIds = admin_visible_page_reordered_ids(
+        $currentIds,
+        $submittedIds,
+        $visibleOffset,
+        $visibleCount,
+    );
     if ($nextIds === null) {
-        admin_reorder_public_page_response(false, t('admin.galleries.public_subgallery_page_changed'));
+        admin_reorder_public_page_response(
+            false,
+            t('admin.galleries.public_subgallery_page_changed'),
+        );
         return;
     }
 
     try {
         gallery_reorder_save_child_order($parentGalleryId, $nextIds);
 
-        admin_log_event('info', 'gallery.public_page_reordered', t('admin.galleries.log_public_page_reordered'), [
-            'parent_gallery_id' => $parentGalleryId,
-            'visible_offset' => $visibleOffset,
-            'visible_count' => $visibleCount,
-            'submitted_gallery_ids' => $submittedIds,
-        ]);
-        admin_reorder_public_page_response(true, t('admin.galleries.public_subgallery_order_saved'));
+        admin_log_event(
+            'info',
+            'gallery.public_page_reordered',
+            t('admin.galleries.log_public_page_reordered'),
+            [
+                'parent_gallery_id' => $parentGalleryId,
+                'visible_offset' => $visibleOffset,
+                'visible_count' => $visibleCount,
+                'submitted_gallery_ids' => $submittedIds,
+            ],
+        );
+        admin_reorder_public_page_response(
+            true,
+            t('admin.galleries.public_subgallery_order_saved'),
+        );
     } catch (Throwable $exception) {
-        admin_log_event('error', 'gallery.public_page_reorder_failed', t('admin.galleries.log_public_page_reorder_failed'), [
-            'parent_gallery_id' => $parentGalleryId,
+        admin_log_event(
+            'error',
+            'gallery.public_page_reorder_failed',
+            t('admin.galleries.log_public_page_reorder_failed'),
+            [
+                'parent_gallery_id' => $parentGalleryId,
+                'error' => $exception->getMessage(),
+            ],
+        );
+        admin_reorder_public_page_response(false, t('admin.galleries.public_subgallery_reorder_failed_with_error', [
             'error' => $exception->getMessage(),
-        ]);
-        admin_reorder_public_page_response(false, t('admin.galleries.public_subgallery_reorder_failed_with_error', ['error' => $exception->getMessage()]));
+        ]));
     }
 }
 

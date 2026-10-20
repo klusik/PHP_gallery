@@ -17,16 +17,27 @@ declare(strict_types=1);
  * @param bool $initialize Whether this parent owns table creation before workers start.
  * @return PDO Independent SQLite connection; missing required PDO support or invalid migration DDL fails the fixture.
  */
-function cache_registry_fixture_database(string $root, bool $initialize = true): PDO
-{
-    $database = new PDO('sqlite:' . $root . '/registry.sqlite', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+function cache_registry_fixture_database(
+    string $root,
+    bool $initialize = true,
+): PDO {
+    $database = new PDO('sqlite:' . $root . '/registry.sqlite', null, null, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    ]);
     if ($initialize) {
-        $definitions = require dirname(__DIR__, 2) . '/database/migrations/202610150001_cache_lifecycle_regions.php';
+        $definitions = require
+            dirname(__DIR__, 2)
+                . '/database/migrations/202610150001_cache_lifecycle_regions.php';
         $sql = $definitions[0];
         $sql = str_replace(' CHARACTER SET ascii COLLATE ascii_bin', '', $sql);
-        $sql = preg_replace('/,\\s*KEY cache_lifecycle_regions_due \\([^)]*\\)/', '', $sql);
+        $sql = preg_replace(
+            '/,\\s*KEY cache_lifecycle_regions_due \\([^)]*\\)/',
+            '',
+            $sql,
+        );
         $sql = preg_replace('/\\) ENGINE=InnoDB.*$/s', ')', $sql);
-        if (!is_string($sql)) throw new RuntimeException('Fixture migration conversion failed.');
+        if (!is_string($sql))
+            throw new RuntimeException('Fixture migration conversion failed.');
         $database->exec($sql);
     }
     return $database;

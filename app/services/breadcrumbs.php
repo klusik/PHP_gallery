@@ -102,20 +102,31 @@ function breadcrumb_style_registry(): array
  * @param string $inheritedStyle Effective Theme style shown by the inheritance example.
  * @return list<array{value:string,label:string,preview:array{items:list<array{label:string,url:?string,current:bool}>,aria_label:string,style_class:string}}> Prepared choices rendered by the shared style picker.
  */
-function breadcrumb_style_picker_options(bool $allowInherit = false, string $inheritedStyle = BREADCRUMB_STYLE_DEFAULT): array
-{
+function breadcrumb_style_picker_options(
+    bool $allowInherit = false,
+    string $inheritedStyle = BREADCRUMB_STYLE_DEFAULT,
+): array {
     $registry = breadcrumb_style_registry();
     $items = [
         ['label' => t('breadcrumbs.preview.home', 'Home')],
         ['label' => t('breadcrumbs.preview.gallery', 'Travel')],
-        ['label' => t('breadcrumbs.preview.current', 'Photos'), 'current' => true],
+        [
+            'label' => t('breadcrumbs.preview.current', 'Photos'),
+            'current' => true,
+        ],
     ];
     $options = [];
     if ($allowInherit) {
         $effectiveStyle = breadcrumb_style_normalize($inheritedStyle);
         $options[] = [
             'value' => BREADCRUMB_STYLE_INHERIT,
-            'label' => t('admin.gallery_editor.breadcrumb_style_inherit', 'Inherit from Theme') . ' — ' . $registry[$effectiveStyle]['label'],
+            'label' =>
+                t(
+                    'admin.gallery_editor.breadcrumb_style_inherit',
+                    'Inherit from Theme',
+                )
+                    . ' — '
+                    . $registry[$effectiveStyle]['label'],
             'preview' => breadcrumb_view_model($items, $effectiveStyle, ''),
         ];
     }
@@ -136,10 +147,14 @@ function breadcrumb_style_picker_options(bool $allowInherit = false, string $inh
  * @param bool $allowInherit Whether the gallery inheritance sentinel is accepted.
  * @return string Supported style ID, or inherit when explicitly allowed.
  */
-function breadcrumb_style_normalize(mixed $value, bool $allowInherit = false): string
-{
+function breadcrumb_style_normalize(
+    mixed $value,
+    bool $allowInherit = false,
+): string {
     if (!is_string($value) && !is_int($value)) {
-        return $allowInherit ? BREADCRUMB_STYLE_INHERIT : BREADCRUMB_STYLE_DEFAULT;
+        return $allowInherit
+            ? BREADCRUMB_STYLE_INHERIT
+            : BREADCRUMB_STYLE_DEFAULT;
     }
 
     $style = strtolower(trim((string) $value));
@@ -161,8 +176,10 @@ function breadcrumb_style_normalize(mixed $value, bool $allowInherit = false): s
  * @param scalar|array<array-key,mixed>|object|resource|null $themeStyle Theme style preference.
  * @return string Resolved supported breadcrumb style ID.
  */
-function breadcrumb_style_resolve(mixed $galleryStyle = null, mixed $themeStyle = null): string
-{
+function breadcrumb_style_resolve(
+    mixed $galleryStyle = null,
+    mixed $themeStyle = null,
+): string {
     $normalizedGalleryStyle = breadcrumb_style_normalize($galleryStyle, true);
     if ($normalizedGalleryStyle !== BREADCRUMB_STYLE_INHERIT) {
         return $normalizedGalleryStyle;
@@ -179,7 +196,10 @@ function breadcrumb_style_resolve(mixed $galleryStyle = null, mixed $themeStyle 
  */
 function theme_breadcrumb_style(): string
 {
-    return breadcrumb_style_normalize(app_setting('theme_breadcrumb_style', BREADCRUMB_STYLE_DEFAULT));
+    return breadcrumb_style_normalize(app_setting(
+        'theme_breadcrumb_style',
+        BREADCRUMB_STYLE_DEFAULT,
+    ));
 }
 
 /**
@@ -195,8 +215,11 @@ function gallery_breadcrumb_style_override(int $galleryId): string
     }
 
     return breadcrumb_style_normalize(
-        app_setting('gallery_breadcrumb_style.' . $galleryId, BREADCRUMB_STYLE_INHERIT),
-        true
+        app_setting(
+            'gallery_breadcrumb_style.' . $galleryId,
+            BREADCRUMB_STYLE_INHERIT,
+        ),
+        true,
     );
 }
 
@@ -221,7 +244,10 @@ function gallery_breadcrumb_style(?array $gallery = null): string
         return $themeStyle;
     }
 
-    return breadcrumb_style_resolve(gallery_breadcrumb_style_override($galleryId), $themeStyle);
+    return breadcrumb_style_resolve(
+        gallery_breadcrumb_style_override($galleryId),
+        $themeStyle,
+    );
 }
 
 /**
@@ -234,14 +260,18 @@ function gallery_breadcrumb_style(?array $gallery = null): string
 function gallery_breadcrumb_style_validate(mixed $value): string
 {
     if (!is_string($value)) {
-        throw new \InvalidArgumentException('The submitted breadcrumb style is not supported.');
+        throw new \InvalidArgumentException(
+            'The submitted breadcrumb style is not supported.',
+        );
     }
 
     $styleId = trim($value);
     $allowedStyles = array_keys(breadcrumb_style_registry());
     $allowedStyles[] = BREADCRUMB_STYLE_INHERIT;
     if (!in_array($styleId, $allowedStyles, true)) {
-        throw new \InvalidArgumentException('The submitted breadcrumb style is not supported.');
+        throw new \InvalidArgumentException(
+            'The submitted breadcrumb style is not supported.',
+        );
     }
 
     return breadcrumb_style_normalize($styleId, true);
@@ -257,7 +287,9 @@ function gallery_breadcrumb_style_validate(mixed $value): string
 function gallery_breadcrumb_style_save(int $galleryId, mixed $value): string
 {
     if ($galleryId < 1) {
-        throw new \InvalidArgumentException('A valid gallery is required to save its breadcrumb style.');
+        throw new \InvalidArgumentException(
+            'A valid gallery is required to save its breadcrumb style.',
+        );
     }
 
     $normalizedStyle = gallery_breadcrumb_style_validate($value);
@@ -273,8 +305,11 @@ function gallery_breadcrumb_style_save(int $galleryId, mixed $value): string
  * @param string $label Accessible navigation label.
  * @return array{items:list<array{label:string,url:?string,current:bool}>,aria_label:string,style_class:string} Presentation-ready breadcrumb state.
  */
-function breadcrumb_view_model(array $items, string $style, string $label): array
-{
+function breadcrumb_view_model(
+    array $items,
+    string $style,
+    string $label,
+): array {
     $registry = breadcrumb_style_registry();
     $styleId = breadcrumb_style_normalize($style);
     $normalizedItems = [];

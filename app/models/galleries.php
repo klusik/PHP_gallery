@@ -87,7 +87,9 @@ use function Gallery\Core\slugify;
  */
 function gallery_model_has_any(): bool
 {
-    return db()->query('SELECT 1 FROM galleries LIMIT 1')->fetchColumn() !== false;
+    return (
+        db()->query('SELECT 1 FROM galleries LIMIT 1')->fetchColumn() !== false
+    );
 }
 
 /**
@@ -102,7 +104,9 @@ function gallery_model_has_any(): bool
 function gallery_model_catalog_path_owner(string $folderPath): int
 {
     $prefix = rtrim($folderPath, '/') . '/';
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE folder_path = ? OR LEFT(folder_path, CHAR_LENGTH(?)) = ? ORDER BY id LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT id FROM galleries WHERE folder_path = ? OR LEFT(folder_path, CHAR_LENGTH(?)) = ? ORDER BY id LIMIT 1',
+    );
     $stmt->execute([$folderPath, $prefix, $prefix]);
     return (int) $stmt->fetchColumn();
 }
@@ -123,8 +127,12 @@ function gallery_model_catalog_path_owner(string $folderPath): int
  * @return int Number of rows reported as changed by the database driver.
  * @throws InvalidArgumentException For an unsupported column in a nonempty selection.
  */
-function gallery_model_update_scalar_for_ids(array $galleryIds, string $column, mixed $value, string $now): int
-{
+function gallery_model_update_scalar_for_ids(
+    array $galleryIds,
+    string $column,
+    mixed $value,
+    string $now,
+): int {
     if ($galleryIds === []) {
         return 0;
     }
@@ -137,11 +145,19 @@ function gallery_model_update_scalar_for_ids(array $galleryIds, string $column, 
         'picture_game_enabled',
     ];
     if (!in_array($column, $allowedColumns, true)) {
-        throw new InvalidArgumentException('Unsupported gallery bulk-update column.');
+        throw new InvalidArgumentException(
+            'Unsupported gallery bulk-update column.',
+        );
     }
 
     $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
-    $stmt = db()->prepare('UPDATE galleries SET ' . $column . ' = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id IN (' . $placeholders . ')');
+    $stmt = db()->prepare(
+        'UPDATE galleries SET '
+            . $column
+            . ' = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id IN ('
+            . $placeholders
+            . ')',
+    );
     $stmt->execute(array_merge([$value, $now], $galleryIds));
     return $stmt->rowCount();
 }
@@ -157,9 +173,17 @@ function gallery_model_update_scalar_for_ids(array $galleryIds, string $column, 
  * @param string $now Shared SQL timestamp.
  * @return int Number of rows reported as changed.
  */
-function gallery_model_set_visibility(array $galleryIds, string $visibility, string $now): int
-{
-    return gallery_model_update_scalar_for_ids($galleryIds, 'visibility', $visibility, $now);
+function gallery_model_set_visibility(
+    array $galleryIds,
+    string $visibility,
+    string $now,
+): int {
+    return gallery_model_update_scalar_for_ids(
+        $galleryIds,
+        'visibility',
+        $visibility,
+        $now,
+    );
 }
 
 /**
@@ -173,9 +197,17 @@ function gallery_model_set_visibility(array $galleryIds, string $visibility, str
  * @param string $now Shared SQL timestamp.
  * @return int Number of rows reported as changed.
  */
-function gallery_model_set_gps_map_enabled(array $galleryIds, ?bool $enabled, string $now): int
-{
-    return gallery_model_update_scalar_for_ids($galleryIds, 'gps_map_enabled', $enabled === null ? null : ($enabled ? 1 : 0), $now);
+function gallery_model_set_gps_map_enabled(
+    array $galleryIds,
+    ?bool $enabled,
+    string $now,
+): int {
+    return gallery_model_update_scalar_for_ids(
+        $galleryIds,
+        'gps_map_enabled',
+        $enabled === null ? null : ($enabled ? 1 : 0),
+        $now,
+    );
 }
 
 /**
@@ -189,9 +221,17 @@ function gallery_model_set_gps_map_enabled(array $galleryIds, ?bool $enabled, st
  * @param string $now Shared SQL timestamp.
  * @return int Number of rows reported as changed.
  */
-function gallery_model_set_voting_enabled(array $galleryIds, bool $enabled, string $now): int
-{
-    return gallery_model_update_scalar_for_ids($galleryIds, 'voting_enabled', $enabled ? 1 : 0, $now);
+function gallery_model_set_voting_enabled(
+    array $galleryIds,
+    bool $enabled,
+    string $now,
+): int {
+    return gallery_model_update_scalar_for_ids(
+        $galleryIds,
+        'voting_enabled',
+        $enabled ? 1 : 0,
+        $now,
+    );
 }
 
 /**
@@ -204,9 +244,17 @@ function gallery_model_set_voting_enabled(array $galleryIds, bool $enabled, stri
  * @param string $now Shared SQL timestamp.
  * @return int Number of rows reported as changed.
  */
-function gallery_model_set_show_filenames(array $galleryIds, bool $enabled, string $now): int
-{
-    return gallery_model_update_scalar_for_ids($galleryIds, 'show_filenames', $enabled ? 1 : 0, $now);
+function gallery_model_set_show_filenames(
+    array $galleryIds,
+    bool $enabled,
+    string $now,
+): int {
+    return gallery_model_update_scalar_for_ids(
+        $galleryIds,
+        'show_filenames',
+        $enabled ? 1 : 0,
+        $now,
+    );
 }
 
 /**
@@ -220,9 +268,17 @@ function gallery_model_set_show_filenames(array $galleryIds, bool $enabled, stri
  * @param string $now Shared SQL timestamp.
  * @return int Number of rows reported as changed.
  */
-function gallery_model_set_picture_game_enabled(array $galleryIds, bool $enabled, string $now): int
-{
-    return gallery_model_update_scalar_for_ids($galleryIds, 'picture_game_enabled', $enabled ? 1 : 0, $now);
+function gallery_model_set_picture_game_enabled(
+    array $galleryIds,
+    bool $enabled,
+    string $now,
+): int {
+    return gallery_model_update_scalar_for_ids(
+        $galleryIds,
+        'picture_game_enabled',
+        $enabled ? 1 : 0,
+        $now,
+    );
 }
 
 /**
@@ -238,7 +294,9 @@ function gallery_model_set_picture_game_enabled(array $galleryIds, bool $enabled
  */
 function gallery_model_next_child_sort_order(int $parentGalleryId): int
 {
-    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM galleries WHERE parent_id = ?');
+    $stmt = db()->prepare(
+        'SELECT COALESCE(MAX(sort_order), 0) + 10 FROM galleries WHERE parent_id = ?',
+    );
     $stmt->execute([$parentGalleryId]);
     return (int) $stmt->fetchColumn();
 }
@@ -252,9 +310,15 @@ function gallery_model_next_child_sort_order(int $parentGalleryId): int
  * @param int $excludeGalleryId Gallery identifier excluded from the collision check.
  * @return bool True when another gallery already owns the slug.
  */
-function gallery_model_slug_exists(string $slug, int $excludeGalleryId = 0): bool
-{
-    return gallery_model_slug_exists_on_connection(db(), $slug, $excludeGalleryId > 0 ? $excludeGalleryId : null);
+function gallery_model_slug_exists(
+    string $slug,
+    int $excludeGalleryId = 0,
+): bool {
+    return gallery_model_slug_exists_on_connection(
+        db(),
+        $slug,
+        $excludeGalleryId > 0 ? $excludeGalleryId : null,
+    );
 }
 
 /**
@@ -269,8 +333,11 @@ function gallery_model_slug_exists(string $slug, int $excludeGalleryId = 0): boo
  * @param ?int $excludeGalleryId Optional exact identifier excluded from the query.
  * @return bool Whether another row already uses the candidate.
  */
-function gallery_model_slug_exists_on_connection(PDO $connection, string $slug, ?int $excludeGalleryId = null): bool
-{
+function gallery_model_slug_exists_on_connection(
+    PDO $connection,
+    string $slug,
+    ?int $excludeGalleryId = null,
+): bool {
     $sql = 'SELECT id FROM galleries WHERE slug = ?';
     $params = [$slug];
     if ($excludeGalleryId !== null) {
@@ -310,8 +377,11 @@ function gallery_model_slug_exists_on_connection(PDO $connection, string $slug, 
  * @return void Executes one update without returning a row/count or refreshing dependent state.
  * @throws InvalidArgumentException When a supplied field name is outside the fixed allowlist.
  */
-function gallery_model_update_fields(int $galleryId, array $fields, string $now): void
-{
+function gallery_model_update_fields(
+    int $galleryId,
+    array $fields,
+    string $now,
+): void {
     if ($galleryId <= 0 || $fields === []) {
         return;
     }
@@ -358,7 +428,9 @@ function gallery_model_update_fields(int $galleryId, array $fields, string $now)
     $params = [];
     foreach ($fields as $column => $value) {
         if (!is_string($column) || !in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported gallery update field.');
+            throw new InvalidArgumentException(
+                'Unsupported gallery update field.',
+            );
         }
         $assignments[] = $column . ' = ?';
         $params[] = $value;
@@ -368,7 +440,9 @@ function gallery_model_update_fields(int $galleryId, array $fields, string $now)
     $assignments[] = 'edit_revision = edit_revision + 1';
     $params[] = $galleryId;
 
-    $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', $assignments) . ' WHERE id = ?');
+    $stmt = db()->prepare(
+        'UPDATE galleries SET ' . implode(', ', $assignments) . ' WHERE id = ?',
+    );
     $stmt->execute($params);
 }
 
@@ -384,7 +458,10 @@ function gallery_model_update_fields(int $galleryId, array $fields, string $now)
 function gallery_model_picker_rows(bool $secondaryTitleSort = false): array
 {
     $order = $secondaryTitleSort ? 'folder_path, title' : 'folder_path';
-    return db()->query('SELECT id, title, folder_path FROM galleries ORDER BY ' . $order)->fetchAll();
+    return db()
+        ->query('SELECT id, title, folder_path FROM galleries ORDER BY '
+            . $order)
+        ->fetchAll();
 }
 
 /**
@@ -402,17 +479,27 @@ function gallery_model_picker_rows(bool $secondaryTitleSort = false): array
  * @param ?array{id:int,created_at:string} $before Exclusive descending keyset cursor.
  * @return list<array{id:int|string,parent_id:int|string|null,title:string,created_at:string}> Raw naming candidates ordered by created_at DESC then id DESC; no visibility/access filtering or normalization.
  */
-function gallery_model_title_completion_rows(int $parentGalleryId = 0, bool $siblings = true, int $limit = 512, ?array $before = null): array
-{
+function gallery_model_title_completion_rows(
+    int $parentGalleryId = 0,
+    bool $siblings = true,
+    int $limit = 512,
+    ?array $before = null,
+): array {
     $limit = max(1, min(513, $limit));
     $params = [];
     if ($parentGalleryId > 0) {
-        $scope = $siblings ? 'parent_id = ?' : '(parent_id IS NULL OR parent_id <> ?)';
+        $scope = $siblings
+            ? 'parent_id = ?'
+            : '(parent_id IS NULL OR parent_id <> ?)';
         $params[] = $parentGalleryId;
     } else {
-        $scope = $siblings ? '(parent_id IS NULL OR parent_id = 0)' : 'parent_id > 0';
+        $scope = $siblings
+            ? '(parent_id IS NULL OR parent_id = 0)'
+            : 'parent_id > 0';
     }
-    $sql = 'SELECT id, parent_id, title, created_at FROM galleries WHERE ' . $scope;
+    $sql =
+        'SELECT id, parent_id, title, created_at FROM galleries WHERE '
+        . $scope;
     if ($before !== null) {
         $sql .= ' AND (created_at < ? OR (created_at = ? AND id < ?))';
         $params[] = (string) $before['created_at'];
@@ -435,7 +522,9 @@ function gallery_model_title_completion_rows(int $parentGalleryId = 0, bool $sib
  */
 function gallery_model_likely_destination_id(int $sourceGalleryId): int
 {
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE parent_id = ? ORDER BY sort_order, title, id LIMIT 1');
+    $stmt = db()->prepare(
+        'SELECT id FROM galleries WHERE parent_id = ? ORDER BY sort_order, title, id LIMIT 1',
+    );
     $stmt->execute([$sourceGalleryId]);
     return (int) ($stmt->fetchColumn() ?: 0);
 }
@@ -451,13 +540,19 @@ function gallery_model_likely_destination_id(int $sourceGalleryId): int
  * @param int $galleryId Optional gallery identifier restriction.
  * @return GalleryDatabaseRow|null Raw sensitive row, or null when the hash/ID lookup finds nothing.
  */
-function gallery_model_find_by_access_token_hash(string $tokenHash, int $galleryId = 0): ?array
-{
+function gallery_model_find_by_access_token_hash(
+    string $tokenHash,
+    int $galleryId = 0,
+): ?array {
     if ($galleryId > 0) {
-        $stmt = db()->prepare('SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? LIMIT 1');
+        $stmt = db()->prepare(
+            'SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? LIMIT 1',
+        );
         $stmt->execute([$galleryId, $tokenHash]);
     } else {
-        $stmt = db()->prepare('SELECT * FROM galleries WHERE access_token_hash = ? ORDER BY updated_at DESC, id DESC LIMIT 1');
+        $stmt = db()->prepare(
+            'SELECT * FROM galleries WHERE access_token_hash = ? ORDER BY updated_at DESC, id DESC LIMIT 1',
+        );
         $stmt->execute([$tokenHash]);
     }
     $row = $stmt->fetch();
@@ -498,14 +593,24 @@ function gallery_model_public_root_rows(bool $requireListedAccess): array
  * @param bool $requireListedAccess Whether root policy requires the verified access_listing column.
  * @return int Full context count, never a paginated subset.
  */
-function gallery_model_mutation_context_count(int $parentGalleryId, bool $requireListedAccess): int
-{
+function gallery_model_mutation_context_count(
+    int $parentGalleryId,
+    bool $requireListedAccess,
+): int {
     if ($parentGalleryId > 0) {
-        $stmt = db()->prepare('SELECT COUNT(*) FROM galleries WHERE parent_id = ?');
+        $stmt = db()->prepare(
+            'SELECT COUNT(*) FROM galleries WHERE parent_id = ?',
+        );
         $stmt->execute([$parentGalleryId]);
     } else {
-        $stmt = db()->query('SELECT COUNT(*) FROM galleries g WHERE g.parent_id IS NULL'
-            . gallery_model_public_listing_filter_sql('g', true, $requireListedAccess));
+        $stmt = db()->query(
+            'SELECT COUNT(*) FROM galleries g WHERE g.parent_id IS NULL'
+                . gallery_model_public_listing_filter_sql(
+                    'g',
+                    true,
+                    $requireListedAccess,
+                ),
+        );
     }
     return max(0, (int) $stmt->fetchColumn());
 }
@@ -521,7 +626,9 @@ function gallery_model_mutation_context_count(int $parentGalleryId, bool $requir
  */
 function gallery_model_clear_background_sources(string $now): int
 {
-    $stmt = db()->prepare('UPDATE galleries SET background_source = NULL, updated_at = ?, edit_revision = edit_revision + 1 WHERE background_source IS NOT NULL');
+    $stmt = db()->prepare(
+        'UPDATE galleries SET background_source = NULL, updated_at = ?, edit_revision = edit_revision + 1 WHERE background_source IS NOT NULL',
+    );
     $stmt->execute([$now]);
     return $stmt->rowCount();
 }
@@ -538,13 +645,18 @@ function gallery_model_clear_background_sources(string $now): int
  * @return string Hardcoded SQL predicate prefixed with AND, or an empty string.
  * @throws InvalidArgumentException If public filtering is requested with an alias other than g.
  */
-function gallery_model_public_listing_filter_sql(string $alias, bool $publicOnly, bool $requireListedAccess): string
-{
+function gallery_model_public_listing_filter_sql(
+    string $alias,
+    bool $publicOnly,
+    bool $requireListedAccess,
+): string {
     if (!$publicOnly) {
         return '';
     }
     if (!in_array($alias, ['g'], true)) {
-        throw new InvalidArgumentException('Unsupported gallery model SQL alias.');
+        throw new InvalidArgumentException(
+            'Unsupported gallery model SQL alias.',
+        );
     }
 
     $sql = " AND {$alias}.visibility = 'public'";
@@ -566,18 +678,28 @@ function gallery_model_public_listing_filter_sql(string $alias, bool $publicOnly
  * @param bool $requireListedAccess Whether public access_listing must be listed.
  * @return list<GalleryDatabaseRow&array{image_count:int|string}> Full sensitive child rows and direct public-image counts; no service access filtering.
  */
-function gallery_model_child_rows_for_parents(array $parentIds, bool $publicOnly, bool $requireListedAccess): array
-{
+function gallery_model_child_rows_for_parents(
+    array $parentIds,
+    bool $publicOnly,
+    bool $requireListedAccess,
+): array {
     if ($parentIds === []) {
         return [];
     }
 
     $placeholders = implode(',', array_fill(0, count($parentIds), '?'));
-    $sql = "SELECT g.*, COUNT(i.id) AS image_count
+    $sql =
+        "SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-        WHERE g.parent_id IN (" . $placeholders . ')'
-        . gallery_model_public_listing_filter_sql('g', $publicOnly, $requireListedAccess)
+        WHERE g.parent_id IN ("
+        . $placeholders
+        . ')'
+        . gallery_model_public_listing_filter_sql(
+            'g',
+            $publicOnly,
+            $requireListedAccess,
+        )
         . ' GROUP BY g.id ORDER BY g.parent_id, g.sort_order, g.title';
     $stmt = db()->prepare($sql);
     $stmt->execute($parentIds);
@@ -597,19 +719,29 @@ function gallery_model_child_rows_for_parents(array $parentIds, bool $publicOnly
  * @param bool $requireListedAccess Whether public access_listing must be listed.
  * @return list<GalleryDatabaseRow&array{image_count:int|string}> Full sensitive descendants ordered by parent_id/sort_order/title; direct public counts are not access authorization.
  */
-function gallery_model_descendant_rows_for_roots(array $rootIds, bool $publicOnly, bool $requireListedAccess): array
-{
+function gallery_model_descendant_rows_for_roots(
+    array $rootIds,
+    bool $publicOnly,
+    bool $requireListedAccess,
+): array {
     if ($rootIds === []) {
         return [];
     }
 
     $placeholders = implode(',', array_fill(0, count($rootIds), '?'));
-    $sql = "SELECT g.*, COUNT(DISTINCT i.id) AS image_count
+    $sql =
+        "SELECT g.*, COUNT(DISTINCT i.id) AS image_count
         FROM galleries root
         JOIN galleries g ON g.folder_path LIKE CONCAT(root.folder_path, '/%')
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-        WHERE root.id IN (" . $placeholders . ')'
-        . gallery_model_public_listing_filter_sql('g', $publicOnly, $requireListedAccess)
+        WHERE root.id IN ("
+        . $placeholders
+        . ')'
+        . gallery_model_public_listing_filter_sql(
+            'g',
+            $publicOnly,
+            $requireListedAccess,
+        )
         . ' GROUP BY g.id ORDER BY g.parent_id, g.sort_order, g.title';
     $stmt = db()->prepare($sql);
     $stmt->execute($rootIds);
@@ -628,18 +760,28 @@ function gallery_model_descendant_rows_for_roots(array $rootIds, bool $publicOnl
  * @param bool $requireListedAccess Whether public access_listing must be listed.
  * @return list<GalleryDatabaseRow&array{root_id:int|string}> Full sensitive member rows with their requested root ID; no image count or deduplication across roots.
  */
-function gallery_model_branch_descendant_rows(array $rootIds, bool $publicOnly, bool $requireListedAccess): array
-{
+function gallery_model_branch_descendant_rows(
+    array $rootIds,
+    bool $publicOnly,
+    bool $requireListedAccess,
+): array {
     if ($rootIds === []) {
         return [];
     }
 
     $placeholders = implode(',', array_fill(0, count($rootIds), '?'));
-    $sql = "SELECT root.id AS root_id, g.*
+    $sql =
+        "SELECT root.id AS root_id, g.*
         FROM galleries root
         JOIN galleries g ON g.folder_path = root.folder_path OR g.folder_path LIKE CONCAT(root.folder_path, '/%')
-        WHERE root.id IN (" . $placeholders . ')'
-        . gallery_model_public_listing_filter_sql('g', $publicOnly, $requireListedAccess);
+        WHERE root.id IN ("
+        . $placeholders
+        . ')'
+        . gallery_model_public_listing_filter_sql(
+            'g',
+            $publicOnly,
+            $requireListedAccess,
+        );
     $stmt = db()->prepare($sql);
     $stmt->execute($rootIds);
     return $stmt->fetchAll();
@@ -687,7 +829,6 @@ function gallery_model_find_by_folder_path_hash(string $folderPathHash): ?array
     return is_array($row) ? $row : null;
 }
 
-
 /**
  * Return nonempty stored gallery folder paths without additional normalization.
  *
@@ -695,13 +836,15 @@ function gallery_model_find_by_folder_path_hash(string $folderPathHash): ?array
  */
 function gallery_model_folder_paths(): array
 {
-    $rows = db()->query('SELECT folder_path FROM galleries')->fetchAll(\PDO::FETCH_COLUMN);
+    $rows = db()
+        ->query('SELECT folder_path FROM galleries')
+        ->fetchAll(\PDO::FETCH_COLUMN);
     return array_values(array_filter(array_map('strval', $rows), /**
      * Exclude only empty path values after converting fetched scalars to strings.
      * @param string $path Stored folder path, not normalized by this filter.
      * @return bool True for any nonempty string, including whitespace.
      * @author Rudolf Klusal
-     */ static fn (string $path): bool => $path !== ''));
+     */ static fn(string $path): bool => $path !== ''));
 }
 
 /**
@@ -715,8 +858,10 @@ function gallery_model_folder_paths(): array
  * @param int $excludeGalleryId Existing gallery identifier excluded from collision checks.
  * @return string Normalized candidate unused by another row at the time of its last lookup.
  */
-function gallery_model_unique_slug(string $title, int $excludeGalleryId = 0): string
-{
+function gallery_model_unique_slug(
+    string $title,
+    int $excludeGalleryId = 0,
+): string {
     $base = slugify($title);
     $slug = $base;
     $counter = 2;
@@ -755,7 +900,9 @@ function gallery_model_unique_slug(string $title, int $excludeGalleryId = 0): st
 function gallery_model_insert(array $fields): int
 {
     if ($fields === []) {
-        throw new InvalidArgumentException('Gallery insert fields cannot be empty.');
+        throw new InvalidArgumentException(
+            'Gallery insert fields cannot be empty.',
+        );
     }
 
     $allowedColumns = [
@@ -796,14 +943,22 @@ function gallery_model_insert(array $fields): int
     $values = [];
     foreach ($fields as $column => $value) {
         if (!is_string($column) || !in_array($column, $allowedColumns, true)) {
-            throw new InvalidArgumentException('Unsupported gallery insert field.');
+            throw new InvalidArgumentException(
+                'Unsupported gallery insert field.',
+            );
         }
         $columns[] = $column;
         $values[] = $value;
     }
 
     $pdo = db();
-    $stmt = $pdo->prepare('INSERT INTO galleries (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
+    $stmt = $pdo->prepare(
+        'INSERT INTO galleries ('
+            . implode(', ', $columns)
+            . ') VALUES ('
+            . implode(', ', array_fill(0, count($columns), '?'))
+            . ')',
+    );
     $stmt->execute($values);
     return (int) $pdo->lastInsertId();
 }
@@ -820,10 +975,14 @@ function gallery_model_insert(array $fields): int
 function gallery_model_prepend_sort_order(int $parentGalleryId): int
 {
     if ($parentGalleryId > 0) {
-        $stmt = db()->prepare('SELECT COALESCE(MIN(sort_order), 0) FROM galleries WHERE parent_id = ?');
+        $stmt = db()->prepare(
+            'SELECT COALESCE(MIN(sort_order), 0) FROM galleries WHERE parent_id = ?',
+        );
         $stmt->execute([$parentGalleryId]);
     } else {
-        $stmt = db()->query('SELECT COALESCE(MIN(sort_order), 0) FROM galleries WHERE parent_id IS NULL');
+        $stmt = db()->query(
+            'SELECT COALESCE(MIN(sort_order), 0) FROM galleries WHERE parent_id IS NULL',
+        );
     }
     return (int) $stmt->fetchColumn() - 10;
 }
@@ -839,7 +998,9 @@ function gallery_model_prepend_sort_order(int $parentGalleryId): int
 function gallery_model_cover_image_path_column_exists(): bool
 {
     try {
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'cover_image_path'");
+        $stmt = db()->query(
+            "SHOW COLUMNS FROM galleries LIKE 'cover_image_path'",
+        );
         return (bool) $stmt->fetch();
     } catch (\Throwable) {
         return false;
@@ -857,9 +1018,14 @@ function gallery_model_cover_image_path_column_exists(): bool
  * @param string $now SQL timestamp written to updated_at.
  * @return void Executes the cover UPDATE; an absent gallery is not reported.
  */
-function gallery_model_set_cover_image_id(int $galleryId, int $imageId, string $now): void
-{
-    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
+function gallery_model_set_cover_image_id(
+    int $galleryId,
+    int $imageId,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'UPDATE galleries SET cover_image_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
+    );
     $stmt->execute([$imageId, $now, $galleryId]);
 }
 
@@ -874,9 +1040,14 @@ function gallery_model_set_cover_image_id(int $galleryId, int $imageId, string $
  * @param string $now SQL timestamp written to updated_at.
  * @return void Executes the path UPDATE; an absent gallery is not reported.
  */
-function gallery_model_set_cover_image_path(int $galleryId, ?string $relativePath, string $now): void
-{
-    $stmt = db()->prepare('UPDATE galleries SET cover_image_path = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?');
+function gallery_model_set_cover_image_path(
+    int $galleryId,
+    ?string $relativePath,
+    string $now,
+): void {
+    $stmt = db()->prepare(
+        'UPDATE galleries SET cover_image_path = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
+    );
     $stmt->execute([$relativePath, $now, $galleryId]);
 }
 
@@ -891,7 +1062,9 @@ function gallery_model_set_cover_image_path(int $galleryId, ?string $relativePat
 function gallery_model_background_source_column_exists(): bool
 {
     try {
-        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'background_source'");
+        $stmt = db()->query(
+            "SHOW COLUMNS FROM galleries LIKE 'background_source'",
+        );
         return (bool) $stmt->fetch();
     } catch (\Throwable) {
         return false;
@@ -907,8 +1080,16 @@ function gallery_model_background_source_column_exists(): bool
 function gallery_model_date_suggestion_rows(bool $includeRangeEnd): array
 {
     $selects = ['id', 'parent_id', 'folder_path', 'title', 'gallery_date'];
-    $selects[] = $includeRangeEnd ? 'gallery_date_end' : 'NULL AS gallery_date_end';
-    return db()->query('SELECT ' . implode(', ', $selects) . ' FROM galleries ORDER BY folder_path')->fetchAll();
+    $selects[] = $includeRangeEnd
+        ? 'gallery_date_end'
+        : 'NULL AS gallery_date_end';
+    return db()
+        ->query(
+            'SELECT '
+                . implode(', ', $selects)
+                . ' FROM galleries ORDER BY folder_path',
+        )
+        ->fetchAll();
 }
 
 /**
@@ -918,7 +1099,9 @@ function gallery_model_date_suggestion_rows(bool $includeRangeEnd): array
  */
 function gallery_model_all_rows_by_folder_path(): array
 {
-    return db()->query('SELECT * FROM galleries ORDER BY folder_path')->fetchAll();
+    return db()
+        ->query('SELECT * FROM galleries ORDER BY folder_path')
+        ->fetchAll();
 }
 
 /**
@@ -932,7 +1115,9 @@ function gallery_model_all_rows_by_folder_path(): array
  */
 function gallery_model_reset_grid_overrides(string $now): int
 {
-    $stmt = db()->prepare('UPDATE galleries SET grid_columns = NULL, grid_rows = NULL, grid_use_for_subgalleries = 1, updated_at = ?, edit_revision = edit_revision + 1 WHERE grid_columns IS NOT NULL OR grid_rows IS NOT NULL OR grid_use_for_subgalleries <> 1');
+    $stmt = db()->prepare(
+        'UPDATE galleries SET grid_columns = NULL, grid_rows = NULL, grid_use_for_subgalleries = 1, updated_at = ?, edit_revision = edit_revision + 1 WHERE grid_columns IS NOT NULL OR grid_rows IS NOT NULL OR grid_use_for_subgalleries <> 1',
+    );
     $stmt->execute([$now]);
     return $stmt->rowCount();
 }
@@ -944,10 +1129,11 @@ function gallery_model_reset_grid_overrides(string $now): int
  */
 function gallery_model_ids_by_folder_path(): array
 {
-    $rows = db()->query('SELECT id FROM galleries ORDER BY folder_path')->fetchAll(\PDO::FETCH_COLUMN);
+    $rows = db()
+        ->query('SELECT id FROM galleries ORDER BY folder_path')
+        ->fetchAll(\PDO::FETCH_COLUMN);
     return array_map('intval', $rows);
 }
-
 
 /**
  * Find a direct child by title equality under the database collation.
@@ -959,9 +1145,13 @@ function gallery_model_ids_by_folder_path(): array
  * @param string $title Title lookup value; case/accent equality is determined by the SQL collation.
  * @return GalleryDatabaseRow|null Full sensitive child row or null; caller decides whether it can be used.
  */
-function gallery_model_find_child_by_title(int $parentGalleryId, string $title): ?array
-{
-    $stmt = db()->prepare('SELECT * FROM galleries WHERE parent_id = ? AND title = ? ORDER BY sort_order, id LIMIT 1');
+function gallery_model_find_child_by_title(
+    int $parentGalleryId,
+    string $title,
+): ?array {
+    $stmt = db()->prepare(
+        'SELECT * FROM galleries WHERE parent_id = ? AND title = ? ORDER BY sort_order, id LIMIT 1',
+    );
     $stmt->execute([$parentGalleryId, $title]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
@@ -977,11 +1167,12 @@ function gallery_model_find_child_by_title(int $parentGalleryId, string $title):
  */
 function gallery_model_direct_child_ids(int $parentGalleryId): array
 {
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE parent_id = ? ORDER BY sort_order, id');
+    $stmt = db()->prepare(
+        'SELECT id FROM galleries WHERE parent_id = ? ORDER BY sort_order, id',
+    );
     $stmt->execute([$parentGalleryId]);
     return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
 }
-
 
 /**
  * Return one gallery branch as identifiers ordered from parent to descendants.
@@ -994,13 +1185,17 @@ function gallery_model_direct_child_ids(int $parentGalleryId): array
  * @param string $folderPath Requested branch path; caller supplies a current validated snapshot.
  * @return list<int> Path-matched IDs ordered by path length/path/id, or the documented singleton/empty fallback.
  */
-function gallery_model_branch_ids_by_folder_path(int $galleryId, string $folderPath): array
-{
+function gallery_model_branch_ids_by_folder_path(
+    int $galleryId,
+    string $folderPath,
+): array {
     $folderPath = trim(str_replace('\\', '/', $folderPath), '/');
     if ($folderPath === '') {
         return $galleryId > 0 ? [$galleryId] : [];
     }
-    $stmt = db()->prepare('SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
+    $stmt = db()->prepare(
+        'SELECT id FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY CHAR_LENGTH(folder_path), folder_path, id',
+    );
     $stmt->execute([$folderPath, $folderPath . '/%']);
     $ids = array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
     return $ids !== [] ? $ids : ($galleryId > 0 ? [$galleryId] : []);
@@ -1018,19 +1213,30 @@ function gallery_model_branch_ids_by_folder_path(int $galleryId, string $folderP
  * @param string $now Shared SQL timestamp written to selected rows.
  * @return int Number of rows reported as changed.
  */
-function gallery_model_set_thumbnail_bounds(array $galleryIds, ?int $minSize, ?int $maxSize, string $now): int
-{
-    $ids = array_values(array_unique(array_filter(array_map('intval', $galleryIds), /**
-     * Exclude invalid nonpositive IDs before building the thumbnail-bound update.
-     * @param int $id Integer-normalized submitted gallery identifier.
-     * @return bool Whether the ID remains in the explicit update selection.
-     * @author Rudolf Klusal
-     */ static fn (int $id): bool => $id > 0)));
+function gallery_model_set_thumbnail_bounds(
+    array $galleryIds,
+    ?int $minSize,
+    ?int $maxSize,
+    string $now,
+): int {
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        /**
+         * Exclude invalid nonpositive IDs before building the thumbnail-bound update.
+         * @param int $id Integer-normalized submitted gallery identifier.
+         * @return bool Whether the ID remains in the explicit update selection.
+         * @author Rudolf Klusal
+         */ static fn(int $id): bool => $id > 0,
+    )));
     if ($ids === []) {
         return 0;
     }
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = db()->prepare('UPDATE galleries SET thumbnail_min_size = ?, thumbnail_max_size = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id IN (' . $placeholders . ')');
+    $stmt = db()->prepare(
+        'UPDATE galleries SET thumbnail_min_size = ?, thumbnail_max_size = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id IN ('
+            . $placeholders
+            . ')',
+    );
     $stmt->execute(array_merge([$minSize, $maxSize, $now], $ids));
     return $stmt->rowCount();
 }
@@ -1048,7 +1254,8 @@ function gallery_model_source_picker_page(int $afterId, int $limit): array
     if ($afterId < 0 || $limit < 1) {
         throw new InvalidArgumentException('Invalid source picker bounds.');
     }
-    $statement = db()->prepare('SELECT id, title FROM galleries WHERE id > ? ORDER BY id LIMIT ' . $limit);
+    $statement = db()->prepare('SELECT id, title FROM galleries WHERE id > ? ORDER BY id LIMIT '
+        . $limit);
     $statement->execute([$afterId]);
     return $statement->fetchAll(PDO::FETCH_ASSOC);
 }

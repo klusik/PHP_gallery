@@ -50,16 +50,27 @@ function cooperative_peer_base_url(string $url): string
         throw new CooperativeException('invalid_peer_url');
     }
     $parts = parse_url($url);
-    if (!is_array($parts) || strtolower($parts['scheme'] ?? '') !== 'https'
-        || isset($parts['user']) || isset($parts['pass'])
-        || isset($parts['query']) || isset($parts['fragment'])) {
+    if (
+        !is_array($parts)
+        || strtolower($parts['scheme'] ?? '') !== 'https'
+        || isset($parts['user'])
+        || isset($parts['pass'])
+        || isset($parts['query'])
+        || isset($parts['fragment'])
+    ) {
         throw new CooperativeException('invalid_peer_url');
     }
     $host = strtolower($parts['host'] ?? '');
-    if (strlen($host) > 253 || !str_contains($host, '.')
-        || filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false
+    if (
+        strlen($host) > 253
+        || !str_contains($host, '.')
+        || filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)
+            === false
         || filter_var($host, FILTER_VALIDATE_IP) !== false
-        || str_ends_with($host, '.') || str_ends_with($host, '.localhost') || str_ends_with($host, '.local')) {
+        || str_ends_with($host, '.')
+        || str_ends_with($host, '.localhost')
+        || str_ends_with($host, '.local')
+    ) {
         throw new CooperativeException('invalid_peer_url');
     }
     $port = $parts['port'] ?? 443;
@@ -67,10 +78,18 @@ function cooperative_peer_base_url(string $url): string
         throw new CooperativeException('invalid_peer_url');
     }
     $path = $parts['path'] ?? '';
-    if (preg_match('~\A(?:/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)*/?\z~', $path) !== 1) {
+    if (
+        preg_match('~\A(?:/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)*/?\z~', $path)
+        !== 1
+    ) {
         throw new CooperativeException('invalid_peer_url');
     }
-    return 'https://' . $host . ($port === 443 ? '' : ':' . $port) . rtrim($path, '/');
+    return (
+        'https://'
+            . $host
+            . ($port === 443 ? '' : ':' . $port)
+            . rtrim($path, '/')
+    );
 }
 
 /** Canonical public-only membership; unknown fields fail rather than silently losing consent.
@@ -80,7 +99,11 @@ function cooperative_peer_base_url(string $url): string
  */
 function cooperative_members_normalize(array $members): array
 {
-    if (!array_is_list($members) || count($members) < 2 || count($members) > COOPERATIVE_MAX_MEMBERS) {
+    if (
+        !array_is_list($members)
+        || count($members) < 2
+        || count($members) > COOPERATIVE_MAX_MEMBERS
+    ) {
         throw new CooperativeException('invalid_members');
     }
     $result = [];
@@ -91,8 +114,12 @@ function cooperative_members_normalize(array $members): array
         }
         $keys = array_keys($member);
         sort($keys);
-        if ($keys !== ['album_id', 'instance_id', 'scopes'] || !is_string($member['instance_id'])
-            || !is_string($member['album_id']) || !is_array($member['scopes'])) {
+        if (
+            $keys !== ['album_id', 'instance_id', 'scopes']
+            || !is_string($member['instance_id'])
+            || !is_string($member['album_id'])
+            || !is_array($member['scopes'])
+        ) {
             throw new CooperativeException('invalid_member');
         }
         $instance = cooperative_id_validate($member['instance_id']);
@@ -102,14 +129,24 @@ function cooperative_members_normalize(array $members): array
         }
         $scopes = cooperative_scopes_normalize($member['scopes']);
         $seen[$instance] = true;
-        $result[] = ['instance_id' => $instance, 'album_id' => $album, 'scopes' => $scopes];
+        $result[] = [
+            'instance_id' => $instance,
+            'album_id' => $album,
+            'scopes' => $scopes,
+        ];
     }
-    usort($result, /**
- * Compare participant identities for deterministic membership ordering.
- * @param array<string,mixed> $a First canonical member record to compare.
- * @param array<string,mixed> $b Second canonical member record to compare.
- * @return int Comparison or revision value for the operation.
- */ static fn(array $a, array $b): int => strcmp($a['instance_id'], $b['instance_id']));
+    usort(
+        $result,
+        /**
+         * Compare participant identities for deterministic membership ordering.
+         * @param array<string,mixed> $a First canonical member record to compare.
+         * @param array<string,mixed> $b Second canonical member record to compare.
+         * @return int Comparison or revision value for the operation.
+         */ static fn(array $a, array $b): int => strcmp(
+            $a['instance_id'],
+            $b['instance_id'],
+        ),
+    );
     return $result;
 }
 
@@ -124,11 +161,15 @@ function cooperative_friendship_pairs(array $members): array
     $pairs = [];
     foreach ($members as $index => $member) {
         for ($other = $index + 1; $other < count($members); $other++) {
-            $pairs[] = [$member['instance_id'], $members[$other]['instance_id']];
+            $pairs[] = [
+                $member['instance_id'],
+                $members[$other]['instance_id'],
+            ];
         }
     }
     return $pairs;
 }
+
 /**
  * Bind a direct friendship to both independently verified peer revisions.
  * This digest is an identity for evidence, not a signature or proof of trust.
@@ -139,8 +180,12 @@ function cooperative_friendship_pairs(array $members): array
  * @param int $secondRevision Verified credential-state revision issued by the second installation.
  * @return string Symmetric SHA-256 evidence stamp that changes after either side changes trust.
  */
-function cooperative_friendship_stamp(string $first, int $firstRevision, string $second, int $secondRevision): string
-{
+function cooperative_friendship_stamp(
+    string $first,
+    int $firstRevision,
+    string $second,
+    int $secondRevision,
+): string {
     cooperative_id_validate($first);
     cooperative_id_validate($second);
     if ($first === $second || $firstRevision < 1 || $secondRevision < 1) {
@@ -148,7 +193,11 @@ function cooperative_friendship_stamp(string $first, int $firstRevision, string 
     }
     $revisions = [$first => $firstRevision, $second => $secondRevision];
     ksort($revisions, SORT_STRING);
-    return hash('sha256', 'cooperative-friendship-v1:' . json_encode($revisions, JSON_THROW_ON_ERROR));
+    return hash(
+        'sha256',
+        'cooperative-friendship-v1:'
+            . json_encode($revisions, JSON_THROW_ON_ERROR),
+    );
 }
 
 /** Normalize one album's exact requested scopes without inventing defaults.
@@ -162,11 +211,21 @@ function cooperative_scopes_normalize(array $scopes): array
         throw new CooperativeException('invalid_scopes');
     }
     foreach ($scopes as $scope) {
-        if (!is_string($scope) || !in_array($scope, ['metadata', 'thumbnail', 'preview', 'original'], true)) {
+        if (
+            !is_string($scope)
+            || !in_array(
+                $scope,
+                ['metadata', 'thumbnail', 'preview', 'original'],
+                true,
+            )
+        ) {
             throw new CooperativeException('invalid_scopes');
         }
     }
-    if (count(array_unique($scopes)) !== count($scopes) || !in_array('metadata', $scopes, true)) {
+    if (
+        count(array_unique($scopes)) !== count($scopes)
+        || !in_array('metadata', $scopes, true)
+    ) {
         throw new CooperativeException('invalid_scopes');
     }
     sort($scopes, SORT_STRING);

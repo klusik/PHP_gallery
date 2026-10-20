@@ -88,7 +88,7 @@ function set_seo_request_guard_logging_enabled(bool $enabled): void
 /**
  * Return a compact status model for Admin dashboard rendering.
  *
- * @return array<string mixed>.
+ * @return array{enabled:bool,logging_enabled:bool,log_day:string,log_count:int,log_limit:int} Current enforcement and bounded logging status for Admin.
  */
 function seo_request_guard_status(): array
 {
@@ -96,7 +96,10 @@ function seo_request_guard_status(): array
         'enabled' => seo_request_guard_enabled(),
         'logging_enabled' => seo_request_guard_logging_enabled(),
         'log_day' => (string) app_setting('seo_request_guard_log_day', ''),
-        'log_count' => max(0, (int) app_setting('seo_request_guard_log_count', '0')),
+        'log_count' => max(
+            0,
+            (int) app_setting('seo_request_guard_log_count', '0'),
+        ),
         'log_limit' => CMS_SEO_REQUEST_GUARD_LOG_LIMIT_PER_DAY,
     ];
 }
@@ -112,18 +115,22 @@ function seo_request_guard_status(): array
  */
 function seo_request_guard_route_is_non_indexable_download(string $page): bool
 {
-    return in_array($page, [
-        'gallery_ofp_pdf',
-        'gallery_music',
-        'download_gallery_start',
-        'download_gallery',
-        'download_gallery_manifest',
-        'download_gallery_file',
-        'download_smart_gallery_start',
-        'download_smart_gallery',
-        'download_smart_gallery_manifest',
-        'download_smart_gallery_file',
-    ], true);
+    return in_array(
+        $page,
+        [
+            'gallery_ofp_pdf',
+            'gallery_music',
+            'download_gallery_start',
+            'download_gallery',
+            'download_gallery_manifest',
+            'download_gallery_file',
+            'download_smart_gallery_start',
+            'download_smart_gallery',
+            'download_smart_gallery_manifest',
+            'download_smart_gallery_file',
+        ],
+        true,
+    );
 }
 
 /**
@@ -136,7 +143,9 @@ function seo_request_guard_route_is_non_indexable_download(string $page): bool
  */
 function seo_request_guard_route_robots_header_value(string $page): ?string
 {
-    return seo_request_guard_route_is_non_indexable_download($page) ? 'noindex, nofollow' : null;
+    return seo_request_guard_route_is_non_indexable_download($page)
+        ? 'noindex, nofollow'
+        : null;
 }
 
 /**
@@ -156,26 +165,30 @@ function seo_request_guard_route_is_exempt(string $page): bool
         return true;
     }
 
-    return in_array($page, [
-        'setup',
-        'mobile_webdav',
-        'site_maintenance_cron',
-        'upload_automation_upload',
-        'cooperative_gallery',
-        'cooperative_content_api',
-        'cooperative_media',
-        'cooperative_metadata_api',
-        'cooperative_peer_api',
-        'cooperative_proposal_api',
-        'gallery_migration_manifest',
-        'gallery_migration_asset',
-        'gallery_migration_package',
-        'gallery_migration_receive_manifest',
-        'gallery_migration_receive_asset',
-        'gallery_migration_receive_package',
-        'gallery_migration_receive_complete',
-        'gallery_migration_receive_status',
-    ], true);
+    return in_array(
+        $page,
+        [
+            'setup',
+            'mobile_webdav',
+            'site_maintenance_cron',
+            'upload_automation_upload',
+            'cooperative_gallery',
+            'cooperative_content_api',
+            'cooperative_media',
+            'cooperative_metadata_api',
+            'cooperative_peer_api',
+            'cooperative_proposal_api',
+            'gallery_migration_manifest',
+            'gallery_migration_asset',
+            'gallery_migration_package',
+            'gallery_migration_receive_manifest',
+            'gallery_migration_receive_asset',
+            'gallery_migration_receive_package',
+            'gallery_migration_receive_complete',
+            'gallery_migration_receive_status',
+        ],
+        true,
+    );
 }
 
 /**
@@ -235,15 +248,38 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
             'benchmark_phase',
         ],
         'smart_gallery' => [
-            'slug', 'photo_page', 'source_gallery_id', 'view_as',
-            'presentation', 'autoplay', 'presentation_music',
-            'presentation_interval', 'presentation_transition',
-            'presentation_fullscreen', 'presentation_exclusive',
+            'slug',
+            'photo_page',
+            'source_gallery_id',
+            'view_as',
+            'presentation',
+            'autoplay',
+            'presentation_music',
+            'presentation_interval',
+            'presentation_transition',
+            'presentation_fullscreen',
+            'presentation_exclusive',
         ],
         'tag' => ['slug', 'view_as'],
         'public_search' => ['q', 'context_only', 'gallery_id', 'phase'],
-        'gallery_lightbox_data' => ['id', 'limit', 'offset', 'target_image_id', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_phase'],
-        'smart_gallery_lightbox_data' => ['id', 'limit', 'offset', 'target_image_id', 'source_gallery_id', 'view_as'],
+        'gallery_lightbox_data' => [
+            'id',
+            'limit',
+            'offset',
+            'target_image_id',
+            'view_as',
+            'benchmark_token',
+            'benchmark_run',
+            'benchmark_phase',
+        ],
+        'smart_gallery_lightbox_data' => [
+            'id',
+            'limit',
+            'offset',
+            'target_image_id',
+            'source_gallery_id',
+            'view_as',
+        ],
         'smart_gallery_map_data' => ['id', 'source_gallery_id', 'view_as'],
         'gallery_map_data' => ['id', 'view_as'],
         'picture_game' => ['id', 'view_as'],
@@ -253,7 +289,13 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'media' => ['id', 'v', 'ofp', 'download', 'share', 'token'],
         'gallery_ofp_pdf' => ['id', 'document', 'download', 'share', 'token'],
         'gallery_music' => [
-            'id', 'track', 'playlist', 'download', 'share', 'token', 'view_as',
+            'id',
+            'track',
+            'playlist',
+            'download',
+            'share',
+            'token',
+            'view_as',
         ],
         'thumb' => ['id', 'size', 'format', 'v'],
         'public_media' => ['public_path', 'v'],
@@ -269,11 +311,27 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'download_gallery_start' => ['id', 'token', 'share'],
         'download_gallery' => ['id', 'token', 'share', 'capability'],
         'download_gallery_manifest' => ['id', 'token', 'share', 'capability'],
-        'download_gallery_file' => ['gallery_id', 'image_id', 'v', 'mr', 's', 'token', 'share', 'capability'],
+        'download_gallery_file' => [
+            'gallery_id',
+            'image_id',
+            'v',
+            'mr',
+            's',
+            'token',
+            'share',
+            'capability',
+        ],
         'download_smart_gallery_start' => ['id'],
         'download_smart_gallery' => ['id', 'capability'],
         'download_smart_gallery_manifest' => ['id', 'capability'],
-        'download_smart_gallery_file' => ['smart_gallery_id', 'image_id', 'v', 'mr', 's', 'capability'],
+        'download_smart_gallery_file' => [
+            'smart_gallery_id',
+            'image_id',
+            'v',
+            'mr',
+            's',
+            'capability',
+        ],
         'robots' => [],
         'sitemap' => [],
         'not_found' => [],
@@ -289,21 +347,31 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
  * @param array<array-key,scalar|array<array-key,mixed>|null> $query Parsed request query values; bracket-syntax arrays are not valid notice tokens.
  * @return list<string> Unexpected parameter names, including invalid fallback-notice values.
  */
-function seo_request_guard_unexpected_query_parameters(string $page, array $query): array
-{
-    $allowed = array_fill_keys(seo_request_guard_allowed_parameters_for_page($page), true);
+function seo_request_guard_unexpected_query_parameters(
+    string $page,
+    array $query,
+): array {
+    $allowed = array_fill_keys(
+        seo_request_guard_allowed_parameters_for_page($page),
+        true,
+    );
     $tracking = seo_request_guard_ignored_tracking_parameters();
     $unexpected = [];
 
     foreach (array_keys($query) as $rawName) {
         $name = (string) $rawName;
         $lowerName = strtolower($name);
-        $validAnonymousFallbackNotice = $page === 'home'
+        $validAnonymousFallbackNotice =
+            $page === 'home'
             && $name === 'visual_notice'
             && ($query['visual_notice'] ?? null) === 'anonymous_fallback'
             && ($query['preview'] ?? null) === 'visual'
             && ($query['view_as'] ?? null) === 'anonymous';
-        if (isset($allowed[$name]) || isset($tracking[$lowerName]) || $validAnonymousFallbackNotice) {
+        if (
+            isset($allowed[$name])
+            || isset($tracking[$lowerName])
+            || $validAnonymousFallbackNotice
+        ) {
             continue;
         }
         $unexpected[] = $name;
@@ -323,7 +391,7 @@ function seo_request_guard_unexpected_query_parameters(string $page, array $quer
  * @param string $requestUri Raw request URI used only for redacted sampled logging.
  * @param string $remoteAddress Remote address used only for sampled security logging.
  * @param string $userAgent User-Agent used only for sampled security logging.
- * @return array{action:string,status?:int,location?:string,headers?:array<string,string>,body?:string}
+ * @return array{action:string,status?:int,location?:string,headers?:array<string,string>,body?:string} Allow, redirect or reject decision with only the response fields required by that action.
  */
 function seo_request_guard_enforcement_decision(
     string $page,
@@ -332,7 +400,7 @@ function seo_request_guard_enforcement_decision(
     bool $authenticated,
     string $requestUri = '',
     string $remoteAddress = '',
-    string $userAgent = ''
+    string $userAgent = '',
 ): array {
     if (strtoupper($method) !== 'GET' || !seo_request_guard_enabled()) {
         return ['action' => 'allow'];
@@ -353,7 +421,13 @@ function seo_request_guard_enforcement_decision(
         return ['action' => 'allow'];
     }
 
-    seo_request_guard_log_rejection($page, $unexpected, $requestUri, $remoteAddress, $userAgent);
+    seo_request_guard_log_rejection(
+        $page,
+        $unexpected,
+        $requestUri,
+        $remoteAddress,
+        $userAgent,
+    );
     return [
         'action' => 'reject',
         'status' => 404,
@@ -376,16 +450,23 @@ function seo_request_guard_enforcement_decision(
  */
 function seo_request_guard_home_redirect_location(array $query): string
 {
-    $supported = array_fill_keys(['gallery_page', 'view_as', 'lang', 'preview'], true);
+    $supported = array_fill_keys([
+        'gallery_page',
+        'view_as',
+        'lang',
+        'preview',
+    ], true);
     $retained = [];
     foreach ($query as $name => $value) {
         if (isset($supported[(string) $name])) {
             $retained[(string) $name] = $value;
         }
     }
-    if (($query['preview'] ?? null) === 'visual'
+    if (
+        ($query['preview'] ?? null) === 'visual'
         && ($query['view_as'] ?? null) === 'anonymous'
-        && ($query['visual_notice'] ?? null) === 'anonymous_fallback') {
+        && ($query['visual_notice'] ?? null) === 'anonymous_fallback'
+    ) {
         $retained['visual_notice'] = 'anonymous_fallback';
     }
 
@@ -429,11 +510,23 @@ function seo_request_guard_safe_request_target_for_log(string $requestUri): stri
  * Log sampled query rejections without allowing crawler floods to fill the log table.
  *
  * @param string $page Page number or page data.
- * @param array $unexpected Unexpected value.
+ * @param list<string> $unexpected Unexpected query parameter names.
+ * @param string $requestUri Original request URI, reduced to a safe path marker before logging.
+ * @param string $remoteAddress Client address truncated for sampled security logs.
+ * @param string $userAgent Client User-Agent truncated for sampled security logs.
+ * @return void Records a rate-limited rejection event when logging is enabled.
  */
-function seo_request_guard_log_rejection(string $page, array $unexpected, string $requestUri = '', string $remoteAddress = '', string $userAgent = ''): void
-{
-    if (!seo_request_guard_logging_enabled() || !function_exists('Gallery\\Services\\admin_log_event')) {
+function seo_request_guard_log_rejection(
+    string $page,
+    array $unexpected,
+    string $requestUri = '',
+    string $remoteAddress = '',
+    string $userAgent = '',
+): void {
+    if (
+        !seo_request_guard_logging_enabled()
+        || !function_exists('Gallery\\Services\\admin_log_event')
+    ) {
         return;
     }
 
@@ -457,31 +550,56 @@ function seo_request_guard_log_rejection(string $page, array $unexpected, string
         return;
     }
     if ($count === $limit) {
-        admin_log_event('warning', 'seo.request_guard_log_limit_reached', 'SEO request guard reached its daily sampled log limit.', [
-            'day' => $today,
-            'limit' => $limit,
-        ], ['category' => 'security', 'severity' => 'warning', 'route_name' => $page]);
+        admin_log_event(
+            'warning',
+            'seo.request_guard_log_limit_reached',
+            'SEO request guard reached its daily sampled log limit.',
+            [
+                'day' => $today,
+                'limit' => $limit,
+            ],
+            [
+                'category' => 'security',
+                'severity' => 'warning',
+                'route_name' => $page,
+            ],
+        );
         return;
     }
 
-    admin_log_event('warning', 'seo.request_guard_rejected', 'Rejected suspicious public query string before rendering.', [
-        'page' => $page,
-        'unexpected_parameters' => $unexpected,
-        'request_uri' => seo_request_guard_safe_request_target_for_log($requestUri),
-        'remote_addr' => substr($remoteAddress, 0, 80),
-        'user_agent' => substr($userAgent, 0, 300),
-    ], ['category' => 'security', 'severity' => 'warning', 'route_name' => $page]);
+    admin_log_event(
+        'warning',
+        'seo.request_guard_rejected',
+        'Rejected suspicious public query string before rendering.',
+        [
+            'page' => $page,
+            'unexpected_parameters' => $unexpected,
+            'request_uri' =>
+                seo_request_guard_safe_request_target_for_log($requestUri),
+            'remote_addr' => substr($remoteAddress, 0, 80),
+            'user_agent' => substr($userAgent, 0, 300),
+        ],
+        [
+            'category' => 'security',
+            'severity' => 'warning',
+            'route_name' => $page,
+        ],
+    );
 }
 
 /**
  * Build a fallback canonical URL for public pages that do not already emit one.
  *
  * @param string $page Page number or page data.
- * @param ?array $currentGallery Current gallery value.
- * @return string Text result for the caller.
+ * @param ?array<string,mixed> $currentGallery Resolved gallery row for a gallery route.
+ * @param array<array-key,scalar|array<array-key,mixed>|null> $query Current route query values used for canonical slugs.
+ * @return string Absolute canonical URL, or an empty string when the route has no supported canonical mapping.
  */
-function seo_request_guard_public_canonical_url(string $page, ?array $currentGallery = null, array $query = []): string
-{
+function seo_request_guard_public_canonical_url(
+    string $page,
+    ?array $currentGallery = null,
+    array $query = [],
+): string {
     if ($page === 'home') {
         return rtrim(public_base_url(), '/') . '/';
     }
@@ -491,7 +609,9 @@ function seo_request_guard_public_canonical_url(string $page, ?array $currentGal
     if ($page === 'smart_gallery') {
         $slug = trim((string) ($query['slug'] ?? ''));
         if ($slug !== '') {
-            return absolute_public_url(url_for('smart_gallery', ['slug' => $slug]));
+            return absolute_public_url(url_for('smart_gallery', [
+                'slug' => $slug,
+            ]));
         }
     }
     if ($page === 'tag') {

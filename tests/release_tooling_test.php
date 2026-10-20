@@ -56,45 +56,86 @@ function release_test_assert(bool $condition, string $message): void
 
 /**
  * Write one fixture file and create its parent directory.
+ *
+ * @param string $root Isolated fixture root.
+ * @param string $relative File path relative to the fixture root.
+ * @param string $contents Exact file contents to write.
+ * @return void
  */
-function release_test_write(string $root, string $relative, string $contents): void
-{
+function release_test_write(
+    string $root,
+    string $relative,
+    string $contents,
+): void {
     $path = $root . '/' . $relative;
-    if (!is_dir(dirname($path)) && !mkdir(dirname($path), 0777, true) && !is_dir(dirname($path))) {
+    if (
+        !is_dir(dirname($path))
+        && !mkdir(dirname($path), 0777, true)
+        && !is_dir(dirname($path))
+    ) {
         throw new RuntimeException('Unable to create fixture directory.');
     }
     if (file_put_contents($path, $contents) === false) {
-        throw new RuntimeException('Unable to write fixture file: ' . $relative);
+        throw new RuntimeException('Unable to write fixture file: '
+            . $relative);
     }
 }
 
-release_test_assert(valid_version('0.96.2'), 'Patch release versions must be accepted.');
-release_test_assert(valid_version('10.500'), 'Two-component versions must remain supported.');
-release_test_assert(!valid_version('0.096.2'), 'Leading zeroes must remain rejected.');
-release_test_assert(!valid_version('v_0.96.2'), 'Tag prefixes are not release-version input.');
+release_test_assert(
+    valid_version('0.96.2'),
+    'Patch release versions must be accepted.',
+);
+release_test_assert(
+    valid_version('10.500'),
+    'Two-component versions must remain supported.',
+);
+release_test_assert(
+    !valid_version('0.096.2'),
+    'Leading zeroes must remain rejected.',
+);
+release_test_assert(
+    !valid_version('v_0.96.2'),
+    'Tag prefixes are not release-version input.',
+);
 
 // A new release is anchored to immutable source history, not the current runner clock.
 $prague = new DateTimeZone('Europe/Prague');
 $initial = resolve_release_moment(null, '0.96.2', '1780000000', $prague);
-release_test_assert($initial->getTimestamp() === 1780000000, 'First preparation must use the source-commit epoch.');
-release_test_assert(resolve_release_moment(null, '0.96.2', '1780000000', $prague) == $initial,
-    'Repeated initial preparation from the same source must be deterministic.');
+release_test_assert(
+    $initial->getTimestamp() === 1780000000,
+    'First preparation must use the source-commit epoch.',
+);
+release_test_assert(
+    resolve_release_moment(null, '0.96.2', '1780000000', $prague) == $initial,
+    'Repeated initial preparation from the same source must be deterministic.',
+);
 $existingTimestamp = [
-    'tag' => 'v_0.96.2', 'released_at' => '2026-09-06 09:15:00',
+    'tag' => 'v_0.96.2',
+    'released_at' => '2026-09-06 09:15:00',
     'released_label' => '6 September 2026, 09:15',
 ];
-release_test_assert(resolve_release_moment($existingTimestamp, '0.96.2', '1780000001', $prague)
-    ->format('Y-m-d H:i:s') === '2026-09-06 09:15:00',
-    'Existing reviewed release metadata must override any later event commit timestamp.');
+release_test_assert(
+    resolve_release_moment($existingTimestamp, '0.96.2', '1780000001', $prague)
+        ->format('Y-m-d H:i:s') === '2026-09-06 09:15:00',
+    'Existing reviewed release metadata must override any later event commit timestamp.',
+);
 $legacyLabel = $existingTimestamp;
 $legacyLabel['released_label'] = '6. September 2026, 09:15';
-release_test_assert(resolve_release_moment($legacyLabel, '0.96.2', null, $prague)
-    ->format('Y-m-d H:i:s') === '2026-09-06 09:15:00',
-    'Previously reviewed dotted-day labels must remain valid without source-epoch input.');
+release_test_assert(
+    resolve_release_moment($legacyLabel, '0.96.2', null, $prague)
+        ->format('Y-m-d H:i:s') === '2026-09-06 09:15:00',
+    'Previously reviewed dotted-day labels must remain valid without source-epoch input.',
+);
 foreach ([
-    [null, null], [null, '0'], [null, 'n/a'], [null, '999999999999999999999'],
+    [null, null],
+    [null, '0'],
+    [null, 'n/a'],
+    [null, '999999999999999999999'],
     [['tag' => 'v_0.96.3'] + $existingTimestamp, '1780000000'],
-    [['released_at' => '2026-02-30 09:15:00'] + $existingTimestamp, '1780000000'],
+    [
+        ['released_at' => '2026-02-30 09:15:00'] + $existingTimestamp,
+        '1780000000',
+    ],
     [['released_label' => 'arbitrary'] + $existingTimestamp, '1780000000'],
 ] as [$stored, $epoch]) {
     $accepted = true;
@@ -103,68 +144,174 @@ foreach ([
     } catch (RuntimeException) {
         $accepted = false;
     }
-    release_test_assert(!$accepted, 'Invalid or contradictory first-release metadata must fail closed.');
+    release_test_assert(
+        !$accepted,
+        'Invalid or contradictory first-release metadata must fail closed.',
+    );
 }
 
-$fixture = sys_get_temp_dir() . '/php-gallery-release-tooling-' . getmypid() . '-' . bin2hex(random_bytes(4));
+$fixture =
+    sys_get_temp_dir()
+    . '/php-gallery-release-tooling-'
+    . getmypid()
+    . '-'
+    . bin2hex(random_bytes(4));
 mkdir($fixture, 0777, true);
 
 try {
-    release_test_write($fixture, 'app/bootstrap.php', "<?php\nconst CMS_VERSION = '0.96.1';\n");
-    release_test_write($fixture, 'README.md', "# PHP Gallery\n\n**Current Version:** 0.96.1\n\nHistorical Version 0.95 stays here.\n");
-    release_test_write($fixture, 'TESTING.md', "# Testing Guide\n\nThis guide applies to PHP Gallery Version 0.96.1. Historical Version 0.95 remains documented.\n");
-    release_test_write($fixture, 'DATABASE.md', "# Database\n\nThis document describes the database schema as of application version 0.96.1. Version 0.94.5 added the newest migration.\n");
-    release_test_write($fixture, 'ARCHITECTURE.md', "# Architecture\n\n```php\nconst CMS_VERSION = '0.96.1';\n```\nHistorical Version 0.95 stays here.\n");
-    release_test_write($fixture, 'docs/PHP_Gallery_Manual.tex', "\\newcommand{\\version}{0.96.1}\n\\newcommand{\\manualdate}{5 September 2026}\n");
-    release_test_write($fixture, 'docs/PHP_Gallery_Manual.pdf', "%PDF-1.4 fixture\n");
-    release_test_write($fixture, 'PATCH_NOTES.md', "# Patch notes\n\n## Version 0.96.1\n\nPrevious release.\n");
-    release_test_write($fixture, 'release-metadata.json', "{\n    \"0.96.1\": {\"released_at\": \"2026-09-05 20:36:34\", \"released_label\": \"5 September 2026, 20:36\", \"tag\": \"v_0.96.1\"}\n}\n");
-    release_test_write($fixture, 'app/core-manifest.json', "{\"version\":\"0.96.2\",\"files\":{}}\n");
+    release_test_write(
+        $fixture,
+        'app/bootstrap.php',
+        "<?php\nconst CMS_VERSION = '0.96.1';\n",
+    );
+    release_test_write(
+        $fixture,
+        'README.md',
+        "# PHP Gallery\n\n**Current Version:** 0.96.1\n\nHistorical Version 0.95 stays here.\n",
+    );
+    release_test_write(
+        $fixture,
+        'TESTING.md',
+        "# Testing Guide\n\nThis guide applies to PHP Gallery Version 0.96.1. Historical Version 0.95 remains documented.\n",
+    );
+    release_test_write(
+        $fixture,
+        'DATABASE.md',
+        "# Database\n\nThis document describes the database schema as of application version 0.96.1. Version 0.94.5 added the newest migration.\n",
+    );
+    release_test_write(
+        $fixture,
+        'ARCHITECTURE.md',
+        "# Architecture\n\n```php\nconst CMS_VERSION = '0.96.1';\n```\nHistorical Version 0.95 stays here.\n",
+    );
+    release_test_write(
+        $fixture,
+        'docs/PHP_Gallery_Manual.tex',
+        "\\newcommand{\\version}{0.96.1}\n\\newcommand{\\manualdate}{5 September 2026}\n",
+    );
+    release_test_write(
+        $fixture,
+        'docs/PHP_Gallery_Manual.pdf',
+        "%PDF-1.4 fixture\n",
+    );
+    release_test_write(
+        $fixture,
+        'PATCH_NOTES.md',
+        "# Patch notes\n\n## Version 0.96.1\n\nPrevious release.\n",
+    );
+    release_test_write(
+        $fixture,
+        'release-metadata.json',
+        "{\n    \"0.96.1\": {\"released_at\": \"2026-09-05 20:36:34\", \"released_label\": \"5 September 2026, 20:36\", \"tag\": \"v_0.96.1\"}\n}\n",
+    );
+    release_test_write(
+        $fixture,
+        'app/core-manifest.json',
+        "{\"version\":\"0.96.2\",\"files\":{}}\n",
+    );
 
     $changed = prepare_version_markers($fixture, '0.96.2', '6 September 2026');
-    release_test_assert(in_array('app/bootstrap.php', $changed, true), 'Runtime version marker must be prepared.');
-    release_test_assert(str_contains(file_get_contents($fixture . '/README.md') ?: '', 'Historical Version 0.95 stays here.'), 'Historical version prose must not be rewritten by release preparation.');
-
-    release_test_assert(upsert_release_metadata($fixture, '0.96.2', new DateTimeImmutable('2026-09-06 09:15:00')), 'New release metadata must be inserted.');
-    release_test_assert(!upsert_release_metadata($fixture, '0.96.2'), 'Re-running metadata preparation without a new timestamp must be idempotent.');
-    $metadata = json_decode(file_get_contents($fixture . '/release-metadata.json') ?: '', true);
-    release_test_assert(($metadata['0.96.2']['tag'] ?? '') === 'v_0.96.2', 'Release metadata tag must use v_<version>.');
-    release_test_assert(upsert_release_metadata($fixture, '0.96.3'), 'First preparation without an explicit date must insert complete metadata.');
-    $metadata = json_decode(file_get_contents($fixture . '/release-metadata.json') ?: '', true);
     release_test_assert(
-        preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', (string) ($metadata['0.96.3']['released_at'] ?? '')) === 1,
-        'First preparation must set the default release timestamp.'
+        in_array('app/bootstrap.php', $changed, true),
+        'Runtime version marker must be prepared.',
+    );
+    release_test_assert(
+        str_contains(
+            file_get_contents($fixture . '/README.md') ?: '',
+            'Historical Version 0.95 stays here.',
+        ),
+        'Historical version prose must not be rewritten by release preparation.',
+    );
+
+    release_test_assert(
+        upsert_release_metadata(
+            $fixture,
+            '0.96.2',
+            new DateTimeImmutable('2026-09-06 09:15:00'),
+        ),
+        'New release metadata must be inserted.',
+    );
+    release_test_assert(
+        !upsert_release_metadata($fixture, '0.96.2'),
+        'Re-running metadata preparation without a new timestamp must be idempotent.',
+    );
+    $metadata = json_decode(
+        file_get_contents($fixture . '/release-metadata.json') ?: '',
+        true,
+    );
+    release_test_assert(
+        ($metadata['0.96.2']['tag'] ?? '') === 'v_0.96.2',
+        'Release metadata tag must use v_<version>.',
+    );
+    release_test_assert(
+        upsert_release_metadata($fixture, '0.96.3'),
+        'First preparation without an explicit date must insert complete metadata.',
+    );
+    $metadata = json_decode(
+        file_get_contents($fixture . '/release-metadata.json') ?: '',
+        true,
+    );
+    release_test_assert(
+        preg_match(
+            '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/',
+            (string) ($metadata['0.96.3']['released_at'] ?? ''),
+        ) === 1,
+        'First preparation must set the default release timestamp.',
     );
     release_test_assert(
         trim((string) ($metadata['0.96.3']['released_label'] ?? '')) !== '',
-        'First preparation must set the default release label.'
+        'First preparation must set the default release label.',
     );
-    release_test_assert(($metadata['0.96.3']['tag'] ?? '') === 'v_0.96.3', 'Default release metadata tag must use v_<version>.');
-    release_test_assert(!upsert_release_metadata($fixture, '0.96.3'), 'Re-running default metadata preparation must preserve the complete entry.');
+    release_test_assert(
+        ($metadata['0.96.3']['tag'] ?? '') === 'v_0.96.3',
+        'Default release metadata tag must use v_<version>.',
+    );
+    release_test_assert(
+        !upsert_release_metadata($fixture, '0.96.3'),
+        'Re-running default metadata preparation must preserve the complete entry.',
+    );
 
-    release_test_assert(ensure_patch_notes_scaffold($fixture, '0.96.2'), 'Missing patch notes must receive a scaffold.');
-    release_test_assert(!ensure_patch_notes_scaffold($fixture, '0.96.2'), 'Patch-note scaffolding must be idempotent.');
+    release_test_assert(
+        ensure_patch_notes_scaffold($fixture, '0.96.2'),
+        'Missing patch notes must receive a scaffold.',
+    );
+    release_test_assert(
+        !ensure_patch_notes_scaffold($fixture, '0.96.2'),
+        'Patch-note scaffolding must be idempotent.',
+    );
 
     touch($fixture . '/docs/PHP_Gallery_Manual.tex', time() - 10);
     touch($fixture . '/docs/PHP_Gallery_Manual.pdf', time());
     $checks = collect_consistency_checks($fixture, '0.96.2');
     $failedLabels = array_values(array_map(
         static fn(array $check): string => $check['label'],
-        array_filter($checks, static fn(array $check): bool => $check['status'] === 'FAIL')
+        array_filter(
+            $checks,
+            static fn(array $check): bool => $check['status'] === 'FAIL',
+        ),
     ));
-    release_test_assert($failedLabels === ['Patch notes'], 'Unexpected failed fixture invariants: ' . implode(', ', $failedLabels));
+    release_test_assert(
+        $failedLabels === ['Patch notes'],
+        'Unexpected failed fixture invariants: ' . implode(', ', $failedLabels),
+    );
 
     $notes = file_get_contents($fixture . '/PATCH_NOTES.md') ?: '';
     $notes = preg_replace(
         '/<!-- RELEASE_NOTES_TODO:.*?-->\R\RRelease notes for Version 0\.96\.2 are not complete yet\..*?(?=^## Version 0\.96\.1)/ms',
         "Version 0.96.2 centralizes release preparation and consistency checks.\n\n### Highlights\n\n- Added deterministic release tooling.\n\n### Technical Details\n\n- Added release marker validation.\n\n### Tests\n\n- Added release tooling regression coverage.\n\n### User Impact\n\n- Maintainers receive safer release automation.\n\n",
-        $notes
+        $notes,
     );
     file_put_contents($fixture . '/PATCH_NOTES.md', $notes);
 
     $checks = collect_consistency_checks($fixture, '0.96.2');
-    $failed = array_filter($checks, static fn(array $check): bool => $check['status'] === 'FAIL');
-    release_test_assert($failed === [], 'Completed release fixture must satisfy every consistency invariant.');
+    $failed = array_filter(
+        $checks,
+        static fn(array $check): bool => $check['status'] === 'FAIL',
+    );
+    release_test_assert(
+        $failed === [],
+        'Completed release fixture must satisfy every consistency invariant.',
+    );
 
     // Exercise every marker word boundary with ordinary spaces and both native
     // soft-wrap encodings; registered version bytes are the only allowed delta.
@@ -175,41 +322,61 @@ try {
     ];
     foreach ([' ', "\n", "\r\n"] as $gap) {
         foreach ($markdownMarkers as $relative => $marker) {
-            release_test_write($fixture, $relative,
+            release_test_write(
+                $fixture,
+                $relative,
                 str_replace(' ', $gap, $marker)
-                    . "\n\nHistorical Version 0.95 stays here.\n");
+                    . "\n\nHistorical Version 0.95 stays here.\n",
+            );
         }
         prepare_version_markers($fixture, '0.96.2', '6 September 2026');
         foreach ($markdownMarkers as $relative => $marker) {
-            $expected = str_replace(' ', $gap,
-                str_replace('0.96.1', '0.96.2', $marker))
+            $expected =
+                str_replace(' ', $gap, str_replace('0.96.1', '0.96.2', $marker))
                 . "\n\nHistorical Version 0.95 stays here.\n";
-            release_test_assert(file_get_contents($fixture . '/' . $relative)
-                === $expected, 'Version preparation altered Markdown layout: ' . $relative);
+            release_test_assert(
+                file_get_contents($fixture . '/' . $relative)
+                    === $expected,
+                'Version preparation altered Markdown layout: ' . $relative,
+            );
         }
         $checks = collect_consistency_checks($fixture, '0.96.2');
-        release_test_assert(array_filter($checks,
-            static fn(array $check): bool => $check['status'] === 'FAIL') === [],
-            'Consistency checks must accept the same wrapped registered markers.');
-        release_test_assert(prepare_version_markers($fixture, '0.96.2',
-            '6 September 2026') === [], 'Wrapped marker updates must be idempotent.');
+        release_test_assert(
+            array_filter(
+                $checks,
+                static fn(array $check): bool => $check['status'] === 'FAIL',
+            ) === [],
+            'Consistency checks must accept the same wrapped registered markers.',
+        );
+        release_test_assert(
+            prepare_version_markers($fixture, '0.96.2', '6 September 2026')
+                === [],
+            'Wrapped marker updates must be idempotent.',
+        );
     }
     foreach ($markdownMarkers as $relative => $marker) {
         $valid = file_get_contents($fixture . '/' . $relative);
-        release_test_write($fixture, $relative, str_replace(' ', "\n\n", $marker));
+        release_test_write(
+            $fixture,
+            $relative,
+            str_replace(' ', "\n\n", $marker),
+        );
         $rejected = false;
         try {
             prepare_version_markers($fixture, '0.96.2', '6 September 2026');
         } catch (RuntimeException $exception) {
             $rejected = str_contains($exception->getMessage(), 'marker');
         }
-        release_test_assert($rejected, 'Marker words must not cross paragraphs: ' . $relative);
+        release_test_assert(
+            $rejected,
+            'Marker words must not cross paragraphs: ' . $relative,
+        );
         release_test_write($fixture, $relative, $valid);
     }
 } finally {
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($fixture, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $item) {
         if ($item->isDir()) {

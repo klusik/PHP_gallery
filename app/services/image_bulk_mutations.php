@@ -50,7 +50,10 @@ use function Gallery\Models\image_model_set_visibility;
  */
 function image_bulk_normalize_ids(array $imageIds): array
 {
-    return array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $imageId): bool => $imageId > 0)));
+    return array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $imageId): bool => $imageId > 0,
+    )));
 }
 
 /**
@@ -63,7 +66,9 @@ function image_bulk_normalize_ids(array $imageIds): array
 function image_bulk_set_visibility(array $imageIds, string $visibility): array
 {
     if (!in_array($visibility, ['draft', 'public', 'private'], true)) {
-        throw new InvalidArgumentException('Unsupported image visibility value.');
+        throw new InvalidArgumentException(
+            'Unsupported image visibility value.',
+        );
     }
     $ids = image_bulk_normalize_ids($imageIds);
     if ($ids === []) {

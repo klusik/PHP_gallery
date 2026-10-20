@@ -43,6 +43,7 @@ use function Gallery\Core\e;
  * Render the shared Admin log heading and server-backed subsection navigation.
  *
  * @param array<string, mixed> $viewModel Controller-prepared heading state.
+ * @return void Emits the shared heading and subsection navigation.
  */
 function view_render_admin_log_page_heading(array $viewModel): void
 {
@@ -50,10 +51,29 @@ function view_render_admin_log_page_heading(array $viewModel): void
     $urls = (array) ($viewModel['urls'] ?? []);
     $activeSection = (string) ($viewModel['active_section'] ?? 'logs');
 
-    echo '<section class="hero"><h1>' . e((string) ($labels['title'] ?? 'Admin log')) . '</h1><p>' . e((string) ($labels['intro'] ?? '')) . '</p><nav class="nav">';
-    echo '<a class="button secondary" href="' . e((string) ($urls['admin'] ?? '')) . '">' . e((string) ($labels['back_to_dashboard'] ?? 'Back to dashboard')) . '</a>';
+    echo
+        '<section class="hero"><h1>'
+            . e((string) ($labels['title'] ?? 'Admin log'))
+            . '</h1><p>'
+            . e((string) ($labels['intro'] ?? ''))
+            . '</p><nav class="nav">';
+    echo
+        '<a class="button secondary" href="'
+            . e((string) ($urls['admin'] ?? ''))
+            . '">'
+            . e((string) ($labels['back_to_dashboard'] ?? 'Back to dashboard'))
+            . '</a>';
     if (!empty($viewModel['telemetry_enabled'])) {
-        echo '<a class="button secondary" href="' . e((string) ($urls['telemetry'] ?? '')) . '">' . e((string) ($labels['anonymous_telemetry'] ?? 'Anonymous telemetry')) . '</a>';
+        echo
+            '<a class="button secondary" href="'
+                . e((string) ($urls['telemetry'] ?? ''))
+                . '">'
+                . e(
+                    (string) (
+                        $labels['anonymous_telemetry'] ?? 'Anonymous telemetry'
+                    ),
+                )
+                . '</a>';
     }
     echo '</nav></section>';
     view_render_admin_log_section_tabs($viewModel);
@@ -63,6 +83,7 @@ function view_render_admin_log_page_heading(array $viewModel): void
  * Render server-backed Admin Logs subsection navigation.
  *
  * @param array<string, mixed> $viewModel Controller-prepared heading state.
+ * @return void Emits the subsection navigation.
  */
 function view_render_admin_log_section_tabs(array $viewModel): void
 {
@@ -70,10 +91,35 @@ function view_render_admin_log_section_tabs(array $viewModel): void
     $urls = (array) ($viewModel['urls'] ?? []);
     $activeSection = (string) ($viewModel['active_section'] ?? 'logs');
 
-    echo '<nav class="admin-subtabs admin-log-section-tabs" aria-label="' . e((string) ($labels['sections_aria'] ?? 'Admin log sections')) . '">';
+    echo
+        '<nav class="admin-subtabs admin-log-section-tabs" aria-label="'
+            . e((string) ($labels['sections_aria'] ?? 'Admin log sections'))
+            . '">';
     echo '<div class="admin-subtab-list">';
-    echo '<a class="admin-subtab' . ($activeSection === 'logs' ? ' is-active' : '') . '" href="' . e((string) ($urls['logs'] ?? '')) . '"' . ($activeSection === 'logs' ? ' aria-current="page"' : '') . '>' . e((string) ($labels['section_logs'] ?? 'Logs')) . '</a>';
-    echo '<a class="admin-subtab' . ($activeSection === 'maintenance' ? ' is-active' : '') . '" href="' . e((string) ($urls['maintenance'] ?? '')) . '"' . ($activeSection === 'maintenance' ? ' aria-current="page"' : '') . '>' . e((string) ($labels['section_maintenance'] ?? 'Maintenance & archives')) . '</a>';
+    echo
+        '<a class="admin-subtab'
+            . ($activeSection === 'logs' ? ' is-active' : '')
+            . '" href="'
+            . e((string) ($urls['logs'] ?? ''))
+            . '"'
+            . ($activeSection === 'logs' ? ' aria-current="page"' : '')
+            . '>'
+            . e((string) ($labels['section_logs'] ?? 'Logs'))
+            . '</a>';
+    echo
+        '<a class="admin-subtab'
+            . ($activeSection === 'maintenance' ? ' is-active' : '')
+            . '" href="'
+            . e((string) ($urls['maintenance'] ?? ''))
+            . '"'
+            . ($activeSection === 'maintenance' ? ' aria-current="page"' : '')
+            . '>'
+            . e(
+                (string) (
+                    $labels['section_maintenance'] ?? 'Maintenance & archives'
+                ),
+            )
+            . '</a>';
     echo '</div></nav>';
 }
 
@@ -88,8 +134,6 @@ function view_render_admin_log_empty(string $message): string
     return '<p>' . e($message) . '</p>';
 }
 
-
-
 /**
  * Render the compact legacy Admin log row used by compatibility call sites.
  *
@@ -97,14 +141,31 @@ function view_render_admin_log_empty(string $message): string
  * @param string $contextJson Compact context JSON, or an empty string.
  * @return string Rendered table row.
  */
-function view_render_admin_log_legacy_row(array $entry, string $contextJson = ''): string
-{
-    return '<tr>'
-        . '<td>' . e((string) ($entry['created_at'] ?? '')) . '</td>'
-        . '<td>' . e((string) ($entry['event_key'] ?? '')) . '</td>'
-        . '<td>' . e((string) ($entry['message'] ?? '')) . ($contextJson !== '' ? '<div class="muted">' . e($contextJson) . '</div>' : '') . '</td>'
-        . '<td>' . e((string) ($entry['username'] ?? '')) . '</td>'
-        . '</tr>';
+function view_render_admin_log_legacy_row(
+    array $entry,
+    string $contextJson = '',
+): string {
+    return (
+        '<tr>'
+            . '<td>'
+            . e((string) ($entry['created_at'] ?? ''))
+            . '</td>'
+            . '<td>'
+            . e((string) ($entry['event_key'] ?? ''))
+            . '</td>'
+            . '<td>'
+            . e((string) ($entry['message'] ?? ''))
+            . (
+                $contextJson !== ''
+                    ? '<div class="muted">' . e($contextJson) . '</div>'
+                    : ''
+            )
+            . '</td>'
+            . '<td>'
+            . e((string) ($entry['username'] ?? ''))
+            . '</td>'
+            . '</tr>'
+    );
 }
 
 /**
@@ -119,10 +180,25 @@ function view_render_admin_log_pagination(array $viewModel): string
     $totalPages = max(1, (int) ($viewModel['total_pages'] ?? 1));
     $links = is_array($viewModel['links'] ?? null) ? $viewModel['links'] : [];
     ob_start();
-    echo '<nav class="pagination admin-log-pagination" data-admin-log-pagination aria-label="' . e((string) ($viewModel['aria_label'] ?? 'Pagination')) . '">';
-    echo '<span class="pagination-status">' . e((string) ($viewModel['range_label'] ?? '')) . '</span>';
+    echo
+        '<nav class="pagination admin-log-pagination" data-admin-log-pagination aria-label="'
+            . e((string) ($viewModel['aria_label'] ?? 'Pagination'))
+            . '">';
+    echo
+        '<span class="pagination-status">'
+            . e((string) ($viewModel['range_label'] ?? ''))
+            . '</span>';
     if ($totalPages > 1) {
-        echo '<a class="pagination-link' . ($page <= 1 ? ' is-disabled' : '') . '" href="' . e((string) ($viewModel['previous_url'] ?? '')) . '" data-admin-log-page-link="' . max(1, $page - 1) . '">' . e((string) ($viewModel['previous_label'] ?? 'Previous')) . '</a>';
+        echo
+            '<a class="pagination-link'
+                . ($page <= 1 ? ' is-disabled' : '')
+                . '" href="'
+                . e((string) ($viewModel['previous_url'] ?? ''))
+                . '" data-admin-log-page-link="'
+                . max(1, $page - 1)
+                . '">'
+                . e((string) ($viewModel['previous_label'] ?? 'Previous'))
+                . '</a>';
         foreach ($links as $link) {
             if (!is_array($link)) {
                 continue;
@@ -132,13 +208,35 @@ function view_render_admin_log_pagination(array $viewModel): string
             }
             $number = max(1, (int) ($link['page'] ?? 1));
             if (!empty($link['current'])) {
-                echo '<span class="pagination-link is-current" aria-current="page">' . e((string) $number) . '</span>';
+                echo
+                    '<span class="pagination-link is-current" aria-current="page">'
+                        . e((string) $number)
+                        . '</span>';
             } else {
-                echo '<a class="pagination-link" href="' . e((string) ($link['url'] ?? '')) . '" data-admin-log-page-link="' . $number . '">' . e((string) $number) . '</a>';
+                echo
+                    '<a class="pagination-link" href="'
+                        . e((string) ($link['url'] ?? ''))
+                        . '" data-admin-log-page-link="'
+                        . $number
+                        . '">'
+                        . e((string) $number)
+                        . '</a>';
             }
         }
-        echo '<a class="pagination-link' . ($page >= $totalPages ? ' is-disabled' : '') . '" href="' . e((string) ($viewModel['next_url'] ?? '')) . '" data-admin-log-page-link="' . min($totalPages, $page + 1) . '">' . e((string) ($viewModel['next_label'] ?? 'Next')) . '</a>';
-        echo '<span class="pagination-status">' . e((string) ($viewModel['status_label'] ?? '')) . '</span>';
+        echo
+            '<a class="pagination-link'
+                . ($page >= $totalPages ? ' is-disabled' : '')
+                . '" href="'
+                . e((string) ($viewModel['next_url'] ?? ''))
+                . '" data-admin-log-page-link="'
+                . min($totalPages, $page + 1)
+                . '">'
+                . e((string) ($viewModel['next_label'] ?? 'Next'))
+                . '</a>';
+        echo
+            '<span class="pagination-status">'
+                . e((string) ($viewModel['status_label'] ?? ''))
+                . '</span>';
     }
     echo '</nav>';
     return (string) ob_get_clean();
@@ -158,7 +256,9 @@ function view_render_admin_logs_live(array $viewModel): void
     $severityOptions = (array) ($viewModel['severity_options'] ?? []);
     $statusOptions = (array) ($viewModel['status_options'] ?? []);
     $pageSizeOptions = (array) ($viewModel['page_size_options'] ?? []);
-    $selectedSeverities = array_values((array) ($viewModel['selected_severities'] ?? []));
+    $selectedSeverities = array_values(
+        (array) ($viewModel['selected_severities'] ?? []),
+    );
     $category = (string) ($viewModel['category'] ?? '');
     $timeSort = (string) ($viewModel['time_sort'] ?? 'desc');
     $grouped = !empty($viewModel['grouped']);
@@ -176,74 +276,320 @@ function view_render_admin_logs_live(array $viewModel): void
         echo '<div class="notice">' . e($notice) . '</div>';
     }
 
-    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><h2>' . e((string) ($labels['filters'] ?? 'Filters')) . '</h2><div class="admin-log-filters-header-actions"><a class="button secondary" href="' . e((string) ($urls['export_all_zip'] ?? '')) . '">' . e((string) ($labels['export_all_zip'] ?? 'Export all logs ZIP')) . '</a><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div></div><form method="get" action="' . e((string) ($urls['index'] ?? '')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e((string) ($urls['live'] ?? '')) . '" data-admin-log-searching-text="' . e((string) ($labels['searching'] ?? 'Searching...')) . '" data-admin-log-updated-text="' . e((string) ($labels['updated'] ?? 'Updated.')) . '" data-admin-log-failed-text="' . e((string) ($labels['live_search_failed'] ?? 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e((string) ($labels['shown_suffix'] ?? 'shown')) . '" data-admin-log-when-text="' . e((string) ($labels['when'] ?? 'When')) . '">';
+    echo
+        '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><h2>'
+            . e((string) ($labels['filters'] ?? 'Filters'))
+            . '</h2><div class="admin-log-filters-header-actions"><a class="button secondary" href="'
+            . e((string) ($urls['export_all_zip'] ?? ''))
+            . '">'
+            . e((string) ($labels['export_all_zip'] ?? 'Export all logs ZIP'))
+            . '</a><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div></div><form method="get" action="'
+            . e((string) ($urls['index'] ?? ''))
+            . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="'
+            . e((string) ($urls['live'] ?? ''))
+            . '" data-admin-log-searching-text="'
+            . e((string) ($labels['searching'] ?? 'Searching...'))
+            . '" data-admin-log-updated-text="'
+            . e((string) ($labels['updated'] ?? 'Updated.'))
+            . '" data-admin-log-failed-text="'
+            . e(
+                (string) (
+                    $labels['live_search_failed']
+                    ?? 'Live search failed. Use Apply filters.'
+                ),
+            )
+            . '" data-admin-log-shown-text="'
+            . e((string) ($labels['shown_suffix'] ?? 'shown'))
+            . '" data-admin-log-when-text="'
+            . e((string) ($labels['when'] ?? 'When'))
+            . '">';
     echo '<input type="hidden" name="page" value="admin_logs">';
-    echo '<input type="hidden" name="log_page" value="' . $currentPage . '" data-admin-log-page-input>';
+    echo
+        '<input type="hidden" name="log_page" value="'
+            . $currentPage
+            . '" data-admin-log-page-input>';
     echo '<div class="admin-log-filter-main">';
-    echo '<fieldset class="admin-log-filter-group admin-log-filter-scope"><legend>' . e((string) ($labels['filter_scope'] ?? 'Log scope')) . '</legend><div class="admin-log-control-grid">';
-    echo '<label class="admin-log-filter-control"><span>' . e((string) ($labels['category'] ?? 'Category')) . '</span><select name="category" data-admin-log-live-filter><option value="">' . e((string) ($labels['all_categories'] ?? 'All categories')) . '</option>';
+    echo
+        '<fieldset class="admin-log-filter-group admin-log-filter-scope"><legend>'
+            . e((string) ($labels['filter_scope'] ?? 'Log scope'))
+            . '</legend><div class="admin-log-control-grid">';
+    echo
+        '<label class="admin-log-filter-control"><span>'
+            . e((string) ($labels['category'] ?? 'Category'))
+            . '</span><select name="category" data-admin-log-live-filter><option value="">'
+            . e((string) ($labels['all_categories'] ?? 'All categories'))
+            . '</option>';
     foreach ($categoryOptions as $value => $label) {
-        echo '<option value="' . e((string) $value) . '"' . ($category === (string) $value ? ' selected' : '') . '>' . e((string) $label) . '</option>';
+        echo
+            '<option value="'
+                . e((string) $value)
+                . '"'
+                . ($category === (string) $value ? ' selected' : '')
+                . '>'
+                . e((string) $label)
+                . '</option>';
     }
     echo '</select></label>';
-    echo '<label class="admin-log-filter-control"><span>' . e((string) ($labels['time_order'] ?? 'Time order')) . '</span><select name="time_sort" data-admin-log-live-filter><option value="desc"' . ($timeSort === 'desc' ? ' selected' : '') . '>' . e((string) ($labels['newest_first'] ?? 'Newest first')) . '</option><option value="asc"' . ($timeSort === 'asc' ? ' selected' : '') . '>' . e((string) ($labels['oldest_first'] ?? 'Oldest first')) . '</option></select></label>';
-    echo '<label class="admin-log-filter-control"><span>' . e((string) ($labels['grouping'] ?? 'Grouping')) . '</span><select name="grouped" data-admin-log-live-filter><option value="1"' . ($grouped ? ' selected' : '') . '>' . e((string) ($labels['group_similar'] ?? 'Group similar events')) . '</option><option value="0"' . (!$grouped ? ' selected' : '') . '>' . e((string) ($labels['show_individual'] ?? 'Show individual rows')) . '</option></select></label>';
-    echo '<label class="admin-log-filter-control"><span>' . e((string) ($labels['per_page'] ?? 'Rows per page')) . '</span><select name="per_page" data-admin-log-live-filter>';
+    echo
+        '<label class="admin-log-filter-control"><span>'
+            . e((string) ($labels['time_order'] ?? 'Time order'))
+            . '</span><select name="time_sort" data-admin-log-live-filter><option value="desc"'
+            . ($timeSort === 'desc' ? ' selected' : '')
+            . '>'
+            . e((string) ($labels['newest_first'] ?? 'Newest first'))
+            . '</option><option value="asc"'
+            . ($timeSort === 'asc' ? ' selected' : '')
+            . '>'
+            . e((string) ($labels['oldest_first'] ?? 'Oldest first'))
+            . '</option></select></label>';
+    echo
+        '<label class="admin-log-filter-control"><span>'
+            . e((string) ($labels['grouping'] ?? 'Grouping'))
+            . '</span><select name="grouped" data-admin-log-live-filter><option value="1"'
+            . ($grouped ? ' selected' : '')
+            . '>'
+            . e((string) ($labels['group_similar'] ?? 'Group similar events'))
+            . '</option><option value="0"'
+            . (!$grouped ? ' selected' : '')
+            . '>'
+            . e((string) ($labels['show_individual'] ?? 'Show individual rows'))
+            . '</option></select></label>';
+    echo
+        '<label class="admin-log-filter-control"><span>'
+            . e((string) ($labels['per_page'] ?? 'Rows per page'))
+            . '</span><select name="per_page" data-admin-log-live-filter>';
     foreach ($pageSizeOptions as $option) {
         $optionValue = (int) $option;
-        echo '<option value="' . $optionValue . '"' . ($pageSize === $optionValue ? ' selected' : '') . '>' . $optionValue . '</option>';
+        echo
+            '<option value="'
+                . $optionValue
+                . '"'
+                . ($pageSize === $optionValue ? ' selected' : '')
+                . '>'
+                . $optionValue
+                . '</option>';
     }
     echo '</select></label>';
     echo '</div></fieldset>';
-    echo '<details class="admin-log-severity-disclosure"><summary><span class="admin-log-severity-trigger-label">' . e((string) ($labels['severity'] ?? 'Severity')) . '<span class="admin-log-severity-count' . ($selectedSeverities === [] ? ' is-empty' : '') . '">' . e((string) count($selectedSeverities)) . '</span></span><span class="admin-log-severity-summary" data-admin-log-severity-summary>' . e((string) ($viewModel['severity_summary'] ?? '')) . '</span></summary>';
-    echo '<fieldset class="admin-log-severity-filter admin-log-filter-group" data-admin-log-severity-filter data-all-text="' . e((string) ($labels['severity_filter_all_summary'] ?? 'All severities are shown.')) . '" data-active-template="' . e((string) ($labels['severity_filter_active_summary'] ?? 'Active severities: {values}')) . '"><legend>' . e((string) ($labels['severity'] ?? 'Severity')) . '</legend>';
+    echo
+        '<details class="admin-log-severity-disclosure"><summary><span class="admin-log-severity-trigger-label">'
+            . e((string) ($labels['severity'] ?? 'Severity'))
+            . '<span class="admin-log-severity-count'
+            . ($selectedSeverities === [] ? ' is-empty' : '')
+            . '">'
+            . e((string) count($selectedSeverities))
+            . '</span></span><span class="admin-log-severity-summary" data-admin-log-severity-summary>'
+            . e((string) ($viewModel['severity_summary'] ?? ''))
+            . '</span></summary>';
+    echo
+        '<fieldset class="admin-log-severity-filter admin-log-filter-group" data-admin-log-severity-filter data-all-text="'
+            . e(
+                (string) (
+                    $labels['severity_filter_all_summary']
+                    ?? 'All severities are shown.'
+                ),
+            )
+            . '" data-active-template="'
+            . e(
+                (string) (
+                    $labels['severity_filter_active_summary']
+                    ?? 'Active severities: {values}'
+                ),
+            )
+            . '"><legend>'
+            . e((string) ($labels['severity'] ?? 'Severity'))
+            . '</legend>';
     echo '<input type="hidden" name="severity_filter_submitted" value="1">';
-    echo '<p class="admin-log-filter-help">' . e((string) ($labels['severity_filter_hint'] ?? '')) . '</p>';
+    echo
+        '<p class="admin-log-filter-help">'
+            . e((string) ($labels['severity_filter_hint'] ?? ''))
+            . '</p>';
     echo '<div class="admin-log-severity-options">';
     foreach ($severityOptions as $value => $label) {
         $valueString = (string) $value;
-        echo '<label class="admin-log-severity-choice is-' . e($valueString) . '"><input class="admin-log-severity-checkbox" type="checkbox" name="severities[]" value="' . e($valueString) . '"' . (in_array($valueString, $selectedSeverities, true) ? ' checked' : '') . ' data-admin-log-live-filter> <span>' . e((string) $label) . '</span></label>';
+        echo
+            '<label class="admin-log-severity-choice is-'
+                . e($valueString)
+                . '"><input class="admin-log-severity-checkbox" type="checkbox" name="severities[]" value="'
+                . e($valueString)
+                . '"'
+                . (
+                    in_array($valueString, $selectedSeverities, true)
+                        ? ' checked'
+                        : ''
+                )
+                . ' data-admin-log-live-filter> <span>'
+                . e((string) $label)
+                . '</span></label>';
     }
-    echo '</div><a class="button secondary" href="' . e((string) ($urls['reset_severity'] ?? '')) . '">' . e((string) ($labels['reset_severity_filter'] ?? 'Reset severity filter')) . '</a></fieldset></details>';
+    echo
+        '</div><a class="button secondary" href="'
+            . e((string) ($urls['reset_severity'] ?? ''))
+            . '">'
+            . e(
+                (string) (
+                    $labels['reset_severity_filter'] ?? 'Reset severity filter'
+                ),
+            )
+            . '</a></fieldset></details>';
     echo '</div>';
     echo '<div class="admin-log-filter-footer">';
-    echo '<label class="admin-log-filter-control admin-log-search-control"><span>' . e((string) ($labels['search'] ?? 'Search')) . '</span><input name="q" value="' . e($query) . '" placeholder="' . e((string) ($labels['search_placeholder'] ?? '')) . '" autocomplete="off" data-admin-log-live-search></label>';
-    echo '<div class="admin-log-filter-actions"><button type="submit">' . e((string) ($labels['apply_filters'] ?? 'Apply filters')) . '</button></div>';
+    echo
+        '<label class="admin-log-filter-control admin-log-search-control"><span>'
+            . e((string) ($labels['search'] ?? 'Search'))
+            . '</span><input name="q" value="'
+            . e($query)
+            . '" placeholder="'
+            . e((string) ($labels['search_placeholder'] ?? ''))
+            . '" autocomplete="off" data-admin-log-live-search></label>';
+    echo
+        '<div class="admin-log-filter-actions"><button type="submit">'
+            . e((string) ($labels['apply_filters'] ?? 'Apply filters'))
+            . '</button></div>';
     echo '</div>';
     echo '</form></section>';
 
-    echo '<section class="panel" data-admin-log-results><div class="admin-log-results-header"><h2>' . e((string) ($labels['entries'] ?? 'Entries')) . ' <span class="muted" data-admin-log-count>(' . e($countText) . ')</span></h2>';
+    echo
+        '<section class="panel" data-admin-log-results><div class="admin-log-results-header"><h2>'
+            . e((string) ($labels['entries'] ?? 'Entries'))
+            . ' <span class="muted" data-admin-log-count>('
+            . e($countText)
+            . ')</span></h2>';
     echo $paginationHtml;
     echo '</div>';
-    echo '<div class="admin-log-export-toolbar" data-admin-log-export-toolbar data-export-url="' . e((string) ($urls['export_text'] ?? '')) . '" data-labels="' . e((string) json_encode($labels, JSON_UNESCAPED_UNICODE)) . '">';
-    echo '<label class="admin-log-export-scope"><span class="admin-log-sr-only">' . e($labels['export_scope']) . '</span><select name="export_scope" form="admin-log-bulk-form" data-admin-log-export-scope>';
-    foreach ([['selected', 'selected'], ['page', 'this_page'], ['filtered', 'all_filtered']] as [$value, $label]) {
-        echo '<option value="' . $value . '">' . e($labels[$label]) . '</option>';
+    echo
+        '<div class="admin-log-export-toolbar" data-admin-log-export-toolbar data-export-url="'
+            . e((string) ($urls['export_text'] ?? ''))
+            . '" data-labels="'
+            . e((string) json_encode($labels, JSON_UNESCAPED_UNICODE))
+            . '">';
+    echo
+        '<label class="admin-log-export-scope"><span class="admin-log-sr-only">'
+            . e($labels['export_scope'])
+            . '</span><select name="export_scope" form="admin-log-bulk-form" data-admin-log-export-scope>';
+    foreach ([
+        ['selected', 'selected'],
+        ['page', 'this_page'],
+        ['filtered', 'all_filtered'],
+    ] as [$value, $label]) {
+        echo
+            '<option value="'
+                . $value
+                . '">'
+                . e($labels[$label])
+                . '</option>';
     }
-    echo '</select></label><span class="admin-log-selection-count" data-admin-log-selection-count aria-live="polite"></span>';
-    echo '<button type="button" class="admin-log-icon-button secondary" data-admin-log-copy-selection hidden title="' . e($labels['copy_logs']) . '" aria-label="' . e($labels['copy_logs']) . '">' . view_render_admin_log_icon('copy') . '</button>';
-    echo '<button type="submit" form="admin-log-bulk-form" formaction="' . e((string) ($urls['export_text'] ?? '')) . '" formtarget="_blank" class="admin-log-icon-button secondary" data-admin-log-save-selection title="' . e($labels['save_logs']) . '" aria-label="' . e($labels['save_logs']) . '">' . view_render_admin_log_icon('save') . '</button>';
-    echo '<span class="admin-log-export-state" data-admin-log-export-state role="status"></span>';
-    foreach (['category' => $category, 'q' => $query, 'time_sort' => $timeSort] as $name => $value) {
-        echo '<input type="hidden" name="' . $name . '" value="' . e($value) . '" form="admin-log-bulk-form" data-admin-log-export-filter>';
+    echo
+        '</select></label><span class="admin-log-selection-count" data-admin-log-selection-count aria-live="polite"></span>';
+    echo
+        '<button type="button" class="admin-log-icon-button secondary" data-admin-log-copy-selection hidden title="'
+            . e($labels['copy_logs'])
+            . '" aria-label="'
+            . e($labels['copy_logs'])
+            . '">'
+            . view_render_admin_log_icon('copy')
+            . '</button>';
+    echo
+        '<button type="submit" form="admin-log-bulk-form" formaction="'
+            . e((string) ($urls['export_text'] ?? ''))
+            . '" formtarget="_blank" class="admin-log-icon-button secondary" data-admin-log-save-selection title="'
+            . e($labels['save_logs'])
+            . '" aria-label="'
+            . e($labels['save_logs'])
+            . '">'
+            . view_render_admin_log_icon('save')
+            . '</button>';
+    echo
+        '<span class="admin-log-export-state" data-admin-log-export-state role="status"></span>';
+    foreach ([
+        'category' => $category,
+        'q' => $query,
+        'time_sort' => $timeSort,
+    ] as $name => $value) {
+        echo
+            '<input type="hidden" name="'
+                . $name
+                . '" value="'
+                . e($value)
+                . '" form="admin-log-bulk-form" data-admin-log-export-filter>';
     }
     foreach ($selectedSeverities as $value) {
-        echo '<input type="hidden" name="severities[]" value="' . e((string) $value) . '" form="admin-log-bulk-form" data-admin-log-export-filter>';
+        echo
+            '<input type="hidden" name="severities[]" value="'
+                . e((string) $value)
+                . '" form="admin-log-bulk-form" data-admin-log-export-filter>';
     }
     echo '</div>';
     if (!$hasLogs) {
-        echo '<div data-admin-log-empty>' . view_render_admin_log_empty((string) ($labels['no_entries_match'] ?? 'No log entries match the current filters.')) . '</div>';
+        echo
+            '<div data-admin-log-empty>'
+                . view_render_admin_log_empty(
+                    (string) (
+                        $labels['no_entries_match']
+                        ?? 'No log entries match the current filters.'
+                    ),
+                )
+                . '</div>';
     }
     echo '<div class="admin-log-table-wrap">';
-    echo '<table class="admin-log-table"><thead><tr><th><input type="checkbox" data-admin-log-select-page disabled aria-label="' . e($labels['select_page']) . '" title="' . e($labels['select_page']) . '"></th><th><a href="' . e((string) ($urls['time_sort'] ?? '')) . '" data-admin-log-time-sort-link data-next-sort="' . e((string) ($viewModel['next_time_sort'] ?? 'asc')) . '">' . e((string) ($labels['when'] ?? 'When')) . ' ' . e((string) ($viewModel['time_sort_symbol'] ?? '↓')) . '</a></th><th>' . e((string) ($labels['instances'] ?? 'Instances')) . '</th><th>' . e((string) ($labels['severity'] ?? 'Severity')) . '</th><th>' . e((string) ($labels['category'] ?? 'Category')) . '</th><th>' . e((string) ($labels['event'] ?? 'Event')) . '</th><th>' . e((string) ($labels['message'] ?? 'Message')) . '</th><th>' . e((string) ($labels['by'] ?? 'By')) . '</th><th><span class="admin-log-sr-only">' . e($labels['export_scope']) . '</span></th></tr></thead><tbody data-admin-log-tbody>';
+    echo
+        '<table class="admin-log-table"><thead><tr><th><input type="checkbox" data-admin-log-select-page disabled aria-label="'
+            . e($labels['select_page'])
+            . '" title="'
+            . e($labels['select_page'])
+            . '"></th><th><a href="'
+            . e((string) ($urls['time_sort'] ?? ''))
+            . '" data-admin-log-time-sort-link data-next-sort="'
+            . e((string) ($viewModel['next_time_sort'] ?? 'asc'))
+            . '">'
+            . e((string) ($labels['when'] ?? 'When'))
+            . ' '
+            . e((string) ($viewModel['time_sort_symbol'] ?? '↓'))
+            . '</a></th><th>'
+            . e((string) ($labels['instances'] ?? 'Instances'))
+            . '</th><th>'
+            . e((string) ($labels['severity'] ?? 'Severity'))
+            . '</th><th>'
+            . e((string) ($labels['category'] ?? 'Category'))
+            . '</th><th>'
+            . e((string) ($labels['event'] ?? 'Event'))
+            . '</th><th>'
+            . e((string) ($labels['message'] ?? 'Message'))
+            . '</th><th>'
+            . e((string) ($labels['by'] ?? 'By'))
+            . '</th><th><span class="admin-log-sr-only">'
+            . e($labels['export_scope'])
+            . '</span></th></tr></thead><tbody data-admin-log-tbody>';
     echo $rowsHtml;
-    echo '</tbody></table></div><form id="admin-log-bulk-form" method="post" action="' . e((string) ($urls['update'] ?? '')) . '">' . $csrfHtml;
-    echo '<input type="hidden" name="export_tokens_json" value="' . e((string) json_encode($viewModel['export_tokens'] ?? new \stdClass())) . '">';
-    echo '<div class="bulk-row"><label>' . e((string) ($labels['bulk_set_selected'] ?? 'Bulk set selected')) . '<select name="status">';
+    echo
+        '</tbody></table></div><form id="admin-log-bulk-form" method="post" action="'
+            . e((string) ($urls['update'] ?? ''))
+            . '">'
+            . $csrfHtml;
+    echo
+        '<input type="hidden" name="export_tokens_json" value="'
+            . e((string) json_encode(
+                $viewModel['export_tokens'] ?? new \stdClass(),
+            ))
+            . '">';
+    echo
+        '<div class="bulk-row"><label>'
+            . e((string) ($labels['bulk_set_selected'] ?? 'Bulk set selected'))
+            . '<select name="status">';
     foreach ($statusOptions as $value => $label) {
-        echo '<option value="' . e((string) $value) . '">' . e((string) $label) . '</option>';
+        echo
+            '<option value="'
+                . e((string) $value)
+                . '">'
+                . e((string) $label)
+                . '</option>';
     }
-    echo '</select></label><button type="submit" name="action" value="bulk" title="' . e((string) ($labels['bulk_grouping_hint'] ?? '')) . '">' . e((string) ($labels['apply_to_selected'] ?? 'Apply to selected')) . '</button></div></form></section>';
+    echo
+        '</select></label><button type="submit" name="action" value="bulk" title="'
+            . e((string) ($labels['bulk_grouping_hint'] ?? ''))
+            . '">'
+            . e((string) ($labels['apply_to_selected'] ?? 'Apply to selected'))
+            . '</button></div></form></section>';
 }
 
 /**
@@ -258,7 +604,11 @@ function view_render_admin_log_icon(string $name): string
         'save' => '<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
         'details' => '<path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/>',
     ];
-    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($paths[$name] ?? '') . '</svg>';
+    return (
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+            . ($paths[$name] ?? '')
+            . '</svg>'
+    );
 }
 
 /**
@@ -268,12 +618,35 @@ function view_render_admin_log_icon(string $name): string
  * @param bool $group Whether the URL exports an entire group instead of one event.
  * @return string Accessible icon controls; copy is enabled by the browser module.
  */
-function view_render_admin_log_export_actions(string $url, array $labels, bool $group = false): string
-{
+function view_render_admin_log_export_actions(
+    string $url,
+    array $labels,
+    bool $group = false,
+): string {
     $copy = $labels[$group ? 'copy_group' : 'copy'] ?? 'Copy log';
     $save = $labels[$group ? 'save_group' : 'save'] ?? 'Save log';
-    return '<span class="admin-log-row-actions"><button type="button" class="admin-log-icon-button secondary" data-admin-log-copy-url="' . e($url) . '" hidden title="' . e($copy) . '" aria-label="' . e($copy) . '">' . view_render_admin_log_icon('copy') . '</button>'
-        . '<a class="admin-log-icon-button secondary" href="' . e($url) . '" download target="_blank" rel="noopener" data-admin-log-save-url="' . e($url) . '" title="' . e($save) . '" aria-label="' . e($save) . '">' . view_render_admin_log_icon('save') . '</a></span>';
+    return (
+        '<span class="admin-log-row-actions"><button type="button" class="admin-log-icon-button secondary" data-admin-log-copy-url="'
+            . e($url)
+            . '" hidden title="'
+            . e($copy)
+            . '" aria-label="'
+            . e($copy)
+            . '">'
+            . view_render_admin_log_icon('copy')
+            . '</button>'
+            . '<a class="admin-log-icon-button secondary" href="'
+            . e($url)
+            . '" download target="_blank" rel="noopener" data-admin-log-save-url="'
+            . e($url)
+            . '" title="'
+            . e($save)
+            . '" aria-label="'
+            . e($save)
+            . '">'
+            . view_render_admin_log_icon('save')
+            . '</a></span>'
+    );
 }
 
 /**
@@ -284,26 +657,50 @@ function view_render_admin_log_export_actions(string $url, array $labels, bool $
  * @param array<string,string> $labels Localized selection and export labels.
  * @return string Rendered grouped member rows.
  */
-function view_render_admin_log_group_member_rows(array $members, string $requestPrefix, array $labels = []): string
-{
+function view_render_admin_log_group_member_rows(
+    array $members,
+    string $requestPrefix,
+    array $labels = [],
+): string {
     ob_start();
     foreach ($members as $member) {
         echo '<div class="admin-log-group-instance">';
-        echo '<div class="admin-log-instance-heading"><input type="checkbox" name="log_ids[]" value="' . (int) ($member['id'] ?? 0) . '" form="admin-log-bulk-form" data-admin-log-export-choice aria-label="' . e(($labels['select_log'] ?? 'Select log') . ' ' . (string) ($member['id'] ?? '')) . '">';
-        echo '<strong>#' . e((string) ($member['display_index'] ?? '')) . '</strong> ';
+        echo
+            '<div class="admin-log-instance-heading"><input type="checkbox" name="log_ids[]" value="'
+                . (int) ($member['id'] ?? 0)
+                . '" form="admin-log-bulk-form" data-admin-log-export-choice aria-label="'
+                . e(
+                    ($labels['select_log'] ?? 'Select log')
+                        . ' '
+                        . (string) ($member['id'] ?? ''),
+                )
+                . '">';
+        echo
+            '<strong>#'
+                . e((string) ($member['display_index'] ?? ''))
+                . '</strong> ';
         echo e((string) ($member['created_at'] ?? ''));
         echo ' | ID ' . e((string) ($member['id'] ?? '0'));
-        echo ' | ' . e((string) ($member['severity'] ?? $member['level'] ?? ''));
+        echo
+            ' | ' . e((string) ($member['severity'] ?? $member['level'] ?? ''));
         if (!empty($member['username'])) {
             echo ' | ' . e((string) $member['username']);
         }
         if (!empty($member['request_id'])) {
-            echo ' | ' . e($requestPrefix) . ' ' . e((string) $member['request_id']);
+            echo
+                ' | '
+                    . e($requestPrefix)
+                    . ' '
+                    . e((string) $member['request_id']);
         }
         if (!empty($member['route_name'])) {
             echo ' | ' . e((string) $member['route_name']);
         }
-        echo view_render_admin_log_export_actions((string) ($member['export_url'] ?? ''), $labels) . '</div>';
+        echo
+            view_render_admin_log_export_actions(
+                (string) ($member['export_url'] ?? ''),
+                $labels,
+            ) . '</div>';
         $message = (string) ($member['message'] ?? '');
         $contextJson = (string) ($member['context_compact_json'] ?? '');
         if ($message !== '') {
@@ -328,62 +725,214 @@ function view_render_admin_log_group_member_rows(array $members, string $request
  * @param string $query Active text query supplied by the controller; empty disables the context-match hint.
  * @return string Rendered table rows.
  */
-function view_render_admin_log_table_rows(array $logs, array $labels, string $query = ''): string
-{
+function view_render_admin_log_table_rows(
+    array $logs,
+    array $labels,
+    string $query = '',
+): string {
     ob_start();
     foreach ($logs as $entry) {
         $groupCount = max(1, (int) ($entry['group_count'] ?? 1));
-        $firstCreatedAt = (string) ($entry['first_created_at'] ?? $entry['created_at'] ?? '');
-        $latestCreatedAt = (string) ($entry['latest_created_at'] ?? $entry['created_at'] ?? '');
+        $firstCreatedAt = (string) (
+            $entry['first_created_at']
+            ?? $entry['created_at']
+            ?? ''
+        );
+        $latestCreatedAt = (string) (
+            $entry['latest_created_at']
+            ?? $entry['created_at']
+            ?? ''
+        );
         $createdAtLabel = (string) ($entry['created_at'] ?? '');
         $severity = (string) ($entry['severity'] ?? $entry['level'] ?? 'info');
 
         echo '<tr data-admin-log-row>';
-        echo '<td><input type="checkbox" name="log_ids[]" value="' . e((string) ($entry['selection_value'] ?? '')) . '" form="admin-log-bulk-form" data-export-token="' . e((string) ($entry['export_token'] ?? '')) . '" data-admin-log-export-choice aria-label="' . e(($labels['select_log'] ?? 'Select log') . ' ' . (string) ($entry['id'] ?? '')) . '"></td>';
-        echo '<td data-admin-log-created-at title="' . e($firstCreatedAt . ' – ' . $latestCreatedAt) . '">' . e($createdAtLabel) . '</td>';
-        echo '<td><span class="admin-log-instance-count" title="' . e((string) ($labels['group_count'] ?? 'Grouped entries')) . '">' . $groupCount . '</span></td>';
-        echo '<td><span class="log-severity log-severity-' . e($severity) . '">' . e($severity) . '</span></td>';
+        echo
+            '<td><input type="checkbox" name="log_ids[]" value="'
+                . e((string) ($entry['selection_value'] ?? ''))
+                . '" form="admin-log-bulk-form" data-export-token="'
+                . e((string) ($entry['export_token'] ?? ''))
+                . '" data-admin-log-export-choice aria-label="'
+                . e(
+                    ($labels['select_log'] ?? 'Select log')
+                        . ' '
+                        . (string) ($entry['id'] ?? ''),
+                )
+                . '"></td>';
+        echo
+            '<td data-admin-log-created-at title="'
+                . e($firstCreatedAt . ' – ' . $latestCreatedAt)
+                . '">'
+                . e($createdAtLabel)
+                . '</td>';
+        echo
+            '<td><span class="admin-log-instance-count" title="'
+                . e((string) ($labels['group_count'] ?? 'Grouped entries'))
+                . '">'
+                . $groupCount
+                . '</span></td>';
+        echo
+            '<td><span class="log-severity log-severity-'
+                . e($severity)
+                . '">'
+                . e($severity)
+                . '</span></td>';
         echo '<td>' . e((string) ($entry['category'] ?? 'other')) . '</td>';
-        echo '<td><details class="log-entry-details"><summary><code>' . e((string) ($entry['event_key'] ?? '')) . '</code></summary>';
-        echo '<div class="admin-log-detail-body"><div class="log-detail-actions">' . view_render_admin_log_export_actions((string) ($entry['single_export_url'] ?? ''), $labels) . '</div>';
+        echo
+            '<td><details class="log-entry-details"><summary><code>'
+                . e((string) ($entry['event_key'] ?? ''))
+                . '</code></summary>';
+        echo
+            '<div class="admin-log-detail-body"><div class="log-detail-actions">'
+                . view_render_admin_log_export_actions(
+                    (string) ($entry['single_export_url'] ?? ''),
+                    $labels,
+                )
+                . '</div>';
         echo '<dl class="log-detail-list">';
-        echo '<dt>' . e((string) ($labels['log_id'] ?? 'Log ID')) . '</dt><dd>' . (int) ($entry['id'] ?? 0) . '</dd>';
-        echo '<dt>' . e((string) ($labels['group_count'] ?? 'Grouped entries')) . '</dt><dd>' . e((string) $groupCount) . '</dd>';
+        echo
+            '<dt>'
+                . e((string) ($labels['log_id'] ?? 'Log ID'))
+                . '</dt><dd>'
+                . (int) ($entry['id'] ?? 0)
+                . '</dd>';
+        echo
+            '<dt>'
+                . e((string) ($labels['group_count'] ?? 'Grouped entries'))
+                . '</dt><dd>'
+                . e((string) $groupCount)
+                . '</dd>';
         if ($groupCount > 1) {
-            echo '<dt>' . e((string) ($labels['first_seen'] ?? 'First seen')) . '</dt><dd>' . e($firstCreatedAt) . '</dd>';
-            echo '<dt>' . e((string) ($labels['latest_seen'] ?? 'Latest seen')) . '</dt><dd>' . e($latestCreatedAt) . '</dd>';
+            echo
+                '<dt>'
+                    . e((string) ($labels['first_seen'] ?? 'First seen'))
+                    . '</dt><dd>'
+                    . e($firstCreatedAt)
+                    . '</dd>';
+            echo
+                '<dt>'
+                    . e((string) ($labels['latest_seen'] ?? 'Latest seen'))
+                    . '</dt><dd>'
+                    . e($latestCreatedAt)
+                    . '</dd>';
         }
-        echo '<dt>' . e((string) ($labels['created_at'] ?? 'Created at')) . '</dt><dd>' . e($createdAtLabel) . '</dd>';
-        echo '<dt>' . e((string) ($labels['level'] ?? 'Level')) . '</dt><dd>' . e((string) ($entry['level'] ?? '')) . '</dd>';
-        echo '<dt>' . e((string) ($labels['severity'] ?? 'Severity')) . '</dt><dd>' . e($severity) . '</dd>';
-        echo '<dt>' . e((string) ($labels['category'] ?? 'Category')) . '</dt><dd>' . e((string) ($entry['category'] ?? 'other')) . '</dd>';
-        echo '<dt>' . e((string) ($labels['route'] ?? 'Route')) . '</dt><dd>' . e((string) ($entry['route_name'] ?? '')) . '</dd>';
-        echo '<dt>' . e((string) ($labels['request_id'] ?? 'Request ID')) . '</dt><dd>' . e((string) ($entry['request_id'] ?? '')) . '</dd>';
+        echo
+            '<dt>'
+                . e((string) ($labels['created_at'] ?? 'Created at'))
+                . '</dt><dd>'
+                . e($createdAtLabel)
+                . '</dd>';
+        echo
+            '<dt>'
+                . e((string) ($labels['level'] ?? 'Level'))
+                . '</dt><dd>'
+                . e((string) ($entry['level'] ?? ''))
+                . '</dd>';
+        echo
+            '<dt>'
+                . e((string) ($labels['severity'] ?? 'Severity'))
+                . '</dt><dd>'
+                . e($severity)
+                . '</dd>';
+        echo
+            '<dt>'
+                . e((string) ($labels['category'] ?? 'Category'))
+                . '</dt><dd>'
+                . e((string) ($entry['category'] ?? 'other'))
+                . '</dd>';
+        echo
+            '<dt>'
+                . e((string) ($labels['route'] ?? 'Route'))
+                . '</dt><dd>'
+                . e((string) ($entry['route_name'] ?? ''))
+                . '</dd>';
+        echo
+            '<dt>'
+                . e((string) ($labels['request_id'] ?? 'Request ID'))
+                . '</dt><dd>'
+                . e((string) ($entry['request_id'] ?? ''))
+                . '</dd>';
         echo '</dl>';
         if ($groupCount > 1 && !empty($entry['members_url'])) {
-            echo '<details class="log-context admin-log-group-members" data-admin-log-group-members data-admin-log-group-members-url="' . e((string) $entry['members_url']) . '" data-admin-log-group-total="' . e((string) $groupCount) . '">';
-            echo '<summary>' . e((string) ($labels['all_instances'] ?? 'All grouped instances')) . ' (' . e((string) $groupCount) . ')</summary>';
-            echo '<div data-admin-log-group-members-list><p class="muted">' . e((string) ($labels['instances_lazy_hint'] ?? '')) . '</p></div>';
-            echo '<div class="log-detail-actions"><button type="button" class="button secondary" data-admin-log-group-members-more hidden>' . e((string) ($labels['load_more_instances'] ?? 'Load more instances')) . '</button><span class="muted" data-admin-log-group-members-state aria-live="polite"></span></div>';
+            echo
+                '<details class="log-context admin-log-group-members" data-admin-log-group-members data-admin-log-group-members-url="'
+                    . e((string) $entry['members_url'])
+                    . '" data-admin-log-group-total="'
+                    . e((string) $groupCount)
+                    . '">';
+            echo
+                '<summary>'
+                    . e(
+                        (string) (
+                            $labels['all_instances'] ?? 'All grouped instances'
+                        ),
+                    )
+                    . ' ('
+                    . e((string) $groupCount)
+                    . ')</summary>';
+            echo
+                '<div data-admin-log-group-members-list><p class="muted">'
+                    . e((string) ($labels['instances_lazy_hint'] ?? ''))
+                    . '</p></div>';
+            echo
+                '<div class="log-detail-actions"><button type="button" class="button secondary" data-admin-log-group-members-more hidden>'
+                    . e(
+                        (string) (
+                            $labels['load_more_instances']
+                            ?? 'Load more instances'
+                        ),
+                    )
+                    . '</button><span class="muted" data-admin-log-group-members-state aria-live="polite"></span></div>';
             echo '</details>';
         }
         echo '<code>' . e((string) ($entry['event_key'] ?? '')) . '</code>';
         if (!empty($entry['subject_type']) || !empty($entry['subject_id'])) {
-            echo '<div class="muted">' . e((string) ($entry['subject_type'] ?? '')) . ' #' . e((string) ($entry['subject_id'] ?? '')) . '</div>';
+            echo
+                '<div class="muted">'
+                    . e((string) ($entry['subject_type'] ?? ''))
+                    . ' #'
+                    . e((string) ($entry['subject_id'] ?? ''))
+                    . '</div>';
         }
         echo '</div></details></td>';
-        echo '<td><span class="admin-log-message">' . e((string) ($entry['message'] ?? '')) . '</span>';
-        if ($query !== '' && stripos((string) ($entry['context_pretty_json'] ?? ''), $query) !== false
+        echo
+            '<td><span class="admin-log-message">'
+                . e((string) ($entry['message'] ?? ''))
+                . '</span>';
+        if (
+            $query !== ''
+            && stripos((string) ($entry['context_pretty_json'] ?? ''), $query)
+                !== false
             && stripos((string) ($entry['event_key'] ?? ''), $query) === false
-            && stripos((string) ($entry['message'] ?? ''), $query) === false) {
-            echo '<div class="muted" data-admin-log-context-match>' . e($labels['context_match'] ?? 'Match in details') . '</div>';
+            && stripos((string) ($entry['message'] ?? ''), $query) === false
+        ) {
+            echo
+                '<div class="muted" data-admin-log-context-match>'
+                    . e($labels['context_match'] ?? 'Match in details')
+                    . '</div>';
         }
         if (!empty($entry['context_pretty_json'])) {
-            echo '<details class="log-context admin-log-context"><summary title="' . e((string) ($labels['details'] ?? 'Details')) . '" aria-label="' . e((string) ($labels['details'] ?? 'Details')) . '">' . view_render_admin_log_icon('details') . '</summary><div class="admin-log-detail-body"><pre>' . e((string) $entry['context_pretty_json']) . '</pre></div></details>';
+            echo
+                '<details class="log-context admin-log-context"><summary title="'
+                    . e((string) ($labels['details'] ?? 'Details'))
+                    . '" aria-label="'
+                    . e((string) ($labels['details'] ?? 'Details'))
+                    . '">'
+                    . view_render_admin_log_icon('details')
+                    . '</summary><div class="admin-log-detail-body"><pre>'
+                    . e((string) $entry['context_pretty_json'])
+                    . '</pre></div></details>';
         }
         echo '</td>';
         echo '<td>' . e((string) ($entry['username'] ?? '')) . '</td>';
-        echo '<td>' . view_render_admin_log_export_actions((string) ($entry['export_url'] ?? ''), $labels, $groupCount > 1) . '</td>';
+        echo
+            '<td>'
+                . view_render_admin_log_export_actions(
+                    (string) ($entry['export_url'] ?? ''),
+                    $labels,
+                    $groupCount > 1,
+                )
+                . '</td>';
         echo '</tr>';
     }
     return (string) ob_get_clean();
@@ -402,13 +951,29 @@ function view_render_admin_log_archive_pagination(array $viewModel): string
     }
 
     ob_start();
-    echo '<nav class="pagination admin-log-archive-pagination" aria-label="' . e((string) ($viewModel['aria_label'] ?? 'Archived log pages')) . '">';
+    echo
+        '<nav class="pagination admin-log-archive-pagination" aria-label="'
+            . e((string) ($viewModel['aria_label'] ?? 'Archived log pages'))
+            . '">';
     if (!empty($viewModel['previous_url'])) {
-        echo '<a class="pagination-link" href="' . e((string) $viewModel['previous_url']) . '">' . e((string) ($viewModel['previous_label'] ?? 'Previous')) . '</a>';
+        echo
+            '<a class="pagination-link" href="'
+                . e((string) $viewModel['previous_url'])
+                . '">'
+                . e((string) ($viewModel['previous_label'] ?? 'Previous'))
+                . '</a>';
     }
-    echo '<span class="pagination-status">' . e((string) ($viewModel['status_label'] ?? '')) . '</span>';
+    echo
+        '<span class="pagination-status">'
+            . e((string) ($viewModel['status_label'] ?? ''))
+            . '</span>';
     if (!empty($viewModel['next_url'])) {
-        echo '<a class="pagination-link" href="' . e((string) $viewModel['next_url']) . '">' . e((string) ($viewModel['next_label'] ?? 'Next')) . '</a>';
+        echo
+            '<a class="pagination-link" href="'
+                . e((string) $viewModel['next_url'])
+                . '">'
+                . e((string) ($viewModel['next_label'] ?? 'Next'))
+                . '</a>';
     }
     echo '</nav>';
     return (string) ob_get_clean();
@@ -438,14 +1003,31 @@ function view_render_admin_log_archive_panel(array $viewModel): void
 
     echo '<div class="admin-log-archive-workspace">';
     echo '<section class="panel admin-log-archive-files">';
-    echo '<div class="admin-log-archive-files-header"><h2>' . e((string) ($labels['files_title'] ?? 'Archived logs')) . '</h2>';
+    echo
+        '<div class="admin-log-archive-files-header"><h2>'
+            . e((string) ($labels['files_title'] ?? 'Archived logs'))
+            . '</h2>';
     echo $paginationHtml;
     echo '</div>';
-    echo '<details class="admin-log-archive-help"><summary>' . e((string) ($labels['details'] ?? 'Details')) . '</summary><p class="muted">' . e((string) ($labels['files_intro'] ?? '')) . '</p></details>';
+    echo
+        '<details class="admin-log-archive-help"><summary>'
+            . e((string) ($labels['details'] ?? 'Details'))
+            . '</summary><p class="muted">'
+            . e((string) ($labels['files_intro'] ?? ''))
+            . '</p></details>';
     if ($items === []) {
-        echo '<p class="muted">' . e((string) ($labels['none_yet'] ?? 'No Admin log ZIP archives exist yet.')) . '</p>';
+        echo
+            '<p class="muted">'
+                . e(
+                    (string) (
+                        $labels['none_yet']
+                        ?? 'No Admin log ZIP archives exist yet.'
+                    ),
+                )
+                . '</p>';
     } else {
-        echo '<div class="admin-log-table-wrap"><table class="admin-log-archive-table"><thead><tr>';
+        echo
+            '<div class="admin-log-table-wrap"><table class="admin-log-archive-table"><thead><tr>';
         echo '<th>' . e((string) ($labels['date'] ?? 'Date')) . '</th>';
         echo '<th>' . e((string) ($labels['records'] ?? 'Records')) . '</th>';
         echo '<th>' . e((string) ($labels['zip_size'] ?? 'ZIP size')) . '</th>';
@@ -456,17 +1038,52 @@ function view_render_admin_log_archive_panel(array $viewModel): void
             if (!is_array($item)) {
                 continue;
             }
-            echo '<tr><td><strong>' . e((string) ($item['date'] ?? '')) . '</strong><div class="muted">' . e((string) ($item['file_name'] ?? '')) . '</div></td>';
+            echo
+                '<tr><td><strong>'
+                    . e((string) ($item['date'] ?? ''))
+                    . '</strong><div class="muted">'
+                    . e((string) ($item['file_name'] ?? ''))
+                    . '</div></td>';
             echo '<td>' . e((string) ($item['manifest_value'] ?? '')) . '</td>';
             echo '<td>' . e((string) ($item['size_label'] ?? '')) . '</td>';
-            echo '<td>' . e((string) ($item['created_at_label'] ?? '')) . '</td>';
+            echo
+                '<td>'
+                    . e((string) ($item['created_at_label'] ?? ''))
+                    . '</td>';
             echo '<td><div class="admin-log-archive-actions">';
-            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e((string) ($item['html_url'] ?? '')) . '">' . e((string) ($labels['view_html'] ?? 'View HTML')) . '</a>';
-            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e((string) ($item['json_url'] ?? '')) . '">' . e((string) ($labels['view_json'] ?? 'View JSON')) . '</a>';
-            echo '<a class="button secondary" href="' . e((string) ($item['download_url'] ?? '')) . '">' . e((string) ($labels['download_zip'] ?? 'Download ZIP')) . '</a>';
-            echo '<form method="post" action="' . e($maintenanceUrl) . '" class="admin-log-archive-delete-form">' . $csrfHtml;
-            echo '<input type="hidden" name="action" value="delete_archive"><input type="hidden" name="date" value="' . e((string) ($item['date'] ?? '')) . '">';
-            echo '<button type="submit" class="secondary danger" onclick="return confirm(' . e((string) ($item['delete_confirm_json'] ?? '""')) . ');">' . e((string) ($labels['delete'] ?? 'Delete')) . '</button>';
+            echo
+                '<a class="button secondary" target="_blank" rel="noopener" href="'
+                    . e((string) ($item['html_url'] ?? ''))
+                    . '">'
+                    . e((string) ($labels['view_html'] ?? 'View HTML'))
+                    . '</a>';
+            echo
+                '<a class="button secondary" target="_blank" rel="noopener" href="'
+                    . e((string) ($item['json_url'] ?? ''))
+                    . '">'
+                    . e((string) ($labels['view_json'] ?? 'View JSON'))
+                    . '</a>';
+            echo
+                '<a class="button secondary" href="'
+                    . e((string) ($item['download_url'] ?? ''))
+                    . '">'
+                    . e((string) ($labels['download_zip'] ?? 'Download ZIP'))
+                    . '</a>';
+            echo
+                '<form method="post" action="'
+                    . e($maintenanceUrl)
+                    . '" class="admin-log-archive-delete-form">'
+                    . $csrfHtml;
+            echo
+                '<input type="hidden" name="action" value="delete_archive"><input type="hidden" name="date" value="'
+                    . e((string) ($item['date'] ?? ''))
+                    . '">';
+            echo
+                '<button type="submit" class="secondary danger" onclick="return confirm('
+                    . e((string) ($item['delete_confirm_json'] ?? '""'))
+                    . ');">'
+                    . e((string) ($labels['delete'] ?? 'Delete'))
+                    . '</button>';
             echo '</form></div></td></tr>';
         }
         echo '</tbody></table></div>';
@@ -474,48 +1091,126 @@ function view_render_admin_log_archive_panel(array $viewModel): void
     echo $paginationHtml;
     echo '</section>';
 
-    echo '<aside class="panel admin-log-archive-panel admin-log-archive-sidebar">';
-    echo '<h2>' . e((string) ($labels['maintenance_title'] ?? 'Planned Admin log maintenance')) . '</h2>';
+    echo
+        '<aside class="panel admin-log-archive-panel admin-log-archive-sidebar">';
+    echo
+        '<h2>'
+            . e(
+                (string) (
+                    $labels['maintenance_title']
+                    ?? 'Planned Admin log maintenance'
+                ),
+            )
+            . '</h2>';
 
     if (empty($viewModel['zip_available'])) {
-        echo '<div class="notice">' . e((string) ($labels['zip_unavailable'] ?? '')) . '</div>';
+        echo
+            '<div class="notice">'
+                . e((string) ($labels['zip_unavailable'] ?? ''))
+                . '</div>';
     }
 
     echo '<div class="admin-log-archive-controls">';
-    echo '<form method="post" action="' . e($maintenanceUrl) . '" class="admin-log-archive-retention-form">' . $csrfHtml;
+    echo
+        '<form method="post" action="'
+            . e($maintenanceUrl)
+            . '" class="admin-log-archive-retention-form">'
+            . $csrfHtml;
     echo '<input type="hidden" name="action" value="save_retention">';
-    echo '<label><span>' . e((string) ($labels['keep_live_logs'] ?? 'Keep live logs')) . '</span><select name="retention_days">';
+    echo
+        '<label><span>'
+            . e((string) ($labels['keep_live_logs'] ?? 'Keep live logs'))
+            . '</span><select name="retention_days">';
     foreach ($retentionOptions as $option) {
         if (!is_array($option)) {
             continue;
         }
         $days = (int) ($option['days'] ?? 0);
-        echo '<option value="' . $days . '"' . ($retentionDays === $days ? ' selected' : '') . '>' . e((string) ($option['label'] ?? '')) . '</option>';
+        echo
+            '<option value="'
+                . $days
+                . '"'
+                . ($retentionDays === $days ? ' selected' : '')
+                . '>'
+                . e((string) ($option['label'] ?? ''))
+                . '</option>';
     }
-    echo '</select></label><button type="submit" class="secondary">' . e((string) ($labels['save_retention'] ?? 'Save retention')) . '</button></form>';
+    echo
+        '</select></label><button type="submit" class="secondary">'
+            . e((string) ($labels['save_retention'] ?? 'Save retention'))
+            . '</button></form>';
 
-    echo '<form method="post" action="' . e($maintenanceUrl) . '" class="admin-log-archive-run-form">' . $csrfHtml;
+    echo
+        '<form method="post" action="'
+            . e($maintenanceUrl)
+            . '" class="admin-log-archive-run-form">'
+            . $csrfHtml;
     echo '<input type="hidden" name="action" value="run_now">';
-    echo '<button type="submit">' . e((string) ($labels['run_now'] ?? 'Run maintenance cycle now')) . '</button>';
+    echo
+        '<button type="submit">'
+            . e((string) ($labels['run_now'] ?? 'Run maintenance cycle now'))
+            . '</button>';
     echo '</form>';
     echo '</div>';
 
     echo '<dl class="admin-log-archive-metrics">';
-    echo '<div><dt>' . e((string) ($labels['live_retention'] ?? 'Live retention')) . '</dt><dd>' . e((string) ($metrics['retention'] ?? '')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['archived_zips'] ?? 'Archived ZIPs')) . '</dt><dd>' . e((string) ($metrics['count'] ?? '0')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['storage'] ?? 'Archive storage')) . '</dt><dd>' . e((string) ($metrics['storage'] ?? '')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['oldest'] ?? 'Oldest archive')) . '</dt><dd>' . e((string) ($metrics['oldest'] ?? '')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['newest'] ?? 'Newest archive')) . '</dt><dd>' . e((string) ($metrics['newest'] ?? '')) . '</dd></div>';
-    echo '<div><dt>' . e((string) ($labels['next_check'] ?? 'Next automatic check')) . '</dt><dd>' . e((string) ($metrics['next_check'] ?? '')) . '</dd></div>';
+    echo
+        '<div><dt>'
+            . e((string) ($labels['live_retention'] ?? 'Live retention'))
+            . '</dt><dd>'
+            . e((string) ($metrics['retention'] ?? ''))
+            . '</dd></div>';
+    echo
+        '<div><dt>'
+            . e((string) ($labels['archived_zips'] ?? 'Archived ZIPs'))
+            . '</dt><dd>'
+            . e((string) ($metrics['count'] ?? '0'))
+            . '</dd></div>';
+    echo
+        '<div><dt>'
+            . e((string) ($labels['storage'] ?? 'Archive storage'))
+            . '</dt><dd>'
+            . e((string) ($metrics['storage'] ?? ''))
+            . '</dd></div>';
+    echo
+        '<div><dt>'
+            . e((string) ($labels['oldest'] ?? 'Oldest archive'))
+            . '</dt><dd>'
+            . e((string) ($metrics['oldest'] ?? ''))
+            . '</dd></div>';
+    echo
+        '<div><dt>'
+            . e((string) ($labels['newest'] ?? 'Newest archive'))
+            . '</dt><dd>'
+            . e((string) ($metrics['newest'] ?? ''))
+            . '</dd></div>';
+    echo
+        '<div><dt>'
+            . e((string) ($labels['next_check'] ?? 'Next automatic check'))
+            . '</dt><dd>'
+            . e((string) ($metrics['next_check'] ?? ''))
+            . '</dd></div>';
     echo '</dl>';
 
     if (!empty($viewModel['last_summary'])) {
-        echo '<p class="muted admin-log-archive-last-result">' . e((string) $viewModel['last_summary']) . '</p>';
+        echo
+            '<p class="muted admin-log-archive-last-result">'
+                . e((string) $viewModel['last_summary'])
+                . '</p>';
     }
 
-    echo '<details class="admin-log-archive-help"><summary>' . e((string) ($labels['details'] ?? 'Details')) . '</summary>';
-    echo '<p class="muted">' . e((string) ($labels['maintenance_intro'] ?? '')) . '</p>';
-    echo '<p class="muted">' . e((string) ($labels['policy'] ?? '')) . '</p></details>';
+    echo
+        '<details class="admin-log-archive-help"><summary>'
+            . e((string) ($labels['details'] ?? 'Details'))
+            . '</summary>';
+    echo
+        '<p class="muted">'
+            . e((string) ($labels['maintenance_intro'] ?? ''))
+            . '</p>';
+    echo
+        '<p class="muted">'
+            . e((string) ($labels['policy'] ?? ''))
+            . '</p></details>';
     echo '</aside>';
 
     echo '</div>';

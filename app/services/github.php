@@ -71,7 +71,12 @@ function cms_github_api_cache_key(string $url): string
  */
 function cms_github_api_cache_path(string $url): string
 {
-    return cms_github_api_cache_dir() . '/' . cms_github_api_cache_key($url) . '.json';
+    return (
+        cms_github_api_cache_dir()
+            . '/'
+            . cms_github_api_cache_key($url)
+            . '.json'
+    );
 }
 
 /**
@@ -108,8 +113,12 @@ function cms_github_api_read_cache(string $url): array
  * @param string $body Body value.
  * @return void Writes response metadata while holding its producer lease, or leaves cache unchanged when storage/lease acquisition is unavailable.
  */
-function cms_github_api_write_cache(string $url, int $status, array $headers, string $body): void
-{
+function cms_github_api_write_cache(
+    string $url,
+    int $status,
+    array $headers,
+    string $body,
+): void {
     // $dir stores the cache directory that is private behind cache/.htaccess.
     $dir = cms_github_api_cache_dir();
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
@@ -135,8 +144,11 @@ function cms_github_api_write_cache(string $url, int $status, array $headers, st
 
     // Load the lease owner only for a write; public cache reads stay lightweight.
     require_once __DIR__ . '/cache_lifecycle_storage.php';
-    $lease = cache_lifecycle_producer_lease('github-api/' . cms_github_api_cache_key($url) . '.json');
-    if (!is_resource($lease)) return;
+    $lease = cache_lifecycle_producer_lease(
+        'github-api/' . cms_github_api_cache_key($url) . '.json',
+    );
+    if (!is_resource($lease))
+        return;
     try {
         @file_put_contents(cms_github_api_cache_path($url), $json, LOCK_EX);
     } finally {
@@ -148,16 +160,22 @@ function cms_github_api_write_cache(string $url, int $status, array $headers, st
 /**
  * Return the next safe GitHub request time according to saved policy data.
  *
- * @return array Structured result data for the caller.
+ * @return array{active:bool,now:int,next_allowed_at:int,retry_after_until:int,primary_reset_at:int,next_allowed_label:string} Current GitHub API backoff state and display label.
  */
 function cms_github_api_wait_state(): array
 {
     // $now stores one timestamp used for every comparison in this decision.
     $now = time();
     // $retryAfterUntil stores a Retry-After based pause after secondary limits or 429/403 responses.
-    $retryAfterUntil = (int) app_setting('application_update_github_retry_after_until', '0');
+    $retryAfterUntil = (int) app_setting(
+        'application_update_github_retry_after_until',
+        '0',
+    );
     // $primaryResetAt stores the x-ratelimit-reset time when GitHub reported zero remaining core quota.
-    $primaryResetAt = (int) app_setting('application_update_github_primary_reset_at', '0');
+    $primaryResetAt = (int) app_setting(
+        'application_update_github_primary_reset_at',
+        '0',
+    );
     // $nextAllowedAt stores the strictest known wait target.
     $nextAllowedAt = max($retryAfterUntil, $primaryResetAt);
 
@@ -167,7 +185,9 @@ function cms_github_api_wait_state(): array
         'next_allowed_at' => $nextAllowedAt,
         'retry_after_until' => $retryAfterUntil,
         'primary_reset_at' => $primaryResetAt,
-        'next_allowed_label' => $nextAllowedAt > 0 ? date('Y-m-d H:i:s', $nextAllowedAt) : '',
+        'next_allowed_label' => $nextAllowedAt > 0
+            ? date('Y-m-d H:i:s', $nextAllowedAt)
+            : '',
     ];
 }
 
@@ -180,36 +200,76 @@ function cms_github_api_wait_state(): array
  * @param bool $fromCache From cache value.
  * @return void Persists policy state and sanitized diagnostics.
  */
-function cms_github_api_record_response(string $url, int $status, array $headers, bool $fromCache = false): void
-{
+function cms_github_api_record_response(
+    string $url,
+    int $status,
+    array $headers,
+    bool $fromCache = false,
+): void {
     // $normalizedHeaders stores only headers relevant to GitHub API diagnostics and backoff.
     $normalizedHeaders = [];
     foreach ($headers as $name => $value) {
         // $lowerName stores the canonical lowercase header key used by GitHub documentation.
         $lowerName = strtolower((string) $name);
-        if (in_array($lowerName, ['x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-used', 'x-ratelimit-reset', 'x-ratelimit-resource', 'retry-after', 'etag', 'last-modified'], true)) {
-            $normalizedHeaders[$lowerName] = is_array($value) ? implode(', ', array_map('strval', $value)) : (string) $value;
+        if (in_array(
+            $lowerName,
+            [
+                'x-ratelimit-limit',
+                'x-ratelimit-remaining',
+                'x-ratelimit-used',
+                'x-ratelimit-reset',
+                'x-ratelimit-resource',
+                'retry-after',
+                'etag',
+                'last-modified',
+            ],
+            true,
+        )) {
+            $normalizedHeaders[$lowerName] = is_array($value)
+                ? implode(', ', array_map('strval', $value))
+                : (string) $value;
         }
     }
 
-    set_app_setting('application_update_github_last_checked_at', (string) time());
+    set_app_setting(
+        'application_update_github_last_checked_at',
+        (string) time(),
+    );
     set_app_setting('application_update_github_last_status', (string) $status);
     set_app_setting('application_update_github_last_url', $url);
-    set_app_setting('application_update_github_last_from_cache', $fromCache ? '1' : '0');
-    set_app_setting('application_update_github_headers_json', json_encode($normalizedHeaders, JSON_UNESCAPED_SLASHES) ?: '{}');
+    set_app_setting(
+        'application_update_github_last_from_cache',
+        $fromCache ? '1' : '0',
+    );
+    set_app_setting(
+        'application_update_github_headers_json',
+        json_encode($normalizedHeaders, JSON_UNESCAPED_SLASHES) ?: '{}',
+    );
 
     // $retryAfter stores the server-requested wait in seconds when GitHub sends Retry-After.
-    $retryAfter = isset($normalizedHeaders['retry-after']) ? max(0, (int) $normalizedHeaders['retry-after']) : 0;
+    $retryAfter = isset($normalizedHeaders['retry-after'])
+        ? max(0, (int) $normalizedHeaders['retry-after'])
+        : 0;
     if ($retryAfter > 0) {
-        set_app_setting('application_update_github_retry_after_until', (string) (time() + $retryAfter));
+        set_app_setting(
+            'application_update_github_retry_after_until',
+            (string) (time() + $retryAfter),
+        );
     }
 
     // $remaining stores GitHub primary remaining quota from x-ratelimit-remaining.
-    $remaining = isset($normalizedHeaders['x-ratelimit-remaining']) ? (int) $normalizedHeaders['x-ratelimit-remaining'] : null;
+    $remaining = isset($normalizedHeaders['x-ratelimit-remaining'])
+        ? (int) $normalizedHeaders['x-ratelimit-remaining']
+        : null;
     // $resetAt stores GitHub primary reset time from x-ratelimit-reset.
-    $resetAt = isset($normalizedHeaders['x-ratelimit-reset']) ? (int) $normalizedHeaders['x-ratelimit-reset'] : 0;
+    $resetAt = isset($normalizedHeaders['x-ratelimit-reset'])
+        ? (int) $normalizedHeaders['x-ratelimit-reset']
+        : 0;
     if ($remaining === 0 && $resetAt > time()) {
-        set_app_setting('application_update_github_primary_reset_at', (string) $resetAt);
+        set_app_setting(
+            'application_update_github_primary_reset_at',
+            (string) $resetAt,
+        );
     } elseif ($remaining !== 0) {
         delete_app_settings(['application_update_github_primary_reset_at']);
     }
@@ -217,12 +277,30 @@ function cms_github_api_record_response(string $url, int $status, array $headers
     // Secondary-limit responses may lack Retry-After/reset headers. Apply a
     // bounded exponential pause rather than repeatedly probing a blocked API.
     if (in_array($status, [403, 429], true)) {
-        $failures = min(7, max(0, (int) app_setting('application_update_github_secondary_failures', '0')) + 1);
-        set_app_setting('application_update_github_secondary_failures', (string) $failures);
+        $failures = min(
+            7,
+            max(
+                0,
+                (int) app_setting(
+                    'application_update_github_secondary_failures',
+                    '0',
+                ),
+            ) + 1,
+        );
+        set_app_setting(
+            'application_update_github_secondary_failures',
+            (string) $failures,
+        );
         if ($retryAfter === 0 && !($remaining === 0 && $resetAt > time())) {
             $backoffSeconds = min(3600, 60 * (2 ** ($failures - 1)));
-            $currentPause = (int) app_setting('application_update_github_retry_after_until', '0');
-            set_app_setting('application_update_github_retry_after_until', (string) max($currentPause, time() + $backoffSeconds));
+            $currentPause = (int) app_setting(
+                'application_update_github_retry_after_until',
+                '0',
+            );
+            set_app_setting(
+                'application_update_github_retry_after_until',
+                (string) max($currentPause, time() + $backoffSeconds),
+            );
         }
     } elseif ($status >= 200 && $status < 400) {
         delete_app_settings(['application_update_github_secondary_failures']);
@@ -236,12 +314,15 @@ function cms_github_api_record_response(string $url, int $status, array $headers
 /**
  * Return persisted GitHub API diagnostics for the update page.
  *
- * @return array Structured result data for the caller.
+ * @return array{last_checked_at:int,last_checked_label:string,last_status:string,last_url:string,last_from_cache:bool,limit:string,remaining:string,used:string,resource:string,reset_at:int,reset_label:string,retry_after:string,etag:string,last_modified:string,wait:array{active:bool,now:int,next_allowed_at:int,retry_after_until:int,primary_reset_at:int,next_allowed_label:string}} Persisted rate-limit, cache, and backoff diagnostics.
  */
 function cms_github_api_status(): array
 {
     // $headersJson stores the latest parsed rate-limit and cache headers from a GitHub API response.
-    $headersJson = (string) app_setting('application_update_github_headers_json', '');
+    $headersJson = (string) app_setting(
+        'application_update_github_headers_json',
+        '',
+    );
     // $headers stores normalized GitHub headers when they were captured successfully.
     $headers = json_decode($headersJson, true);
     if (!is_array($headers)) {
@@ -249,7 +330,10 @@ function cms_github_api_status(): array
     }
 
     // $lastCheckedAt stores the most recent attempted GitHub HTTP request timestamp.
-    $lastCheckedAt = (int) app_setting('application_update_github_last_checked_at', '0');
+    $lastCheckedAt = (int) app_setting(
+        'application_update_github_last_checked_at',
+        '0',
+    );
     // $waitState stores active policy backoff information.
     $waitState = cms_github_api_wait_state();
     // $resetAt stores the GitHub primary rate-limit reset timestamp when available.
@@ -257,10 +341,20 @@ function cms_github_api_status(): array
 
     return [
         'last_checked_at' => $lastCheckedAt,
-        'last_checked_label' => $lastCheckedAt > 0 ? date('Y-m-d H:i:s', $lastCheckedAt) : t('admin.updates.autoupdate_last_check_never', 'never'),
-        'last_status' => (string) app_setting('application_update_github_last_status', ''),
-        'last_url' => (string) app_setting('application_update_github_last_url', ''),
-        'last_from_cache' => app_setting('application_update_github_last_from_cache', '0') === '1',
+        'last_checked_label' => $lastCheckedAt > 0
+            ? date('Y-m-d H:i:s', $lastCheckedAt)
+            : t('admin.updates.autoupdate_last_check_never', 'never'),
+        'last_status' => (string) app_setting(
+            'application_update_github_last_status',
+            '',
+        ),
+        'last_url' => (string) app_setting(
+            'application_update_github_last_url',
+            '',
+        ),
+        'last_from_cache' =>
+            app_setting('application_update_github_last_from_cache', '0')
+                === '1',
         'limit' => (string) ($headers['x-ratelimit-limit'] ?? ''),
         'remaining' => (string) ($headers['x-ratelimit-remaining'] ?? ''),
         'used' => (string) ($headers['x-ratelimit-used'] ?? ''),
@@ -279,30 +373,44 @@ function cms_github_api_status(): array
  *
  * @param string $url URL used by this workflow.
  * @param int $timeoutSeconds Timeout seconds value.
- * @param array $headers Headers value.
+ * @param array<int,string> $headers Optional request header lines.
  * @param bool $allowConditionalRequest Allow conditional request flag.
- * @return array Structured result data for the caller.
+ * @return array{body:string,status:int,headers:array<string,string>,from_cache:bool,not_modified:bool} API response body, HTTP status, and normalized response metadata.
  */
-function cms_github_api_get(string $url, int $timeoutSeconds, array $headers = [], bool $allowConditionalRequest = true): array
-{
+function cms_github_api_get(
+    string $url,
+    int $timeoutSeconds,
+    array $headers = [],
+    bool $allowConditionalRequest = true,
+): array {
     if (strpos($url, 'https://api.github.com/') !== 0) {
-        throw new RuntimeException('GitHub API gateway refused a non-GitHub API URL.');
+        throw new RuntimeException(
+            'GitHub API gateway refused a non-GitHub API URL.',
+        );
     }
 
     // $waitState stores saved GitHub policy backoff information from previous responses.
     $waitState = cms_github_api_wait_state();
     if (!empty($waitState['active'])) {
-        throw new RuntimeException('GitHub API calls are paused until ' . (string) ($waitState['next_allowed_label'] ?? '') . '.');
+        throw new RuntimeException(
+            'GitHub API calls are paused until '
+                . (string) ($waitState['next_allowed_label'] ?? '')
+                . '.',
+        );
     }
 
     // $cache stores the previous successful response, including ETag and response body.
     $cache = cms_github_api_read_cache($url);
     // $requestHeaders stores caller-provided headers plus conditional validators when available.
-    $requestHeaders = array_values(array_filter($headers, static fn ($header): bool => is_string($header) && trim($header) !== ''));
+    $requestHeaders = array_values(array_filter(
+        $headers,
+        static fn($header): bool => is_string($header) && trim($header) !== '',
+    ));
     if ($allowConditionalRequest && !empty($cache['etag'])) {
         $requestHeaders[] = 'If-None-Match: ' . (string) $cache['etag'];
     } elseif ($allowConditionalRequest && !empty($cache['last_modified'])) {
-        $requestHeaders[] = 'If-Modified-Since: ' . (string) $cache['last_modified'];
+        $requestHeaders[] =
+            'If-Modified-Since: ' . (string) $cache['last_modified'];
     }
 
     // $response stores the raw HTTP result from GitHub.
@@ -332,7 +440,9 @@ function cms_github_api_get(string $url, int $timeoutSeconds, array $headers = [
     }
 
     if ($status >= 400 || $status === 0) {
-        throw new RuntimeException('GitHub API request failed with status ' . $status . '.');
+        throw new RuntimeException(
+            'GitHub API request failed with status ' . $status . '.',
+        );
     }
 
     // $body stores the response payload returned by GitHub.
@@ -355,11 +465,14 @@ function cms_github_api_get(string $url, int $timeoutSeconds, array $headers = [
  *
  * @param string $url URL used by this workflow.
  * @param int $timeoutSeconds Timeout seconds value.
- * @param array $headers Headers value.
- * @return array Structured result data for the caller.
+ * @param array<int,string> $headers Request header lines.
+ * @return array{body:string,status:int,headers:array<string,string>} Raw HTTP response body, status, and normalized response headers.
  */
-function cms_github_api_raw_get(string $url, int $timeoutSeconds, array $headers): array
-{
+function cms_github_api_raw_get(
+    string $url,
+    int $timeoutSeconds,
+    array $headers,
+): array {
     // $baseHeaders stores standard headers shared by all GitHub REST API calls.
     $baseHeaders = [
         'Cache-Control: no-cache',
@@ -372,20 +485,31 @@ function cms_github_api_raw_get(string $url, int $timeoutSeconds, array $headers
     // $token stores an optional Personal Access Token or GitHub App token configured server-side only.
     $token = '';
     if (is_array($config)) {
-        $token = trim((string) ($config['github_token'] ?? ($config['updates']['github_token'] ?? '')));
+        $token = trim(
+            (string) (
+                $config['github_token']
+                ?? $config['updates']['github_token']
+                ?? ''
+            ),
+        );
     }
     if ($token !== '') {
         $baseHeaders[] = 'Authorization: Bearer ' . $token;
     }
 
     // $requestHeaders stores all headers after removing empty values.
-    $requestHeaders = array_values(array_filter(array_merge($baseHeaders, $headers), static fn ($header): bool => is_string($header) && trim($header) !== ''));
+    $requestHeaders = array_values(array_filter(
+        array_merge($baseHeaders, $headers),
+        static fn($header): bool => is_string($header) && trim($header) !== '',
+    ));
 
     if (function_exists('curl_init')) {
         // $handle stores the cURL handle used for a single bounded HTTP request.
         $handle = curl_init($url);
         if ($handle === false) {
-            throw new RuntimeException('Could not initialize GitHub API HTTP client.');
+            throw new RuntimeException(
+                'Could not initialize GitHub API HTTP client.',
+            );
         }
         // $responseHeaders stores normalized response headers captured by cURL.
         $responseHeaders = [];
@@ -399,13 +523,18 @@ function cms_github_api_raw_get(string $url, int $timeoutSeconds, array $headers
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => $requestHeaders,
-            CURLOPT_HEADERFUNCTION => static function ($curlHandle, string $headerLine) use (&$responseHeaders): int {
+            CURLOPT_HEADERFUNCTION => static function (
+                \CurlHandle $curlHandle,
+                string $headerLine,
+            ) use (&$responseHeaders): int {
                 // $length stores the raw header-line length cURL expects this callback to return.
                 $length = strlen($headerLine);
                 // $parts stores the parsed header name and value when the line is a normal response header.
                 $parts = explode(':', trim($headerLine), 2);
                 if (count($parts) === 2) {
-                    $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                    $responseHeaders[strtolower(trim($parts[0]))] = trim(
+                        $parts[1],
+                    );
                 }
                 return $length;
             },
@@ -418,13 +547,24 @@ function cms_github_api_raw_get(string $url, int $timeoutSeconds, array $headers
         $error = curl_error($handle);
         curl_close($handle);
         if ($body === false) {
-            throw new RuntimeException($error !== '' ? $error : 'GitHub API HTTP request failed.');
+            throw new RuntimeException(
+                $error !== '' ? $error : 'GitHub API HTTP request failed.',
+            );
         }
-        return ['body' => (string) $body, 'status' => $status, 'headers' => $responseHeaders];
+        return [
+            'body' => (string) $body,
+            'status' => $status,
+            'headers' => $responseHeaders,
+        ];
     }
 
     // $headerText stores HTTP headers formatted for the stream wrapper fallback.
-    $headerText = "User-Agent: PHP-Gallery-CMS/" . cms_current_version() . "\r\n" . implode("\r\n", $requestHeaders) . "\r\n";
+    $headerText =
+        'User-Agent: PHP-Gallery-CMS/'
+        . cms_current_version()
+        . "\r\n"
+        . implode("\r\n", $requestHeaders)
+        . "\r\n";
     // $context stores stream options for a single bounded GET request.
     $context = stream_context_create([
         'http' => [
@@ -440,7 +580,7 @@ function cms_github_api_raw_get(string $url, int $timeoutSeconds, array $headers
     $responseHeaders = [];
     // $status stores the parsed response code when stream metadata is available.
     $status = 0;
-    foreach (($http_response_header ?? []) as $line) {
+    foreach ($http_response_header ?? [] as $line) {
         if (preg_match('/^HTTP\/\S+\s+(\d+)/', $line, $match)) {
             $status = (int) $match[1];
             continue;
@@ -451,7 +591,13 @@ function cms_github_api_raw_get(string $url, int $timeoutSeconds, array $headers
         }
     }
     if ($body === false) {
-        throw new RuntimeException('GitHub API HTTP request failed. Enable curl or allow_url_fopen for update checks.');
+        throw new RuntimeException(
+            'GitHub API HTTP request failed. Enable curl or allow_url_fopen for update checks.',
+        );
     }
-    return ['body' => (string) $body, 'status' => $status, 'headers' => $responseHeaders];
+    return [
+        'body' => (string) $body,
+        'status' => $status,
+        'headers' => $responseHeaders,
+    ];
 }

@@ -71,17 +71,26 @@ function viewer_favourites_storage_available(): bool
  * @param array<int,int|string> $imageIds Candidate image identifiers.
  * @return array<int,bool> Favourite state keyed by image id. Only true entries are returned.
  */
-function viewer_favourites_for_image_ids(int $viewerAccountId, array $imageIds): array
-{
-    if ($viewerAccountId <= 0 || !viewer_favourites_storage_available()) return [];
+function viewer_favourites_for_image_ids(
+    int $viewerAccountId,
+    array $imageIds,
+): array {
+    if ($viewerAccountId <= 0 || !viewer_favourites_storage_available())
+        return [];
     $ids = [];
     foreach ($imageIds as $imageId) {
         $imageId = (int) $imageId;
-        if ($imageId > 0) $ids[$imageId] = true;
+        if ($imageId > 0)
+            $ids[$imageId] = true;
     }
-    if ($ids === []) return [];
+    if ($ids === [])
+        return [];
     try {
-        return \Gallery\Models\viewer_favourites_model_for_image_ids($viewerAccountId, array_keys($ids), 200);
+        return \Gallery\Models\viewer_favourites_model_for_image_ids(
+            $viewerAccountId,
+            array_keys($ids),
+            200,
+        );
     } catch (Throwable) {
         return [];
     }
@@ -94,19 +103,42 @@ function viewer_favourites_for_image_ids(int $viewerAccountId, array $imageIds):
  * viewer_source_image_can_render_reference()/viewer_source_image_resolve_authorized() for
  * every returned reference before exposing any image or gallery metadata.
  *
- * @return array{rows:array<int,array{image_id:int,created_at:string}>,total:int,page:int,per_page:int}
+ * @param int $viewerAccountId Viewer account identifier.
+ * @param int $page One-based page number; values below one normalize to page one.
+ * @param int $perPage Requested page size, capped at 96.
+ *
+ *
+ *
+ * @return array{rows:list<array{image_id:int,created_at:string}>,total:int,page:int,per_page:int} Favourite references and pagination totals; source authorization must still be checked before rendering.
  */
-function viewer_favourites_page(int $viewerAccountId, int $page = 1, int $perPage = 48): array
-{
+function viewer_favourites_page(
+    int $viewerAccountId,
+    int $page = 1,
+    int $perPage = 48,
+): array {
     $page = max(1, $page);
     $perPage = max(1, min(96, $perPage));
     if ($viewerAccountId <= 0 || !viewer_favourites_storage_available()) {
-        return ['rows' => [], 'total' => 0, 'page' => $page, 'per_page' => $perPage];
+        return [
+            'rows' => [],
+            'total' => 0,
+            'page' => $page,
+            'per_page' => $perPage,
+        ];
     }
     try {
-        return \Gallery\Models\viewer_favourites_model_page($viewerAccountId, $page, $perPage);
+        return \Gallery\Models\viewer_favourites_model_page(
+            $viewerAccountId,
+            $page,
+            $perPage,
+        );
     } catch (Throwable) {
-        return ['rows' => [], 'total' => 0, 'page' => $page, 'per_page' => $perPage];
+        return [
+            'rows' => [],
+            'total' => 0,
+            'page' => $page,
+            'per_page' => $perPage,
+        ];
     }
 }
 
@@ -117,23 +149,45 @@ function viewer_favourites_page(int $viewerAccountId, int $page = 1, int $perPag
  * authorization is checked before any mutation and stored favourite rows never carry a
  * permission snapshot.
  *
- * @param array $viewer Current viewer principal returned by current_viewer().
- * @param int $imageId Canonical images.id value.
- * @param bool $desiredFavourite True to add, false to remove.
- * @return array{ok:bool,favourite:bool,changed:bool,reason:string}
+ * @param array{id:int,security_version:int} $viewer Authenticated viewer principal whose locked account and security version authorize mutation.
+ * @param int $imageId Canonical image identifier to add or remove.
+ * @param bool $desiredFavourite Whether the image should be favourited after the operation.
+ * @return array{ok:bool,favourite:bool,changed:bool,reason:string} Mutation outcome, resulting favourite state, change flag and stable reason code.
  */
-function viewer_favourite_set(array $viewer, int $imageId, bool $desiredFavourite): array
-{
+function viewer_favourite_set(
+    array $viewer,
+    int $imageId,
+    bool $desiredFavourite,
+): array {
     $viewerAccountId = (int) ($viewer['id'] ?? 0);
     $expectedSecurityVersion = (int) ($viewer['security_version'] ?? 0);
-    if ($viewerAccountId <= 0 || $expectedSecurityVersion <= 0 || $imageId <= 0) {
-        return ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'invalid'];
+    if (
+        $viewerAccountId <= 0
+        || $expectedSecurityVersion <= 0
+        || $imageId <= 0
+    ) {
+        return [
+            'ok' => false,
+            'favourite' => false,
+            'changed' => false,
+            'reason' => 'invalid',
+        ];
     }
     if (!viewer_favourites_storage_available()) {
-        return ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'unavailable'];
+        return [
+            'ok' => false,
+            'favourite' => false,
+            'changed' => false,
+            'reason' => 'unavailable',
+        ];
     }
     if (!viewer_source_image_can_reference($imageId)) {
-        return ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'source_forbidden'];
+        return [
+            'ok' => false,
+            'favourite' => false,
+            'changed' => false,
+            'reason' => 'source_forbidden',
+        ];
     }
 
     $quota = viewer_content_quota_config();
@@ -144,10 +198,18 @@ function viewer_favourite_set(array $viewer, int $imageId, bool $desiredFavourit
             $desiredFavourite,
             (int) $quota['max_viewer_favourites_per_account'],
             now_sql(),
-            static fn (array $lockedAccount): bool => viewer_account_can_mutate_content($lockedAccount)
-                && (int) ($lockedAccount['security_version'] ?? 0) === $expectedSecurityVersion
+            static fn(array $lockedAccount): bool => (
+                viewer_account_can_mutate_content($lockedAccount)
+                && (int) ($lockedAccount['security_version'] ?? 0)
+                === $expectedSecurityVersion
+            ),
         );
     } catch (Throwable) {
-        return ['ok' => false, 'favourite' => false, 'changed' => false, 'reason' => 'unavailable'];
+        return [
+            'ok' => false,
+            'favourite' => false,
+            'changed' => false,
+            'reason' => 'unavailable',
+        ];
     }
 }

@@ -80,7 +80,9 @@ namespace Gallery\Services {
      */
     function t(string $key, string $fallback = '', array $params = []): string
     {
-        return strtr($fallback, ['{title}' => (string) ($params['title'] ?? '')]);
+        return strtr($fallback, [
+            '{title}' => (string) ($params['title'] ?? ''),
+        ]);
     }
 }
 
@@ -92,7 +94,7 @@ namespace {
         ob_start();
         \Gallery\Controllers\render_public_gallery_admin_add_child_link(
             ['id' => 42, 'title' => 'Parent'],
-            $placement
+            $placement,
         );
         $html = (string) ob_get_clean();
 
@@ -102,7 +104,9 @@ namespace {
             'data-admin-side-panel-workflow="create"',
         ] as $expected) {
             if (!str_contains($html, $expected)) {
-                throw new \RuntimeException($placement . ' add-gallery link is missing ' . $expected);
+                throw new \RuntimeException(
+                    $placement . ' add-gallery link is missing ' . $expected,
+                );
             }
         }
     }

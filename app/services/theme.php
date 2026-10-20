@@ -59,35 +59,88 @@ function theme_settings(): array
     $defaults = theme_css_defaults();
     return array_merge([
         'accent' => app_setting('theme_accent', $defaults['accent']),
-        'accent_dark' => app_setting('theme_accent_dark', $defaults['accent_dark']),
+        'accent_dark' => app_setting(
+            'theme_accent_dark',
+            $defaults['accent_dark'],
+        ),
         'paper' => app_setting('theme_paper', $defaults['paper']),
         'panel' => app_setting('theme_panel', $defaults['panel']),
-        'gallery_panel' => app_setting('theme_gallery_panel', $defaults['gallery_panel']),
+        'gallery_panel' => app_setting(
+            'theme_gallery_panel',
+            $defaults['gallery_panel'],
+        ),
         'header_text' => app_setting('theme_header_text', '#0f172a'),
         'hero_text' => app_setting('theme_hero_text', '#0f172a'),
         'background_opacity' => app_setting('theme_background_opacity', '65'),
         'background_path' => app_setting('theme_background_path', ''),
-        'background_original_path' => app_setting('theme_background_original_path', ''),
-        'background_optimized_path' => app_setting('theme_background_optimized_path', ''),
-        'background_optimized_max_side' => app_setting('theme_background_optimized_max_side', '1920'),
+        'background_original_path' => app_setting(
+            'theme_background_original_path',
+            '',
+        ),
+        'background_optimized_path' => app_setting(
+            'theme_background_optimized_path',
+            '',
+        ),
+        'background_optimized_max_side' => app_setting(
+            'theme_background_optimized_max_side',
+            '1920',
+        ),
         'gps_pin_enabled' => app_setting('theme_gps_pin_enabled', '1'),
-        'gps_pin_background_enabled' => app_setting('theme_gps_pin_background_enabled', '1'),
+        'gps_pin_background_enabled' => app_setting(
+            'theme_gps_pin_background_enabled',
+            '1',
+        ),
         'gps_pin_size' => app_setting('theme_gps_pin_size', '26'),
-        'gps_pin_background_size' => app_setting('theme_gps_pin_background_size', '22'),
+        'gps_pin_background_size' => app_setting(
+            'theme_gps_pin_background_size',
+            '22',
+        ),
         'radius' => app_setting('theme_radius', $defaults['radius']),
         'font' => app_setting('theme_font', $defaults['font']),
-        'page_width' => theme_page_width_mode((string) app_setting('theme_page_width', 'default')),
-        'page_width_custom' => theme_page_width_custom_value(app_setting('theme_page_width_custom')),
-        'branding_separator_width' => theme_branding_separator_width_value(app_setting('theme_branding_separator_width')),
-        'branding_separator_height' => theme_branding_separator_height_value(app_setting('theme_branding_separator_height')),
-        'branding_separator_stretch' => theme_branding_separator_stretch_enabled(app_setting('theme_branding_separator_stretch')),
-        'gallery_description_layout' => function_exists('Gallery\\Services\\theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
-        'gallery_count_badge_enabled' => !function_exists('Gallery\\Services\\theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
-        'gallery_count_badge_mode' => function_exists('Gallery\\Services\\theme_gallery_count_badge_mode') ? theme_gallery_count_badge_mode() : 'both',
-        'gallery_count_badge_icons_enabled' => function_exists('Gallery\\Services\\theme_gallery_count_badge_icons_enabled') && theme_gallery_count_badge_icons_enabled() ? '1' : '0',
-        'lightbox_browsing_mode' => function_exists('Gallery\\Services\\theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
+        'page_width' => theme_page_width_mode((string) app_setting(
+            'theme_page_width',
+            'default',
+        )),
+        'page_width_custom' => theme_page_width_custom_value(app_setting(
+            'theme_page_width_custom',
+        )),
+        'branding_separator_width' => theme_branding_separator_width_value(app_setting(
+            'theme_branding_separator_width',
+        )),
+        'branding_separator_height' => theme_branding_separator_height_value(app_setting(
+            'theme_branding_separator_height',
+        )),
+        'branding_separator_stretch' => theme_branding_separator_stretch_enabled(app_setting(
+            'theme_branding_separator_stretch',
+        )),
+        'gallery_description_layout' => function_exists(
+            'Gallery\\Services\\theme_gallery_description_layout',
+        )
+            ? theme_gallery_description_layout()
+            : 'vertical',
+        'gallery_count_badge_enabled' => !function_exists(
+            'Gallery\\Services\\theme_gallery_count_badge_enabled',
+        ) || theme_gallery_count_badge_enabled()
+            ? '1'
+            : '0',
+        'gallery_count_badge_mode' => function_exists(
+            'Gallery\\Services\\theme_gallery_count_badge_mode',
+        )
+            ? theme_gallery_count_badge_mode()
+            : 'both',
+        'gallery_count_badge_icons_enabled' => function_exists(
+            'Gallery\\Services\\theme_gallery_count_badge_icons_enabled',
+        ) && theme_gallery_count_badge_icons_enabled()
+            ? '1'
+            : '0',
+        'lightbox_browsing_mode' => function_exists(
+            'Gallery\\Services\\theme_lightbox_browsing_mode',
+        )
+            ? theme_lightbox_browsing_mode()
+            : 'single',
         'gallery_info_motion_ms' => (string) theme_gallery_info_motion_ms(),
-        'admin_side_panel_motion_ms' => (string) theme_admin_side_panel_motion_ms(),
+        'admin_side_panel_motion_ms' =>
+            (string) theme_admin_side_panel_motion_ms(),
     ], theme_advanced_appearance_settings());
 }
 
@@ -103,11 +156,36 @@ function theme_advanced_appearance_definitions(): array
     // Scope: public Theme appearance only. Consumers: normalization and the Appearance editor.
     // Rationale: 0-64px gaps, 0-48px padding and 80-140% type allow useful adjustments without unbounded layouts.
     return [
-        'gallery_grid_gap' => ['default' => '16', 'min' => 0, 'max' => 64, 'unit' => 'px'],
-        'gallery_card_padding' => ['default' => '16', 'min' => 0, 'max' => 48, 'unit' => 'px'],
-        'card_shadow' => ['default' => 'default', 'min' => 0, 'max' => 0, 'unit' => ''],
-        'public_type_scale' => ['default' => '100', 'min' => 80, 'max' => 140, 'unit' => '%'],
-        'header_transparent' => ['default' => '0', 'min' => 0, 'max' => 1, 'unit' => ''],
+        'gallery_grid_gap' => [
+            'default' => '16',
+            'min' => 0,
+            'max' => 64,
+            'unit' => 'px',
+        ],
+        'gallery_card_padding' => [
+            'default' => '16',
+            'min' => 0,
+            'max' => 48,
+            'unit' => 'px',
+        ],
+        'card_shadow' => [
+            'default' => 'default',
+            'min' => 0,
+            'max' => 0,
+            'unit' => '',
+        ],
+        'public_type_scale' => [
+            'default' => '100',
+            'min' => 80,
+            'max' => 140,
+            'unit' => '%',
+        ],
+        'header_transparent' => [
+            'default' => '0',
+            'min' => 0,
+            'max' => 1,
+            'unit' => '',
+        ],
     ];
 }
 
@@ -121,11 +199,15 @@ function theme_advanced_appearance_value(string $key, ?string $value): string
 {
     $definition = theme_advanced_appearance_definitions()[$key] ?? null;
     if ($definition === null) {
-        throw new InvalidArgumentException('Unknown advanced appearance setting.');
+        throw new InvalidArgumentException(
+            'Unknown advanced appearance setting.',
+        );
     }
     $value = trim($value ?? '');
     if ($key === 'card_shadow') {
-        return in_array($value, ['default', 'none', 'soft', 'raised'], true) ? $value : $definition['default'];
+        return in_array($value, ['default', 'none', 'soft', 'raised'], true)
+            ? $value
+            : $definition['default'];
     }
     if ($key === 'header_transparent') {
         return $value === '1' ? '1' : '0';
@@ -133,7 +215,10 @@ function theme_advanced_appearance_value(string $key, ?string $value): string
     if (filter_var($value, FILTER_VALIDATE_INT) === false) {
         return $definition['default'];
     }
-    return (string) max($definition['min'], min($definition['max'], (int) $value));
+    return (string) max($definition['min'], min(
+        $definition['max'],
+        (int) $value,
+    ));
 }
 
 /**
@@ -144,7 +229,10 @@ function theme_advanced_appearance_settings(): array
 {
     $settings = [];
     foreach (theme_advanced_appearance_definitions() as $key => $definition) {
-        $settings[$key] = theme_advanced_appearance_value($key, app_setting('theme_' . $key));
+        $settings[$key] = theme_advanced_appearance_value(
+            $key,
+            app_setting('theme_' . $key),
+        );
     }
     return $settings;
 }
@@ -185,25 +273,47 @@ function theme_advanced_appearance_css(array $settings): string
 {
     $css = '';
     foreach (['gallery_grid_gap', 'gallery_card_padding'] as $key) {
-        $value = theme_advanced_appearance_value($key, isset($settings[$key]) ? (string) $settings[$key] : null);
+        $value = theme_advanced_appearance_value(
+            $key,
+            isset($settings[$key]) ? (string) $settings[$key] : null,
+        );
         if ($value !== '16') {
-            $variable = $key === 'gallery_grid_gap' ? '--public-gallery-grid-gap' : '--public-gallery-card-padding';
+            $variable = $key === 'gallery_grid_gap'
+                ? '--public-gallery-grid-gap'
+                : '--public-gallery-card-padding';
             $css .= '.public-page{' . $variable . ':' . $value . 'px;}';
             $css .= $key === 'gallery_grid_gap'
                 ? '.public-page .site-main .grid{gap:var(--public-gallery-grid-gap);}'
                 : '.public-page .site-main .gallery-card .gallery-card-body{padding:var(--public-gallery-card-padding);}';
         }
     }
-    $shadow = theme_advanced_appearance_value('card_shadow', isset($settings['card_shadow']) ? (string) $settings['card_shadow'] : null);
-    $shadows = ['none' => 'none', 'soft' => '0 4px 12px rgba(54,38,20,.08)', 'raised' => '0 18px 42px rgba(54,38,20,.18)'];
+    $shadow = theme_advanced_appearance_value(
+        'card_shadow',
+        isset($settings['card_shadow'])
+            ? (string) $settings['card_shadow']
+            : null,
+    );
+    $shadows = [
+        'none' => 'none',
+        'soft' => '0 4px 12px rgba(54,38,20,.08)',
+        'raised' => '0 18px 42px rgba(54,38,20,.18)',
+    ];
     if (isset($shadows[$shadow])) {
         $css .= '.public-page{--public-card-shadow:' . $shadows[$shadow] . ';}';
         $css .= '.public-page .gallery-card,.public-page .image-card,.public-page .gallery-card:hover,.public-page .gallery-card:focus-within{box-shadow:var(--public-card-shadow);}';
     }
-    $scale = theme_advanced_appearance_value('public_type_scale', isset($settings['public_type_scale']) ? (string) $settings['public_type_scale'] : null);
+    $scale = theme_advanced_appearance_value(
+        'public_type_scale',
+        isset($settings['public_type_scale'])
+            ? (string) $settings['public_type_scale']
+            : null,
+    );
     if ($scale !== '100') {
         $factor = number_format((int) $scale / 100, 2, '.', '');
-        $css .= '.public-page .site-main{--public-type-scale:' . $factor . ';font-size:calc(var(--type-body-size,1rem) * var(--public-type-scale));}';
+        $css .=
+            '.public-page .site-main{--public-type-scale:'
+            . $factor
+            . ';font-size:calc(var(--type-body-size,1rem) * var(--public-type-scale));}';
         $css .= '.public-page .hero h1{font-size:calc(clamp(2.05rem,3.6vw,3.2rem) * var(--public-type-scale,1));}';
         $css .= '.public-page .hero p{font-size:calc(.95rem * var(--public-type-scale,1));}';
         // Match the existing orientation rules so scaling preserves their distinct title/copy hierarchy.
@@ -244,7 +354,10 @@ function theme_gallery_info_motion_ms_value(mixed $value): int
  */
 function theme_gallery_info_motion_ms(): int
 {
-    return theme_gallery_info_motion_ms_value(app_setting('theme_gallery_info_motion_ms', '320'));
+    return theme_gallery_info_motion_ms_value(app_setting(
+        'theme_gallery_info_motion_ms',
+        '320',
+    ));
 }
 
 /**
@@ -272,7 +385,10 @@ function theme_admin_side_panel_motion_ms_value(mixed $value): int
  */
 function theme_admin_side_panel_motion_ms(): int
 {
-    return theme_admin_side_panel_motion_ms_value(app_setting('theme_admin_side_panel_motion_ms', '260'));
+    return theme_admin_side_panel_motion_ms_value(app_setting(
+        'theme_admin_side_panel_motion_ms',
+        '260',
+    ));
 }
 
 /**
@@ -291,13 +407,17 @@ function theme_basic_appearance_settings(): array
         'theme_accent_dark' => (string) ($theme['accent_dark'] ?? '#713414'),
         'theme_paper' => (string) ($theme['paper'] ?? '#f8f4ec'),
         'theme_panel' => (string) ($theme['panel'] ?? '#fffaf0'),
-        'theme_gallery_panel' => (string) ($theme['gallery_panel'] ?? '#fffaf0'),
+        'theme_gallery_panel' => (string) (
+            $theme['gallery_panel'] ?? '#fffaf0'
+        ),
         'theme_header_text' => (string) ($theme['header_text'] ?? '#0f172a'),
         'theme_hero_text' => (string) ($theme['hero_text'] ?? '#0f172a'),
         'theme_radius' => (string) ($theme['radius'] ?? '16'),
         'theme_font' => (string) ($theme['font'] ?? 'serif'),
         'theme_page_width' => (string) ($theme['page_width'] ?? 'default'),
-        'theme_page_width_custom' => (string) ($theme['page_width_custom'] ?? '1440'),
+        'theme_page_width_custom' => (string) (
+            $theme['page_width_custom'] ?? '1440'
+        ),
     ];
 }
 
@@ -314,41 +434,63 @@ function theme_basic_appearance_normalize(string $id, mixed $value): string
         throw new InvalidArgumentException('Enter a valid appearance value.');
     }
     $value = trim((string) $value);
-    if (in_array($id, [
-        'theme_accent',
-        'theme_accent_dark',
-        'theme_paper',
-        'theme_panel',
-        'theme_gallery_panel',
-        'theme_header_text',
-        'theme_hero_text',
-    ], true)) {
+    if (in_array(
+        $id,
+        [
+            'theme_accent',
+            'theme_accent_dark',
+            'theme_paper',
+            'theme_panel',
+            'theme_gallery_panel',
+            'theme_header_text',
+            'theme_hero_text',
+        ],
+        true,
+    )) {
         if (!preg_match('/^#[0-9a-fA-F]{6}$/', $value)) {
-            throw new InvalidArgumentException('Enter a six-digit hexadecimal color.');
+            throw new InvalidArgumentException(
+                'Enter a six-digit hexadecimal color.',
+            );
         }
         return strtolower($value);
     }
     if ($id === 'theme_radius') {
-        if (filter_var($value, FILTER_VALIDATE_INT) === false || (int) $value < 0 || (int) $value > 32) {
-            throw new InvalidArgumentException('Choose a corner radius from 0 to 32 pixels.');
+        if (
+            filter_var($value, FILTER_VALIDATE_INT) === false
+            || (int) $value < 0
+            || (int) $value > 32
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a corner radius from 0 to 32 pixels.',
+            );
         }
         return (string) (int) $value;
     }
     if ($id === 'theme_font') {
         if (!in_array($value, ['serif', 'sans'], true)) {
-            throw new InvalidArgumentException('Choose a supported font style.');
+            throw new InvalidArgumentException(
+                'Choose a supported font style.',
+            );
         }
         return $value;
     }
     if ($id === 'theme_page_width') {
         if (!in_array($value, ['default', 'wide', 'custom', 'full'], true)) {
-            throw new InvalidArgumentException('Choose a supported page-width mode.');
+            throw new InvalidArgumentException(
+                'Choose a supported page-width mode.',
+            );
         }
         return $value;
     }
     if ($id === 'theme_page_width_custom') {
-        if (filter_var($value, FILTER_VALIDATE_INT) === false || (int) $value < 1024 || (int) $value > 2048) {
-            throw new InvalidArgumentException('Choose a custom page width from 1024 to 2048 pixels.');
+        if (
+            filter_var($value, FILTER_VALIDATE_INT) === false
+            || (int) $value < 1024
+            || (int) $value > 2048
+        ) {
+            throw new InvalidArgumentException(
+                'Choose a custom page width from 1024 to 2048 pixels.',
+            );
         }
         return (string) (int) $value;
     }
@@ -386,27 +528,52 @@ function theme_override_settings(): array
         'hero_text' => app_setting('theme_hero_text'),
         'background_opacity' => app_setting('theme_background_opacity'),
         'background_path' => app_setting('theme_background_path'),
-        'background_original_path' => app_setting('theme_background_original_path'),
-        'background_optimized_path' => app_setting('theme_background_optimized_path'),
-        'background_optimized_max_side' => app_setting('theme_background_optimized_max_side'),
+        'background_original_path' => app_setting(
+            'theme_background_original_path',
+        ),
+        'background_optimized_path' => app_setting(
+            'theme_background_optimized_path',
+        ),
+        'background_optimized_max_side' => app_setting(
+            'theme_background_optimized_max_side',
+        ),
         'gps_pin_enabled' => app_setting('theme_gps_pin_enabled'),
-        'gps_pin_background_enabled' => app_setting('theme_gps_pin_background_enabled'),
+        'gps_pin_background_enabled' => app_setting(
+            'theme_gps_pin_background_enabled',
+        ),
         'gps_pin_size' => app_setting('theme_gps_pin_size'),
-        'gps_pin_background_size' => app_setting('theme_gps_pin_background_size'),
+        'gps_pin_background_size' => app_setting(
+            'theme_gps_pin_background_size',
+        ),
         'radius' => app_setting('theme_radius'),
         'font' => app_setting('theme_font'),
         'page_width' => app_setting('theme_page_width'),
         'page_width_custom' => app_setting('theme_page_width_custom'),
-        'branding_separator_width' => app_setting('theme_branding_separator_width'),
-        'branding_separator_height' => app_setting('theme_branding_separator_height'),
-        'branding_separator_stretch' => app_setting('theme_branding_separator_stretch'),
-        'gallery_description_layout' => app_setting('theme_gallery_description_layout'),
-        'gallery_count_badge_enabled' => app_setting('theme_gallery_count_badge_enabled'),
+        'branding_separator_width' => app_setting(
+            'theme_branding_separator_width',
+        ),
+        'branding_separator_height' => app_setting(
+            'theme_branding_separator_height',
+        ),
+        'branding_separator_stretch' => app_setting(
+            'theme_branding_separator_stretch',
+        ),
+        'gallery_description_layout' => app_setting(
+            'theme_gallery_description_layout',
+        ),
+        'gallery_count_badge_enabled' => app_setting(
+            'theme_gallery_count_badge_enabled',
+        ),
         'lightbox_browsing_mode' => app_setting('theme_lightbox_browsing_mode'),
         'gallery_info_motion_ms' => app_setting('theme_gallery_info_motion_ms'),
-        'admin_side_panel_motion_ms' => app_setting('theme_admin_side_panel_motion_ms'),
+        'admin_side_panel_motion_ms' => app_setting(
+            'theme_admin_side_panel_motion_ms',
+        ),
     ];
-    return array_filter($settings, static fn (?string $value): bool => $value !== null && $value !== '');
+    return array_filter(
+        $settings,
+        static fn(?string $value): bool => $value !== null && $value !== '',
+    );
 }
 
 /**
@@ -479,7 +646,9 @@ function theme_page_width_mode(string $value): string
 {
     // $mode stores the trimmed user or database value before it is compared with supported presets.
     $mode = trim($value);
-    return in_array($mode, ['default', 'wide', 'full', 'custom'], true) ? $mode : 'default';
+    return in_array($mode, ['default', 'wide', 'full', 'custom'], true)
+        ? $mode
+        : 'default';
 }
 
 /**
@@ -501,7 +670,6 @@ function theme_page_width_custom_value(mixed $value): int
     }
     return max(1024, min(2048, $width));
 }
-
 
 /**
  * Normalize the number of hero tags shown before the browser offers expansion.
@@ -526,7 +694,10 @@ function theme_hero_tag_visible_limit_value(mixed $value): int
  */
 function theme_hero_tag_visible_limit(): int
 {
-    return theme_hero_tag_visible_limit_value(app_setting('theme_hero_tag_visible_limit', '20'));
+    return theme_hero_tag_visible_limit_value(app_setting(
+        'theme_hero_tag_visible_limit',
+        '20',
+    ));
 }
 
 /**
@@ -536,7 +707,7 @@ function theme_hero_tag_visible_limit(): int
  */
 function theme_hero_tag_display_all_enabled(): bool
 {
-    return ((string) app_setting('theme_hero_tag_display_all', '0')) === '1';
+    return (string) app_setting('theme_hero_tag_display_all', '0') === '1';
 }
 
 /**
@@ -546,7 +717,9 @@ function theme_hero_tag_display_all_enabled(): bool
  */
 function theme_hero_tag_scrollbar_enabled(): bool
 {
-    return ((string) app_setting('theme_hero_tag_scrollbar_enabled', '1')) !== '0';
+    return (
+        (string) app_setting('theme_hero_tag_scrollbar_enabled', '1') !== '0'
+    );
 }
 
 /**
@@ -572,7 +745,10 @@ function theme_hero_tag_scrollbar_rows_value(mixed $value): int
  */
 function theme_hero_tag_scrollbar_rows(): int
 {
-    return theme_hero_tag_scrollbar_rows_value(app_setting('theme_hero_tag_scrollbar_rows', '5'));
+    return theme_hero_tag_scrollbar_rows_value(app_setting(
+        'theme_hero_tag_scrollbar_rows',
+        '5',
+    ));
 }
 
 /**
@@ -598,7 +774,10 @@ function theme_hero_tag_sort_mode_normalize(mixed $value): string
  */
 function theme_hero_tag_sort_mode(): string
 {
-    return theme_hero_tag_sort_mode_normalize(app_setting('theme_hero_tag_sort_mode', 'usage'));
+    return theme_hero_tag_sort_mode_normalize(app_setting(
+        'theme_hero_tag_sort_mode',
+        'usage',
+    ));
 }
 
 /**
@@ -655,7 +834,7 @@ function theme_branding_separator_stretch_enabled(mixed $value): bool
 /**
  * Read theme defaults from the built-in stylesheet and then from active custom CSS.
  *
- * @return array Structured result data for the caller.
+ * @return array{accent:string,accent_dark:string,paper:string,panel:string,gallery_panel:string,radius:string,font:string} Sanitized theme defaults read from built-in and active custom CSS.
  */
 function theme_css_defaults(): array
 {
@@ -668,20 +847,32 @@ function theme_css_defaults(): array
         '--radius' => '16px',
         '--font-family' => 'Georgia, Times New Roman, serif',
     ];
-    foreach ([dirname(__DIR__, 2) . '/public/assets/styles.css', custom_css_path()] as $path) {
+    foreach ([
+        dirname(__DIR__, 2) . '/public/assets/styles.css',
+        custom_css_path(),
+    ] as $path) {
         if (!is_file($path)) {
             continue;
         }
         // $variables stores an intermediate value used by the surrounding gallery workflow.
-        $variables = array_merge($variables, css_custom_properties_from_file($path, array_keys($variables)));
+        $variables = array_merge($variables, css_custom_properties_from_file(
+            $path,
+            array_keys($variables),
+        ));
     }
 
     return [
         'accent' => sanitize_hex_color($variables['--accent'], '#a5481c'),
-        'accent_dark' => sanitize_hex_color($variables['--accent-dark'], '#713414'),
+        'accent_dark' => sanitize_hex_color(
+            $variables['--accent-dark'],
+            '#713414',
+        ),
         'paper' => sanitize_hex_color($variables['--paper'], '#f8f4ec'),
         'panel' => sanitize_hex_color($variables['--panel'], '#fffaf0'),
-        'gallery_panel' => sanitize_hex_color($variables['--gallery-panel'] ?? $variables['--panel'], '#fffaf0'),
+        'gallery_panel' => sanitize_hex_color(
+            $variables['--gallery-panel'] ?? $variables['--panel'],
+            '#fffaf0',
+        ),
         'radius' => (string) max(0, min(32, (int) $variables['--radius'])),
         'font' => theme_font_mode_from_css($variables['--font-family']),
     ];
@@ -701,7 +892,10 @@ function css_custom_properties_from_file(string $path, array $names): array
     if ($css === false) {
         return [];
     }
-    if (!preg_match_all('/:root\s*\{([^}]*)\}/is', $css, $blocks) || empty($blocks[1])) {
+    if (
+        !preg_match_all('/:root\s*\{([^}]*)\}/is', $css, $blocks)
+        || empty($blocks[1])
+    ) {
         return [];
     }
     // $rootCss stores an intermediate value used by the surrounding gallery workflow.
@@ -711,7 +905,10 @@ function css_custom_properties_from_file(string $path, array $names): array
     foreach ($names as $name) {
         // $pattern stores an intermediate value used by the surrounding gallery workflow.
         $pattern = '/' . preg_quote($name, '/') . '\s*:\s*([^;}{]+)\s*;/i';
-        if (preg_match_all($pattern, $rootCss, $matches) && !empty($matches[1])) {
+        if (
+            preg_match_all($pattern, $rootCss, $matches)
+            && !empty($matches[1])
+        ) {
             $found[$name] = trim((string) end($matches[1]));
         }
     }
@@ -728,7 +925,11 @@ function theme_font_mode_from_css(string $fontFamily): string
 {
     // $fontFamily stores an intermediate value used by the surrounding gallery workflow.
     $fontFamily = strtolower($fontFamily);
-    return str_contains($fontFamily, 'sans') || str_contains($fontFamily, 'system-ui') || str_contains($fontFamily, 'arial') ? 'sans' : 'serif';
+    return str_contains($fontFamily, 'sans')
+    || str_contains($fontFamily, 'system-ui')
+    || str_contains($fontFamily, 'arial')
+        ? 'sans'
+        : 'serif';
 }
 
 /**
@@ -742,5 +943,7 @@ function sanitize_hex_color(string $value, string $fallback): string
 {
     // $value stores an intermediate value used by the surrounding gallery workflow.
     $value = trim($value);
-    return preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? strtolower($value) : $fallback;
+    return preg_match('/^#[0-9a-fA-F]{6}$/', $value)
+        ? strtolower($value)
+        : $fallback;
 }

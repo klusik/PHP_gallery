@@ -23,10 +23,16 @@ declare(strict_types=1);
  * @param int $line Source line, deliberately discarded.
  * @return bool False leaves intentionally suppressed diagnostics to PHP.
  */
-function runtime_normalization_error(int $severity, string $message, string $file, int $line): bool
-{
+function runtime_normalization_error(
+    int $severity,
+    string $message,
+    string $file,
+    int $line,
+): bool {
     if ((error_reporting() & $severity) !== 0) {
-        throw new RuntimeException('Unexpected PHP diagnostic in runtime normalization.');
+        throw new RuntimeException(
+            'Unexpected PHP diagnostic in runtime normalization.',
+        );
     }
     return false;
 }
@@ -36,21 +42,48 @@ $previousReporting = error_reporting(E_ALL);
 try {
     require_once dirname(__DIR__) . '/app/services/gallery_picker.php';
     $expected = (string) getenv('GALLERY_RUNTIME_NORMALIZATION');
-    $unicode = class_exists(Normalizer::class) && function_exists('mb_strtolower');
-    $mode = Gallery\Services\gallery_title_completion_empty_result()['normalization'];
-    if (!in_array($expected, ['', 'unicode', 'ascii'], true)
-        || ($expected === 'unicode' && !$unicode) || ($expected === 'ascii' && $unicode)
-        || $mode !== ($unicode ? 'nfkc-lowercase' : 'ascii-lowercase')) {
-        throw new RuntimeException('Configured CI normalization environment does not match installed capabilities.');
+    $unicode =
+        class_exists(Normalizer::class) && function_exists('mb_strtolower');
+    $mode =
+        Gallery\Services\gallery_title_completion_empty_result()['normalization'];
+    if (
+        !in_array($expected, ['', 'unicode', 'ascii'], true)
+        || (
+            $expected === 'unicode'
+            && !$unicode
+        )
+        || (
+            $expected === 'ascii'
+            && $unicode
+        )
+        || $mode !== ($unicode ? 'nfkc-lowercase' : 'ascii-lowercase')
+    ) {
+        throw new RuntimeException(
+            'Configured CI normalization environment does not match installed capabilities.',
+        );
     }
-    $samples = ['FLIGHT' => 'flight', "\u{FF26}\u{FF2C}\u{FF29}\u{FF27}\u{FF28}\u{FF34}" => $unicode ? 'flight' : null,
-        "E\u{0301}cole" => $unicode ? "\u{00E9}cole" : null, "\u{FB00}light" => $unicode ? 'fflight' : null];
+    $samples = [
+        'FLIGHT' => 'flight',
+        "\u{FF26}\u{FF2C}\u{FF29}\u{FF27}\u{FF28}\u{FF34}" => $unicode
+            ? 'flight'
+            : null,
+        "E\u{0301}cole" => $unicode ? "\u{00E9}cole" : null,
+        "\u{FB00}light" => $unicode ? 'fflight' : null,
+    ];
     foreach ($samples as $input => $normalized) {
-        if (Gallery\Services\gallery_title_completion_normalize($input, $mode) !== $normalized) {
-            throw new RuntimeException('Installed runtime normalization differs from its declared mode.');
+        if (
+            Gallery\Services\gallery_title_completion_normalize($input, $mode)
+            !== $normalized
+        ) {
+            throw new RuntimeException(
+                'Installed runtime normalization differs from its declared mode.',
+            );
         }
     }
-    echo 'PASS runtime normalization installed mode ' . $mode . " with strict warnings and deprecations\n";
+    echo
+        'PASS runtime normalization installed mode '
+            . $mode
+            . " with strict warnings and deprecations\n";
 } finally {
     error_reporting($previousReporting);
     restore_error_handler();

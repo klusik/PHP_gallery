@@ -201,10 +201,17 @@ namespace Gallery\Services {
      * @param array<string,mixed> $parameters Prepared placeholder values.
      * @return string Unescaped presentation text.
      */
-    function t(string $key, string $fallback = '', array $parameters = []): string
-    {
+    function t(
+        string $key,
+        string $fallback = '',
+        array $parameters = [],
+    ): string {
         foreach ($parameters as $name => $value) {
-            $fallback = str_replace('{' . $name . '}', (string) $value, $fallback);
+            $fallback = str_replace(
+                '{' . $name . '}',
+                (string) $value,
+                $fallback,
+            );
         }
         return $fallback;
     }
@@ -245,8 +252,10 @@ namespace Gallery\Services {
      * @param string $operation Bounded operation identity.
      * @return void Records a fixture observation only.
      */
-    function presentation_schema_log_degraded(array $status, string $operation): void
-    {
+    function presentation_schema_log_degraded(
+        array $status,
+        string $operation,
+    ): void {
         $GLOBALS['content_degraded'] = [$status, $operation];
     }
 
@@ -289,9 +298,20 @@ namespace Gallery\Services {
      * @param array<string,mixed> $options Optional logging metadata.
      * @return void Stores fixture event context.
      */
-    function admin_log_event(string $level, string $event, string $message, array $context = [], array $options = []): void
-    {
-        $GLOBALS['content_log'] = [$level, $event, $message, $context, $options];
+    function admin_log_event(
+        string $level,
+        string $event,
+        string $message,
+        array $context = [],
+        array $options = [],
+    ): void {
+        $GLOBALS['content_log'] = [
+            $level,
+            $event,
+            $message,
+            $context,
+            $options,
+        ];
     }
 }
 
@@ -335,7 +355,9 @@ namespace {
     {
         ob_start();
         try {
-            \Gallery\Views\view_render_admin_dashboard_content_display_tools($model);
+            \Gallery\Views\view_render_admin_dashboard_content_display_tools(
+                $model,
+            );
             $html = (string) ob_get_contents();
         } finally {
             ob_end_clean();
@@ -343,7 +365,11 @@ namespace {
         $document = new DOMDocument();
         $previous = libxml_use_internal_errors(true);
         try {
-            $document->loadHTML('<!doctype html><html><meta charset="utf-8"><body>' . $html . '</body></html>');
+            $document->loadHTML(
+                '<!doctype html><html><meta charset="utf-8"><body>'
+                    . $html
+                    . '</body></html>',
+            );
         } finally {
             libxml_clear_errors();
             libxml_use_internal_errors($previous);
@@ -358,7 +384,11 @@ namespace {
      */
     function content_display_reset(bool $default): void
     {
-        $GLOBALS['content_auth'] = $GLOBALS['content_csrf'] = $GLOBALS['content_schema_reads'] = $GLOBALS['content_default_writes'] = $GLOBALS['content_reset_writes'] = 0;
+        $GLOBALS['content_auth'] =
+            $GLOBALS['content_csrf'] =
+                $GLOBALS['content_schema_reads'] =
+                    $GLOBALS['content_default_writes'] =
+                        $GLOBALS['content_reset_writes'] = 0;
         $GLOBALS['content_gps_default'] = $default;
         $GLOBALS['content_denied'] = $GLOBALS['content_not_found'] = false;
         $GLOBALS['content_search_available'] = true;
@@ -382,93 +412,321 @@ namespace {
             $handler ??= 'Gallery\\Controllers\\cms_admin_exif_gps_settings';
             $handler();
         } catch (RuntimeException $exception) {
-            content_display_assert($exception->getCode() === 302, 'Controller failed before selecting its fallback destination.');
+            content_display_assert(
+                $exception->getCode() === 302,
+                'Controller failed before selecting its fallback destination.',
+            );
         }
     }
 
-    $model = ['feature_enabled' => ['public_search' => true, 'gallery_maps' => true, 'exif_gallery_date_suggestions' => true], 'gps_map_override_ready' => true, 'gallery_date_range_ready' => true, 'exif_gps_default_enabled' => true, 'exif_gps_override_count' => 5, 'public_home_search_enabled' => true, 'url_rewrite_enabled' => true, 'url_rewrite_compatibility' => ['enabled' => true, 'status' => 'unsupported', 'reasons' => ['<script>fixture reason</script>']]];
+    $model = [
+        'feature_enabled' => [
+            'public_search' => true,
+            'gallery_maps' => true,
+            'exif_gallery_date_suggestions' => true,
+        ],
+        'gps_map_override_ready' => true,
+        'gallery_date_range_ready' => true,
+        'exif_gps_default_enabled' => true,
+        'exif_gps_override_count' => 5,
+        'public_home_search_enabled' => true,
+        'url_rewrite_enabled' => true,
+        'url_rewrite_compatibility' => [
+            'enabled' => true,
+            'status' => 'unsupported',
+            'reasons' => ['<script>fixture reason</script>'],
+        ],
+    ];
     $dom = content_display_render($model);
-    foreach (['public-display', 'gallery-metadata', 'urls-protection'] as $group) {
-        content_display_assert($dom->query('//*[@data-admin-content-group="' . $group . '"]')->length === 1, 'Content tools lost an owned compact group.');
+    foreach ([
+        'public-display',
+        'gallery-metadata',
+        'urls-protection',
+    ] as $group) {
+        content_display_assert(
+            $dom->query(
+                '//*[@data-admin-content-group="' . $group . '"]',
+            )->length === 1,
+            'Content tools lost an owned compact group.',
+        );
     }
     foreach ($dom->query('//form') as $form) {
-        content_display_assert(strtolower($form->getAttribute('method')) === 'post', 'Content mutations must stay POST-only.');
-        content_display_assert($dom->query('.//input[@name="csrf_token" and @value="content-fixture"]', $form)->length === 1, 'Content form lost its CSRF field.');
-        content_display_assert($dom->query('.//input[@name="maintenance_return" and @value="content"]', $form)->length === 1, 'Content form lost its owned return context.');
+        content_display_assert(
+            strtolower($form->getAttribute('method')) === 'post',
+            'Content mutations must stay POST-only.',
+        );
+        content_display_assert(
+            $dom->query(
+                './/input[@name="csrf_token" and @value="content-fixture"]',
+                $form,
+            )->length === 1,
+            'Content form lost its CSRF field.',
+        );
+        content_display_assert(
+            $dom->query(
+                './/input[@name="maintenance_return" and @value="content"]',
+                $form,
+            )->length === 1,
+            'Content form lost its owned return context.',
+        );
     }
-    $reset = $dom->query('//form[.//input[@name="reset_gallery_overrides_only" and @value="1"]]');
-    content_display_assert($reset->length === 1, 'Gallery override reset must have its own explicit form.');
-    content_display_assert($dom->query('.//input[@name="reset_gallery_overrides" and @value="1"]', $reset->item(0))->length === 1 && $dom->query('.//input[@name="exif_gps_default_enabled"]', $reset->item(0))->length === 0, 'Reset must not submit or rewrite the independent global preference.');
-    content_display_assert($dom->query('//form[.//input[@name="exif_gps_default_enabled"] and .//input[@name="reset_gallery_overrides"]]')->length === 0, 'Default editing must not contain the bulk reset action.');
-    content_display_assert($dom->query('//script')->length === 0 && str_contains($dom->document->textContent, '<script>fixture reason</script>'), 'Rewrite compatibility reasons must be preserved as escaped prose.');
-    content_display_assert($dom->query('//*[contains(@class,"is-alert") and contains(.,"support was not detected")]')->length >= 1, 'Unsupported rewrite warning must remain visible.');
-    content_display_assert($dom->query('//a[@href="/index.php?page=admin_gallery_dates"]')->length === 1 && $dom->query('//form[@action="/index.php?page=admin_regenerate_paths"]')->length === 1, 'Metadata date workflow or public-path action was lost.');
-    content_display_assert(str_contains($reset->item(0)->textContent, '5'), 'The bulk reset must show its affected override count.');
-    foreach (['public_home_search_enabled', 'exif_gps_default_enabled', 'url_rewrite_enabled', 'seo_request_guard_enabled', 'seo_request_guard_logging_enabled'] as $name) {
-        content_display_assert($dom->query('//input[@name="' . $name . '"]')->length === 1, 'Content preference changed its existing submitted field name.');
+    $reset = $dom->query(
+        '//form[.//input[@name="reset_gallery_overrides_only" and @value="1"]]',
+    );
+    content_display_assert(
+        $reset->length === 1,
+        'Gallery override reset must have its own explicit form.',
+    );
+    content_display_assert(
+        $dom->query(
+            './/input[@name="reset_gallery_overrides" and @value="1"]',
+            $reset->item(0),
+        )->length === 1
+            && $dom->query(
+                './/input[@name="exif_gps_default_enabled"]',
+                $reset->item(0),
+            )->length === 0,
+        'Reset must not submit or rewrite the independent global preference.',
+    );
+    content_display_assert(
+        $dom->query(
+            '//form[.//input[@name="exif_gps_default_enabled"] and .//input[@name="reset_gallery_overrides"]]',
+        )->length === 0,
+        'Default editing must not contain the bulk reset action.',
+    );
+    content_display_assert(
+        $dom->query('//script')->length === 0
+            && str_contains(
+                $dom->document->textContent,
+                '<script>fixture reason</script>',
+            ),
+        'Rewrite compatibility reasons must be preserved as escaped prose.',
+    );
+    content_display_assert(
+        $dom->query(
+            '//*[contains(@class,"is-alert") and contains(.,"support was not detected")]',
+        )->length >= 1,
+        'Unsupported rewrite warning must remain visible.',
+    );
+    content_display_assert(
+        $dom->query('//a[@href="/index.php?page=admin_gallery_dates"]')->length
+            === 1
+            && $dom->query(
+                '//form[@action="/index.php?page=admin_regenerate_paths"]',
+            )->length === 1,
+        'Metadata date workflow or public-path action was lost.',
+    );
+    content_display_assert(
+        str_contains($reset->item(0)->textContent, '5'),
+        'The bulk reset must show its affected override count.',
+    );
+    foreach ([
+        'public_home_search_enabled',
+        'exif_gps_default_enabled',
+        'url_rewrite_enabled',
+        'seo_request_guard_enabled',
+        'seo_request_guard_logging_enabled',
+    ] as $name) {
+        content_display_assert(
+            $dom->query('//input[@name="' . $name . '"]')->length === 1,
+            'Content preference changed its existing submitted field name.',
+        );
     }
-    content_display_assert($dom->query('//details//*[contains(@class,"is-alert")]')->length === 0, 'Unsupported rewrite guidance must remain outside collapsed details.');
+    content_display_assert(
+        $dom->query('//details//*[contains(@class,"is-alert")]')->length === 0,
+        'Unsupported rewrite guidance must remain outside collapsed details.',
+    );
 
-    $zero = content_display_render(array_replace($model, ['exif_gps_override_count' => 0]));
-    content_display_assert($zero->query('//input[@name="reset_gallery_overrides_only"]')->length === 0, 'Zero overrides must not expose a misleading bulk action.');
-    $disabled = content_display_render(array_replace($model, ['feature_enabled' => ['public_search' => false, 'gallery_maps' => false, 'exif_gallery_date_suggestions' => false], 'gps_map_override_ready' => false, 'gallery_date_range_ready' => false]));
-    content_display_assert($disabled->query('//input[@name="public_home_search_enabled" or @name="exif_gps_default_enabled" or @name="reset_gallery_overrides_only"]')->length === 0 && $disabled->query('//a[@href="/index.php?page=admin_gallery_dates"]')->length === 0, 'Disabled or unready optional display controls escaped their existing gates.');
-    $datesDisabled = content_display_render(array_replace($model, ['feature_enabled' => ['public_search' => true, 'exif_gallery_date_suggestions' => false]]));
-    content_display_assert($datesDisabled->query('//a[@href="/index.php?page=admin_gallery_dates"]')->length === 0, 'Date readiness must not override the date-suggestion capability switch.');
-    $unready = content_display_render(array_replace($model, ['gps_map_override_ready' => false, 'gallery_date_range_ready' => false]));
-    content_display_assert($unready->query('//input[@name="exif_gps_default_enabled" or @name="reset_gallery_overrides_only"]')->length === 0 && $unready->query('//a[@href="/index.php?page=admin_gallery_dates"]')->length === 0, 'Enabled capabilities must still respect unresolved storage readiness.');
+    $zero = content_display_render(array_replace($model, [
+        'exif_gps_override_count' => 0,
+    ]));
+    content_display_assert(
+        $zero->query('//input[@name="reset_gallery_overrides_only"]')->length
+            === 0,
+        'Zero overrides must not expose a misleading bulk action.',
+    );
+    $disabled = content_display_render(array_replace($model, [
+        'feature_enabled' => [
+            'public_search' => false,
+            'gallery_maps' => false,
+            'exif_gallery_date_suggestions' => false,
+        ],
+        'gps_map_override_ready' => false,
+        'gallery_date_range_ready' => false,
+    ]));
+    content_display_assert(
+        $disabled->query(
+            '//input[@name="public_home_search_enabled" or @name="exif_gps_default_enabled" or @name="reset_gallery_overrides_only"]',
+        )->length === 0
+            && $disabled->query(
+                '//a[@href="/index.php?page=admin_gallery_dates"]',
+            )->length === 0,
+        'Disabled or unready optional display controls escaped their existing gates.',
+    );
+    $datesDisabled = content_display_render(array_replace($model, ['feature_enabled' => [
+        'public_search' => true,
+        'exif_gallery_date_suggestions' => false,
+    ]]));
+    content_display_assert(
+        $datesDisabled->query(
+            '//a[@href="/index.php?page=admin_gallery_dates"]',
+        )->length === 0,
+        'Date readiness must not override the date-suggestion capability switch.',
+    );
+    $unready = content_display_render(array_replace($model, [
+        'gps_map_override_ready' => false,
+        'gallery_date_range_ready' => false,
+    ]));
+    content_display_assert(
+        $unready->query(
+            '//input[@name="exif_gps_default_enabled" or @name="reset_gallery_overrides_only"]',
+        )->length === 0
+            && $unready->query(
+                '//a[@href="/index.php?page=admin_gallery_dates"]',
+            )->length === 0,
+        'Enabled capabilities must still respect unresolved storage readiness.',
+    );
 
     foreach ([true, false] as $default) {
         content_display_reset($default);
-        $_POST += ['reset_gallery_overrides' => '1', 'reset_gallery_overrides_only' => '1'];
+        $_POST += [
+            'reset_gallery_overrides' => '1',
+            'reset_gallery_overrides_only' => '1',
+        ];
         $_POST['exif_gps_default_enabled'] = $default ? '0' : '1';
         content_display_gps_request();
-        content_display_assert($GLOBALS['content_gps_default'] === $default && $GLOBALS['content_default_writes'] === 0 && $GLOBALS['content_reset_writes'] === 1, 'Reset-only request changed the independent GPS default.');
-        content_display_assert($GLOBALS['content_auth'] === 1 && $GLOBALS['content_csrf'] === 1 && str_contains($GLOBALS['content_redirect'], 'maintenance_tab=content'), 'Reset request lost its guards or Content return destination.');
+        content_display_assert(
+            $GLOBALS['content_gps_default'] === $default
+                && $GLOBALS['content_default_writes'] === 0
+                && $GLOBALS['content_reset_writes'] === 1,
+            'Reset-only request changed the independent GPS default.',
+        );
+        content_display_assert(
+            $GLOBALS['content_auth'] === 1
+                && $GLOBALS['content_csrf'] === 1
+                && str_contains(
+                    $GLOBALS['content_redirect'],
+                    'maintenance_tab=content',
+                ),
+            'Reset request lost its guards or Content return destination.',
+        );
     }
     foreach (['missing', 'unknown'] as $state) {
         content_display_reset(true);
         $GLOBALS['content_schema_state'] = $state;
-        $_POST += ['reset_gallery_overrides' => '1', 'reset_gallery_overrides_only' => '1'];
+        $_POST += [
+            'reset_gallery_overrides' => '1',
+            'reset_gallery_overrides_only' => '1',
+        ];
         content_display_gps_request();
-        content_display_assert($GLOBALS['content_default_writes'] === 0 && $GLOBALS['content_reset_writes'] === 0 && str_contains($GLOBALS['content_redirect'], 'maintenance_tab=content'), 'Unverified override storage permitted writes or lost Content navigation.');
+        content_display_assert(
+            $GLOBALS['content_default_writes'] === 0
+                && $GLOBALS['content_reset_writes'] === 0
+                && str_contains(
+                    $GLOBALS['content_redirect'],
+                    'maintenance_tab=content',
+                ),
+            'Unverified override storage permitted writes or lost Content navigation.',
+        );
     }
     content_display_reset(false);
     $_POST['exif_gps_default_enabled'] = '1';
     content_display_gps_request();
-    content_display_assert($GLOBALS['content_gps_default'] && $GLOBALS['content_default_writes'] === 1 && $GLOBALS['content_reset_writes'] === 0, 'Ordinary default editing must remain independent of bulk reset.');
+    content_display_assert(
+        $GLOBALS['content_gps_default']
+            && $GLOBALS['content_default_writes'] === 1
+            && $GLOBALS['content_reset_writes'] === 0,
+        'Ordinary default editing must remain independent of bulk reset.',
+    );
     content_display_reset(false);
-    $_POST += ['exif_gps_default_enabled' => '1', 'reset_gallery_overrides' => '1'];
+    $_POST += [
+        'exif_gps_default_enabled' => '1',
+        'reset_gallery_overrides' => '1',
+    ];
     content_display_gps_request();
-    content_display_assert($GLOBALS['content_gps_default'] && $GLOBALS['content_default_writes'] === 1 && $GLOBALS['content_reset_writes'] === 1, 'Legacy combined default-and-reset submissions must remain compatible.');
+    content_display_assert(
+        $GLOBALS['content_gps_default']
+            && $GLOBALS['content_default_writes'] === 1
+            && $GLOBALS['content_reset_writes'] === 1,
+        'Legacy combined default-and-reset submissions must remain compatible.',
+    );
     content_display_reset(true);
     $_POST = [];
     content_display_gps_request();
-    content_display_assert($GLOBALS['content_redirect'] === '/index.php?page=admin', 'Unmarked legacy requests must keep their existing fallback destination.');
+    content_display_assert(
+        $GLOBALS['content_redirect'] === '/index.php?page=admin',
+        'Unmarked legacy requests must keep their existing fallback destination.',
+    );
     content_display_reset(true);
     $GLOBALS['content_method'] = 'GET';
     content_display_gps_request();
-    content_display_assert($GLOBALS['content_not_found'] && $GLOBALS['content_schema_reads'] === 0 && $GLOBALS['content_csrf'] === 0, 'GET must never inspect or mutate GPS override storage.');
+    content_display_assert(
+        $GLOBALS['content_not_found']
+            && $GLOBALS['content_schema_reads'] === 0
+            && $GLOBALS['content_csrf'] === 0,
+        'GET must never inspect or mutate GPS override storage.',
+    );
     content_display_reset(true);
     $GLOBALS['content_denied'] = true;
     try {
         \Gallery\Controllers\cms_admin_exif_gps_settings();
         throw new RuntimeException('Denied request reached controller work.');
     } catch (RuntimeException $exception) {
-        content_display_assert($exception->getCode() === 401 && $GLOBALS['content_schema_reads'] === 0 && $GLOBALS['content_reset_writes'] === 0, 'Authentication must precede all GPS storage work.');
+        content_display_assert(
+            $exception->getCode() === 401
+                && $GLOBALS['content_schema_reads'] === 0
+                && $GLOBALS['content_reset_writes'] === 0,
+            'Authentication must precede all GPS storage work.',
+        );
     }
-    foreach (['cms_admin_url_rewrite', 'cms_admin_public_search_settings', 'cms_admin_seo_guard_settings', 'cms_admin_regenerate_paths'] as $handler) {
+    foreach ([
+        'cms_admin_url_rewrite',
+        'cms_admin_public_search_settings',
+        'cms_admin_seo_guard_settings',
+        'cms_admin_regenerate_paths',
+    ] as $handler) {
         content_display_reset(true);
         content_display_gps_request('Gallery\\Controllers\\' . $handler);
-        content_display_assert($GLOBALS['content_auth'] === 1 && $GLOBALS['content_csrf'] === 1 && str_contains($GLOBALS['content_redirect'], 'dashboard_tab=maintenance') && str_contains($GLOBALS['content_redirect'], 'maintenance_tab=content'), 'Content mutation lost its guards or owned dashboard return: ' . $handler);
+        content_display_assert(
+            $GLOBALS['content_auth'] === 1
+                && $GLOBALS['content_csrf'] === 1
+                && str_contains(
+                    $GLOBALS['content_redirect'],
+                    'dashboard_tab=maintenance',
+                )
+                && str_contains(
+                    $GLOBALS['content_redirect'],
+                    'maintenance_tab=content',
+                ),
+            'Content mutation lost its guards or owned dashboard return: '
+                . $handler,
+        );
     }
     content_display_reset(true);
     $GLOBALS['content_search_available'] = false;
-    content_display_gps_request('Gallery\\Controllers\\cms_admin_public_search_settings');
-    content_display_assert($GLOBALS['content_setting_writes'] === [] && str_contains($GLOBALS['content_redirect'], 'maintenance_tab=content'), 'Disabled public search must refuse mutation while retaining Content navigation.');
+    content_display_gps_request(
+        'Gallery\\Controllers\\cms_admin_public_search_settings',
+    );
+    content_display_assert(
+        $GLOBALS['content_setting_writes'] === []
+            && str_contains(
+                $GLOBALS['content_redirect'],
+                'maintenance_tab=content',
+            ),
+        'Disabled public search must refuse mutation while retaining Content navigation.',
+    );
     content_display_reset(true);
     $GLOBALS['content_paths_fail'] = true;
-    content_display_gps_request('Gallery\\Controllers\\cms_admin_regenerate_paths');
-    content_display_assert($GLOBALS['content_setting_writes'] === [] && str_contains($GLOBALS['content_redirect'], 'maintenance_tab=content'), 'Path regeneration refusal lost its Content return destination.');
+    content_display_gps_request(
+        'Gallery\\Controllers\\cms_admin_regenerate_paths',
+    );
+    content_display_assert(
+        $GLOBALS['content_setting_writes'] === []
+            && str_contains(
+                $GLOBALS['content_redirect'],
+                'maintenance_tab=content',
+            ),
+        'Path regeneration refusal lost its Content return destination.',
+    );
     echo "Content and display production controls: PASS\n";
 }

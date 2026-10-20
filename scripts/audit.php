@@ -71,7 +71,6 @@ use function PhpGallery\Audit\process_status;
 use function PhpGallery\Audit\browser_required;
 use function PhpGallery\Audit\task_result;
 use function PhpGallery\Audit\write_text_file;
-
 use const PhpGallery\Audit\STATUS_BLOCKED;
 use const PhpGallery\Audit\STATUS_FAIL;
 use const PhpGallery\Audit\STATUS_PASS;
@@ -116,52 +115,56 @@ $registry = require $registryPath;
 try {
     $options = parse_options($argv);
 } catch (Throwable $exception) {
-    fwrite(STDERR, $exception->getMessage() . "\nUse --help for supported options.\n");
+    fwrite(
+        STDERR,
+        $exception->getMessage() . "\nUse --help for supported options.\n",
+    );
     exit(2);
 }
 
 if ($options['help']) {
     fwrite(STDOUT, <<<'TEXT'
-PHP Gallery central audit
+    PHP Gallery central audit
 
-Usage:
-  php scripts/audit.php [--profile basic|quick|full|release|release-preflight|release-stage-b|candidate-preflight|source-contracts|portable|hosted-full]
-  php scripts/audit.php --suite <suite-id>
-  php scripts/audit.php --profile basic --changed
+    Usage:
+      php scripts/audit.php [--profile basic|quick|full|release|release-preflight|release-stage-b|candidate-preflight|source-contracts|portable|hosted-full]
+      php scripts/audit.php --suite <suite-id>
+      php scripts/audit.php --profile basic --changed
 
-Options:
-  --profile <name>   Audit profile. Default: full.
-  --suite <id>       Run one registered suite only. Intended for diagnosis and tests/run.php compatibility.
-  --changed          Use complete Git-changed PHP/JS/MJS files; full/release retain whole-tree lint.
-  --report <path>    Override the Markdown report path.
-  --json <path>      Override the JSON report path.
-  --no-report        Do not persist reports or logs. Intended for compatibility wrappers.
-  --help             Show this help.
+    Options:
+      --profile <name>   Audit profile. Default: full.
+      --suite <id>       Run one registered suite only. Intended for diagnosis and tests/run.php compatibility.
+      --changed          Use complete Git-changed PHP/JS/MJS files; full/release retain whole-tree lint.
+      --report <path>    Override the Markdown report path.
+      --json <path>      Override the JSON report path.
+      --no-report        Do not persist reports or logs. Intended for compatibility wrappers.
+      --help             Show this help.
 
-Environment overrides:
-  PHP_GALLERY_NODE, PHP_GALLERY_PYTHON, PHP_GALLERY_GIT, PHP_GALLERY_BROWSER
-  PHP_GALLERY_AUDIT_WORKERS (1..8, default 4), PHP_GALLERY_BROWSER_REQUIRED=1
-  PHP_GALLERY_SOURCE_BASE (immutable branch merge-base or previous release tag SHA)
+    Environment overrides:
+      PHP_GALLERY_NODE, PHP_GALLERY_PYTHON, PHP_GALLERY_GIT, PHP_GALLERY_BROWSER
+      PHP_GALLERY_AUDIT_WORKERS (1..8, default 4), PHP_GALLERY_BROWSER_REQUIRED=1
+      PHP_GALLERY_SOURCE_BASE (immutable branch merge-base or previous release tag SHA)
 
-Profiles:
-  basic    PHP/JavaScript syntax and changed named-declaration documentation only.
-  quick    Curated PHP smoke, fast Node/contracts, bootstrap probes and changed-file syntax checks.
-  full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
-  release  Full audit plus release consistency, manifest freshness, and Git validation.
-  release-preflight  Cheap source-only authoring feedback, including debt budgets; no release actions.
-  release-stage-b    Medium-cost source-only MVC and mutation contracts before release generation.
-  candidate-preflight  Read-only generated-artifact and CI-workflow integrity gate before heavy CI.
-  source-contracts  Shared whole-tree syntax, declaration, policy and architecture owners.
-  portable  Shared full Node and WinApp owners.
-  hosted-full  One exact-candidate PHP/runtime shard (hosted shard environment required).
-  basic --changed  Lint the immutable PHP_GALLERY_SOURCE_BASE delta; evaluator/config changes expand to full tree, missing base blocks.
-TEXT
-    );
+    Profiles:
+      basic    PHP/JavaScript syntax and changed named-declaration documentation only.
+      quick    Curated PHP smoke, fast Node/contracts, bootstrap probes and changed-file syntax checks.
+      full     Complete source audit, including slow ZIP64, syntax, and available Chromium fixtures.
+      release  Full audit plus release consistency, manifest freshness, and Git validation.
+      release-preflight  Cheap source-only authoring feedback, including debt budgets; no release actions.
+      release-stage-b    Medium-cost source-only MVC and mutation contracts before release generation.
+      candidate-preflight  Read-only generated-artifact and CI-workflow integrity gate before heavy CI.
+      source-contracts  Shared whole-tree syntax, declaration, policy and architecture owners.
+      portable  Shared full Node and WinApp owners.
+      hosted-full  One exact-candidate PHP/runtime shard (hosted shard environment required).
+      basic --changed  Lint the immutable PHP_GALLERY_SOURCE_BASE delta; evaluator/config changes expand to full tree, missing base blocks.
+    TEXT);
     exit(0);
 }
 
 $root = project_root();
-$profiles = is_array($registry['profiles'] ?? null) ? $registry['profiles'] : [];
+$profiles = is_array($registry['profiles'] ?? null)
+    ? $registry['profiles']
+    : [];
 $profile = (string) $options['profile'];
 if ($options['suite'] !== null) {
     $suiteIds = [(string) $options['suite']];
@@ -178,15 +181,30 @@ $delegatedToPreflight = [];
 if ($options['suite'] === null) {
     // The existing central selector delegates only manifest freshness in the
     // verified disposable hosted DB context; other full audits stay complete.
-    $ownership = audit_hosted_full_suite_ownership($profiles, $profile, getenv() ?: []);
+    $ownership = audit_hosted_full_suite_ownership(
+        $profiles,
+        $profile,
+        getenv() ?: [],
+    );
     $suiteIds = $ownership['suites'];
     $delegatedToPreflight = $ownership['delegated_to_preflight'];
 }
 
-if ($options['changed'] && !in_array($profileLabel, ['full', 'release', 'source-contracts', 'portable', 'hosted-full'], true)) {
+if (
+    $options['changed']
+    && !in_array(
+        $profileLabel,
+        ['full', 'release', 'source-contracts', 'portable', 'hosted-full'],
+        true,
+    )
+) {
     $suiteIds = array_map(
-        static fn(string $suite): string => $suite === 'php-lint' ? 'php-lint-changed' : ($suite === 'js-lint' ? 'js-lint-changed' : $suite),
-        $suiteIds
+        static fn(string $suite): string => (
+            $suite === 'php-lint'
+                ? 'php-lint-changed'
+                : ($suite === 'js-lint' ? 'js-lint-changed' : $suite)
+        ),
+        $suiteIds,
     );
 }
 
@@ -233,37 +251,66 @@ $runId = $startedAt->format('Ymd-His') . '-' . getmypid();
 $runDirectory = $persistReports
     ? $root . '/cache/test-audit/' . $runId
     : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'php-gallery-audit-' . $runId;
-if (!is_dir($runDirectory) && !mkdir($runDirectory, 0775, true) && !is_dir($runDirectory)) {
-    fwrite(STDERR, 'Unable to create audit work directory: ' . $runDirectory . "\n");
+if (
+    !is_dir($runDirectory)
+    && !mkdir($runDirectory, 0775, true)
+    && !is_dir($runDirectory)
+) {
+    fwrite(
+        STDERR,
+        'Unable to create audit work directory: ' . $runDirectory . "\n",
+    );
     exit(2);
 }
 
 $isBasicProfile = $profileLabel === 'basic';
-$isMinimalProfile = $isBasicProfile || in_array($profileLabel, ['suite:packaging', 'suite:production-package'], true);
+$isMinimalProfile =
+    $isBasicProfile
+    || in_array(
+        $profileLabel,
+        ['suite:packaging', 'suite:production-package'],
+        true,
+    );
 $node = resolve_executable('PHP_GALLERY_NODE', ['node']);
 $python = $isMinimalProfile ? null : resolve_python_command();
 $git = resolve_executable('PHP_GALLERY_GIT', ['git']);
 $browser = $isMinimalProfile ? null : resolve_browser_executable();
 $requestedSourceBase = trim((string) getenv('PHP_GALLERY_SOURCE_BASE'));
-$sourceIdentity = PhpGallery\Audit\audit_source_identity($root, $git,
-    $requestedSourceBase !== '' ? $requestedSourceBase : 'HEAD');
+$sourceIdentity = PhpGallery\Audit\audit_source_identity(
+    $root,
+    $git,
+    $requestedSourceBase !== '' ? $requestedSourceBase : 'HEAD',
+);
 // Child contract tools consume the same resolved immutable base as this report.
 // Manual workflow callers may supply HEAD^; retain that request in the report,
 // while passing its exact resolved identity across independent child processes.
-if (is_string($sourceIdentity['comparison_base'] ?? null)
-    && preg_match('/^[a-f0-9]{40}$/D', $sourceIdentity['comparison_base']) === 1) {
+if (
+    is_string($sourceIdentity['comparison_base'] ?? null)
+    && preg_match('/^[a-f0-9]{40}$/D', $sourceIdentity['comparison_base']) === 1
+) {
     putenv('PHP_GALLERY_SOURCE_BASE=' . $sourceIdentity['comparison_base']);
 }
 $phpShard = null;
-if (in_array($profileLabel, ['source-contracts', 'portable', 'hosted-full'], true)) {
+if (in_array(
+    $profileLabel,
+    ['source-contracts', 'portable', 'hosted-full'],
+    true,
+)) {
     $phpShardCount = (int) ($registry['hosted_full_php_shard_count'] ?? 0);
     $phpShard = PhpGallery\Audit\audit_hosted_parallel_owner(
-        getenv() ?: [], $profileLabel, $sourceIdentity['head_sha'] ?? null,
-        $sourceIdentity['comparison_base'] ?? null, $phpShardCount
+        getenv() ?: [],
+        $profileLabel,
+        $sourceIdentity['head_sha'] ?? null,
+        $sourceIdentity['comparison_base'] ?? null,
+        $phpShardCount,
     );
     if (!$phpShard['valid']) {
-        fwrite(STDERR, 'Hosted parallel owner is not bound to this exact candidate: '
-            . ($phpShard['error'] ?? 'invalid owner context') . "\n");
+        fwrite(
+            STDERR,
+            'Hosted parallel owner is not bound to this exact candidate: '
+                . ($phpShard['error'] ?? 'invalid owner context')
+                . "\n",
+        );
         @rmdir($runDirectory);
         exit(2);
     }
@@ -273,24 +320,40 @@ if (in_array($profileLabel, ['source-contracts', 'portable', 'hosted-full'], tru
     // Scope: hosted-full shard one on runtimes below PHP 8.5.
     // Consumers: Central audit suite selector and the source-contracts owner.
     // Rationale: The shared source owner runs on PHP 8.5; shard one on PHP 8.1 preserves the minimum-parser syntax gate without repeating it across shards.
-    if ($profileLabel === 'hosted-full' && ($phpShard['index'] !== 1 || PHP_VERSION_ID >= 80500)) {
+    if (
+        $profileLabel === 'hosted-full'
+        && (
+            $phpShard['index'] !== 1
+            || PHP_VERSION_ID >= 80500
+        )
+    ) {
         $suiteIds = array_values(array_diff($suiteIds, ['php-lint']));
     }
 }
-$basicChangedLintBase = $profileLabel === 'basic' && $options['changed']
+$basicChangedLintBase =
+    $profileLabel === 'basic'
+    && $options['changed']
     && preg_match('/^[a-f0-9]{40}$/D', $requestedSourceBase) === 1
     && ($sourceIdentity['comparison_base'] ?? null) === $requestedSourceBase
         ? $requestedSourceBase
         : null;
-$basicChangedLintRequiresBase = $profileLabel === 'basic' && $options['changed'];
+$basicChangedLintRequiresBase =
+    $profileLabel === 'basic' && $options['changed'];
 $packagingOwnership = \PhpGallery\Audit\audit_hosted_packaging_ownership(
-    $suiteIds, $profileLabel, getenv() ?: [], $sourceIdentity['head_sha'] ?? null
+    $suiteIds,
+    $profileLabel,
+    getenv() ?: [],
+    $sourceIdentity['head_sha'] ?? null,
 );
 $suiteIds = $packagingOwnership['suites'];
 $delegatedToPackaging = $packagingOwnership['delegated_to_packaging'];
 $delegatedToParallelOwners = [];
 if ($profileLabel === 'hosted-full') {
-    foreach (['candidate-preflight', 'source-contracts', 'portable'] as $ownerProfile) {
+    foreach ([
+        'candidate-preflight',
+        'source-contracts',
+        'portable',
+    ] as $ownerProfile) {
         $ownerName = match ($ownerProfile) {
             'candidate-preflight' => 'candidate-preflight',
             'source-contracts' => 'shared-source-contracts',
@@ -316,13 +379,17 @@ if ($profileLabel === 'hosted-full') {
 /**
  * Return a concise executable version string without exposing noisy tool output.
  *
- * @param array $command Command prefix.
- * @param array $versionArgs Version arguments.
+ * @param list<string> $command Command prefix.
+ * @param list<string> $versionArgs Version arguments.
  * @return string Version or unavailable marker.
  */
 function audit_tool_version(array $command, array $versionArgs): string
 {
-    $result = run_process(array_merge($command, $versionArgs), project_root(), 10);
+    $result = run_process(
+        array_merge($command, $versionArgs),
+        project_root(),
+        10,
+    );
     $output = trim($result['stdout'] . "\n" . $result['stderr']);
     if ($result['exit_code'] !== 0 || $output === '') {
         return 'unavailable';
@@ -333,46 +400,84 @@ function audit_tool_version(array $command, array $versionArgs): string
 
 $environment = $isMinimalProfile
     ? [
-        ['component' => 'PHP', 'status' => STATUS_PASS, 'value' => PHP_VERSION . ' (' . PHP_BINARY . ')'],
+        [
+            'component' => 'PHP',
+            'status' => STATUS_PASS,
+            'value' => PHP_VERSION . ' (' . PHP_BINARY . ')',
+        ],
         [
             'component' => 'Node',
             'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED,
-            'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'
+            'value' => $node !== null
+                ? audit_tool_version([$node], ['--version'])
+                : 'not found',
         ],
         [
             'component' => 'Git',
-            'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP,
-            'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'
+            'status' => $git !== null && is_dir($root . '/.git')
+                ? STATUS_PASS
+                : STATUS_SKIP,
+            'value' => $git !== null
+                ? $git
+                . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')
+                : 'not found',
         ],
     ]
     : [
-        ['component' => 'PHP', 'status' => STATUS_PASS, 'value' => PHP_VERSION . ' (' . PHP_BINARY . ')'],
         [
-        'component' => 'PHP GD', 'status' => extension_loaded('gd') ? STATUS_PASS : STATUS_BLOCKED,
-        'value' => extension_loaded('gd') ? 'loaded' : 'not loaded',
-        ], [
-        'component' => 'pdo_mysql', 'status' => extension_loaded('pdo_mysql') ? STATUS_PASS : STATUS_SKIP,
-        'value' => extension_loaded('pdo_mysql') ? 'loaded' : 'not loaded',
+            'component' => 'PHP',
+            'status' => STATUS_PASS,
+            'value' => PHP_VERSION . ' (' . PHP_BINARY . ')',
+        ],
+        [
+            'component' => 'PHP GD',
+            'status' => extension_loaded('gd') ? STATUS_PASS : STATUS_BLOCKED,
+            'value' => extension_loaded('gd') ? 'loaded' : 'not loaded',
+        ],
+        [
+            'component' => 'pdo_mysql',
+            'status' => extension_loaded('pdo_mysql')
+                ? STATUS_PASS
+                : STATUS_SKIP,
+            'value' => extension_loaded('pdo_mysql') ? 'loaded' : 'not loaded',
         ],
         [
             'component' => 'Node',
             'status' => $node !== null ? STATUS_PASS : STATUS_BLOCKED,
-            'value' => $node !== null ? audit_tool_version([$node], ['--version']) : 'not found'
+            'value' => $node !== null
+                ? audit_tool_version([$node], ['--version'])
+                : 'not found',
         ],
         [
             'component' => 'Python',
             'status' => $python !== null ? STATUS_PASS : STATUS_BLOCKED,
-            'value' => $python !== null ? audit_tool_version($python, ['--version']) : 'not found'
+            'value' => $python !== null
+                ? audit_tool_version($python, ['--version'])
+                : 'not found',
         ],
         [
             'component' => 'Git',
-            'status' => $git !== null && is_dir($root . '/.git') ? STATUS_PASS : STATUS_SKIP,
-            'value' => $git !== null ? ($git . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')) : 'not found'
+            'status' => $git !== null && is_dir($root . '/.git')
+                ? STATUS_PASS
+                : STATUS_SKIP,
+            'value' => $git !== null
+                ? $git
+                . (is_dir($root . '/.git') ? '' : ' (no checkout metadata)')
+                : 'not found',
         ],
         [
             'component' => 'Chromium browser',
-            'status' => $browser !== null ? STATUS_PASS : (browser_required() ? STATUS_BLOCKED : STATUS_SKIP),
-            'value' => $browser ?? (trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled' ? 'explicitly disabled by PHP_GALLERY_BROWSER' : 'not found')
+            'status' => $browser !== null
+                ? STATUS_PASS
+                : (browser_required() ? STATUS_BLOCKED : STATUS_SKIP),
+            'value' =>
+                $browser
+                    ?? (
+                        trim((string) getenv('PHP_GALLERY_BROWSER'))
+                        === 'disabled'
+                            ? 'explicitly disabled by PHP_GALLERY_BROWSER'
+                            : 'not found'
+                    ),
         ],
     ];
 
@@ -392,7 +497,11 @@ function audit_write_log(string $suiteId, array $lines): ?string
     if (!$persistReports) {
         return null;
     }
-    $path = $runDirectory . '/' . preg_replace('/[^a-z0-9._-]+/i', '-', $suiteId) . '.log';
+    $path =
+        $runDirectory
+        . '/'
+        . preg_replace('/[^a-z0-9._-]+/i', '-', $suiteId)
+        . '.log';
     write_text_file($path, implode("\n", $lines) . "\n");
     return relative_path($path, $root);
 }
@@ -407,7 +516,10 @@ function audit_write_log(string $suiteId, array $lines): ?string
 function audit_record_slow_check(string $name, float $duration): void
 {
     global $slowChecks;
-    $slowChecks[] = ['name' => $name, 'duration_seconds' => round($duration, 4)];
+    $slowChecks[] = [
+        'name' => $name,
+        'duration_seconds' => round($duration, 4),
+    ];
 }
 
 /**
@@ -436,12 +548,19 @@ function audit_process_output(array $process): string
  * @param array{valid:bool,index:?int,total:?int,owner:?string,candidate:?string,error:?string}|null $shard Validated hosted FULL shard context, or null for an unsharded suite.
  * @return AuditPhpTask Normalized child counts, individual timed outcomes and actionable failures; missing requirements block the suite.
  */
-function audit_run_php_regression(array $registry, string $suiteId = 'php-regression', ?array $shard = null): array
-{
+function audit_run_php_regression(
+    array $registry,
+    string $suiteId = 'php-regression',
+    ?array $shard = null,
+): array {
     global $root;
     $started = microtime(true);
     $testDirectory = $root . '/tests';
-    $label = match ($suiteId) { 'php-fast' => 'PHP regression (fast)', 'packaging' => 'Production packaging policy and smoke', default => 'PHP regression' };
+    $label = match ($suiteId) {
+        'php-fast' => 'PHP regression (fast)',
+        'packaging' => 'Production packaging policy and smoke',
+        default => 'PHP regression',
+    };
     if (!is_dir($testDirectory)) {
         return task_result(
             $suiteId,
@@ -451,39 +570,90 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
             [],
             'tests/ source tree is unavailable.',
             null,
-            ['problems' => ['The tracked tests/ directory is required for source-tree regression coverage.']]
+            ['problems' => [
+                'The tracked tests/ directory is required for source-tree regression coverage.',
+            ]],
         );
     }
 
     $packagingNames = $registry['packaging_tests'] ?? [];
     $files = match ($suiteId) {
-        'php-fast' => array_map(static fn(string $name): string => $testDirectory . '/' . $name, $registry['php_fast_tests'] ?? []),
-        'packaging' => array_map(static fn(string $name): string => $testDirectory . '/' . $name, $packagingNames),
-        default => array_values(array_filter(glob($testDirectory . '/*_test.php') ?: [],
-            static fn(string $path): bool => !in_array(basename($path), $packagingNames, true))),
+        'php-fast' => array_map(
+            static fn(string $name): string => $testDirectory . '/' . $name,
+            $registry['php_fast_tests'] ?? [],
+        ),
+        'packaging' => array_map(
+            static fn(string $name): string => $testDirectory . '/' . $name,
+            $packagingNames,
+        ),
+        default => array_values(array_filter(
+            glob($testDirectory . '/*_test.php') ?: [],
+            static fn(string $path): bool => !in_array(
+                basename($path),
+                $packagingNames,
+                true,
+            ),
+        )),
     };
     if ($suiteId === 'php-regression' && $shard !== null) {
-        if (($shard['valid'] ?? false) !== true || !is_int($shard['index'] ?? null)
-            || !is_int($shard['total'] ?? null)) {
-            return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'Hosted PHP shard context is invalid.');
+        if (
+            ($shard['valid'] ?? false) !== true
+            || !is_int($shard['index'] ?? null)
+            || !is_int($shard['total'] ?? null)
+        ) {
+            return task_result(
+                $suiteId,
+                $label,
+                STATUS_BLOCKED,
+                0.0,
+                [],
+                'Hosted PHP shard context is invalid.',
+            );
         }
         $selectedNames = PhpGallery\Audit\audit_partition_php_tests(
-            array_map('basename', $files), $shard['index'], $shard['total']
+            array_map('basename', $files),
+            $shard['index'],
+            $shard['total'],
         );
-        $files = array_map(static fn(string $name): string => $testDirectory . '/' . $name, $selectedNames);
+        $files = array_map(
+            static fn(string $name): string => $testDirectory . '/' . $name,
+            $selectedNames,
+        );
     }
     sort($files, SORT_STRING);
     if ($files === []) {
-        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'No PHP tests were selected.');
+        return task_result(
+            $suiteId,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'No PHP tests were selected.',
+        );
     }
     try {
         $workers = worker_count();
     } catch (InvalidArgumentException $exception) {
-        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
+        return task_result(
+            $suiteId,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            $exception->getMessage(),
+        );
     }
 
-    $requirements = is_array($registry['php_test_requirements'] ?? null) ? $registry['php_test_requirements'] : [];
-    $counts = ['passed' => 0, 'failed' => 0, 'skipped' => 0, 'blocked' => 0, 'total' => count($files)];
+    $requirements = is_array($registry['php_test_requirements'] ?? null)
+        ? $registry['php_test_requirements']
+        : [];
+    $counts = [
+        'passed' => 0,
+        'failed' => 0,
+        'skipped' => 0,
+        'blocked' => 0,
+        'total' => count($files),
+    ];
     $problems = [];
     $gaps = [];
     $log = [$label . ' suite; worker limit=' . $workers];
@@ -494,26 +664,49 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
 
     foreach ($files as $file) {
         $name = basename($file);
-        $requirement = is_array($requirements[$name] ?? null) ? $requirements[$name] : [];
+        $requirement = is_array($requirements[$name] ?? null)
+            ? $requirements[$name]
+            : [];
         $missingExtensions = [];
-        foreach (($requirement['extensions'] ?? []) as $extension) {
+        foreach ($requirement['extensions'] ?? [] as $extension) {
             if (!extension_loaded((string) $extension)) {
                 $missingExtensions[] = (string) $extension;
             }
         }
         if (!is_file($file) || $missingExtensions !== []) {
-            $reason = !is_file($file) ? 'Registered PHP test is missing.'
-                : (string) ($requirement['reason'] ?? ('Missing PHP extension(s): ' . implode(', ', $missingExtensions)));
-            $results[$name] = ['exit_code' => 127, 'blocked' => true, 'stdout' => '', 'stderr' => $reason, 'timed_out' => false, 'duration' => 0.0];
+            $reason = !is_file($file)
+                ? 'Registered PHP test is missing.'
+                : (string) (
+                    $requirement['reason']
+                    ?? 'Missing PHP extension(s): '
+                    . implode(', ', $missingExtensions)
+                );
+            $results[$name] = [
+                'exit_code' => 127,
+                'blocked' => true,
+                'stdout' => '',
+                'stderr' => $reason,
+                'timed_out' => false,
+                'duration' => 0.0,
+            ];
             continue;
         }
         $timeout = max(1, min(600, (int) ($requirement['timeout'] ?? 45)));
         $serial = !empty($requirement['serial']);
         $serialCount += $serial ? 1 : 0;
-        $jobs[$name] = ['command' => [PHP_BINARY, $file], 'timeout' => $timeout, 'serial' => $serial];
+        $jobs[$name] = [
+            'command' => [PHP_BINARY, $file],
+            'timeout' => $timeout,
+            'serial' => $serial,
+        ];
     }
     // Drain the parallel batch once, then retain the relative order of exclusive fixtures.
-    uasort($jobs, static fn(array $left, array $right): int => $left['serial'] <=> $right['serial']);
+    uasort(
+        $jobs,
+        static fn(array $left, array $right): int => (
+            $left['serial'] <=> $right['serial']
+        ),
+    );
     $jobNames = array_keys($jobs);
     foreach (run_process_pool($jobs, $root, $workers) as $index => $process) {
         $results[$jobNames[$index]] = $process;
@@ -526,29 +719,70 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
         $status = process_status($process);
         audit_record_slow_check('PHP ' . $name, (float) $process['duration']);
         $output = audit_process_output($process);
-        $metricRecord = \PhpGallery\Audit\parse_php_audit_metrics((string) $process['stdout']);
+        $metricRecord = \PhpGallery\Audit\parse_php_audit_metrics(
+            (string) $process['stdout'],
+        );
         if (!$metricRecord['valid']) {
             $status = STATUS_FAIL;
         }
-        $counter = match ($status) { STATUS_PASS => 'passed', STATUS_FAIL => 'failed', STATUS_SKIP => 'skipped', default => 'blocked' };
+        $counter = match ($status) {
+            STATUS_PASS => 'passed',
+            STATUS_FAIL => 'failed',
+            STATUS_SKIP => 'skipped',
+            default => 'blocked',
+        };
         $counts[$counter]++;
-        $testResult = ['name' => $name, 'status' => $status, 'exit_code' => $process['exit_code'],
-            'timed_out' => $process['timed_out'], 'duration_seconds' => round((float) $process['duration'], 4),
-            'serial' => !empty($requirements[$name]['serial'])];
+        $testResult = [
+            'name' => $name,
+            'status' => $status,
+            'exit_code' => $process['exit_code'],
+            'timed_out' => $process['timed_out'],
+            'duration_seconds' => round((float) $process['duration'], 4),
+            'serial' => !empty($requirements[$name]['serial']),
+        ];
         if ($metricRecord['present']) {
             if ($metricRecord['valid']) {
                 $testResult['metrics'] = $metricRecord['metrics'];
-                $log[] = '[METRICS] ' . $name . ' ' . json_encode($metricRecord['metrics'], JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+                $log[] =
+                    '[METRICS] '
+                    . $name
+                    . ' '
+                    . json_encode(
+                        $metricRecord['metrics'],
+                        JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
+                    );
             } else {
                 $testResult['metrics_error'] = $metricRecord['error'];
             }
         }
         $testResults[] = $testResult;
-        $log[] = '[' . $status . '] ' . $name . ' ' . format_duration((float) $process['duration']) . ' exit=' . $process['exit_code'];
+        $log[] =
+            '['
+            . $status
+            . '] '
+            . $name
+            . ' '
+            . format_duration((float) $process['duration'])
+            . ' exit='
+            . $process['exit_code'];
         if (in_array($status, [STATUS_FAIL, STATUS_BLOCKED], true)) {
-            $reason = !$metricRecord['valid'] ? 'malformed AUDIT_METRICS evidence (' . $metricRecord['error'] . ')'
-                : ($process['timed_out'] ? 'timed out after ' . ($requirements[$name]['timeout'] ?? 45) . ' seconds' : 'exit code ' . $process['exit_code']);
-            $problems[] = $name . ': ' . $reason . '.' . ($status === STATUS_BLOCKED ? ' ' . trim($output) : '');
+            $reason = !$metricRecord['valid']
+                ? 'malformed AUDIT_METRICS evidence ('
+                . $metricRecord['error']
+                . ')'
+                : (
+                    $process['timed_out']
+                        ? 'timed out after '
+                            . ($requirements[$name]['timeout'] ?? 45)
+                            . ' seconds'
+                        : 'exit code ' . $process['exit_code']
+                );
+            $problems[] =
+                $name
+                . ': '
+                . $reason
+                . '.'
+                . ($status === STATUS_BLOCKED ? ' ' . trim($output) : '');
             $log[] = '[stdout] ' . rtrim($process['stdout']);
             $log[] = '[stderr] ' . rtrim($process['stderr']);
         }
@@ -559,41 +793,94 @@ function audit_run_php_regression(array $registry, string $suiteId = 'php-regres
         }
     }
 
-    $status = $counts['failed'] > 0 ? STATUS_FAIL : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
-    $summary = $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['skipped'] . ' skip / ' . $counts['blocked'] . ' blocked';
+    $status = $counts['failed'] > 0
+        ? STATUS_FAIL
+        : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
+    $summary =
+        $counts['passed']
+        . ' pass / '
+        . $counts['failed']
+        . ' fail / '
+        . $counts['skipped']
+        . ' skip / '
+        . $counts['blocked']
+        . ' blocked';
     $logPath = audit_write_log($suiteId, $log);
-    $details = ['problems' => $problems, 'gaps' => $gaps, 'workers' => $workers,
-        'serial_tests' => $serialCount, 'tests' => $testResults];
+    $details = [
+        'problems' => $problems,
+        'gaps' => $gaps,
+        'workers' => $workers,
+        'serial_tests' => $serialCount,
+        'tests' => $testResults,
+    ];
     if ($shard !== null) {
-        $details['shard'] = ['index' => $shard['index'], 'total' => $shard['total'], 'selected_tests' => count($files)];
+        $details['shard'] = [
+            'index' => $shard['index'],
+            'total' => $shard['total'],
+            'selected_tests' => count($files),
+        ];
     }
-    $task = task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath, $details);
+    $task = task_result(
+        $suiteId,
+        $label,
+        $status,
+        microtime(true) - $started,
+        $counts,
+        $summary,
+        $logPath,
+        $details,
+    );
 
     // Packaging is mandatory even outside Actions; unrelated optional PHP SKIPs
     // cannot hide missing smoke coverage or PHP_BINARY module-loader proofs.
-    if (($suiteId === 'packaging' || ($suiteId === 'php-regression' && getenv('GITHUB_ACTIONS') === 'true')) && $status === STATUS_PASS) {
-        $required = $suiteId === 'packaging' ? $packagingNames : ($registry['hosted_full_required_php_tests'] ?? null);
-        $validRequired = is_array($required) && array_is_list($required) && $required !== [];
+    if (
+        (
+            $suiteId === 'packaging'
+            || (
+                $suiteId === 'php-regression'
+                && getenv('GITHUB_ACTIONS') === 'true'
+            )
+        )
+        && $status === STATUS_PASS
+    ) {
+        $required = $suiteId === 'packaging'
+            ? $packagingNames
+            : $registry['hosted_full_required_php_tests'] ?? null;
+        $validRequired =
+            is_array($required) && array_is_list($required) && $required !== [];
         if ($validRequired) {
             $seenRequired = [];
             foreach ($required as $testName) {
-                if (!is_string($testName)
+                if (
+                    !is_string($testName)
                     || preg_match('/^[a-z0-9_]+_test[.]php$/D', $testName) !== 1
-                    || isset($seenRequired[$testName])) {
+                    || isset($seenRequired[$testName])
+                ) {
                     $validRequired = false;
                     break;
                 }
                 $seenRequired[$testName] = true;
             }
         }
-        $ownedRequired = $validRequired && $suiteId === 'php-regression' && $shard !== null
-            ? array_values(array_intersect($required, array_map('basename', $files)))
-            : $required;
+        $ownedRequired =
+            $validRequired && $suiteId === 'php-regression' && $shard !== null
+                ? array_values(array_intersect($required, array_map(
+                    'basename',
+                    $files,
+                )))
+                : $required;
         $missing = !$validRequired
             ? ['invalid hosted_full_required_php_tests registry']
-            : ($ownedRequired === [] ? [] : missing_required_php_test_passes($task, $ownedRequired));
+            : (
+                $ownedRequired === []
+                    ? []
+                    : missing_required_php_test_passes($task, $ownedRequired)
+            );
         if ($missing !== []) {
-            $reason = 'Missing mandatory hosted PHP child PASS: ' . implode(', ', $missing) . '.';
+            $reason =
+                'Missing mandatory hosted PHP child PASS: '
+                . implode(', ', $missing)
+                . '.';
             $task['status'] = STATUS_BLOCKED;
             $task['summary'] .= '; ' . $reason;
             $task['details']['problems'][] = $reason;
@@ -613,47 +900,109 @@ function audit_run_production_package(array $registry): array
 {
     global $root, $sourceIdentity;
     $started = microtime(true);
-    $children = [audit_run_php_command('packaging-freshness', 'Production generated-state freshness', 'scripts/prepare_candidate.php', ['--check'], 180)];
+    $children = [audit_run_php_command(
+        'packaging-freshness',
+        'Production generated-state freshness',
+        'scripts/prepare_candidate.php',
+        ['--check'],
+        180,
+    )];
     $children[] = audit_run_php_regression($registry, 'packaging');
     $temporaryRoot = realpath(sys_get_temp_dir());
     if (!is_string($temporaryRoot)) {
-        return task_result('production-package', 'Required production packaging', STATUS_BLOCKED,
-            microtime(true) - $started, ['required_owners' => count($children) + 1, 'failed_owners' => 1],
-            'The canonical temporary root is unavailable.', null,
-            ['problems' => ['The canonical temporary root is unavailable.'], 'owners' => $children, 'builder' => null, 'source' => $sourceIdentity]);
+        return task_result(
+            'production-package',
+            'Required production packaging',
+            STATUS_BLOCKED,
+            microtime(true) - $started,
+            ['required_owners' => count($children) + 1, 'failed_owners' => 1],
+            'The canonical temporary root is unavailable.',
+            null,
+            [
+                'problems' => ['The canonical temporary root is unavailable.'],
+                'owners' => $children,
+                'builder' => null,
+                'source' => $sourceIdentity,
+            ],
+        );
     }
-    $temporary = $temporaryRoot . DIRECTORY_SEPARATOR . 'gallery-production-' . bin2hex(random_bytes(12));
+    $temporary =
+        $temporaryRoot
+        . DIRECTORY_SEPARATOR
+        . 'gallery-production-'
+        . bin2hex(random_bytes(12));
     $ownsTemporary = false;
     $builderReport = null;
     $problems = [];
     try {
         if (!mkdir($temporary, 0700)) {
-            throw new RuntimeException('Unable to create the owned production package fixture.');
+            throw new RuntimeException(
+                'Unable to create the owned production package fixture.',
+            );
         }
         $ownsTemporary = true;
-        $build = run_process([PHP_BINARY, $root . '/scripts/package_production.php', '--root=' . $root,
-            '--directory=' . $temporary . '/production', '--zip=' . $temporary . '/production.zip'], $root, 180);
+        $build = run_process(
+            [
+                PHP_BINARY,
+                $root . '/scripts/package_production.php',
+                '--root=' . $root,
+                '--directory=' . $temporary . '/production',
+                '--zip=' . $temporary . '/production.zip',
+            ],
+            $root,
+            180,
+        );
         $builderReport = json_decode($build['stdout'], true);
-        $valid = process_status($build) === STATUS_PASS && is_array($builderReport)
+        $valid =
+            process_status($build) === STATUS_PASS
+            && is_array($builderReport)
             && ($builderReport['schema_version'] ?? null) === 1
-            && is_int($builderReport['file_count'] ?? null) && $builderReport['file_count'] > 0
-            && is_file($temporary . '/production.zip') && is_dir($temporary . '/production')
+            && is_int($builderReport['file_count'] ?? null)
+            && $builderReport['file_count'] > 0
+            && is_file($temporary . '/production.zip')
+            && is_dir($temporary . '/production')
             && is_string($builderReport['archive_sha256'] ?? null)
-            && hash_file('sha256', $temporary . '/production.zip') === $builderReport['archive_sha256'];
-        $log = audit_write_log('production-package-build', [audit_process_output($build)]);
-        $children[] = task_result('production-package-build', 'Complete production folder and ZIP',
-            $valid ? STATUS_PASS : STATUS_FAIL, (float) $build['duration'], [],
-            $valid ? 'Complete folder and ZIP membership and every source-byte digest verified.' : 'Production builder or its retained integrity evidence failed.',
-            $log, ['builder' => $builderReport, 'problems' => $valid ? [] : [audit_process_output($build)]]);
+            && hash_file('sha256', $temporary . '/production.zip')
+                === $builderReport['archive_sha256'];
+        $log = audit_write_log('production-package-build', [audit_process_output(
+            $build,
+        )]);
+        $children[] = task_result(
+            'production-package-build',
+            'Complete production folder and ZIP',
+            $valid ? STATUS_PASS : STATUS_FAIL,
+            (float) $build['duration'],
+            [],
+            $valid
+                ? 'Complete folder and ZIP membership and every source-byte digest verified.'
+                : 'Production builder or its retained integrity evidence failed.',
+            $log,
+            [
+                'builder' => $builderReport,
+                'problems' => $valid ? [] : [audit_process_output($build)],
+            ],
+        );
     } catch (Throwable $exception) {
         $problems[] = $exception->getMessage();
-        $children[] = task_result('production-package-build', 'Complete production folder and ZIP', STATUS_FAIL,
-            microtime(true) - $started, [], $exception->getMessage());
+        $children[] = task_result(
+            'production-package-build',
+            'Complete production folder and ZIP',
+            STATUS_FAIL,
+            microtime(true) - $started,
+            [],
+            $exception->getMessage(),
+        );
     } finally {
         // This freshly created random temporary root is the only recursive
         // cleanup target; never follow filesystem links outside that owned root.
         if ($ownsTemporary && is_dir($temporary)) {
-            $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($temporary, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
+            $entries = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator(
+                    $temporary,
+                    FilesystemIterator::SKIP_DOTS,
+                ),
+                RecursiveIteratorIterator::CHILD_FIRST,
+            );
             foreach ($entries as $entry) {
                 if ($entry->isDir() && !$entry->isLink()) {
                     rmdir($entry->getPathname());
@@ -670,11 +1019,26 @@ function audit_run_production_package(array $registry): array
             $problems[] = $child['label'] . ': ' . $child['summary'];
         }
     }
-    return task_result('production-package', 'Required production packaging',
-        $problems === [] ? STATUS_PASS : STATUS_FAIL, microtime(true) - $started,
-        ['required_owners' => count($children), 'failed_owners' => count($problems)],
-        $problems === [] ? 'Policy, compact smoke and complete folder/ZIP proofs passed.' : implode(' ', $problems), null,
-        ['problems' => $problems, 'owners' => $children, 'builder' => $builderReport, 'source' => $sourceIdentity]);
+    return task_result(
+        'production-package',
+        'Required production packaging',
+        $problems === [] ? STATUS_PASS : STATUS_FAIL,
+        microtime(true) - $started,
+        [
+            'required_owners' => count($children),
+            'failed_owners' => count($problems),
+        ],
+        $problems === []
+            ? 'Policy, compact smoke and complete folder/ZIP proofs passed.'
+            : implode(' ', $problems),
+        null,
+        [
+            'problems' => $problems,
+            'owners' => $children,
+            'builder' => $builderReport,
+            'source' => $sourceIdentity,
+        ],
+    );
 }
 
 /**
@@ -690,8 +1054,16 @@ function audit_run_runtime_performance(array $registry): array
     $definitions = $registry['performance_probes'] ?? [];
     $metrics = [];
     $problems = [];
-    $counts = ['passed' => 0, 'failed' => 0, 'blocked' => 0, 'skipped' => 0, 'total' => count($definitions)];
-    $log = ['Fresh-child include-only bootstrap probes; route probes below execute cms_run() and use the owned disposable database/session when available.'];
+    $counts = [
+        'passed' => 0,
+        'failed' => 0,
+        'blocked' => 0,
+        'skipped' => 0,
+        'total' => count($definitions),
+    ];
+    $log = [
+        'Fresh-child include-only bootstrap probes; route probes below execute cms_run() and use the owned disposable database/session when available.',
+    ];
     if ($definitions === []) {
         return task_result(
             'runtime-performance',
@@ -699,19 +1071,33 @@ function audit_run_runtime_performance(array $registry): array
             STATUS_BLOCKED,
             0.0,
             [],
-            'No bootstrap performance probes registered.'
+            'No bootstrap performance probes registered.',
         );
     }
     foreach ($definitions as $id => $definition) {
-        $process = run_process([PHP_BINARY, $root . '/scripts/audit_runtime_probe.php', $id], $root, 30);
+        $process = run_process(
+            [PHP_BINARY, $root . '/scripts/audit_runtime_probe.php', $id],
+            $root,
+            30,
+        );
         $output = audit_process_output($process);
         $metric = json_decode($process['stdout'], true);
         $status = process_status($process);
         if ($status !== STATUS_PASS || !is_array($metric)) {
             $status = $status === STATUS_BLOCKED ? STATUS_BLOCKED : STATUS_FAIL;
-            $problems[] = $id . ': measurement failed, exit=' . $process['exit_code'] . ($process['timed_out'] ? ' (timeout)' : '') . '. ' . trim($output);
+            $problems[] =
+                $id
+                . ': measurement failed, exit='
+                . $process['exit_code']
+                . ($process['timed_out'] ? ' (timeout)' : '')
+                . '. '
+                . trim($output);
         } else {
-            $errors = \PhpGallery\Audit\performance_metric_problems($metric, $id, $definition);
+            $errors = \PhpGallery\Audit\performance_metric_problems(
+                $metric,
+                $id,
+                $definition,
+            );
             if ($errors !== []) {
                 $status = STATUS_FAIL;
                 foreach ($errors as $error) {
@@ -719,23 +1105,47 @@ function audit_run_runtime_performance(array $registry): array
                 }
             }
             // Persist valid-shaped measurements even when a ceiling fails, for later diagnosis.
-            if (isset($metric['included_php_files'], $metric['peak_memory_bytes'], $metric['bootstrap_wall_ms'])) {
+            if (
+                isset(
+                    $metric['included_php_files'],
+                    $metric['peak_memory_bytes'],
+                    $metric['bootstrap_wall_ms'],
+                )
+            ) {
                 $metric['limits'] = $definition;
                 $metrics[] = $metric;
             }
         }
-        $counts[match ($status) { STATUS_PASS => 'passed', STATUS_BLOCKED => 'blocked', default => 'failed' }]++;
+        $counts[match ($status) {
+            STATUS_PASS => 'passed',
+            STATUS_BLOCKED => 'blocked',
+            default => 'failed',
+        }]++;
         $log[] = '[' . $status . '] ' . $id . ' exit=' . $process['exit_code'];
         $log[] = $output;
     }
-    $expectedRouteIds = ['robots', 'home', 'gallery', 'thumb', 'media', 'admin', 'admin_telemetry', 'admin_denied', 'admin_telemetry_denied'];
+    $expectedRouteIds = [
+        'robots',
+        'home',
+        'gallery',
+        'thumb',
+        'media',
+        'admin',
+        'admin_telemetry',
+        'admin_denied',
+        'admin_telemetry_denied',
+    ];
     $routeDefinitions = $registry['route_performance_probes'] ?? null;
-    $definitionIds = is_array($routeDefinitions) ? array_keys($routeDefinitions) : [];
+    $definitionIds = is_array($routeDefinitions)
+        ? array_keys($routeDefinitions)
+        : [];
     $sortedDefinitionIds = $definitionIds;
     $sortedExpectedIds = $expectedRouteIds;
     sort($sortedDefinitionIds, SORT_STRING);
     sort($sortedExpectedIds, SORT_STRING);
-    $validDefinitions = is_array($routeDefinitions) && $sortedDefinitionIds === $sortedExpectedIds;
+    $validDefinitions =
+        is_array($routeDefinitions)
+        && $sortedDefinitionIds === $sortedExpectedIds;
     if ($validDefinitions) {
         foreach ($expectedRouteIds as $routeId) {
             if (!is_array($routeDefinitions[$routeId] ?? null)) {
@@ -749,19 +1159,31 @@ function audit_run_runtime_performance(array $registry): array
         $counts['failed'] += count($expectedRouteIds);
         $problems[] = 'Route performance registry must define the complete expected route matrix.';
         $log[] = '[FAIL] Route performance registry is missing, malformed, or incomplete.';
-    } elseif (getenv('GALLERY_WORKFLOW_FIXTURE') === false || getenv('GALLERY_WORKFLOW_FIXTURE') === '') {
+    } elseif (
+        getenv('GALLERY_WORKFLOW_FIXTURE') === false
+        || getenv('GALLERY_WORKFLOW_FIXTURE') === ''
+    ) {
         $counts['skipped'] += count($expectedRouteIds);
         $log[] = '[SKIP] All nine real route lifecycles require an explicitly owned disposable workflow fixture.';
     } else {
-        $process = run_process([PHP_BINARY, $root . '/scripts/audit_route_performance.php'], $root, 600);
+        $process = run_process(
+            [PHP_BINARY, $root . '/scripts/audit_route_performance.php'],
+            $root,
+            600,
+        );
         $report = json_decode($process['stdout'], true);
-        $routeMetrics = is_array($report) ? ($report['routes'] ?? null) : null;
-        $validEnvelope = is_array($report)
+        $routeMetrics = is_array($report) ? $report['routes'] ?? null : null;
+        $validEnvelope =
+            is_array($report)
             && ($report['schema_version'] ?? null) === 1
-            && ($report['scope'] ?? null) === 'disposable-mysql-cms-run-route-lifecycle'
+            && ($report['scope'] ?? null)
+                === 'disposable-mysql-cms-run-route-lifecycle'
             && ($report['status'] ?? null) === 'PASS';
-        $validMatrix = process_status($process) === STATUS_PASS && $validEnvelope
-            && is_array($routeMetrics) && array_is_list($routeMetrics)
+        $validMatrix =
+            process_status($process) === STATUS_PASS
+            && $validEnvelope
+            && is_array($routeMetrics)
+            && array_is_list($routeMetrics)
             && count($routeMetrics) === count($expectedRouteIds);
         if (!$validEnvelope) {
             $problems[] = 'Real route matrix report envelope has an invalid schema, scope, or status.';
@@ -771,23 +1193,39 @@ function audit_run_runtime_performance(array $registry): array
         }
         $seen = [];
         foreach (is_array($routeMetrics) ? $routeMetrics : [] as $metric) {
-            $id = is_array($metric) ? ($metric['probe'] ?? '') : '';
-            if (!is_string($id) || isset($seen[$id]) || !isset($routeDefinitions[$id])) {
+            $id = is_array($metric) ? $metric['probe'] ?? '' : '';
+            if (
+                !is_string($id)
+                || isset($seen[$id])
+                || !isset($routeDefinitions[$id])
+            ) {
                 $validMatrix = false;
                 continue;
             }
             $seen[$id] = true;
-            $errors = \PhpGallery\Audit\route_metric_problems($metric, $id, $routeDefinitions[$id]);
+            $errors = \PhpGallery\Audit\route_metric_problems(
+                $metric,
+                $id,
+                $routeDefinitions[$id],
+            );
             if ($errors !== []) {
                 $validMatrix = false;
-                foreach ($errors as $error) $problems[] = $id . ': ' . $error;
+                foreach ($errors as $error)
+                    $problems[] = $id . ': ' . $error;
             }
             $metric['limits'] = $routeDefinitions[$id];
             $metrics[] = $metric;
-            $log[] = '[' . ($errors === [] ? STATUS_PASS : STATUS_FAIL) . '] route ' . $id
-                . ' files=' . ($metric['included_php_files'] ?? '?')
-                . ' peak=' . ($metric['peak_memory_bytes'] ?? '?')
-                . ' wall_ms=' . ($metric['wall_ms'] ?? '?');
+            $log[] =
+                '['
+                . ($errors === [] ? STATUS_PASS : STATUS_FAIL)
+                . '] route '
+                . $id
+                . ' files='
+                . ($metric['included_php_files'] ?? '?')
+                . ' peak='
+                . ($metric['peak_memory_bytes'] ?? '?')
+                . ' wall_ms='
+                . ($metric['wall_ms'] ?? '?');
         }
         if (count($seen) !== count($expectedRouteIds)) {
             $validMatrix = false;
@@ -800,27 +1238,48 @@ function audit_run_runtime_performance(array $registry): array
             $counts['passed'] += count($expectedRouteIds);
         }
     }
-    $status = $counts['failed'] > 0 ? STATUS_FAIL : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
-    return task_result('runtime-performance', 'Runtime performance probes', $status, microtime(true) - $started, $counts,
-        $counts['passed'] . '/' . $counts['total'] . ' measurements; ' . $counts['skipped']
-            . ' route cases skipped; wall time observational', audit_write_log('runtime-performance', $log),
-        ['problems' => $problems, 'metrics' => $metrics]);
+    $status = $counts['failed'] > 0
+        ? STATUS_FAIL
+        : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
+    return task_result(
+        'runtime-performance',
+        'Runtime performance probes',
+        $status,
+        microtime(true) - $started,
+        $counts,
+        $counts['passed']
+            . '/'
+            . $counts['total']
+            . ' measurements; '
+            . $counts['skipped']
+            . ' route cases skipped; wall time observational',
+        audit_write_log('runtime-performance', $log),
+        ['problems' => $problems, 'metrics' => $metrics],
+    );
 }
 
 /**
  * Return explicit Node test definitions for one source-tree suite.
  *
- * @param array $registry Audit registry.
+ * @param array{node_tests?:array<string,array{browser?:bool,slow?:bool,timeout?:int,temporary_output?:string,php_argument?:bool,serial?:bool}>} $registry Audit registry with explicit Node test definitions.
  * @param bool $includeSlow True to include slow deterministic tests.
  * @param bool $browserOnly True to select only the browser integration test.
- * @return array Test definitions keyed by filename.
+ * @return array<string,array{browser?:bool,slow?:bool,timeout?:int,temporary_output?:string,php_argument?:bool,serial?:bool}> Selected Node test definitions keyed by filename.
  */
-function audit_select_node_tests(array $registry, bool $includeSlow, bool $browserOnly = false): array
-{
-    $tests = is_array($registry['node_tests'] ?? null) ? $registry['node_tests'] : [];
+function audit_select_node_tests(
+    array $registry,
+    bool $includeSlow,
+    bool $browserOnly = false,
+): array {
+    $tests = is_array($registry['node_tests'] ?? null)
+        ? $registry['node_tests']
+        : [];
     return array_filter(
         $tests,
-        static function (array $definition) use ($includeSlow, $browserOnly): bool {
+        static function (array $definition) use (
+            $includeSlow,
+            $browserOnly,
+        ): bool {
             $isBrowser = !empty($definition['browser']);
             if ($browserOnly) {
                 return $isBrowser;
@@ -832,7 +1291,7 @@ function audit_select_node_tests(array $registry, bool $includeSlow, bool $brows
                 return false;
             }
             return true;
-        }
+        },
     );
 }
 
@@ -846,8 +1305,13 @@ function audit_select_node_tests(array $registry, bool $includeSlow, bool $brows
  * @param ?string $browser Browser executable for browser-only tests.
  * @return array<string,mixed> Normalized suite result with pass/fail/skip/blocked counts and a bounded log link.
  */
-function audit_run_node_suite(string $suiteId, string $label, array $definitions, ?string $node, ?string $browser = null): array
-{
+function audit_run_node_suite(
+    string $suiteId,
+    string $label,
+    array $definitions,
+    ?string $node,
+    ?string $browser = null,
+): array {
     global $root, $runDirectory;
     $started = microtime(true);
     if ($node === null) {
@@ -859,23 +1323,47 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
             [],
             'Node executable was not found.',
             null,
-            ['problems' => ['Set PHP_GALLERY_NODE or install Node.js to execute JavaScript regression tests.']]
+            ['problems' => [
+                'Set PHP_GALLERY_NODE or install Node.js to execute JavaScript regression tests.',
+            ]],
         );
     }
     if ($definitions === []) {
-        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], 'No registered Node tests were selected.');
+        return task_result(
+            $suiteId,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'No registered Node tests were selected.',
+        );
     }
     try {
         $workers = worker_count();
     } catch (InvalidArgumentException $exception) {
-        return task_result($suiteId, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
+        return task_result(
+            $suiteId,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            $exception->getMessage(),
+        );
     }
 
-    $counts = ['passed' => 0, 'failed' => 0, 'skipped' => 0, 'blocked' => 0, 'total' => count($definitions)];
+    $counts = [
+        'passed' => 0,
+        'failed' => 0,
+        'skipped' => 0,
+        'blocked' => 0,
+        'total' => count($definitions),
+    ];
     $problems = [];
     $gaps = [];
     $log = [$label . '; worker limit=' . $workers];
-    $requiredBrowser = $suiteId === 'website' || ($suiteId === 'browser-map' && browser_required());
+    $requiredBrowser =
+        $suiteId === 'website'
+        || ($suiteId === 'browser-map' && browser_required());
     $jobs = [];
     $outputs = [];
 
@@ -891,19 +1379,33 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         $command = [$node, $file];
         $temporaryOutput = null;
         if (!empty($definition['temporary_output'])) {
-            $temporaryOutput = $runDirectory . '/' . basename((string) $definition['temporary_output']);
+            $temporaryOutput =
+                $runDirectory
+                . '/'
+                . basename((string) $definition['temporary_output']);
             $command[] = $temporaryOutput;
         }
         if (!empty($definition['browser'])) {
             if ($browser === null) {
                 $counts[$requiredBrowser ? 'blocked' : 'skipped']++;
-                $reason = trim((string) getenv('PHP_GALLERY_BROWSER')) === 'disabled'
-                    ? 'Chromium explicitly disabled by PHP_GALLERY_BROWSER' : 'no Chrome/Chromium/Edge executable detected';
+                $reason = trim((string) getenv('PHP_GALLERY_BROWSER'))
+                === 'disabled'
+                    ? 'Chromium explicitly disabled by PHP_GALLERY_BROWSER'
+                    : 'no Chrome/Chromium/Edge executable detected';
                 $gaps[] = $name . ': ' . $reason;
                 if ($requiredBrowser) {
-                    $problems[] = $name . ': Required Chromium dependency is unavailable. ' . $reason;
+                    $problems[] =
+                        $name
+                        . ': Required Chromium dependency is unavailable. '
+                        . $reason;
                 }
-                $log[] = '[' . ($requiredBrowser ? STATUS_BLOCKED : STATUS_SKIP) . '] ' . $name . ' - ' . $reason;
+                $log[] =
+                    '['
+                    . ($requiredBrowser ? STATUS_BLOCKED : STATUS_SKIP)
+                    . '] '
+                    . $name
+                    . ' - '
+                    . $reason;
                 continue;
             }
             $command[] = $browser;
@@ -914,7 +1416,11 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         }
 
         $timeout = max(5, (int) ($definition['timeout'] ?? 30));
-        $jobs[$name] = ['command' => $command, 'timeout' => $timeout, 'serial' => !empty($definition['serial'])];
+        $jobs[$name] = [
+            'command' => $command,
+            'timeout' => $timeout,
+            'serial' => !empty($definition['serial']),
+        ];
         $outputs[$name] = $temporaryOutput;
     }
     $jobNames = array_keys($jobs);
@@ -923,9 +1429,13 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         $name = $jobNames[$index];
         $timeout = $jobs[$name]['timeout'];
         $temporaryOutput = $outputs[$name];
-        $testResults[] = ['name' => $name, 'status' => process_status($process, $requiredBrowser),
-            'exit_code' => $process['exit_code'], 'timed_out' => $process['timed_out'],
-            'duration_seconds' => round((float) $process['duration'], 4)];
+        $testResults[] = [
+            'name' => $name,
+            'status' => process_status($process, $requiredBrowser),
+            'exit_code' => $process['exit_code'],
+            'timed_out' => $process['timed_out'],
+            'duration_seconds' => round((float) $process['duration'], 4),
+        ];
         audit_record_slow_check('Node ' . $name, (float) $process['duration']);
         $output = audit_process_output($process);
         if ($temporaryOutput !== null && is_file($temporaryOutput)) {
@@ -934,7 +1444,12 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
 
         if (process_status($process, $requiredBrowser) === STATUS_BLOCKED) {
             $counts['blocked']++;
-            $problems[] = $name . ': required coverage could not execute (exit=' . $process['exit_code'] . '). ' . preg_replace('/\s+/', ' ', trim($output));
+            $problems[] =
+                $name
+                . ': required coverage could not execute (exit='
+                . $process['exit_code']
+                . '). '
+                . preg_replace('/\s+/', ' ', trim($output));
             $gaps[] = end($problems);
             $log[] = '[BLOCKED] ' . $name . ' exit=' . $process['exit_code'];
             $log[] = $output;
@@ -943,7 +1458,12 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
         if ($process['timed_out']) {
             $counts['failed']++;
             $problems[] = $name . ': timed out after ' . $timeout . ' seconds.';
-            $log[] = '[FAIL] ' . $name . ' ' . format_duration((float) $process['duration']) . ' - timeout';
+            $log[] =
+                '[FAIL] '
+                . $name
+                . ' '
+                . format_duration((float) $process['duration'])
+                . ' - timeout';
             $log[] = $output;
             continue;
         }
@@ -955,29 +1475,78 @@ function audit_run_node_suite(string $suiteId, string $label, array $definitions
                 $problem .= ' ' . $detail;
             }
             $problems[] = $problem;
-            $log[] = '[FAIL] ' . $name . ' ' . format_duration((float) $process['duration']) . ' exit=' . $process['exit_code'];
+            $log[] =
+                '[FAIL] '
+                . $name
+                . ' '
+                . format_duration((float) $process['duration'])
+                . ' exit='
+                . $process['exit_code'];
             $log[] = $output;
             continue;
         }
         if (output_is_skip($output)) {
             $counts['skipped']++;
-            $skipReason = $output !== '' ? preg_replace('/\s+/', ' ', trim($output)) : 'test reported SKIP';
+            $skipReason = $output !== ''
+                ? preg_replace('/\s+/', ' ', trim($output))
+                : 'test reported SKIP';
             $gaps[] = $name . ': ' . $skipReason;
-            $log[] = '[SKIP] ' . $name . ' ' . format_duration((float) $process['duration']) . ($output !== '' ? ' - ' . preg_replace('/\s+/', ' ', trim($output)) : '');
+            $log[] =
+                '[SKIP] '
+                . $name
+                . ' '
+                . format_duration((float) $process['duration'])
+                . (
+                    $output !== ''
+                        ? ' - ' . preg_replace('/\s+/', ' ', trim($output))
+                        : ''
+                );
             continue;
         }
         $counts['passed']++;
-        $log[] = '[PASS] ' . $name . ' ' . format_duration((float) $process['duration']);
+        $log[] =
+            '[PASS] '
+            . $name
+            . ' '
+            . format_duration((float) $process['duration']);
     }
 
-    $status = $counts['failed'] > 0 ? STATUS_FAIL : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
-    if ($counts['passed'] === 0 && $counts['failed'] === 0 && $counts['blocked'] === 0 && $counts['skipped'] > 0) {
+    $status = $counts['failed'] > 0
+        ? STATUS_FAIL
+        : ($counts['blocked'] > 0 ? STATUS_BLOCKED : STATUS_PASS);
+    if (
+        $counts['passed'] === 0
+        && $counts['failed'] === 0
+        && $counts['blocked'] === 0
+        && $counts['skipped'] > 0
+    ) {
         $status = STATUS_SKIP;
     }
-    $summary = $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['skipped'] . ' skip / ' . $counts['blocked'] . ' blocked';
+    $summary =
+        $counts['passed']
+        . ' pass / '
+        . $counts['failed']
+        . ' fail / '
+        . $counts['skipped']
+        . ' skip / '
+        . $counts['blocked']
+        . ' blocked';
     $logPath = audit_write_log($suiteId, $log);
-    return task_result($suiteId, $label, $status, microtime(true) - $started, $counts, $summary, $logPath,
-        ['problems' => $problems, 'gaps' => $gaps, 'workers' => $workers, 'tests' => $testResults]);
+    return task_result(
+        $suiteId,
+        $label,
+        $status,
+        microtime(true) - $started,
+        $counts,
+        $summary,
+        $logPath,
+        [
+            'problems' => $problems,
+            'gaps' => $gaps,
+            'workers' => $workers,
+            'tests' => $testResults,
+        ],
+    );
 }
 
 /**
@@ -992,7 +1561,14 @@ function audit_run_winapp(?array $python): array
     $started = microtime(true);
     $testDirectory = $root . '/winapp/tests';
     if (!is_dir($testDirectory)) {
-        return task_result('winapp', 'WinApp regression', STATUS_SKIP, 0.0, [], 'winapp/tests is not present in this source tree.');
+        return task_result(
+            'winapp',
+            'WinApp regression',
+            STATUS_SKIP,
+            0.0,
+            [],
+            'winapp/tests is not present in this source tree.',
+        );
     }
     if ($python === null) {
         return task_result(
@@ -1003,7 +1579,9 @@ function audit_run_winapp(?array $python): array
             [],
             'Python executable was not found.',
             null,
-            ['problems' => ['Set PHP_GALLERY_PYTHON or install Python 3 to execute WinApp regression tests.']]
+            ['problems' => [
+                'Set PHP_GALLERY_PYTHON or install Python 3 to execute WinApp regression tests.',
+            ]],
         );
     }
 
@@ -1015,18 +1593,26 @@ function audit_run_winapp(?array $python): array
     ]);
     $reportExistedBeforeRun = file_exists($reportPath);
     $process = run_process($command, $root, 90);
-    audit_record_slow_check('Python WinApp unittest discovery', (float) $process['duration']);
+    audit_record_slow_check(
+        'Python WinApp unittest discovery',
+        (float) $process['duration'],
+    );
     $output = audit_process_output($process);
-    $logPath = audit_write_log('winapp', ['WinApp unittest discovery', $output]);
+    $logPath = audit_write_log('winapp', [
+        'WinApp unittest discovery',
+        $output,
+    ]);
     $reportProduced = !$reportExistedBeforeRun && is_file($reportPath);
     $reportContents = $reportProduced ? file_get_contents($reportPath) : false;
     $evaluated = audit_evaluate_winapp_report(
         is_string($reportContents) ? $reportContents : null,
         [
-            'exit_code' => is_int($process['exit_code'] ?? null) ? $process['exit_code'] : null,
+            'exit_code' => is_int($process['exit_code'] ?? null)
+                ? $process['exit_code']
+                : null,
             'timed_out' => (bool) ($process['timed_out'] ?? false),
             'duration_seconds' => (float) ($process['duration'] ?? 0.0),
-        ]
+        ],
     );
     $adapterReportPath = $persistReports && $reportProduced
         ? relative_path($reportPath, $root)
@@ -1048,16 +1634,40 @@ function audit_run_winapp(?array $python): array
     ];
     $status = $evaluated['status'];
     $counts = $evaluated['counts'];
-    $summary = $counts['total'] . ' tests: ' . $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / ' . $counts['errors']
-        . ' error (' . $counts['fixture_errors'] . ' fixture) / ' . $counts['skipped'] . ' skip / '
-        . $counts['subtest_skips'] . ' subtest skip / ' . $counts['fixture_skips'] . ' fixture skip / '
+    $summary =
+        $counts['total']
+        . ' tests: '
+        . $counts['passed']
+        . ' pass / '
+        . $counts['failed']
+        . ' fail / '
+        . $counts['errors']
+        . ' error ('
+        . $counts['fixture_errors']
+        . ' fixture) / '
+        . $counts['skipped']
+        . ' skip / '
+        . $counts['subtest_skips']
+        . ' subtest skip / '
+        . $counts['fixture_skips']
+        . ' fixture skip / '
         . $counts['expected_failures']
-        . ' expected failure / ' . $counts['unexpected_successes'] . ' unexpected success';
+        . ' expected failure / '
+        . $counts['unexpected_successes']
+        . ' unexpected success';
     if (!$evaluated['valid']) {
         $summary = 'Structured WinApp report unavailable or invalid.';
     }
-    return task_result('winapp', 'WinApp regression', $status, microtime(true) - $started,
-        $counts, $summary, $logPath, array_merge($details, ['problems' => $evaluated['problems']]));
+    return task_result(
+        'winapp',
+        'WinApp regression',
+        $status,
+        microtime(true) - $started,
+        $counts,
+        $summary,
+        $logPath,
+        array_merge($details, ['problems' => $evaluated['problems']]),
+    );
 }
 
 /**
@@ -1066,12 +1676,17 @@ function audit_run_winapp(?array $python): array
  * @param string $id Stable task identifier.
  * @param string $label Human-readable label.
  * @param string $relativeScript Repository-relative script path.
- * @param array $arguments Script arguments.
+ * @param list<string> $arguments Script arguments.
  * @param int $timeout Timeout in seconds.
- * @return array Normalized task result.
+ * @return array{id:string,label:string,status:string,duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array<string,mixed>} Normalized task result for the selected PHP utility.
  */
-function audit_run_php_command(string $id, string $label, string $relativeScript, array $arguments = [], int $timeout = 45): array
-{
+function audit_run_php_command(
+    string $id,
+    string $label,
+    string $relativeScript,
+    array $arguments = [],
+    int $timeout = 45,
+): array {
     global $root;
     $path = $root . '/' . $relativeScript;
     if (!is_file($path)) {
@@ -1083,10 +1698,16 @@ function audit_run_php_command(string $id, string $label, string $relativeScript
             [],
             $relativeScript . ' is missing.',
             null,
-            ['problems' => [$relativeScript . ' is required for this audit task.']]
+            ['problems' => [
+                $relativeScript . ' is required for this audit task.',
+            ]],
         );
     }
-    $process = run_process(array_merge([PHP_BINARY, $path], $arguments), $root, $timeout);
+    $process = run_process(
+        array_merge([PHP_BINARY, $path], $arguments),
+        $root,
+        $timeout,
+    );
     audit_record_slow_check($label, (float) $process['duration']);
     $output = audit_process_output($process);
     $logPath = audit_write_log($id, [$label, $output]);
@@ -1099,7 +1720,7 @@ function audit_run_php_command(string $id, string $label, string $relativeScript
             [],
             'Timed out after ' . $timeout . ' seconds.',
             $logPath,
-            ['problems' => [$relativeScript . ' timed out.']]
+            ['problems' => [$relativeScript . ' timed out.']],
         );
     }
     if ((int) $process['exit_code'] !== 0) {
@@ -1111,13 +1732,29 @@ function audit_run_php_command(string $id, string $label, string $relativeScript
             [],
             'Exit code ' . $process['exit_code'] . '.',
             $logPath,
-            ['problems' => [$relativeScript . ' reported a failure.']]
+            ['problems' => [$relativeScript . ' reported a failure.']],
         );
     }
     if (output_is_skip($output)) {
-        return task_result($id, $label, STATUS_SKIP, (float) $process['duration'], [], preg_replace('/\s+/', ' ', trim($output)), $logPath);
+        return task_result(
+            $id,
+            $label,
+            STATUS_SKIP,
+            (float) $process['duration'],
+            [],
+            preg_replace('/\s+/', ' ', trim($output)),
+            $logPath,
+        );
     }
-    return task_result($id, $label, STATUS_PASS, (float) $process['duration'], [], 'Passed.', $logPath);
+    return task_result(
+        $id,
+        $label,
+        STATUS_PASS,
+        (float) $process['duration'],
+        [],
+        'Passed.',
+        $logPath,
+    );
 }
 
 /**
@@ -1131,22 +1768,41 @@ function audit_run_readability(?array $python): array
     $id = 'readability-advisory';
     $label = 'Advisory readability report';
     if ($python === null) {
-        return task_result($id, $label, STATUS_BLOCKED, 0.0, [],
-            'Python is required to produce the report.', null,
-            ['problems' => ['Missing Python interpreter.']]);
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Python is required to produce the report.',
+            null,
+            ['problems' => ['Missing Python interpreter.']],
+        );
     }
-    $process = run_process(array_merge($python, [
-        $root . '/scripts/readability_report.py',
-        '--output', $runDirectory . '/readability',
-    ]), $root, AUDIT_READABILITY_REPORT_TIMEOUT_SECONDS);
+    $process = run_process(
+        array_merge($python, [
+            $root . '/scripts/readability_report.py',
+            '--output',
+            $runDirectory . '/readability',
+        ]),
+        $root,
+        AUDIT_READABILITY_REPORT_TIMEOUT_SECONDS,
+    );
     $log = audit_write_log($id, [audit_process_output($process)]);
     $success = !$process['timed_out'] && $process['exit_code'] === 0;
 
-    return task_result($id, $label, $success ? STATUS_PASS : STATUS_FAIL,
-        (float) $process['duration'], [],
-        $success ? 'Advice published; findings never fail CI.'
+    return task_result(
+        $id,
+        $label,
+        $success ? STATUS_PASS : STATUS_FAIL,
+        (float) $process['duration'],
+        [],
+        $success
+            ? 'Advice published; findings never fail CI.'
             : 'Report unavailable; inspect operational diagnostics.',
-        $log, $success ? [] : ['problems' => ['Readability reporter failed.']]);
+        $log,
+        $success ? [] : ['problems' => ['Readability reporter failed.']],
+    );
 }
 
 /**
@@ -1156,7 +1812,7 @@ function audit_run_readability(?array $python): array
  * reported as bounded advisory data so existing debt can be removed deliberately
  * and later promoted into hard architecture rules without hiding it in a baseline.
  *
- * @return array Normalized task result.
+ * @return array{id:string,label:string,status:string,duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array<string,mixed>} Normalized MVC-boundary audit task result.
  */
 function audit_run_mvc_boundaries(): array
 {
@@ -1167,7 +1823,7 @@ function audit_run_mvc_boundaries(): array
         'MVC layer boundaries',
         'scripts/check_mvc_boundaries.php',
         ['--quiet', '--report-json=' . $reportPath],
-        45
+        45,
     );
 
     if (!is_file($reportPath)) {
@@ -1183,12 +1839,17 @@ function audit_run_mvc_boundaries(): array
     if (!is_array($decoded)) {
         $task['status'] = STATUS_FAIL;
         $task['summary'] = 'MVC architecture report is invalid JSON.';
-        $task['details']['problems'][] = 'Unable to decode ' . relative_path($reportPath, $root) . '.';
+        $task['details']['problems'][] =
+            'Unable to decode ' . relative_path($reportPath, $root) . '.';
         return $task;
     }
 
-    $strict = is_array($decoded['strict_mvc'] ?? null) ? $decoded['strict_mvc'] : [];
-    $runtime = is_array($decoded['runtime_inventory'] ?? null) ? $decoded['runtime_inventory'] : [];
+    $strict = is_array($decoded['strict_mvc'] ?? null)
+        ? $decoded['strict_mvc']
+        : [];
+    $runtime = is_array($decoded['runtime_inventory'] ?? null)
+        ? $decoded['runtime_inventory']
+        : [];
     $strictCount = (int) ($strict['current_violation_count'] ?? 0);
     $candidateCount = (int) ($runtime['review_candidate_count'] ?? 0);
     $runtimeFiles = (int) ($runtime['scanned_files'] ?? 0);
@@ -1198,9 +1859,18 @@ function audit_run_mvc_boundaries(): array
         'runtime_files' => $runtimeFiles,
     ];
     if (($task['status'] ?? '') === STATUS_PASS) {
-        $task['summary'] = $strictCount . ' strict violations; ' . $candidateCount . ' review candidates / ' . $runtimeFiles . ' runtime PHP files';
+        $task['summary'] =
+            $strictCount
+            . ' strict violations; '
+            . $candidateCount
+            . ' review candidates / '
+            . $runtimeFiles
+            . ' runtime PHP files';
     }
-    $task['details']['artifacts']['architecture_json'] = relative_path($reportPath, $root);
+    $task['details']['artifacts']['architecture_json'] = relative_path(
+        $reportPath,
+        $root,
+    );
     return $task;
 }
 
@@ -1223,62 +1893,126 @@ function audit_run_source_contract_inventory(): array
     $problems = [];
     $status = STATUS_PASS;
     $reports = [];
-    foreach (['documentation' => 'check_source_documentation.php', 'policy' => 'check_policy_constants.php'] as $kind => $script) {
-        $process = run_process([PHP_BINARY, $root . '/scripts/' . $script, '--json'], $root, 90);
+    foreach ([
+        'documentation' => 'check_source_documentation.php',
+        'policy' => 'check_policy_constants.php',
+    ] as $kind => $script) {
+        $process = run_process(
+            [PHP_BINARY, $root . '/scripts/' . $script, '--json'],
+            $root,
+            90,
+        );
         $report = json_decode((string) $process['stdout'], true);
-        if ($process['timed_out'] || (int) $process['exit_code'] !== 0 || !isset($report['summary']['finding_count'], $report['summary']['source_files'])) {
-            $problems[] = $kind . ' inventory did not produce a complete report.';
-            $failure = $process['timed_out'] || (int) $process['exit_code'] === 2 ? STATUS_BLOCKED : STATUS_FAIL;
+        if (
+            $process['timed_out']
+            || (int) $process['exit_code'] !== 0
+            || !isset(
+                $report['summary']['finding_count'],
+                $report['summary']['source_files'],
+            )
+        ) {
+            $problems[] =
+                $kind . ' inventory did not produce a complete report.';
+            $failure = $process['timed_out']
+            || (int) $process['exit_code'] === 2
+                ? STATUS_BLOCKED
+                : STATUS_FAIL;
             $status = $status === STATUS_FAIL ? $status : $failure;
             continue;
         }
         $path = $runDirectory . '/source-' . $kind . '.json';
         write_text_file($path, (string) $process['stdout']);
         $artifacts[$kind . '_json'] = relative_path($path, $root);
-        $counts[$kind . '_findings'] = (int) $report['summary']['finding_count'];
+        $counts[$kind . '_findings'] =
+            (int) $report['summary']['finding_count'];
         $counts[$kind . '_files'] = (int) $report['summary']['source_files'];
         $reports[$kind] = $report;
     }
     if (count($reports) === 2) {
         try {
-            $baselineText = @file_get_contents($root . '/scripts/source_contract_debt_baseline.json');
+            $baselineText = @file_get_contents($root
+                . '/scripts/source_contract_debt_baseline.json');
             if (!is_string($baselineText)) {
-                throw new RuntimeException('Reviewed source debt baseline is missing or unreadable.');
+                throw new RuntimeException(
+                    'Reviewed source debt baseline is missing or unreadable.',
+                );
             }
-            $baseline = json_decode($baselineText, true, 512, JSON_THROW_ON_ERROR);
+            $baseline = json_decode(
+                $baselineText,
+                true,
+                512,
+                JSON_THROW_ON_ERROR,
+            );
             if (!is_array($baseline)) {
-                throw new RuntimeException('Reviewed source debt baseline must be an object.');
+                throw new RuntimeException(
+                    'Reviewed source debt baseline must be an object.',
+                );
             }
             $evaluation = PhpGallery\SourceDebt\evaluate($baseline, $reports);
             $ratchetPath = $runDirectory . '/source-debt-ratchet.json';
-            write_text_file($ratchetPath, json_encode([
-                'schema_version' => 1,
-                'classifier_sha256' => $baseline['classifier_sha256'],
-                'provenance' => $baseline['provenance'],
-                'evaluation' => $evaluation,
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n");
-            $artifacts['debt_ratchet_json'] = relative_path($ratchetPath, $root);
+            write_text_file(
+                $ratchetPath,
+                json_encode(
+                    [
+                        'schema_version' => 1,
+                        'classifier_sha256' => $baseline['classifier_sha256'],
+                        'provenance' => $baseline['provenance'],
+                        'evaluation' => $evaluation,
+                    ],
+                    JSON_PRETTY_PRINT
+                        | JSON_UNESCAPED_SLASHES
+                        | JSON_THROW_ON_ERROR,
+                )
+                    . "\n",
+            );
+            $artifacts['debt_ratchet_json'] = relative_path(
+                $ratchetPath,
+                $root,
+            );
             $counts['debt_categories'] = count($evaluation['counts']);
-            $counts['debt_growth_categories'] = count($evaluation['violations']);
+            $counts['debt_growth_categories'] = count(
+                $evaluation['violations'],
+            );
             $counts['advisory_categories'] = count($evaluation['advisory']);
             foreach ($evaluation['violations'] as $category => $violation) {
-                $problems[] = $category . ': ' . $violation['current'] . ' findings exceed cap ' . $violation['cap'] . '.';
+                $problems[] =
+                    $category
+                    . ': '
+                    . $violation['current']
+                    . ' findings exceed cap '
+                    . $violation['cap']
+                    . '.';
             }
             if ($evaluation['status'] !== STATUS_PASS) {
                 $status = STATUS_FAIL;
             }
         } catch (Throwable $error) {
             $status = STATUS_BLOCKED;
-            $problems[] = 'Source debt coverage blocked: ' . $error->getMessage();
+            $problems[] =
+                'Source debt coverage blocked: ' . $error->getMessage();
         }
     }
-    $summary = $problems !== [] ? implode(' ', $problems)
-        : $counts['documentation_findings'] . ' documentation / ' . $counts['policy_findings']
-            . ' policy findings; ' . $counts['debt_growth_categories'] . ' reliable categories grew; noisy policy heuristics advisory';
-    $logPath = $status === STATUS_PASS ? null : audit_write_log('source-contract-inventory', [$summary]);
-    return task_result('source-contract-inventory', 'Source contract inventory',
-        $status, microtime(true) - $started,
-        $counts, $summary, $logPath, ['problems' => $problems, 'artifacts' => $artifacts]);
+    $summary = $problems !== []
+        ? implode(' ', $problems)
+        : $counts['documentation_findings']
+        . ' documentation / '
+        . $counts['policy_findings']
+        . ' policy findings; '
+        . $counts['debt_growth_categories']
+        . ' reliable categories grew; noisy policy heuristics advisory';
+    $logPath = $status === STATUS_PASS
+        ? null
+        : audit_write_log('source-contract-inventory', [$summary]);
+    return task_result(
+        'source-contract-inventory',
+        'Source contract inventory',
+        $status,
+        microtime(true) - $started,
+        $counts,
+        $summary,
+        $logPath,
+        ['problems' => $problems, 'artifacts' => $artifacts],
+    );
 }
 
 /**
@@ -1294,19 +2028,48 @@ function audit_run_source_contract_inventory(): array
  * @param bool $changedOnly Whether the checker compares declarations against Git; false for mandatory whole-tree import policy.
  * @return array<string,mixed> Normalized audit task; counts describe findings and changed declarations/policy sites, with a complete value-free JSON artifact.
  */
-function audit_run_source_contract(string $suiteId, string $label, string $script, string $artifactKey, bool $changedOnly = true): array
-{
-    global $root, $runDirectory, $sourceIdentity, $basicChangedLintBase, $basicChangedLintRequiresBase;
+function audit_run_source_contract(
+    string $suiteId,
+    string $label,
+    string $script,
+    string $artifactKey,
+    bool $changedOnly = true,
+): array {
+    global
+        $root,
+        $runDirectory,
+        $sourceIdentity,
+        $basicChangedLintBase,
+        $basicChangedLintRequiresBase
+    ;
     $started = microtime(true);
-    if ($suiteId === 'source-documentation-changed' && $basicChangedLintRequiresBase && $basicChangedLintBase === null) {
-        return task_result($suiteId, $label, STATUS_BLOCKED, microtime(true) - $started, [],
-            'Changed declaration documentation requires a full immutable PHP_GALLERY_SOURCE_BASE SHA.', null,
-            ['problems' => ['The requested comparison base is missing, malformed, or unavailable.']]);
+    if (
+        $suiteId === 'source-documentation-changed'
+        && $basicChangedLintRequiresBase
+        && $basicChangedLintBase === null
+    ) {
+        return task_result(
+            $suiteId,
+            $label,
+            STATUS_BLOCKED,
+            microtime(true) - $started,
+            [],
+            'Changed declaration documentation requires a full immutable PHP_GALLERY_SOURCE_BASE SHA.',
+            null,
+            ['problems' => [
+                'The requested comparison base is missing, malformed, or unavailable.',
+            ]],
+        );
     }
     $command = [PHP_BINARY, $root . '/scripts/' . $script, '--json'];
     if ($changedOnly) {
         $command[] = '--changed';
-        $command[] = '--base=' . ($sourceIdentity['comparison_base'] ?? $sourceIdentity['requested_base']);
+        $command[] =
+            '--base='
+            . (
+                $sourceIdentity['comparison_base']
+                ?? $sourceIdentity['requested_base']
+            );
     }
     $process = run_process($command, $root, 90);
     $report = json_decode((string) $process['stdout'], true);
@@ -1314,43 +2077,89 @@ function audit_run_source_contract(string $suiteId, string $label, string $scrip
     $status = STATUS_BLOCKED;
     $counts = [];
     $summary = 'Source-contract coverage did not produce a complete report.';
-    if (!$process['timed_out'] && is_array($report)
+    if (
+        !$process['timed_out']
+        && is_array($report)
         && isset($report['status'], $report['summary']['finding_count'])
-        && in_array($report['status'], [STATUS_PASS, STATUS_FAIL, STATUS_BLOCKED], true)) {
+        && in_array(
+            $report['status'],
+            [STATUS_PASS, STATUS_FAIL, STATUS_BLOCKED],
+            true,
+        )
+    ) {
         $path = $runDirectory . '/' . $suiteId . '.json';
         write_text_file($path, (string) $process['stdout']);
         $artifacts[$artifactKey] = relative_path($path, $root);
         $status = $report['status'];
-        $counterNames = $changedOnly ? ['finding_count', 'added', 'changed', 'unchanged', 'moved', 'doc_regressions', 'coverage_review_count']
+        $counterNames = $changedOnly
+            ? [
+                'finding_count',
+                'added',
+                'changed',
+                'unchanged',
+                'moved',
+                'doc_regressions',
+                'coverage_review_count',
+            ]
             : ['finding_count', 'source_files'];
         foreach ($counterNames as $key) {
             $counts[$key] = (int) ($report['summary'][$key] ?? 0);
         }
-        $expectedExit = match ($status) { STATUS_PASS => 0, STATUS_FAIL => 1, default => 2 };
+        $expectedExit = match ($status) {
+            STATUS_PASS => 0,
+            STATUS_FAIL => 1,
+            default => 2,
+        };
         if ((int) $process['exit_code'] !== $expectedExit) {
             $status = STATUS_BLOCKED;
             $summary = 'Source-contract report and process status disagree.';
         } else {
-            $summary = $counts['finding_count'] . ' findings; '
-                . ($changedOnly ? $counts['added'] . ' added / ' . $counts['changed'] . ' changed sites; '
-                    : $counts['source_files'] . ' source files; ')
-                . count($report['blocked'] ?? []) . ' coverage blockers';
+            $summary =
+                $counts['finding_count']
+                . ' findings; '
+                . (
+                    $changedOnly
+                        ? $counts['added']
+                        . ' added / '
+                        . $counts['changed']
+                        . ' changed sites; '
+                        : $counts['source_files'] . ' source files; '
+                )
+                . count($report['blocked'] ?? [])
+                . ' coverage blockers';
         }
     }
     $problems = [];
     if ($status !== STATUS_PASS) {
         $problems[] = $summary;
         foreach (array_slice($report['findings'] ?? [], 0, 30) as $finding) {
-            $problems[] = ($finding['path'] ?? '') . ':' . (int) ($finding['line'] ?? 1) . ' ' . ($finding['rule'] ?? 'source-contract');
+            $problems[] =
+                ($finding['path'] ?? '')
+                . ':'
+                . (int) ($finding['line'] ?? 1)
+                . ' '
+                . ($finding['rule'] ?? 'source-contract');
         }
         foreach ($report['blocked'] ?? [] as $blocker) {
-            $problems[] = ($blocker['path'] ?? '') . ': ' . ($blocker['reason'] ?? 'Source coverage unknown.');
+            $problems[] =
+                ($blocker['path'] ?? '')
+                . ': '
+                . ($blocker['reason'] ?? 'Source coverage unknown.');
         }
     }
-    $logPath = $status === STATUS_PASS ? null : audit_write_log($suiteId, [$summary, $process['stderr']]);
-    return task_result($suiteId, $label,
-        $status, microtime(true) - $started, $counts, $summary, $logPath,
-        ['artifacts' => $artifacts, 'problems' => $problems]);
+    $logPath = $status === STATUS_PASS
+        ? null
+        : audit_write_log($suiteId, [$summary, $process['stderr']]);
+    return task_result(
+        $suiteId,
+        $label,
+        $status,
+        microtime(true) - $started,
+        $counts,
+        $summary,
+        $logPath,
+        ['artifacts' => $artifacts, 'problems' => $problems],
+    );
 }
 
 /**
@@ -1362,10 +2171,20 @@ function audit_run_source_contract(string $suiteId, string $label, string $scrip
  * @param bool $requireGitEvidence True when missing Git/base evidence must block instead of linting the full tree.
  * @return array{files:list<string>,fallback:bool,blocked:bool,reason:string} Selected files and explicit fallback/baseline evidence.
  */
-function audit_lint_targets(array $extensions, bool $changedOnly, ?string $baseSha = null, bool $requireGitEvidence = false): array
-{
+function audit_lint_targets(
+    array $extensions,
+    bool $changedOnly,
+    ?string $baseSha = null,
+    bool $requireGitEvidence = false,
+): array {
     global $root;
-    return \PhpGallery\Audit\select_lint_targets($root, $extensions, $changedOnly, $baseSha, $requireGitEvidence);
+    return \PhpGallery\Audit\select_lint_targets(
+        $root,
+        $extensions,
+        $changedOnly,
+        $baseSha,
+        $requireGitEvidence,
+    );
 }
 
 /**
@@ -1376,8 +2195,11 @@ function audit_lint_targets(array $extensions, bool $changedOnly, ?string $baseS
  * @param bool $requireGitEvidence True when missing Git/base evidence must block instead of linting the full tree.
  * @return array{id:string,label:string,status:string,duration_seconds:float,counts:array{total?:int,php?:int,failed?:int},summary:string,log:?string,details:array{selection?:string,problems?:list<string>}} Complete PHP file count, fallback reason and failed source paths; unavailable required evidence blocks.
  */
-function audit_run_php_lint(bool $changedOnly, ?string $baseSha = null, bool $requireGitEvidence = false): array
-{
+function audit_run_php_lint(
+    bool $changedOnly,
+    ?string $baseSha = null,
+    bool $requireGitEvidence = false,
+): array {
     global $root;
     $id = $changedOnly ? 'php-lint-changed' : 'php-lint';
     $label = $changedOnly ? 'PHP syntax (changed)' : 'PHP syntax';
@@ -1385,22 +2207,52 @@ function audit_run_php_lint(bool $changedOnly, ?string $baseSha = null, bool $re
     try {
         $workers = worker_count();
     } catch (InvalidArgumentException $exception) {
-        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            $exception->getMessage(),
+        );
     }
-    $targets = audit_lint_targets(['php'], $changedOnly, $baseSha, $requireGitEvidence);
+    $targets = audit_lint_targets(
+        ['php'],
+        $changedOnly,
+        $baseSha,
+        $requireGitEvidence,
+    );
     if (!empty($targets['blocked'])) {
-        return task_result($id, $label, STATUS_BLOCKED, microtime(true) - $started, [],
-            'Changed-source lint requires a resolvable immutable PHP_GALLERY_SOURCE_BASE commit.', null,
-            ['problems' => ['Git history or the requested comparison base is unavailable.']]);
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            microtime(true) - $started,
+            [],
+            'Changed-source lint requires a resolvable immutable PHP_GALLERY_SOURCE_BASE commit.',
+            null,
+            ['problems' => [
+                'Git history or the requested comparison base is unavailable.',
+            ]],
+        );
     }
     $files = $targets['files'];
     $failed = [];
     $log = [$label];
 
     // Syntax parsing needs no installed extensions or php.ini startup work.
-    foreach (run_file_checks($files, [PHP_BINARY, '-n', '-l'], $root, $workers, 15) as $index => $process) {
+    foreach (run_file_checks(
+        $files,
+        [PHP_BINARY, '-n', '-l'],
+        $root,
+        $workers,
+        15,
+    ) as $index => $process) {
         $file = $files[$index];
-        audit_record_slow_check('PHP lint ' . relative_path($file, $root), (float) $process['duration']);
+        audit_record_slow_check(
+            'PHP lint ' . relative_path($file, $root),
+            (float) $process['duration'],
+        );
         if ((int) $process['exit_code'] !== 0 || $process['timed_out']) {
             $failed[] = relative_path($file, $root);
             $log[] = '[FAIL] ' . relative_path($file, $root);
@@ -1411,17 +2263,33 @@ function audit_run_php_lint(bool $changedOnly, ?string $baseSha = null, bool $re
     }
 
     $status = $failed === [] ? STATUS_PASS : STATUS_FAIL;
-    $summary = count($files) . ' PHP files; ' . $targets['reason'] . ($failed !== [] ? ', ' . count($failed) . ' failed' : '');
+    $summary =
+        count($files)
+        . ' PHP files; '
+        . $targets['reason']
+        . ($failed !== [] ? ', ' . count($failed) . ' failed' : '');
     $logPath = audit_write_log($id, $log);
     return task_result(
         $id,
         $label,
         $status,
         microtime(true) - $started,
-        ['total' => count($files), 'php' => count($files), 'failed' => count($failed)],
+        [
+            'total' => count($files),
+            'php' => count($files),
+            'failed' => count($failed),
+        ],
         $summary,
         $logPath,
-        ['selection' => $targets['reason'], 'problems' => array_map(static fn(string $file): string => $file . ': PHP syntax check failed.', $failed)]
+        [
+            'selection' => $targets['reason'],
+            'problems' => array_map(
+                static fn(string $file): string => (
+                    $file . ': PHP syntax check failed.'
+                ),
+                $failed,
+            ),
+        ],
     );
 }
 
@@ -1434,8 +2302,12 @@ function audit_run_php_lint(bool $changedOnly, ?string $baseSha = null, bool $re
  * @param bool $requireGitEvidence True when missing Git/base evidence must block instead of linting the full tree.
  * @return array{id:string,label:string,status:string,duration_seconds:float,counts:array{total?:int,js?:int,mjs?:int,failed?:int},summary:string,log:?string,details:array{selection?:string,problems?:list<string>}} Separate complete JS/MJS counts and failed source paths; missing Node or required Git evidence blocks.
  */
-function audit_run_js_lint(bool $changedOnly, ?string $node, ?string $baseSha = null, bool $requireGitEvidence = false): array
-{
+function audit_run_js_lint(
+    bool $changedOnly,
+    ?string $node,
+    ?string $baseSha = null,
+    bool $requireGitEvidence = false,
+): array {
     global $root;
     $id = $changedOnly ? 'js-lint-changed' : 'js-lint';
     $label = $changedOnly ? 'JavaScript syntax (changed)' : 'JavaScript syntax';
@@ -1448,7 +2320,9 @@ function audit_run_js_lint(bool $changedOnly, ?string $node, ?string $baseSha = 
             [],
             'Node executable was not found.',
             null,
-            ['problems' => ['Node is required for JavaScript syntax validation.']]
+            ['problems' => [
+                'Node is required for JavaScript syntax validation.',
+            ]],
         );
     }
 
@@ -1456,20 +2330,50 @@ function audit_run_js_lint(bool $changedOnly, ?string $node, ?string $baseSha = 
     try {
         $workers = worker_count();
     } catch (InvalidArgumentException $exception) {
-        return task_result($id, $label, STATUS_BLOCKED, 0.0, [], $exception->getMessage());
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            $exception->getMessage(),
+        );
     }
-    $targets = audit_lint_targets(['js', 'mjs'], $changedOnly, $baseSha, $requireGitEvidence);
+    $targets = audit_lint_targets(
+        ['js', 'mjs'],
+        $changedOnly,
+        $baseSha,
+        $requireGitEvidence,
+    );
     if (!empty($targets['blocked'])) {
-        return task_result($id, $label, STATUS_BLOCKED, microtime(true) - $started, [],
-            'Changed-source lint requires a resolvable immutable PHP_GALLERY_SOURCE_BASE commit.', null,
-            ['problems' => ['Git history or the requested comparison base is unavailable.']]);
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            microtime(true) - $started,
+            [],
+            'Changed-source lint requires a resolvable immutable PHP_GALLERY_SOURCE_BASE commit.',
+            null,
+            ['problems' => [
+                'Git history or the requested comparison base is unavailable.',
+            ]],
+        );
     }
     $files = $targets['files'];
     $failed = [];
     $log = [$label];
-    foreach (run_file_checks($files, [$node, '--check'], $root, $workers, 15) as $index => $process) {
+    foreach (run_file_checks(
+        $files,
+        [$node, '--check'],
+        $root,
+        $workers,
+        15,
+    ) as $index => $process) {
         $file = $files[$index];
-        audit_record_slow_check('JS lint ' . relative_path($file, $root), (float) $process['duration']);
+        audit_record_slow_check(
+            'JS lint ' . relative_path($file, $root),
+            (float) $process['duration'],
+        );
         if ((int) $process['exit_code'] !== 0 || $process['timed_out']) {
             $failed[] = relative_path($file, $root);
             $log[] = '[FAIL] ' . relative_path($file, $root);
@@ -1480,19 +2384,43 @@ function audit_run_js_lint(bool $changedOnly, ?string $node, ?string $baseSha = 
     }
 
     $status = $failed === [] ? STATUS_PASS : STATUS_FAIL;
-    $jsCount = count(array_filter($files, static fn(string $file): bool => strtolower(pathinfo($file, PATHINFO_EXTENSION)) === 'js'));
+    $jsCount = count(array_filter(
+        $files,
+        static fn(string $file): bool => (
+            strtolower(pathinfo($file, PATHINFO_EXTENSION)) === 'js'
+        ),
+    ));
     $mjsCount = count($files) - $jsCount;
-    $summary = $jsCount . ' JS / ' . $mjsCount . ' MJS files; ' . $targets['reason'] . ($failed !== [] ? ', ' . count($failed) . ' failed' : '');
+    $summary =
+        $jsCount
+        . ' JS / '
+        . $mjsCount
+        . ' MJS files; '
+        . $targets['reason']
+        . ($failed !== [] ? ', ' . count($failed) . ' failed' : '');
     $logPath = audit_write_log($id, $log);
     return task_result(
         $id,
         $label,
         $status,
         microtime(true) - $started,
-        ['total' => count($files), 'js' => $jsCount, 'mjs' => $mjsCount, 'failed' => count($failed)],
+        [
+            'total' => count($files),
+            'js' => $jsCount,
+            'mjs' => $mjsCount,
+            'failed' => count($failed),
+        ],
         $summary,
         $logPath,
-        ['selection' => $targets['reason'], 'problems' => array_map(static fn(string $file): string => $file . ': JavaScript syntax check failed.', $failed)]
+        [
+            'selection' => $targets['reason'],
+            'problems' => array_map(
+                static fn(string $file): string => (
+                    $file . ': JavaScript syntax check failed.'
+                ),
+                $failed,
+            ),
+        ],
     );
 }
 
@@ -1500,7 +2428,7 @@ function audit_run_js_lint(bool $changedOnly, ?string $node, ?string $baseSha = 
  * Run git diff --check when the audit is executing inside a Git checkout.
  *
  * @param ?string $git Git executable.
- * @return array Normalized task result.
+ * @return array{id:string,label:string,status:string,duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array<string,mixed>} Normalized Git whitespace-check task result.
  */
 function audit_run_git_diff_check(?string $git): array
 {
@@ -1512,7 +2440,7 @@ function audit_run_git_diff_check(?string $git): array
             STATUS_SKIP,
             0.0,
             [],
-            'Git checkout metadata is unavailable in this source package.'
+            'Git checkout metadata is unavailable in this source package.',
         );
     }
     $process = run_process([$git, 'diff', '--check'], $root, 30);
@@ -1524,9 +2452,13 @@ function audit_run_git_diff_check(?string $git): array
         (int) $process['exit_code'] === 0 ? STATUS_PASS : STATUS_FAIL,
         (float) $process['duration'],
         [],
-        (int) $process['exit_code'] === 0 ? 'Passed.' : 'Whitespace errors detected.',
+        (int) $process['exit_code'] === 0
+            ? 'Passed.'
+            : 'Whitespace errors detected.',
         $logPath,
-        (int) $process['exit_code'] === 0 ? [] : ['problems' => ['git diff --check reported whitespace errors.']]
+        (int) $process['exit_code'] === 0
+            ? []
+            : ['problems' => ['git diff --check reported whitespace errors.']],
     );
 }
 
@@ -1577,7 +2509,8 @@ if ($profileLabel === 'release') {
     try {
         require_once __DIR__ . '/release_qualification_lib.php';
         $releaseSnapshotBefore = \PhpGallery\ReleaseQualification\snapshot(
-            $root, \PhpGallery\Release\detect_cms_version($root)
+            $root,
+            \PhpGallery\Release\detect_cms_version($root),
         );
     } catch (Throwable) {
         // Continue useful diagnostics; the consistency task is blocked below.
@@ -1585,58 +2518,163 @@ if ($profileLabel === 'release') {
 }
 
 $suiteCount = count($suiteIds);
-fwrite(STDOUT, 'PHP Gallery audit | Profile: ' . $profileLabel . ' | Suites: ' . $suiteCount . "\n");
+fwrite(
+    STDOUT,
+    'PHP Gallery audit | Profile: '
+        . $profileLabel
+        . ' | Suites: '
+        . $suiteCount
+        . "\n",
+);
 fwrite(STDOUT, str_repeat('=', 72) . "\n");
 fflush(STDOUT);
 if ($delegatedToPreflight !== []) {
-    fwrite(STDOUT, 'Delegated to required exact-candidate preflight (not a local PASS): '
-        . implode(', ', $delegatedToPreflight) . "\n");
+    fwrite(
+        STDOUT,
+        'Delegated to required exact-candidate preflight (not a local PASS): '
+            . implode(', ', $delegatedToPreflight)
+            . "\n",
+    );
 }
 if ($delegatedToPackaging !== []) {
-    fwrite(STDOUT, 'Delegated to required exact-candidate three-platform production-package owner (not a local PASS): packaging' . "\n");
+    fwrite(
+        STDOUT,
+        'Delegated to required exact-candidate three-platform production-package owner (not a local PASS): packaging'
+            . "\n",
+    );
 }
 if ($delegatedToParallelOwners !== []) {
-    fwrite(STDOUT, 'Expected separate same-candidate owners (each provides its own evidence): '
-        . implode(', ', array_column($delegatedToParallelOwners, 'owner')) . "\n");
+    fwrite(
+        STDOUT,
+        'Expected separate same-candidate owners (each provides its own evidence): '
+            . implode(', ', array_column($delegatedToParallelOwners, 'owner'))
+            . "\n",
+    );
 }
 
 foreach ($suiteIds as $suiteIndex => $suiteId) {
     $position = $suiteIndex + 1;
     $consoleLabel = audit_suite_console_label($suiteId);
-    fwrite(STDOUT, '[' . $position . '/' . $suiteCount . '] RUN     ' . $consoleLabel . "\n");
+    fwrite(
+        STDOUT,
+        '['
+            . $position
+            . '/'
+            . $suiteCount
+            . '] RUN     '
+            . $consoleLabel
+            . "\n",
+    );
     fflush(STDOUT);
 
     $task = match ($suiteId) {
-        'php-regression' => audit_run_php_regression($registry, 'php-regression', $profileLabel === 'hosted-full' ? $phpShard : null),
+        'php-regression' => audit_run_php_regression(
+            $registry,
+            'php-regression',
+            $profileLabel === 'hosted-full' ? $phpShard : null,
+        ),
         'php-fast' => audit_run_php_regression($registry, 'php-fast'),
         'packaging' => audit_run_php_regression($registry, 'packaging'),
         'production-package' => audit_run_production_package($registry),
         'runtime-performance' => audit_run_runtime_performance($registry),
         'mvc-boundaries' => audit_run_mvc_boundaries(),
         'source-contract-inventory' => audit_run_source_contract_inventory(),
-        'python-import-policy' => audit_run_source_contract('python-import-policy', 'Python import policy (all sources)', 'check_python_import_policy.php', 'python_import_policy_json', false),
-        'source-documentation-changed' => audit_run_source_contract('source-documentation-changed', 'Changed declaration documentation', 'check_source_documentation.php', 'changed_documentation_json'),
-        'source-policy-changed' => audit_run_source_contract('source-policy-changed', 'Changed runtime policy documentation', 'check_policy_constants.php', 'changed_policy_json'),
-        'node-fast' => audit_run_node_suite('node-fast', 'Node regression (fast)', audit_select_node_tests($registry, false), $node),
-        'node-full' => audit_run_node_suite('node-full', 'Node regression', audit_select_node_tests($registry, true), $node),
-        'browser-map' => audit_run_node_suite('browser-map', 'Chromium browser integration', audit_select_node_tests($registry, true, true), $node, $browser),
-        'website' => audit_run_node_suite('website', 'Static project website', $registry['website_tests'], $node, $browser),
-        'ci-workflow-contract' => audit_run_php_command('ci-workflow-contract', 'CI workflow contracts', 'tests/gallery_workflow_ci_trigger_policy_test.php'),
+        'python-import-policy' => audit_run_source_contract(
+            'python-import-policy',
+            'Python import policy (all sources)',
+            'check_python_import_policy.php',
+            'python_import_policy_json',
+            false,
+        ),
+        'source-documentation-changed' => audit_run_source_contract(
+            'source-documentation-changed',
+            'Changed declaration documentation',
+            'check_source_documentation.php',
+            'changed_documentation_json',
+        ),
+        'source-policy-changed' => audit_run_source_contract(
+            'source-policy-changed',
+            'Changed runtime policy documentation',
+            'check_policy_constants.php',
+            'changed_policy_json',
+        ),
+        'node-fast' => audit_run_node_suite(
+            'node-fast',
+            'Node regression (fast)',
+            audit_select_node_tests($registry, false),
+            $node,
+        ),
+        'node-full' => audit_run_node_suite(
+            'node-full',
+            'Node regression',
+            audit_select_node_tests($registry, true),
+            $node,
+        ),
+        'browser-map' => audit_run_node_suite(
+            'browser-map',
+            'Chromium browser integration',
+            audit_select_node_tests($registry, true, true),
+            $node,
+            $browser,
+        ),
+        'website' => audit_run_node_suite(
+            'website',
+            'Static project website',
+            $registry['website_tests'],
+            $node,
+            $browser,
+        ),
+        'ci-workflow-contract' => audit_run_php_command(
+            'ci-workflow-contract',
+            'CI workflow contracts',
+            'tests/gallery_workflow_ci_trigger_policy_test.php',
+        ),
         'readability-contract' => audit_run_php_command(
-            'readability-contract', 'Readability report contracts',
-            'tests/readability_report_test.php', [],
-            AUDIT_READABILITY_CONTRACT_TIMEOUT_SECONDS
+            'readability-contract',
+            'Readability report contracts',
+            'tests/readability_report_test.php',
+            [],
+            AUDIT_READABILITY_CONTRACT_TIMEOUT_SECONDS,
         ),
         'readability-advisory' => audit_run_readability($python),
-        'release-consistency' => audit_run_php_command('release-consistency', 'Release consistency', 'scripts/check_release.php', ['--quiet'], 30),
+        'release-consistency' => audit_run_php_command(
+            'release-consistency',
+            'Release consistency',
+            'scripts/check_release.php',
+            ['--quiet'],
+            30,
+        ),
         'winapp' => audit_run_winapp($python),
-        'mutation-contracts' => audit_run_php_command('mutation-contracts', 'Admin mutation contracts', 'scripts/check_admin_mutation_contracts.php'),
-        'version-audit' => audit_run_php_command('version-audit', 'Runtime hardening audit', 'tests/version_094_audit_hardening.php'),
+        'mutation-contracts' => audit_run_php_command(
+            'mutation-contracts',
+            'Admin mutation contracts',
+            'scripts/check_admin_mutation_contracts.php',
+        ),
+        'version-audit' => audit_run_php_command(
+            'version-audit',
+            'Runtime hardening audit',
+            'tests/version_094_audit_hardening.php',
+        ),
         'php-lint' => audit_run_php_lint(false),
-        'php-lint-changed' => audit_run_php_lint(true, $basicChangedLintBase, $basicChangedLintRequiresBase),
+        'php-lint-changed' => audit_run_php_lint(
+            true,
+            $basicChangedLintBase,
+            $basicChangedLintRequiresBase,
+        ),
         'js-lint' => audit_run_js_lint(false, $node),
-        'js-lint-changed' => audit_run_js_lint(true, $node, $basicChangedLintBase, $basicChangedLintRequiresBase),
-        'manifest' => audit_run_php_command('manifest', 'Generated candidate artifacts', 'scripts/prepare_candidate.php', ['--check'], 180),
+        'js-lint-changed' => audit_run_js_lint(
+            true,
+            $node,
+            $basicChangedLintBase,
+            $basicChangedLintRequiresBase,
+        ),
+        'manifest' => audit_run_php_command(
+            'manifest',
+            'Generated candidate artifacts',
+            'scripts/prepare_candidate.php',
+            ['--check'],
+            180,
+        ),
         'git-diff-check' => audit_run_git_diff_check($git),
     };
     $tasks[] = $task;
@@ -1644,8 +2682,19 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
     $statusText = str_pad((string) $task['status'], 8);
     fwrite(
         STDOUT,
-        '[' . $position . '/' . $suiteCount . '] ' . $statusText . ' ' . $task['label'] . ' '
-        . format_duration((float) $task['duration_seconds']) . '  ' . $task['summary'] . "\n"
+        '['
+            . $position
+            . '/'
+            . $suiteCount
+            . '] '
+            . $statusText
+            . ' '
+            . $task['label']
+            . ' '
+            . format_duration((float) $task['duration_seconds'])
+            . '  '
+            . $task['summary']
+            . "\n",
     );
     fwrite(STDOUT, \PhpGallery\Audit\render_console_problems($task));
     fflush(STDOUT);
@@ -1656,74 +2705,150 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
 if ($delegatedToPreflight !== []) {
     $integrityStarted = microtime(true);
     $finalSourceIdentity = \PhpGallery\Audit\audit_source_identity(
-        $root, $git, (string) $sourceIdentity['requested_base']
+        $root,
+        $git,
+        (string) $sourceIdentity['requested_base'],
     );
-    $integrity = audit_delegated_checkout_integrity($sourceIdentity, $finalSourceIdentity);
+    $integrity = audit_delegated_checkout_integrity(
+        $sourceIdentity,
+        $finalSourceIdentity,
+    );
     $integrityPassed = $integrity['status'] === STATUS_PASS;
     $integritySummary = $integrityPassed
         ? 'Candidate checkout and comparison base remained clean and unchanged after tests.'
-        : 'Delegated manifest post-test integrity is not qualified: ' . $integrity['reason'];
-    $integrityTask = task_result('delegated-manifest-post-test-integrity',
-        'Delegated manifest post-test checkout integrity', $integrity['status'],
-        microtime(true) - $integrityStarted, [], $integritySummary, null, [
+        : 'Delegated manifest post-test integrity is not qualified: '
+        . $integrity['reason'];
+    $integrityTask = task_result(
+        'delegated-manifest-post-test-integrity',
+        'Delegated manifest post-test checkout integrity',
+        $integrity['status'],
+        microtime(true) - $integrityStarted,
+        [],
+        $integritySummary,
+        null,
+        [
             'source_after' => $finalSourceIdentity,
             'problems' => $integrityPassed ? [] : [$integritySummary],
-        ]);
+        ],
+    );
     $tasks[] = $integrityTask;
-    fwrite(STDOUT, '[post-test] ' . $integrityTask['status'] . ' ' . $integritySummary . "\n");
+    fwrite(
+        STDOUT,
+        '[post-test] '
+            . $integrityTask['status']
+            . ' '
+            . $integritySummary
+            . "\n",
+    );
 }
 
 // Each split hosted owner proves it left the exact candidate and comparison base clean.
 if ($phpShard !== null) {
     $integrityStarted = microtime(true);
     $finalSourceIdentity = PhpGallery\Audit\audit_source_identity(
-        $root, $git, (string) $sourceIdentity['requested_base']
+        $root,
+        $git,
+        (string) $sourceIdentity['requested_base'],
     );
-    $integrity = audit_delegated_checkout_integrity($sourceIdentity, $finalSourceIdentity);
+    $integrity = audit_delegated_checkout_integrity(
+        $sourceIdentity,
+        $finalSourceIdentity,
+    );
     $integrityPassed = $integrity['status'] === STATUS_PASS;
     $integritySummary = $integrityPassed
         ? 'Parallel owner preserved the exact clean candidate and comparison base.'
-        : 'Parallel owner checkout integrity is not qualified: ' . $integrity['reason'];
-    $integrityTask = task_result('parallel-owner-checkout-integrity', 'Parallel owner checkout integrity',
-        $integrity['status'], microtime(true) - $integrityStarted, [], $integritySummary, null, [
+        : 'Parallel owner checkout integrity is not qualified: '
+        . $integrity['reason'];
+    $integrityTask = task_result(
+        'parallel-owner-checkout-integrity',
+        'Parallel owner checkout integrity',
+        $integrity['status'],
+        microtime(true) - $integrityStarted,
+        [],
+        $integritySummary,
+        null,
+        [
             'owner' => $phpShard['owner'],
             'candidate' => $phpShard['candidate'],
             'source_after' => $finalSourceIdentity,
             'problems' => $integrityPassed ? [] : [$integritySummary],
-        ]);
+        ],
+    );
     $tasks[] = $integrityTask;
-    fwrite(STDOUT, '[post-test] ' . $integrityTask['status'] . ' ' . $integritySummary . "\n");
+    fwrite(
+        STDOUT,
+        '[post-test] '
+            . $integrityTask['status']
+            . ' '
+            . $integritySummary
+            . "\n",
+    );
 }
 
-if ($profileLabel === 'candidate-preflight' && !audit_required_suite_pass($tasks, 'manifest')) {
-    $tasks[] = task_result('candidate-preflight-manifest-owner', 'Mandatory generated-artifact freshness owner',
-        STATUS_BLOCKED, 0.0, [], 'The candidate preflight requires exactly one individual manifest PASS.',
-        null, ['problems' => ['Missing, duplicated, skipped, blocked or failed manifest owner.']]);
+if (
+    $profileLabel === 'candidate-preflight'
+    && !audit_required_suite_pass($tasks, 'manifest')
+) {
+    $tasks[] = task_result(
+        'candidate-preflight-manifest-owner',
+        'Mandatory generated-artifact freshness owner',
+        STATUS_BLOCKED,
+        0.0,
+        [],
+        'The candidate preflight requires exactly one individual manifest PASS.',
+        null,
+        ['problems' => [
+            'Missing, duplicated, skipped, blocked or failed manifest owner.',
+        ]],
+    );
 }
 
 if ($profileLabel === 'release') {
     try {
         $releaseSnapshotAfter = \PhpGallery\ReleaseQualification\snapshot(
-            $root, \PhpGallery\Release\detect_cms_version($root)
+            $root,
+            \PhpGallery\Release\detect_cms_version($root),
         );
-        $record = \PhpGallery\ReleaseQualification\load_record($root, $releaseSnapshotAfter);
+        $record = \PhpGallery\ReleaseQualification\load_record(
+            $root,
+            $releaseSnapshotAfter,
+        );
         $qualification = \PhpGallery\ReleaseQualification\qualification_status(
-            $record ?? \PhpGallery\ReleaseQualification\empty_record($releaseSnapshotAfter),
-            'pre-publication', $record !== null
+            $record ?? \PhpGallery\ReleaseQualification\empty_record(
+                $releaseSnapshotAfter,
+            ),
+            'pre-publication',
+            $record !== null,
         );
-        $manualReviewSummary = 'Outstanding pre-publication manual checks: '
-            . ($qualification['unresolved'] === [] ? 'none' : implode(', ', $qualification['unresolved']))
+        $manualReviewSummary =
+            'Outstanding pre-publication manual checks: '
+            . (
+                $qualification['unresolved'] === []
+                    ? 'none'
+                    : implode(', ', $qualification['unresolved'])
+            )
             . '. Post-publication checks: '
-            . ($qualification['later'] === [] ? 'none' : implode(', ', $qualification['later'])) . '.';
+            . (
+                $qualification['later'] === []
+                    ? 'none'
+                    : implode(', ', $qualification['later'])
+            )
+            . '.';
     } catch (Throwable) {
         $manualReviewSummary = 'Manual qualification evidence unavailable; no human approval is implied.';
     }
-    $tasks = \PhpGallery\Audit\bind_release_source_identity($tasks, $releaseSnapshotBefore, $releaseSnapshotAfter);
+    $tasks = \PhpGallery\Audit\bind_release_source_identity(
+        $tasks,
+        $releaseSnapshotBefore,
+        $releaseSnapshotAfter,
+    );
 }
 
 usort(
     $slowChecks,
-    static fn(array $left, array $right): int => $right['duration_seconds'] <=> $left['duration_seconds']
+    static fn(array $left, array $right): int => (
+        $right['duration_seconds'] <=> $left['duration_seconds']
+    ),
 );
 $slowChecks = array_slice($slowChecks, 0, 10);
 $status = overall_status($tasks);
@@ -1733,10 +2858,22 @@ $reportRoot = $root . '/cache/test-audit';
 $defaultMarkdown = $reportRoot . '/latest.md';
 $defaultJson = $reportRoot . '/latest.json';
 $markdownPath = $options['report'] !== null
-    ? (str_starts_with((string) $options['report'], '/') || preg_match('/^[A-Za-z]:[\\\\\/]/', (string) $options['report']) === 1 ? (string) $options['report'] : $root . '/' . $options['report'])
+    ? (
+        str_starts_with((string) $options['report'], '/')
+            || preg_match('/^[A-Za-z]:[\\\\\/]/', (string) $options['report'])
+            === 1
+                ? (string) $options['report']
+                : $root . '/' . $options['report']
+    )
     : $defaultMarkdown;
 $jsonPath = $options['json'] !== null
-    ? (str_starts_with((string) $options['json'], '/') || preg_match('/^[A-Za-z]:[\\\\\/]/', (string) $options['json']) === 1 ? (string) $options['json'] : $root . '/' . $options['json'])
+    ? (
+        str_starts_with((string) $options['json'], '/')
+            || preg_match('/^[A-Za-z]:[\\\\\/]/', (string) $options['json'])
+            === 1
+                ? (string) $options['json']
+                : $root . '/' . $options['json']
+    )
     : $defaultJson;
 
 $report = [
@@ -1746,14 +2883,16 @@ $report = [
     'delegated_to_preflight' => $delegatedToPreflight,
     'delegated_to_packaging' => $delegatedToPackaging,
     'delegated_to_parallel_owners' => $delegatedToParallelOwners,
-    'parallel_owner' => $phpShard === null ? null : [
-        'profile' => $profileLabel,
-        'owner' => $phpShard['owner'],
-        'candidate' => $phpShard['candidate'],
-        'comparison_base' => $sourceIdentity['comparison_base'],
-        'shard_index' => $phpShard['index'],
-        'shard_total' => $phpShard['total'],
-    ],
+    'parallel_owner' => $phpShard === null
+        ? null
+        : [
+            'profile' => $profileLabel,
+            'owner' => $phpShard['owner'],
+            'candidate' => $phpShard['candidate'],
+            'comparison_base' => $sourceIdentity['comparison_base'],
+            'shard_index' => $phpShard['index'],
+            'shard_total' => $phpShard['total'],
+        ],
     'started_at' => $startedAt->format(DATE_ATOM),
     'duration_seconds' => round($duration, 4),
     'source' => $sourceIdentity,
@@ -1768,19 +2907,28 @@ $report = [
 ];
 
 if ($profileLabel === 'release') {
-    $report['source_fingerprint_before'] = $releaseSnapshotBefore['fingerprint'] ?? null;
-    $report['source_fingerprint_after'] = $releaseSnapshotAfter['fingerprint'] ?? null;
+    $report['source_fingerprint_before'] =
+        $releaseSnapshotBefore['fingerprint'] ?? null;
+    $report['source_fingerprint_after'] =
+        $releaseSnapshotAfter['fingerprint'] ?? null;
     $report['manual_review_summary'] = $manualReviewSummary;
 }
 
 if ($persistReports) {
-    $sourceFailuresPath = PhpGallery\Audit\write_source_failures($report, $root, $runDirectory);
+    $sourceFailuresPath = PhpGallery\Audit\write_source_failures(
+        $report,
+        $root,
+        $runDirectory,
+    );
     if ($sourceFailuresPath !== null) {
         $report['report_files']['source_failures'] = $sourceFailuresPath;
     }
     $runJsonPath = $runDirectory . '/report.json';
     $runMarkdownPath = $runDirectory . '/report.md';
-    $json = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $json = json_encode(
+        $report,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    );
     if ($json === false) {
         fwrite(STDERR, "Unable to encode audit JSON report.\n");
         exit(2);
@@ -1792,14 +2940,32 @@ if ($persistReports) {
 }
 
 fwrite(STDOUT, str_repeat('-', 72) . "\n");
-fwrite(STDOUT, 'Result: ' . $status . ' | Profile: ' . $profileLabel . ' | Duration: ' . format_duration($duration) . "\n");
+fwrite(
+    STDOUT,
+    'Result: '
+        . $status
+        . ' | Profile: '
+        . $profileLabel
+        . ' | Duration: '
+        . format_duration($duration)
+        . "\n",
+);
 if ($manualReviewSummary !== null) {
-    fwrite(STDOUT, $manualReviewSummary . "\nAutomated results are separate from manual qualification; use scripts/release_qualification.php check.\n");
+    fwrite(
+        STDOUT,
+        $manualReviewSummary
+            . "\nAutomated results are separate from manual qualification; use scripts/release_qualification.php check.\n",
+    );
 }
 if ($persistReports) {
     fwrite(STDOUT, 'Report: ' . relative_path($markdownPath, $root) . "\n");
     if (isset($report['report_files']['source_failures'])) {
-        fwrite(STDOUT, 'Complete source failures: ' . $report['report_files']['source_failures'] . "\n");
+        fwrite(
+            STDOUT,
+            'Complete source failures: '
+                . $report['report_files']['source_failures']
+                . "\n",
+        );
     }
 } else {
     @rmdir($runDirectory);

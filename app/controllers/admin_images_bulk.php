@@ -73,20 +73,37 @@ function cms_admin_bulk_images(): void
     // A failed POST may have committed before response construction failed. This
     // passive, authenticated read reconciles stars without replacing the drawer
     // or repeating a write. CSRF remains mandatory for every mutation below.
-    if (($_SERVER['REQUEST_METHOD'] ?? 'POST') === 'GET' && ($_GET['cover_state'] ?? '') === '1') {
+    if (
+        ($_SERVER['REQUEST_METHOD'] ?? 'POST') === 'GET'
+        && ($_GET['cover_state'] ?? '') === '1'
+    ) {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, private');
         $gallery = find_gallery((int) ($_GET['id'] ?? 0), true);
         if (!$gallery) {
-            admin_panel_error_response(t('admin.gallery_editor.selected_photo_unavailable'), 404);
+            admin_panel_error_response(
+                t('admin.gallery_editor.selected_photo_unavailable'),
+                404,
+            );
             return;
         }
         try {
-            $response = admin_bulk_images_success_response($gallery, '', 'admin-edit-images', 'cover');
+            $response = admin_bulk_images_success_response(
+                $gallery,
+                '',
+                'admin-edit-images',
+                'cover',
+            );
             $response['reconciled'] = true;
             echo json_encode($response, JSON_THROW_ON_ERROR);
         } catch (Throwable) {
-            admin_panel_error_response(t('admin.gallery_editor.cover_state_unavailable', 'The saved title-picture state could not be read. Reopen the editor before trying again.'), 503);
+            admin_panel_error_response(
+                t(
+                    'admin.gallery_editor.cover_state_unavailable',
+                    'The saved title-picture state could not be read. Reopen the editor before trying again.',
+                ),
+                503,
+            );
         }
         return;
     }
@@ -104,8 +121,11 @@ function cms_admin_bulk_images(): void
     // Variable $imageIds stores this steps working value.
     // Variable $submittedImageIds stores checked image ids from the bulk table.
     $rawImageIds = $_POST['image_ids'] ?? [];
-    $submittedImageIds = is_array($rawImageIds) ? array_map(static fn (mixed $id): int =>
-        is_int($id) || (is_string($id) && ctype_digit($id)) ? (int) $id : 0, $rawImageIds) : [0];
+    $submittedImageIds = is_array($rawImageIds)
+        ? array_map(static fn(mixed $id): int => is_int($id)
+            || (is_string($id) && ctype_digit($id))
+                ? (int) $id
+                : 0, $rawImageIds) : [0];
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? '');
     if ($action === '') {
@@ -117,7 +137,13 @@ function cms_admin_bulk_images(): void
     }
     // Explicit row actions target only that photo, regardless of the bulk selection.
     $singleImageId = 0;
-    if (preg_match('/^(delete|cover|cover_arm|cover_add|cover_reset|public|draft|private):(\d+)$/', $action, $rowMatch) === 1) {
+    if (
+        preg_match(
+            '/^(delete|cover|cover_arm|cover_add|cover_reset|public|draft|private):(\d+)$/',
+            $action,
+            $rowMatch,
+        ) === 1
+    ) {
         $singleImageId = (int) $rowMatch[2];
         $action = $rowMatch[1];
     }
@@ -126,8 +152,17 @@ function cms_admin_bulk_images(): void
     // Covers own their complete selection, validation, diagnostics and failure
     // response. Do not silently filter an invalid bulk selection down to a
     // single photo or bypass the logging path for zero selected checkboxes.
-    if (in_array($action, ['cover', 'cover_arm', 'cover_add', 'cover_reset'], true)) {
-        admin_save_gallery_title_picture($gallery, $imageIds, $returnTab, $action);
+    if (in_array(
+        $action,
+        ['cover', 'cover_arm', 'cover_add', 'cover_reset'],
+        true,
+    )) {
+        admin_save_gallery_title_picture(
+            $gallery,
+            $imageIds,
+            $returnTab,
+            $action,
+        );
         return;
     }
     // Variable $count stores this steps working value.
@@ -150,7 +185,9 @@ function cms_admin_bulk_images(): void
     }
     if (!$ownedIds) {
         if (admin_wants_json()) {
-            admin_panel_error_response(t('admin.gallery_editor.selected_photo_unavailable'));
+            admin_panel_error_response(t(
+                'admin.gallery_editor.selected_photo_unavailable',
+            ));
             return;
         }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
@@ -164,38 +201,77 @@ function cms_admin_bulk_images(): void
             // $destinationGalleryId stores the target gallery chosen directly or created from selected images.
             $destinationGalleryId = 0;
             if ($action === 'move_existing') {
-                $destinationGalleryId = (int) ($_POST['destination_gallery_id'] ?? 0);
-                if ($destinationGalleryId <= 0 || !find_gallery($destinationGalleryId)) {
-                    throw new RuntimeException('Choose an existing destination gallery.');
+                $destinationGalleryId = (int) (
+                    $_POST['destination_gallery_id'] ?? 0
+                );
+                if (
+                    $destinationGalleryId <= 0
+                    || !find_gallery($destinationGalleryId)
+                ) {
+                    throw new RuntimeException(
+                        'Choose an existing destination gallery.',
+                    );
                 }
             } else {
                 // $newGalleryTitle stores the title for the gallery created from selected photos.
-                $newGalleryTitle = trim((string) ($_POST['new_gallery_title'] ?? ''));
+                $newGalleryTitle = trim(
+                    (string) ($_POST['new_gallery_title'] ?? ''),
+                );
                 if ($newGalleryTitle === '') {
-                    throw new RuntimeException('Enter a title for the new gallery.');
+                    throw new RuntimeException(
+                        'Enter a title for the new gallery.',
+                    );
                 }
                 // $newGalleryParentId stores the selected parent for the new destination gallery.
-                $newGalleryParentId = array_key_exists('new_gallery_parent_id', $_POST) ? (int) ($_POST['new_gallery_parent_id'] ?? 0) : $galleryId;
+                $newGalleryParentId = array_key_exists(
+                    'new_gallery_parent_id',
+                    $_POST,
+                )
+                    ? (int) ($_POST['new_gallery_parent_id'] ?? 0)
+                    : $galleryId;
                 // $newGalleryParent stores the validated parent row for hierarchy and setting inheritance.
-                $newGalleryParent = $newGalleryParentId > 0 ? find_gallery($newGalleryParentId) : null;
+                $newGalleryParent = $newGalleryParentId > 0
+                    ? find_gallery($newGalleryParentId)
+                    : null;
                 if ($newGalleryParentId > 0 && !$newGalleryParent) {
-                    throw new RuntimeException('Choose a valid parent gallery for the new gallery.');
+                    throw new RuntimeException(
+                        'Choose a valid parent gallery for the new gallery.',
+                    );
                 }
                 // $newGalleryTemplateGallery stores the gallery whose default settings seed the new destination.
-                $newGalleryTemplateGallery = is_array($newGalleryParent) ? $newGalleryParent : $gallery;
+                $newGalleryTemplateGallery = is_array($newGalleryParent)
+                    ? $newGalleryParent
+                    : $gallery;
                 // $newGallerySortOrder stores the next position among the selected parent's children.
-                $newGallerySortOrder = gallery_next_child_sort_order($newGalleryParentId);
+                $newGallerySortOrder =
+                    gallery_next_child_sort_order($newGalleryParentId);
                 // $newGallery stores the newly created destination gallery under the selected parent.
                 $newGallery = admin_create_gallery_from_input([
                     'title' => $newGalleryTitle,
-                    'folder_name' => trim((string) ($_POST['new_gallery_folder_name'] ?? '')),
+                    'folder_name' => trim(
+                        (string) ($_POST['new_gallery_folder_name'] ?? ''),
+                    ),
                     'description' => '',
-                    'visibility' => gallery_visibility_storage_value((string) ($newGalleryTemplateGallery['visibility'] ?? 'unpublished')),
+                    'visibility' => gallery_visibility_storage_value(
+                        (string) (
+                            $newGalleryTemplateGallery['visibility']
+                            ?? 'unpublished'
+                        ),
+                    ),
                     'parent_id' => $newGalleryParentId,
                     'sort_order' => $newGallerySortOrder,
-                    'voting_enabled' => (int) ($newGalleryTemplateGallery['voting_enabled'] ?? 0) === 1,
-                    'show_filenames' => gallery_shows_filenames($newGalleryTemplateGallery),
-                    'count_badge_visibility' => gallery_count_badge_storage_value($newGalleryTemplateGallery['count_badge_visibility'] ?? null) ?? 'inherit',
+                    'voting_enabled' =>
+                        (int) (
+                            $newGalleryTemplateGallery['voting_enabled'] ?? 0
+                        ) === 1,
+                    'show_filenames' => gallery_shows_filenames(
+                        $newGalleryTemplateGallery,
+                    ),
+                    'count_badge_visibility' =>
+                        gallery_count_badge_storage_value(
+                            $newGalleryTemplateGallery['count_badge_visibility']
+                                ?? null,
+                        ) ?? 'inherit',
                 ]);
                 $destinationGalleryId = (int) $newGallery['id'];
                 $createdGalleryId = $destinationGalleryId;
@@ -203,20 +279,32 @@ function cms_admin_bulk_images(): void
 
             // $moved stores filesystem and database movement details.
             $moveAttempted = true;
-            $moved = move_gallery_images($galleryId, $destinationGalleryId, $ownedIds);
+            $moved = move_gallery_images(
+                $galleryId,
+                $destinationGalleryId,
+                $ownedIds,
+            );
             if (!empty($moved['failures'])) {
                 if ($createdGalleryId > 0) {
-            // Rollback of a gallery this failed operation just created. It never held
-            // administrator content, so it is destroyed instead of entering the trash bin.
+                    // Rollback of a gallery this failed operation just created. It never held
+                    // administrator content, so it is destroyed instead of entering the trash bin.
                     delete_gallery_subtrees([$createdGalleryId]);
                 }
-                admin_log_event('error', 'image.bulk_move_failed', 'Admin image move validation failed.', [
-                    'source_gallery_id' => $galleryId,
-                    'destination_gallery_id' => $destinationGalleryId,
-                    'image_ids' => $ownedIds,
-                    'failures' => $moved['failures'],
-                ], ['category' => 'other', 'severity' => 'error']);
-                $moveFailureNotice = 'Image move failed: ' . implode(' ', array_slice($moved['failures'], 0, 5));
+                admin_log_event(
+                    'error',
+                    'image.bulk_move_failed',
+                    'Admin image move validation failed.',
+                    [
+                        'source_gallery_id' => $galleryId,
+                        'destination_gallery_id' => $destinationGalleryId,
+                        'image_ids' => $ownedIds,
+                        'failures' => $moved['failures'],
+                    ],
+                    ['category' => 'other', 'severity' => 'error'],
+                );
+                $moveFailureNotice =
+                    'Image move failed: '
+                    . implode(' ', array_slice($moved['failures'], 0, 5));
                 if (admin_wants_json()) {
                     admin_panel_error_response($moveFailureNotice);
                     return;
@@ -224,38 +312,77 @@ function cms_admin_bulk_images(): void
                 flash_message('admin_notice', $moveFailureNotice);
                 redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
             }
-            admin_log_event('info', 'image.bulk_moved', 'Admin moved selected images between galleries.', [
-                'source_gallery_id' => $galleryId,
-                'destination_gallery_id' => $destinationGalleryId,
-                'requested' => (int) $moved['requested'],
-                'moved' => (int) $moved['moved'],
-                'originals_moved' => (int) $moved['originals_moved'],
-                'derivatives_moved' => (int) $moved['derivatives_moved'],
-                'created_gallery' => $action === 'move_new',
-                'source_cover_image_id' => $moved['source_cover_image_id'] ?? null,
-                'destination_cover_image_id' => $moved['destination_cover_image_id'] ?? null,
-            ], ['category' => 'other', 'severity' => 'info']);
-            $notice = 'Moved ' . (int) $moved['moved'] . ' image(s), including ' . (int) $moved['originals_moved'] . ' original file(s) and ' . (int) $moved['derivatives_moved'] . ' derivative file(s).';
+            admin_log_event(
+                'info',
+                'image.bulk_moved',
+                'Admin moved selected images between galleries.',
+                [
+                    'source_gallery_id' => $galleryId,
+                    'destination_gallery_id' => $destinationGalleryId,
+                    'requested' => (int) $moved['requested'],
+                    'moved' => (int) $moved['moved'],
+                    'originals_moved' => (int) $moved['originals_moved'],
+                    'derivatives_moved' => (int) $moved['derivatives_moved'],
+                    'created_gallery' => $action === 'move_new',
+                    'source_cover_image_id' =>
+                        $moved['source_cover_image_id'] ?? null,
+                    'destination_cover_image_id' =>
+                        $moved['destination_cover_image_id'] ?? null,
+                ],
+                ['category' => 'other', 'severity' => 'info'],
+            );
+            $notice =
+                'Moved '
+                . (int) $moved['moved']
+                . ' image(s), including '
+                . (int) $moved['originals_moved']
+                . ' original file(s) and '
+                . (int) $moved['derivatives_moved']
+                . ' derivative file(s).';
             if (admin_wants_json()) {
-                $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
-                $destinationGallery = find_gallery($destinationGalleryId, true) ?: find_gallery($destinationGalleryId) ?: null;
-                $response = admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds, [
-                    'destination_gallery' => $destinationGallery,
-                ]);
+                $updated = find_gallery($galleryId, true) ?: find_gallery(
+                    $galleryId,
+                ) ?: $gallery;
+                $destinationGallery = find_gallery(
+                    $destinationGalleryId,
+                    true,
+                ) ?: find_gallery($destinationGalleryId) ?: null;
+                $response = admin_bulk_images_success_response(
+                    $updated,
+                    $notice,
+                    $returnTab,
+                    $action,
+                    $ownedIds,
+                    [
+                        'destination_gallery' => $destinationGallery,
+                    ],
+                );
                 $response['source_gallery_id'] = $galleryId;
                 $response['source_gallery_url'] = gallery_public_url($updated);
                 $response['refresh_url'] = gallery_public_url($updated);
                 $response['refresh_gallery_id'] = $galleryId;
                 $response['destination_gallery_id'] = $destinationGalleryId;
-                $response['created_gallery_id'] = $action === 'move_new' ? $destinationGalleryId : 0;
+                $response['created_gallery_id'] = $action === 'move_new'
+                    ? $destinationGalleryId
+                    : 0;
                 if (is_array($destinationGallery)) {
                     // $destinationParentId stores where a newly-created gallery belongs in the public hierarchy.
-                    $destinationParentId = (int) ($destinationGallery['parent_id'] ?? 0);
+                    $destinationParentId = (int) (
+                        $destinationGallery['parent_id'] ?? 0
+                    );
                     // $destinationParent stores the parent row so the client does not infer placement from the destination URL.
-                    $destinationParent = $destinationParentId > 0 ? find_gallery($destinationParentId, true) : null;
-                    $response['destination_gallery_url'] = gallery_public_url($destinationGallery);
-                    $response['destination_parent_gallery_id'] = $destinationParentId;
-                    $response['destination_parent_gallery_url'] = is_array($destinationParent) ? gallery_public_url($destinationParent) : '';
+                    $destinationParent = $destinationParentId > 0
+                        ? find_gallery($destinationParentId, true)
+                        : null;
+                    $response['destination_gallery_url'] =
+                        gallery_public_url($destinationGallery);
+                    $response['destination_parent_gallery_id'] =
+                        $destinationParentId;
+                    $response['destination_parent_gallery_url'] = is_array(
+                        $destinationParent,
+                    )
+                        ? gallery_public_url($destinationParent)
+                        : '';
                 }
                 header('Content-Type: application/json');
                 echo json_encode($response);
@@ -266,26 +393,34 @@ function cms_admin_bulk_images(): void
             if ($createdGalleryId > 0) {
                 try {
                     // $createdGalleryImageCount keeps a successfully populated new gallery from being deleted after a late non-critical failure.
-                    $createdGalleryImageCount = gallery_direct_image_count($createdGalleryId);
+                    $createdGalleryImageCount =
+                        gallery_direct_image_count($createdGalleryId);
                 } catch (Throwable) {
                     $createdGalleryImageCount = $moveAttempted ? 1 : 0;
                 }
                 if (!$moveAttempted || $createdGalleryImageCount === 0) {
                     try {
-                // Rollback of a gallery this failed operation just created. It never held
-            // administrator content, so it is destroyed instead of entering the trash bin.
-                    delete_gallery_subtrees([$createdGalleryId]);
+                        // Rollback of a gallery this failed operation just created. It never held
+                        // administrator content, so it is destroyed instead of entering the trash bin.
+                        delete_gallery_subtrees([$createdGalleryId]);
                     } catch (Throwable) {
                     }
                 }
             }
-            admin_log_event('error', 'image.bulk_move_failed', 'Admin image move failed.', [
-                'source_gallery_id' => $galleryId,
-                'image_ids' => $ownedIds,
-                'action' => $action,
-                'error' => $exception->getMessage(),
-            ], ['category' => 'other', 'severity' => 'error']);
-            $moveFailureNotice = 'Image move failed: ' . $exception->getMessage();
+            admin_log_event(
+                'error',
+                'image.bulk_move_failed',
+                'Admin image move failed.',
+                [
+                    'source_gallery_id' => $galleryId,
+                    'image_ids' => $ownedIds,
+                    'action' => $action,
+                    'error' => $exception->getMessage(),
+                ],
+                ['category' => 'other', 'severity' => 'error'],
+            );
+            $moveFailureNotice =
+                'Image move failed: ' . $exception->getMessage();
             if (admin_wants_json()) {
                 admin_panel_error_response($moveFailureNotice);
                 return;
@@ -299,33 +434,65 @@ function cms_admin_bulk_images(): void
             // Variable $deleted stores the filesystem and database deletion result.
             $deleted = delete_gallery_images($galleryId, $ownedIds);
             // $updated stores the gallery row after deletion so panel JSON reflects the current cover and metadata.
-            $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
-            admin_log_event('warning', 'image.bulk_deleted', 'Admin deleted selected gallery images.', [
-                'gallery_id' => $galleryId,
-                'requested' => (int) $deleted['requested'],
-                'deleted' => (int) $deleted['deleted'],
-                'files_deleted' => (int) $deleted['files_deleted'],
-                'derivatives_deleted' => (int) $deleted['derivatives_deleted'],
-                'missing_files' => (int) $deleted['missing_files'],
-                'cleanup_failed' => (int) ($deleted['cleanup_failed'] ?? 0),
-            ], ['category' => 'other', 'severity' => 'warning']);
-            $notice = 'Deleted ' . (int) $deleted['deleted'] . ' image(s), removed ' . (int) $deleted['files_deleted'] . ' original file(s), and cleaned ' . (int) $deleted['derivatives_deleted'] . ' derivative file(s).';
+            $updated = find_gallery($galleryId, true) ?: find_gallery(
+                $galleryId,
+            ) ?: $gallery;
+            admin_log_event(
+                'warning',
+                'image.bulk_deleted',
+                'Admin deleted selected gallery images.',
+                [
+                    'gallery_id' => $galleryId,
+                    'requested' => (int) $deleted['requested'],
+                    'deleted' => (int) $deleted['deleted'],
+                    'files_deleted' => (int) $deleted['files_deleted'],
+                    'derivatives_deleted' =>
+                        (int) $deleted['derivatives_deleted'],
+                    'missing_files' => (int) $deleted['missing_files'],
+                    'cleanup_failed' => (int) ($deleted['cleanup_failed'] ?? 0),
+                ],
+                ['category' => 'other', 'severity' => 'warning'],
+            );
+            $notice =
+                'Deleted '
+                . (int) $deleted['deleted']
+                . ' image(s), removed '
+                . (int) $deleted['files_deleted']
+                . ' original file(s), and cleaned '
+                . (int) $deleted['derivatives_deleted']
+                . ' derivative file(s).';
             if ((int) ($deleted['cleanup_failed'] ?? 0) > 0) {
-                $notice .= ' ' . (int) $deleted['cleanup_failed'] . ' quarantined deletion file(s) could not be physically removed, but they are no longer live media paths.';
+                $notice .=
+                    ' '
+                    . (int) $deleted['cleanup_failed']
+                    . ' quarantined deletion file(s) could not be physically removed, but they are no longer live media paths.';
             }
             if (admin_wants_json()) {
                 header('Content-Type: application/json');
-                echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'delete', $ownedIds));
+                echo json_encode(admin_bulk_images_success_response(
+                    $updated,
+                    $notice,
+                    $returnTab,
+                    'delete',
+                    $ownedIds,
+                ));
                 return;
             }
             flash_message('admin_notice', $notice);
         } catch (Throwable $exception) {
-            admin_log_event('error', 'image.bulk_delete_failed', 'Admin image delete failed.', [
-                'gallery_id' => $galleryId,
-                'image_ids' => $ownedIds,
-                'error' => $exception->getMessage(),
-            ], ['category' => 'other', 'severity' => 'error']);
-            $deleteFailureNotice = 'Image delete failed: ' . $exception->getMessage();
+            admin_log_event(
+                'error',
+                'image.bulk_delete_failed',
+                'Admin image delete failed.',
+                [
+                    'gallery_id' => $galleryId,
+                    'image_ids' => $ownedIds,
+                    'error' => $exception->getMessage(),
+                ],
+                ['category' => 'other', 'severity' => 'error'],
+            );
+            $deleteFailureNotice =
+                'Image delete failed: ' . $exception->getMessage();
             if (admin_wants_json()) {
                 admin_panel_error_response($deleteFailureNotice);
                 return;
@@ -337,19 +504,37 @@ function cms_admin_bulk_images(): void
     if (in_array($action, ['draft', 'public', 'private'], true)) {
         image_bulk_set_visibility($ownedIds, $action);
         if (admin_wants_json()) {
-            $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
-            $notice = 'Updated visibility on ' . count($ownedIds) . ' image(s).';
+            $updated = find_gallery($galleryId, true) ?: find_gallery(
+                $galleryId,
+            ) ?: $gallery;
+            $notice =
+                'Updated visibility on ' . count($ownedIds) . ' image(s).';
             header('Content-Type: application/json');
-            echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds));
+            echo json_encode(admin_bulk_images_success_response(
+                $updated,
+                $notice,
+                $returnTab,
+                $action,
+                $ownedIds,
+            ));
             return;
         }
     }
-    if (in_array($action, ['nsfw_on', 'nsfw_off'], true) && !nsfw_guard_schema_ready()) {
+    if (
+        in_array($action, ['nsfw_on', 'nsfw_off'], true)
+        && !nsfw_guard_schema_ready()
+    ) {
         // $nsfwSchemaStatus distinguishes a migration requirement from an inspection outage.
         $nsfwSchemaStatus = nsfw_guard_schema_status();
         $notice = ($nsfwSchemaStatus['state'] ?? '') === 'unknown'
-            ? t('admin.gallery_editor.nsfw_change_inspection_failed', 'NSFW Guard was not changed because the required database schema could not be inspected. Check System Health and try again.')
-            : t('admin.gallery_editor.nsfw_change_migration_required', 'NSFW Guard was not changed because its database migration has not been applied.');
+            ? t(
+                'admin.gallery_editor.nsfw_change_inspection_failed',
+                'NSFW Guard was not changed because the required database schema could not be inspected. Check System Health and try again.',
+            )
+            : t(
+                'admin.gallery_editor.nsfw_change_migration_required',
+                'NSFW Guard was not changed because its database migration has not been applied.',
+            );
         if (admin_wants_json()) {
             admin_panel_error_response($notice, 503);
             return;
@@ -361,9 +546,17 @@ function cms_admin_bulk_images(): void
         image_bulk_set_nsfw_enabled($ownedIds, $action === 'nsfw_on');
         $notice = 'Updated NSFW Guard on ' . count($ownedIds) . ' image(s).';
         if (admin_wants_json()) {
-            $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+            $updated = find_gallery($galleryId, true) ?: find_gallery(
+                $galleryId,
+            ) ?: $gallery;
             header('Content-Type: application/json');
-            echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds));
+            echo json_encode(admin_bulk_images_success_response(
+                $updated,
+                $notice,
+                $returnTab,
+                $action,
+                $ownedIds,
+            ));
             return;
         }
         flash_message('admin_notice', $notice);
@@ -380,19 +573,34 @@ function cms_admin_bulk_images(): void
         thumbnail_maintenance_summary_cache_clear();
         $notice = t('admin.galleries.thumbnail_result', ['count' => $count]);
         if (admin_wants_json()) {
-            $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+            $updated = find_gallery($galleryId, true) ?: find_gallery(
+                $galleryId,
+            ) ?: $gallery;
             header('Content-Type: application/json');
-            echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'thumbs', $ownedIds));
+            echo json_encode(admin_bulk_images_success_response(
+                $updated,
+                $notice,
+                $returnTab,
+                'thumbs',
+                $ownedIds,
+            ));
             return;
         }
         flash_message('admin_notice', $notice);
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     if (admin_wants_json()) {
-        $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+        $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId)
+        ?: $gallery;
         $notice = 'Updated ' . count($ownedIds) . ' image(s).';
         header('Content-Type: application/json');
-        echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds));
+        echo json_encode(admin_bulk_images_success_response(
+            $updated,
+            $notice,
+            $returnTab,
+            $action,
+            $ownedIds,
+        ));
         return;
     }
     flash_message('admin_notice', 'Updated ' . count($ownedIds) . ' image(s).');

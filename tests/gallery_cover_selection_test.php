@@ -48,7 +48,9 @@ namespace Gallery\Services {
      */
     function find_image(int $imageId, bool $fresh = false): ?array
     {
-        $query = \Gallery\Core\db()->prepare('SELECT * FROM images WHERE id = ?');
+        $query = \Gallery\Core\db()->prepare(
+            'SELECT * FROM images WHERE id = ?',
+        );
         $query->execute([$imageId]);
         $row = $query->fetch(\PDO::FETCH_ASSOC);
         return is_array($row) ? $row : null;
@@ -61,10 +63,16 @@ namespace Gallery\Services {
      * @param array{locked?:bool,not_public?:bool} $gallery Owning gallery.
      * @return bool Whether the simulated anonymous viewer may see this photo.
      */
-    function public_image_visible_to_current_visitor_without_admin_bypass(array $image, array $gallery): bool
-    {
-        return ($image['visibility'] ?? '') === 'public' && empty($image['nsfw_enabled'])
-            && empty($gallery['locked']) && empty($gallery['not_public']);
+    function public_image_visible_to_current_visitor_without_admin_bypass(
+        array $image,
+        array $gallery,
+    ): bool {
+        return (
+            ($image['visibility'] ?? '') === 'public'
+                && empty($image['nsfw_enabled'])
+                && empty($gallery['locked'])
+                && empty($gallery['not_public'])
+        );
     }
 
     /**
@@ -76,9 +84,16 @@ namespace Gallery\Services {
      */
     function child_galleries(int $galleryId, bool $publicOnly): array
     {
-        $rows = array_map(static fn (int $id): array => $GLOBALS['cover_fixture_galleries'][$id],
-            $GLOBALS['cover_fixture_children'][$galleryId] ?? []);
-        return array_values(array_filter($rows, static fn (array $g): bool => !$publicOnly || empty($g['not_public'])));
+        $rows = array_map(
+            static fn(int $id): array => $GLOBALS['cover_fixture_galleries'][$id],
+            $GLOBALS['cover_fixture_children'][$galleryId] ?? [],
+        );
+        return array_values(array_filter(
+            $rows,
+            static fn(array $g): bool => (
+                !$publicOnly || empty($g['not_public'])
+            ),
+        ));
     }
 
     /**
@@ -113,20 +128,32 @@ namespace {
      * @param string $case User-visible regression case description.
      * @return void Throw before reporting a false positive.
      */
-    function cover_selection_assert(mixed $expected, mixed $actual, string $case): void
-    {
+    function cover_selection_assert(
+        mixed $expected,
+        mixed $actual,
+        string $case,
+    ): void {
         if ($expected !== $actual) {
-            throw new \RuntimeException($case . ': expected ' . var_export($expected, true)
-                . ', got ' . var_export($actual, true));
+            throw new \RuntimeException(
+                $case
+                    . ': expected '
+                    . var_export($expected, true)
+                    . ', got '
+                    . var_export($actual, true),
+            );
         }
     }
 
     $db = new \PDO('sqlite::memory:');
     $db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
     $db->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
-    $db->exec('CREATE TABLE images (id INTEGER PRIMARY KEY, gallery_id INTEGER NOT NULL,
-        relative_path TEXT NOT NULL, filename TEXT NOT NULL, visibility TEXT NOT NULL, sort_order INTEGER NOT NULL, nsfw_enabled INTEGER DEFAULT 0)');
-    $insert = $db->prepare('INSERT INTO images (id,gallery_id,relative_path,filename,visibility,sort_order) VALUES (?,?,?,?,?,?)');
+    $db->exec(
+        'CREATE TABLE images (id INTEGER PRIMARY KEY, gallery_id INTEGER NOT NULL,
+        relative_path TEXT NOT NULL, filename TEXT NOT NULL, visibility TEXT NOT NULL, sort_order INTEGER NOT NULL, nsfw_enabled INTEGER DEFAULT 0)',
+    );
+    $insert = $db->prepare(
+        'INSERT INTO images (id,gallery_id,relative_path,filename,visibility,sort_order) VALUES (?,?,?,?,?,?)',
+    );
     foreach ([
         [105, 1, 'restricted.jpg', 'restricted.jpg', 'public', -1],
         [101, 1, 'one.jpg', 'one.jpg', 'public', 1],
@@ -156,53 +183,179 @@ namespace {
     $GLOBALS['cover_fixture_db'] = $db;
     $GLOBALS['cover_fixture_galleries'] = [
         1 => ['id' => 1, 'cover_image_id' => null, 'cover_image_ids' => '[]'],
-        2 => ['id' => 2, 'cover_image_id' => 201, 'cover_image_ids' => '[201,205,202,203]'],
+        2 => [
+            'id' => 2,
+            'cover_image_id' => 201,
+            'cover_image_ids' => '[201,205,202,203]',
+        ],
         3 => ['id' => 3, 'cover_image_id' => 203, 'cover_image_ids' => null],
         4 => ['id' => 4, 'cover_image_id' => null, 'cover_image_ids' => null],
         5 => ['id' => 5, 'cover_image_id' => null, 'cover_image_ids' => '[]'],
         6 => ['id' => 6, 'cover_image_id' => 999, 'cover_image_ids' => '[999]'],
         7 => ['id' => 7, 'cover_image_id' => 701, 'cover_image_ids' => null],
         8 => ['id' => 8, 'cover_image_id' => null, 'cover_image_ids' => '[]'],
-        9 => ['id' => 9, 'cover_image_id' => 901, 'cover_image_ids' => null, 'locked' => true],
+        9 => [
+            'id' => 9,
+            'cover_image_id' => 901,
+            'cover_image_ids' => null,
+            'locked' => true,
+        ],
         10 => ['id' => 10, 'cover_image_id' => 203, 'cover_image_ids' => null],
         11 => ['id' => 11, 'cover_image_id' => 1101, 'cover_image_ids' => null],
         12 => ['id' => 12, 'cover_image_id' => 1201, 'cover_image_ids' => null],
     ];
-    $GLOBALS['cover_fixture_children'] = [4 => [2, 3], 5 => [2, 3], 8 => [9, 3]];
+    $GLOBALS['cover_fixture_children'] = [
+        4 => [2, 3],
+        5 => [2, 3],
+        8 => [9, 3],
+    ];
 
-    $ids = static fn (array $images): array => array_map(static fn (array $image): int => (int) $image['id'], $images);
+    $ids = static fn(array $images): array => array_map(
+        static fn(array $image): int => (int) $image['id'],
+        $images,
+    );
 
-    cover_selection_assert('automatic', gallery_cover_selection_mode($GLOBALS['cover_fixture_galleries'][1]), 'Explicit automatic mode');
-    cover_selection_assert('multi', gallery_cover_selection_mode($GLOBALS['cover_fixture_galleries'][2]), 'Blue selection mode');
-    cover_selection_assert('single', gallery_cover_selection_mode($GLOBALS['cover_fixture_galleries'][7]), 'Legacy single-cover mode');
-    cover_selection_assert('legacy', gallery_cover_selection_mode($GLOBALS['cover_fixture_galleries'][4]), 'Unconfigured parent legacy behavior');
-    cover_selection_assert([201, 205, 202, 203], gallery_cover_selection_ids($GLOBALS['cover_fixture_galleries'][2]), 'Ordered selected IDs');
-    cover_selection_assert([], gallery_cover_selection_ids(['cover_image_ids' => 'invalid json']), 'Invalid JSON does not select photos');
-    cover_selection_assert(false, gallery_cover_selection_storage_valid(['cover_image_ids' => '[1,1]']), 'Duplicate persisted IDs are not exportable as valid state');
-    cover_selection_assert(false, gallery_cover_selection_storage_valid(['cover_image_ids' => '[1,2,3,4,5]']), 'More than four persisted IDs are not exportable as valid state');
+    cover_selection_assert(
+        'automatic',
+        gallery_cover_selection_mode($GLOBALS['cover_fixture_galleries'][1]),
+        'Explicit automatic mode',
+    );
+    cover_selection_assert(
+        'multi',
+        gallery_cover_selection_mode($GLOBALS['cover_fixture_galleries'][2]),
+        'Blue selection mode',
+    );
+    cover_selection_assert(
+        'single',
+        gallery_cover_selection_mode($GLOBALS['cover_fixture_galleries'][7]),
+        'Legacy single-cover mode',
+    );
+    cover_selection_assert(
+        'legacy',
+        gallery_cover_selection_mode($GLOBALS['cover_fixture_galleries'][4]),
+        'Unconfigured parent legacy behavior',
+    );
+    cover_selection_assert(
+        [201, 205, 202, 203],
+        gallery_cover_selection_ids($GLOBALS['cover_fixture_galleries'][2]),
+        'Ordered selected IDs',
+    );
+    cover_selection_assert(
+        [],
+        gallery_cover_selection_ids(['cover_image_ids' => 'invalid json']),
+        'Invalid JSON does not select photos',
+    );
+    cover_selection_assert(
+        false,
+        gallery_cover_selection_storage_valid(['cover_image_ids' => '[1,1]']),
+        'Duplicate persisted IDs are not exportable as valid state',
+    );
+    cover_selection_assert(
+        false,
+        gallery_cover_selection_storage_valid([
+            'cover_image_ids' => '[1,2,3,4,5]',
+        ]),
+        'More than four persisted IDs are not exportable as valid state',
+    );
 
-    cover_selection_assert(null, gallery_cover_image(1, true), 'Automatic collage does not degrade to single photo');
-    cover_selection_assert(null, gallery_direct_cover_image(9, true), 'Public direct cover rejects an inaccessible root gallery');
-    cover_selection_assert([], gallery_cover_collage_images(9, true), 'Public collage rejects an inaccessible root gallery');
-    cover_selection_assert([101, 102], $ids(gallery_cover_collage_images(1, true)), 'Public direct automatic excludes NSFW photos and still returns two');
-    cover_selection_assert([105, 101], $ids(gallery_cover_collage_images(1, false)), 'Admin sees all eligible and NSFW direct photos');
-    cover_selection_assert([201], $ids(gallery_cover_collage_images(2, true)), 'Private, NSFW or moved selected photos do not leak');
-    cover_selection_assert([201, 205, 202], $ids(gallery_cover_collage_images(2, false)), 'Editor sees explicitly selected NSFW and unpublished photos');
-    cover_selection_assert([201, 203], $ids(gallery_cover_collage_images(4, true)), 'Legacy parent still borrows child covers');
-    cover_selection_assert([201, 203], $ids(gallery_cover_collage_images(5, true)), 'Automatic parent reuses the child collage');
-    cover_selection_assert([601, 602], $ids(gallery_cover_collage_images(6, true)), 'Stale multi-choice falls back to two public photos');
-    cover_selection_assert(701, (int) gallery_cover_image(7, true)['id'], 'Legacy direct cover remains exclusive');
-    cover_selection_assert(1001, (int) gallery_cover_image(10, true)['id'], 'A moved scalar cover is rejected and replaced with a local direct photo');
-    cover_selection_assert(1102, (int) gallery_cover_image(11, true)['id'], 'Public single-cover fallback skips NSFW direct photos');
-    cover_selection_assert(1202, (int) gallery_cover_image(12, true)['id'], 'Public single-cover fallback skips unpublished direct photos');
-    cover_selection_assert([203], $ids(gallery_cover_collage_images(8, true)), 'Protected children cannot contribute covers');
-    cover_selection_assert(false,
+    cover_selection_assert(
+        null,
+        gallery_cover_image(1, true),
+        'Automatic collage does not degrade to single photo',
+    );
+    cover_selection_assert(
+        null,
+        gallery_direct_cover_image(9, true),
+        'Public direct cover rejects an inaccessible root gallery',
+    );
+    cover_selection_assert(
+        [],
+        gallery_cover_collage_images(9, true),
+        'Public collage rejects an inaccessible root gallery',
+    );
+    cover_selection_assert(
+        [101, 102],
+        $ids(gallery_cover_collage_images(1, true)),
+        'Public direct automatic excludes NSFW photos and still returns two',
+    );
+    cover_selection_assert(
+        [105, 101],
+        $ids(gallery_cover_collage_images(1, false)),
+        'Admin sees all eligible and NSFW direct photos',
+    );
+    cover_selection_assert(
+        [201],
+        $ids(gallery_cover_collage_images(2, true)),
+        'Private, NSFW or moved selected photos do not leak',
+    );
+    cover_selection_assert(
+        [201, 205, 202],
+        $ids(gallery_cover_collage_images(2, false)),
+        'Editor sees explicitly selected NSFW and unpublished photos',
+    );
+    cover_selection_assert(
+        [201, 203],
+        $ids(gallery_cover_collage_images(4, true)),
+        'Legacy parent still borrows child covers',
+    );
+    cover_selection_assert(
+        [201, 203],
+        $ids(gallery_cover_collage_images(5, true)),
+        'Automatic parent reuses the child collage',
+    );
+    cover_selection_assert(
+        [601, 602],
+        $ids(gallery_cover_collage_images(6, true)),
+        'Stale multi-choice falls back to two public photos',
+    );
+    cover_selection_assert(
+        701,
+        (int) gallery_cover_image(7, true)['id'],
+        'Legacy direct cover remains exclusive',
+    );
+    cover_selection_assert(
+        1001,
+        (int) gallery_cover_image(10, true)['id'],
+        'A moved scalar cover is rejected and replaced with a local direct photo',
+    );
+    cover_selection_assert(
+        1102,
+        (int) gallery_cover_image(11, true)['id'],
+        'Public single-cover fallback skips NSFW direct photos',
+    );
+    cover_selection_assert(
+        1202,
+        (int) gallery_cover_image(12, true)['id'],
+        'Public single-cover fallback skips unpublished direct photos',
+    );
+    cover_selection_assert(
+        [203],
+        $ids(gallery_cover_collage_images(8, true)),
+        'Protected children cannot contribute covers',
+    );
+    cover_selection_assert(
+        false,
         gallery_cover_selection_revision($GLOBALS['cover_fixture_galleries'][1])
-            === gallery_cover_selection_revision($GLOBALS['cover_fixture_galleries'][4]),
-        'Automatic and legacy refresh fingerprints are distinct');
-    $revisionBefore = gallery_cover_selection_revision(['cover_image_id' => 701, 'cover_image_ids' => null, 'edit_revision' => '12']);
-    $revisionAfter = gallery_cover_selection_revision(['cover_image_id' => 701, 'cover_image_ids' => null, 'edit_revision' => '13']);
-    cover_selection_assert(false, $revisionBefore === $revisionAfter, 'Writer revision changes invalidate an otherwise identical cover selection fingerprint');
+        === gallery_cover_selection_revision(
+            $GLOBALS['cover_fixture_galleries'][4],
+        ),
+        'Automatic and legacy refresh fingerprints are distinct',
+    );
+    $revisionBefore = gallery_cover_selection_revision([
+        'cover_image_id' => 701,
+        'cover_image_ids' => null,
+        'edit_revision' => '12',
+    ]);
+    $revisionAfter = gallery_cover_selection_revision([
+        'cover_image_id' => 701,
+        'cover_image_ids' => null,
+        'edit_revision' => '13',
+    ]);
+    cover_selection_assert(
+        false,
+        $revisionBefore === $revisionAfter,
+        'Writer revision changes invalidate an otherwise identical cover selection fingerprint',
+    );
 
     echo "gallery cover selection tests passed\n";
 }

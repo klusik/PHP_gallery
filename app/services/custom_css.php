@@ -52,10 +52,13 @@ class CustomCssRecoveryException extends \RuntimeException
     public function __construct(
         public readonly bool $hasRecoveryCopy,
         \Throwable $previous,
-        public readonly bool $backgroundStateUncertain = false
-    )
-    {
-        parent::__construct('The custom stylesheet rollback could not be completed.', 0, $previous);
+        public readonly bool $backgroundStateUncertain = false,
+    ) {
+        parent::__construct(
+            'The custom stylesheet rollback could not be completed.',
+            0,
+            $previous,
+        );
     }
 }
 
@@ -128,7 +131,11 @@ function custom_css_presets(): array
  */
 function custom_css_preset_path(string $filename): ?string
 {
-    if ($filename === '' || basename($filename) !== $filename || !str_ends_with(strtolower($filename), '.css')) {
+    if (
+        $filename === ''
+        || basename($filename) !== $filename
+        || !str_ends_with(strtolower($filename), '.css')
+    ) {
         return null;
     }
 
@@ -176,8 +183,12 @@ function custom_css_state(): array
 function custom_css_assert_storage_ready(string $operation): void
 {
     mutation_schema_assert_available(
-        mutation_schema_table_columns_status('custom_stylesheet', 'app_settings', ['setting_key', 'setting_value', 'updated_at']),
-        $operation
+        mutation_schema_table_columns_status(
+            'custom_stylesheet',
+            'app_settings',
+            ['setting_key', 'setting_value', 'updated_at'],
+        ),
+        $operation,
     );
 }
 
@@ -193,7 +204,9 @@ function custom_css_temporary_path(): string
         if (is_string($path) && is_file($path)) {
             @unlink($path);
         }
-        throw new \RuntimeException('The custom stylesheet could not be staged.');
+        throw new \RuntimeException(
+            'The custom stylesheet could not be staged.',
+        );
     }
     return $path;
 }
@@ -211,7 +224,11 @@ function custom_css_copy_verified(string $source, string $destination): bool
     }
     $sourceHash = @hash_file('sha256', $source);
     $copiedHash = @hash_file('sha256', $destination);
-    return is_string($sourceHash) && is_string($copiedHash) && hash_equals($sourceHash, $copiedHash);
+    return (
+        is_string($sourceHash)
+            && is_string($copiedHash)
+            && hash_equals($sourceHash, $copiedHash)
+    );
 }
 
 /**
@@ -231,29 +248,45 @@ function custom_css_install_staged(string $staged, string $preset): void
         if (is_file($target)) {
             $existingPermissions = @fileperms($target);
             if ($existingPermissions === false) {
-                throw new \RuntimeException('The existing custom stylesheet permissions could not be verified.');
+                throw new \RuntimeException(
+                    'The existing custom stylesheet permissions could not be verified.',
+                );
             }
             $permissions = $existingPermissions & 0777;
             $backup = custom_css_temporary_path();
-            if (!custom_css_copy_verified($target, $backup) || !@chmod($backup, $permissions)) {
-                throw new \RuntimeException('The existing custom stylesheet could not be backed up.');
+            if (
+                !custom_css_copy_verified($target, $backup)
+                || !@chmod($backup, $permissions)
+            ) {
+                throw new \RuntimeException(
+                    'The existing custom stylesheet could not be backed up.',
+                );
             }
         }
         // Staging files start private; preserve the installed asset's readability on activation and rollback.
         if (!@chmod($staged, $permissions)) {
-            throw new \RuntimeException('The custom stylesheet permissions could not be preserved.');
+            throw new \RuntimeException(
+                'The custom stylesheet permissions could not be preserved.',
+            );
         }
         if (!@rename($staged, $target)) {
-            throw new \RuntimeException('The custom stylesheet could not be installed.');
+            throw new \RuntimeException(
+                'The custom stylesheet could not be installed.',
+            );
         }
         $activated = true;
         set_app_setting('custom_css_preset', $preset);
     } catch (\Throwable $exception) {
         if ($activated) {
-            $restored = $backup !== '' ? @rename($backup, $target) : @unlink($target);
+            $restored = $backup !== ''
+                ? @rename($backup, $target)
+                : @unlink($target);
             if (!$restored) {
                 $retainBackup = $backup !== '';
-                throw new CustomCssRecoveryException($backup !== '', $exception);
+                throw new CustomCssRecoveryException(
+                    $backup !== '',
+                    $exception,
+                );
             }
         }
         throw $exception;
@@ -282,7 +315,9 @@ function custom_css_reset(): void
         $backup = custom_css_temporary_path();
         if (!@rename($path, $backup)) {
             @unlink($backup);
-            throw new \RuntimeException('The custom stylesheet could not be removed.');
+            throw new \RuntimeException(
+                'The custom stylesheet could not be removed.',
+            );
         }
     }
     try {
@@ -307,14 +342,22 @@ function custom_css_reset(): void
 function custom_css_apply_preset(string $preset): bool
 {
     $source = custom_css_preset_path($preset);
-    if ($source === null || ($preset === (string) app_setting('custom_css_preset', '') && is_file(custom_css_path()))) {
+    if (
+        $source === null
+        || (
+            $preset === (string) app_setting('custom_css_preset', '')
+            && is_file(custom_css_path())
+        )
+    ) {
         return false;
     }
     custom_css_assert_storage_ready('custom_stylesheet.replace');
     $staged = custom_css_temporary_path();
     if (!custom_css_copy_verified($source, $staged)) {
         @unlink($staged);
-        throw new \RuntimeException('The selected stylesheet could not be staged.');
+        throw new \RuntimeException(
+            'The selected stylesheet could not be staged.',
+        );
     }
     custom_css_install_staged($staged, $preset);
     return true;
@@ -328,16 +371,21 @@ function custom_css_apply_preset(string $preset): bool
 function custom_css_store_uploaded(array $file): bool
 {
     $temporary = (string) ($file['tmp_name'] ?? '');
-    if ((int) ($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK
-        || $temporary === '' || !is_uploaded_file($temporary)
-        || !str_ends_with(strtolower((string) ($file['name'] ?? '')), '.css')) {
+    if (
+        (int) ($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK
+        || $temporary === ''
+        || !is_uploaded_file($temporary)
+        || !str_ends_with(strtolower((string) ($file['name'] ?? '')), '.css')
+    ) {
         return false;
     }
     custom_css_assert_storage_ready('custom_stylesheet.replace');
     $staged = custom_css_temporary_path();
     if (!move_uploaded_file($temporary, $staged)) {
         @unlink($staged);
-        throw new \RuntimeException('The uploaded stylesheet could not be staged.');
+        throw new \RuntimeException(
+            'The uploaded stylesheet could not be staged.',
+        );
     }
     custom_css_install_staged($staged, 'uploaded');
     return true;
@@ -351,27 +399,34 @@ function custom_css_store_uploaded(array $file): bool
  */
 function custom_css_save_selection(string $preset, ?array $file = null): bool
 {
-    $uploadRequested = $file !== null && (
-        (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE
-        || (string) ($file['tmp_name'] ?? '') !== ''
-        || (string) ($file['name'] ?? '') !== ''
-    );
+    $uploadRequested =
+        $file !== null
+        && (
+            (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE
+            || (string) ($file['tmp_name'] ?? '') !== ''
+            || (string) ($file['name'] ?? '') !== ''
+        );
     if ($uploadRequested) {
-        if ((int) ($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK || !custom_css_store_uploaded($file)) {
-            throw new \RuntimeException('Choose a successfully uploaded .css file. The current stylesheet was kept.');
+        if (
+            (int) ($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK
+            || !custom_css_store_uploaded($file)
+        ) {
+            throw new \RuntimeException(
+                'Choose a successfully uploaded .css file. The current stylesheet was kept.',
+            );
         }
         return true;
     }
     if ($preset !== '' && custom_css_preset_path($preset) === null) {
-        throw new \RuntimeException('The selected stylesheet is unavailable. The current stylesheet was kept.');
+        throw new \RuntimeException(
+            'The selected stylesheet is unavailable. The current stylesheet was kept.',
+        );
     }
     return $preset !== '' && custom_css_apply_preset($preset);
 }
 
 /** A stale override writer that must reload the saved revision before retrying. */
-class CustomCssOverrideConflictException extends \RuntimeException
-{
-}
+class CustomCssOverrideConflictException extends \RuntimeException {}
 
 /**
  * Bound manually edited CSS before reading, staging or retaining a failed draft.
@@ -397,9 +452,14 @@ function custom_css_overrides_path(): string
  */
 function custom_css_overrides_validate(string $text): void
 {
-    if (strlen($text) > CUSTOM_CSS_OVERRIDE_MAX_BYTES || preg_match('//u', $text) !== 1
-        || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $text) === 1) {
-        throw new \InvalidArgumentException('Enter valid UTF-8 CSS within the editor size limit.');
+    if (
+        strlen($text) > CUSTOM_CSS_OVERRIDE_MAX_BYTES
+        || preg_match('//u', $text) !== 1
+        || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $text) === 1
+    ) {
+        throw new \InvalidArgumentException(
+            'Enter valid UTF-8 CSS within the editor size limit.',
+        );
     }
 }
 
@@ -413,17 +473,33 @@ function custom_css_overrides_state(): array
     clearstatcache(true, $path);
     $text = '';
     if (is_link($path) || (file_exists($path) && !is_file($path))) {
-        throw new \RuntimeException('The override asset is not a regular file.');
+        throw new \RuntimeException(
+            'The override asset is not a regular file.',
+        );
     }
     if (is_file($path)) {
-        $text = @file_get_contents($path, false, null, 0, CUSTOM_CSS_OVERRIDE_MAX_BYTES + 1);
+        $text = @file_get_contents(
+            $path,
+            false,
+            null,
+            0,
+            CUSTOM_CSS_OVERRIDE_MAX_BYTES + 1,
+        );
         if (!is_string($text)) {
-            throw new \RuntimeException('The override asset could not be read.');
+            throw new \RuntimeException(
+                'The override asset could not be read.',
+            );
         }
         custom_css_overrides_validate($text);
     }
     $revision = hash('sha256', $text);
-    return ['text' => $text, 'revision' => $revision, 'url' => $text === '' ? '' : asset_url('assets/custom-overrides.css') . '?v=' . $revision];
+    return [
+        'text' => $text,
+        'revision' => $revision,
+        'url' => $text === ''
+            ? ''
+            : asset_url('assets/custom-overrides.css') . '?v=' . $revision,
+    ];
 }
 
 /**
@@ -434,7 +510,13 @@ function custom_css_visual_preview_inspection_decision(): array
 {
     $installedPath = custom_css_path();
     clearstatcache(true, $installedPath);
-    if (is_link($installedPath) || (file_exists($installedPath) && !is_file($installedPath))) {
+    if (
+        is_link($installedPath)
+        || (
+            file_exists($installedPath)
+            && !is_file($installedPath)
+        )
+    ) {
         return ['blocked' => true, 'reason' => 'inspection_unavailable'];
     }
     if (is_file($installedPath)) {
@@ -445,7 +527,13 @@ function custom_css_visual_preview_inspection_decision(): array
         if ($size > CUSTOM_CSS_VISUAL_PREVIEW_SCAN_MAX_BYTES) {
             return ['blocked' => true, 'reason' => 'inspection_limit'];
         }
-        $installedText = @file_get_contents($installedPath, false, null, 0, CUSTOM_CSS_VISUAL_PREVIEW_SCAN_MAX_BYTES + 1);
+        $installedText = @file_get_contents(
+            $installedPath,
+            false,
+            null,
+            0,
+            CUSTOM_CSS_VISUAL_PREVIEW_SCAN_MAX_BYTES + 1,
+        );
         if (!is_string($installedText)) {
             return ['blocked' => true, 'reason' => 'inspection_unavailable'];
         }
@@ -458,7 +546,9 @@ function custom_css_visual_preview_inspection_decision(): array
     }
 
     try {
-        if (custom_css_visual_preview_css_has_imports(custom_css_overrides_state()['text'])) {
+        if (custom_css_visual_preview_css_has_imports(
+            custom_css_overrides_state()['text'],
+        )) {
             return ['blocked' => true, 'reason' => 'import_unsupported'];
         }
     } catch (\Throwable) {
@@ -495,14 +585,30 @@ function custom_css_visual_preview_css_has_imports(string $text): bool
                 }
                 if (preg_match('/[0-9a-f]/i', $source[$index]) === 1) {
                     $escapeStart = $index;
-                    while ($index < $length && $index - $escapeStart < 6
-                        && preg_match('/[0-9a-f]/i', $source[$index]) === 1) {
+                    while (
+                        $index < $length
+                        && ($index - $escapeStart) < 6
+                        && preg_match('/[0-9a-f]/i', $source[$index]) === 1
+                    ) {
                         $index++;
                     }
-                    $codePoint = hexdec(substr($source, $escapeStart, $index - $escapeStart));
-                    $value .= $codePoint > 0 && $codePoint < 128 ? chr($codePoint) : "\0";
-                    if ($index < $length && preg_match('/[\t\n\r\f ]/', $source[$index]) === 1) {
-                        if ($source[$index] === "\r" && ($source[$index + 1] ?? '') === "\n") {
+                    $codePoint = hexdec(substr(
+                        $source,
+                        $escapeStart,
+                        $index - $escapeStart,
+                    ));
+                    $value .=
+                        $codePoint > 0 && $codePoint < 128
+                            ? chr($codePoint)
+                            : "\0";
+                    if (
+                        $index < $length
+                        && preg_match('/[\t\n\r\f ]/', $source[$index]) === 1
+                    ) {
+                        if (
+                            $source[$index] === "\r"
+                            && ($source[$index + 1] ?? '') === "\n"
+                        ) {
                             $index += 2;
                         } else {
                             $index++;
@@ -517,7 +623,10 @@ function custom_css_visual_preview_css_has_imports(string $text): bool
                 $index++;
                 continue;
             }
-            if (preg_match('/[a-z0-9_-]/i', $character) !== 1 && ord($character) < 128) {
+            if (
+                preg_match('/[a-z0-9_-]/i', $character) !== 1
+                && ord($character) < 128
+            ) {
                 break;
             }
             $value .= $character;
@@ -559,7 +668,11 @@ function custom_css_visual_preview_css_has_imports(string $text): bool
             $index = max($index + 1, (int) $escaped['end']);
             continue;
         }
-        if ($character === '@' && $braceDepth === 0 && $parenthesisDepth === 0) {
+        if (
+            $character === '@'
+            && $braceDepth === 0
+            && $parenthesisDepth === 0
+        ) {
             $identifier = $decodeIdentifier($text, $index + 1);
             if (strtolower((string) $identifier['value']) === 'import') {
                 return true;
@@ -590,52 +703,83 @@ function custom_css_visual_preview_css_has_imports(string $text): bool
  * @throws \InvalidArgumentException When the explicit Theme-image operation shape or target is invalid.
  * @throws \RuntimeException When a configured Theme image cannot be verified for removal.
  */
-function custom_css_overrides_save(string $text, string $expectedRevision, ?array $backgroundAttachment = null): array
-{
+function custom_css_overrides_save(
+    string $text,
+    string $expectedRevision,
+    ?array $backgroundAttachment = null,
+): array {
     custom_css_overrides_validate($text);
     if (preg_match('/^[a-f0-9]{64}$/D', $expectedRevision) !== 1) {
-        throw new \InvalidArgumentException('Reload the saved override revision before saving.');
+        throw new \InvalidArgumentException(
+            'Reload the saved override revision before saving.',
+        );
     }
     if ($backgroundAttachment !== null) {
-        $backgroundChange = custom_css_background_change_normalize($backgroundAttachment);
+        $backgroundChange = custom_css_background_change_normalize(
+            $backgroundAttachment,
+        );
         if ($backgroundChange['operation'] !== 'keep') {
-            return custom_css_overrides_save_with_background_change($text, $expectedRevision, $backgroundChange);
+            return custom_css_overrides_save_with_background_change(
+                $text,
+                $expectedRevision,
+                $backgroundChange,
+            );
         }
     }
     $revision = hash('sha256', $text);
-    $nextState = ['text' => $text, 'revision' => $revision, 'url' => $text === '' ? '' : asset_url('assets/custom-overrides.css') . '?v=' . $revision];
+    $nextState = [
+        'text' => $text,
+        'revision' => $revision,
+        'url' => $text === ''
+            ? ''
+            : asset_url('assets/custom-overrides.css') . '?v=' . $revision,
+    ];
     $target = custom_css_overrides_path();
     $directory = dirname($target);
     $lockPath = $directory . '/.custom-overrides.lock';
     clearstatcache();
     if (!is_dir($directory) || !is_writable($directory) || is_link($lockPath)) {
-        throw new \RuntimeException('The override asset directory is unavailable or unwritable.');
+        throw new \RuntimeException(
+            'The override asset directory is unavailable or unwritable.',
+        );
     }
     $lock = @fopen($lockPath, 'c');
     if ($lock === false) {
-        throw new \RuntimeException('The override writer lock could not be opened.');
+        throw new \RuntimeException(
+            'The override writer lock could not be opened.',
+        );
     }
     $staged = '';
     try {
         if (!flock($lock, LOCK_EX | LOCK_NB)) {
-            throw new \RuntimeException('The override writer lock could not be acquired.');
+            throw new \RuntimeException(
+                'The override writer lock could not be acquired.',
+            );
         }
         $current = custom_css_overrides_state();
         if (!hash_equals($current['revision'], $expectedRevision)) {
-            throw new CustomCssOverrideConflictException('The saved overrides changed in another editor.');
+            throw new CustomCssOverrideConflictException(
+                'The saved overrides changed in another editor.',
+            );
         }
         if ($current['text'] === $text) {
             return $current;
         }
         $staged = custom_css_temporary_path();
-        if (@file_put_contents($staged, $text) !== strlen($text)
+        if (
+            @file_put_contents($staged, $text) !== strlen($text)
             || @hash_file('sha256', $staged) !== hash('sha256', $text)
-            || !@chmod($staged, 0644)) {
-            throw new \RuntimeException('The override asset could not be staged and verified.');
+            || !@chmod($staged, 0644)
+        ) {
+            throw new \RuntimeException(
+                'The override asset could not be staged and verified.',
+            );
         }
         // Activation is the final fallible operation: no DB marker or post-replacement write can require rollback.
         if (!@rename($staged, $target)) {
-            throw new \RuntimeException('The override asset could not be replaced.');
+            throw new \RuntimeException(
+                'The override asset could not be replaced.',
+            );
         }
         return $nextState;
     } finally {

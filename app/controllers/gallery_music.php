@@ -53,7 +53,10 @@ function gallery_music_view_model(array $gallery, bool $editor = false): array
         $error = \Gallery\Services\t('music.failed');
     }
     return gallery_music_present_playlist(
-        (int) $gallery['id'], $editor, $state, $error
+        (int) $gallery['id'],
+        $editor,
+        $state,
+        $error,
     );
 }
 
@@ -91,14 +94,17 @@ function gallery_music_present_playlist(
     int $galleryId,
     bool $editor,
     array $state,
-    string $error = ''
+    string $error = '',
 ): array {
     $base = rtrim(\Gallery\Core\request_script_base_path(), '/') . '/index.php';
     $tracks = [];
     $audience = \Gallery\Core\admin_anonymous_preview_active()
         ? ['view_as' => 'anonymous'] : [];
     foreach ($state['tracks'] as $track) {
-        if (!$editor && !\Gallery\Services\gallery_music_track_visible($track)) {
+        if (
+            !$editor
+            && !\Gallery\Services\gallery_music_track_visible($track)
+        ) {
             continue;
         }
         $sourceId = $track['source_gallery_id'] ?? $galleryId;
@@ -107,23 +113,43 @@ function gallery_music_present_playlist(
             $track['id'] = $sourceId . ':' . $originalId;
             unset($track['source_gallery_id']);
         }
-        $url = $base . '?' . http_build_query([
-            'page' => 'gallery_music',
-            'id' => $sourceId,
-            'track' => $originalId,
-        ] + $audience, '', '&', PHP_QUERY_RFC3986);
-        $tracks[] = $track + [
+        $url =
+            $base
+            . '?'
+            . http_build_query(
+                [
+                    'page' => 'gallery_music',
+                    'id' => $sourceId,
+                    'track' => $originalId,
+                ] + $audience,
+                '',
+                '&',
+                PHP_QUERY_RFC3986,
+            );
+        $tracks[] = $track
+        + [
             'url' => $url,
             'download_url' => $track['downloadable']
-                ? $url . '&download=1' : '',
+                ? $url . '&download=1'
+                : '',
         ];
     }
     return [
         'gallery_id' => $galleryId,
         'editor' => $editor,
-        'action_url' => $galleryId > 0 ? $base . '?' . http_build_query([
-            'page' => 'admin_edit_gallery', 'id' => $galleryId,
-        ], '', '&', PHP_QUERY_RFC3986) : '',
+        'action_url' => $galleryId > 0
+            ? $base
+            . '?'
+            . http_build_query(
+                [
+                    'page' => 'admin_edit_gallery',
+                    'id' => $galleryId,
+                ],
+                '',
+                '&',
+                PHP_QUERY_RFC3986,
+            )
+            : '',
         'csrf_html' => $editor ? \Gallery\Core\csrf_field() : '',
         'revision' => $state['revision'],
         'enabled' => $state['enabled'],
@@ -162,7 +188,7 @@ function gallery_music_present_playlist(
 function gallery_music_smart_view_model(
     int $smartGalleryId,
     array $sources,
-    bool $enabled
+    bool $enabled,
 ): array {
     $state = \Gallery\Services\gallery_music_merge_playlists($sources);
     $state['enabled'] = $enabled;
@@ -180,13 +206,13 @@ function gallery_music_smart_view_model(
 function admin_gallery_music_html(array $gallery): string
 {
     if (!\Gallery\Services\feature_capability_effective_enabled(
-        'gallery_music'
+        'gallery_music',
     )) {
         return '';
     }
     ob_start();
     \Gallery\Views\view_render_gallery_music(
-        gallery_music_view_model($gallery, true)
+        gallery_music_view_model($gallery, true),
     );
     return (string) ob_get_clean();
 }
@@ -205,7 +231,10 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
         'tab' => 'admin-edit-documents',
     ]);
     $descriptor = \Gallery\Core\admin_mutation_descriptor(
-        'gallery.music.' . $action, 'gallery', 'update', [$id]
+        'gallery.music.' . $action,
+        'gallery',
+        'update',
+        [$id],
     );
     $ajax = admin_wants_json();
     try {
@@ -216,13 +245,15 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
         $filename = '';
         if ($action === 'upload') {
             $upload = $_FILES['music_file'] ?? null;
-            if (!is_array($upload)
+            if (
+                !is_array($upload)
                 || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
                 || !is_string($upload['tmp_name'] ?? null)
                 || !is_uploaded_file($upload['tmp_name'])
-                || !is_string($upload['name'] ?? null)) {
+                || !is_string($upload['name'] ?? null)
+            ) {
                 throw new \RuntimeException(
-                    \Gallery\Services\t('music.invalid_file')
+                    \Gallery\Services\t('music.invalid_file'),
                 );
             }
             $source = $upload['tmp_name'];
@@ -230,10 +261,13 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
         }
         $outcome = \Gallery\Services\gallery_music_mutate(
             $gallery,
-            (string) ($_POST['music_revision'] ?? ''), $action,
-            (string) ($_POST['track_id'] ?? ''), $source, $filename,
+            (string) ($_POST['music_revision'] ?? ''),
+            $action,
+            (string) ($_POST['track_id'] ?? ''),
+            $source,
+            $filename,
             (string) ($_POST['music_enabled'] ?? '') === '1',
-            (string) ($_POST['music_download_enabled'] ?? '') === '1'
+            (string) ($_POST['music_download_enabled'] ?? '') === '1',
         );
         \Gallery\Services\gallery_attachment_storage_changed();
         $message = \Gallery\Services\t('music.saved');
@@ -241,12 +275,15 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
             $message,
             $descriptor,
             \Gallery\Core\admin_mutation_panel_metadata(
-                'gallery-edit', $editUrl, true
+                'gallery-edit',
+                $editUrl,
+                true,
             ),
             [\Gallery\Core\admin_mutation_public_gallery_context(
-                $id, \Gallery\Core\gallery_public_url($gallery)
+                $id,
+                \Gallery\Core\gallery_public_url($gallery),
             )],
-            ['redirect_url' => $editUrl]
+            ['redirect_url' => $editUrl],
         );
         $result['panel_html'] = admin_gallery_music_html($gallery);
         $result['music_revision'] = $outcome['revision'];
@@ -260,16 +297,20 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
                 break;
             }
         }
-        if ($ajax) http_response_code(422);
+        if ($ajax)
+            http_response_code(422);
         $result = \Gallery\Core\admin_mutation_error_envelope(
-            $message, 'music_operation_failed', $descriptor
+            $message,
+            'music_operation_failed',
+            $descriptor,
         );
     }
     if ($ajax) {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: private, no-store');
         echo json_encode(
-            $result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            $result,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
         );
         return;
     }
@@ -298,7 +339,9 @@ function cms_gallery_music(): void
     }
     $gallery = \Gallery\Services\find_gallery((int) ($_GET['id'] ?? 0));
     $user = \Gallery\Core\current_user();
-    $admin = is_array($user) && ($user['role'] ?? '') === 'admin'
+    $admin =
+        is_array($user)
+        && ($user['role'] ?? '') === 'admin'
         && !\Gallery\Core\admin_anonymous_preview_active()
         && !\Gallery\Services\current_user_is_known_under_18();
     if ($gallery && $admin && (string) ($_GET['playlist'] ?? '') === '1') {
@@ -319,33 +362,45 @@ function cms_gallery_music(): void
         return;
     }
     $document = null;
-    $allowed = $gallery && ($admin
-        || \Gallery\Services\visitor_can_access_gallery_without_admin_bypass(
-            $gallery
-        ));
+    $allowed =
+        $gallery
+        && (
+            $admin
+            || \Gallery\Services\visitor_can_access_gallery_without_admin_bypass(
+                $gallery,
+            )
+        );
     if ($allowed) {
         try {
             $document = \Gallery\Services\gallery_music_track(
-                $gallery, (string) ($_GET['track'] ?? '')
+                $gallery,
+                (string) ($_GET['track'] ?? ''),
             );
         } catch (\Throwable) {
             $document = null;
         }
     }
-    if ($document !== null && !$admin
-        && !\Gallery\Services\gallery_music_track_visible($document['track'])) {
+    if (
+        $document !== null
+        && !$admin
+        && !\Gallery\Services\gallery_music_track_visible($document['track'])
+    ) {
         $document = null;
     }
     $download = (string) ($_GET['download'] ?? '') === '1';
-    if ($download && $document !== null
-        && !$document['track']['downloadable']) {
+    if (
+        $download
+        && $document !== null
+        && !$document['track']['downloadable']
+    ) {
         $document = null;
     }
     $handle = $document !== null ? @fopen($document['path'], 'rb') : false;
     if ($document === null || $handle === false) {
         http_response_code(404);
         header('Content-Type: text/plain; charset=utf-8');
-        if ($method !== 'HEAD') echo 'Not found';
+        if ($method !== 'HEAD')
+            echo 'Not found';
         return;
     }
     try {
@@ -353,9 +408,11 @@ function cms_gallery_music(): void
         // Without validators, If-Range means a complete representation. HEAD
         // reports GET metadata without interpreting its ignored Range field.
         $rangeHeader = $method === 'GET' && !isset($_SERVER['HTTP_IF_RANGE'])
-            ? (string) ($_SERVER['HTTP_RANGE'] ?? '') : '';
+            ? (string) ($_SERVER['HTTP_RANGE'] ?? '')
+            : '';
         $range = \Gallery\Services\gallery_music_byte_range(
-            $rangeHeader, $size
+            $rangeHeader,
+            $size,
         );
         header('Accept-Ranges: bytes');
         if ($range === null) {
@@ -366,17 +423,27 @@ function cms_gallery_music(): void
         }
         header('Content-Type: ' . $document['track']['mime']);
         $disposition = $download ? 'attachment' : 'inline';
-        header('Content-Disposition: ' . $disposition
-            . '; filename="audio"; filename*=UTF-8\'\''
-            . rawurlencode($document['track']['filename']));
+        header(
+            'Content-Disposition: '
+                . $disposition
+                . '; filename="audio"; filename*=UTF-8\'\''
+                . rawurlencode($document['track']['filename']),
+        );
         $length = $range['end'] - $range['start'] + 1;
         header('Content-Length: ' . $length);
         if ($range['partial']) {
             http_response_code(206);
-            header('Content-Range: bytes ' . $range['start']
-                . '-' . $range['end'] . '/' . $size);
+            header(
+                'Content-Range: bytes '
+                    . $range['start']
+                    . '-'
+                    . $range['end']
+                    . '/'
+                    . $size,
+            );
         }
-        if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+        if (session_status() === PHP_SESSION_ACTIVE)
+            session_write_close();
         if ($method === 'GET' && fseek($handle, $range['start']) === 0) {
             $output = fopen('php://output', 'wb');
             if ($output !== false) {

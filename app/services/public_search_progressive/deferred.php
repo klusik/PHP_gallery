@@ -40,7 +40,8 @@ namespace Gallery\Services;
 
 use function Gallery\Models\public_search_model_gallery_description_rows;
 use function Gallery\Models\public_search_model_gallery_tag_description_rows;
-use function Gallery\Models\public_search_model_gallery_translated_description_rows;
+use function Gallery\Models\public_search_model_gallery_translated_description_rows
+;
 use function Gallery\Models\public_search_model_gallery_translated_title_rows;
 use function Gallery\Models\public_search_model_image_ai_rows;
 use function Gallery\Models\public_search_model_image_description_rows;
@@ -55,9 +56,16 @@ use function Gallery\Models\public_search_model_image_translation_rows;
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Descriptive public result models.
  */
-function public_search_descriptive_results(string $query, int $limit, ?array $contextGallery = null): array
-{
-    $candidates = public_search_descriptive_gallery_candidates($query, $limit, $contextGallery);
+function public_search_descriptive_results(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
+    $candidates = public_search_descriptive_gallery_candidates(
+        $query,
+        $limit,
+        $contextGallery,
+    );
     if ($candidates === []) {
         return [];
     }
@@ -78,8 +86,11 @@ function public_search_descriptive_results(string $query, int $limit, ?array $co
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Ordered gallery candidate models.
  */
-function public_search_descriptive_gallery_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_descriptive_gallery_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $query = public_search_normalize_query($query);
     if (public_search_query_length($query) < 2) {
         return [];
@@ -91,18 +102,34 @@ function public_search_descriptive_gallery_candidates(string $query, int $limit,
 
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_descriptive_gallery_description_candidates($query, $candidateLimit, $contextGallery)
+        public_search_descriptive_gallery_description_candidates(
+            $query,
+            $candidateLimit,
+            $contextGallery,
+        ),
     );
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_descriptive_gallery_tag_description_candidates($query, $candidateLimit, $contextGallery)
+        public_search_descriptive_gallery_tag_description_candidates(
+            $query,
+            $candidateLimit,
+            $contextGallery,
+        ),
     );
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_descriptive_gallery_translated_title_candidates($query, $candidateLimit, $contextGallery)
+        public_search_descriptive_gallery_translated_title_candidates(
+            $query,
+            $candidateLimit,
+            $contextGallery,
+        ),
     );
 
-    return array_slice(public_search_sort_candidate_rows(array_values($candidates)), 0, $limit);
+    return array_slice(
+        public_search_sort_candidate_rows(array_values($candidates)),
+        0,
+        $limit,
+    );
 }
 
 /**
@@ -113,13 +140,16 @@ function public_search_descriptive_gallery_candidates(string $query, int $limit,
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Gallery-description candidate models.
  */
-function public_search_descriptive_gallery_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_descriptive_gallery_description_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $rows = public_search_model_gallery_description_rows(
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
-        $limit
+        $limit,
     );
     $score = public_search_relevance_score('gallery_description');
 
@@ -129,7 +159,13 @@ function public_search_descriptive_gallery_description_candidates(string $query,
         if ($id <= 0) {
             continue;
         }
-        $candidates[] = public_search_candidate_model('gallery', $id, $score, 'gallery_description', (string) ($row['title'] ?? ''));
+        $candidates[] = public_search_candidate_model(
+            'gallery',
+            $id,
+            $score,
+            'gallery_description',
+            (string) ($row['title'] ?? ''),
+        );
     }
 
     return $candidates;
@@ -143,13 +179,16 @@ function public_search_descriptive_gallery_description_candidates(string $query,
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Gallery-tag-description candidate models.
  */
-function public_search_descriptive_gallery_tag_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_descriptive_gallery_tag_description_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $rows = public_search_model_gallery_tag_description_rows(
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
-        $limit
+        $limit,
     );
     $score = public_search_relevance_score('tag_description');
 
@@ -159,7 +198,13 @@ function public_search_descriptive_gallery_tag_description_candidates(string $qu
         if ($id <= 0) {
             continue;
         }
-        $candidates[] = public_search_candidate_model('gallery', $id, $score, 'tag_description', (string) ($row['title'] ?? ''));
+        $candidates[] = public_search_candidate_model(
+            'gallery',
+            $id,
+            $score,
+            'tag_description',
+            (string) ($row['title'] ?? ''),
+        );
     }
 
     return $candidates;
@@ -173,9 +218,15 @@ function public_search_descriptive_gallery_tag_description_candidates(string $qu
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Translated-title gallery candidates.
  */
-function public_search_descriptive_gallery_translated_title_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
-    if (!content_localization_enabled() || !content_localization_schema_ready('gallery')) {
+function public_search_descriptive_gallery_translated_title_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
+    if (
+        !content_localization_enabled()
+        || !content_localization_schema_ready('gallery')
+    ) {
         return [];
     }
 
@@ -184,7 +235,7 @@ function public_search_descriptive_gallery_translated_title_candidates(string $q
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
-        $limit
+        $limit,
     );
     $score = public_search_relevance_score('translated_title');
 
@@ -194,7 +245,13 @@ function public_search_descriptive_gallery_translated_title_candidates(string $q
         if ($id <= 0) {
             continue;
         }
-        $candidates[] = public_search_candidate_model('gallery', $id, $score, 'translated_title', (string) ($row['title_sort'] ?? ''));
+        $candidates[] = public_search_candidate_model(
+            'gallery',
+            $id,
+            $score,
+            'translated_title',
+            (string) ($row['title_sort'] ?? ''),
+        );
     }
 
     return $candidates;
@@ -209,8 +266,11 @@ function public_search_descriptive_gallery_translated_title_candidates(string $q
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Deep public result models.
  */
-function public_search_deep_results(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_deep_results(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $query = public_search_normalize_query($query);
     if (public_search_query_length($query) < 2) {
         return [];
@@ -222,14 +282,26 @@ function public_search_deep_results(string $query, int $limit, ?array $contextGa
 
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_deep_gallery_translated_description_candidates($query, $candidateLimit, $contextGallery)
+        public_search_deep_gallery_translated_description_candidates(
+            $query,
+            $candidateLimit,
+            $contextGallery,
+        ),
     );
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_deep_image_candidates($query, $candidateLimit, $contextGallery)
+        public_search_deep_image_candidates(
+            $query,
+            $candidateLimit,
+            $contextGallery,
+        ),
     );
 
-    $ordered = array_slice(public_search_sort_candidate_rows(array_values($candidates)), 0, $limit);
+    $ordered = array_slice(
+        public_search_sort_candidate_rows(array_values($candidates)),
+        0,
+        $limit,
+    );
     return public_search_hydrate_deep_candidates($ordered, $contextGallery);
 }
 
@@ -241,9 +313,15 @@ function public_search_deep_results(string $query, int $limit, ?array $contextGa
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Translated-description gallery candidates.
  */
-function public_search_deep_gallery_translated_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
-    if (!content_localization_enabled() || !content_localization_schema_ready('gallery')) {
+function public_search_deep_gallery_translated_description_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
+    if (
+        !content_localization_enabled()
+        || !content_localization_schema_ready('gallery')
+    ) {
         return [];
     }
 
@@ -252,7 +330,7 @@ function public_search_deep_gallery_translated_description_candidates(string $qu
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
-        $limit
+        $limit,
     );
     $score = public_search_relevance_score('translated_description');
 
@@ -262,7 +340,13 @@ function public_search_deep_gallery_translated_description_candidates(string $qu
         if ($id <= 0) {
             continue;
         }
-        $candidates[] = public_search_candidate_model('gallery', $id, $score, 'translated_description', (string) ($row['title_sort'] ?? ''));
+        $candidates[] = public_search_candidate_model(
+            'gallery',
+            $id,
+            $score,
+            'translated_description',
+            (string) ($row['title_sort'] ?? ''),
+        );
     }
 
     return $candidates;
@@ -279,28 +363,47 @@ function public_search_deep_gallery_translated_description_candidates(string $qu
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Ordered deep image candidates.
  */
-function public_search_deep_image_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_deep_image_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $candidates = [];
 
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_deep_image_description_candidates($query, $limit, $contextGallery)
+        public_search_deep_image_description_candidates(
+            $query,
+            $limit,
+            $contextGallery,
+        ),
     );
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_deep_image_tag_description_candidates($query, $limit, $contextGallery)
+        public_search_deep_image_tag_description_candidates(
+            $query,
+            $limit,
+            $contextGallery,
+        ),
     );
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_deep_image_translation_candidates($query, $limit, $contextGallery)
+        public_search_deep_image_translation_candidates(
+            $query,
+            $limit,
+            $contextGallery,
+        ),
     );
     public_search_merge_candidate_rows(
         $candidates,
-        public_search_deep_image_ai_candidates($query, $limit, $contextGallery)
+        public_search_deep_image_ai_candidates($query, $limit, $contextGallery),
     );
 
-    return array_slice(public_search_sort_candidate_rows(array_values($candidates)), 0, $limit);
+    return array_slice(
+        public_search_sort_candidate_rows(array_values($candidates)),
+        0,
+        $limit,
+    );
 }
 
 /**
@@ -311,18 +414,21 @@ function public_search_deep_image_candidates(string $query, int $limit, ?array $
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Image-description candidate models.
  */
-function public_search_deep_image_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_deep_image_description_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $rows = public_search_model_image_description_rows(
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
-        $limit
+        $limit,
     );
     return public_search_deep_image_rows_to_candidates(
         $rows,
         public_search_relevance_score('image_description'),
-        'image_description'
+        'image_description',
     );
 }
 
@@ -334,18 +440,21 @@ function public_search_deep_image_description_candidates(string $query, int $lim
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Image-tag-description candidate models.
  */
-function public_search_deep_image_tag_description_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_deep_image_tag_description_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     $rows = public_search_model_image_tag_description_rows(
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
-        $limit
+        $limit,
     );
     return public_search_deep_image_rows_to_candidates(
         $rows,
         public_search_relevance_score('tag_description'),
-        'tag_description'
+        'tag_description',
     );
 }
 
@@ -357,9 +466,15 @@ function public_search_deep_image_tag_description_candidates(string $query, int 
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Localized image candidate models.
  */
-function public_search_deep_image_translation_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
-    if (!content_localization_enabled() || !content_localization_schema_ready('image')) {
+function public_search_deep_image_translation_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
+    if (
+        !content_localization_enabled()
+        || !content_localization_schema_ready('image')
+    ) {
         return [];
     }
 
@@ -372,7 +487,7 @@ function public_search_deep_image_translation_candidates(string $query, int $lim
         $descriptionScore,
         public_search_listing_requires_listed(),
         $contextGallery,
-        $limit
+        $limit,
     );
 
     $candidates = [];
@@ -382,8 +497,16 @@ function public_search_deep_image_translation_candidates(string $query, int $lim
         if ($id <= 0 || $score <= 0) {
             continue;
         }
-        $source = $score === $titleScore ? 'translated_title' : 'translated_description';
-        $candidates[] = public_search_candidate_model('photo', $id, $score, $source, (string) ($row['title_sort'] ?? ''));
+        $source = $score === $titleScore
+            ? 'translated_title'
+            : 'translated_description';
+        $candidates[] = public_search_candidate_model(
+            'photo',
+            $id,
+            $score,
+            $source,
+            (string) ($row['title_sort'] ?? ''),
+        );
     }
 
     return $candidates;
@@ -400,8 +523,11 @@ function public_search_deep_image_translation_candidates(string $query, int $lim
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> AI-backed image candidate models.
  */
-function public_search_deep_image_ai_candidates(string $query, int $limit, ?array $contextGallery = null): array
-{
+function public_search_deep_image_ai_candidates(
+    string $query,
+    int $limit,
+    ?array $contextGallery = null,
+): array {
     if (!public_search_ai_metadata_ready()) {
         return [];
     }
@@ -410,12 +536,12 @@ function public_search_deep_image_ai_candidates(string $query, int $limit, ?arra
         $query,
         public_search_listing_requires_listed(),
         $contextGallery,
-        $limit
+        $limit,
     );
     return public_search_deep_image_rows_to_candidates(
         $rows,
         public_search_relevance_score('ai_searchable_metadata'),
-        'ai_searchable_metadata'
+        'ai_searchable_metadata',
     );
 }
 
@@ -427,8 +553,11 @@ function public_search_deep_image_ai_candidates(string $query, int $limit, ?arra
  * @param string $matchSource Stable match-source identifier.
  * @return array<int, array<string, mixed>> Standard candidate models.
  */
-function public_search_deep_image_rows_to_candidates(array $rows, int $score, string $matchSource): array
-{
+function public_search_deep_image_rows_to_candidates(
+    array $rows,
+    int $score,
+    string $matchSource,
+): array {
     $candidates = [];
     foreach ($rows as $row) {
         $id = (int) ($row['id'] ?? 0);
@@ -439,7 +568,13 @@ function public_search_deep_image_rows_to_candidates(array $rows, int $score, st
         if ($titleSort === '') {
             $titleSort = (string) ($row['filename'] ?? '');
         }
-        $candidates[] = public_search_candidate_model('photo', $id, $score, $matchSource, $titleSort);
+        $candidates[] = public_search_candidate_model(
+            'photo',
+            $id,
+            $score,
+            $matchSource,
+            $titleSort,
+        );
     }
 
     return $candidates;
@@ -455,8 +590,13 @@ function public_search_deep_image_rows_to_candidates(array $rows, int $score, st
  * @param string $titleSort Display title used for deterministic tie-breaking.
  * @return array<string, mixed> Candidate model.
  */
-function public_search_candidate_model(string $entityType, int $entityId, int $score, string $matchSource, string $titleSort): array
-{
+function public_search_candidate_model(
+    string $entityType,
+    int $entityId,
+    int $score,
+    string $matchSource,
+    string $titleSort,
+): array {
     $entityType = $entityType === 'photo' ? 'photo' : 'gallery';
     return [
         'entity_type' => $entityType,
@@ -475,15 +615,21 @@ function public_search_candidate_model(string $entityType, int $entityId, int $s
  * @param array<int, array<string, mixed>> $incoming Candidate rows from one source.
  * @return void
  */
-function public_search_merge_candidate_rows(array &$target, array $incoming): void
-{
+function public_search_merge_candidate_rows(
+    array &$target,
+    array $incoming,
+): void {
     foreach ($incoming as $candidate) {
         $key = (string) ($candidate['result_key'] ?? '');
         if ($key === '') {
             continue;
         }
         $existing = $target[$key] ?? null;
-        if (!is_array($existing) || (int) ($candidate['score'] ?? 0) > (int) ($existing['score'] ?? 0)) {
+        if (
+            !is_array($existing)
+            || (int) ($candidate['score'] ?? 0)
+                > (int) ($existing['score'] ?? 0)
+        ) {
             $target[$key] = $candidate;
         }
     }
@@ -498,7 +644,8 @@ function public_search_merge_candidate_rows(array &$target, array $incoming): vo
 function public_search_sort_candidate_rows(array $candidates): array
 {
     usort($candidates, static function (array $left, array $right): int {
-        $scoreCompare = ((int) ($right['score'] ?? 0)) <=> ((int) ($left['score'] ?? 0));
+        $scoreCompare =
+            (int) ($right['score'] ?? 0) <=> (int) ($left['score'] ?? 0);
         if ($scoreCompare !== 0) {
             return $scoreCompare;
         }
@@ -507,11 +654,16 @@ function public_search_sort_candidate_rows(array $candidates): array
         if ($leftType !== $rightType) {
             return $leftType <=> $rightType;
         }
-        $titleCompare = strcasecmp((string) ($left['title_sort'] ?? ''), (string) ($right['title_sort'] ?? ''));
+        $titleCompare = strcasecmp(
+            (string) ($left['title_sort'] ?? ''),
+            (string) ($right['title_sort'] ?? ''),
+        );
         if ($titleCompare !== 0) {
             return $titleCompare;
         }
-        return ((int) ($left['entity_id'] ?? 0)) <=> ((int) ($right['entity_id'] ?? 0));
+        return (
+            (int) ($left['entity_id'] ?? 0) <=> (int) ($right['entity_id'] ?? 0)
+        );
     });
 
     return $candidates;
@@ -524,8 +676,10 @@ function public_search_sort_candidate_rows(array $candidates): array
  * @param ?array $contextGallery Optional branch-limiting gallery.
  * @return array<int, array<string, mixed>> Hydrated result models in candidate order.
  */
-function public_search_hydrate_deep_candidates(array $candidates, ?array $contextGallery = null): array
-{
+function public_search_hydrate_deep_candidates(
+    array $candidates,
+    ?array $contextGallery = null,
+): array {
     if ($candidates === []) {
         return [];
     }
@@ -541,13 +695,18 @@ function public_search_hydrate_deep_candidates(array $candidates, ?array $contex
     }
 
     $hydratedByKey = [];
-    foreach (public_search_hydrate_primary_gallery_candidates($galleryCandidates) as $result) {
+    foreach (public_search_hydrate_primary_gallery_candidates(
+        $galleryCandidates,
+    ) as $result) {
         $key = (string) ($result['key'] ?? '');
         if ($key !== '') {
             $hydratedByKey[$key] = $result;
         }
     }
-    foreach (public_search_hydrate_media_image_candidates($photoCandidates, $contextGallery) as $result) {
+    foreach (public_search_hydrate_media_image_candidates(
+        $photoCandidates,
+        $contextGallery,
+    ) as $result) {
         $key = (string) ($result['key'] ?? '');
         if ($key !== '') {
             $hydratedByKey[$key] = $result;

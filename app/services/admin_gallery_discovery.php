@@ -105,8 +105,11 @@ function admin_gallery_discovery_start_job(array &$jobs): array
  * @param int $batchSize Maximum number of directories to inspect.
  * @return array<string, mixed> Public job state for the Ajax caller.
  */
-function admin_gallery_discovery_process_job(string $token, array &$jobs, int $batchSize = ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE): array
-{
+function admin_gallery_discovery_process_job(
+    string $token,
+    array &$jobs,
+    int $batchSize = ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE,
+): array {
     $job = admin_gallery_discovery_read_job($jobs, $token);
     if ($job === null) {
         return admin_gallery_discovery_missing_state();
@@ -125,10 +128,16 @@ function admin_gallery_discovery_process_job(string $token, array &$jobs, int $b
         return admin_gallery_discovery_public_state($job, true);
     }
 
-    $batchSize = max(1, min(ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE, $batchSize));
+    $batchSize = max(1, min(
+        ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE,
+        $batchSize,
+    ));
     $processedThisBatch = 0;
 
-    while ($processedThisBatch < $batchSize && admin_gallery_discovery_has_pending_directory($job)) {
+    while (
+        $processedThisBatch < $batchSize
+        && admin_gallery_discovery_has_pending_directory($job)
+    ) {
         $relativePath = (string) $job['queue'][(int) $job['queue_index']];
         $job['queue_index'] = (int) $job['queue_index'] + 1;
         admin_gallery_discovery_scan_directory($job, $relativePath);
@@ -144,7 +153,10 @@ function admin_gallery_discovery_process_job(string $token, array &$jobs, int $b
     }
 
     admin_gallery_discovery_write_job($jobs, $job);
-    return admin_gallery_discovery_public_state($job, (string) ($job['status'] ?? '') === 'complete');
+    return admin_gallery_discovery_public_state(
+        $job,
+        (string) ($job['status'] ?? '') === 'complete',
+    );
 }
 
 /**
@@ -161,7 +173,10 @@ function admin_gallery_discovery_job_status(string $token, array &$jobs): array
         return admin_gallery_discovery_missing_state();
     }
 
-    return admin_gallery_discovery_public_state($job, (string) ($job['status'] ?? '') === 'complete');
+    return admin_gallery_discovery_public_state(
+        $job,
+        (string) ($job['status'] ?? '') === 'complete',
+    );
 }
 
 /**
@@ -176,38 +191,61 @@ function admin_gallery_discovery_job_status(string $token, array &$jobs): array
  */
 function admin_gallery_discovery_expand_requested_import_paths(array $folderPaths): array
 {
-    $knownJob = admin_gallery_discovery_known_path_job_state(admin_gallery_discovery_known_gallery_paths());
+    $knownJob = admin_gallery_discovery_known_path_job_state(
+        admin_gallery_discovery_known_gallery_paths(),
+    );
     $expanded = [];
     foreach ($folderPaths as $folderPath) {
         $requestedPath = normalize_relative_path((string) $folderPath);
-        if ($requestedPath === '' || !is_dir(gallery_abs_path($requestedPath))) {
+        if (
+            $requestedPath === ''
+            || !is_dir(gallery_abs_path($requestedPath))
+        ) {
             continue;
         }
 
-        foreach (admin_gallery_discovery_ancestor_paths($requestedPath) as $ancestorPath) {
+        foreach (admin_gallery_discovery_ancestor_paths(
+            $requestedPath,
+        ) as $ancestorPath) {
             if (!is_dir(gallery_abs_path($ancestorPath))) {
                 continue;
             }
-            if (admin_gallery_discovery_is_known_gallery_path($ancestorPath, $knownJob)) {
+            if (admin_gallery_discovery_is_known_gallery_path(
+                $ancestorPath,
+                $knownJob,
+            )) {
                 continue;
             }
-            if (!admin_gallery_discovery_path_has_branch_images($ancestorPath)) {
+            if (!admin_gallery_discovery_path_has_branch_images(
+                $ancestorPath,
+            )) {
                 continue;
             }
-            if (admin_gallery_discovery_has_existing_sibling_title($ancestorPath)) {
+            if (admin_gallery_discovery_has_existing_sibling_title(
+                $ancestorPath,
+            )) {
                 continue;
             }
             $expanded[$ancestorPath] = $ancestorPath;
         }
 
-        foreach (admin_gallery_discovery_collect_subtree_candidate_paths($requestedPath) as $candidatePath) {
-            if (admin_gallery_discovery_is_known_gallery_path($candidatePath, $knownJob)) {
+        foreach (admin_gallery_discovery_collect_subtree_candidate_paths(
+            $requestedPath,
+        ) as $candidatePath) {
+            if (admin_gallery_discovery_is_known_gallery_path(
+                $candidatePath,
+                $knownJob,
+            )) {
                 continue;
             }
-            if (!admin_gallery_discovery_path_has_branch_images($candidatePath)) {
+            if (!admin_gallery_discovery_path_has_branch_images(
+                $candidatePath,
+            )) {
                 continue;
             }
-            if (admin_gallery_discovery_has_existing_sibling_title($candidatePath)) {
+            if (admin_gallery_discovery_has_existing_sibling_title(
+                $candidatePath,
+            )) {
                 continue;
             }
             $expanded[$candidatePath] = $candidatePath;
@@ -235,14 +273,21 @@ function admin_gallery_discovery_expand_requested_import_paths(array $folderPath
  * @param int $targetGalleryId Destination gallery identifier.
  * @return array<string, mixed> Move result for the controller or Ajax caller.
  */
-function admin_gallery_discovery_move_requested_photos(array $folderPaths, int $targetGalleryId): array
-{
-    $targetGallery = $targetGalleryId > 0 ? find_gallery($targetGalleryId) : null;
+function admin_gallery_discovery_move_requested_photos(
+    array $folderPaths,
+    int $targetGalleryId,
+): array {
+    $targetGallery = $targetGalleryId > 0
+        ? find_gallery($targetGalleryId)
+        : null;
     if (!$targetGallery) {
         return [
             'ok' => false,
             'action' => 'move_photos',
-            'error' => t('admin.galleries.discover_move_target_required', 'Choose the existing gallery where the photos should be moved.'),
+            'error' => t(
+                'admin.galleries.discover_move_target_required',
+                'Choose the existing gallery where the photos should be moved.',
+            ),
             'moved' => 0,
             'scanned' => 0,
             'gallery_ids' => [],
@@ -255,7 +300,10 @@ function admin_gallery_discovery_move_requested_photos(array $folderPaths, int $
         return [
             'ok' => false,
             'action' => 'move_photos',
-            'error' => t('admin.galleries.discover_move_target_not_writable', 'The selected destination gallery folder is not writable.'),
+            'error' => t(
+                'admin.galleries.discover_move_target_not_writable',
+                'The selected destination gallery folder is not writable.',
+            ),
             'moved' => 0,
             'scanned' => 0,
             'gallery_ids' => [],
@@ -263,49 +311,72 @@ function admin_gallery_discovery_move_requested_photos(array $folderPaths, int $
         ];
     }
 
-    $knownJob = admin_gallery_discovery_known_path_job_state(admin_gallery_discovery_known_gallery_paths());
-    $selectedPaths = admin_gallery_discovery_selected_unmanaged_paths($folderPaths, $knownJob);
+    $knownJob = admin_gallery_discovery_known_path_job_state(
+        admin_gallery_discovery_known_gallery_paths(),
+    );
+    $selectedPaths = admin_gallery_discovery_selected_unmanaged_paths(
+        $folderPaths,
+        $knownJob,
+    );
     $moved = 0;
     $skipped = 0;
     $sourceFoldersCleaned = 0;
     $errors = [];
 
     foreach ($selectedPaths as $sourcePath) {
-        foreach (admin_gallery_discovery_collect_supported_image_files($sourcePath) as $sourceFile) {
+        foreach (admin_gallery_discovery_collect_supported_image_files(
+            $sourcePath,
+        ) as $sourceFile) {
             $sourceRealPath = realpath($sourceFile);
             if ($sourceRealPath === false || !is_file($sourceRealPath)) {
                 $skipped++;
                 continue;
             }
-            if (admin_gallery_discovery_is_path_inside_directory($sourceRealPath, $targetRoot)) {
+            if (admin_gallery_discovery_is_path_inside_directory(
+                $sourceRealPath,
+                $targetRoot,
+            )) {
                 $skipped++;
                 continue;
             }
 
-            $targetPath = admin_gallery_discovery_unique_target_file_path($targetRoot, basename($sourceRealPath));
+            $targetPath = admin_gallery_discovery_unique_target_file_path(
+                $targetRoot,
+                basename($sourceRealPath),
+            );
             if (!@rename($sourceRealPath, $targetPath)) {
-                $errors[] = t('admin.galleries.discover_move_file_failed', 'Could not move {file}.', ['file' => basename($sourceRealPath)]);
+                $errors[] = t(
+                    'admin.galleries.discover_move_file_failed',
+                    'Could not move {file}.',
+                    ['file' => basename($sourceRealPath)],
+                );
                 $skipped++;
                 continue;
             }
             $moved++;
         }
 
-        $sourceFoldersCleaned += admin_gallery_discovery_remove_empty_directories($sourcePath);
+        $sourceFoldersCleaned +=
+            admin_gallery_discovery_remove_empty_directories($sourcePath);
     }
 
     clearstatcache();
     $scanned = $moved > 0 ? scan_gallery_images((int) $targetGallery['id']) : 0;
 
     if ($moved > 0) {
-        admin_log_event('info', 'gallery.discovery_photos_moved', 'Admin moved photos from discovered folders into an existing gallery.', [
-            'target_gallery_id' => (int) $targetGallery['id'],
-            'target_folder_path' => (string) $targetGallery['folder_path'],
-            'source_folders' => $selectedPaths,
-            'moved' => $moved,
-            'scanned' => $scanned,
-            'skipped' => $skipped,
-        ]);
+        admin_log_event(
+            'info',
+            'gallery.discovery_photos_moved',
+            'Admin moved photos from discovered folders into an existing gallery.',
+            [
+                'target_gallery_id' => (int) $targetGallery['id'],
+                'target_folder_path' => (string) $targetGallery['folder_path'],
+                'source_folders' => $selectedPaths,
+                'moved' => $moved,
+                'scanned' => $scanned,
+                'skipped' => $skipped,
+            ],
+        );
     }
 
     return [
@@ -319,7 +390,9 @@ function admin_gallery_discovery_move_requested_photos(array $folderPaths, int $
         'source_folders_cleaned' => $sourceFoldersCleaned,
         'gallery_ids' => $moved > 0 ? [(int) $targetGallery['id']] : [],
         'errors' => array_values(array_unique($errors)),
-        'error' => $errors !== [] ? implode(' ', array_values(array_unique($errors))) : '',
+        'error' => $errors !== []
+            ? implode(' ', array_values(array_unique($errors)))
+            : '',
     ];
 }
 
@@ -335,8 +408,13 @@ function admin_gallery_discovery_move_requested_photos(array $folderPaths, int $
  */
 function admin_gallery_discovery_delete_requested_paths(array $folderPaths): array
 {
-    $knownJob = admin_gallery_discovery_known_path_job_state(admin_gallery_discovery_known_gallery_paths());
-    $selectedPaths = admin_gallery_discovery_selected_unmanaged_paths($folderPaths, $knownJob);
+    $knownJob = admin_gallery_discovery_known_path_job_state(
+        admin_gallery_discovery_known_gallery_paths(),
+    );
+    $selectedPaths = admin_gallery_discovery_selected_unmanaged_paths(
+        $folderPaths,
+        $knownJob,
+    );
     $foldersDeleted = 0;
     $filesDeleted = 0;
     $skipped = 0;
@@ -359,12 +437,18 @@ function admin_gallery_discovery_delete_requested_paths(array $folderPaths): arr
     }
 
     if ($foldersDeleted > 0 || $filesDeleted > 0) {
-        admin_log_event('warning', 'gallery.discovery_folders_deleted', 'Admin deleted unmanaged discovered folders from disk.', [
-            'source_folders' => $selectedPaths,
-            'folders_deleted' => $foldersDeleted,
-            'files_deleted' => $filesDeleted,
-            'skipped' => $skipped,
-        ], ['category' => 'other', 'severity' => 'warning']);
+        admin_log_event(
+            'warning',
+            'gallery.discovery_folders_deleted',
+            'Admin deleted unmanaged discovered folders from disk.',
+            [
+                'source_folders' => $selectedPaths,
+                'folders_deleted' => $foldersDeleted,
+                'files_deleted' => $filesDeleted,
+                'skipped' => $skipped,
+            ],
+            ['category' => 'other', 'severity' => 'warning'],
+        );
     }
 
     return [
@@ -378,7 +462,9 @@ function admin_gallery_discovery_delete_requested_paths(array $folderPaths): arr
         'thumbnails' => 0,
         'gallery_ids' => [],
         'errors' => array_values(array_unique($errors)),
-        'error' => $errors !== [] ? implode(' ', array_values(array_unique($errors))) : '',
+        'error' => $errors !== []
+            ? implode(' ', array_values(array_unique($errors)))
+            : '',
     ];
 }
 
@@ -389,18 +475,25 @@ function admin_gallery_discovery_delete_requested_paths(array $folderPaths): arr
  * @param array<string, mixed> $knownJob Known gallery path lookup state.
  * @return array<int, string> Normalized unmanaged folder paths.
  */
-function admin_gallery_discovery_selected_unmanaged_paths(array $folderPaths, array $knownJob): array
-{
+function admin_gallery_discovery_selected_unmanaged_paths(
+    array $folderPaths,
+    array $knownJob,
+): array {
     $selected = [];
     foreach ($folderPaths as $folderPath) {
         $relativePath = normalize_relative_path((string) $folderPath);
         if ($relativePath === '' || isset($selected[$relativePath])) {
             continue;
         }
-        if (admin_gallery_discovery_is_known_gallery_path($relativePath, $knownJob)) {
+        if (admin_gallery_discovery_is_known_gallery_path(
+            $relativePath,
+            $knownJob,
+        )) {
             continue;
         }
-        if (!admin_gallery_discovery_is_safe_gallery_subdirectory($relativePath)) {
+        if (!admin_gallery_discovery_is_safe_gallery_subdirectory(
+            $relativePath,
+        )) {
             continue;
         }
         $selected[$relativePath] = $relativePath;
@@ -428,7 +521,12 @@ function admin_gallery_discovery_is_safe_gallery_subdirectory(string $relativePa
         return false;
     }
 
-    return admin_gallery_discovery_is_path_inside_directory($candidate, $root) && admin_gallery_discovery_path_key($candidate) !== admin_gallery_discovery_path_key($root);
+    return (
+        admin_gallery_discovery_is_path_inside_directory($candidate, $root)
+            && admin_gallery_discovery_path_key(
+                $candidate,
+            ) !== admin_gallery_discovery_path_key($root)
+    );
 }
 
 /**
@@ -438,10 +536,18 @@ function admin_gallery_discovery_is_safe_gallery_subdirectory(string $relativePa
  * @param string $directory Absolute directory path.
  * @return bool True when the path is inside the directory.
  */
-function admin_gallery_discovery_is_path_inside_directory(string $path, string $directory): bool
-{
+function admin_gallery_discovery_is_path_inside_directory(
+    string $path,
+    string $directory,
+): bool {
     $path = admin_gallery_discovery_path_key(realpath($path) ?: $path);
-    $directory = rtrim(admin_gallery_discovery_path_key(realpath($directory) ?: $directory), '/') . '/';
+    $directory =
+        rtrim(
+            admin_gallery_discovery_path_key(
+                realpath($directory) ?: $directory,
+            ),
+            '/',
+        ) . '/';
     return str_starts_with($path, $directory);
 }
 
@@ -459,21 +565,35 @@ function admin_gallery_discovery_collect_supported_image_files(string $relativeP
     }
 
     try {
-        $directory = new RecursiveDirectoryIterator(gallery_abs_path($relativePath), FilesystemIterator::SKIP_DOTS);
-        $filter = new RecursiveCallbackFilterIterator($directory, static function (SplFileInfo $entry): bool {
-            if ($entry->isDir()) {
-                return !$entry->isLink() && !admin_gallery_discovery_should_skip_directory($entry);
-            }
-            return true;
-        });
-        $iterator = new RecursiveIteratorIterator($filter, RecursiveIteratorIterator::LEAVES_ONLY);
+        $directory = new RecursiveDirectoryIterator(
+            gallery_abs_path($relativePath),
+            FilesystemIterator::SKIP_DOTS,
+        );
+        $filter =
+            new RecursiveCallbackFilterIterator($directory, static function (SplFileInfo $entry): bool {
+                if ($entry->isDir()) {
+                    return !$entry->isLink()
+                        && !admin_gallery_discovery_should_skip_directory(
+                            $entry,
+                        );
+                }
+                return true;
+            });
+        $iterator = new RecursiveIteratorIterator(
+            $filter,
+            RecursiveIteratorIterator::LEAVES_ONLY,
+        );
     } catch (Throwable) {
         return [];
     }
 
     $files = [];
     foreach ($iterator as $entry) {
-        if ($entry instanceof SplFileInfo && $entry->isFile() && is_supported_image_path($entry->getFilename())) {
+        if (
+            $entry instanceof SplFileInfo
+            && $entry->isFile()
+            && is_supported_image_path($entry->getFilename())
+        ) {
             $files[] = $entry->getPathname();
         }
     }
@@ -489,16 +609,27 @@ function admin_gallery_discovery_collect_supported_image_files(string $relativeP
  * @param string $filename Original source filename.
  * @return string Absolute target path.
  */
-function admin_gallery_discovery_unique_target_file_path(string $targetRoot, string $filename): string
-{
+function admin_gallery_discovery_unique_target_file_path(
+    string $targetRoot,
+    string $filename,
+): string {
     $name = pathinfo($filename, PATHINFO_FILENAME);
     $extension = pathinfo($filename, PATHINFO_EXTENSION);
     $suffix = $extension !== '' ? '.' . $extension : '';
-    $candidate = rtrim($targetRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename;
+    $candidate =
+        rtrim($targetRoot, DIRECTORY_SEPARATOR)
+        . DIRECTORY_SEPARATOR
+        . $filename;
     $index = 2;
 
     while (file_exists($candidate)) {
-        $candidate = rtrim($targetRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $name . '-' . $index . $suffix;
+        $candidate =
+            rtrim($targetRoot, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR
+            . $name
+            . '-'
+            . $index
+            . $suffix;
         $index++;
     }
 
@@ -521,11 +652,20 @@ function admin_gallery_discovery_remove_empty_directories(string $relativePath):
     $removed = 0;
     try {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($absolutePath, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
+            new RecursiveDirectoryIterator(
+                $absolutePath,
+                FilesystemIterator::SKIP_DOTS,
+            ),
+            RecursiveIteratorIterator::CHILD_FIRST,
         );
         foreach ($iterator as $entry) {
-            if ($entry instanceof SplFileInfo && $entry->isDir() && !admin_gallery_discovery_directory_has_entries($entry->getPathname())) {
+            if (
+                $entry instanceof SplFileInfo
+                && $entry->isDir()
+                && !admin_gallery_discovery_directory_has_entries(
+                    $entry->getPathname(),
+                )
+            ) {
                 if (@rmdir($entry->getPathname())) {
                     $removed++;
                 }
@@ -535,7 +675,11 @@ function admin_gallery_discovery_remove_empty_directories(string $relativePath):
         return $removed;
     }
 
-    if (is_dir($absolutePath) && !admin_gallery_discovery_directory_has_entries($absolutePath) && @rmdir($absolutePath)) {
+    if (
+        is_dir($absolutePath)
+        && !admin_gallery_discovery_directory_has_entries($absolutePath)
+        && @rmdir($absolutePath)
+    ) {
         $removed++;
     }
 
@@ -551,7 +695,10 @@ function admin_gallery_discovery_remove_empty_directories(string $relativePath):
 function admin_gallery_discovery_directory_has_entries(string $absolutePath): bool
 {
     try {
-        $iterator = new FilesystemIterator($absolutePath, FilesystemIterator::SKIP_DOTS);
+        $iterator = new FilesystemIterator(
+            $absolutePath,
+            FilesystemIterator::SKIP_DOTS,
+        );
         return $iterator->valid();
     } catch (Throwable) {
         return true;
@@ -573,8 +720,11 @@ function admin_gallery_discovery_delete_directory_tree(string $absolutePath): ar
 
     try {
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($absolutePath, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
+            new RecursiveDirectoryIterator(
+                $absolutePath,
+                FilesystemIterator::SKIP_DOTS,
+            ),
+            RecursiveIteratorIterator::CHILD_FIRST,
         );
         foreach ($iterator as $entry) {
             if (!$entry instanceof SplFileInfo) {
@@ -586,7 +736,11 @@ function admin_gallery_discovery_delete_directory_tree(string $absolutePath): ar
                     $foldersDeleted++;
                 } else {
                     $skipped++;
-                    $errors[] = t('admin.galleries.discover_delete_folder_failed', 'Could not delete folder {folder}.', ['folder' => basename($path)]);
+                    $errors[] = t(
+                        'admin.galleries.discover_delete_folder_failed',
+                        'Could not delete folder {folder}.',
+                        ['folder' => basename($path)],
+                    );
                 }
                 continue;
             }
@@ -594,14 +748,22 @@ function admin_gallery_discovery_delete_directory_tree(string $absolutePath): ar
                 $filesDeleted++;
             } else {
                 $skipped++;
-                $errors[] = t('admin.galleries.discover_delete_file_failed', 'Could not delete file {file}.', ['file' => basename($path)]);
+                $errors[] = t(
+                    'admin.galleries.discover_delete_file_failed',
+                    'Could not delete file {file}.',
+                    ['file' => basename($path)],
+                );
             }
         }
         if (@rmdir($absolutePath)) {
             $foldersDeleted++;
         } else {
             $skipped++;
-            $errors[] = t('admin.galleries.discover_delete_folder_failed', 'Could not delete folder {folder}.', ['folder' => basename($absolutePath)]);
+            $errors[] = t(
+                'admin.galleries.discover_delete_folder_failed',
+                'Could not delete folder {folder}.',
+                ['folder' => basename($absolutePath)],
+            );
         }
     } catch (Throwable $exception) {
         $errors[] = $exception->getMessage();
@@ -614,7 +776,6 @@ function admin_gallery_discovery_delete_directory_tree(string $absolutePath): ar
         'errors' => $errors,
     ];
 }
-
 
 /**
  * Return known gallery folder paths keyed by normalized path.
@@ -637,7 +798,6 @@ function admin_gallery_discovery_known_gallery_paths(): array
     }
     return $known;
 }
-
 
 /**
  * Build lookup indexes used to suppress already imported gallery folders.
@@ -675,25 +835,33 @@ function admin_gallery_discovery_known_path_job_state(array $knownPaths): array
  * @param array<string, mixed> $job Discovery job state with known path indexes.
  * @return bool True when the path is already represented in the database.
  */
-function admin_gallery_discovery_is_known_gallery_path(string $relativePath, array $job): bool
-{
+function admin_gallery_discovery_is_known_gallery_path(
+    string $relativePath,
+    array $job,
+): bool {
     $normalized = normalize_relative_path($relativePath);
     if ($normalized === '') {
         return false;
     }
 
-    $knownPaths = is_array($job['known_paths'] ?? null) ? $job['known_paths'] : [];
+    $knownPaths = is_array($job['known_paths'] ?? null)
+        ? $job['known_paths']
+        : [];
     if (isset($knownPaths[$normalized])) {
         return true;
     }
 
-    $knownPathKeys = is_array($job['known_path_keys'] ?? null) ? $job['known_path_keys'] : [];
+    $knownPathKeys = is_array($job['known_path_keys'] ?? null)
+        ? $job['known_path_keys']
+        : [];
     if (isset($knownPathKeys[admin_gallery_discovery_path_key($normalized)])) {
         return true;
     }
 
     $realPathKey = admin_gallery_discovery_real_path_key($normalized);
-    $knownRealPaths = is_array($job['known_real_paths'] ?? null) ? $job['known_real_paths'] : [];
+    $knownRealPaths = is_array($job['known_real_paths'] ?? null)
+        ? $job['known_real_paths']
+        : [];
     return $realPathKey !== '' && isset($knownRealPaths[$realPathKey]);
 }
 
@@ -706,7 +874,9 @@ function admin_gallery_discovery_is_known_gallery_path(string $relativePath, arr
 function admin_gallery_discovery_path_key(string $path): string
 {
     $path = trim(str_replace('\\', '/', $path));
-    return function_exists('mb_strtolower') ? mb_strtolower($path, 'UTF-8') : strtolower($path);
+    return function_exists('mb_strtolower')
+        ? mb_strtolower($path, 'UTF-8')
+        : strtolower($path);
 }
 
 /**
@@ -739,18 +909,25 @@ function admin_gallery_discovery_real_path_key(string $relativePath): string
  */
 function admin_gallery_discovery_has_pending_directory(array $job): bool
 {
-    return (int) ($job['queue_index'] ?? 0) < count((array) ($job['queue'] ?? []));
+    return (int) ($job['queue_index'] ?? 0) < count(
+        (array) ($job['queue'] ?? []),
+    );
 }
 
 /**
  * Scan one directory and update the discovery job state.
  *
- * @param array<string, mixed> $job Discovery job state, updated in place.
+ * @param array<string,mixed> $job Discovery job state, updated in place; adds child paths to queue and queued_paths when found.
  * @param string $relativePath Directory path relative to the gallery root.
+ * @return void Records supported images, queues unseen child directories, and records sidecar presence in the job.
  */
-function admin_gallery_discovery_scan_directory(array &$job, string $relativePath): void
-{
-    $absolutePath = $relativePath === '' ? galleries_root() : gallery_abs_path($relativePath);
+function admin_gallery_discovery_scan_directory(
+    array &$job,
+    string $relativePath,
+): void {
+    $absolutePath = $relativePath === ''
+        ? galleries_root()
+        : gallery_abs_path($relativePath);
     if (!is_dir($absolutePath)) {
         return;
     }
@@ -761,7 +938,11 @@ function admin_gallery_discovery_scan_directory(array &$job, string $relativePat
     try {
         $iterator = new DirectoryIterator($absolutePath);
     } catch (Throwable $exception) {
-        admin_gallery_discovery_record_error($job, $relativePath, $exception->getMessage());
+        admin_gallery_discovery_record_error(
+            $job,
+            $relativePath,
+            $exception->getMessage(),
+        );
         return;
     }
 
@@ -771,10 +952,16 @@ function admin_gallery_discovery_scan_directory(array &$job, string $relativePat
         }
 
         if ($entry->isDir()) {
-            if ($entry->isLink() || admin_gallery_discovery_should_skip_directory($entry)) {
+            if (
+                $entry->isLink()
+                || admin_gallery_discovery_should_skip_directory($entry)
+            ) {
                 continue;
             }
-            $childPath = normalize_relative_path(($relativePath === '' ? '' : $relativePath . '/') . $entry->getFilename());
+            $childPath = normalize_relative_path(
+                ($relativePath === '' ? '' : $relativePath . '/')
+                    . $entry->getFilename(),
+            );
             if ($childPath !== '' && empty($job['queued_paths'][$childPath])) {
                 $job['queue'][] = $childPath;
                 $job['queued_paths'][$childPath] = true;
@@ -795,7 +982,11 @@ function admin_gallery_discovery_scan_directory(array &$job, string $relativePat
     }
 
     if ($directImageCount > 0) {
-        admin_gallery_discovery_record_image_count($job, $relativePath, $directImageCount);
+        admin_gallery_discovery_record_image_count(
+            $job,
+            $relativePath,
+            $directImageCount,
+        );
         admin_gallery_discovery_mark_image_candidate_path($job, $relativePath);
     }
     if ($hasSidecar && $relativePath !== '') {
@@ -819,7 +1010,11 @@ function admin_gallery_discovery_should_skip_directory(SplFileInfo $entry): bool
         return true;
     }
 
-    return in_array(strtolower($name), admin_gallery_discovery_ignored_directory_names(), true);
+    return in_array(
+        strtolower($name),
+        admin_gallery_discovery_ignored_directory_names(),
+        true,
+    );
 }
 
 /**
@@ -829,49 +1024,79 @@ function admin_gallery_discovery_should_skip_directory(SplFileInfo $entry): bool
  */
 function admin_gallery_discovery_ignored_directory_names(): array
 {
-    return ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews', '_php-gallery-internal'];
+    return [
+        'cache',
+        'thumbs',
+        'thumbnail',
+        'thumbnails',
+        'preview',
+        'previews',
+        '_php-gallery-internal',
+    ];
 }
 
 /**
  * Record direct and branch image totals for a scanned directory.
  *
- * @param array<string, mixed> $job Discovery job state, updated in place.
+ * @param array<string,mixed> $job Discovery job state, updated in place; increments direct_image_counts and branch_image_counts.
  * @param string $relativePath Directory path relative to the gallery root.
  * @param int $imageCount Number of supported images found directly in the directory.
+ * @return void Adds positive image counts to the normalized directory and its ancestors.
  */
-function admin_gallery_discovery_record_image_count(array &$job, string $relativePath, int $imageCount): void
-{
+function admin_gallery_discovery_record_image_count(
+    array &$job,
+    string $relativePath,
+    int $imageCount,
+): void {
     $normalized = normalize_relative_path($relativePath);
     if ($normalized === '' || $imageCount <= 0) {
         return;
     }
 
-    if (!isset($job['direct_image_counts']) || !is_array($job['direct_image_counts'])) {
+    if (
+        !isset($job['direct_image_counts'])
+        || !is_array($job['direct_image_counts'])
+    ) {
         $job['direct_image_counts'] = [];
     }
-    if (!isset($job['branch_image_counts']) || !is_array($job['branch_image_counts'])) {
+    if (
+        !isset($job['branch_image_counts'])
+        || !is_array($job['branch_image_counts'])
+    ) {
         $job['branch_image_counts'] = [];
     }
 
-    $job['direct_image_counts'][$normalized] = (int) ($job['direct_image_counts'][$normalized] ?? 0) + $imageCount;
-    foreach (admin_gallery_discovery_ancestor_paths($normalized, true) as $candidatePath) {
-        $job['branch_image_counts'][$candidatePath] = (int) ($job['branch_image_counts'][$candidatePath] ?? 0) + $imageCount;
+    $job['direct_image_counts'][$normalized] =
+        (int) ($job['direct_image_counts'][$normalized] ?? 0) + $imageCount;
+    foreach (admin_gallery_discovery_ancestor_paths(
+        $normalized,
+        true,
+    ) as $candidatePath) {
+        $job['branch_image_counts'][$candidatePath] =
+            (int) ($job['branch_image_counts'][$candidatePath] ?? 0)
+            + $imageCount;
     }
 }
 
 /**
  * Mark a directory and its ancestors as candidates because an image was found below them.
  *
- * @param array<string, mixed> $job Discovery job state, updated in place.
+ * @param array<string,mixed> $job Discovery job state, updated in place; updates candidate_paths.
  * @param string $relativePath Directory path relative to the gallery root.
+ * @return void Marks the normalized directory and each ancestor as candidate paths.
  */
-function admin_gallery_discovery_mark_image_candidate_path(array &$job, string $relativePath): void
-{
+function admin_gallery_discovery_mark_image_candidate_path(
+    array &$job,
+    string $relativePath,
+): void {
     if ($relativePath === '') {
         return;
     }
 
-    foreach (admin_gallery_discovery_ancestor_paths($relativePath, true) as $candidatePath) {
+    foreach (admin_gallery_discovery_ancestor_paths(
+        $relativePath,
+        true,
+    ) as $candidatePath) {
         admin_gallery_discovery_mark_candidate_path($job, $candidatePath);
     }
 }
@@ -879,11 +1104,14 @@ function admin_gallery_discovery_mark_image_candidate_path(array &$job, string $
 /**
  * Mark one normalized directory as a potential candidate.
  *
- * @param array<string, mixed> $job Discovery job state, updated in place.
+ * @param array<string,mixed> $job Discovery job state, updated in place; updates candidate_paths.
  * @param string $relativePath Directory path relative to the gallery root.
+ * @return void Marks the normalized non-root directory as a candidate when valid.
  */
-function admin_gallery_discovery_mark_candidate_path(array &$job, string $relativePath): void
-{
+function admin_gallery_discovery_mark_candidate_path(
+    array &$job,
+    string $relativePath,
+): void {
     $normalized = normalize_relative_path($relativePath);
     if ($normalized === '') {
         return;
@@ -902,9 +1130,14 @@ function admin_gallery_discovery_mark_candidate_path(array &$job, string $relati
  * @param bool $includeSelf Include the supplied path in the returned list.
  * @return array<int, string> Ancestor paths in root-to-leaf order.
  */
-function admin_gallery_discovery_ancestor_paths(string $relativePath, bool $includeSelf = false): array
-{
-    $segments = array_values(array_filter(explode('/', normalize_relative_path($relativePath)), static fn (string $segment): bool => $segment !== ''));
+function admin_gallery_discovery_ancestor_paths(
+    string $relativePath,
+    bool $includeSelf = false,
+): array {
+    $segments = array_values(array_filter(
+        explode('/', normalize_relative_path($relativePath)),
+        static fn(string $segment): bool => $segment !== '',
+    ));
     $limit = $includeSelf ? count($segments) : max(0, count($segments) - 1);
     $paths = [];
     $current = [];
@@ -925,22 +1158,34 @@ function admin_gallery_discovery_ancestor_paths(string $relativePath, bool $incl
  */
 function admin_gallery_discovery_finish_job(array $job): array
 {
-    $candidatePaths = array_keys(is_array($job['candidate_paths'] ?? null) ? $job['candidate_paths'] : []);
+    $candidatePaths = array_keys(
+        is_array($job['candidate_paths'] ?? null)
+            ? $job['candidate_paths']
+            : [],
+    );
     usort($candidatePaths, static function (string $left, string $right): int {
         $depth = substr_count($left, '/') <=> substr_count($right, '/');
         return $depth !== 0 ? $depth : strnatcasecmp($left, $right);
     });
 
-    $branchImageCounts = is_array($job['branch_image_counts'] ?? null) ? $job['branch_image_counts'] : [];
+    $branchImageCounts = is_array($job['branch_image_counts'] ?? null)
+        ? $job['branch_image_counts']
+        : [];
     $candidates = [];
     foreach ($candidatePaths as $candidatePath) {
-        if (admin_gallery_discovery_is_known_gallery_path($candidatePath, $job) || !is_dir(gallery_abs_path($candidatePath))) {
+        if (
+            admin_gallery_discovery_is_known_gallery_path($candidatePath, $job)
+            || !is_dir(gallery_abs_path($candidatePath))
+        ) {
             continue;
         }
         if ((int) ($branchImageCounts[$candidatePath] ?? 0) <= 0) {
             continue;
         }
-        $candidate = admin_gallery_discovery_candidate_from_path($candidatePath, $job);
+        $candidate = admin_gallery_discovery_candidate_from_path(
+            $candidatePath,
+            $job,
+        );
         if ($candidate !== null) {
             $candidates[] = $candidate;
         }
@@ -948,7 +1193,8 @@ function admin_gallery_discovery_finish_job(array $job): array
 
     $job['status'] = 'complete';
     $job['candidates'] = $candidates;
-    $job['metadata_only_paths'] = admin_gallery_discovery_metadata_only_paths($job);
+    $job['metadata_only_paths'] =
+        admin_gallery_discovery_metadata_only_paths($job);
     $job['updated_at'] = time();
     return $job;
 }
@@ -960,30 +1206,48 @@ function admin_gallery_discovery_finish_job(array $job): array
  * @param array<string, mixed> $job Discovery job state used for import-preview counts.
  * @return array<string, mixed>|null Candidate row, or null when the folder vanished.
  */
-function admin_gallery_discovery_candidate_from_path(string $relativePath, array $job = []): ?array
-{
+function admin_gallery_discovery_candidate_from_path(
+    string $relativePath,
+    array $job = [],
+): ?array {
     $relativePath = normalize_relative_path($relativePath);
     if ($relativePath === '' || !is_dir(gallery_abs_path($relativePath))) {
         return null;
     }
 
-    $jsonPath = gallery_abs_path($relativePath) . DIRECTORY_SEPARATOR . 'gallery.json';
+    $jsonPath =
+        gallery_abs_path($relativePath) . DIRECTORY_SEPARATOR . 'gallery.json';
     $metadata = read_gallery_sidecar($jsonPath);
 
-    $directImageCounts = is_array($job['direct_image_counts'] ?? null) ? $job['direct_image_counts'] : [];
-    $branchImageCounts = is_array($job['branch_image_counts'] ?? null) ? $job['branch_image_counts'] : [];
-    $sidecarPaths = is_array($job['sidecar_paths'] ?? null) ? $job['sidecar_paths'] : [];
-    $candidatePaths = array_keys(is_array($job['candidate_paths'] ?? null) ? $job['candidate_paths'] : []);
+    $directImageCounts = is_array($job['direct_image_counts'] ?? null)
+        ? $job['direct_image_counts']
+        : [];
+    $branchImageCounts = is_array($job['branch_image_counts'] ?? null)
+        ? $job['branch_image_counts']
+        : [];
+    $sidecarPaths = is_array($job['sidecar_paths'] ?? null)
+        ? $job['sidecar_paths']
+        : [];
+    $candidatePaths = array_keys(
+        is_array($job['candidate_paths'] ?? null)
+            ? $job['candidate_paths']
+            : [],
+    );
     $parentPath = admin_gallery_discovery_parent_path($relativePath);
 
     $title = (string) ($metadata['title'] ?? basename($relativePath));
-    $titleConflict = admin_gallery_discovery_existing_sibling_title_conflict($relativePath, $title);
+    $titleConflict = admin_gallery_discovery_existing_sibling_title_conflict(
+        $relativePath,
+        $title,
+    );
 
     return [
         'folder_path' => $relativePath,
         'title' => $title,
         'description' => $metadata['description'] ?? '',
-        'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
+        'visibility' => gallery_visibility_storage_value(
+            (string) ($metadata['visibility'] ?? 'unpublished'),
+        ),
         'access_mode' => $metadata['access_mode'] ?? 'normal',
         'access_listing' => $metadata['access_listing'] ?? 'listed',
         'banner_image_path' => $metadata['banner_image_path'] ?? null,
@@ -993,8 +1257,15 @@ function admin_gallery_discovery_candidate_from_path(string $relativePath, array
         'parent_folder_path' => $parentPath,
         'parent_title' => admin_gallery_discovery_parent_title($parentPath),
         'direct_image_count' => (int) ($directImageCounts[$relativePath] ?? 0),
-        'branch_image_count' => (int) ($branchImageCounts[$relativePath] ?? $directImageCounts[$relativePath] ?? 0),
-        'descendant_candidate_count' => admin_gallery_discovery_descendant_candidate_count($relativePath, $candidatePaths),
+        'branch_image_count' => (int) (
+            $branchImageCounts[$relativePath]
+            ?? $directImageCounts[$relativePath]
+            ?? 0
+        ),
+        'descendant_candidate_count' => admin_gallery_discovery_descendant_candidate_count(
+            $relativePath,
+            $candidatePaths,
+        ),
         'has_sidecar' => isset($sidecarPaths[$relativePath]),
         'existing_title_conflict' => $titleConflict !== null,
         'existing_title_conflict_title' => $titleConflict['title'] ?? '',
@@ -1025,8 +1296,10 @@ function admin_gallery_discovery_has_existing_sibling_title(string $relativePath
  * @param string $title Candidate gallery title.
  * @return array<string, mixed>|null Matching existing gallery row summary.
  */
-function admin_gallery_discovery_existing_sibling_title_conflict(string $relativePath, string $title): ?array
-{
+function admin_gallery_discovery_existing_sibling_title_conflict(
+    string $relativePath,
+    string $title,
+): ?array {
     $relativePath = normalize_relative_path($relativePath);
     $parentPath = admin_gallery_discovery_parent_path($relativePath);
     $titleKey = admin_gallery_discovery_title_key($title);
@@ -1035,14 +1308,22 @@ function admin_gallery_discovery_existing_sibling_title_conflict(string $relativ
     }
 
     foreach (admin_gallery_discovery_existing_gallery_rows() as $gallery) {
-        $existingPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+        $existingPath = normalize_relative_path(
+            (string) ($gallery['folder_path'] ?? ''),
+        );
         if ($existingPath === '' || $existingPath === $relativePath) {
             continue;
         }
-        if (admin_gallery_discovery_parent_path($existingPath) !== $parentPath) {
+        if (
+            admin_gallery_discovery_parent_path($existingPath) !== $parentPath
+        ) {
             continue;
         }
-        if (admin_gallery_discovery_title_key((string) ($gallery['title'] ?? '')) !== $titleKey) {
+        if (
+            admin_gallery_discovery_title_key(
+                (string) ($gallery['title'] ?? ''),
+            ) !== $titleKey
+        ) {
             continue;
         }
         return [
@@ -1065,10 +1346,40 @@ function admin_gallery_discovery_title_key(string $title): string
 {
     $title = trim($title);
     $title = strtr($title, [
-        'á' => 'a', 'č' => 'c', 'ď' => 'd', 'é' => 'e', 'ě' => 'e', 'í' => 'i', 'ň' => 'n', 'ó' => 'o', 'ř' => 'r', 'š' => 's', 'ť' => 't', 'ú' => 'u', 'ů' => 'u', 'ý' => 'y', 'ž' => 'z',
-        'Á' => 'A', 'Č' => 'C', 'Ď' => 'D', 'É' => 'E', 'Ě' => 'E', 'Í' => 'I', 'Ň' => 'N', 'Ó' => 'O', 'Ř' => 'R', 'Š' => 'S', 'Ť' => 'T', 'Ú' => 'U', 'Ů' => 'U', 'Ý' => 'Y', 'Ž' => 'Z',
+        'á' => 'a',
+        'č' => 'c',
+        'ď' => 'd',
+        'é' => 'e',
+        'ě' => 'e',
+        'í' => 'i',
+        'ň' => 'n',
+        'ó' => 'o',
+        'ř' => 'r',
+        'š' => 's',
+        'ť' => 't',
+        'ú' => 'u',
+        'ů' => 'u',
+        'ý' => 'y',
+        'ž' => 'z',
+        'Á' => 'A',
+        'Č' => 'C',
+        'Ď' => 'D',
+        'É' => 'E',
+        'Ě' => 'E',
+        'Í' => 'I',
+        'Ň' => 'N',
+        'Ó' => 'O',
+        'Ř' => 'R',
+        'Š' => 'S',
+        'Ť' => 'T',
+        'Ú' => 'U',
+        'Ů' => 'U',
+        'Ý' => 'Y',
+        'Ž' => 'Z',
     ]);
-    $title = function_exists('mb_strtolower') ? mb_strtolower($title, 'UTF-8') : strtolower($title);
+    $title = function_exists('mb_strtolower')
+        ? mb_strtolower($title, 'UTF-8')
+        : strtolower($title);
     $title = preg_replace('/[^\p{L}\p{N}]+/u', '', $title) ?: '';
     return $title;
 }
@@ -1105,7 +1416,9 @@ function admin_gallery_discovery_parent_path(string $relativePath): string
         return '';
     }
 
-    return dirname($relativePath) === '.' ? '' : normalize_relative_path(dirname($relativePath));
+    return dirname($relativePath) === '.'
+        ? ''
+        : normalize_relative_path(dirname($relativePath));
 }
 
 /**
@@ -1122,7 +1435,11 @@ function admin_gallery_discovery_parent_title(string $parentPath): string
     }
 
     $gallery = find_gallery_by_folder_path($parentPath);
-    if ($gallery && isset($gallery['title']) && trim((string) $gallery['title']) !== '') {
+    if (
+        $gallery
+        && isset($gallery['title'])
+        && trim((string) $gallery['title']) !== ''
+    ) {
         return (string) $gallery['title'];
     }
 
@@ -1136,8 +1453,10 @@ function admin_gallery_discovery_parent_title(string $parentPath): string
  * @param array<int, string> $candidatePaths Candidate folder paths from the completed scan.
  * @return int Number of descendant candidates.
  */
-function admin_gallery_discovery_descendant_candidate_count(string $relativePath, array $candidatePaths): int
-{
+function admin_gallery_discovery_descendant_candidate_count(
+    string $relativePath,
+    array $candidatePaths,
+): int {
     $relativePath = normalize_relative_path($relativePath);
     if ($relativePath === '') {
         return 0;
@@ -1155,7 +1474,6 @@ function admin_gallery_discovery_descendant_candidate_count(string $relativePath
     return $count;
 }
 
-
 /**
  * Return metadata-only folders that were found but are not import candidates.
  *
@@ -1164,13 +1482,20 @@ function admin_gallery_discovery_descendant_candidate_count(string $relativePath
  */
 function admin_gallery_discovery_metadata_only_paths(array $job): array
 {
-    $sidecarPaths = array_keys(is_array($job['sidecar_paths'] ?? null) ? $job['sidecar_paths'] : []);
-    $branchImageCounts = is_array($job['branch_image_counts'] ?? null) ? $job['branch_image_counts'] : [];
+    $sidecarPaths = array_keys(
+        is_array($job['sidecar_paths'] ?? null) ? $job['sidecar_paths'] : [],
+    );
+    $branchImageCounts = is_array($job['branch_image_counts'] ?? null)
+        ? $job['branch_image_counts']
+        : [];
     $metadataOnlyPaths = [];
 
     foreach ($sidecarPaths as $sidecarPath) {
         $normalized = normalize_relative_path((string) $sidecarPath);
-        if ($normalized === '' || admin_gallery_discovery_is_known_gallery_path($normalized, $job)) {
+        if (
+            $normalized === ''
+            || admin_gallery_discovery_is_known_gallery_path($normalized, $job)
+        ) {
             continue;
         }
         if ((int) ($branchImageCounts[$normalized] ?? 0) > 0) {
@@ -1197,20 +1522,34 @@ function admin_gallery_discovery_path_has_branch_images(string $relativePath): b
     }
 
     try {
-        $directory = new RecursiveDirectoryIterator(gallery_abs_path($relativePath), FilesystemIterator::SKIP_DOTS);
-        $filter = new RecursiveCallbackFilterIterator($directory, static function (SplFileInfo $entry): bool {
-            if ($entry->isDir()) {
-                return !$entry->isLink() && !admin_gallery_discovery_should_skip_directory($entry);
-            }
-            return true;
-        });
-        $iterator = new RecursiveIteratorIterator($filter, RecursiveIteratorIterator::LEAVES_ONLY);
+        $directory = new RecursiveDirectoryIterator(
+            gallery_abs_path($relativePath),
+            FilesystemIterator::SKIP_DOTS,
+        );
+        $filter =
+            new RecursiveCallbackFilterIterator($directory, static function (SplFileInfo $entry): bool {
+                if ($entry->isDir()) {
+                    return !$entry->isLink()
+                        && !admin_gallery_discovery_should_skip_directory(
+                            $entry,
+                        );
+                }
+                return true;
+            });
+        $iterator = new RecursiveIteratorIterator(
+            $filter,
+            RecursiveIteratorIterator::LEAVES_ONLY,
+        );
     } catch (Throwable) {
         return false;
     }
 
     foreach ($iterator as $entry) {
-        if ($entry instanceof SplFileInfo && $entry->isFile() && is_supported_image_path($entry->getFilename())) {
+        if (
+            $entry instanceof SplFileInfo
+            && $entry->isFile()
+            && is_supported_image_path($entry->getFilename())
+        ) {
             return true;
         }
     }
@@ -1245,7 +1584,11 @@ function admin_gallery_discovery_collect_subtree_candidate_paths(string $relativ
         admin_gallery_discovery_scan_directory($job, $currentPath);
     }
 
-    $paths = array_keys(is_array($job['candidate_paths'] ?? null) ? $job['candidate_paths'] : []);
+    $paths = array_keys(
+        is_array($job['candidate_paths'] ?? null)
+            ? $job['candidate_paths']
+            : [],
+    );
     usort($paths, static function (string $left, string $right): int {
         $depth = substr_count($left, '/') <=> substr_count($right, '/');
         return $depth !== 0 ? $depth : strnatcasecmp($left, $right);
@@ -1257,12 +1600,16 @@ function admin_gallery_discovery_collect_subtree_candidate_paths(string $relativ
 /**
  * Record a bounded discovery warning for later display and logging.
  *
- * @param array<string, mixed> $job Discovery job state, updated in place.
+ * @param array<string,mixed> $job Discovery job state, updated in place; adds a bounded message to errors.
  * @param string $relativePath Directory path relative to the gallery root.
  * @param string $message Error message from the filesystem operation.
+ * @return void Records the warning unless the ten-message limit has been reached.
  */
-function admin_gallery_discovery_record_error(array &$job, string $relativePath, string $message): void
-{
+function admin_gallery_discovery_record_error(
+    array &$job,
+    string $relativePath,
+    string $message,
+): void {
     if (!isset($job['errors']) || !is_array($job['errors'])) {
         $job['errors'] = [];
     }
@@ -1270,7 +1617,9 @@ function admin_gallery_discovery_record_error(array &$job, string $relativePath,
         return;
     }
 
-    $job['errors'][] = trim(($relativePath === '' ? '[root]' : $relativePath) . ': ' . $message);
+    $job['errors'][] = trim(
+        ($relativePath === '' ? '[root]' : $relativePath) . ': ' . $message,
+    );
 }
 
 /**
@@ -1280,16 +1629,37 @@ function admin_gallery_discovery_record_error(array &$job, string $relativePath,
  * @param bool $includeCandidates Include candidate rows in the payload.
  * @return array<string, mixed> JSON-safe public state.
  */
-function admin_gallery_discovery_public_state(array $job, bool $includeCandidates = false): array
-{
-    $processed = (int) ($job['processed_directories'] ?? $job['queue_index'] ?? 0);
-    $total = max($processed, (int) ($job['discovered_directories'] ?? count((array) ($job['queue'] ?? []))));
-    $candidatePaths = is_array($job['candidate_paths'] ?? null) ? $job['candidate_paths'] : [];
-    $candidates = is_array($job['candidates'] ?? null) ? $job['candidates'] : [];
+function admin_gallery_discovery_public_state(
+    array $job,
+    bool $includeCandidates = false,
+): array {
+    $processed = (int) (
+        $job['processed_directories']
+        ?? $job['queue_index']
+        ?? 0
+    );
+    $total = max(
+        $processed,
+        (int) (
+            $job['discovered_directories'] ?? count(
+                (array) ($job['queue'] ?? []),
+            )
+        ),
+    );
+    $candidatePaths = is_array($job['candidate_paths'] ?? null)
+        ? $job['candidate_paths']
+        : [];
+    $candidates = is_array($job['candidates'] ?? null)
+        ? $job['candidates']
+        : [];
     $status = (string) ($job['status'] ?? 'running');
     $done = $status === 'complete' || $status === 'error';
-    $candidateCount = $status === 'complete' ? count($candidates) : count($candidatePaths);
-    $metadataOnlyPaths = is_array($job['metadata_only_paths'] ?? null) ? $job['metadata_only_paths'] : [];
+    $candidateCount = $status === 'complete'
+        ? count($candidates)
+        : count($candidatePaths);
+    $metadataOnlyPaths = is_array($job['metadata_only_paths'] ?? null)
+        ? $job['metadata_only_paths']
+        : [];
 
     $state = [
         'ok' => $status !== 'error',
@@ -1301,7 +1671,9 @@ function admin_gallery_discovery_public_state(array $job, bool $includeCandidate
         'queued_directories' => max(0, $total - $processed),
         'candidate_count' => $candidateCount,
         'metadata_only_count' => count($metadataOnlyPaths),
-        'percent' => $total > 0 ? min(100.0, ($processed / $total) * 100.0) : 0.0,
+        'percent' => $total > 0
+            ? min(100.0, ($processed / $total) * 100.0)
+            : 0.0,
         'errors' => is_array($job['errors'] ?? null) ? $job['errors'] : [],
     ];
 
@@ -1349,7 +1721,10 @@ function admin_gallery_discovery_read_job(array &$jobs, string $token): ?array
     }
 
     $job = $jobs[$token];
-    if (time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0) > ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS) {
+    if (
+        (time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0))
+        > ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS
+    ) {
         unset($jobs[$token]);
         return null;
     }
@@ -1366,7 +1741,8 @@ function admin_gallery_discovery_read_job(array &$jobs, string $token): ?array
  */
 function admin_gallery_discovery_write_job(array &$jobs, array $job): void
 {
-    $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($job['token'] ?? '')) ?: '';
+    $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($job['token'] ?? ''))
+    ?: '';
     if ($token === '') {
         return;
     }
@@ -1386,7 +1762,11 @@ function admin_gallery_discovery_cleanup_jobs(array &$jobs): void
     }
 
     foreach ($jobs as $token => $job) {
-        if (!is_array($job) || time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0) > ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS) {
+        if (
+            !is_array($job)
+            || (time() - (int) ($job['updated_at'] ?? $job['started_at'] ?? 0))
+                > ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS
+        ) {
             unset($jobs[$token]);
         }
     }
@@ -1395,7 +1775,8 @@ function admin_gallery_discovery_cleanup_jobs(array &$jobs): void
         return;
     }
 
-    uasort($jobs,
+    uasort(
+        $jobs,
         /**
          * Sort retained checkpoints newest first while preserving their token keys.
          * @param array<string,mixed> $left Earlier candidate checkpoint.
@@ -1403,7 +1784,16 @@ function admin_gallery_discovery_cleanup_jobs(array &$jobs): void
          * @return int Descending last-update comparison.
          */
         static function (array $left, array $right): int {
-        return (int) ($right['updated_at'] ?? 0) <=> (int) ($left['updated_at'] ?? 0);
-    });
-    $jobs = array_slice($jobs, 0, ADMIN_GALLERY_DISCOVERY_RETAINED_JOB_LIMIT, true);
+            return (
+                (int) ($right['updated_at'] ?? 0)
+                    <=> (int) ($left['updated_at'] ?? 0)
+            );
+        },
+    );
+    $jobs = array_slice(
+        $jobs,
+        0,
+        ADMIN_GALLERY_DISCOVERY_RETAINED_JOB_LIMIT,
+        true,
+    );
 }

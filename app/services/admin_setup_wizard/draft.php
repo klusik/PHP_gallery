@@ -45,7 +45,9 @@ use InvalidArgumentException;
 function admin_setup_wizard_begin_draft(int $ownerId, array $steps): array
 {
     if ($ownerId <= 0 || $steps === []) {
-        throw new AdminSetupWizardException('admin.setup_wizard.error.invalid_draft');
+        throw new AdminSetupWizardException(
+            'admin.setup_wizard.error.invalid_draft',
+        );
     }
     $original = [];
     foreach ($steps as $step) {
@@ -73,10 +75,18 @@ function admin_setup_wizard_begin_draft(int $ownerId, array $steps): array
  * @param array<string,array<string,mixed>> $steps Trusted wizard steps.
  * @return bool True only for a safe reusable draft.
  */
-function admin_setup_wizard_draft_valid(array $draft, int $ownerId, array $steps): bool
-{
-    if ($ownerId <= 0 || !is_int($draft['owner'] ?? null) || $draft['owner'] !== $ownerId
-        || !is_int($draft['revision'] ?? null) || $draft['revision'] < 1) {
+function admin_setup_wizard_draft_valid(
+    array $draft,
+    int $ownerId,
+    array $steps,
+): bool {
+    if (
+        $ownerId <= 0
+        || !is_int($draft['owner'] ?? null)
+        || $draft['owner'] !== $ownerId
+        || !is_int($draft['revision'] ?? null)
+        || $draft['revision'] < 1
+    ) {
         return false;
     }
     $step = (string) ($draft['step'] ?? '');
@@ -91,7 +101,10 @@ function admin_setup_wizard_draft_valid(array $draft, int $ownerId, array $steps
     $editable = admin_setup_wizard_editable_entries($steps);
     $known = admin_setup_wizard_all_entries($steps);
     foreach (array_keys($draft['changes']) as $id) {
-        if (!isset($editable[(string) $id]) || !array_key_exists((string) $id, $draft['original'])) {
+        if (
+            !isset($editable[(string) $id])
+            || !array_key_exists((string) $id, $draft['original'])
+        ) {
             return false;
         }
     }
@@ -130,22 +143,42 @@ function admin_setup_wizard_stage_step(
     string $sectionId,
     array $settings,
     array $include,
-    bool $skipSection = false
+    bool $skipSection = false,
 ): array {
     if (!isset($steps[$sectionId])) {
-        return ['draft' => $draft, 'errors' => ['_page' => 'admin.setup_wizard.error.invalid_step']];
+        return [
+            'draft' => $draft,
+            'errors' => ['_page' => 'admin.setup_wizard.error.invalid_step'],
+        ];
     }
     $entries = (array) ($steps[$sectionId]['entries'] ?? []);
     foreach (array_keys($settings) as $submittedId) {
         $submittedId = (string) $submittedId;
-        if (!isset($entries[$submittedId]) || !is_array($entries[$submittedId]) || empty($entries[$submittedId]['wizard_editable'])) {
-            return ['draft' => $draft, 'errors' => [$submittedId => 'admin.setup_wizard.error.unavailable']];
+        if (
+            !isset($entries[$submittedId])
+            || !is_array($entries[$submittedId])
+            || empty($entries[$submittedId]['wizard_editable'])
+        ) {
+            return [
+                'draft' => $draft,
+                'errors' => [
+                    $submittedId => 'admin.setup_wizard.error.unavailable',
+                ],
+            ];
         }
     }
     foreach (array_keys($include) as $submittedId) {
         $submittedId = (string) $submittedId;
-        if (!isset($entries[$submittedId]) || !is_array($entries[$submittedId])) {
-            return ['draft' => $draft, 'errors' => [$submittedId => 'admin.setup_wizard.error.unavailable']];
+        if (
+            !isset($entries[$submittedId])
+            || !is_array($entries[$submittedId])
+        ) {
+            return [
+                'draft' => $draft,
+                'errors' => [
+                    $submittedId => 'admin.setup_wizard.error.unavailable',
+                ],
+            ];
         }
     }
 
@@ -173,11 +206,17 @@ function admin_setup_wizard_stage_step(
             continue;
         }
         $inputType = (string) ($entry['input_type'] ?? 'text');
-        $raw = $inputType === 'checkbox' && !array_key_exists($id, $settings) ? '' : ($settings[$id] ?? null);
+        $raw = $inputType === 'checkbox' && !array_key_exists($id, $settings)
+            ? ''
+            : $settings[$id] ?? null;
         try {
             $normalized = admin_setup_wizard_normalize_entry($entry, $raw);
-            $original = $candidate['original'][$id] ?? ($entry['current'] ?? null);
-            if (admin_setup_wizard_values_equal($normalized, admin_setup_wizard_normalize_original($entry, $original))) {
+            $original =
+                $candidate['original'][$id] ?? $entry['current'] ?? null;
+            if (admin_setup_wizard_values_equal($normalized, admin_setup_wizard_normalize_original(
+                $entry,
+                $original,
+            ))) {
                 unset($candidate['changes'][$id]);
             } else {
                 $candidate['changes'][$id] = $normalized;
@@ -187,9 +226,11 @@ function admin_setup_wizard_stage_step(
             $errors[$id] = 'admin.setup_wizard.error.invalid_value';
         }
     }
-    return $errors === []
-        ? ['draft' => $candidate, 'errors' => []]
-        : ['draft' => $draft, 'errors' => $errors];
+    return (
+        $errors === []
+            ? ['draft' => $candidate, 'errors' => []]
+            : ['draft' => $draft, 'errors' => $errors]
+    );
 }
 
 /**
@@ -201,11 +242,17 @@ function admin_setup_wizard_stage_step(
  * @param string $target Requested goto target.
  * @return string Safe destination section or summary id.
  */
-function admin_setup_wizard_navigation(string $current, string $action, array $steps, string $target = ''): string
-{
+function admin_setup_wizard_navigation(
+    string $current,
+    string $action,
+    array $steps,
+    string $target = '',
+): string {
     $ids = array_keys($steps);
     if ($ids === []) {
-        throw new AdminSetupWizardException('admin.setup_wizard.error.invalid_step');
+        throw new AdminSetupWizardException(
+            'admin.setup_wizard.error.invalid_step',
+        );
     }
     if ($current === ADMIN_SETUP_WIZARD_SUMMARY_STEP) {
         if ($action === 'back') {
@@ -218,11 +265,15 @@ function admin_setup_wizard_navigation(string $current, string $action, array $s
     }
     $index = array_search($current, $ids, true);
     if ($index === false) {
-        throw new AdminSetupWizardException('admin.setup_wizard.error.invalid_step');
+        throw new AdminSetupWizardException(
+            'admin.setup_wizard.error.invalid_step',
+        );
     }
     if ($action === 'goto') {
         if (!isset($steps[$target])) {
-            throw new AdminSetupWizardException('admin.setup_wizard.error.invalid_step');
+            throw new AdminSetupWizardException(
+                'admin.setup_wizard.error.invalid_step',
+            );
         }
         return $target;
     }
@@ -230,9 +281,13 @@ function admin_setup_wizard_navigation(string $current, string $action, array $s
         return (string) $ids[max(0, $index - 1)];
     }
     if (in_array($action, ['next', 'skip'], true)) {
-        return isset($ids[$index + 1]) ? (string) $ids[$index + 1] : ADMIN_SETUP_WIZARD_SUMMARY_STEP;
+        return isset($ids[$index + 1])
+            ? (string) $ids[$index + 1]
+            : ADMIN_SETUP_WIZARD_SUMMARY_STEP;
     }
-    throw new AdminSetupWizardException('admin.setup_wizard.error.invalid_step');
+    throw new AdminSetupWizardException(
+        'admin.setup_wizard.error.invalid_step',
+    );
 }
 
 /**
@@ -261,7 +316,8 @@ function admin_setup_wizard_summary(array $draft, array $steps): array
                     'id' => $id,
                     'label' => (string) ($entry['label'] ?? $id),
                     'label_key' => (string) ($entry['label_key'] ?? ''),
-                    'before' => $draft['original'][$id] ?? ($entry['current'] ?? null),
+                    'before' =>
+                        $draft['original'][$id] ?? $entry['current'] ?? null,
                     'after' => $value,
                     'value' => $value,
                     'display' => admin_setup_wizard_summary_display($value),
@@ -275,7 +331,7 @@ function admin_setup_wizard_summary(array $draft, array $steps): array
                     'label_key' => (string) ($entry['label_key'] ?? ''),
                 ];
             } else {
-                $value = $draft['original'][$id] ?? ($entry['current'] ?? null);
+                $value = $draft['original'][$id] ?? $entry['current'] ?? null;
                 $reviewed[] = [
                     'id' => $id,
                     'label' => (string) ($entry['label'] ?? $id),
@@ -285,8 +341,15 @@ function admin_setup_wizard_summary(array $draft, array $steps): array
                 ];
             }
         }
-        if ($changes !== [] || $reviewed !== [] || $skipped !== [] || $deferred !== []) {
-            $definition = is_array($step['definition'] ?? null) ? $step['definition'] : [];
+        if (
+            $changes !== []
+            || $reviewed !== []
+            || $skipped !== []
+            || $deferred !== []
+        ) {
+            $definition = is_array($step['definition'] ?? null)
+                ? $step['definition']
+                : [];
             $groups[] = [
                 'id' => (string) $sectionId,
                 'title' => (string) ($definition['label'] ?? $sectionId),
@@ -312,8 +375,11 @@ function admin_setup_wizard_summary_display(mixed $value): string
     if (!is_array($value)) {
         return (string) $value;
     }
-    if (array_is_list($value) && count($value) <= ADMIN_SETUP_WIZARD_SUMMARY_LIST_LIMIT
-        && array_reduce($value,
+    if (
+        array_is_list($value)
+        && count($value) <= ADMIN_SETUP_WIZARD_SUMMARY_LIST_LIMIT
+        && array_reduce(
+            $value,
             /**
              * Check whether every visited list item is scalar.
              *
@@ -321,9 +387,11 @@ function admin_setup_wizard_summary_display(mixed $value): string
              * @param scalar|array<array-key,mixed>|object|null $item Candidate normalized item.
              * @return bool Updated scalar-only state.
              */
-            static fn (bool $safe, mixed $item): bool => $safe && is_scalar($item),
-            true
-        )) {
+            static fn(bool $safe, mixed $item): bool => $safe
+            && is_scalar($item),
+            true,
+        )
+    ) {
         return implode(', ', array_map(
             /**
              * Format one scalar list item for bounded summary output.
@@ -331,8 +399,8 @@ function admin_setup_wizard_summary_display(mixed $value): string
              * @param scalar $item Validated scalar list item.
              * @return string Display text.
              */
-            static fn (mixed $item): string => (string) $item,
-            $value
+            static fn(mixed $item): string => (string) $item,
+            $value,
         ));
     }
     return t('admin.setup_wizard.value_customized', 'Customized');

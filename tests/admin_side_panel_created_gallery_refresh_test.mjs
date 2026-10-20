@@ -199,7 +199,7 @@ assert.equal(aggregateFromExisting.created_gallery, true, 'A batch response can 
 
 assert.match(
     publicGalleryPagesViewSource,
-    /<section class="hero" data-public-gallery-id="' \. \(int\) \(\$viewModel\['gallery_id'\] \?\? 0\)/,
+    /<section class="hero" data-public-gallery-id="'\s*\.\s*\(int\)\s*\(\$viewModel\['gallery_id'\]\s*\?\?\s*0\)/,
     'Public gallery hero view must expose the controller-prepared gallery id for pagination-safe refresh ownership.'
 );
 assert.match(

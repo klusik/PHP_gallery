@@ -61,9 +61,12 @@ use function Gallery\Services\picture_game_schema_ready;
  */
 function admin_edit_gallery_feature_enabled(string $flag): bool
 {
-    return function_exists('Gallery\\Services\\feature_capability_effective_enabled')
+    return function_exists(
+        'Gallery\\Services\\feature_capability_effective_enabled',
+    )
         ? feature_capability_effective_enabled($flag)
-        : (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($flag));
+        : !function_exists('Gallery\\Services\\feature_flag_enabled')
+        || feature_flag_enabled($flag);
 }
 
 /**
@@ -81,33 +84,55 @@ function admin_edit_gallery_capabilities(): array
     // Share-token persistence is independently migrated and can therefore differ from core access readiness.
     $shareTokenSchemaStatus = gallery_access_share_token_schema_status();
     // Feature-only decisions are resolved first so disabled capabilities never trigger optional schema probes.
-    $pictureGameFeatureEnabled = admin_edit_gallery_feature_enabled('picture_game');
+    $pictureGameFeatureEnabled = admin_edit_gallery_feature_enabled(
+        'picture_game',
+    );
     $gpsMapFeatureEnabled = admin_edit_gallery_feature_enabled('gallery_maps');
-    $flightMapFeatureEnabled = admin_edit_gallery_feature_enabled('flight_maps');
-    $imageVotingFeatureEnabled = admin_edit_gallery_feature_enabled('image_voting');
-    $lightboxModeFeatureEnabled = admin_edit_gallery_feature_enabled('lightbox_modes');
+    $flightMapFeatureEnabled = admin_edit_gallery_feature_enabled(
+        'flight_maps',
+    );
+    $imageVotingFeatureEnabled = admin_edit_gallery_feature_enabled(
+        'image_voting',
+    );
+    $lightboxModeFeatureEnabled = admin_edit_gallery_feature_enabled(
+        'lightbox_modes',
+    );
     // $gpsMapReady stores whether EXIF/GPS display may be offered at all.
     $gpsMapReady = $gpsMapFeatureEnabled && exif_gps_schema_ready();
 
     return [
-        'picture_game_ready' => $pictureGameFeatureEnabled && picture_game_schema_ready(),
+        'picture_game_ready' =>
+            $pictureGameFeatureEnabled && picture_game_schema_ready(),
         'gps_map_ready' => $gpsMapReady,
         // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
-        'gps_map_override_ready' => $gpsMapReady && exif_gps_override_schema_ready(),
-        'flight_map_ready' => $flightMapFeatureEnabled && flight_map_schema_ready(),
-        'voting_ready' => $imageVotingFeatureEnabled && gallery_voting_schema_ready(),
-        'lightbox_mode_ready' => $lightboxModeFeatureEnabled && gallery_lightbox_browsing_mode_schema_ready(),
+        'gps_map_override_ready' =>
+            $gpsMapReady && exif_gps_override_schema_ready(),
+        'flight_map_ready' =>
+            $flightMapFeatureEnabled && flight_map_schema_ready(),
+        'voting_ready' =>
+            $imageVotingFeatureEnabled && gallery_voting_schema_ready(),
+        'lightbox_mode_ready' =>
+            $lightboxModeFeatureEnabled
+                && gallery_lightbox_browsing_mode_schema_ready(),
         // Feature-only decisions control whether a control is surfaced before schema is considered.
         'picture_game_feature_enabled' => $pictureGameFeatureEnabled,
         'image_voting_feature_enabled' => $imageVotingFeatureEnabled,
         'flight_map_feature_enabled' => $flightMapFeatureEnabled,
         'lightbox_mode_feature_enabled' => $lightboxModeFeatureEnabled,
-        'media_renamer_feature_enabled' => admin_edit_gallery_feature_enabled('media_renamer'),
-        'upload_api_feature_enabled' => admin_edit_gallery_feature_enabled('upload_api'),
-        'gallery_migration_feature_enabled' => admin_edit_gallery_feature_enabled('gallery_migration'),
+        'media_renamer_feature_enabled' => admin_edit_gallery_feature_enabled(
+            'media_renamer',
+        ),
+        'upload_api_feature_enabled' => admin_edit_gallery_feature_enabled(
+            'upload_api',
+        ),
+        'gallery_migration_feature_enabled' => admin_edit_gallery_feature_enabled(
+            'gallery_migration',
+        ),
         'access_schema_status' => $accessSchemaStatus,
         'access_ready' => schema_inspection_is_available($accessSchemaStatus),
         'share_token_schema_status' => $shareTokenSchemaStatus,
-        'share_token_ready' => schema_inspection_is_available($shareTokenSchemaStatus),
+        'share_token_ready' => schema_inspection_is_available(
+            $shareTokenSchemaStatus,
+        ),
     ];
 }

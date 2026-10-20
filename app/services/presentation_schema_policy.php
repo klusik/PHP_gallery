@@ -54,12 +54,13 @@ final class PresentationSchemaUnavailableException extends RuntimeException
      * @param string $state Observed schema capability state.
      * @param string $operation Stable attempted-operation identifier.
      * @param string $message Safe caller-facing exception message.
+     * @return void
      */
     public function __construct(
         private readonly string $feature,
         private readonly string $state,
         private readonly string $operation,
-        string $message
+        string $message,
     ) {
         parent::__construct($message);
     }
@@ -94,15 +95,20 @@ final class PresentationSchemaUnavailableException extends RuntimeException
  *
  * @param string $feature Stable feature key.
  * @param array<string,array<int,string>> $tables Table => required columns.
- * @return array{state:string,feature:string,requirements:array}
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state and table/column inspection results.
  */
-function presentation_schema_tables_status(string $feature, array $tables): array
-{
+function presentation_schema_tables_status(
+    string $feature,
+    array $tables,
+): array {
     $requirements = [];
     foreach ($tables as $table => $columns) {
         $requirements[] = schema_inspection_table((string) $table);
         foreach ($columns as $column) {
-            $requirements[] = schema_inspection_column((string) $table, (string) $column);
+            $requirements[] = schema_inspection_column(
+                (string) $table,
+                (string) $column,
+            );
         }
     }
     return schema_inspection_feature($feature, $requirements);
@@ -113,27 +119,34 @@ function presentation_schema_tables_status(string $feature, array $tables): arra
  *
  * @param string $feature Stable feature key.
  * @param array<int,string> $tables Required table names.
- * @return array{state:string,feature:string,requirements:array}
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state and required table inspection results.
  */
-function presentation_schema_table_set_status(string $feature, array $tables): array
-{
+function presentation_schema_table_set_status(
+    string $feature,
+    array $tables,
+): array {
     return schema_inspection_feature(
         $feature,
-        array_map(static fn (string $table): array => schema_inspection_table($table), $tables)
+        array_map(static fn(string $table): array => schema_inspection_table(
+            $table,
+        ), $tables),
     );
 }
 
 /**
  * Return bounded unavailable object names for diagnostics and logs.
  *
- * @param array $status Aggregate schema status.
+ * @param array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} $status Aggregate state, feature key, and individual schema requirement results.
  * @return array<int,string>
  */
 function presentation_schema_affected_objects(array $status): array
 {
     $objects = [];
     foreach ((array) ($status['requirements'] ?? []) as $requirement) {
-        if (!is_array($requirement) || schema_inspection_is_available($requirement)) {
+        if (
+            !is_array($requirement)
+            || schema_inspection_is_available($requirement)
+        ) {
             continue;
         }
         $table = (string) ($requirement['table'] ?? '');
@@ -145,7 +158,10 @@ function presentation_schema_affected_objects(array $status): array
         ) {
             continue;
         }
-        $objects[] = $type === 'table' || $table === $object ? $table : $table . '.' . $object;
+        $objects[] =
+            $type === 'table' || $table === $object
+                ? $table
+                : $table . '.' . $object;
     }
     return array_values(array_unique($objects));
 }
@@ -157,12 +173,18 @@ function presentation_schema_affected_objects(array $status): array
  * Health without log noise. Unknown means metadata inspection itself failed and
  * therefore receives one bounded log event per feature/operation/request.
  *
- * @param array $status Aggregate schema status.
+ * @param array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} $status Aggregate state, feature key, and individual schema requirement results.
  * @param string $operation Stable rendering/reporting operation.
+ * @return void
  */
-function presentation_schema_log_degraded(array $status, string $operation): void
-{
-    if (!schema_inspection_is_unknown($status) || !function_exists('Gallery\\Services\\admin_log_event')) {
+function presentation_schema_log_degraded(
+    array $status,
+    string $operation,
+): void {
+    if (
+        !schema_inspection_is_unknown($status)
+        || !function_exists('Gallery\\Services\\admin_log_event')
+    ) {
         return;
     }
 
@@ -181,12 +203,18 @@ function presentation_schema_log_degraded(array $status, string $operation): voi
     }
     $logged[$key] = true;
 
-    admin_log_event('warning', 'database.presentation_schema_degraded', 'Optional presentation was degraded because required database schema could not be inspected.', [
-        'feature' => $feature,
-        'state' => 'unknown',
-        'operation' => $operation,
-        'affected_objects' => presentation_schema_affected_objects($status),
-    ], ['category' => 'database', 'severity' => 'warning']);
+    admin_log_event(
+        'warning',
+        'database.presentation_schema_degraded',
+        'Optional presentation was degraded because required database schema could not be inspected.',
+        [
+            'feature' => $feature,
+            'state' => 'unknown',
+            'operation' => $operation,
+            'affected_objects' => presentation_schema_affected_objects($status),
+        ],
+        ['category' => 'database', 'severity' => 'warning'],
+    );
 }
 
 /**
@@ -196,11 +224,14 @@ function presentation_schema_log_degraded(array $status, string $operation): voi
  * creates bounded diagnostics so a database outage cannot masquerade silently as
  * an intentionally old installation.
  *
- * @param array $status Aggregate schema status.
+ * @param array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} $status Aggregate state, feature key, and individual schema requirement results.
  * @param string $operation Stable render/read operation.
+ * @return bool True when schema is verified available.
  */
-function presentation_schema_render_available(array $status, string $operation): bool
-{
+function presentation_schema_render_available(
+    array $status,
+    string $operation,
+): bool {
     if (schema_inspection_is_available($status)) {
         return true;
     }
@@ -211,16 +242,17 @@ function presentation_schema_render_available(array $status, string $operation):
 /**
  * Require complete verified schema before an optional presentation feature writes.
  *
- * @param array $status Aggregate schema status.
+ * @param array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} $status Aggregate state, feature key, and individual schema requirement results.
  * @param string $operation Stable mutation identifier.
  * @param string $missingMessage User-facing migration message.
  * @param string $unknownMessage User-facing inspection-failure message.
+ * @return void
  */
 function presentation_schema_assert_write_available(
     array $status,
     string $operation,
     string $missingMessage = 'Required database migration has not been applied.',
-    string $unknownMessage = 'Required database schema could not be verified. The operation was not started.'
+    string $unknownMessage = 'Required database schema could not be verified. The operation was not started.',
 ): void {
     if (schema_inspection_is_available($status)) {
         return;
@@ -234,7 +266,9 @@ function presentation_schema_assert_write_available(
         (string) ($status['feature'] ?? 'presentation_schema'),
         schema_inspection_is_missing($status) ? 'missing' : 'unknown',
         $operation,
-        schema_inspection_is_missing($status) ? $missingMessage : $unknownMessage
+        schema_inspection_is_missing($status)
+            ? $missingMessage
+            : $unknownMessage,
     );
 }
 
@@ -245,14 +279,15 @@ function presentation_schema_assert_write_available(
  * the optional write, but a metadata inspection failure must not be mistaken for that
  * confirmed legacy state.
  *
- * @param array $status Aggregate schema status.
+ * @param array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} $status Aggregate schema state and feature with the per-requirement inspection results.
  * @param string $operation Stable mutation identifier.
  * @param string $unknownMessage User-facing inspection-failure message.
+ * @return void
  */
 function presentation_schema_assert_known(
     array $status,
     string $operation,
-    string $unknownMessage = 'Required database schema could not be verified. The operation was not started.'
+    string $unknownMessage = 'Required database schema could not be verified. The operation was not started.',
 ): void {
     if (!schema_inspection_is_unknown($status)) {
         return;
@@ -263,7 +298,7 @@ function presentation_schema_assert_known(
         (string) ($status['feature'] ?? 'presentation_schema'),
         'unknown',
         $operation,
-        $unknownMessage
+        $unknownMessage,
     );
 }
 
@@ -273,9 +308,18 @@ function presentation_gps_exif_schema_status(): array
     return presentation_schema_tables_status('presentation.gps_exif', [
         'galleries' => ['gps_map_enabled'],
         'images' => [
-            'exif_taken_at', 'exif_camera_make', 'exif_camera_model', 'exif_lens_model',
-            'exif_focal_length', 'exif_aperture', 'exif_exposure_time', 'exif_iso',
-            'gps_lat', 'gps_lng', 'gps_altitude', 'gps_extracted_at',
+            'exif_taken_at',
+            'exif_camera_make',
+            'exif_camera_model',
+            'exif_lens_model',
+            'exif_focal_length',
+            'exif_aperture',
+            'exif_exposure_time',
+            'exif_iso',
+            'gps_lat',
+            'gps_lng',
+            'gps_altitude',
+            'gps_extracted_at',
         ],
     ]);
 }
@@ -288,7 +332,9 @@ function presentation_metadata_organizer_schema_status(): array
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for the nullable GPS override setting.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and nullable gallery GPS override column check.
+ */
 function presentation_gps_override_schema_status(): array
 {
     return schema_inspection_feature('presentation.gps_override', [
@@ -296,54 +342,115 @@ function presentation_gps_override_schema_status(): array
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for saved flight-map routes.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and checks for required saved-route table columns.
+ */
 function presentation_flight_map_schema_status(): array
 {
     return presentation_schema_tables_status('presentation.flight_map', [
         'gallery_flight_maps' => [
-            'gallery_id', 'map_source_type', 'route_text', 'resolved_points_json',
-            'unresolved_points_json', 'point_count', 'resolved_at', 'created_at', 'updated_at',
+            'gallery_id',
+            'map_source_type',
+            'route_text',
+            'resolved_points_json',
+            'unresolved_points_json',
+            'point_count',
+            'resolved_at',
+            'created_at',
+            'updated_at',
         ],
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for flight navigation data storage.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and checks for required navigation-point table columns.
+ */
 function presentation_flight_navdata_schema_status(): array
 {
     return presentation_schema_tables_status('presentation.flight_navdata', [
-        'flight_map_nav_points' => ['id', 'ident', 'kind', 'region', 'latitude', 'longitude', 'source', 'cycle', 'created_at', 'updated_at'],
+        'flight_map_nav_points' => [
+            'id',
+            'ident',
+            'kind',
+            'region',
+            'latitude',
+            'longitude',
+            'source',
+            'cycle',
+            'created_at',
+            'updated_at',
+        ],
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for public image voting storage.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and gallery voting-setting and vote-table column checks.
+ */
 function presentation_voting_schema_status(): array
 {
     return presentation_schema_tables_status('presentation.image_voting', [
         'galleries' => ['voting_enabled'],
-        'image_votes' => ['id', 'image_id', 'user_id', 'visitor_hash', 'vote', 'created_at', 'updated_at'],
+        'image_votes' => [
+            'id',
+            'image_id',
+            'user_id',
+            'visitor_hash',
+            'vote',
+            'created_at',
+            'updated_at',
+        ],
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for picture-game voting and opt-in storage.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and checks for voting storage, the gallery opt-in column, and picture-game vote columns/table.
+ */
 function presentation_picture_game_schema_status(): array
 {
     $voting = presentation_voting_schema_status();
     $requirements = (array) ($voting['requirements'] ?? []);
-    $requirements[] = schema_inspection_column('galleries', 'picture_game_enabled');
-    foreach (['id', 'gallery_id', 'image_a_id', 'image_b_id', 'winner_image_id', 'voter_hash', 'created_at'] as $column) {
-        $requirements[] = schema_inspection_column('picture_game_votes', $column);
+    $requirements[] = schema_inspection_column(
+        'galleries',
+        'picture_game_enabled',
+    );
+    foreach ([
+        'id',
+        'gallery_id',
+        'image_a_id',
+        'image_b_id',
+        'winner_image_id',
+        'voter_hash',
+        'created_at',
+    ] as $column) {
+        $requirements[] = schema_inspection_column(
+            'picture_game_votes',
+            $column,
+        );
     }
     $requirements[] = schema_inspection_table('picture_game_votes');
-    return schema_inspection_feature('presentation.picture_game', $requirements);
+    return schema_inspection_feature(
+        'presentation.picture_game',
+        $requirements,
+    );
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for gallery lightbox override storage.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and checks for the override column and supported mode definitions.
+ */
 function presentation_lightbox_override_schema_status(): array
 {
     return schema_inspection_feature('presentation.lightbox_override', [
         schema_inspection_column('galleries', 'lightbox_browsing_mode'),
-        schema_inspection_column_definition_contains('galleries', 'lightbox_browsing_mode', 'picture_strip'),
-        schema_inspection_column_definition_contains('galleries', 'lightbox_browsing_mode', '3d_carousel'),
+        schema_inspection_column_definition_contains(
+            'galleries',
+            'lightbox_browsing_mode',
+            'picture_strip',
+        ),
+        schema_inspection_column_definition_contains(
+            'galleries',
+            'lightbox_browsing_mode',
+            '3d_carousel',
+        ),
     ]);
 }
 
@@ -360,46 +467,103 @@ function presentation_gallery_settings_schema_status(): array
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for per-user OpenAI text settings storage.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and required user OpenAI text settings table column checks.
+ */
 function presentation_openai_text_schema_status(): array
 {
     return presentation_schema_tables_status('presentation.openai_text', [
-        'user_openai_text_settings' => ['user_id', 'enabled', 'api_key_cipher', 'api_key_hint', 'model', 'created_at', 'updated_at'],
+        'user_openai_text_settings' => [
+            'user_id',
+            'enabled',
+            'api_key_cipher',
+            'api_key_hint',
+            'model',
+            'created_at',
+            'updated_at',
+        ],
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for optional OpenAI image-input settings storage.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and optional image-input setting column check.
+ */
 function presentation_openai_image_input_schema_status(): array
 {
     return schema_inspection_feature('presentation.openai_image_input', [
-        schema_inspection_column('user_openai_text_settings', 'allow_image_input'),
+        schema_inspection_column(
+            'user_openai_text_settings',
+            'allow_image_input',
+        ),
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for AI image-analysis metadata and job storage.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and required metadata/job table column checks.
+ */
 function presentation_ai_image_analysis_schema_status(): array
 {
     return presentation_schema_tables_status('presentation.ai_image_analysis', [
         'image_ai_metadata' => [
-            'id', 'image_id', 'model_name', 'model_version', 'source_checksum_sha256',
-            'source_file_size', 'source_modified_at', 'metadata_json', 'searchable_text',
-            'generated_at', 'created_at', 'updated_at',
+            'id',
+            'image_id',
+            'model_name',
+            'model_version',
+            'source_checksum_sha256',
+            'source_file_size',
+            'source_modified_at',
+            'metadata_json',
+            'searchable_text',
+            'generated_at',
+            'created_at',
+            'updated_at',
         ],
         'image_ai_analysis_jobs' => [
-            'id', 'gallery_id', 'image_id', 'job_key', 'model_name', 'model_version',
-            'source_checksum_sha256', 'source_file_size', 'source_modified_at', 'state',
-            'claim_owner', 'claim_token_hash', 'claim_expires_at', 'claimed_at', 'heartbeat_at',
-            'progress_percent', 'progress_message', 'attempt_count', 'available_at', 'completed_at',
-            'last_error', 'created_at', 'updated_at',
+            'id',
+            'gallery_id',
+            'image_id',
+            'job_key',
+            'model_name',
+            'model_version',
+            'source_checksum_sha256',
+            'source_file_size',
+            'source_modified_at',
+            'state',
+            'claim_owner',
+            'claim_token_hash',
+            'claim_expires_at',
+            'claimed_at',
+            'heartbeat_at',
+            'progress_percent',
+            'progress_message',
+            'attempt_count',
+            'available_at',
+            'completed_at',
+            'last_error',
+            'created_at',
+            'updated_at',
         ],
     ]);
 }
 
-/** @return array{state:string,feature:string,requirements:array} */
+/** Return schema status for navigation lookup cache storage.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Aggregate state, feature key, and required navigation-cache table column checks.
+ */
 function presentation_navigation_cache_schema_status(): array
 {
     return presentation_schema_tables_status('presentation.navigation_cache', [
-        'navigation_data_cache' => ['id', 'cache_key', 'ident', 'kind', 'source', 'cycle', 'payload_json', 'expires_at', 'created_at', 'updated_at'],
+        'navigation_data_cache' => [
+            'id',
+            'cache_key',
+            'ident',
+            'kind',
+            'source',
+            'cycle',
+            'payload_json',
+            'expires_at',
+            'created_at',
+            'updated_at',
+        ],
     ]);
 }
 
@@ -408,9 +572,22 @@ function presentation_navigation_account_schema_status(): array
 {
     return presentation_schema_tables_status('presentation.navigation_account', [
         'navigation_data_accounts' => [
-            'id', 'user_id', 'provider', 'access_token_cipher', 'refresh_token_cipher', 'id_token_cipher',
-            'token_expires_at', 'scope_text', 'claims_json', 'subscription_json', 'package_cycle',
-            'package_status', 'package_format', 'package_checked_at', 'connected_at', 'updated_at',
+            'id',
+            'user_id',
+            'provider',
+            'access_token_cipher',
+            'refresh_token_cipher',
+            'id_token_cipher',
+            'token_expires_at',
+            'scope_text',
+            'claims_json',
+            'subscription_json',
+            'package_cycle',
+            'package_status',
+            'package_format',
+            'package_checked_at',
+            'connected_at',
+            'updated_at',
         ],
     ]);
 }
@@ -455,11 +632,26 @@ function presentation_telemetry_schema_status(): array
 function presentation_admin_gallery_report_schema_status(): array
 {
     return presentation_schema_table_set_status('presentation.admin_gallery_report', [
-        'galleries', 'images', 'tags', 'gallery_tags', 'image_tags', 'image_votes', 'picture_game_votes',
-        'app_settings', 'admin_logs', 'telemetry_sessions', 'telemetry_hourly_metrics',
-        'telemetry_daily_metrics', 'telemetry_db_query_metrics', 'telemetry_job_runs',
-        'telemetry_settings', 'navigation_data_accounts', 'navigation_data_cache', 'gallery_flight_maps',
-        'image_ai_metadata', 'image_ai_analysis_jobs',
+        'galleries',
+        'images',
+        'tags',
+        'gallery_tags',
+        'image_tags',
+        'image_votes',
+        'picture_game_votes',
+        'app_settings',
+        'admin_logs',
+        'telemetry_sessions',
+        'telemetry_hourly_metrics',
+        'telemetry_daily_metrics',
+        'telemetry_db_query_metrics',
+        'telemetry_job_runs',
+        'telemetry_settings',
+        'navigation_data_accounts',
+        'navigation_data_cache',
+        'gallery_flight_maps',
+        'image_ai_metadata',
+        'image_ai_analysis_jobs',
     ]);
 }
 
@@ -482,24 +674,85 @@ function presentation_admin_gallery_report_schema_status(): array
 function presentation_schema_health_definitions(): array
 {
     return [
-        'presentation_gps_exif' => ['resolver' => static fn(): array => presentation_gps_exif_schema_status(), 'flag' => 'gallery_maps'],
-        'presentation_gps_override' => ['resolver' => static fn(): array => presentation_gps_override_schema_status(), 'flag' => 'gallery_maps'],
-        'presentation_flight_map' => ['resolver' => static fn(): array => presentation_flight_map_schema_status(), 'flag' => 'flight_maps'],
-        'presentation_flight_navdata' => ['resolver' => static fn(): array => presentation_flight_navdata_schema_status(), 'flag' => 'navigation_data'],
-        'presentation_image_voting' => ['resolver' => static fn(): array => presentation_voting_schema_status(), 'flag' => 'image_voting'],
-        'presentation_picture_game' => ['resolver' => static fn(): array => presentation_picture_game_schema_status(), 'flag' => 'picture_game'],
-        'presentation_lightbox_override' => ['resolver' => static fn(): array => presentation_lightbox_override_schema_status(), 'flag' => 'lightbox_modes'],
-        'presentation_gallery_settings' => [
-            'resolver' => static fn(): array => presentation_gallery_settings_schema_status(),
+        'presentation_gps_exif' => [
+            'resolver' =>
+                static fn(): array => presentation_gps_exif_schema_status(),
+            'flag' => 'gallery_maps',
+        ],
+        'presentation_gps_override' => [
+            'resolver' =>
+                static fn(): array => presentation_gps_override_schema_status(),
+            'flag' => 'gallery_maps',
+        ],
+        'presentation_flight_map' => [
+            'resolver' =>
+                static fn(): array => presentation_flight_map_schema_status(),
+            'flag' => 'flight_maps',
+        ],
+        'presentation_flight_navdata' => [
+            'resolver' =>
+                static fn(): array => presentation_flight_navdata_schema_status(),
+            'flag' => 'navigation_data',
+        ],
+        'presentation_image_voting' => [
+            'resolver' =>
+                static fn(): array => presentation_voting_schema_status(),
+            'flag' => 'image_voting',
+        ],
+        'presentation_picture_game' => [
+            'resolver' =>
+                static fn(): array => presentation_picture_game_schema_status(),
+            'flag' => 'picture_game',
+        ],
+        'presentation_lightbox_override' => [
+            'resolver' =>
+                static fn(): array => presentation_lightbox_override_schema_status(),
             'flag' => 'lightbox_modes',
         ],
-        'presentation_openai_text' => ['resolver' => static fn(): array => presentation_openai_text_schema_status(), 'flag' => 'openai_text_assist'],
-        'presentation_openai_image_input' => ['resolver' => static fn(): array => presentation_openai_image_input_schema_status(), 'flag' => 'openai_text_assist'],
-        'presentation_ai_image_analysis' => ['resolver' => static fn(): array => presentation_ai_image_analysis_schema_status(), 'flag' => 'ai_image_metadata'],
-        'presentation_simbrief_route_map' => ['resolver' => static fn(): array => presentation_flight_map_schema_status(), 'flag' => 'simbrief'],
-        'presentation_navigation_cache' => ['resolver' => static fn(): array => presentation_navigation_cache_schema_status(), 'flag' => 'navigation_data'],
-        'presentation_navigation_account' => ['resolver' => static fn(): array => presentation_navigation_account_schema_status(), 'flag' => 'navigation_data'],
-        'presentation_telemetry_reporting' => ['resolver' => static fn(): array => presentation_telemetry_schema_status(), 'flag' => 'telemetry'],
-        'presentation_admin_gallery_report' => ['resolver' => static fn(): array => presentation_admin_gallery_report_schema_status(), 'flag' => ''],
+        'presentation_gallery_settings' => [
+            'resolver' =>
+                static fn(): array => presentation_gallery_settings_schema_status(),
+            'flag' => 'lightbox_modes',
+        ],
+        'presentation_openai_text' => [
+            'resolver' =>
+                static fn(): array => presentation_openai_text_schema_status(),
+            'flag' => 'openai_text_assist',
+        ],
+        'presentation_openai_image_input' => [
+            'resolver' =>
+                static fn(): array => presentation_openai_image_input_schema_status(),
+            'flag' => 'openai_text_assist',
+        ],
+        'presentation_ai_image_analysis' => [
+            'resolver' =>
+                static fn(): array => presentation_ai_image_analysis_schema_status(),
+            'flag' => 'ai_image_metadata',
+        ],
+        'presentation_simbrief_route_map' => [
+            'resolver' =>
+                static fn(): array => presentation_flight_map_schema_status(),
+            'flag' => 'simbrief',
+        ],
+        'presentation_navigation_cache' => [
+            'resolver' =>
+                static fn(): array => presentation_navigation_cache_schema_status(),
+            'flag' => 'navigation_data',
+        ],
+        'presentation_navigation_account' => [
+            'resolver' =>
+                static fn(): array => presentation_navigation_account_schema_status(),
+            'flag' => 'navigation_data',
+        ],
+        'presentation_telemetry_reporting' => [
+            'resolver' =>
+                static fn(): array => presentation_telemetry_schema_status(),
+            'flag' => 'telemetry',
+        ],
+        'presentation_admin_gallery_report' => [
+            'resolver' =>
+                static fn(): array => presentation_admin_gallery_report_schema_status(),
+            'flag' => '',
+        ],
     ];
 }

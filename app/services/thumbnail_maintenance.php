@@ -59,15 +59,25 @@ const THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING = 'thumbnail_maintenance_last_che
  * @param array<string,mixed> $gallery Owning gallery row used for safe cache paths.
  * @param array<int,int> $sizes Supported derivative sizes to inspect.
  * @param bool $mutate Mutate value.
- * @return array<string,mixed> Required and missing variant counts with maintenance policy details.
+ * @return array{required:int,missing:int,webp_skipped:int,target_formats:list<string>,thumbnail_policy:array<string,mixed>|null,invalid_geometry_deleted?:int,invalid_geometry_detected?:int,invalid_geometry_files?:list<string>,metadata_rows_written?:int,metadata_source_syncs?:int} Required/missing counts with runtime format and geometry details.
  */
-function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, array $sizes, bool $mutate = true): array
-{
+function thumbnail_maintenance_status_for_sizes(
+    array $image,
+    array $gallery,
+    array $sizes,
+    bool $mutate = true,
+): array {
     thumbnail_assert_source_identity_owned($image);
     // $sourcePath stores the original image path inspected before any decoding is attempted.
     $sourcePath = image_abs_path($image, $gallery);
     if (!is_file($sourcePath)) {
-        return ['required' => 0, 'missing' => 0, 'webp_skipped' => 0, 'target_formats' => [], 'thumbnail_policy' => null];
+        return [
+            'required' => 0,
+            'missing' => 0,
+            'webp_skipped' => 0,
+            'target_formats' => [],
+            'thumbnail_policy' => null,
+        ];
     }
 
     // $sourceMtime stores the modification time that generated variants must match.
@@ -77,11 +87,22 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
     // $formats stores the formats this installation can keep current for this source file.
     $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
     // $thumbnailPolicy stores the exact source-specific policy for warmup diagnostics.
-    $thumbnailPolicy = function_exists('Gallery\\Services\\thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes) : null;
+    $thumbnailPolicy = function_exists(
+        'Gallery\\Services\\thumbnail_generation_policy_summary',
+    )
+        ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes)
+        : null;
     // $webpSkipped stores intentionally missing WebP variants when metadata preservation is not available.
-    $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
+    $webpSkipped = thumbnail_intentionally_skipped_webp_count(
+        $sourcePath,
+        $mime,
+    );
     // $sourceGeometry stores dimensions used to detect stale square-canvas thumbnail artifacts.
-    $sourceGeometry = function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions') ? thumbnail_source_geometry_dimensions($sourcePath, $image) : null;
+    $sourceGeometry = function_exists(
+        'Gallery\\Services\\thumbnail_source_geometry_dimensions',
+    )
+        ? thumbnail_source_geometry_dimensions($sourcePath, $image)
+        : null;
     // $invalidGeometryDeleted stores cache files scheduled for replacement because they did not preserve the source ratio.
     $invalidGeometryDeleted = 0;
     // $invalidGeometryDetected stores invalid cache files found even when the caller requested a dry check.
@@ -89,7 +110,10 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
     // $invalidGeometryFiles stores stale cache filenames scheduled for detailed warmup repair logs.
     $invalidGeometryFiles = [];
     // $sizes stores only supported sizes.
-    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    $sizes = array_values(array_unique(array_filter(
+        array_map('intval', $sizes),
+        static fn(int $size): bool => in_array($size, thumbnail_sizes(), true),
+    )));
     // $required stores the number of expected variant files.
     $required = 0;
     // $missing stores the number of expected variant files missing or stale.
@@ -104,34 +128,71 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
             $required++;
             try {
                 // $targetPath stores one generated thumbnail path to inspect.
-                $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
+                $targetPath = thumbnail_abs_path(
+                    $image,
+                    $gallery,
+                    $size,
+                    $format,
+                );
             } catch (RuntimeException) {
                 $missing++;
                 continue;
             }
-            if (!is_file($targetPath) || filemtime($targetPath) < $sourceMtime) {
+            if (
+                !is_file($targetPath)
+                || filemtime($targetPath) < $sourceMtime
+            ) {
                 $missing++;
                 continue;
             }
-            if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
+            if (
+                is_array($sourceGeometry)
+                && function_exists(
+                    'Gallery\\Services\\thumbnail_file_geometry_status',
+                )
+            ) {
                 // $geometryStatus stores whether a fresh thumbnail cache file has valid dimensions.
-                $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
+                $geometryStatus = thumbnail_file_geometry_status(
+                    $targetPath,
+                    (int) $sourceGeometry['width'],
+                    (int) $sourceGeometry['height'],
+                    (int) $size,
+                );
                 if (empty($geometryStatus['valid'])) {
                     $invalidGeometryDetected++;
                     $invalidGeometryFiles[] = basename($targetPath);
                     if ($mutate) {
                         $invalidGeometryDeleted++;
                         thumbnail_delete_invalid_geometry_file($targetPath);
-                        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
-                            thumbnail_metadata_delete_variant($image, (int) $size, $format);
+                        if (function_exists(
+                            'Gallery\\Services\\thumbnail_metadata_delete_variant',
+                        )) {
+                            thumbnail_metadata_delete_variant(
+                                $image,
+                                (int) $size,
+                                $format,
+                            );
                         }
                     }
                     $missing++;
                     continue;
                 }
             }
-            if ($mutate && function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
-                $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
+            if (
+                $mutate
+                && function_exists(
+                    'Gallery\\Services\\thumbnail_metadata_record_file',
+                )
+            ) {
+                $metadataResult = thumbnail_metadata_record_file(
+                    $image,
+                    $gallery,
+                    (int) $size,
+                    $format,
+                    $targetPath,
+                    $sourcePath,
+                    false,
+                );
                 if (!empty($metadataResult['metadata_written'])) {
                     $metadataRowsWritten++;
                 }
@@ -157,28 +218,47 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
 }
 
 /**
- * Handles thumbnail maintenance status logic for the gallery application.
+ * Return required, missing and policy details for all configured derivatives of one image.
  *
- * @param mixed $image Input used by this operation.
- * @param mixed $gallery Input used by this operation.
- * @param bool $mutate Mutate value.
- * @return mixed Result produced by this operation.
+ * @param array<string,mixed> $image Persisted source image row whose variants are checked.
+ * @param array<string,mixed> $gallery Owning gallery row used for safe source and cache paths.
+ * @param bool $mutate Whether missing or stale variants may be repaired during the check.
+ * @return array<string,mixed> Variant counts, target formats, generation policy and optional geometry details.
  */
-function thumbnail_maintenance_status(array $image, array $gallery, bool $mutate = true): array
-{
+function thumbnail_maintenance_status(
+    array $image,
+    array $gallery,
+    bool $mutate = true,
+): array {
     // $status stores the shared thumbnail variant status used by admin and warmup repair.
-    $status = thumbnail_maintenance_status_for_sizes($image, $gallery, thumbnail_sizes(), $mutate);
+    $status = thumbnail_maintenance_status_for_sizes(
+        $image,
+        $gallery,
+        thumbnail_sizes(),
+        $mutate,
+    );
 
-    if (image_uses_dng_display_derivatives($image) && dng_derivative_generation_supported()) {
+    if (
+        image_uses_dng_display_derivatives($image)
+        && dng_derivative_generation_supported()
+    ) {
         try {
             // $sourcePath stores the original image path inspected before DNG master checks.
             $sourcePath = image_abs_path($image, $gallery);
             // $sourceMtime stores the original DNG timestamp used to detect stale generated files.
-            $sourceMtime = is_file($sourcePath) ? (filemtime($sourcePath) ?: 0) : 0;
+            $sourceMtime = is_file($sourcePath)
+                ? (filemtime($sourcePath) ?: 0)
+                : 0;
             // $masterPath stores the generated full-size WebP display master.
             $masterPath = dng_display_master_abs_path($image, $gallery, false);
             $status['required'] = (int) ($status['required'] ?? 0) + 1;
-            if (!is_file($masterPath) || ($sourceMtime > 0 && filemtime($masterPath) < $sourceMtime)) {
+            if (
+                !is_file($masterPath)
+                || (
+                    $sourceMtime > 0
+                    && filemtime($masterPath) < $sourceMtime
+                )
+            ) {
                 $status['missing'] = (int) ($status['missing'] ?? 0) + 1;
             }
         } catch (RuntimeException) {
@@ -191,18 +271,31 @@ function thumbnail_maintenance_status(array $image, array $gallery, bool $mutate
 }
 
 /**
- * Handles thumbnail maintenance summary logic for the gallery application.
+ * Summarize missing thumbnail derivatives across the selected direct-image inventory.
  *
- * @param mixed $galleryIds Input used by this operation.
- * @param mixed $maxImagesToScan Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param ?list<int|string> $galleryIds Optional gallery scope; null selects the full inventory.
+ * @param int $maxImagesToScan Maximum image rows to scan; non-positive means no cap.
+ * @return array{images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,limited:bool,inventory_fingerprint:string} Bounded scan totals and inventory fingerprint.
  */
-function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImagesToScan = 1000): array
-{
+function thumbnail_maintenance_summary(
+    ?array $galleryIds = null,
+    int $maxImagesToScan = 1000,
+): array {
     if ($galleryIds !== null) {
-        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        $galleryIds = array_values(array_unique(array_filter(
+            array_map('intval', $galleryIds),
+            static fn(int $id): bool => $id > 0,
+        )));
         if ($galleryIds === []) {
-            return ['images_scanned' => 0, 'images_with_missing' => 0, 'missing_variants' => 0, 'webp_skipped' => 0, 'limited' => false, 'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds)];
+            return [
+                'images_scanned' => 0,
+                'images_with_missing' => 0,
+                'missing_variants' => 0,
+                'webp_skipped' => 0,
+                'limited' => false,
+                'inventory_fingerprint' =>
+                    thumbnail_inventory_fingerprint($galleryIds),
+            ];
         }
     }
     $queryLimit = $maxImagesToScan > 0 ? max(1, $maxImagesToScan + 1) : null;
@@ -230,7 +323,10 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
             continue;
         }
         // $status stores an intermediate value used by the surrounding gallery workflow.
-        $status = thumbnail_maintenance_status($image, $galleryCache[$galleryId]);
+        $status = thumbnail_maintenance_status(
+            $image,
+            $galleryCache[$galleryId],
+        );
         if ($status['missing'] > 0) {
             $imagesWithMissing++;
             $missingVariants += $status['missing'];
@@ -254,14 +350,19 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
  * missing or stale thumbnail files so the admin can rebuild the affected set
  * without scanning or processing every image in the library.
  *
- * @param ?array $galleryIds Gallery ids value.
+ * @param ?list<int|string> $galleryIds Optional gallery scope; null selects all galleries.
  * @param int $maxImagesToScan Max images to scan value.
- * @return array<int int>.
+ * @return list<int> IDs of images with missing or stale derivatives within the scan limit.
  */
-function thumbnail_maintenance_image_ids(?array $galleryIds = null, int $maxImagesToScan = 1000): array
-{
+function thumbnail_maintenance_image_ids(
+    ?array $galleryIds = null,
+    int $maxImagesToScan = 1000,
+): array {
     if ($galleryIds !== null) {
-        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        $galleryIds = array_values(array_unique(array_filter(
+            array_map('intval', $galleryIds),
+            static fn(int $id): bool => $id > 0,
+        )));
         if ($galleryIds === []) {
             return [];
         }
@@ -286,7 +387,10 @@ function thumbnail_maintenance_image_ids(?array $galleryIds = null, int $maxImag
             continue;
         }
         // $status stores an intermediate value used by the surrounding gallery workflow.
-        $status = thumbnail_maintenance_status($image, $galleryCache[$galleryId]);
+        $status = thumbnail_maintenance_status(
+            $image,
+            $galleryCache[$galleryId],
+        );
         if (($status['missing'] ?? 0) > 0) {
             $imageIds[] = (int) $image['id'];
         }
@@ -302,14 +406,19 @@ function thumbnail_maintenance_image_ids(?array $galleryIds = null, int $maxImag
  * asks the checker not to generate, delete, or record files. A non-positive
  * scan limit means every imported direct image is checked.
  *
- * @param ?array $galleryIds Gallery ids value.
+ * @param ?list<int|string> $galleryIds Optional gallery scope; null selects the full inventory.
  * @param int $maxImagesToScan Max images to scan value.
- * @return array<string mixed>.
+ * @return array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} Dry-run findings with bounded gallery samples and exact repair IDs.
  */
-function thumbnail_maintenance_check_report(?array $galleryIds = null, int $maxImagesToScan = 0): array
-{
+function thumbnail_maintenance_check_report(
+    ?array $galleryIds = null,
+    int $maxImagesToScan = 0,
+): array {
     if ($galleryIds !== null) {
-        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        $galleryIds = array_values(array_unique(array_filter(
+            array_map('intval', $galleryIds),
+            static fn(int $id): bool => $id > 0,
+        )));
         if ($galleryIds === []) {
             return thumbnail_maintenance_empty_check_report($galleryIds);
         }
@@ -322,7 +431,11 @@ function thumbnail_maintenance_check_report(?array $galleryIds = null, int $maxI
         array_pop($rows);
     }
 
-    return thumbnail_maintenance_check_report_from_rows($rows, $galleryIds, $limited);
+    return thumbnail_maintenance_check_report_from_rows(
+        $rows,
+        $galleryIds,
+        $limited,
+    );
 }
 
 /**
@@ -331,12 +444,15 @@ function thumbnail_maintenance_check_report(?array $galleryIds = null, int $maxI
  * Targeted server-side repair uses this helper after generation so it can report
  * whether the selected images are fixed without rescanning the whole library.
  *
- * @param array $imageIds Image IDs to inspect.
+ * @param list<int|string> $imageIds Image IDs selected for targeted dry-run verification.
  * @return array<string mixed> Structured report for the selected images.
  */
 function thumbnail_maintenance_check_report_for_image_ids(array $imageIds): array
 {
-    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $imageIds = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$imageIds) {
         return thumbnail_maintenance_empty_check_report(null);
     }
@@ -349,14 +465,18 @@ function thumbnail_maintenance_check_report_for_image_ids(array $imageIds): arra
 /**
  * Build one dry-run thumbnail report from already selected image rows.
  *
- * @param array $rows Rows to process.
- * @param ?array $galleryIds Gallery ids value.
+ * @param list<array<string,mixed>> $rows Persisted image rows to inspect without mutation.
+ * @param ?list<int|string> $galleryIds Optional gallery scope recorded in the inventory fingerprint.
  * @param bool $limited Limited value.
  * @param bool $finalize Finalize value.
- * @return array<string mixed>.
+ * @return array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} Aggregated dry-run findings, optionally finalized for storage.
  */
-function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galleryIds = null, bool $limited = false, bool $finalize = true): array
-{
+function thumbnail_maintenance_check_report_from_rows(
+    array $rows,
+    ?array $galleryIds = null,
+    bool $limited = false,
+    bool $finalize = true,
+): array {
     // Variable $galleryCache stores galleries only once per scan.
     $galleryCache = [];
     // Variable $imagesWithMissing stores this steps working value.
@@ -376,17 +496,25 @@ function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galle
         // $galleryId stores the current image gallery identifier.
         $galleryId = (int) ($image['gallery_id'] ?? 0);
         if (!array_key_exists($galleryId, $galleryCache)) {
-            $galleryCache[$galleryId] = $galleryId > 0 ? find_gallery($galleryId) : null;
+            $galleryCache[$galleryId] = $galleryId > 0
+                ? find_gallery($galleryId)
+                : null;
         }
         if (!$galleryCache[$galleryId]) {
             continue;
         }
 
         // $status stores missing/stale/invalid variant counts without changing files.
-        $status = thumbnail_maintenance_status($image, $galleryCache[$galleryId], false);
+        $status = thumbnail_maintenance_status(
+            $image,
+            $galleryCache[$galleryId],
+            false,
+        );
         $missing = max(0, (int) ($status['missing'] ?? 0));
         $webpSkipped += (int) ($status['webp_skipped'] ?? 0);
-        $invalidGeometryDetected += (int) ($status['invalid_geometry_detected'] ?? 0);
+        $invalidGeometryDetected += (int) (
+            $status['invalid_geometry_detected'] ?? 0
+        );
         if ($missing <= 0) {
             continue;
         }
@@ -400,19 +528,33 @@ function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galle
         if (!isset($affectedGalleries[$galleryId])) {
             $affectedGalleries[$galleryId] = [
                 'id' => $galleryId,
-                'title' => (string) ($galleryCache[$galleryId]['title'] ?? ($image['gallery_title'] ?? ('#' . $galleryId))),
-                'folder_path' => (string) ($galleryCache[$galleryId]['folder_path'] ?? ($image['gallery_folder_path'] ?? '')),
+                'title' => (string) (
+                    $galleryCache[$galleryId]['title']
+                    ?? $image['gallery_title']
+                    ?? '#' . $galleryId
+                ),
+                'folder_path' => (string) (
+                    $galleryCache[$galleryId]['folder_path']
+                    ?? $image['gallery_folder_path']
+                    ?? ''
+                ),
                 'images_with_missing' => 0,
                 'missing_variants' => 0,
                 'sample_images' => [],
             ];
         }
-        $affectedGalleries[$galleryId]['images_with_missing'] = (int) $affectedGalleries[$galleryId]['images_with_missing'] + 1;
-        $affectedGalleries[$galleryId]['missing_variants'] = (int) $affectedGalleries[$galleryId]['missing_variants'] + $missing;
+        $affectedGalleries[$galleryId]['images_with_missing'] =
+            (int) $affectedGalleries[$galleryId]['images_with_missing'] + 1;
+        $affectedGalleries[$galleryId]['missing_variants'] =
+            (int) $affectedGalleries[$galleryId]['missing_variants'] + $missing;
         if (count($affectedGalleries[$galleryId]['sample_images']) < 5) {
             $affectedGalleries[$galleryId]['sample_images'][] = [
                 'id' => (int) ($image['id'] ?? 0),
-                'filename' => (string) ($image['filename'] ?? $image['relative_path'] ?? ''),
+                'filename' => (string) (
+                    $image['filename']
+                    ?? $image['relative_path']
+                    ?? ''
+                ),
                 'missing_variants' => $missing,
             ];
         }
@@ -434,21 +576,29 @@ function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galle
         'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
     ];
 
-    return $finalize ? thumbnail_maintenance_finalize_check_report($report) : $report;
+    return $finalize
+        ? thumbnail_maintenance_finalize_check_report($report)
+        : $report;
 }
 
 /**
  * Build one dry-run thumbnail check batch.
  *
- * @param ?array $galleryIds Gallery ids value.
+ * @param ?list<int|string> $galleryIds Optional gallery scope; null selects the full inventory.
  * @param int $offset Starting offset.
  * @param int $batchSize Batch size value.
- * @return array<string mixed>.
+ * @return array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string,total:int,processed:int,next_offset:int,done:bool} One dry-run batch and progress state.
  */
-function thumbnail_maintenance_check_batch(?array $galleryIds = null, int $offset = 0, int $batchSize = 150): array
-{
+function thumbnail_maintenance_check_batch(
+    ?array $galleryIds = null,
+    int $offset = 0,
+    int $batchSize = 150,
+): array {
     if ($galleryIds !== null) {
-        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        $galleryIds = array_values(array_unique(array_filter(
+            array_map('intval', $galleryIds),
+            static fn(int $id): bool => $id > 0,
+        )));
         if ($galleryIds === []) {
             $report = thumbnail_maintenance_empty_check_report($galleryIds);
             $report['total'] = 0;
@@ -463,7 +613,12 @@ function thumbnail_maintenance_check_batch(?array $galleryIds = null, int $offse
     $total = thumbnail_maintenance_model_count($galleryIds);
     $rows = thumbnail_maintenance_model_batch($galleryIds, $offset, $batchSize);
 
-    $report = thumbnail_maintenance_check_report_from_rows($rows, $galleryIds, false, false);
+    $report = thumbnail_maintenance_check_report_from_rows(
+        $rows,
+        $galleryIds,
+        false,
+        false,
+    );
     $processed = min($total, $offset + count($rows));
     $report['total'] = $total;
     $report['processed'] = $processed;
@@ -476,24 +631,43 @@ function thumbnail_maintenance_check_batch(?array $galleryIds = null, int $offse
 /**
  * Merge two dry-run thumbnail check reports.
  *
- * @param array $base Base value.
- * @param array $addition Addition value.
- * @return array<string mixed>.
+ * @param array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} $base Accumulated report to update.
+ * @param array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} $addition Next batch report to merge.
+ * @return array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} Combined counts, bounded gallery samples and deduplicated repair IDs.
  */
-function thumbnail_maintenance_merge_check_reports(array $base, array $addition): array
-{
+function thumbnail_maintenance_merge_check_reports(
+    array $base,
+    array $addition,
+): array {
     $base['checked_at'] = (string) ($base['checked_at'] ?? now_sql());
-    $base['images_scanned'] = (int) ($base['images_scanned'] ?? 0) + (int) ($addition['images_scanned'] ?? 0);
-    $base['images_with_missing'] = (int) ($base['images_with_missing'] ?? 0) + (int) ($addition['images_with_missing'] ?? 0);
-    $base['missing_variants'] = (int) ($base['missing_variants'] ?? 0) + (int) ($addition['missing_variants'] ?? 0);
-    $base['webp_skipped'] = (int) ($base['webp_skipped'] ?? 0) + (int) ($addition['webp_skipped'] ?? 0);
-    $base['invalid_geometry_detected'] = (int) ($base['invalid_geometry_detected'] ?? 0) + (int) ($addition['invalid_geometry_detected'] ?? 0);
+    $base['images_scanned'] =
+        (int) ($base['images_scanned'] ?? 0)
+        + (int) ($addition['images_scanned'] ?? 0);
+    $base['images_with_missing'] =
+        (int) ($base['images_with_missing'] ?? 0)
+        + (int) ($addition['images_with_missing'] ?? 0);
+    $base['missing_variants'] =
+        (int) ($base['missing_variants'] ?? 0)
+        + (int) ($addition['missing_variants'] ?? 0);
+    $base['webp_skipped'] =
+        (int) ($base['webp_skipped'] ?? 0)
+        + (int) ($addition['webp_skipped'] ?? 0);
+    $base['invalid_geometry_detected'] =
+        (int) ($base['invalid_geometry_detected'] ?? 0)
+        + (int) ($addition['invalid_geometry_detected'] ?? 0);
     $base['limited'] = !empty($base['limited']) || !empty($addition['limited']);
-    $base['inventory_fingerprint'] = (string) ($base['inventory_fingerprint'] ?? ($addition['inventory_fingerprint'] ?? thumbnail_inventory_fingerprint(null)));
+    $base['inventory_fingerprint'] = (string) (
+        $base['inventory_fingerprint']
+        ?? $addition['inventory_fingerprint']
+        ?? thumbnail_inventory_fingerprint(null)
+    );
 
     // $galleriesById stores affected galleries keyed by id so repeated batches accumulate cleanly.
     $galleriesById = [];
-    foreach ([(array) ($base['affected_galleries'] ?? []), (array) ($addition['affected_galleries'] ?? [])] as $galleryRows) {
+    foreach ([
+        (array) ($base['affected_galleries'] ?? []),
+        (array) ($addition['affected_galleries'] ?? []),
+    ] as $galleryRows) {
         foreach ($galleryRows as $galleryRow) {
             if (!is_array($galleryRow)) {
                 continue;
@@ -505,23 +679,39 @@ function thumbnail_maintenance_merge_check_reports(array $base, array $addition)
             if (!isset($galleriesById[$galleryId])) {
                 $galleriesById[$galleryId] = [
                     'id' => $galleryId,
-                    'title' => (string) ($galleryRow['title'] ?? ('#' . $galleryId)),
-                    'folder_path' => (string) ($galleryRow['folder_path'] ?? ''),
+                    'title' => (string) (
+                        $galleryRow['title']
+                        ?? '#' . $galleryId
+                    ),
+                    'folder_path' => (string) (
+                        $galleryRow['folder_path'] ?? ''
+                    ),
                     'images_with_missing' => 0,
                     'missing_variants' => 0,
                     'sample_images' => [],
                 ];
             }
-            $galleriesById[$galleryId]['images_with_missing'] = (int) $galleriesById[$galleryId]['images_with_missing'] + (int) ($galleryRow['images_with_missing'] ?? 0);
-            $galleriesById[$galleryId]['missing_variants'] = (int) $galleriesById[$galleryId]['missing_variants'] + (int) ($galleryRow['missing_variants'] ?? 0);
-            foreach ((array) ($galleryRow['sample_images'] ?? []) as $sampleImage) {
-                if (count($galleriesById[$galleryId]['sample_images']) >= 5 || !is_array($sampleImage)) {
+            $galleriesById[$galleryId]['images_with_missing'] =
+                (int) $galleriesById[$galleryId]['images_with_missing']
+                + (int) ($galleryRow['images_with_missing'] ?? 0);
+            $galleriesById[$galleryId]['missing_variants'] =
+                (int) $galleriesById[$galleryId]['missing_variants']
+                + (int) ($galleryRow['missing_variants'] ?? 0);
+            foreach ((array) (
+                $galleryRow['sample_images'] ?? []
+            ) as $sampleImage) {
+                if (
+                    count($galleriesById[$galleryId]['sample_images']) >= 5
+                    || !is_array($sampleImage)
+                ) {
                     continue;
                 }
                 $galleriesById[$galleryId]['sample_images'][] = [
                     'id' => (int) ($sampleImage['id'] ?? 0),
                     'filename' => (string) ($sampleImage['filename'] ?? ''),
-                    'missing_variants' => (int) ($sampleImage['missing_variants'] ?? 0),
+                    'missing_variants' => (int) (
+                        $sampleImage['missing_variants'] ?? 0
+                    ),
                 ];
             }
         }
@@ -532,15 +722,23 @@ function thumbnail_maintenance_merge_check_reports(array $base, array $addition)
     $base['affected_galleries_truncated'] = false;
 
     // $affectedImageIds stores an exact repair list while keeping app_settings payloads bounded.
-    $affectedImageIds = array_values(array_unique(array_filter(array_map('intval', array_merge(
-        (array) ($base['affected_image_ids'] ?? []),
-        (array) ($addition['affected_image_ids'] ?? [])
-    )), static fn (int $id): bool => $id > 0)));
+    $affectedImageIds = array_values(array_unique(array_filter(
+        array_map('intval', array_merge(
+            (array) ($base['affected_image_ids'] ?? []),
+            (array) ($addition['affected_image_ids'] ?? []),
+        )),
+        static fn(int $id): bool => $id > 0,
+    )));
     $affectedImageLimit = 2000;
-    $base['affected_image_ids_truncated'] = !empty($base['affected_image_ids_truncated'])
+    $base['affected_image_ids_truncated'] =
+        !empty($base['affected_image_ids_truncated'])
         || !empty($addition['affected_image_ids_truncated'])
         || count($affectedImageIds) > $affectedImageLimit;
-    $base['affected_image_ids'] = array_slice($affectedImageIds, 0, $affectedImageLimit);
+    $base['affected_image_ids'] = array_slice(
+        $affectedImageIds,
+        0,
+        $affectedImageLimit,
+    );
 
     return $base;
 }
@@ -548,22 +746,39 @@ function thumbnail_maintenance_merge_check_reports(array $base, array $addition)
 /**
  * Normalize a dry-run thumbnail check report before storing or displaying it.
  *
- * @param array $report Report value.
- * @return array<string mixed>.
+ * @param array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} $report Unbounded or partially accumulated report to normalize.
+ * @return array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} Report capped to the durable gallery and image ID storage limits.
  */
 function thumbnail_maintenance_finalize_check_report(array $report): array
 {
-    $affectedGalleryRows = array_values(array_filter((array) ($report['affected_galleries'] ?? []), static fn ($row): bool => is_array($row)));
+    $affectedGalleryRows = array_values(array_filter(
+        (array) ($report['affected_galleries'] ?? []),
+        static fn($row): bool => is_array($row),
+    ));
     $affectedGalleryCount = count($affectedGalleryRows);
     $storedGalleryLimit = 50;
-    $affectedImageIds = array_values(array_unique(array_filter(array_map('intval', (array) ($report['affected_image_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+    $affectedImageIds = array_values(array_unique(array_filter(
+        array_map('intval', (array) ($report['affected_image_ids'] ?? [])),
+        static fn(int $id): bool => $id > 0,
+    )));
     $storedImageLimit = 2000;
 
     $report['affected_gallery_count'] = $affectedGalleryCount;
-    $report['affected_galleries'] = array_slice($affectedGalleryRows, 0, $storedGalleryLimit);
-    $report['affected_galleries_truncated'] = $affectedGalleryCount > $storedGalleryLimit;
-    $report['affected_image_ids'] = array_slice($affectedImageIds, 0, $storedImageLimit);
-    $report['affected_image_ids_truncated'] = !empty($report['affected_image_ids_truncated']) || count($affectedImageIds) > $storedImageLimit;
+    $report['affected_galleries'] = array_slice(
+        $affectedGalleryRows,
+        0,
+        $storedGalleryLimit,
+    );
+    $report['affected_galleries_truncated'] =
+        $affectedGalleryCount > $storedGalleryLimit;
+    $report['affected_image_ids'] = array_slice(
+        $affectedImageIds,
+        0,
+        $storedImageLimit,
+    );
+    $report['affected_image_ids_truncated'] =
+        !empty($report['affected_image_ids_truncated'])
+        || count($affectedImageIds) > $storedImageLimit;
 
     return $report;
 }
@@ -596,12 +811,16 @@ function thumbnail_maintenance_empty_check_report(?array $galleryIds = null): ar
 /**
  * Persist the latest full dry thumbnail check for the Admin media card.
  *
- * @param array $report Report value.
+ * @param array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} $report Completed maintenance report to normalize and persist.
+ * @return void Saves the normalized report when JSON encoding succeeds.
  */
 function thumbnail_maintenance_store_last_check(array $report): void
 {
     $report = thumbnail_maintenance_finalize_check_report($report);
-    $json = json_encode($report, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $json = json_encode(
+        $report,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    );
     if (is_string($json)) {
         set_app_setting(THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING, $json);
     }
@@ -610,11 +829,14 @@ function thumbnail_maintenance_store_last_check(array $report): void
 /**
  * Return the latest full dry thumbnail check when it still matches the image inventory.
  *
- * @return array<string mixed>.
+ * @return array{}|array{checked_at:string,images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,invalid_geometry_detected:int,limited:bool,affected_gallery_count:int,affected_galleries:list<array{id:int,title:string,folder_path:string,images_with_missing:int,missing_variants:int,sample_images:list<array{id:int,filename:string,missing_variants:int}>}>,affected_galleries_truncated:bool,affected_image_ids:list<int>,affected_image_ids_truncated:bool,inventory_fingerprint:string} Current report when its inventory fingerprint is valid, or an empty array.
  */
 function thumbnail_maintenance_last_check(): array
 {
-    $json = trim((string) app_setting(THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING, ''));
+    $json = trim((string) app_setting(
+        THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING,
+        '',
+    ));
     if ($json === '') {
         return [];
     }
@@ -626,7 +848,10 @@ function thumbnail_maintenance_last_check(): array
     }
 
     $fingerprint = (string) ($report['inventory_fingerprint'] ?? '');
-    if ($fingerprint === '' || !hash_equals(thumbnail_inventory_fingerprint(null), $fingerprint)) {
+    if (
+        $fingerprint === ''
+        || !hash_equals(thumbnail_inventory_fingerprint(null), $fingerprint)
+    ) {
         delete_app_settings([THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING]);
         return [];
     }
@@ -637,8 +862,8 @@ function thumbnail_maintenance_last_check(): array
 /**
  * Return exact image ids from the latest full dry check when they are safe to reuse.
  *
- * @param ?array $galleryIds Optional gallery scope for targeted repair.
- * @return array<int int>.
+ * @param ?list<int|string> $galleryIds Optional gallery IDs used to filter saved repair candidates.
+ * @return list<int> Safe exact image IDs from the current untruncated full report.
  */
 function thumbnail_maintenance_last_check_image_ids(?array $galleryIds = null): array
 {
@@ -648,7 +873,10 @@ function thumbnail_maintenance_last_check_image_ids(?array $galleryIds = null): 
     }
 
     // $imageIds stores the exact dry-check repair list saved with the current inventory fingerprint.
-    $imageIds = array_values(array_unique(array_filter(array_map('intval', (array) ($report['affected_image_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+    $imageIds = array_values(array_unique(array_filter(
+        array_map('intval', (array) ($report['affected_image_ids'] ?? [])),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$imageIds) {
         return [];
     }
@@ -658,7 +886,10 @@ function thumbnail_maintenance_last_check_image_ids(?array $galleryIds = null): 
     }
 
     // $galleryIds stores a normalized optional subset for future scoped maintenance controls.
-    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$galleryIds) {
         return [];
     }
@@ -667,7 +898,10 @@ function thumbnail_maintenance_last_check_image_ids(?array $galleryIds = null): 
     $filteredIds = [];
     foreach ($imageIds as $imageId) {
         $image = find_image($imageId);
-        if ($image && in_array((int) ($image['gallery_id'] ?? 0), $galleryIds, true)) {
+        if (
+            $image
+            && in_array((int) ($image['gallery_id'] ?? 0), $galleryIds, true)
+        ) {
             $filteredIds[] = $imageId;
         }
     }
@@ -678,13 +912,20 @@ function thumbnail_maintenance_last_check_image_ids(?array $galleryIds = null): 
 /**
  * Return compact diagnostic data for thumbnail repair logs.
  *
- * @param array $imageIds Image ids value.
- * @return array<int array<string, mixed>>.
+ * @param list<int|string> $imageIds Candidate image IDs; at most 20 unique valid IDs are reported.
+ * @return list<array{image_id:int,found:false}|array{image_id:int,found:true,gallery_found:false}|array{image_id:int,found:true,gallery_found:true,gallery_id:int,filename:string,relative_path:string,source_exists:bool,mime:string,has_exif:bool,is_dng:bool,imagewebp_available:bool,imagick_available:bool,imagick_webp_available:bool,dng_conversion_supported:bool,target_formats:list<string>,dng_master_exists:?bool,status:array<string,mixed>}> Bounded per-image diagnostic rows.
  */
 function thumbnail_maintenance_debug_image_statuses(array $imageIds): array
 {
     // $imageIds stores a short unique list so admin log context stays readable.
-    $imageIds = array_slice(array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0))), 0, 20);
+    $imageIds = array_slice(
+        array_values(array_unique(array_filter(
+            array_map('intval', $imageIds),
+            static fn(int $id): bool => $id > 0,
+        ))),
+        0,
+        20,
+    );
     // $rows stores the diagnostic entries included in the admin log.
     $rows = [];
     foreach ($imageIds as $imageId) {
@@ -698,14 +939,20 @@ function thumbnail_maintenance_debug_image_statuses(array $imageIds): array
         // $gallery stores the parent gallery needed to resolve source and thumbnail paths.
         $gallery = find_gallery((int) $image['gallery_id']);
         if (!$gallery) {
-            $rows[] = ['image_id' => $imageId, 'found' => true, 'gallery_found' => false];
+            $rows[] = [
+                'image_id' => $imageId,
+                'found' => true,
+                'gallery_found' => false,
+            ];
             continue;
         }
 
         // $sourcePath stores the absolute source path for filesystem checks.
         $sourcePath = image_abs_path($image, $gallery);
         // $mime stores the detected MIME type used for thumbnail format decisions.
-        $mime = is_file($sourcePath) ? image_source_mime_for_derivatives($sourcePath, $image) : '';
+        $mime = is_file($sourcePath)
+            ? image_source_mime_for_derivatives($sourcePath, $image)
+            : '';
         // $status stores the same maintenance status used by the dashboard warning.
         $status = thumbnail_maintenance_status($image, $gallery);
 
@@ -718,14 +965,19 @@ function thumbnail_maintenance_debug_image_statuses(array $imageIds): array
             'relative_path' => (string) ($image['relative_path'] ?? ''),
             'source_exists' => is_file($sourcePath),
             'mime' => $mime,
-            'has_exif' => $mime !== '' && image_source_has_exif($sourcePath, $mime),
+            'has_exif' =>
+                $mime !== '' && image_source_has_exif($sourcePath, $mime),
             'is_dng' => image_uses_dng_display_derivatives($image),
             'imagewebp_available' => function_exists('imagewebp'),
             'imagick_available' => class_exists('Imagick'),
             'imagick_webp_available' => thumbnail_imagick_webp_available(),
             'dng_conversion_supported' => dng_derivative_generation_supported(),
-            'target_formats' => $mime !== '' ? thumbnail_target_formats_for_source($sourcePath, $mime) : [],
-            'dng_master_exists' => image_uses_dng_display_derivatives($image) ? is_file(dng_display_master_abs_path($image, $gallery, false)) : null,
+            'target_formats' => $mime !== ''
+                ? thumbnail_target_formats_for_source($sourcePath, $mime)
+                : [],
+            'dng_master_exists' => image_uses_dng_display_derivatives($image)
+                ? is_file(dng_display_master_abs_path($image, $gallery, false))
+                : null,
             'status' => $status,
         ];
     }
@@ -742,15 +994,23 @@ function thumbnail_maintenance_debug_image_statuses(array $imageIds): array
  * generation invalidation makes thumbnail creation and deletion visible on the
  * next admin load.
  *
- * @param ?array $galleryIds Gallery ids value.
+ * @param ?list<int|string> $galleryIds Optional gallery scope; null selects the full inventory.
  * @param int $maxImagesToScan Max images to scan value.
  * @param int $ttlSeconds Ttl seconds value.
- * @return array Structured result data for the caller.
+ * @return array{images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,limited:bool,inventory_fingerprint:string} Fresh or cached scan totals tied to the inventory fingerprint.
  */
-function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImagesToScan = 1000, int $ttlSeconds = 180): array
-{
+function cached_thumbnail_maintenance_summary(
+    ?array $galleryIds = null,
+    int $maxImagesToScan = 1000,
+    int $ttlSeconds = 180,
+): array {
     // $galleryIds stores the normalized optional gallery scope used by both cache keys and summary queries.
-    $galleryIds = $galleryIds === null ? null : array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    $galleryIds = $galleryIds === null
+        ? null
+        : array_values(array_unique(array_filter(
+            array_map('intval', $galleryIds),
+            static fn(int $id): bool => $id > 0,
+        )));
     if ($galleryIds !== null && $galleryIds === []) {
         return thumbnail_maintenance_summary([], $maxImagesToScan);
     }
@@ -758,9 +1018,14 @@ function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $ma
     // $scopeKey stores a compact stable key for the dashboard-wide or gallery-scoped summary.
     $scopeKey = $galleryIds === null ? 'all' : implode(',', $galleryIds);
     // $cacheKey stores the DB setting that contains the cached summary payload.
-    $cacheKey = 'thumbnail_maintenance_summary_' . substr(hash('sha256', $scopeKey . '|' . $maxImagesToScan), 0, 16);
+    $cacheKey =
+        'thumbnail_maintenance_summary_'
+        . substr(hash('sha256', $scopeKey . '|' . $maxImagesToScan), 0, 16);
     // $generation stores the invalidation marker changed after thumbnail creation or deletion.
-    $generation = (string) app_setting('thumbnail_maintenance_summary_generation', '0');
+    $generation = (string) app_setting(
+        'thumbnail_maintenance_summary_generation',
+        '0',
+    );
     // $fingerprint stores the cheap image inventory state. It changes when images are imported.
     $fingerprint = thumbnail_inventory_fingerprint($galleryIds);
     // $cachedJson stores the previous summary payload, if any.
@@ -769,10 +1034,14 @@ function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $ma
     if ($cachedJson !== '') {
         // $cachedPayload stores the decoded summary cache candidate.
         $cachedPayload = json_decode($cachedJson, true);
-        if (is_array($cachedPayload)
+        if (
+            is_array($cachedPayload)
             && (string) ($cachedPayload['generation'] ?? '') === $generation
             && (string) ($cachedPayload['fingerprint'] ?? '') === $fingerprint
-            && time() - (int) ($cachedPayload['created_at'] ?? 0) <= max(30, $ttlSeconds)
+            && (time() - (int) ($cachedPayload['created_at'] ?? 0)) <= max(
+                30,
+                $ttlSeconds,
+            )
             && is_array($cachedPayload['summary'] ?? null)
         ) {
             $cachedPayload['summary']['inventory_fingerprint'] = $fingerprint;
@@ -785,7 +1054,9 @@ function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $ma
     set_app_setting($cacheKey, json_encode([
         'created_at' => time(),
         'generation' => $generation,
-        'fingerprint' => (string) ($summary['inventory_fingerprint'] ?? $fingerprint),
+        'fingerprint' => (string) (
+            $summary['inventory_fingerprint'] ?? $fingerprint
+        ),
         'summary' => $summary,
     ], JSON_UNESCAPED_SLASHES));
 
@@ -799,15 +1070,23 @@ function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $ma
  * spend seconds checking thumbnail files on disk. Explicit thumbnail maintenance
  * actions still use thumbnail_maintenance_summary() and can refresh the cache.
  *
- * @param ?array $galleryIds Gallery ids value.
+ * @param ?list<int|string> $galleryIds Optional gallery scope; null selects the full inventory.
  * @param int $maxImagesToScan Max images to scan value.
  * @param int $ttlSeconds Ttl seconds value.
- * @return array Structured result data for the caller.
+ * @return array{images_scanned:int,images_with_missing:int,missing_variants:int,webp_skipped:int,limited:bool,inventory_fingerprint:string,deferred?:bool} Fresh cached totals, or an empty-scope result marked deferred.
  */
-function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = null, int $maxImagesToScan = 1000, int $ttlSeconds = 180): array
-{
+function cached_thumbnail_maintenance_summary_if_available(
+    ?array $galleryIds = null,
+    int $maxImagesToScan = 1000,
+    int $ttlSeconds = 180,
+): array {
     // $galleryIds stores the normalized optional gallery scope used by both cache keys and summary queries.
-    $galleryIds = $galleryIds === null ? null : array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    $galleryIds = $galleryIds === null
+        ? null
+        : array_values(array_unique(array_filter(
+            array_map('intval', $galleryIds),
+            static fn(int $id): bool => $id > 0,
+        )));
     if ($galleryIds !== null && $galleryIds === []) {
         return [
             'images_scanned' => 0,
@@ -816,16 +1095,22 @@ function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = 
             'webp_skipped' => 0,
             'limited' => false,
             'deferred' => false,
-            'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
+            'inventory_fingerprint' =>
+                thumbnail_inventory_fingerprint($galleryIds),
         ];
     }
 
     // $scopeKey stores a compact stable key for the dashboard-wide or gallery-scoped summary.
     $scopeKey = $galleryIds === null ? 'all' : implode(',', $galleryIds);
     // $cacheKey stores the DB setting that contains the cached summary payload.
-    $cacheKey = 'thumbnail_maintenance_summary_' . substr(hash('sha256', $scopeKey . '|' . $maxImagesToScan), 0, 16);
+    $cacheKey =
+        'thumbnail_maintenance_summary_'
+        . substr(hash('sha256', $scopeKey . '|' . $maxImagesToScan), 0, 16);
     // $generation stores the invalidation marker changed after thumbnail creation or deletion.
-    $generation = (string) app_setting('thumbnail_maintenance_summary_generation', '0');
+    $generation = (string) app_setting(
+        'thumbnail_maintenance_summary_generation',
+        '0',
+    );
     // $fingerprint stores the cheap image inventory state. It changes when images are imported.
     $fingerprint = thumbnail_inventory_fingerprint($galleryIds);
     // $cachedJson stores the previous summary payload, if any.
@@ -834,10 +1119,14 @@ function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = 
     if ($cachedJson !== '') {
         // $cachedPayload stores the decoded summary cache candidate.
         $cachedPayload = json_decode($cachedJson, true);
-        if (is_array($cachedPayload)
+        if (
+            is_array($cachedPayload)
             && (string) ($cachedPayload['generation'] ?? '') === $generation
             && (string) ($cachedPayload['fingerprint'] ?? '') === $fingerprint
-            && time() - (int) ($cachedPayload['created_at'] ?? 0) <= max(30, $ttlSeconds)
+            && (time() - (int) ($cachedPayload['created_at'] ?? 0)) <= max(
+                30,
+                $ttlSeconds,
+            )
             && is_array($cachedPayload['summary'] ?? null)
         ) {
             $cachedPayload['summary']['inventory_fingerprint'] = $fingerprint;
@@ -865,7 +1154,8 @@ function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = 
  */
 function thumbnail_maintenance_summary_cache_clear(?array &$diagnostics = null): void
 {
-    if (function_exists(__NAMESPACE__ . '\\thumbnail_legacy_identity_cache_clear')) {
+    if (function_exists(__NAMESPACE__
+        . '\\thumbnail_legacy_identity_cache_clear')) {
         thumbnail_legacy_identity_cache_clear();
     }
     $diagnosticMode = $diagnostics !== null;
@@ -875,7 +1165,10 @@ function thumbnail_maintenance_summary_cache_clear(?array &$diagnostics = null):
     $stepStarted = $diagnosticMode ? microtime(true) : 0.0;
     $completed = false;
     try {
-        set_app_setting('thumbnail_maintenance_summary_generation', sprintf('%.6F', microtime(true)));
+        set_app_setting('thumbnail_maintenance_summary_generation', sprintf(
+            '%.6F',
+            microtime(true),
+        ));
         $completed = true;
     } finally {
         if ($diagnosticMode) {
@@ -903,7 +1196,9 @@ function thumbnail_maintenance_summary_cache_clear(?array &$diagnostics = null):
     }
 
     $stepStarted = $diagnosticMode ? microtime(true) : 0.0;
-    $available = function_exists('Gallery\\Services\\admin_storage_statistics_cache_clear');
+    $available = function_exists(
+        'Gallery\\Services\\admin_storage_statistics_cache_clear',
+    );
     $completed = false;
     try {
         if ($available) {
@@ -921,7 +1216,9 @@ function thumbnail_maintenance_summary_cache_clear(?array &$diagnostics = null):
     }
 
     $stepStarted = $diagnosticMode ? microtime(true) : 0.0;
-    $available = function_exists('Gallery\\Services\\gallery_map_cache_clear_all');
+    $available = function_exists(
+        'Gallery\\Services\\gallery_map_cache_clear_all',
+    );
     $completed = false;
     try {
         if ($available) {
@@ -975,7 +1272,10 @@ function thumbnail_maintenance_summary_cache_clear_diagnostic(): array
 function thumbnail_inventory_fingerprint(?array $galleryIds = null): string
 {
     if ($galleryIds !== null) {
-        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        $galleryIds = array_values(array_unique(array_filter(
+            array_map('intval', $galleryIds),
+            static fn(int $id): bool => $id > 0,
+        )));
         if ($galleryIds === []) {
             return hash('sha256', 'empty-gallery-scope');
         }
@@ -1005,7 +1305,7 @@ function delete_all_thumbnail_files(): array
     mutation_schema_assert_known(
         $metadataSchemaStatus,
         'thumbnail_maintenance.delete_all_files',
-        'Thumbnail cleanup is temporarily unavailable because thumbnail metadata schema could not be verified. No thumbnail files were deleted.'
+        'Thumbnail cleanup is temporarily unavailable because thumbnail metadata schema could not be verified. No thumbnail files were deleted.',
     );
     // $filesDeleted counts individual thumbnail files removed from disk.
     $filesDeleted = 0;
@@ -1030,16 +1330,22 @@ function delete_all_thumbnail_files(): array
             continue;
         }
         if (!path_inside($galleryRoot, $thumbsDirectory)) {
-            throw new RuntimeException('Refusing to delete thumbnails outside the gallery root.');
+            throw new RuntimeException(
+                'Refusing to delete thumbnails outside the gallery root.',
+            );
         }
 
         $directoriesScanned++;
-        $filesDeleted += delete_thumbnail_directory_contents($thumbsDirectory, $galleryRoot);
+        $filesDeleted += delete_thumbnail_directory_contents(
+            $thumbsDirectory,
+            $galleryRoot,
+        );
 
         if (@rmdir($thumbsDirectory)) {
             $directoriesRemoved++;
         } elseif (is_dir($thumbsDirectory)) {
-            throw new RuntimeException('Could not remove thumbnail directory: ' . $thumbsDirectory);
+            throw new RuntimeException('Could not remove thumbnail directory: '
+                . $thumbsDirectory);
         }
     }
 
@@ -1062,30 +1368,39 @@ function delete_all_thumbnail_files(): array
  * @param string $allowedRoot Allowed root value.
  * @return int Number of removed files.
  */
-function delete_thumbnail_directory_contents(string $thumbsDirectory, string $allowedRoot): int
-{
+function delete_thumbnail_directory_contents(
+    string $thumbsDirectory,
+    string $allowedRoot,
+): int {
     // $filesDeleted counts all non-directory entries removed from this thumbs directory.
     $filesDeleted = 0;
     // $iterator walks children before parents so nested directories can be removed cleanly.
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($thumbsDirectory, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $thumbsDirectory,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
 
     foreach ($iterator as $entry) {
         // $path stores the concrete filesystem path currently being removed.
         $path = $entry->getPathname();
         if (!path_inside($allowedRoot, $path)) {
-            throw new RuntimeException('Refusing to delete a thumbnail path outside the gallery root.');
+            throw new RuntimeException(
+                'Refusing to delete a thumbnail path outside the gallery root.',
+            );
         }
         if ($entry->isDir() && !$entry->isLink()) {
             if (!@rmdir($path)) {
-                throw new RuntimeException('Could not remove thumbnail subdirectory: ' . $path);
+                throw new RuntimeException('Could not remove thumbnail subdirectory: '
+                    . $path);
             }
             continue;
         }
         if (!@unlink($path)) {
-            throw new RuntimeException('Could not remove thumbnail file: ' . $path);
+            throw new RuntimeException('Could not remove thumbnail file: '
+                . $path);
         }
         $filesDeleted++;
     }

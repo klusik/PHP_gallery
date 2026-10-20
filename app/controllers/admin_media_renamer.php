@@ -56,8 +56,10 @@ use function Gallery\Services\media_renamer_execute_image_batch;
 use function Gallery\Services\media_renamer_existing_gallery_ids;
 use function Gallery\Services\media_renamer_gallery_ids_with_pending_renames;
 use function Gallery\Services\media_renamer_gallery_rows;
-use function Gallery\Services\media_renamer_gallery_rows_with_rename_availability;
-use function Gallery\Services\media_renamer_gallery_rows_with_submitted_availability;
+use function Gallery\Services\media_renamer_gallery_rows_with_rename_availability
+;
+use function Gallery\Services\media_renamer_gallery_rows_with_submitted_availability
+;
 use function Gallery\Services\media_renamer_normalize_pattern;
 use function Gallery\Services\media_renamer_pattern_help_text;
 use function Gallery\Services\media_renamer_plan_for_gallery;
@@ -99,21 +101,31 @@ function cms_admin_media_renamer(): void
             return;
         }
         $hideEmptyGalleries = admin_media_renamer_hide_empty_from_post();
-        $hideGalleriesWithoutRenameCandidates = admin_media_renamer_hide_done_from_post();
-        $renameAvailabilityChecked = admin_media_renamer_availability_checked_from_post($action);
+        $hideGalleriesWithoutRenameCandidates =
+            admin_media_renamer_hide_done_from_post();
+        $renameAvailabilityChecked =
+            admin_media_renamer_availability_checked_from_post($action);
         $selectedScope = admin_media_renamer_scope_from_post();
         $selectedSingleGalleryId = (int) ($_POST['single_gallery_id'] ?? 0);
-        $pattern = media_renamer_normalize_pattern((string) ($_POST['renamer_pattern'] ?? ''));
-        $submittedAvailability = admin_media_renamer_availability_payload_from_post();
+        $pattern = media_renamer_normalize_pattern(
+            (string) ($_POST['renamer_pattern'] ?? ''),
+        );
+        $submittedAvailability =
+            admin_media_renamer_availability_payload_from_post();
         if ($action === 'filter' && !$submittedAvailability) {
             $renameAvailabilityChecked = false;
         }
 
         if ($action === 'check_availability_batch') {
-            $batchIds = media_renamer_existing_gallery_ids((array) ($_POST['gallery_ids'] ?? []));
+            $batchIds = media_renamer_existing_gallery_ids(
+                (array) ($_POST['gallery_ids'] ?? []),
+            );
             admin_media_renamer_json_response([
                 'ok' => true,
-                'availability' => media_renamer_availability_for_gallery_ids($batchIds, $pattern),
+                'availability' => media_renamer_availability_for_gallery_ids(
+                    $batchIds,
+                    $pattern,
+                ),
                 'processed' => count($batchIds),
             ]);
         }
@@ -122,23 +134,36 @@ function cms_admin_media_renamer(): void
             if (empty($_POST['confirm_media_rename'])) {
                 admin_media_renamer_json_response([
                     'ok' => false,
-                    'error' => t('admin.media_renamer.confirm_required', 'Confirm that you reviewed the preview before applying physical renames.'),
+                    'error' => t(
+                        'admin.media_renamer.confirm_required',
+                        'Confirm that you reviewed the preview before applying physical renames.',
+                    ),
                 ], 400);
             }
-            $batchImageIds = admin_media_renamer_image_ids_from_post('batch_image_ids');
+            $batchImageIds = admin_media_renamer_image_ids_from_post(
+                'batch_image_ids',
+            );
             try {
                 admin_media_renamer_json_response([
                     'ok' => true,
-                    'result' => admin_media_renamer_bounded_result(media_renamer_execute_image_batch($batchImageIds, $pattern)),
+                    'result' => admin_media_renamer_bounded_result(media_renamer_execute_image_batch(
+                        $batchImageIds,
+                        $pattern,
+                    )),
                     'processed' => count($batchImageIds),
                 ]);
             } catch (Throwable $exception) {
-                admin_media_renamer_log_exception('media_renamer.site_batch_failed', 'Site-wide media rename batch failed.', $exception, [
-                    'selected_scope' => $selectedScope,
-                    'selected_gallery_ids' => $selectedGalleryIds,
-                    'batch_image_ids' => $batchImageIds,
-                    'pattern' => $pattern,
-                ]);
+                admin_media_renamer_log_exception(
+                    'media_renamer.site_batch_failed',
+                    'Site-wide media rename batch failed.',
+                    $exception,
+                    [
+                        'selected_scope' => $selectedScope,
+                        'selected_gallery_ids' => $selectedGalleryIds,
+                        'batch_image_ids' => $batchImageIds,
+                        'pattern' => $pattern,
+                    ],
+                );
                 admin_media_renamer_json_response([
                     'ok' => false,
                     'error' => $exception->getMessage(),
@@ -149,84 +174,159 @@ function cms_admin_media_renamer(): void
         if ($action === 'apply_refresh') {
             $lastResult = admin_media_renamer_result_payload_from_post();
             $notice = admin_media_renamer_result_notice($lastResult);
-            $completionSeverity = admin_media_renamer_result_log_severity($lastResult);
-            admin_media_renamer_log_event($completionSeverity === 'warning' ? 'warning' : 'info', 'media_renamer.site_completed', 'Site-wide media rename completed.', [
-                'selected_scope' => $selectedScope,
-                'selected_gallery_ids' => admin_media_renamer_gallery_ids_from_post($selectedScope, $hideEmptyGalleries, false, $pattern),
-                'pattern' => $pattern,
-                'batched' => true,
-                'result' => admin_media_renamer_loggable_result($lastResult),
-            ], ['category' => 'media', 'severity' => $completionSeverity]);
+            $completionSeverity =
+                admin_media_renamer_result_log_severity($lastResult);
+            admin_media_renamer_log_event(
+                $completionSeverity === 'warning' ? 'warning' : 'info',
+                'media_renamer.site_completed',
+                'Site-wide media rename completed.',
+                [
+                    'selected_scope' => $selectedScope,
+                    'selected_gallery_ids' => admin_media_renamer_gallery_ids_from_post(
+                        $selectedScope,
+                        $hideEmptyGalleries,
+                        false,
+                        $pattern,
+                    ),
+                    'pattern' => $pattern,
+                    'batched' => true,
+                    'result' =>
+                        admin_media_renamer_loggable_result($lastResult),
+                ],
+                ['category' => 'media', 'severity' => $completionSeverity],
+            );
         }
 
-        $filterSelectedFromSubmittedAvailability = $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && $submittedAvailability;
+        $filterSelectedFromSubmittedAvailability =
+            $hideGalleriesWithoutRenameCandidates
+            && $renameAvailabilityChecked
+            && $submittedAvailability;
         $selectedGalleryIds = admin_media_renamer_gallery_ids_from_post(
             $selectedScope,
             $hideEmptyGalleries,
-            $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && !$submittedAvailability && $action !== 'filter',
-            $pattern
+            $hideGalleriesWithoutRenameCandidates
+                && $renameAvailabilityChecked
+                && !$submittedAvailability
+                && $action !== 'filter',
+            $pattern,
         );
         if ($filterSelectedFromSubmittedAvailability) {
-            $selectedGalleryIds = admin_media_renamer_filter_gallery_ids_by_availability($selectedGalleryIds, $submittedAvailability);
+            $selectedGalleryIds = admin_media_renamer_filter_gallery_ids_by_availability(
+                $selectedGalleryIds,
+                $submittedAvailability,
+            );
         }
 
         if ($action === 'filter') {
             // Visibility changes refresh selector rows only; planning stays an explicit admin action.
             $plans = [];
         } elseif ($action === 'check_availability') {
-            $notice = t('admin.media_renamer.availability_checked', 'Rename availability was checked for the current list. Galleries with no pending renames can now be hidden.');
+            $notice = t(
+                'admin.media_renamer.availability_checked',
+                'Rename availability was checked for the current list. Galleries with no pending renames can now be hidden.',
+            );
         } elseif ($action === 'apply_refresh') {
-            $plans = $selectedGalleryIds ? media_renamer_plans_for_galleries($selectedGalleryIds, $pattern) : [];
+            $plans = $selectedGalleryIds
+                ? media_renamer_plans_for_galleries(
+                    $selectedGalleryIds,
+                    $pattern,
+                )
+                : [];
         } elseif (!$selectedGalleryIds) {
-            $notice = t('admin.media_renamer.no_galleries_selected', 'Select at least one gallery to preview or rename.');
+            $notice = t(
+                'admin.media_renamer.no_galleries_selected',
+                'Select at least one gallery to preview or rename.',
+            );
         } elseif ($action === 'apply') {
             if (empty($_POST['confirm_media_rename'])) {
-                $notice = t('admin.media_renamer.confirm_required', 'Confirm that you reviewed the preview before applying physical renames.');
-                $plans = media_renamer_plans_for_galleries($selectedGalleryIds, $pattern);
+                $notice = t(
+                    'admin.media_renamer.confirm_required',
+                    'Confirm that you reviewed the preview before applying physical renames.',
+                );
+                $plans = media_renamer_plans_for_galleries(
+                    $selectedGalleryIds,
+                    $pattern,
+                );
             } else {
                 try {
-                    $result = media_renamer_execute_galleries($selectedGalleryIds, $pattern);
+                    $result = media_renamer_execute_galleries(
+                        $selectedGalleryIds,
+                        $pattern,
+                    );
                     $lastResult = $result;
                     $notice = admin_media_renamer_result_notice($result);
-                    $completionSeverity = admin_media_renamer_result_log_severity($result);
-                    admin_media_renamer_log_event($completionSeverity === 'warning' ? 'warning' : 'info', 'media_renamer.site_completed', 'Site-wide media rename completed.', [
-                        'selected_scope' => $selectedScope,
-                        'selected_gallery_ids' => $selectedGalleryIds,
-                        'pattern' => $pattern,
-                        'result' => admin_media_renamer_loggable_result($result),
-                    ], ['category' => 'media', 'severity' => $completionSeverity]);
+                    $completionSeverity =
+                        admin_media_renamer_result_log_severity($result);
+                    admin_media_renamer_log_event(
+                        $completionSeverity === 'warning' ? 'warning' : 'info',
+                        'media_renamer.site_completed',
+                        'Site-wide media rename completed.',
+                        [
+                            'selected_scope' => $selectedScope,
+                            'selected_gallery_ids' => $selectedGalleryIds,
+                            'pattern' => $pattern,
+                            'result' =>
+                                admin_media_renamer_loggable_result($result),
+                        ],
+                        [
+                            'category' => 'media',
+                            'severity' => $completionSeverity,
+                        ],
+                    );
                 } catch (Throwable $exception) {
                     $notice = $exception->getMessage();
-                    admin_media_renamer_log_exception('media_renamer.site_failed', 'Site-wide media rename failed.', $exception, [
-                        'selected_scope' => $selectedScope,
-                        'selected_gallery_ids' => $selectedGalleryIds,
-                        'pattern' => $pattern,
-                    ]);
+                    admin_media_renamer_log_exception(
+                        'media_renamer.site_failed',
+                        'Site-wide media rename failed.',
+                        $exception,
+                        [
+                            'selected_scope' => $selectedScope,
+                            'selected_gallery_ids' => $selectedGalleryIds,
+                            'pattern' => $pattern,
+                        ],
+                    );
                 }
-                $plans = media_renamer_plans_for_galleries($selectedGalleryIds, $pattern);
+                $plans = media_renamer_plans_for_galleries(
+                    $selectedGalleryIds,
+                    $pattern,
+                );
             }
         } else {
-            $plans = media_renamer_plans_for_galleries($selectedGalleryIds, $pattern);
+            $plans = media_renamer_plans_for_galleries(
+                $selectedGalleryIds,
+                $pattern,
+            );
         }
     }
 
     $galleryRows = media_renamer_gallery_rows($hideEmptyGalleries);
     if ($renameAvailabilityChecked) {
-        $submittedAvailability = request_method() === 'POST' ? admin_media_renamer_availability_payload_from_post() : [];
+        $submittedAvailability = request_method() === 'POST'
+            ? admin_media_renamer_availability_payload_from_post()
+            : [];
         if ($submittedAvailability) {
             $renameAvailability = $submittedAvailability;
             $galleryRows = media_renamer_gallery_rows_with_submitted_availability(
                 $galleryRows,
                 $renameAvailability,
-                $hideGalleriesWithoutRenameCandidates
+                $hideGalleriesWithoutRenameCandidates,
             );
         } else {
-            $availabilityResult = media_renamer_gallery_rows_with_rename_availability($galleryRows, $pattern, $hideGalleriesWithoutRenameCandidates);
+            $availabilityResult = media_renamer_gallery_rows_with_rename_availability(
+                $galleryRows,
+                $pattern,
+                $hideGalleriesWithoutRenameCandidates,
+            );
             $galleryRows = (array) ($availabilityResult['rows'] ?? []);
-            $renameAvailability = (array) ($availabilityResult['availability'] ?? []);
+            $renameAvailability = (array) (
+                $availabilityResult['availability'] ?? []
+            );
         }
         if ($selectedScope === 'all') {
-            $selectedGalleryIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $galleryRows);
+            $selectedGalleryIds = array_map(
+                static fn(array $row): int => (int) ($row['id'] ?? 0),
+                $galleryRows,
+            );
         }
     }
     $workspaceHtml = admin_media_renamer_render_site_workspace(
@@ -241,7 +341,7 @@ function cms_admin_media_renamer(): void
         $hideEmptyGalleries,
         $hideGalleriesWithoutRenameCandidates,
         $renameAvailabilityChecked,
-        $renameAvailability
+        $renameAvailability,
     );
     if (admin_wants_json()) {
         header('Content-Type: application/json');
@@ -263,19 +363,19 @@ function cms_admin_media_renamer(): void
 /**
  * Render the site-wide renamer workspace for normal and AJAX requests.
  *
- * @param array<int,array<string,mixed>> $galleryRows Gallery rows value.
- * @param string $selectedScope Selected scope value.
- * @param array<int> $selectedGalleryIds Selected gallery ids value.
- * @param int $selectedSingleGalleryId Selected single gallery id identifier.
- * @param string $pattern Pattern value.
- * @param array<int,array<string,mixed>> $plans Plans value.
- * @param string $notice Notice value.
- * @param ?array $lastResult Last result value.
- * @param bool $hideEmptyGalleries Hide empty galleries value.
- * @param bool $hideGalleriesWithoutRenameCandidates Hide galleries without rename candidates value.
- * @param bool $renameAvailabilityChecked Rename availability checked value.
- * @param array $renameAvailability Rename availability value.
- * @return string Text result for the caller.
+ * @param list<array{id:int,title?:string,folder_path?:string,direct_image_count?:int,rename_candidate_count?:int,rename_warning_count?:int}> $galleryRows Gallery rows used to render the site-wide selector.
+ * @param string $selectedScope Selected site-wide scope: all, single, or selected.
+ * @param list<int> $selectedGalleryIds Gallery IDs selected for preview or apply.
+ * @param int $selectedSingleGalleryId Gallery ID selected by the single-gallery scope.
+ * @param string $pattern Normalized filename pattern shown in the forms.
+ * @param list<array{gallery:array{id:int,title?:string,folder_path?:string},items:list<array{gallery_id:int,image_id:int,image:array<string,string|int|float|null>,target_image:array<string,string|int|float|null>,old_relative_path:string,old_filename:string,new_relative_path:string,new_filename:string,status:string,warnings:list<string>,can_rename:bool}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>}> $plans Dry-run gallery plans to display.
+ * @param string $notice Optional result notice shown in the workspace.
+ * @param ?array{galleries_requested:int,galleries_processed:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>} $lastResult Most recent normalized execution summary, when available.
+ * @param bool $hideEmptyGalleries Whether empty galleries are hidden from scope choices.
+ * @param bool $hideGalleriesWithoutRenameCandidates Whether galleries without pending renames are hidden.
+ * @param bool $renameAvailabilityChecked Whether current availability counts were submitted.
+ * @param array<int,array{rename_count:int,warning_count:int}> $renameAvailability Counts keyed by gallery ID.
+ * @return string Complete workspace HTML for the page or AJAX response.
  */
 function admin_media_renamer_render_site_workspace(
     array $galleryRows,
@@ -289,11 +389,20 @@ function admin_media_renamer_render_site_workspace(
     bool $hideEmptyGalleries = true,
     bool $hideGalleriesWithoutRenameCandidates = false,
     bool $renameAvailabilityChecked = false,
-    array $renameAvailability = []
-): string
-{
+    array $renameAvailability = [],
+): string {
     ob_start();
-    render_admin_media_renamer_scope_form($galleryRows, $selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates, $renameAvailabilityChecked, $renameAvailability);
+    render_admin_media_renamer_scope_form(
+        $galleryRows,
+        $selectedScope,
+        $selectedGalleryIds,
+        $selectedSingleGalleryId,
+        $pattern,
+        $hideEmptyGalleries,
+        $hideGalleriesWithoutRenameCandidates,
+        $renameAvailabilityChecked,
+        $renameAvailability,
+    );
     $scopeFormHtml = (string) ob_get_clean();
 
     $planTableHtml = '';
@@ -305,11 +414,22 @@ function admin_media_renamer_render_site_workspace(
         $planTableHtml = (string) ob_get_clean();
         if ($lastResult !== null) {
             ob_start();
-            render_admin_media_renamer_execution_details((array) ($lastResult['details'] ?? []));
+            render_admin_media_renamer_execution_details(
+                (array) ($lastResult['details'] ?? []),
+            );
             $executionDetailsHtml = (string) ob_get_clean();
         }
         ob_start();
-        render_admin_media_renamer_apply_form($selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates, $renameAvailabilityChecked, $renameAvailability);
+        render_admin_media_renamer_apply_form(
+            $selectedScope,
+            $selectedGalleryIds,
+            $selectedSingleGalleryId,
+            $pattern,
+            $hideEmptyGalleries,
+            $hideGalleriesWithoutRenameCandidates,
+            $renameAvailabilityChecked,
+            $renameAvailability,
+        );
         $applyFormHtml = (string) ob_get_clean();
     }
 
@@ -329,27 +449,34 @@ function admin_media_renamer_render_site_workspace(
 /**
  * Render the gallery editor panel for the current gallery only.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int,title?:string,folder_path?:string} $gallery Gallery row rendered in the editor panel.
+ * @return void Renders the gallery-level renamer panel fragment.
  */
 function render_admin_media_renamer_gallery_panel(array $gallery): void
 {
-    $pattern = media_renamer_normalize_pattern((string) ($_GET['renamer_pattern'] ?? $_POST['renamer_pattern'] ?? ''));
+    $pattern = media_renamer_normalize_pattern(
+        (string) ($_GET['renamer_pattern'] ?? $_POST['renamer_pattern'] ?? ''),
+    );
     \Gallery\Views\view_render_admin_media_renamer_fragment(
-        admin_media_renamer_render_gallery_panel_html($gallery, $pattern)
+        admin_media_renamer_render_gallery_panel_html($gallery, $pattern),
     );
 }
 
 /**
  * Render the gallery-level renamer panel HTML so normal and AJAX requests share one view.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{id:int,title?:string,folder_path?:string} $gallery Gallery row used to build the plan and panel.
  * @param string $pattern Pattern value.
  * @param string $notice Notice value.
- * @param ?array $result Result value.
+ * @param ?array{details?:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>} $result Previous execution result with optional per-image details.
  * @return string Text result for the caller.
  */
-function admin_media_renamer_render_gallery_panel_html(array $gallery, string $pattern, string $notice = '', ?array $result = null): string
-{
+function admin_media_renamer_render_gallery_panel_html(
+    array $gallery,
+    string $pattern,
+    string $notice = '',
+    ?array $result = null,
+): string {
     $galleryId = (int) ($gallery['id'] ?? 0);
     $pattern = media_renamer_normalize_pattern($pattern);
 
@@ -376,7 +503,9 @@ function admin_media_renamer_render_gallery_panel_html(array $gallery, string $p
     $executionDetailsHtml = '';
     if ($result !== null) {
         ob_start();
-        render_admin_media_renamer_execution_details((array) ($result['details'] ?? []));
+        render_admin_media_renamer_execution_details(
+            (array) ($result['details'] ?? []),
+        );
         $executionDetailsHtml = (string) ob_get_clean();
     }
 
@@ -404,9 +533,12 @@ function admin_media_renamer_render_gallery_panel_html(array $gallery, string $p
  *
  * @param int $galleryId Gallery identifier.
  * @param string $pattern Pattern value.
+ * @return void Renders the gallery-level pattern preview form.
  */
-function render_admin_media_renamer_pattern_preview_form(int $galleryId, string $pattern): void
-{
+function render_admin_media_renamer_pattern_preview_form(
+    int $galleryId,
+    string $pattern,
+): void {
     \Gallery\Views\view_render_admin_media_renamer_pattern_preview_form([
         'action_url' => url_for('admin_edit_gallery'),
         'gallery_id' => $galleryId,
@@ -419,15 +551,15 @@ function render_admin_media_renamer_pattern_preview_form(int $galleryId, string 
 /**
  * Render the site-wide gallery selection form.
  *
- * @param array<int,array<string,mixed>> $galleryRows Gallery rows value.
+ * @param list<array{id:int,title?:string,folder_path?:string,direct_image_count?:int,rename_candidate_count?:int,rename_warning_count?:int}> $galleryRows Gallery rows displayed in the scope selector.
  * @param string $selectedScope Selected scope value.
- * @param array<int> $selectedGalleryIds Selected gallery ids value.
+ * @param list<int> $selectedGalleryIds Gallery IDs selected for the current scope.
  * @param int $selectedSingleGalleryId Selected single gallery id identifier.
  * @param string $pattern Pattern value.
  * @param bool $hideEmptyGalleries Hide empty galleries value.
  * @param bool $hideGalleriesWithoutRenameCandidates Hide galleries without rename candidates value.
  * @param bool $renameAvailabilityChecked Rename availability checked value.
- * @param array $renameAvailability Rename availability value.
+ * @param array<int,array{rename_count:int,warning_count:int}> $renameAvailability Counts keyed by gallery ID.
  * @return void Emits the site-wide gallery selection form.
  */
 function render_admin_media_renamer_scope_form(
@@ -439,15 +571,27 @@ function render_admin_media_renamer_scope_form(
     bool $hideEmptyGalleries = true,
     bool $hideGalleriesWithoutRenameCandidates = false,
     bool $renameAvailabilityChecked = false,
-    array $renameAvailability = []
-): void
-{
-    $pendingTotal = array_sum(array_map(static fn (array $row): int => (int) ($row['rename_candidate_count'] ?? 0), $galleryRows));
+    array $renameAvailability = [],
+): void {
+    $pendingTotal = array_sum(array_map(
+        static fn(array $row): int => (int) (
+            $row['rename_candidate_count'] ?? 0
+        ),
+        $galleryRows,
+    ));
     $preparedRows = [];
     foreach ($galleryRows as $gallery) {
         $id = (int) ($gallery['id'] ?? 0);
-        $gallery['selector_label'] = (string) ($gallery['folder_path'] ?? $gallery['title'] ?? ('#' . $id));
-        $gallery['edit_url'] = url_for('admin_edit_gallery', ['id' => $id, 'tab' => 'admin-edit-renamer']) . '#admin-edit-renamer';
+        $gallery['selector_label'] = (string) (
+            $gallery['folder_path']
+            ?? $gallery['title']
+            ?? '#' . $id
+        );
+        $gallery['edit_url'] =
+            url_for('admin_edit_gallery', [
+                'id' => $id,
+                'tab' => 'admin-edit-renamer',
+            ]) . '#admin-edit-renamer';
         $preparedRows[] = $gallery;
     }
 
@@ -460,7 +604,10 @@ function render_admin_media_renamer_scope_form(
         'hide_empty_galleries' => $hideEmptyGalleries,
         'hide_done_galleries' => $hideGalleriesWithoutRenameCandidates,
         'rename_availability_checked' => $renameAvailabilityChecked,
-        'availability_payload' => admin_media_renamer_encode_availability_payload($renameAvailability),
+        'availability_payload' =>
+            admin_media_renamer_encode_availability_payload(
+                $renameAvailability,
+            ),
         'pending_total' => $pendingTotal,
         'action_url' => url_for('admin_media_renamer'),
         'csrf_html' => csrf_field(),
@@ -473,13 +620,13 @@ function render_admin_media_renamer_scope_form(
  * Render the apply form for a previously previewed site-wide plan.
  *
  * @param string $selectedScope Selected scope value.
- * @param array<int> $selectedGalleryIds Selected gallery ids value.
+ * @param list<int> $selectedGalleryIds Gallery IDs included in the reviewed plan.
  * @param int $selectedSingleGalleryId Selected single gallery id identifier.
  * @param string $pattern Pattern value.
  * @param bool $hideEmptyGalleries Hide empty galleries value.
  * @param bool $hideGalleriesWithoutRenameCandidates Hide galleries without rename candidates value.
  * @param bool $renameAvailabilityChecked Rename availability checked value.
- * @param array $renameAvailability Rename availability value.
+ * @param array<int,array{rename_count:int,warning_count:int}> $renameAvailability Counts keyed by gallery ID.
  * @return void Emits the reviewed rename-plan submission form.
  */
 function render_admin_media_renamer_apply_form(
@@ -490,13 +637,13 @@ function render_admin_media_renamer_apply_form(
     bool $hideEmptyGalleries = true,
     bool $hideGalleriesWithoutRenameCandidates = false,
     bool $renameAvailabilityChecked = false,
-    array $renameAvailability = []
-): void
-{
+    array $renameAvailability = [],
+): void {
     $plans = media_renamer_plans_for_galleries($selectedGalleryIds, $pattern);
     $aggregate = admin_media_renamer_aggregate_plans($plans);
     $renameCount = (int) ($aggregate['rename'] ?? 0);
-    $candidateImageIds = admin_media_renamer_candidate_image_ids_from_plans($plans);
+    $candidateImageIds =
+        admin_media_renamer_candidate_image_ids_from_plans($plans);
 
     \Gallery\Views\view_render_admin_media_renamer_apply_form([
         'action_url' => url_for('admin_media_renamer'),
@@ -510,14 +657,18 @@ function render_admin_media_renamer_apply_form(
         'hide_empty_galleries' => $hideEmptyGalleries,
         'hide_done_galleries' => $hideGalleriesWithoutRenameCandidates,
         'rename_availability_checked' => $renameAvailabilityChecked,
-        'availability_payload' => admin_media_renamer_encode_availability_payload($renameAvailability),
+        'availability_payload' =>
+            admin_media_renamer_encode_availability_payload(
+                $renameAvailability,
+            ),
     ]);
 }
 
 /**
  * Render dry-run plan tables grouped by gallery.
  *
- * @param array<int,array<string,mixed>> $plans Plans value.
+ * @param list<array{gallery:array{id:int,title?:string,folder_path?:string},items:list<array{gallery_id:int,image_id:int,image:array<string,string|int|float|null>,target_image:array<string,string|int|float|null>,old_relative_path:string,old_filename:string,new_relative_path:string,new_filename:string,status:string,warnings:list<string>,can_rename:bool}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>}> $plans Dry-run plans grouped for presentation.
+ * @return void Renders the prepared plan table.
  */
 function render_admin_media_renamer_plan_table(array $plans): void
 {
@@ -527,8 +678,13 @@ function render_admin_media_renamer_plan_table(array $plans): void
         $preparedItems = [];
         foreach ((array) ($plan['items'] ?? []) as $item) {
             $preparedItem = $item;
-            $preparedItem['status_label'] = admin_media_renamer_status_label((string) ($item['status'] ?? 'skipped'));
-            $preparedItem['notes_text'] = implode(' ', array_map('strval', (array) ($item['warnings'] ?? [])));
+            $preparedItem['status_label'] = admin_media_renamer_status_label(
+                (string) ($item['status'] ?? 'skipped'),
+            );
+            $preparedItem['notes_text'] = implode(' ', array_map(
+                'strval',
+                (array) ($item['warnings'] ?? []),
+            ));
             $preparedItems[] = $preparedItem;
         }
         $preparedPlan['items'] = $preparedItems;
@@ -544,15 +700,21 @@ function render_admin_media_renamer_plan_table(array $plans): void
 /**
  * Render the execution detail table after an apply run.
  *
- * @param array<int,array<string,mixed>> $details Details value.
+ * @param list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}> $details Per-image execution outcomes to render.
+ * @return void Renders the prepared execution detail table.
  */
 function render_admin_media_renamer_execution_details(array $details): void
 {
     $preparedDetails = [];
     foreach ($details as $detail) {
         $preparedDetail = $detail;
-        $preparedDetail['status_label'] = admin_media_renamer_status_label((string) ($detail['status'] ?? 'skipped'));
-        $preparedDetail['notes_text'] = implode(' ', array_map('strval', (array) ($detail['notes'] ?? [])));
+        $preparedDetail['status_label'] = admin_media_renamer_status_label(
+            (string) ($detail['status'] ?? 'skipped'),
+        );
+        $preparedDetail['notes_text'] = implode(' ', array_map(
+            'strval',
+            (array) ($detail['notes'] ?? []),
+        ));
         $preparedDetails[] = $preparedDetail;
     }
     \Gallery\Views\view_render_admin_media_renamer_execution_details([
@@ -563,7 +725,7 @@ function render_admin_media_renamer_execution_details(array $details): void
 /**
  * Return image ids that are planned for physical rename.
  *
- * @param array<int,array<string,mixed>> $plans Plans value.
+ * @param list<array{items:list<array{image_id:int,status:string,can_rename:bool}>}> $plans Plans containing candidate image outcomes.
  * @return array<int> Structured result data for the caller.
  */
 function admin_media_renamer_candidate_image_ids_from_plans(array $plans): array
@@ -571,12 +733,18 @@ function admin_media_renamer_candidate_image_ids_from_plans(array $plans): array
     $ids = [];
     foreach ($plans as $plan) {
         foreach ((array) ($plan['items'] ?? []) as $item) {
-            if (!empty($item['can_rename']) && (string) ($item['status'] ?? '') === 'rename') {
+            if (
+                !empty($item['can_rename'])
+                && (string) ($item['status'] ?? '') === 'rename'
+            ) {
                 $ids[] = (int) ($item['image_id'] ?? 0);
             }
         }
     }
-    return array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0)));
+    return array_values(array_unique(array_filter(
+        $ids,
+        static fn(int $id): bool => $id > 0,
+    )));
 }
 
 /**
@@ -587,26 +755,39 @@ function admin_media_renamer_candidate_image_ids_from_plans(array $plans): array
  */
 function admin_media_renamer_image_ids_from_post(string $field): array
 {
-    return array_values(array_unique(array_filter(array_map('intval', (array) ($_POST[$field] ?? [])), static fn (int $id): bool => $id > 0)));
+    return array_values(array_unique(array_filter(
+        array_map('intval', (array) ($_POST[$field] ?? [])),
+        static fn(int $id): bool => $id > 0,
+    )));
 }
 
 /**
  * Trim large batch results before returning them through AJAX.
  *
- * @param array $result Result value.
+ * @param array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,details?:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings?:list<string>,failures?:list<string>} $result Aggregate execution fields to bound before returning them to the browser.
  * @param int $detailLimit Detail limit value.
- * @return array<string,mixed> Structured result data for the caller.
+ * @return array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,details?:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings?:list<string>,failures?:list<string>} Result with detail, warning, and failure lists truncated to their response limits.
  */
-function admin_media_renamer_bounded_result(array $result, int $detailLimit = 300): array
-{
+function admin_media_renamer_bounded_result(
+    array $result,
+    int $detailLimit = 300,
+): array {
     if (isset($result['details']) && is_array($result['details'])) {
         $result['details'] = array_slice($result['details'], 0, $detailLimit);
     }
     if (isset($result['warnings']) && is_array($result['warnings'])) {
-        $result['warnings'] = array_slice(array_map('strval', $result['warnings']), 0, 50);
+        $result['warnings'] = array_slice(
+            array_map('strval', $result['warnings']),
+            0,
+            50,
+        );
     }
     if (isset($result['failures']) && is_array($result['failures'])) {
-        $result['failures'] = array_slice(array_map('strval', $result['failures']), 0, 50);
+        $result['failures'] = array_slice(
+            array_map('strval', $result['failures']),
+            0,
+            50,
+        );
     }
     return $result;
 }
@@ -624,7 +805,9 @@ function admin_media_renamer_result_payload_from_post(): array
         return media_renamer_empty_execution_result(0);
     }
 
-    $result = media_renamer_empty_execution_result((int) ($decoded['galleries_requested'] ?? 0));
+    $result = media_renamer_empty_execution_result(
+        (int) ($decoded['galleries_requested'] ?? 0),
+    );
     foreach ([
         'galleries_processed',
         'renamed',
@@ -636,13 +819,25 @@ function admin_media_renamer_result_payload_from_post(): array
         'derivatives_cleaned',
         'derivative_failures',
         'zip_archives_deleted',
-        'titles_updated'
+        'titles_updated',
     ] as $key) {
         $result[$key] = max(0, (int) ($decoded[$key] ?? 0));
     }
-    $result['details'] = array_slice((array) ($decoded['details'] ?? []), 0, 500);
-    $result['warnings'] = array_slice(array_map('strval', (array) ($decoded['warnings'] ?? [])), 0, 50);
-    $result['failures'] = array_slice(array_map('strval', (array) ($decoded['failures'] ?? [])), 0, 50);
+    $result['details'] = array_slice(
+        (array) ($decoded['details'] ?? []),
+        0,
+        500,
+    );
+    $result['warnings'] = array_slice(
+        array_map('strval', (array) ($decoded['warnings'] ?? [])),
+        0,
+        50,
+    );
+    $result['failures'] = array_slice(
+        array_map('strval', (array) ($decoded['failures'] ?? [])),
+        0,
+        50,
+    );
     return $result;
 }
 
@@ -685,7 +880,10 @@ function admin_media_renamer_status_label(string $status): string
     return match ($status) {
         'renamed' => t('admin.media_renamer.status_renamed', 'Renamed'),
         'rename' => t('admin.media_renamer.status_rename', 'Will rename'),
-        'already_matches' => t('admin.media_renamer.status_already_matches', 'Already matches'),
+        'already_matches' => t(
+            'admin.media_renamer.status_already_matches',
+            'Already matches',
+        ),
         'missing' => t('admin.media_renamer.status_missing', 'Missing file'),
         'collision' => t('admin.media_renamer.status_collision', 'Collision'),
         default => t('admin.media_renamer.status_skipped', 'Skipped'),
@@ -700,7 +898,9 @@ function admin_media_renamer_status_label(string $status): string
 function admin_media_renamer_scope_from_post(): string
 {
     $scope = (string) ($_POST['renamer_scope'] ?? 'selected');
-    return in_array($scope, ['all', 'single', 'selected'], true) ? $scope : 'selected';
+    return in_array($scope, ['all', 'single', 'selected'], true)
+        ? $scope
+        : 'selected';
 }
 
 /**
@@ -716,25 +916,29 @@ function admin_media_renamer_gallery_ids_from_post(
     string $scope,
     bool $hideEmptyGalleries = false,
     bool $hideGalleriesWithoutRenameCandidates = false,
-    string $pattern = ''
-): array
-{
+    string $pattern = '',
+): array {
     if ($scope === 'all') {
         $galleryIds = media_renamer_all_gallery_ids($hideEmptyGalleries);
     } elseif ($scope === 'single') {
-        $galleryIds = media_renamer_existing_gallery_ids([(int) ($_POST['single_gallery_id'] ?? 0)]);
+        $galleryIds = media_renamer_existing_gallery_ids([
+            (int) ($_POST['single_gallery_id'] ?? 0),
+        ]);
     } else {
-        $galleryIds = media_renamer_existing_gallery_ids((array) ($_POST['gallery_ids'] ?? []));
+        $galleryIds = media_renamer_existing_gallery_ids(
+            (array) ($_POST['gallery_ids'] ?? []),
+        );
     }
 
     if ($hideGalleriesWithoutRenameCandidates) {
-        $galleryIds = media_renamer_gallery_ids_with_pending_renames($galleryIds, $pattern);
+        $galleryIds = media_renamer_gallery_ids_with_pending_renames(
+            $galleryIds,
+            $pattern,
+        );
     }
 
     return $galleryIds;
 }
-
-
 
 /**
  * Read whether zero-image galleries should be hidden from the site-wide selector.
@@ -746,7 +950,6 @@ function admin_media_renamer_hide_empty_from_post(): bool
     $raw = (string) ($_POST['hide_empty_galleries'] ?? '0');
     return in_array($raw, ['1', 'true', 'on', 'yes'], true);
 }
-
 
 /**
  * Read whether already-renamed galleries should be hidden after availability was checked.
@@ -773,8 +976,6 @@ function admin_media_renamer_availability_checked_from_post(string $action): boo
     $raw = (string) ($_POST['rename_availability_checked'] ?? '0');
     return in_array($raw, ['1', 'true', 'on', 'yes'], true);
 }
-
-
 
 /**
  * Decode a submitted availability payload produced by the on-demand batch checker.
@@ -820,7 +1021,10 @@ function admin_media_renamer_encode_availability_payload(array $availability): s
         return '';
     }
 
-    return (string) json_encode($availability, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    return (string) json_encode(
+        $availability,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+    );
 }
 
 /**
@@ -830,8 +1034,10 @@ function admin_media_renamer_encode_availability_payload(array $availability): s
  * @param array<int,array<string,int>> $availability Availability value.
  * @return array<int> Structured result data for the caller.
  */
-function admin_media_renamer_filter_gallery_ids_by_availability(array $galleryIds, array $availability): array
-{
+function admin_media_renamer_filter_gallery_ids_by_availability(
+    array $galleryIds,
+    array $availability,
+): array {
     $filtered = [];
     foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
         if ((int) ($availability[$galleryId]['rename_count'] ?? 0) > 0) {
@@ -850,18 +1056,34 @@ function admin_media_renamer_filter_gallery_ids_by_availability(array $galleryId
 function admin_media_renamer_verify_csrf_for_ajax(): bool
 {
     $token = (string) ($_POST['csrf_token'] ?? '');
-    if ($token !== '' && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
+    if (
+        $token !== ''
+        && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)
+    ) {
         return true;
     }
 
     if (admin_wants_json()) {
-        admin_media_renamer_log_event('warning', 'media_renamer.csrf_failed', 'Media renamer AJAX request failed CSRF validation.', [
-            'action' => (string) ($_POST['renamer_action'] ?? $_POST['action'] ?? ''),
-            'request' => admin_media_renamer_request_log_context(),
-        ], ['category' => 'security', 'severity' => 'warning']);
+        admin_media_renamer_log_event(
+            'warning',
+            'media_renamer.csrf_failed',
+            'Media renamer AJAX request failed CSRF validation.',
+            [
+                'action' => (string) (
+                    $_POST['renamer_action']
+                    ?? $_POST['action']
+                    ?? ''
+                ),
+                'request' => admin_media_renamer_request_log_context(),
+            ],
+            ['category' => 'security', 'severity' => 'warning'],
+        );
         admin_media_renamer_json_response([
             'ok' => false,
-            'error' => t('admin.media_renamer.csrf_failed', 'Security token expired or invalid. Reload the admin page and try again.'),
+            'error' => t(
+                'admin.media_renamer.csrf_failed',
+                'Security token expired or invalid. Reload the admin page and try again.',
+            ),
         ], 400);
         return false;
     }
@@ -872,6 +1094,8 @@ function admin_media_renamer_verify_csrf_for_ajax(): bool
 
 /**
  * Handle a browser-side JSON parsing or non-JSON response diagnostic report.
+ *
+ * @return void Logs bounded request diagnostics and emits a successful JSON acknowledgement.
  */
 function admin_media_renamer_handle_client_error(): void
 {
@@ -879,8 +1103,16 @@ function admin_media_renamer_handle_client_error(): void
         'message' => substr((string) ($_POST['message'] ?? ''), 0, 500),
         'status' => (int) ($_POST['status'] ?? 0),
         'status_text' => substr((string) ($_POST['status_text'] ?? ''), 0, 120),
-        'content_type' => substr((string) ($_POST['content_type'] ?? ''), 0, 160),
-        'response_url' => substr((string) ($_POST['response_url'] ?? ''), 0, 500),
+        'content_type' => substr(
+            (string) ($_POST['content_type'] ?? ''),
+            0,
+            160,
+        ),
+        'response_url' => substr(
+            (string) ($_POST['response_url'] ?? ''),
+            0,
+            500,
+        ),
         'request_url' => substr((string) ($_POST['request_url'] ?? ''), 0, 500),
         'redirected' => !empty($_POST['redirected']),
         'snippet' => substr((string) ($_POST['snippet'] ?? ''), 0, 1500),
@@ -889,26 +1121,35 @@ function admin_media_renamer_handle_client_error(): void
         'form_action' => substr((string) ($_POST['form_action'] ?? ''), 0, 500),
         'request' => admin_media_renamer_request_log_context(),
     ];
-    admin_media_renamer_log_event('error', 'media_renamer.ajax_non_json_response', 'Media renamer AJAX request returned a non-JSON or invalid JSON response.', $context, [
-        'category' => 'media',
-        'severity' => 'error',
-    ]);
+    admin_media_renamer_log_event(
+        'error',
+        'media_renamer.ajax_non_json_response',
+        'Media renamer AJAX request returned a non-JSON or invalid JSON response.',
+        $context,
+        [
+            'category' => 'media',
+            'severity' => 'error',
+        ],
+    );
     admin_media_renamer_json_response(['ok' => true]);
 }
 
 /**
  * Emit a JSON response and stop the current media-renamer request.
  *
- * @param array $payload Payload value.
- * @param int $statusCode Status code value.
+ * @param array{ok:bool,error?:string,processed?:int,availability?:array<int,array{rename_count:int,warning_count:int}>,result?:array{galleries_requested:int,galleries_processed:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>}} $payload Supported media-renamer JSON response fields.
+ * @param int $statusCode HTTP response status code.
+ * @return never Emits the JSON response and terminates the request.
  */
-function admin_media_renamer_json_response(array $payload, int $statusCode = 200): never
-{
+function admin_media_renamer_json_response(
+    array $payload,
+    int $statusCode = 200,
+): never {
     http_response_code($statusCode);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
+    exit();
 }
 
 /**
@@ -917,11 +1158,15 @@ function admin_media_renamer_json_response(array $payload, int $statusCode = 200
  * @param string $eventKey Event key value.
  * @param string $message Message value.
  * @param Throwable $exception Exception value.
- * @param array $context Context value.
+ * @param array{selected_scope?:string,selected_gallery_ids?:list<int>,batch_image_ids?:list<int>,pattern?:string,action?:string,batched?:bool,message?:string,status?:int,status_text?:string,content_type?:string,response_url?:string,request_url?:string,redirected?:bool,snippet?:string,workspace?:string,current_url?:string,form_action?:string,request?:array{method:string,uri:string,accept:string,requested_with:string,referer:string},result?:array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,warnings?:list<string>,failures?:list<string>}} $context Diagnostic context fields supplied by the workflow.
  * @return void Records a bounded exception diagnostic.
  */
-function admin_media_renamer_log_exception(string $eventKey, string $message, Throwable $exception, array $context = []): void
-{
+function admin_media_renamer_log_exception(
+    string $eventKey,
+    string $message,
+    Throwable $exception,
+    array $context = [],
+): void {
     $context['exception'] = [
         'class' => $exception::class,
         'message' => $exception->getMessage(),
@@ -930,7 +1175,10 @@ function admin_media_renamer_log_exception(string $eventKey, string $message, Th
         'trace' => admin_media_renamer_compact_trace($exception),
     ];
     $context['request'] = admin_media_renamer_request_log_context();
-    admin_media_renamer_log_event('error', $eventKey, $message, $context, ['category' => 'media', 'severity' => 'error']);
+    admin_media_renamer_log_event('error', $eventKey, $message, $context, [
+        'category' => 'media',
+        'severity' => 'error',
+    ]);
 }
 
 /**
@@ -939,18 +1187,37 @@ function admin_media_renamer_log_exception(string $eventKey, string $message, Th
  * @param string $level Level value.
  * @param string $eventKey Event key value.
  * @param string $message Message value.
- * @param array $context Context value.
- * @param array $options Optional behavior flags.
+ * @param array{selected_scope?:string,selected_gallery_ids?:list<int>,batch_image_ids?:list<int>,pattern?:string,action?:string,batched?:bool,message?:string,status?:int,status_text?:string,content_type?:string,response_url?:string,request_url?:string,redirected?:bool,snippet?:string,workspace?:string,current_url?:string,form_action?:string,request?:array{method:string,uri:string,accept:string,requested_with:string,referer:string},exception?:array{class:string,message:string,file:string,line:int,trace:list<array{file:string,line:int,function:string}>},result?:array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,warnings?:list<string>,failures?:list<string>}} $context Diagnostic event context fields.
+ * @param array{category?:string,severity?:string} $options Optional Admin log category and severity.
  * @return void Writes a bounded Admin event and local diagnostic.
  */
-function admin_media_renamer_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
-{
-    $written = admin_media_renamer_write_admin_log_direct($level, $eventKey, $message, $context, $options);
+function admin_media_renamer_log_event(
+    string $level,
+    string $eventKey,
+    string $message,
+    array $context = [],
+    array $options = [],
+): void {
+    $written = admin_media_renamer_write_admin_log_direct(
+        $level,
+        $eventKey,
+        $message,
+        $context,
+        $options,
+    );
     if (!$written && function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event($level, $eventKey, $message, $context, $options);
     }
-    $encodedContext = $context ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '';
-    error_log('[PHP Gallery] ' . $eventKey . ': ' . $message . ($encodedContext !== '' ? ' ' . $encodedContext : ''));
+    $encodedContext = $context
+        ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        : '';
+    error_log(
+        '[PHP Gallery] '
+            . $eventKey
+            . ': '
+            . $message
+            . ($encodedContext !== '' ? ' ' . $encodedContext : ''),
+    );
 }
 
 /**
@@ -963,8 +1230,8 @@ function admin_media_renamer_log_event(string $level, string $eventKey, string $
  * @param string $level Level value.
  * @param string $eventKey Event key value.
  * @param string $message Message value.
- * @param array $context Context value.
- * @param array $options Optional behavior flags.
+ * @param array{selected_scope?:string,selected_gallery_ids?:list<int>,batch_image_ids?:list<int>,pattern?:string,action?:string,batched?:bool,message?:string,status?:int,status_text?:string,content_type?:string,response_url?:string,request_url?:string,redirected?:bool,snippet?:string,workspace?:string,current_url?:string,form_action?:string,request?:array{method:string,uri:string,accept:string,requested_with:string,referer:string},exception?:array{class:string,message:string,file:string,line:int,trace:list<array{file:string,line:int,function:string}>},result?:array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,warnings?:list<string>,failures?:list<string>}} $context Diagnostic event context fields.
+ * @param array{category?:string,severity?:string} $options Optional Admin log category and severity.
  * @return bool True when the condition matches.
  */
 function admin_media_renamer_write_admin_log_direct(
@@ -972,20 +1239,39 @@ function admin_media_renamer_write_admin_log_direct(
     string $eventKey,
     string $message,
     array $context = [],
-    array $options = []
-): bool
-{
+    array $options = [],
+): bool {
     try {
-        $user = function_exists('Gallery\\Core\\current_user') ? current_user() : null;
-        return admin_diagnostic_log_write($level, $eventKey, $message, $context, $options, [
-            'user_id' => $user ? (int) $user['id'] : null,
-            'request_id' => function_exists('Gallery\\Services\\telemetry_request_id') ? telemetry_request_id() : null,
-            'route_name' => function_exists('Gallery\\Services\\admin_log_current_route_name') ? admin_log_current_route_name() : '',
-            'http_method' => (string) ($_SERVER['REQUEST_METHOD'] ?? ''),
-            'is_ajax' => admin_wants_json(),
-        ]);
+        $user = function_exists('Gallery\\Core\\current_user')
+            ? current_user()
+            : null;
+        return admin_diagnostic_log_write(
+            $level,
+            $eventKey,
+            $message,
+            $context,
+            $options,
+            [
+                'user_id' => $user ? (int) $user['id'] : null,
+                'request_id' => function_exists(
+                    'Gallery\\Services\\telemetry_request_id',
+                )
+                    ? telemetry_request_id()
+                    : null,
+                'route_name' => function_exists(
+                    'Gallery\\Services\\admin_log_current_route_name',
+                )
+                    ? admin_log_current_route_name()
+                    : '',
+                'http_method' => (string) ($_SERVER['REQUEST_METHOD'] ?? ''),
+                'is_ajax' => admin_wants_json(),
+            ],
+        );
     } catch (Throwable $exception) {
-        error_log('[PHP Gallery] media_renamer.direct_admin_log_failed: ' . $exception->getMessage());
+        error_log(
+            '[PHP Gallery] media_renamer.direct_admin_log_failed: '
+                . $exception->getMessage(),
+        );
         return false;
     }
 }
@@ -994,7 +1280,7 @@ function admin_media_renamer_write_admin_log_direct(
  * Return a bounded exception trace suitable for the admin log context JSON.
  *
  * @param Throwable $exception Exception value.
- * @return array Structured result data for the caller.
+ * @return list<array{file:string,line:int,function:string}> Trace frames limited to eight entries.
  */
 function admin_media_renamer_compact_trace(Throwable $exception): array
 {
@@ -1012,7 +1298,7 @@ function admin_media_renamer_compact_trace(Throwable $exception): array
 /**
  * Return request metadata useful when diagnosing AJAX JSON failures.
  *
- * @return array Structured result data for the caller.
+ * @return array{method:string,uri:string,accept:string,requested_with:string,referer:string} Bounded request metadata for diagnostic events.
  */
 function admin_media_renamer_request_log_context(): array
 {
@@ -1020,7 +1306,11 @@ function admin_media_renamer_request_log_context(): array
         'method' => (string) ($_SERVER['REQUEST_METHOD'] ?? ''),
         'uri' => substr((string) ($_SERVER['REQUEST_URI'] ?? ''), 0, 500),
         'accept' => substr((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 0, 220),
-        'requested_with' => substr((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''), 0, 120),
+        'requested_with' => substr(
+            (string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''),
+            0,
+            120,
+        ),
         'referer' => substr((string) ($_SERVER['HTTP_REFERER'] ?? ''), 0, 500),
     ];
 }
@@ -1028,17 +1318,25 @@ function admin_media_renamer_request_log_context(): array
 /**
  * Remove bulky per-image detail rows before writing aggregate results to logs.
  *
- * @param array $result Result value.
- * @return array Structured result data for the caller.
+ * @param array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,details?:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings?:list<string>,failures?:list<string>} $result Execution result fields whose large details list is excluded from logs.
+ * @return array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,warnings?:list<string>,failures?:list<string>} Aggregate result with bounded warning and failure lists and no per-image details.
  */
 function admin_media_renamer_loggable_result(array $result): array
 {
     unset($result['details']);
     if (isset($result['warnings']) && is_array($result['warnings'])) {
-        $result['warnings'] = array_slice(array_map('strval', $result['warnings']), 0, 20);
+        $result['warnings'] = array_slice(
+            array_map('strval', $result['warnings']),
+            0,
+            20,
+        );
     }
     if (isset($result['failures']) && is_array($result['failures'])) {
-        $result['failures'] = array_slice(array_map('strval', $result['failures']), 0, 20);
+        $result['failures'] = array_slice(
+            array_map('strval', $result['failures']),
+            0,
+            20,
+        );
     }
     return $result;
 }
@@ -1046,34 +1344,63 @@ function admin_media_renamer_loggable_result(array $result): array
 /**
  * Build a visible result notice after a physical rename run.
  *
- * @param array $result Result value.
+ * @param array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,warnings?:list<string>,failures?:list<string>} $result Aggregate execution counters used to create the visible notice.
  * @return string Text result for the caller.
  */
 function admin_media_renamer_result_notice(array $result): string
 {
-    $message = t('admin.media_renamer.result_notice', 'Processed {galleries} gallery/galleries. Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), skipped {skipped} row(s), saw {missing} missing file(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).', [
-        'galleries' => (string) (int) ($result['galleries_processed'] ?? 0),
-        'renamed' => (string) (int) ($result['renamed'] ?? 0),
-        'derivatives' => (string) ((int) ($result['derivatives_moved'] ?? 0) + (int) ($result['derivatives_cleaned'] ?? 0)),
-        'skipped' => (string) ((int) ($result['skipped'] ?? 0) + (int) ($result['collisions'] ?? 0)),
-        'missing' => (string) (int) ($result['missing'] ?? 0),
-        'archives' => (string) (int) ($result['zip_archives_deleted'] ?? 0),
-        'titles' => (string) (int) ($result['titles_updated'] ?? 0),
-    ]);
+    $message = t(
+        'admin.media_renamer.result_notice',
+        'Processed {galleries} gallery/galleries. Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), skipped {skipped} row(s), saw {missing} missing file(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).',
+        [
+            'galleries' => (string) (int) ($result['galleries_processed'] ?? 0),
+            'renamed' => (string) (int) ($result['renamed'] ?? 0),
+            'derivatives' => (string) (
+                (int) ($result['derivatives_moved'] ?? 0)
+                + (int) ($result['derivatives_cleaned'] ?? 0)
+            ),
+            'skipped' => (string) (
+                (int) ($result['skipped'] ?? 0)
+                + (int) ($result['collisions'] ?? 0)
+            ),
+            'missing' => (string) (int) ($result['missing'] ?? 0),
+            'archives' => (string) (int) ($result['zip_archives_deleted'] ?? 0),
+            'titles' => (string) (int) ($result['titles_updated'] ?? 0),
+        ],
+    );
 
     $derivativeFailures = (int) ($result['derivative_failures'] ?? 0);
     if ($derivativeFailures > 0) {
-        $message .= ' ' . t('admin.media_renamer.result_derivative_warnings', 'Generated derivative warnings: {count}.', ['count' => (string) $derivativeFailures]);
+        $message .= ' '
+        . t(
+            'admin.media_renamer.result_derivative_warnings',
+            'Generated derivative warnings: {count}.',
+            ['count' => (string) $derivativeFailures],
+        );
     }
 
     $warnings = (array) ($result['warnings'] ?? []);
     if ($warnings) {
-        $message .= ' ' . t('admin.media_renamer.result_warnings', 'Warnings: {warnings}', ['warnings' => implode(' | ', array_map('strval', array_slice($warnings, 0, 8)))]);
+        $message .= ' '
+        . t(
+            'admin.media_renamer.result_warnings',
+            'Warnings: {warnings}',
+            ['warnings' => implode(' | ', array_map('strval', array_slice(
+                $warnings,
+                0,
+                8,
+            )))],
+        );
     }
 
     $failures = (array) ($result['failures'] ?? []);
     if ($failures) {
-        $message .= ' ' . t('admin.media_renamer.result_failures', 'Failures: {failures}', ['failures' => implode(' | ', array_map('strval', $failures))]);
+        $message .= ' '
+        . t(
+            'admin.media_renamer.result_failures',
+            'Failures: {failures}',
+            ['failures' => implode(' | ', array_map('strval', $failures))],
+        );
     }
     return $message;
 }
@@ -1089,7 +1416,10 @@ function admin_media_renamer_result_log_severity(array $result): string
     if (!empty($result['failures'])) {
         return 'warning';
     }
-    if (!empty($result['warnings']) || (int) ($result['derivative_failures'] ?? 0) > 0) {
+    if (
+        !empty($result['warnings'])
+        || (int) ($result['derivative_failures'] ?? 0) > 0
+    ) {
         return 'warning';
     }
     return 'info';

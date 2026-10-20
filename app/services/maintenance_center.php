@@ -50,28 +50,52 @@ use Throwable;
  * Rationale: require fresh analysis before approving the expanded cache task.
  */
 const MAINTENANCE_CENTER_REGISTRY_REVISION = '2026-10-14.cache-lifecycle';
+
 /** Terminal job history retained by normal maintenance. */
 const MAINTENANCE_CENTER_HISTORY_RETENTION_DAYS = 90;
+
 /** Conservative web-maintenance classification threshold for one physical DB table operation. */
 const MAINTENANCE_CENTER_LARGE_TABLE_BYTES = 268435456;
+
 /** Minimum DATA_FREE signal used for the normal recommended OPTIMIZE set. */
 const MAINTENANCE_CENTER_RECOMMEND_RECLAIM_BYTES = 1048576;
+
 /** Logical database cleanup batch size per browser request. */
 const MAINTENANCE_CENTER_DB_CLEANUP_BATCH = 250;
+
 /** Maximum recent activity entries persisted in one job row. */
 const MAINTENANCE_CENTER_ACTIVITY_LIMIT = 80;
 
-/** Encode bounded Maintenance Center persistence JSON with stable failure semantics. */
+/**
+ * Encode a bounded Maintenance Center state object with stable failure semantics.
+ *
+ * @param array<string,mixed> $value JSON-compatible state fields.
+ * @return string UTF-8 JSON encoding; throws RuntimeException when encoding fails.
+ */
 function maintenance_center_json_encode(array $value): string
 {
     try {
-        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        return json_encode(
+            $value,
+            JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_SLASHES
+                | JSON_THROW_ON_ERROR,
+        );
     } catch (JsonException $exception) {
-        throw new RuntimeException('Maintenance Center state could not be encoded.', 0, $exception);
+        throw new RuntimeException(
+            'Maintenance Center state could not be encoded.',
+            0,
+            $exception,
+        );
     }
 }
 
-/** Decode one persisted Maintenance Center JSON object. */
+/**
+ * Decode one persisted Maintenance Center state object.
+ *
+ * @param ?string $value Persisted JSON object, or null for no saved state.
+ * @return array<string,mixed> Decoded state fields, or an empty array for absent state; throws RuntimeException for invalid JSON or non-object data.
+ */
 function maintenance_center_json_decode(?string $value): array
 {
     if ($value === null || trim($value) === '') {
@@ -80,10 +104,16 @@ function maintenance_center_json_decode(?string $value): array
     try {
         $decoded = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
     } catch (JsonException $exception) {
-        throw new RuntimeException('Maintenance Center persisted state is invalid.', 0, $exception);
+        throw new RuntimeException(
+            'Maintenance Center persisted state is invalid.',
+            0,
+            $exception,
+        );
     }
     if (!is_array($decoded)) {
-        throw new RuntimeException('Maintenance Center persisted state is not an object.');
+        throw new RuntimeException(
+            'Maintenance Center persisted state is not an object.',
+        );
     }
     return $decoded;
 }
@@ -95,16 +125,38 @@ function maintenance_center_app_version(): string
     return defined($constant) ? (string) constant($constant) : 'unknown';
 }
 
-/** Return a monotonic bounded percentage. */
-function maintenance_center_monotonic_percent(float $previous, int $done, int $total): float
-{
-    $calculated = $total > 0 ? min(100.0, max(0.0, ($done / $total) * 100.0)) : ($done > 0 ? 100.0 : 0.0);
+/**
+ * Return a monotonic percentage between zero and one hundred.
+ *
+ * @param float $previous Previously reported percentage.
+ * @param int $done Completed work units.
+ * @param int $total Total work units.
+ * @return float Rounded percentage that never decreases below the previous value.
+ */
+function maintenance_center_monotonic_percent(
+    float $previous,
+    int $done,
+    int $total,
+): float {
+    $calculated = $total > 0
+        ? min(100.0, max(0.0, ($done / $total) * 100.0))
+        : ($done > 0 ? 100.0 : 0.0);
     return round(max($previous, $calculated), 2);
 }
 
-/** Resolve one persisted/runtime Maintenance Center message through the active Admin language. */
-function maintenance_center_runtime_text(string $key, string $fallback, array $parameters = []): string
-{
+/**
+ * Resolve one persisted/runtime message through the active Admin language.
+ *
+ * @param string $key Translation key.
+ * @param string $fallback English fallback text.
+ * @param array<string,string|int|float> $parameters Scalar placeholder values.
+ * @return string Localized message, or the interpolated fallback when translation is unavailable.
+ */
+function maintenance_center_runtime_text(
+    string $key,
+    string $fallback,
+    array $parameters = [],
+): string {
     if (function_exists(__NAMESPACE__ . '\\t')) {
         return t($key, $fallback, $parameters);
     }
@@ -114,13 +166,27 @@ function maintenance_center_runtime_text(string $key, string $fallback, array $p
     return $fallback;
 }
 
-/** Append one bounded recent-activity entry to persisted state. */
-function maintenance_center_activity(array &$state, string $level, string $message, array $context = []): void
-{
+/**
+ * Append one bounded recent-activity entry to persisted state.
+ *
+ * @param array<string,mixed> $state Mutable maintenance state.
+ * @param string $level Activity severity label.
+ * @param string $message Human-readable activity text.
+ * @param array<string,mixed> $context Structured activity details.
+ * @return void Appends the activity entry and applies the configured history limit.
+ */
+function maintenance_center_activity(
+    array &$state,
+    string $level,
+    string $message,
+    array $context = [],
+): void {
     $entries = is_array($state['activity'] ?? null) ? $state['activity'] : [];
     $entries[] = [
         'at' => date('Y-m-d H:i:s'),
-        'level' => in_array($level, ['info', 'warning', 'error'], true) ? $level : 'info',
+        'level' => in_array($level, ['info', 'warning', 'error'], true)
+            ? $level
+            : 'info',
         'message' => mb_substr(trim($message), 0, 220),
         'context' => array_slice($context, 0, 8, true),
     ];
@@ -130,24 +196,50 @@ function maintenance_center_activity(array &$state, string $level, string $messa
     $state['activity'] = $entries;
 }
 
-/** Add a unique bounded warning code/message to persisted state. */
-function maintenance_center_warning(array &$state, string $code, string $message): void
-{
+/**
+ * Add a unique bounded warning code/message to persisted state.
+ *
+ * @param array<string,mixed> $state Mutable maintenance state.
+ * @param string $code Stable warning identifier.
+ * @param string $message Human-readable warning text.
+ * @return void Adds the warning unless its code is already present.
+ */
+function maintenance_center_warning(
+    array &$state,
+    string $code,
+    string $message,
+): void {
     $warnings = is_array($state['warnings'] ?? null) ? $state['warnings'] : [];
     foreach ($warnings as $warning) {
         if (is_array($warning) && (string) ($warning['code'] ?? '') === $code) {
             return;
         }
     }
-    $warnings[] = ['code' => mb_substr($code, 0, 64), 'message' => mb_substr(trim($message), 0, 255)];
+    $warnings[] = [
+        'code' => mb_substr($code, 0, 64),
+        'message' => mb_substr(trim($message), 0, 255),
+    ];
     $state['warnings'] = array_slice($warnings, -40);
 }
 
-/** Record a bounded service-level error without persisting exception traces. */
-function maintenance_center_error(array &$state, string $code, string $message): void
-{
+/**
+ * Record a bounded service-level error without persisting exception traces.
+ *
+ * @param array<string,mixed> $state Mutable maintenance state.
+ * @param string $code Stable error identifier.
+ * @param string $message Human-readable error text.
+ * @return void Appends the error and enforces the persisted history limit.
+ */
+function maintenance_center_error(
+    array &$state,
+    string $code,
+    string $message,
+): void {
     $errors = is_array($state['errors'] ?? null) ? $state['errors'] : [];
-    $errors[] = ['code' => mb_substr($code, 0, 64), 'message' => mb_substr(trim($message), 0, 255)];
+    $errors[] = [
+        'code' => mb_substr($code, 0, 64),
+        'message' => mb_substr(trim($message), 0, 255),
+    ];
     $state['errors'] = array_slice($errors, -20);
 }
 
@@ -167,7 +259,10 @@ function maintenance_center_exception_diagnostic(Throwable $exception): array
     if (method_exists($exception, 'reason')) {
         try {
             $candidate = $exception->reason();
-            if (is_string($candidate) && preg_match('/^[a-z0-9_.-]{1,80}$/D', $candidate) === 1) {
+            if (
+                is_string($candidate)
+                && preg_match('/^[a-z0-9_.-]{1,80}$/D', $candidate) === 1
+            ) {
                 $errorCode = $candidate;
             }
         } catch (Throwable) {
@@ -178,7 +273,8 @@ function maintenance_center_exception_diagnostic(Throwable $exception): array
     if ($errorCode === '') {
         $errorCode = match (true) {
             $exception instanceof \PDOException => 'database_exception',
-            $exception instanceof \UnexpectedValueException => 'filesystem_iterator_exception',
+            $exception instanceof \UnexpectedValueException
+                => 'filesystem_iterator_exception',
             $exception instanceof \JsonException => 'json_exception',
             $exception instanceof \RuntimeException => 'runtime_exception',
             $exception instanceof \Error => 'php_error',
@@ -204,8 +300,10 @@ function maintenance_center_exception_diagnostic(Throwable $exception): array
  * @param string $phase Current task phase: analysis or execution.
  * @return list<string> Logical runtime module identifiers to load before the task callback.
  */
-function maintenance_center_task_runtime_modules(string $taskKey, string $phase): array
-{
+function maintenance_center_task_runtime_modules(
+    string $taskKey,
+    string $phase,
+): array {
     if (!in_array($phase, ['analysis', 'execution'], true)) {
         return [];
     }
@@ -213,30 +311,40 @@ function maintenance_center_task_runtime_modules(string $taskKey, string $phase)
     if ($taskKey === 'preflight') {
         return $phase === 'analysis' ? ['site-maintenance-work'] : [];
     }
-    if (in_array($taskKey, [
-        'trash.reconcile',
-        'telemetry.retention',
-        'trash.retention',
-        'security.cleanup',
-        'downloads.cache',
-        'thumbnail.metadata',
-        'media.deep_verify',
-    ], true)) {
+    if (in_array(
+        $taskKey,
+        [
+            'trash.reconcile',
+            'telemetry.retention',
+            'trash.retention',
+            'security.cleanup',
+            'downloads.cache',
+            'thumbnail.metadata',
+            'media.deep_verify',
+        ],
+        true,
+    )) {
         return ['site-maintenance-work'];
     }
     if ($taskKey === 'logs.retention') {
         return ['archive-maintenance-work'];
     }
-    if (in_array($taskKey, [
-        'database.logical',
-        'database.inventory',
-        'database.analyze',
-        'database.optimize',
-    ], true)) {
+    if (in_array(
+        $taskKey,
+        [
+            'database.logical',
+            'database.inventory',
+            'database.analyze',
+            'database.optimize',
+        ],
+        true,
+    )) {
         return ['domain-admin-database-maintenance'];
     }
     if ($taskKey === 'verify') {
-        return $phase === 'execution' ? ['domain-admin-database-maintenance'] : [];
+        return (
+            $phase === 'execution' ? ['domain-admin-database-maintenance'] : []
+        );
     }
     return [];
 }
@@ -253,12 +361,18 @@ function maintenance_center_task_runtime_modules(string $taskKey, string $phase)
  * @param callable(string):void|null $loadDependencies Optional logical-module loader.
  * @return void Loads all modules required by this task and phase.
  */
-function maintenance_center_load_task_dependencies(string $taskKey, string $phase, ?callable $loadDependencies = null): void
-{
+function maintenance_center_load_task_dependencies(
+    string $taskKey,
+    string $phase,
+    ?callable $loadDependencies = null,
+): void {
     if ($loadDependencies === null) {
         return;
     }
-    foreach (maintenance_center_task_runtime_modules($taskKey, $phase) as $module) {
+    foreach (maintenance_center_task_runtime_modules(
+        $taskKey,
+        $phase,
+    ) as $module) {
         $loadDependencies($module);
     }
 }

@@ -33,67 +33,108 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
-/** Return durable account-count and persisted capacity-counter diagnostics. */
+/**
+ * Return durable account-count and persisted capacity-counter diagnostics.
+ *
+ * @param string $stateKey State key used by this operation.
+ * @return array{current_count:int,capacity_counter_count:?int} Capacity diagnostics.
+ */
 function viewer_security_operations_model_account_capacity(string $stateKey): array
 {
     $stmt = db()->prepare(
         'SELECT COUNT(*) AS current_count, '
-        . '(SELECT account_count FROM viewer_account_state WHERE state_key = ? LIMIT 1) AS capacity_counter_count '
-        . 'FROM viewer_accounts'
+            . '(SELECT account_count FROM viewer_account_state WHERE state_key = ? LIMIT 1) AS capacity_counter_count '
+            . 'FROM viewer_accounts',
     );
     $stmt->execute([$stateKey]);
     return $stmt->fetch() ?: [];
 }
 
-/** Return staged-registration count breakdown and persisted capacity-counter diagnostics. */
+/**
+ * Return staged-registration count breakdown and persisted capacity-counter diagnostics.
+ *
+ * @param string $stateKey State key used by this operation.
+ * @return array{current_count:int,capacity_counter_count:?int} Capacity diagnostics.
+ */
 function viewer_security_operations_model_registration_capacity(string $stateKey): array
 {
     $stmt = db()->prepare(
         'SELECT COUNT(*) AS current_count, '
-        . 'COALESCE(SUM(CASE WHEN viewer_invitation_id IS NULL THEN 1 ELSE 0 END), 0) AS open_origin_count, '
-        . 'COALESCE(SUM(CASE WHEN viewer_invitation_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS invitation_backed_count, '
-        . '(SELECT active_request_count FROM viewer_registration_state WHERE state_key = ? LIMIT 1) AS capacity_counter_count '
-        . 'FROM viewer_registration_requests'
+            . 'COALESCE(SUM(CASE WHEN viewer_invitation_id IS NULL THEN 1 ELSE 0 END), 0) AS open_origin_count, '
+            . 'COALESCE(SUM(CASE WHEN viewer_invitation_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS invitation_backed_count, '
+            . '(SELECT active_request_count FROM viewer_registration_state WHERE state_key = ? LIMIT 1) AS capacity_counter_count '
+            . 'FROM viewer_registration_requests',
     );
     $stmt->execute([$stateKey]);
     return $stmt->fetch() ?: [];
 }
 
-/** Return allowlisted rolling-window security-event aggregate rows. */
-function viewer_security_operations_model_event_aggregates(array $eventKeys, string $cutoff24, string $cutoff7): array
-{
+/**
+ * Return allowlisted rolling-window security-event aggregate rows.
+ *
+ * @param string $cutoff24 Cutoff24 used by this operation.
+ * @param string $cutoff7 Cutoff7 used by this operation.
+ * @param list<string> $eventKeys Event keys used by this operation.
+ * @return array<int,array{event_key:string,count_24h:int,count_7d:int}> Event totals.
+ */
+function viewer_security_operations_model_event_aggregates(
+    array $eventKeys,
+    string $cutoff24,
+    string $cutoff7,
+): array {
     if ($eventKeys === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($eventKeys), '?'));
     $stmt = db()->prepare(
         'SELECT event_key, '
-        . 'SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS count_24h, '
-        . 'COUNT(*) AS count_7d '
-        . 'FROM viewer_security_events '
-        . 'WHERE event_key IN (' . $placeholders . ') AND created_at >= ? '
-        . 'GROUP BY event_key'
+            . 'SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS count_24h, '
+            . 'COUNT(*) AS count_7d '
+            . 'FROM viewer_security_events '
+            . 'WHERE event_key IN ('
+            . $placeholders
+            . ') AND created_at >= ? '
+            . 'GROUP BY event_key',
     );
-    $stmt->execute(array_merge([$cutoff24], array_values($eventKeys), [$cutoff7]));
+    $stmt->execute(array_merge(
+        [$cutoff24],
+        array_values($eventKeys),
+        [$cutoff7],
+    ));
     return $stmt->fetchAll() ?: [];
 }
 
-/** Return allowlisted daily security-event trend rows. */
-function viewer_security_operations_model_event_trend(array $eventKeys, string $trendStart, string $nowSql): array
-{
+/**
+ * Return allowlisted daily security-event trend rows.
+ *
+ * @param list<string> $eventKeys Event keys used by this operation.
+ * @param string $nowSql Now sql used by this operation.
+ * @param string $trendStart Trend start used by this operation.
+ * @return array<int,array{event_key:string,event_date:string,event_count:int}> Daily event totals.
+ */
+function viewer_security_operations_model_event_trend(
+    array $eventKeys,
+    string $trendStart,
+    string $nowSql,
+): array {
     if ($eventKeys === []) {
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($eventKeys), '?'));
     $stmt = db()->prepare(
         'SELECT DATE(created_at) AS activity_date, event_key, COUNT(*) AS event_count '
-        . 'FROM viewer_security_events '
-        . 'WHERE event_key IN (' . $placeholders . ') '
-        . 'AND created_at >= ? AND created_at <= ? '
-        . 'GROUP BY DATE(created_at), event_key '
-        . 'ORDER BY activity_date ASC, event_key ASC'
+            . 'FROM viewer_security_events '
+            . 'WHERE event_key IN ('
+            . $placeholders
+            . ') '
+            . 'AND created_at >= ? AND created_at <= ? '
+            . 'GROUP BY DATE(created_at), event_key '
+            . 'ORDER BY activity_date ASC, event_key ASC',
     );
-    $stmt->execute(array_merge(array_values($eventKeys), [$trendStart, $nowSql]));
+    $stmt->execute(array_merge(
+        array_values($eventKeys),
+        [$trendStart, $nowSql],
+    ));
     return $stmt->fetchAll() ?: [];
 }
 
@@ -101,9 +142,15 @@ function viewer_security_operations_model_event_trend(array $eventKeys, string $
  * Build the bounded aggregate limiter query for an application-owned bucket/policy set.
  *
  * Every identifier is validated before interpolation and every cutoff is derived from integer policy windows.
+ *
+ * @param int $nowTimestamp Timestamp for the now timestamp.
+ * @param array<string,array{window_seconds:int,limit:int}> $policies Rate-limit policies keyed by policy name.
+ * @return string Resolved string value used by the caller.
  */
-function viewer_security_operations_model_rate_limit_query(array $policies, int $nowTimestamp): string
-{
+function viewer_security_operations_model_rate_limit_query(
+    array $policies,
+    int $nowTimestamp,
+): string {
     $case = [];
     $bucketSql = [];
     $maximumWindow = 0;
@@ -123,27 +170,47 @@ function viewer_security_operations_model_rate_limit_query(array $policies, int 
 
     $nowSql = date('Y-m-d H:i:s', $nowTimestamp);
     $oldestCutoff = date('Y-m-d H:i:s', $nowTimestamp - $maximumWindow);
-    $cutoffCase = 'CASE b.bucket ' . implode(' ', $case) . " ELSE '{$nowSql}' END";
+    $cutoffCase =
+        'CASE b.bucket ' . implode(' ', $case) . " ELSE '{$nowSql}' END";
 
-    return 'SELECT b.bucket, b.entry_count, '
-        . 'COALESCE(SUM(CASE WHEN r.subject_hash IS NOT NULL '
-        . 'AND (r.last_attempt_at >= ' . $cutoffCase . " OR r.locked_until > '{$nowSql}') "
-        . 'THEN 1 ELSE 0 END), 0) AS active_subjects, '
-        . 'COALESCE(SUM(CASE WHEN r.subject_hash IS NOT NULL '
-        . "AND r.locked_until > '{$nowSql}' THEN 1 ELSE 0 END), 0) AS locked_subjects, "
-        . 'COALESCE(MAX(CASE WHEN r.subject_hash IS NOT NULL '
-        . 'AND r.first_attempt_at >= ' . $cutoffCase . ' THEN r.attempts ELSE 0 END), 0) AS current_window_attempts '
-        . 'FROM viewer_rate_limit_buckets b '
-        . 'LEFT JOIN viewer_rate_limits r ON r.bucket = b.bucket '
-        . "AND (r.last_attempt_at >= '{$oldestCutoff}' OR r.first_attempt_at >= '{$oldestCutoff}' OR r.locked_until > '{$nowSql}') "
-        . 'WHERE b.bucket IN (' . implode(',', $bucketSql) . ') '
-        . 'GROUP BY b.bucket, b.entry_count';
+    return (
+        'SELECT b.bucket, b.entry_count, '
+            . 'COALESCE(SUM(CASE WHEN r.subject_hash IS NOT NULL '
+            . 'AND (r.last_attempt_at >= '
+            . $cutoffCase
+            . " OR r.locked_until > '{$nowSql}') "
+            . 'THEN 1 ELSE 0 END), 0) AS active_subjects, '
+            . 'COALESCE(SUM(CASE WHEN r.subject_hash IS NOT NULL '
+            . "AND r.locked_until > '{$nowSql}' THEN 1 ELSE 0 END), 0) AS locked_subjects, "
+            . 'COALESCE(MAX(CASE WHEN r.subject_hash IS NOT NULL '
+            . 'AND r.first_attempt_at >= '
+            . $cutoffCase
+            . ' THEN r.attempts ELSE 0 END), 0) AS current_window_attempts '
+            . 'FROM viewer_rate_limit_buckets b '
+            . 'LEFT JOIN viewer_rate_limits r ON r.bucket = b.bucket '
+            . "AND (r.last_attempt_at >= '{$oldestCutoff}' OR r.first_attempt_at >= '{$oldestCutoff}' OR r.locked_until > '{$nowSql}') "
+            . 'WHERE b.bucket IN ('
+            . implode(',', $bucketSql)
+            . ') '
+            . 'GROUP BY b.bucket, b.entry_count'
+    );
 }
 
-/** Execute and return aggregate rate-limit pressure rows for the allowlisted policy set. */
-function viewer_security_operations_model_rate_limit_rows(array $policies, int $nowTimestamp): array
-{
-    $sql = viewer_security_operations_model_rate_limit_query($policies, $nowTimestamp);
+/**
+ * Execute and return aggregate rate-limit pressure rows for the allowlisted policy set.
+ *
+ * @param int $nowTimestamp Timestamp for the now timestamp.
+ * @param array<string,array{window_seconds:int,limit:int}> $policies Rate-limit policies keyed by policy name.
+ * @return array<int,array{policy:string,window_seconds:int,request_count:int}> Aggregate rate-limit rows.
+ */
+function viewer_security_operations_model_rate_limit_rows(
+    array $policies,
+    int $nowTimestamp,
+): array {
+    $sql = viewer_security_operations_model_rate_limit_query(
+        $policies,
+        $nowTimestamp,
+    );
     if ($sql === '') {
         return [];
     }

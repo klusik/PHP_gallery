@@ -46,7 +46,9 @@ use function Gallery\Core\cms_runtime_limit;
 use function Gallery\Core\path_inside;
 
 const DOWNLOAD_MANIFEST_CACHE_FORMAT = 1;
+
 const DOWNLOAD_MANIFEST_RESOURCE_GALLERY = 'gallery';
+
 const DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY = 'smart_gallery';
 
 /**
@@ -79,10 +81,13 @@ function &download_manifest_profile_state(): array
  *
  * @param string $resourceType Stable manifest resource type.
  * @param int $resourceId Authorized resource identifier.
+ * @return void Starts a request-local profile with counters and cache state reset.
  */
-function download_manifest_profile_begin(string $resourceType, int $resourceId): void
-{
-    $state =& download_manifest_profile_state();
+function download_manifest_profile_begin(
+    string $resourceType,
+    int $resourceId,
+): void {
+    $state = &download_manifest_profile_state();
     $state = [
         'resource_type' => $resourceType,
         'resource_id' => $resourceId,
@@ -107,7 +112,7 @@ function download_manifest_profile_begin(string $resourceType, int $resourceId):
  */
 function download_manifest_profile_count(string $counter, int $amount = 1): void
 {
-    $state =& download_manifest_profile_state();
+    $state = &download_manifest_profile_state();
     if ($state === [] || $amount <= 0) {
         return;
     }
@@ -121,19 +126,23 @@ function download_manifest_profile_count(string $counter, int $amount = 1): void
  */
 function download_manifest_profile_set_cache(string $status): void
 {
-    $state =& download_manifest_profile_state();
+    $state = &download_manifest_profile_state();
     if ($state === []) {
         return;
     }
-    $state['cache'] = in_array($status, ['hit', 'miss', 'bypass'], true) ? $status : 'none';
+    $state['cache'] = in_array($status, ['hit', 'miss', 'bypass'], true)
+        ? $status
+        : 'none';
 }
 
 /**
  * Finish the current profile and attach it to an active Admin test run when available.
+ *
+ * @return void Records elapsed/memory/query totals and attaches a sanitized snapshot when tracing is active.
  */
 function download_manifest_profile_finish(): void
 {
-    $state =& download_manifest_profile_state();
+    $state = &download_manifest_profile_state();
     if ($state === [] || !empty($state['finished'])) {
         return;
     }
@@ -141,27 +150,41 @@ function download_manifest_profile_finish(): void
     $endedAt = microtime(true);
     $dbEnd = download_manifest_profile_current_db_query_count();
     $dbStart = $state['db_query_start'];
-    $state['elapsed_ms'] = max(0.0, ($endedAt - (float) $state['started_at']) * 1000.0);
-    $state['memory_delta_bytes'] = max(0, memory_get_usage(true) - (int) $state['memory_start_bytes']);
+    $state['elapsed_ms'] = max(
+        0.0,
+        ($endedAt - (float) $state['started_at']) * 1000.0,
+    );
+    $state['memory_delta_bytes'] = max(
+        0,
+        memory_get_usage(true) - (int) $state['memory_start_bytes'],
+    );
     $state['memory_peak_bytes'] = memory_get_peak_usage(true);
-    $state['db_queries'] = ($dbStart !== null && $dbEnd !== null) ? max(0, $dbEnd - (int) $dbStart) : null;
+    $state['db_queries'] =
+        $dbStart !== null && $dbEnd !== null
+            ? max(0, $dbEnd - (int) $dbStart)
+            : null;
     $state['finished'] = true;
 
-    if (function_exists(__NAMESPACE__ . '\\admin_test_run_active')
+    if (
+        function_exists(__NAMESPACE__ . '\\admin_test_run_active')
         && admin_test_run_active()
-        && function_exists(__NAMESPACE__ . '\\admin_test_run_record_component')) {
-        admin_test_run_record_component('download_manifest_profile', download_manifest_profile_snapshot());
+        && function_exists(__NAMESPACE__ . '\\admin_test_run_record_component')
+    ) {
+        admin_test_run_record_component(
+            'download_manifest_profile',
+            download_manifest_profile_snapshot(),
+        );
     }
 }
 
 /**
  * Return a credential-free manifest profile snapshot.
  *
- * @return array<string,mixed>
+ * @return array<string, mixed> Credential-free resource, cache, row-count, filesystem, elapsed-time, and memory measurements; empty when profiling did not start.
  */
 function download_manifest_profile_snapshot(): array
 {
-    $state =& download_manifest_profile_state();
+    $state = &download_manifest_profile_state();
     if ($state === []) {
         return [];
     }
@@ -170,15 +193,29 @@ function download_manifest_profile_snapshot(): array
         'resource_type' => (string) ($state['resource_type'] ?? ''),
         'resource_id' => max(0, (int) ($state['resource_id'] ?? 0)),
         'cache' => (string) ($state['cache'] ?? 'none'),
-        'db_queries' => isset($state['db_queries']) ? (int) $state['db_queries'] : null,
+        'db_queries' => isset($state['db_queries'])
+            ? (int) $state['db_queries']
+            : null,
         'gallery_rows' => max(0, (int) ($state['gallery_rows'] ?? 0)),
         'image_rows' => max(0, (int) ($state['image_rows'] ?? 0)),
         'filesystem_checks' => max(0, (int) ($state['filesystem_checks'] ?? 0)),
-        'filesystem_size_reads' => max(0, (int) ($state['filesystem_size_reads'] ?? 0)),
-        'filesystem_realpath_checks' => max(0, (int) ($state['filesystem_realpath_checks'] ?? 0)),
+        'filesystem_size_reads' => max(
+            0,
+            (int) ($state['filesystem_size_reads'] ?? 0),
+        ),
+        'filesystem_realpath_checks' => max(
+            0,
+            (int) ($state['filesystem_realpath_checks'] ?? 0),
+        ),
         'elapsed_ms' => max(0.0, (float) ($state['elapsed_ms'] ?? 0.0)),
-        'memory_delta_bytes' => max(0, (int) ($state['memory_delta_bytes'] ?? 0)),
-        'memory_peak_bytes' => max(0, (int) ($state['memory_peak_bytes'] ?? memory_get_peak_usage(true))),
+        'memory_delta_bytes' => max(
+            0,
+            (int) ($state['memory_delta_bytes'] ?? 0),
+        ),
+        'memory_peak_bytes' => max(
+            0,
+            (int) ($state['memory_peak_bytes'] ?? memory_get_peak_usage(true)),
+        ),
     ];
 }
 
@@ -195,11 +232,25 @@ function download_manifest_profile_response_headers(): array
     }
 
     $cache = (string) ($snapshot['cache'] ?? 'none');
-    $parts = ['download-manifest;dur=' . number_format((float) ($snapshot['elapsed_ms'] ?? 0.0), 2, '.', '')];
+    $parts = [
+        'download-manifest;dur='
+            . number_format(
+                (float) ($snapshot['elapsed_ms'] ?? 0.0),
+                2,
+                '.',
+                '',
+            ),
+    ];
     if ($snapshot['db_queries'] !== null) {
-        $parts[] = 'download-manifest-db;desc="' . (int) $snapshot['db_queries'] . ' queries"';
+        $parts[] =
+            'download-manifest-db;desc="'
+            . (int) $snapshot['db_queries']
+            . ' queries"';
     }
-    $parts[] = 'download-manifest-fs;desc="' . (int) ($snapshot['filesystem_checks'] ?? 0) . ' checks"';
+    $parts[] =
+        'download-manifest-fs;desc="'
+        . (int) ($snapshot['filesystem_checks'] ?? 0)
+        . ' checks"';
     return [
         'X-PHP-Gallery-Manifest-Cache' => $cache,
         'Server-Timing' => implode(', ', $parts),
@@ -214,8 +265,17 @@ function download_manifest_profile_response_headers(): array
  */
 function download_manifest_cache_resource_type(string $resourceType): string
 {
-    if (!in_array($resourceType, [DOWNLOAD_MANIFEST_RESOURCE_GALLERY, DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY], true)) {
-        throw new \InvalidArgumentException('Invalid download manifest cache resource type.');
+    if (!in_array(
+        $resourceType,
+        [
+            DOWNLOAD_MANIFEST_RESOURCE_GALLERY,
+            DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY,
+        ],
+        true,
+    )) {
+        throw new \InvalidArgumentException(
+            'Invalid download manifest cache resource type.',
+        );
     }
     return $resourceType;
 }
@@ -229,7 +289,9 @@ function download_manifest_cache_root(): string
 {
     $path = zip_cache_dir() . DIRECTORY_SEPARATOR . '.download-manifests';
     if (!is_dir($path) && !@mkdir($path, 0775, true) && !is_dir($path)) {
-        throw new \RuntimeException('Unable to initialize download manifest cache.');
+        throw new \RuntimeException(
+            'Unable to initialize download manifest cache.',
+        );
     }
     return $path;
 }
@@ -256,7 +318,10 @@ function download_manifest_cache_retention_seconds(string $resourceType): int
  */
 function download_manifest_cache_max_entry_bytes(): int
 {
-    return max(64 * 1024, (int) cms_runtime_limit('download.manifest_cache_max_entry_bytes'));
+    return max(
+        64 * 1024,
+        (int) cms_runtime_limit('download.manifest_cache_max_entry_bytes'),
+    );
 }
 
 /**
@@ -270,17 +335,29 @@ function download_manifest_cache_max_entry_bytes(): int
  * @param string $revision Content-only SHA-256 revision.
  * @return string Absolute cache-entry path.
  */
-function download_manifest_cache_path(string $resourceType, int $resourceId, string $revision): string
-{
+function download_manifest_cache_path(
+    string $resourceType,
+    int $resourceId,
+    string $revision,
+): string {
     $resourceType = download_manifest_cache_resource_type($resourceType);
     $revision = strtolower(trim($revision));
     if ($resourceId <= 0 || preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1) {
-        throw new \InvalidArgumentException('Invalid download manifest cache identity.');
+        throw new \InvalidArgumentException(
+            'Invalid download manifest cache identity.',
+        );
     }
 
-    $dir = download_manifest_cache_root() . DIRECTORY_SEPARATOR . $resourceType . DIRECTORY_SEPARATOR . $resourceId;
+    $dir =
+        download_manifest_cache_root()
+        . DIRECTORY_SEPARATOR
+        . $resourceType
+        . DIRECTORY_SEPARATOR
+        . $resourceId;
     if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
-        throw new \RuntimeException('Unable to initialize download manifest cache resource directory.');
+        throw new \RuntimeException(
+            'Unable to initialize download manifest cache resource directory.',
+        );
     }
     return $dir . DIRECTORY_SEPARATOR . $revision . '.json';
 }
@@ -288,8 +365,8 @@ function download_manifest_cache_path(string $resourceType, int $resourceId, str
 /**
  * Validate normalized capability-free cached manifest data.
  *
- * @param mixed $payload Decoded candidate payload.
- * @return ?array{files:array<int,array{name:string,size:int,image_id:int,version:string}>,total_files:int,total_bytes:int}
+ * @param array<array-key,mixed>|scalar|object{}|resource|null $payload Decoded candidate shaped as array{files:list<array{name:mixed,size:mixed,image_id:mixed,version:mixed}>,total_files:mixed,total_bytes:mixed}; malformed values are rejected.
+ * @return ?array{files:list<array{name:string,size:int,image_id:int,version:string}>,total_files:int,total_bytes:int} Validated normalized manifest metadata, or null when any required field/limit is invalid.
  */
 function download_manifest_cache_normalize_payload(mixed $payload): ?array
 {
@@ -311,10 +388,15 @@ function download_manifest_cache_normalize_payload(mixed $payload): ?array
         $size = (int) ($file['size'] ?? -1);
         $imageId = (int) ($file['image_id'] ?? 0);
         $version = strtolower((string) ($file['version'] ?? ''));
-        if ($name === '' || $size < 0 || $imageId <= 0 || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1) {
+        if (
+            $name === ''
+            || $size < 0
+            || $imageId <= 0
+            || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1
+        ) {
             return null;
         }
-        if ($size > PHP_INT_MAX - $totalBytes) {
+        if ($size > (PHP_INT_MAX - $totalBytes)) {
             return null;
         }
         $totalBytes += $size;
@@ -326,8 +408,10 @@ function download_manifest_cache_normalize_payload(mixed $payload): ?array
         ];
     }
 
-    if ((int) ($payload['total_files'] ?? -1) !== count($files)
-        || (int) ($payload['total_bytes'] ?? -1) !== $totalBytes) {
+    if (
+        (int) ($payload['total_files'] ?? -1) !== count($files)
+        || (int) ($payload['total_bytes'] ?? -1) !== $totalBytes
+    ) {
         return null;
     }
 
@@ -347,12 +431,19 @@ function download_manifest_cache_normalize_payload(mixed $payload): ?array
  * @param string $resourceType Stable manifest resource type.
  * @param int $resourceId Authorized resource identifier.
  * @param string $revision Content-only SHA-256 revision.
- * @return ?array{files:array<int,array{name:string,size:int,image_id:int,version:string}>,total_files:int,total_bytes:int}
+ * @return ?array{files:list<array{name:string,size:int,image_id:int,version:string}>,total_files:int,total_bytes:int} Normalized cached payload, or null for a missing, expired, corrupt, or mismatched entry.
  */
-function download_manifest_cache_read(string $resourceType, int $resourceId, string $revision): ?array
-{
+function download_manifest_cache_read(
+    string $resourceType,
+    int $resourceId,
+    string $revision,
+): ?array {
     try {
-        $path = download_manifest_cache_path($resourceType, $resourceId, $revision);
+        $path = download_manifest_cache_path(
+            $resourceType,
+            $resourceId,
+            $revision,
+        );
     } catch (Throwable) {
         download_manifest_profile_set_cache('bypass');
         return null;
@@ -360,7 +451,10 @@ function download_manifest_cache_read(string $resourceType, int $resourceId, str
     download_manifest_profile_count('filesystem_checks');
     download_manifest_profile_count('filesystem_realpath_checks', 2);
     download_manifest_profile_count('filesystem_checks', 2);
-    if (!is_file($path) || !path_inside(download_manifest_cache_root(), $path)) {
+    if (
+        !is_file($path)
+        || !path_inside(download_manifest_cache_root(), $path)
+    ) {
         download_manifest_profile_set_cache('miss');
         return null;
     }
@@ -368,20 +462,34 @@ function download_manifest_cache_read(string $resourceType, int $resourceId, str
     download_manifest_profile_count('filesystem_size_reads');
     download_manifest_profile_count('filesystem_checks', 2);
     $size = @filesize($path);
-    if ($size === false || $size <= 0 || $size > download_manifest_cache_max_entry_bytes()) {
+    if (
+        $size === false
+        || $size <= 0
+        || $size > download_manifest_cache_max_entry_bytes()
+    ) {
         @unlink($path);
         download_manifest_profile_set_cache('miss');
         return null;
     }
     $mtime = @filemtime($path);
-    if ($mtime === false || $mtime < time() - download_manifest_cache_retention_seconds($resourceType)) {
+    if (
+        $mtime === false
+        || $mtime
+            < (
+                time()
+                - download_manifest_cache_retention_seconds($resourceType)
+            )
+    ) {
         @unlink($path);
         download_manifest_profile_set_cache('miss');
         return null;
     }
 
     $json = @file_get_contents($path);
-    if ($json === false || strlen($json) > download_manifest_cache_max_entry_bytes()) {
+    if (
+        $json === false
+        || strlen($json) > download_manifest_cache_max_entry_bytes()
+    ) {
         download_manifest_profile_set_cache('miss');
         return null;
     }
@@ -392,17 +500,24 @@ function download_manifest_cache_read(string $resourceType, int $resourceId, str
         download_manifest_profile_set_cache('miss');
         return null;
     }
-    if (!is_array($decoded)
+    if (
+        !is_array($decoded)
         || (int) ($decoded['format'] ?? 0) !== DOWNLOAD_MANIFEST_CACHE_FORMAT
         || (string) ($decoded['resource_type'] ?? '') !== $resourceType
         || (int) ($decoded['resource_id'] ?? 0) !== $resourceId
-        || !hash_equals($revision, strtolower((string) ($decoded['revision'] ?? '')))) {
+        || !hash_equals(
+            $revision,
+            strtolower((string) ($decoded['revision'] ?? '')),
+        )
+    ) {
         @unlink($path);
         download_manifest_profile_set_cache('miss');
         return null;
     }
 
-    $payload = download_manifest_cache_normalize_payload($decoded['payload'] ?? null);
+    $payload = download_manifest_cache_normalize_payload(
+        $decoded['payload'] ?? null,
+    );
     if ($payload === null) {
         @unlink($path);
         download_manifest_profile_set_cache('miss');
@@ -423,16 +538,25 @@ function download_manifest_cache_read(string $resourceType, int $resourceId, str
  * @param int $resourceId Authorized resource identifier.
  * @param string $revision Content-only SHA-256 revision.
  * @param array<string,mixed> $payload Candidate normalized metadata payload.
+ * @return void Best-effort atomically stores the payload; cache-write errors do not interrupt the authorized request.
  */
-function download_manifest_cache_write(string $resourceType, int $resourceId, string $revision, array $payload): void
-{
+function download_manifest_cache_write(
+    string $resourceType,
+    int $resourceId,
+    string $revision,
+    array $payload,
+): void {
     $payload = download_manifest_cache_normalize_payload($payload);
     if ($payload === null) {
         return;
     }
 
     try {
-        $path = download_manifest_cache_path($resourceType, $resourceId, $revision);
+        $path = download_manifest_cache_path(
+            $resourceType,
+            $resourceId,
+            $revision,
+        );
         $encoded = json_encode([
             'format' => DOWNLOAD_MANIFEST_CACHE_FORMAT,
             'resource_type' => $resourceType,
@@ -492,27 +616,41 @@ function download_manifest_cache_invalidate_source_mismatch(
     int $imageId,
     string $version,
     int $expectedSize,
-    int $actualSize
+    int $actualSize,
 ): bool {
-    if ($expectedSize === $actualSize || $imageId <= 0 || $expectedSize < 0 || $actualSize < 0) {
+    if (
+        $expectedSize === $actualSize
+        || $imageId <= 0
+        || $expectedSize < 0
+        || $actualSize < 0
+    ) {
         return false;
     }
 
     $revision = strtolower(trim($revision));
     $version = strtolower(trim($version));
-    if (preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1 || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1) {
+    if (
+        preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1
+        || preg_match('/^[a-f0-9]{16}$/D', $version) !== 1
+    ) {
         return false;
     }
 
-    $payload = download_manifest_cache_read($resourceType, $resourceId, $revision);
+    $payload = download_manifest_cache_read(
+        $resourceType,
+        $resourceId,
+        $revision,
+    );
     if ($payload === null) {
         return false;
     }
     $matchesSnapshot = false;
     foreach ($payload['files'] as $file) {
-        if ((int) $file['image_id'] === $imageId
+        if (
+            (int) $file['image_id'] === $imageId
             && hash_equals((string) $file['version'], $version)
-            && (int) $file['size'] === $expectedSize) {
+            && (int) $file['size'] === $expectedSize
+        ) {
             $matchesSnapshot = true;
             break;
         }
@@ -522,7 +660,11 @@ function download_manifest_cache_invalidate_source_mismatch(
     }
 
     try {
-        $path = download_manifest_cache_path($resourceType, $resourceId, $revision);
+        $path = download_manifest_cache_path(
+            $resourceType,
+            $resourceId,
+            $revision,
+        );
         return is_file($path) && @unlink($path);
     } catch (Throwable) {
         return false;
@@ -540,15 +682,22 @@ function download_manifest_cache_invalidate_source_mismatch(
  * @param int $resourceId Authorized resource identifier.
  * @return int Number of managed metadata/partial files removed.
  */
-function download_manifest_cache_invalidate_resource(string $resourceType, int $resourceId): int
-{
+function download_manifest_cache_invalidate_resource(
+    string $resourceType,
+    int $resourceId,
+): int {
     if ($resourceId <= 0) {
         return 0;
     }
     try {
         $resourceType = download_manifest_cache_resource_type($resourceType);
         $root = download_manifest_cache_root();
-        $directory = $root . DIRECTORY_SEPARATOR . $resourceType . DIRECTORY_SEPARATOR . $resourceId;
+        $directory =
+            $root
+            . DIRECTORY_SEPARATOR
+            . $resourceType
+            . DIRECTORY_SEPARATOR
+            . $resourceId;
         if (!is_dir($directory) || !path_inside($root, $directory)) {
             return 0;
         }
@@ -563,7 +712,10 @@ function download_manifest_cache_invalidate_resource(string $resourceType, int $
                 continue;
             }
             $name = $entry->getFilename();
-            if (preg_match('/^[a-f0-9]{64}\.json$/D', $name) !== 1 && !str_contains($name, '.partial-')) {
+            if (
+                preg_match('/^[a-f0-9]{64}\.json$/D', $name) !== 1
+                && !str_contains($name, '.partial-')
+            ) {
                 continue;
             }
             $path = $entry->getPathname();
@@ -583,22 +735,33 @@ function download_manifest_cache_invalidate_resource(string $resourceType, int $
  * Remove expired/corrupt manifest cache files with a bounded filesystem scan.
  *
  * @param ?int $now Optional deterministic Unix timestamp for maintenance/testing.
- * @return array{files_deleted:int,partials_deleted:int,entries_scanned:int,scan_truncated:bool}
+ * @return array{files_deleted:int,partials_deleted:int,entries_scanned:int,scan_truncated:bool} Counts removed files/partials and whether the scan reached its bound.
  */
 function cleanup_download_manifest_cache(?int $now = null): array
 {
     $now ??= time();
-    $result = ['files_deleted' => 0, 'partials_deleted' => 0, 'entries_scanned' => 0, 'scan_truncated' => false];
+    $result = [
+        'files_deleted' => 0,
+        'partials_deleted' => 0,
+        'entries_scanned' => 0,
+        'scan_truncated' => false,
+    ];
     try {
         $root = download_manifest_cache_root();
     } catch (Throwable) {
         return $result;
     }
 
-    $maxScan = max(100, (int) cms_runtime_limit('download.manifest_cache_cleanup_max_entries'));
+    $maxScan = max(
+        100,
+        (int) cms_runtime_limit('download.manifest_cache_cleanup_max_entries'),
+    );
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $root,
+            RecursiveDirectoryIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $entry) {
         if ($result['entries_scanned'] >= $maxScan) {
@@ -617,7 +780,7 @@ function cleanup_download_manifest_cache(?int $now = null): array
 
         $name = $entry->getFilename();
         if (str_contains($name, '.partial-')) {
-            if ($entry->getMTime() < $now - 3600 && @unlink($path)) {
+            if ($entry->getMTime() < ($now - 3600) && @unlink($path)) {
                 $result['partials_deleted']++;
             }
             continue;
@@ -630,14 +793,27 @@ function cleanup_download_manifest_cache(?int $now = null): array
         }
 
         $resourceType = basename(dirname(dirname($path)));
-        if (!in_array($resourceType, [DOWNLOAD_MANIFEST_RESOURCE_GALLERY, DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY], true)) {
+        if (!in_array(
+            $resourceType,
+            [
+                DOWNLOAD_MANIFEST_RESOURCE_GALLERY,
+                DOWNLOAD_MANIFEST_RESOURCE_SMART_GALLERY,
+            ],
+            true,
+        )) {
             if (@unlink($path)) {
                 $result['files_deleted']++;
             }
             continue;
         }
-        if ($entry->getMTime() < $now - download_manifest_cache_retention_seconds($resourceType)
-            && @unlink($path)) {
+        if (
+            $entry->getMTime()
+                < (
+                    $now
+                    - download_manifest_cache_retention_seconds($resourceType)
+                )
+            && @unlink($path)
+        ) {
             $result['files_deleted']++;
         }
     }

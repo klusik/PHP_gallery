@@ -67,7 +67,9 @@ function view_render_public_gallery_card(array $viewModel): void
     $title = (string) ($viewModel['title'] ?? '');
     $url = (string) ($viewModel['url'] ?? '');
     $visibility = (string) ($viewModel['visibility'] ?? 'unpublished');
-    $descriptionLayout = (string) ($viewModel['description_layout'] ?? 'vertical');
+    $descriptionLayout = (string) (
+        $viewModel['description_layout'] ?? 'vertical'
+    );
     $isProtected = !empty($viewModel['is_protected']);
     $showReorderHandle = !empty($viewModel['show_reorder_handle']);
     $showUnpublishedMarker = !empty($viewModel['show_unpublished_marker']);
@@ -76,49 +78,140 @@ function view_render_public_gallery_card(array $viewModel): void
     $branchImageCount = max(0, (int) ($viewModel['branch_image_count'] ?? 0));
     $coverAsset = (string) ($viewModel['cover_asset'] ?? '');
     $coverPictureHtml = (string) ($viewModel['cover_picture_html'] ?? '');
-    $collagePictureHtml = array_values(array_filter((array) ($viewModel['collage_picture_html'] ?? []), static fn ($html): bool => is_string($html) && $html !== ''));
-    $coverLoadingAttributes = (string) ($viewModel['cover_loading_attributes'] ?? '');
-    $descriptionPreview = view_gallery_description_markdown_excerpt((string) ($viewModel['description'] ?? ''));
-    $descriptionHtml = view_gallery_description_markdown_html($descriptionPreview, (array) ($viewModel['description_links'] ?? []));
+    $collagePictureHtml = array_values(array_filter(
+        (array) ($viewModel['collage_picture_html'] ?? []),
+        static fn($html): bool => is_string($html) && $html !== '',
+    ));
+    $coverLoadingAttributes = (string) (
+        $viewModel['cover_loading_attributes'] ?? ''
+    );
+    $descriptionPreview = view_gallery_description_markdown_excerpt(
+        (string) ($viewModel['description'] ?? ''),
+    );
+    $descriptionHtml = view_gallery_description_markdown_html(
+        $descriptionPreview,
+        (array) ($viewModel['description_links'] ?? []),
+    );
 
-    $galleryCardClass = 'gallery-card is-gallery-description-' . view_public_gallery_description_layout_hook($descriptionLayout)
+    $galleryCardClass =
+        'gallery-card is-gallery-description-'
+        . view_public_gallery_description_layout_hook($descriptionLayout)
         . ($isProtected ? ' is-protected-gallery' : '')
         . ($showReorderHandle ? ' has-public-reorder-handle' : '')
         . ($pictureManagerEnabled ? ' has-picture-manager-select' : '')
         . ($showUnpublishedMarker ? ' is-admin-unpublished-gallery' : '');
 
-    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . $galleryId . '"' . ($pictureManagerEnabled ? ' data-picture-manager-gallery data-picture-manager-gallery-id="' . $galleryId . '" aria-selected="false"' : '') . ' data-gallery-visibility="' . e($visibility) . '" data-gallery-updated-at="' . e((string) ($viewModel['updated_at'] ?? '')) . '" data-public-cover-selection-revision="' . e((string) ($viewModel['cover_selection_revision'] ?? '')) . '" data-public-gallery-order-item data-public-order-id="' . $galleryId . '">';
+    echo
+        '<article class="'
+            . e($galleryCardClass)
+            . '" data-gallery-id="'
+            . $galleryId
+            . '"'
+            . (
+                $pictureManagerEnabled
+                    ? ' data-picture-manager-gallery data-picture-manager-gallery-id="'
+                    . $galleryId
+                    . '" aria-selected="false"'
+                    : ''
+            )
+            . ' data-gallery-visibility="'
+            . e($visibility)
+            . '" data-gallery-updated-at="'
+            . e((string) ($viewModel['updated_at'] ?? ''))
+            . '" data-public-cover-selection-revision="'
+            . e((string) ($viewModel['cover_selection_revision'] ?? ''))
+            . '" data-public-gallery-order-item data-public-order-id="'
+            . $galleryId
+            . '">';
     if ($showUnpublishedMarker) {
-        echo '<span class="admin-gallery-visibility-marker" title="' . e(t('gallery.card.unpublished_admin_hint', 'Only logged-in admins can see this gallery in listings.')) . '">' . e(t('gallery.visibility.unpublished', 'unpublished')) . '</span>';
+        echo
+            '<span class="admin-gallery-visibility-marker" title="'
+                . e(t(
+                    'gallery.card.unpublished_admin_hint',
+                    'Only logged-in admins can see this gallery in listings.',
+                ))
+                . '">'
+                . e(t('gallery.visibility.unpublished', 'unpublished'))
+                . '</span>';
     }
     if ($showReorderHandle) {
-        echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="' . e(t('gallery.reorder.drag_subgallery_aria', 'Drag subgallery to reorder visible subgalleries')) . '" title="' . e(t('gallery.reorder.drag_subgallery_title', 'Drag to reorder this visible subgallery')) . '"><span aria-hidden="true">↕</span><span>' . e(t('gallery.reorder.move_gallery', 'Move gallery')) . '</span></button>';
+        echo
+            '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="'
+                . e(t(
+                    'gallery.reorder.drag_subgallery_aria',
+                    'Drag subgallery to reorder visible subgalleries',
+                ))
+                . '" title="'
+                . e(t(
+                    'gallery.reorder.drag_subgallery_title',
+                    'Drag to reorder this visible subgallery',
+                ))
+                . '"><span aria-hidden="true">↕</span><span>'
+                . e(t('gallery.reorder.move_gallery', 'Move gallery'))
+                . '</span></button>';
     }
 
     if ($pictureManagerEnabled) {
-        echo '<button type="button" class="picture-manager-select-button picture-manager-gallery-select-button" data-picture-manager-select aria-pressed="false" aria-label="' . e(t('picture_manager.select_gallery', 'Select gallery')) . '" title="' . e(t('picture_manager.select_gallery', 'Select gallery')) . '"><span aria-hidden="true">✓</span><span class="visually-hidden">' . e(t('picture_manager.select_gallery', 'Select gallery')) . '</span></button>';
+        echo
+            '<button type="button" class="picture-manager-select-button picture-manager-gallery-select-button" data-picture-manager-select aria-pressed="false" aria-label="'
+                . e(t('picture_manager.select_gallery', 'Select gallery'))
+                . '" title="'
+                . e(t('picture_manager.select_gallery', 'Select gallery'))
+                . '"><span aria-hidden="true">✓</span><span class="visually-hidden">'
+                . e(t('picture_manager.select_gallery', 'Select gallery'))
+                . '</span></button>';
     }
 
-    echo '<a class="gallery-card-media" href="' . e($url) . '" aria-label="' . e(t('gallery.card.open_gallery', 'Open gallery {title}', ['title' => $title])) . '">';
+    echo
+        '<a class="gallery-card-media" href="'
+            . e($url)
+            . '" aria-label="'
+            . e(t('gallery.card.open_gallery', 'Open gallery {title}', [
+                'title' => $title,
+            ]))
+            . '">';
     if ($showCountBadge) {
         $badge = (array) ($viewModel['count_badge'] ?? []);
         if (!empty($badge['admin'])) {
-            echo '<span class="subgallery-stack-badge gallery-count-badge-admin" aria-label="' . e(view_gallery_count_admin_label($badge)) . '">';
+            echo
+                '<span class="subgallery-stack-badge gallery-count-badge-admin" aria-label="'
+                    . e(view_gallery_count_admin_label($badge))
+                    . '">';
             view_gallery_count_admin_values($badge);
             echo '</span>';
         } else {
             // Preserve the exact single public count badge for ordinary visitors.
-            echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => $branchImageCount])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . $branchImageCount . '</span></span>';
+            echo
+                '<span class="subgallery-stack-badge" aria-label="'
+                    . e(t(
+                        'gallery.card.subgallery_image_count',
+                        'Subgallery containing {count} images',
+                        ['count' => $branchImageCount],
+                    ))
+                    . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">'
+                    . $branchImageCount
+                    . '</span></span>';
         }
     }
     if ($isProtected) {
-        echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">' . e(t('gallery.card.protected', 'Protected')) . '</span>';
+        echo
+            '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">'
+                . e(t('gallery.card.protected', 'Protected'))
+                . '</span>';
     } elseif ($coverAsset !== '') {
-        echo '<img decoding="async" ' . $coverLoadingAttributes . ' src="' . e($coverAsset) . '" alt="">';
+        echo
+            '<img decoding="async" '
+                . $coverLoadingAttributes
+                . ' src="'
+                . e($coverAsset)
+                . '" alt="">';
     } elseif ($coverPictureHtml !== '') {
         echo $coverPictureHtml;
     } elseif ($collagePictureHtml !== []) {
-        echo '<span class="gallery-collage collage-count-' . count($collagePictureHtml) . '">';
+        echo
+            '<span class="gallery-collage collage-count-'
+                . count($collagePictureHtml)
+                . '">';
         foreach ($collagePictureHtml as $pictureHtml) {
             echo $pictureHtml;
         }
@@ -126,24 +219,43 @@ function view_render_public_gallery_card(array $viewModel): void
     }
     echo '</a>';
 
-    echo '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="' . e($url) . '">' . e($title) . '</a></h2>';
+    echo
+        '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="'
+            . e($url)
+            . '">'
+            . e($title)
+            . '</a></h2>';
     $horizontalMetaHtml = (string) ($viewModel['horizontal_meta_html'] ?? '');
     if (!$isProtected) {
         $dateHtml = (string) ($viewModel['date_html'] ?? '');
         echo $dateHtml;
         // Older presentation callers may still provide their combined metadata fragment.
         if ($dateHtml === '' && $horizontalMetaHtml !== '') {
-            echo '<div class="gallery-card-meta-row">' . $horizontalMetaHtml . '</div>';
+            echo
+                '<div class="gallery-card-meta-row">'
+                    . $horizontalMetaHtml
+                    . '</div>';
         }
     }
     if ($descriptionHtml !== '') {
-        echo '<div class="gallery-card-description gallery-card-description-rich">' . $descriptionHtml . '</div>';
+        echo
+            '<div class="gallery-card-description gallery-card-description-rich">'
+                . $descriptionHtml
+                . '</div>';
     }
     if ($isProtected) {
-        echo '<p class="muted gallery-card-count">' . e(t('gallery.card.protected_gallery', 'Protected gallery')) . '</p>';
+        echo
+            '<p class="muted gallery-card-count">'
+                . e(t('gallery.card.protected_gallery', 'Protected gallery'))
+                . '</p>';
     } else {
         if ($showCountBadge) {
-            echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . e(t('gallery.image_count', '{count} images', ['count' => $branchImageCount])) . '</p>';
+            echo
+                '<p class="muted gallery-card-count gallery-card-count-visual-hidden">'
+                    . e(t('gallery.image_count', '{count} images', [
+                        'count' => $branchImageCount,
+                    ]))
+                    . '</p>';
         }
         if (is_array($viewModel['tag_list_view_model'] ?? null)) {
             $tagListViewModel = $viewModel['tag_list_view_model'];
@@ -174,25 +286,69 @@ function view_render_public_smart_gallery_card(array $viewModel): void
     $count = max(0, (int) ($viewModel['count'] ?? 0));
     $placementAttributes = '';
     if (!empty($viewModel['has_placement'])) {
-        $placementAttributes = ' data-smart-gallery-placement="' . e((string) ($viewModel['placement'] ?? '')) . '"';
-        $placementAttributes .= ' data-smart-gallery-placement-order="' . max(0, (int) ($viewModel['placement_order'] ?? 0)) . '"';
+        $placementAttributes =
+            ' data-smart-gallery-placement="'
+            . e((string) ($viewModel['placement'] ?? ''))
+            . '"';
+        $placementAttributes .=
+            ' data-smart-gallery-placement-order="'
+            . max(0, (int) ($viewModel['placement_order'] ?? 0))
+            . '"';
     }
 
-    echo '<article class="gallery-card smart-gallery-card is-gallery-description-' . view_public_gallery_description_layout_hook((string) ($viewModel['card_layout'] ?? 'vertical')) . '" data-smart-gallery-id="' . $smartGalleryId . '"' . $placementAttributes . '>';
-    echo '<a class="gallery-card-media" href="' . e($url) . '" aria-label="' . e(t('smart_gallery.open_named', 'Open Smart Gallery {title}', ['title' => $title])) . '">';
-    echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => $count])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . $count . '</span></span>';
+    echo
+        '<article class="gallery-card smart-gallery-card is-gallery-description-'
+            . view_public_gallery_description_layout_hook(
+                (string) ($viewModel['card_layout'] ?? 'vertical'),
+            )
+            . '" data-smart-gallery-id="'
+            . $smartGalleryId
+            . '"'
+            . $placementAttributes
+            . '>';
+    echo
+        '<a class="gallery-card-media" href="'
+            . e($url)
+            . '" aria-label="'
+            . e(t('smart_gallery.open_named', 'Open Smart Gallery {title}', [
+                'title' => $title,
+            ]))
+            . '">';
+    echo
+        '<span class="subgallery-stack-badge" aria-label="'
+            . e(t(
+                'gallery.card.subgallery_image_count',
+                'Subgallery containing {count} images',
+                ['count' => $count],
+            ))
+            . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">'
+            . $count
+            . '</span></span>';
     $coverPictureHtml = (string) ($viewModel['cover_picture_html'] ?? '');
     if ($coverPictureHtml !== '') {
         echo $coverPictureHtml;
     } else {
-        echo '<span class="gallery-collage gallery-empty-preview" aria-hidden="true">' . e(t('smart_gallery.empty_card', 'Smart Gallery')) . '</span>';
+        echo
+            '<span class="gallery-collage gallery-empty-preview" aria-hidden="true">'
+                . e(t('smart_gallery.empty_card', 'Smart Gallery'))
+                . '</span>';
     }
-    echo '</a><div class="gallery-card-body"><p class="admin-kicker">' . e(t('smart_gallery.public_kicker', 'Smart Gallery')) . '</p><h2><a class="gallery-card-title-link" href="' . e($url) . '">' . e($title) . '</a></h2>';
+    echo
+        '</a><div class="gallery-card-body"><p class="admin-kicker">'
+            . e(t('smart_gallery.public_kicker', 'Smart Gallery'))
+            . '</p><h2><a class="gallery-card-title-link" href="'
+            . e($url)
+            . '">'
+            . e($title)
+            . '</a></h2>';
     $description = trim((string) ($viewModel['description'] ?? ''));
     if ($description !== '') {
         echo '<p class="gallery-card-description">' . e($description) . '</p>';
     }
-    echo '<p class="muted gallery-card-count">' . e(t('gallery.image_count', '{count} images', ['count' => $count])) . '</p></div></article>';
+    echo
+        '<p class="muted gallery-card-count">'
+            . e(t('gallery.image_count', '{count} images', ['count' => $count]))
+            . '</p></div></article>';
 }
 
 /**
@@ -205,11 +361,40 @@ function view_render_public_gallery_admin_add_child_link(array $viewModel): void
 {
     $placement = (string) ($viewModel['placement'] ?? 'card');
     $title = (string) ($viewModel['title'] ?? '');
-    $defaultLabel = $placement === 'hero' ? t('gallery.add_here', 'Add gallery here') : t('gallery.add_inside', 'Add gallery inside {title}', ['title' => $title]);
+    $defaultLabel = $placement === 'hero'
+        ? t('gallery.add_here', 'Add gallery here')
+        : t('gallery.add_inside', 'Add gallery inside {title}', [
+            'title' => $title,
+        ]);
     $label = (string) ($viewModel['label'] ?? $defaultLabel);
     $showLabel = !empty($viewModel['show_label']);
-    $class = $showLabel ? 'button public-home-first-gallery-button' : ($placement === 'hero' ? 'public-admin-add-gallery-button public-admin-add-gallery-button-hero hero-icon-button' : 'public-admin-add-gallery-button public-admin-add-gallery-button-card');
-    echo '<a class="' . e($class) . '" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-kicker="' . e(t('gallery.workflow', 'Gallery workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.add_here', 'Add gallery here')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">+</span><span class="' . ($showLabel ? 'public-home-create-label' : 'visually-hidden') . '">' . e($label) . '</span></a>';
+    $class = $showLabel
+        ? 'button public-home-first-gallery-button'
+        : (
+            $placement === 'hero'
+                ? 'public-admin-add-gallery-button public-admin-add-gallery-button-hero hero-icon-button'
+                : 'public-admin-add-gallery-button public-admin-add-gallery-button-card'
+        );
+    echo
+        '<a class="'
+            . e($class)
+            . '" href="'
+            . e((string) ($viewModel['url'] ?? ''))
+            . '" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-kicker="'
+            . e(t('gallery.workflow', 'Gallery workflow'))
+            . '" data-admin-side-panel-title="'
+            . e(t('gallery.add_here', 'Add gallery here'))
+            . '" data-gallery-side-panel-url="'
+            . e((string) ($viewModel['panel_url'] ?? ''))
+            . '" aria-label="'
+            . e($label)
+            . '" title="'
+            . e($label)
+            . '"><span aria-hidden="true">+</span><span class="'
+            . ($showLabel ? 'public-home-create-label' : 'visually-hidden')
+            . '">'
+            . e($label)
+            . '</span></a>';
 }
 
 /**
@@ -222,15 +407,39 @@ function view_render_public_gallery_admin_edit_link(array $viewModel): void
 {
     $placement = (string) ($viewModel['placement'] ?? 'card');
     $title = (string) ($viewModel['title'] ?? '');
-    $label = $placement === 'hero' ? t('gallery.edit_current', 'Edit current gallery') : t('gallery.edit_named', 'Edit gallery {title}', ['title' => $title]);
-    $class = $placement === 'hero' ? 'public-admin-edit-button public-admin-edit-button-hero' : 'public-admin-edit-button public-admin-edit-button-card';
-    echo '<a class="' . e($class) . '" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-i18n-language="' . e((string) ($viewModel['admin_i18n_language'] ?? 'en')) . '" data-admin-side-panel-kicker="' . e(t('gallery.editor', 'Gallery editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit', 'Edit gallery')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
+    $label = $placement === 'hero'
+        ? t('gallery.edit_current', 'Edit current gallery')
+        : t('gallery.edit_named', 'Edit gallery {title}', ['title' => $title]);
+    $class = $placement === 'hero'
+        ? 'public-admin-edit-button public-admin-edit-button-hero'
+        : 'public-admin-edit-button public-admin-edit-button-card';
+    echo
+        '<a class="'
+            . e($class)
+            . '" href="'
+            . e((string) ($viewModel['url'] ?? ''))
+            . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-i18n-language="'
+            . e((string) ($viewModel['admin_i18n_language'] ?? 'en'))
+            . '" data-admin-side-panel-kicker="'
+            . e(t('gallery.editor', 'Gallery editor'))
+            . '" data-admin-side-panel-title="'
+            . e(t('gallery.edit', 'Edit gallery'))
+            . '" data-gallery-side-panel-url="'
+            . e((string) ($viewModel['panel_url'] ?? ''))
+            . '" aria-label="'
+            . e($label)
+            . '" title="'
+            . e($label)
+            . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">'
+            . e($label)
+            . '</span></a>';
 }
 
 /**
  * Render the public-page gallery delete/trash form.
  *
  * @param array<string,mixed> $viewModel Controller-prepared gallery-delete state.
+ * @return void Emits the public gallery delete/trash form.
  */
 function view_render_public_gallery_admin_delete_form(array $viewModel): void
 {
@@ -238,15 +447,52 @@ function view_render_public_gallery_admin_delete_form(array $viewModel): void
     $name = (string) ($viewModel['name'] ?? 'gallery');
     $trashEnabled = !empty($viewModel['trash_enabled']);
     $label = $trashEnabled
-        ? ($placement === 'hero' ? t('gallery.trash_current', 'Move current gallery to trash') : t('gallery.trash_named', 'Move gallery {name} to trash', ['name' => $name]))
-        : ($placement === 'hero' ? t('gallery.remove_current', 'Remove current gallery from CMS') : t('gallery.remove_named', 'Remove gallery {name} from CMS', ['name' => $name]));
-    $class = $placement === 'hero' ? 'public-admin-delete-form public-admin-delete-form-hero' : 'public-admin-delete-form public-admin-delete-form-card';
+        ? (
+            $placement === 'hero'
+                ? t('gallery.trash_current', 'Move current gallery to trash')
+                : t('gallery.trash_named', 'Move gallery {name} to trash', [
+                    'name' => $name,
+                ])
+        )
+        : (
+            $placement === 'hero'
+                ? t('gallery.remove_current', 'Remove current gallery from CMS')
+                : t('gallery.remove_named', 'Remove gallery {name} from CMS', [
+                    'name' => $name,
+                ])
+        );
+    $class = $placement === 'hero'
+        ? 'public-admin-delete-form public-admin-delete-form-hero'
+        : 'public-admin-delete-form public-admin-delete-form-card';
 
-    echo '<form class="' . e($class) . '" method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="gallery" data-public-admin-delete-mode="' . ($trashEnabled ? 'trash' : 'permanent') . '" data-public-admin-delete-auto-purge-enabled="' . (!empty($viewModel['auto_purge_enabled']) ? '1' : '0') . '" data-public-admin-delete-retention-days="' . (int) ($viewModel['retention_days'] ?? 0) . '">';
+    echo
+        '<form class="'
+            . e($class)
+            . '" method="post" action="'
+            . e((string) ($viewModel['action_url'] ?? ''))
+            . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="'
+            . e($name)
+            . '" data-public-admin-delete-kind="gallery" data-public-admin-delete-mode="'
+            . ($trashEnabled ? 'trash' : 'permanent')
+            . '" data-public-admin-delete-auto-purge-enabled="'
+            . (!empty($viewModel['auto_purge_enabled']) ? '1' : '0')
+            . '" data-public-admin-delete-retention-days="'
+            . (int) ($viewModel['retention_days'] ?? 0)
+            . '">';
     echo (string) ($viewModel['csrf_html'] ?? '');
-    echo '<input type="hidden" name="gallery_id" value="' . (int) ($viewModel['gallery_id'] ?? 0) . '">';
+    echo
+        '<input type="hidden" name="gallery_id" value="'
+            . (int) ($viewModel['gallery_id'] ?? 0)
+            . '">';
     echo '<input type="hidden" name="action" value="delete">';
-    echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
+    echo
+        '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="'
+            . e($label)
+            . '" title="'
+            . e($label)
+            . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">'
+            . e($label)
+            . '</span></button>';
     echo '</form>';
 }
 
@@ -254,12 +500,30 @@ function view_render_public_gallery_admin_delete_form(array $viewModel): void
  * Render the public-page photo edit entry point.
  *
  * @param array<string,mixed> $viewModel Controller-prepared photo-edit state.
+ * @return void Emits the public photo edit link.
  */
 function view_render_public_image_admin_edit_link(array $viewModel): void
 {
     $name = (string) ($viewModel['name'] ?? 'photo');
-    $label = t('gallery.edit_photo_named', 'Edit photo {name}', ['name' => $name]);
-    echo '<a class="public-admin-edit-button public-admin-edit-button-card public-admin-edit-button-photo" href="' . e((string) ($viewModel['url'] ?? '')) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="' . e(t('gallery.photo_editor', 'Photo editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit_photo', 'Edit photo')) . '" data-gallery-side-panel-url="' . e((string) ($viewModel['panel_url'] ?? '')) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
+    $label = t('gallery.edit_photo_named', 'Edit photo {name}', [
+        'name' => $name,
+    ]);
+    echo
+        '<a class="public-admin-edit-button public-admin-edit-button-card public-admin-edit-button-photo" href="'
+            . e((string) ($viewModel['url'] ?? ''))
+            . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="'
+            . e(t('gallery.photo_editor', 'Photo editor'))
+            . '" data-admin-side-panel-title="'
+            . e(t('gallery.edit_photo', 'Edit photo'))
+            . '" data-gallery-side-panel-url="'
+            . e((string) ($viewModel['panel_url'] ?? ''))
+            . '" aria-label="'
+            . e($label)
+            . '" title="'
+            . e($label)
+            . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">'
+            . e($label)
+            . '</span></a>';
 }
 
 /**
@@ -272,16 +536,43 @@ function view_render_public_image_admin_delete_form(array $viewModel): void
 {
     $name = (string) ($viewModel['name'] ?? 'photo');
     $imageId = (int) ($viewModel['image_id'] ?? 0);
-    $label = t('gallery.remove_photo_named', 'Remove photo {name} from CMS', ['name' => $name]);
+    $label = t('gallery.remove_photo_named', 'Remove photo {name} from CMS', [
+        'name' => $name,
+    ]);
     if (!empty($viewModel['image_bulk'])) {
-        echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" name="action" value="delete:' . $imageId . '" data-admin-image-delete-single data-admin-image-row-action data-image-id="' . $imageId . '" data-image-name="' . e($name) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
+        echo
+            '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" name="action" value="delete:'
+                . $imageId
+                . '" data-admin-image-delete-single data-admin-image-row-action data-image-id="'
+                . $imageId
+                . '" data-image-name="'
+                . e($name)
+                . '" aria-label="'
+                . e($label)
+                . '" title="'
+                . e($label)
+                . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">'
+                . e($label)
+                . '</span></button>';
         return;
     }
-    echo '<form class="public-admin-delete-form public-admin-delete-form-card public-admin-delete-form-photo" method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="photo">';
+    echo
+        '<form class="public-admin-delete-form public-admin-delete-form-card public-admin-delete-form-photo" method="post" action="'
+            . e((string) ($viewModel['action_url'] ?? ''))
+            . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="'
+            . e($name)
+            . '" data-public-admin-delete-kind="photo">';
     echo (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="image_id" value="' . $imageId . '">';
     echo '<input type="hidden" name="action" value="delete">';
-    echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
+    echo
+        '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="'
+            . e($label)
+            . '" title="'
+            . e($label)
+            . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">'
+            . e($label)
+            . '</span></button>';
     echo '</form>';
 }
 
@@ -300,32 +591,148 @@ function view_render_public_admin_visibility_menu(array $viewModel): void
     $kind = (string) ($viewModel['kind'] ?? 'image');
     $name = (string) ($viewModel['name'] ?? '');
     $visibility = (string) ($viewModel['visibility'] ?? 'unpublished');
-    $visibility = in_array($visibility, ['public', 'unpublished', 'private'], true) ? $visibility : 'unpublished';
+    $visibility = in_array(
+        $visibility,
+        ['public', 'unpublished', 'private'],
+        true,
+    )
+        ? $visibility
+        : 'unpublished';
     $idField = $kind === 'gallery' ? 'gallery_id' : 'image_id';
     $imageBulk = !empty($viewModel['image_bulk']) && $kind === 'image';
     $embedded = !empty($viewModel['embedded']) || $imageBulk;
-    $label = t('gallery.visibility.change_named', 'Change visibility for {name}', ['name' => $name]);
+    $label = t(
+        'gallery.visibility.change_named',
+        'Change visibility for {name}',
+        ['name' => $name],
+    );
     $options = [
-        'public' => ['public-admin-visibility-icon-public', t('gallery.visibility.public', 'Published')],
-        'unpublished' => ['public-admin-visibility-icon-unpublished', t('gallery.visibility.unpublished', 'Unpublished')],
-        'private' => ['public-admin-visibility-icon-private', t('gallery.visibility.private', 'Private')],
+        'public' => [
+            'public-admin-visibility-icon-public',
+            t('gallery.visibility.public', 'Published'),
+        ],
+        'unpublished' => [
+            'public-admin-visibility-icon-unpublished',
+            t('gallery.visibility.unpublished', 'Unpublished'),
+        ],
+        'private' => [
+            'public-admin-visibility-icon-private',
+            t('gallery.visibility.private', 'Private'),
+        ],
     ];
 
-    echo '<details class="public-admin-visibility-menu ' . ($embedded ? 'public-admin-visibility-menu-embedded' : 'public-admin-visibility-menu-card') . '" data-public-admin-card-action data-public-admin-visibility-menu' . ($imageBulk ? ' data-admin-image-row-visibility data-image-id="' . $entityId . '"' : ($embedded ? ' data-admin-gallery-visibility data-action-url="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-gallery-id="' . $entityId . '" data-edit-revision="' . e((string) ($viewModel['edit_revision'] ?? '')) . '"' : '')) . '>';
-    echo '<summary class="public-admin-card-action-button public-admin-visibility-trigger" aria-label="' . e($label) . '" title="' . e($label) . '"><span class="public-admin-visibility-icon ' . e($options[$visibility][0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">' . e($label) . '</span></summary>';
-    echo '<div class="public-admin-visibility-options" role="group" aria-label="' . e($label) . '">';
+    echo
+        '<details class="public-admin-visibility-menu '
+            . (
+                $embedded
+                    ? 'public-admin-visibility-menu-embedded'
+                    : 'public-admin-visibility-menu-card'
+            )
+            . '" data-public-admin-card-action data-public-admin-visibility-menu'
+            . (
+                $imageBulk
+                    ? ' data-admin-image-row-visibility data-image-id="'
+                    . $entityId
+                    . '"'
+                    : (
+                        $embedded
+                            ? ' data-admin-gallery-visibility data-action-url="'
+                                . e((string) ($viewModel['action_url'] ?? ''))
+                                . '" data-gallery-id="'
+                                . $entityId
+                                . '" data-edit-revision="'
+                                . e(
+                                    (string) (
+                                        $viewModel['edit_revision'] ?? ''
+                                    ),
+                                )
+                                . '"'
+                            : ''
+                    )
+            )
+            . '>';
+    echo
+        '<summary class="public-admin-card-action-button public-admin-visibility-trigger" aria-label="'
+            . e($label)
+            . '" title="'
+            . e($label)
+            . '"><span class="public-admin-visibility-icon '
+            . e($options[$visibility][0])
+            . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="visually-hidden">'
+            . e($label)
+            . '</span></summary>';
+    echo
+        '<div class="public-admin-visibility-options" role="group" aria-label="'
+            . e($label)
+            . '">';
     foreach ($options as $value => $option) {
         if ($imageBulk) {
             $bulkAction = $value === 'unpublished' ? 'draft' : $value;
-            echo '<button type="submit" name="action" value="' . e($bulkAction . ':' . $entityId) . '" data-admin-image-row-action data-image-id="' . $entityId . '" class="public-admin-visibility-option' . ($visibility === $value ? ' is-current' : '') . '" aria-pressed="' . ($visibility === $value ? 'true' : 'false') . '" title="' . e((string) $option[1]) . '"><span class="public-admin-visibility-icon ' . e((string) $option[0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="admin-gallery-visibility-option-label">' . e((string) $option[1]) . '</span></button>';
+            echo
+                '<button type="submit" name="action" value="'
+                    . e($bulkAction . ':' . $entityId)
+                    . '" data-admin-image-row-action data-image-id="'
+                    . $entityId
+                    . '" class="public-admin-visibility-option'
+                    . ($visibility === $value ? ' is-current' : '')
+                    . '" aria-pressed="'
+                    . ($visibility === $value ? 'true' : 'false')
+                    . '" title="'
+                    . e((string) $option[1])
+                    . '"><span class="public-admin-visibility-icon '
+                    . e((string) $option[0])
+                    . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="admin-gallery-visibility-option-label">'
+                    . e((string) $option[1])
+                    . '</span></button>';
             continue;
         }
         if (!$embedded) {
-            echo '<form method="post" action="' . e((string) ($viewModel['action_url'] ?? '')) . '" data-public-admin-visibility-form data-public-admin-visibility-kind="' . e($kind) . '">' . (string) ($viewModel['csrf_html'] ?? '');
-            echo '<input type="hidden" name="' . e($idField) . '" value="' . $entityId . '"><input type="hidden" name="action" value="' . e($value) . '">';
+            echo
+                '<form method="post" action="'
+                    . e((string) ($viewModel['action_url'] ?? ''))
+                    . '" data-public-admin-visibility-form data-public-admin-visibility-kind="'
+                    . e($kind)
+                    . '">'
+                    . (string) ($viewModel['csrf_html'] ?? '');
+            echo
+                '<input type="hidden" name="'
+                    . e($idField)
+                    . '" value="'
+                    . $entityId
+                    . '"><input type="hidden" name="action" value="'
+                    . e($value)
+                    . '">';
         }
-        echo '<button type="' . ($embedded ? 'button' : 'submit') . '"' . ($embedded ? ' data-admin-gallery-visibility-choice data-visibility="' . e($value) . '"' : '') . ' class="public-admin-visibility-option' . ($visibility === $value ? ' is-current' : '') . '" aria-pressed="' . ($visibility === $value ? 'true' : 'false') . '" title="' . e((string) $option[1]) . '"><span class="public-admin-visibility-icon ' . e((string) $option[0]) . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="' . ($embedded ? 'admin-gallery-visibility-option-label' : 'visually-hidden') . '">' . e((string) $option[1]) . '</span></button>';
-        if (!$embedded) echo '</form>';
+        echo
+            '<button type="'
+                . ($embedded ? 'button' : 'submit')
+                . '"'
+                . (
+                    $embedded
+                        ? ' data-admin-gallery-visibility-choice data-visibility="'
+                        . e($value)
+                        . '"'
+                        : ''
+                )
+                . ' class="public-admin-visibility-option'
+                . ($visibility === $value ? ' is-current' : '')
+                . '" aria-pressed="'
+                . ($visibility === $value ? 'true' : 'false')
+                . '" title="'
+                . e((string) $option[1])
+                . '"><span class="public-admin-visibility-icon '
+                . e((string) $option[0])
+                . '" aria-hidden="true"><span class="public-admin-visibility-eye">&#128065;</span></span><span class="'
+                . (
+                    $embedded
+                        ? 'admin-gallery-visibility-option-label'
+                        : 'visually-hidden'
+                )
+                . '">'
+                . e((string) $option[1])
+                . '</span></button>';
+        if (!$embedded)
+            echo '</form>';
     }
     echo '</div></details>';
 }
@@ -342,9 +749,21 @@ function view_gallery_count_admin_label(array $badge): string
     $public = max(0, (int) ($badge['public_count'] ?? 0));
     $all = max(0, (int) ($badge['all_count'] ?? 0));
     return match ($mode) {
-        'both' => t('gallery.count_badge.admin_both_aria', 'Public photos: {public}; all photos: {all}. Includes subgalleries.', ['public' => $public, 'all' => $all]),
-        'all' => t('gallery.count_badge.admin_all_aria', 'All photos in this gallery and subgalleries: {count}', ['count' => $all]),
-        default => t('gallery.count_badge.admin_public_aria', 'Public photos in this gallery and subgalleries: {count}', ['count' => $public]),
+        'both' => t(
+            'gallery.count_badge.admin_both_aria',
+            'Public photos: {public}; all photos: {all}. Includes subgalleries.',
+            ['public' => $public, 'all' => $all],
+        ),
+        'all' => t(
+            'gallery.count_badge.admin_all_aria',
+            'All photos in this gallery and subgalleries: {count}',
+            ['count' => $all],
+        ),
+        default => t(
+            'gallery.count_badge.admin_public_aria',
+            'Public photos in this gallery and subgalleries: {count}',
+            ['count' => $public],
+        ),
     };
 }
 
@@ -363,17 +782,25 @@ function view_gallery_count_admin_values(array $badge): void
             continue;
         }
         if ($index > 0) {
-            echo '<span class="gallery-count-separator" aria-hidden="true">/</span>';
+            echo
+                '<span class="gallery-count-separator" aria-hidden="true">/</span>';
         }
         echo '<span class="gallery-count-segment">';
         if (!empty($badge['icons'])) {
             if ($part === 'public') {
-                echo '<svg class="gallery-count-eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.2 12s3.6-7 9.8-7 9.8 7 9.8 7-3.6 7-9.8 7S2.2 12 2.2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+                echo
+                    '<svg class="gallery-count-eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.2 12s3.6-7 9.8-7 9.8 7 9.8 7-3.6 7-9.8 7S2.2 12 2.2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
             } else {
-                echo '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
+                echo
+                    '<span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span>';
             }
         }
-        $count = $part === 'all' ? (int) ($badge['all_count'] ?? 0) : (int) ($badge['public_count'] ?? 0);
-        echo '<span class="gallery-count-number">' . max(0, $count) . '</span></span>';
+        $count = $part === 'all'
+            ? (int) ($badge['all_count'] ?? 0)
+            : (int) ($badge['public_count'] ?? 0);
+        echo
+            '<span class="gallery-count-number">'
+                . max(0, $count)
+                . '</span></span>';
     }
 }

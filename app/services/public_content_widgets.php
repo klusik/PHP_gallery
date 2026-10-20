@@ -82,8 +82,10 @@ final class PublicWidgetInvalidField extends InvalidArgumentException
      * @param string $message Human-readable, transport-independent explanation.
      * @return void
      */
-    public function __construct(public readonly string $field, string $message)
-    {
+    public function __construct(
+        public readonly string $field,
+        string $message,
+    ) {
         parent::__construct($message);
     }
 }
@@ -97,7 +99,10 @@ final class PublicWidgetInvalidField extends InvalidArgumentException
 function public_widget_id(mixed $value): string
 {
     if (!is_string($value) || preg_match('/^[a-f0-9]{32}$/D', $value) !== 1) {
-        throw new PublicWidgetInvalidField('widget_id', 'Choose an existing widget.');
+        throw new PublicWidgetInvalidField(
+            'widget_id',
+            'Choose an existing widget.',
+        );
     }
     return $value;
 }
@@ -110,27 +115,50 @@ function public_widget_id(mixed $value): string
  */
 function public_widget_safe_url(mixed $input): string
 {
-    if (!is_string($input) || $input === '' || strlen($input) > 2048
+    if (
+        !is_string($input)
+        || $input === ''
+        || strlen($input) > 2048
         || preg_match('/[\x00-\x20\x7f\\\\<>"\x27]/u', $input) === 1
-        || preg_match('/%(?:0[0-9a-f]|1[0-9a-f]|5c)/i', $input) === 1) {
-        throw new PublicWidgetInvalidField('content_md', 'Links need a safe URL without whitespace, control characters or quotes.');
+        || preg_match('/%(?:0[0-9a-f]|1[0-9a-f]|5c)/i', $input) === 1
+    ) {
+        throw new PublicWidgetInvalidField(
+            'content_md',
+            'Links need a safe URL without whitespace, control characters or quotes.',
+        );
     }
     if (preg_match('~^https?://~i', $input) === 1) {
-        if (filter_var($input, FILTER_VALIDATE_URL) === false
+        if (
+            filter_var($input, FILTER_VALIDATE_URL) === false
             || !is_string(parse_url($input, PHP_URL_HOST))
             || parse_url($input, PHP_URL_USER) !== null
-            || parse_url($input, PHP_URL_PASS) !== null) {
-            throw new PublicWidgetInvalidField('content_md', 'Enter an absolute HTTP(S) address with a valid host.');
+            || parse_url($input, PHP_URL_PASS) !== null
+        ) {
+            throw new PublicWidgetInvalidField(
+                'content_md',
+                'Enter an absolute HTTP(S) address with a valid host.',
+            );
         }
         return $input;
     }
-    if ((str_starts_with($input, '/') && !str_starts_with($input, '//'))
+    if (
+        (
+            str_starts_with($input, '/')
+            && !str_starts_with($input, '//')
+        )
         || preg_match('/^index\.php(?:[?#].*)?$/D', $input) === 1
-        || preg_match('/^\?(?:page|gallery|lang)=[a-zA-Z0-9_%&=.#-]+$/D', $input) === 1
-        || preg_match('/^#[a-zA-Z0-9_-]+$/D', $input) === 1) {
+        || preg_match(
+            '/^\?(?:page|gallery|lang)=[a-zA-Z0-9_%&=.#-]+$/D',
+            $input,
+        ) === 1
+        || preg_match('/^#[a-zA-Z0-9_-]+$/D', $input) === 1
+    ) {
         return $input;
     }
-    throw new PublicWidgetInvalidField('content_md', 'Use a site-relative destination or an HTTP(S) URL.');
+    throw new PublicWidgetInvalidField(
+        'content_md',
+        'Use a site-relative destination or an HTTP(S) URL.',
+    );
 }
 
 /**
@@ -145,8 +173,17 @@ function public_widget_safe_url(mixed $input): string
  */
 function public_widget_validate_markdown_links(string $content): void
 {
-    if (preg_match_all('/(?<!\\\\)\[[^\]\r\n]{1,160}\]\(((?:[^()\s]|\([^()\s]*\))+)\)/u', $content, $matches) === false) {
-        throw new PublicWidgetInvalidField('content_md', 'The content contains invalid UTF-8 or link syntax.');
+    if (
+        preg_match_all(
+            '/(?<!\\\\)\[[^\]\r\n]{1,160}\]\(((?:[^()\s]|\([^()\s]*\))+)\)/u',
+            $content,
+            $matches,
+        ) === false
+    ) {
+        throw new PublicWidgetInvalidField(
+            'content_md',
+            'The content contains invalid UTF-8 or link syntax.',
+        );
     }
     foreach ($matches[1] as $url) {
         public_widget_safe_url($url);
@@ -166,19 +203,38 @@ function public_widget_normalize(array $input): array
 {
     foreach (['title', 'content_md'] as $field) {
         if (!is_string($input[$field] ?? null)) {
-            throw new PublicWidgetInvalidField($field, 'Enter valid widget text.');
+            throw new PublicWidgetInvalidField(
+                $field,
+                'Enter valid widget text.',
+            );
         }
     }
     $title = trim($input['title']);
     $content = trim(str_replace(["\r\n", "\r"], "\n", $input['content_md']));
-    if (strlen($title) > 720 || (function_exists('mb_strlen') ? mb_strlen($title, 'UTF-8') > 180 : strlen($title) > 180)) {
-        throw new PublicWidgetInvalidField('title', 'Keep the widget title within 180 characters.');
+    if (
+        strlen($title) > 720
+        || (
+            function_exists('mb_strlen')
+                ? mb_strlen($title, 'UTF-8') > 180
+                : strlen($title) > 180
+        )
+    ) {
+        throw new PublicWidgetInvalidField(
+            'title',
+            'Keep the widget title within 180 characters.',
+        );
     }
     if (strlen($content) > PUBLIC_WIDGET_CONTENT_MAX_BYTES) {
-        throw new PublicWidgetInvalidField('content_md', 'Widget content is too long.');
+        throw new PublicWidgetInvalidField(
+            'content_md',
+            'Widget content is too long.',
+        );
     }
     if (preg_match('//u', $title . $content) !== 1) {
-        throw new PublicWidgetInvalidField('content_md', 'Widget text must contain valid UTF-8.');
+        throw new PublicWidgetInvalidField(
+            'content_md',
+            'Widget text must contain valid UTF-8.',
+        );
     }
     public_widget_validate_markdown_links($content);
 
@@ -186,45 +242,107 @@ function public_widget_normalize(array $input): array
         'status' => ['draft', 'published', 'disabled'],
         'page_scope' => ['home', 'gallery', 'all'],
         'placement_mode' => ['flow', 'floating'],
-        'flow_slot' => ['content_top', 'content_bottom', 'left_rail', 'right_rail', 'home_before_grid', 'home_after_grid', 'footer'],
-        'floating_anchor' => ['top-left', 'top-center', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right', 'custom'],
+        'flow_slot' => [
+            'content_top',
+            'content_bottom',
+            'left_rail',
+            'right_rail',
+            'home_before_grid',
+            'home_after_grid',
+            'footer',
+        ],
+        'floating_anchor' => [
+            'top-left',
+            'top-center',
+            'top-right',
+            'middle-left',
+            'middle-right',
+            'bottom-left',
+            'bottom-center',
+            'bottom-right',
+            'custom',
+        ],
         'mobile_fallback' => ['flow'],
         'appearance' => ['card', 'minimal'],
         'source_language' => PUBLIC_WIDGET_SOURCE_LANGUAGES,
     ];
     $defaults = [
-        'status' => 'draft', 'page_scope' => 'home', 'placement_mode' => 'flow',
-        'flow_slot' => 'home_after_grid', 'floating_anchor' => 'bottom-right',
-        'mobile_fallback' => 'flow', 'appearance' => 'card', 'source_language' => 'en',
+        'status' => 'draft',
+        'page_scope' => 'home',
+        'placement_mode' => 'flow',
+        'flow_slot' => 'home_after_grid',
+        'floating_anchor' => 'bottom-right',
+        'mobile_fallback' => 'flow',
+        'appearance' => 'card',
+        'source_language' => 'en',
     ];
     $validated = [];
     foreach ($options as $field => $accepted) {
         $value = $input[$field] ?? $defaults[$field];
         if (!is_string($value) || !in_array($value, $accepted, true)) {
-            throw new PublicWidgetInvalidField($field, 'Choose one of the supported widget options.');
+            throw new PublicWidgetInvalidField(
+                $field,
+                'Choose one of the supported widget options.',
+            );
         }
         $validated[$field] = $value;
     }
-    if ($validated['page_scope'] === 'gallery' && $validated['placement_mode'] === 'flow' && in_array($validated['flow_slot'], ['home_before_grid', 'home_after_grid'], true)) {
-        throw new PublicWidgetInvalidField('flow_slot', 'Homepage gallery-grid positions are unavailable for gallery-only widgets.');
+    if (
+        $validated['page_scope'] === 'gallery'
+        && $validated['placement_mode'] === 'flow'
+        && in_array(
+            $validated['flow_slot'],
+            ['home_before_grid', 'home_after_grid'],
+            true,
+        )
+    ) {
+        throw new PublicWidgetInvalidField(
+            'flow_slot',
+            'Homepage gallery-grid positions are unavailable for gallery-only widgets.',
+        );
     }
     if ($validated['status'] === 'published' && $content === '') {
-        throw new PublicWidgetInvalidField('content_md', 'Add content before publishing this widget.');
+        throw new PublicWidgetInvalidField(
+            'content_md',
+            'Add content before publishing this widget.',
+        );
     }
 
-    $numbers = ['x_permille' => [900, 0, 1000], 'y_permille' => [900, 0, 1000], 'width_px' => [320, PUBLIC_WIDGET_MIN_WIDTH_PX, PUBLIC_WIDGET_MAX_WIDTH_PX], 'sort_order' => [0, 0, 10000]];
+    $numbers = [
+        'x_permille' => [900, 0, 1000],
+        'y_permille' => [900, 0, 1000],
+        'width_px' => [
+            320,
+            PUBLIC_WIDGET_MIN_WIDTH_PX,
+            PUBLIC_WIDGET_MAX_WIDTH_PX,
+        ],
+        'sort_order' => [0, 0, 10000],
+    ];
     $numeric = [];
     foreach ($numbers as $field => [$default, $minimum, $maximum]) {
         $raw = $input[$field] ?? $default;
-        if ((!is_int($raw) && (!is_string($raw) || preg_match('/^(?:0|[1-9][0-9]*)$/D', $raw) !== 1))
-            || (float) $raw > $maximum || (float) $raw < $minimum) {
-            throw new PublicWidgetInvalidField($field, 'Enter a value inside the supported widget range.');
+        if (
+            (
+                !is_int($raw)
+                && (
+                    !is_string($raw)
+                    || preg_match('/^(?:0|[1-9][0-9]*)$/D', $raw) !== 1
+                )
+            )
+            || (float) $raw > $maximum
+            || (float) $raw < $minimum
+        ) {
+            throw new PublicWidgetInvalidField(
+                $field,
+                'Enter a value inside the supported widget range.',
+            );
         }
         $numeric[$field] = (int) $raw;
     }
 
     return [
-        'title' => $title, 'content_md' => $content,
+        'title' => $title,
+        'content_md' => $content,
         ...$validated,
         ...$numeric,
     ];
@@ -257,9 +375,21 @@ function public_widget_normalize_public_row(array $input): array
  */
 function public_widget_revision(mixed $revision): int
 {
-    if ((!is_int($revision) && (!is_string($revision) || preg_match('/^[1-9][0-9]*$/D', $revision) !== 1))
-        || (float) $revision > PHP_INT_MAX || (int) $revision < 1) {
-        throw new PublicWidgetInvalidField('revision', 'Reload the widget before saving.');
+    if (
+        (
+            !is_int($revision)
+            && (
+                !is_string($revision)
+                || preg_match('/^[1-9][0-9]*$/D', $revision) !== 1
+            )
+        )
+        || (float) $revision > PHP_INT_MAX
+        || (int) $revision < 1
+    ) {
+        throw new PublicWidgetInvalidField(
+            'revision',
+            'Reload the widget before saving.',
+        );
     }
     return (int) $revision;
 }
@@ -286,7 +416,11 @@ function public_widget_create(array $input): string
 {
     $row = public_widget_normalize($input);
     $id = bin2hex(random_bytes(16));
-    public_widget_model_insert(['widget_id' => $id, 'revision' => 1, ...$row], gmdate('Y-m-d H:i:s'), PUBLIC_WIDGET_MAX_ITEMS);
+    public_widget_model_insert(
+        ['widget_id' => $id, 'revision' => 1, ...$row],
+        gmdate('Y-m-d H:i:s'),
+        PUBLIC_WIDGET_MAX_ITEMS,
+    );
     return $id;
 }
 
@@ -298,13 +432,23 @@ function public_widget_create(array $input): string
  * @param array<string,mixed> $input Complete authoring values.
  * @return int Next revision after a successful conditional update.
  */
-function public_widget_save(string $widgetId, mixed $revision, array $input): int
-{
+function public_widget_save(
+    string $widgetId,
+    mixed $revision,
+    array $input,
+): int {
     $id = public_widget_id($widgetId);
     $expected = public_widget_revision($revision);
     $row = public_widget_normalize($input);
-    if (!public_widget_model_replace(['widget_id' => $id, 'revision' => $expected, ...$row], gmdate('Y-m-d H:i:s'))) {
-        throw new PublicWidgetInvalidField('revision', 'The widget changed in another tab. Reload before saving.');
+    if (!public_widget_model_replace([
+        'widget_id' => $id,
+        'revision' => $expected,
+        ...$row,
+    ], gmdate('Y-m-d H:i:s'))) {
+        throw new PublicWidgetInvalidField(
+            'revision',
+            'The widget changed in another tab. Reload before saving.',
+        );
     }
     return $expected + 1;
 }
@@ -319,7 +463,10 @@ function public_widget_duplicate(string $widgetId): string
 {
     $original = public_widget_model_find(public_widget_id($widgetId));
     if ($original === null) {
-        throw new PublicWidgetInvalidField('widget_id', 'The widget no longer exists.');
+        throw new PublicWidgetInvalidField(
+            'widget_id',
+            'The widget no longer exists.',
+        );
     }
     $copy = public_widget_normalize($original);
     $copy['status'] = 'draft';
@@ -335,8 +482,14 @@ function public_widget_duplicate(string $widgetId): string
  */
 function public_widget_delete(string $widgetId, mixed $revision): void
 {
-    if (!public_widget_model_delete(public_widget_id($widgetId), public_widget_revision($revision))) {
-        throw new PublicWidgetInvalidField('revision', 'The widget changed in another tab. Reload before deletion.');
+    if (!public_widget_model_delete(
+        public_widget_id($widgetId),
+        public_widget_revision($revision),
+    )) {
+        throw new PublicWidgetInvalidField(
+            'revision',
+            'The widget changed in another tab. Reload before deletion.',
+        );
     }
 }
 
@@ -349,7 +502,10 @@ function public_widget_delete(string $widgetId, mixed $revision): void
 function public_widget_reorder(array $submitted): void
 {
     if ($submitted === [] || count($submitted) > PUBLIC_WIDGET_MAX_ITEMS) {
-        throw new PublicWidgetInvalidField('sort_order', 'Choose between 1 and 48 widgets to reorder.');
+        throw new PublicWidgetInvalidField(
+            'sort_order',
+            'Choose between 1 and 48 widgets to reorder.',
+        );
     }
     $rows = [];
     $seenIds = [];
@@ -358,16 +514,36 @@ function public_widget_reorder(array $submitted): void
         $id = public_widget_id($entry['widget_id'] ?? null);
         $revision = public_widget_revision($entry['revision'] ?? null);
         $order = $entry['sort_order'] ?? null;
-        if ((!is_int($order) && (!is_string($order) || preg_match('/^(?:0|[1-9][0-9]*)$/D', $order) !== 1))
-            || (float) $order > 10000 || isset($seenIds[$id]) || isset($seenOrders[(string) $order])) {
-            throw new PublicWidgetInvalidField('sort_order', 'Widget order contains invalid or repeated values.');
+        if (
+            (
+                !is_int($order)
+                && (
+                    !is_string($order)
+                    || preg_match('/^(?:0|[1-9][0-9]*)$/D', $order) !== 1
+                )
+            )
+            || (float) $order > 10000
+            || isset($seenIds[$id])
+            || isset($seenOrders[(string) $order])
+        ) {
+            throw new PublicWidgetInvalidField(
+                'sort_order',
+                'Widget order contains invalid or repeated values.',
+            );
         }
         $seenIds[$id] = true;
         $seenOrders[(string) $order] = true;
-        $rows[] = ['widget_id' => $id, 'revision' => $revision, 'sort_order' => (int) $order];
+        $rows[] = [
+            'widget_id' => $id,
+            'revision' => $revision,
+            'sort_order' => (int) $order,
+        ];
     }
     if (!public_widget_model_reorder($rows, gmdate('Y-m-d H:i:s'))) {
-        throw new PublicWidgetInvalidField('revision', 'Widget positions changed in another tab. Reload before reordering.');
+        throw new PublicWidgetInvalidField(
+            'revision',
+            'Widget positions changed in another tab. Reload before reordering.',
+        );
     }
 }
 
@@ -380,9 +556,23 @@ function public_widget_reorder(array $submitted): void
  */
 function public_widget_visible_on_page(array $row, string $pageType): bool
 {
-    return ($row['status'] ?? '') === 'published'
-        && (($pageType === 'home' && in_array($row['page_scope'] ?? '', ['home', 'all'], true))
-            || ($pageType === 'gallery' && in_array($row['page_scope'] ?? '', ['gallery', 'all'], true)));
+    return (
+        ($row['status'] ?? '') === 'published'
+            && (
+                (
+                    $pageType === 'home'
+                    && in_array($row['page_scope'] ?? '', ['home', 'all'], true)
+                )
+                || (
+                    $pageType === 'gallery'
+                    && in_array(
+                        $row['page_scope'] ?? '',
+                        ['gallery', 'all'],
+                        true,
+                    )
+                )
+            )
+    );
 }
 
 /**
@@ -412,14 +602,16 @@ function public_widget_public_rows(string $pageType): array
             if (!public_widget_visible_on_page($valid, $pageType)) {
                 continue;
             }
-            $prepared[] = ['widget_id' => public_widget_id($row['widget_id'] ?? null), ...$valid];
+            $prepared[] = [
+                'widget_id' => public_widget_id($row['widget_id'] ?? null),
+                ...$valid,
+            ];
         } catch (InvalidArgumentException) {
             // Incomplete or legacy records are excluded rather than rendered in an unsafe location.
         }
     }
     return $prepared;
 }
-
 
 /**
  * Render emphasized widget text after escaping all user-authored HTML.
@@ -433,11 +625,21 @@ function public_widget_public_rows(string $pageType): array
 function public_widget_emphasis_html(string $text): string
 {
     $escaped = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    $escaped = preg_replace('/\x60([^\x60\n]+)\x60/u', '<code>$1</code>', $escaped) ?? $escaped;
-    $escaped = preg_replace('/\*\*([^*\n]+)\*\*/u', '<strong>$1</strong>', $escaped) ?? $escaped;
-    $escaped = preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $escaped) ?? $escaped;
-    $escaped = preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $escaped) ?? $escaped;
-    $escaped = preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $escaped) ?? $escaped;
+    $escaped =
+        preg_replace('/\x60([^\x60\n]+)\x60/u', '<code>$1</code>', $escaped)
+        ?? $escaped;
+    $escaped =
+        preg_replace('/\*\*([^*\n]+)\*\*/u', '<strong>$1</strong>', $escaped)
+        ?? $escaped;
+    $escaped =
+        preg_replace('/__([^_\n]+)__/u', '<strong>$1</strong>', $escaped)
+        ?? $escaped;
+    $escaped =
+        preg_replace('/(?<!\*)\*([^*\n]+)\*(?!\*)/u', '<em>$1</em>', $escaped)
+        ?? $escaped;
+    $escaped =
+        preg_replace('/(?<!_)_([^_\n]+)_(?!_)/u', '<em>$1</em>', $escaped)
+        ?? $escaped;
     return $escaped;
 }
 
@@ -455,7 +657,12 @@ function public_widget_emphasis_html(string $text): string
 function public_widget_inline_html(string $text): string
 {
     $pattern = '/(?<!\\\\)\[([^\]\r\n]{1,160})\]\(((?:[^()\s]|\([^()\s]*\))+)\)/u';
-    $matchCount = preg_match_all($pattern, $text, $matches, PREG_OFFSET_CAPTURE);
+    $matchCount = preg_match_all(
+        $pattern,
+        $text,
+        $matches,
+        PREG_OFFSET_CAPTURE,
+    );
     if ($matchCount === false || $matchCount === 0) {
         return public_widget_emphasis_html($text);
     }
@@ -464,7 +671,11 @@ function public_widget_inline_html(string $text): string
     for ($index = 0; $index < $matchCount; $index++) {
         $token = (string) $matches[0][$index][0];
         $start = (int) $matches[0][$index][1];
-        $html .= public_widget_emphasis_html(substr($text, $offset, $start - $offset));
+        $html .= public_widget_emphasis_html(substr(
+            $text,
+            $offset,
+            $start - $offset,
+        ));
         $url = (string) $matches[2][$index][0];
         try {
             $href = public_widget_safe_url($url);
@@ -474,9 +685,17 @@ function public_widget_inline_html(string $text): string
             continue;
         }
         $external = preg_match('~^https?://~i', $href) === 1;
-        $attributes = $external ? ' target="_blank" rel="noopener noreferrer"' : '';
-        $html .= '<a href="' . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' . $attributes . '>'
-            . public_widget_emphasis_html((string) $matches[1][$index][0]) . '</a>';
+        $attributes = $external
+            ? ' target="_blank" rel="noopener noreferrer"'
+            : '';
+        $html .=
+            '<a href="'
+            . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+            . '"'
+            . $attributes
+            . '>'
+            . public_widget_emphasis_html((string) $matches[1][$index][0])
+            . '</a>';
         $offset = $start + strlen($token);
     }
     return $html . public_widget_emphasis_html(substr($text, $offset));
@@ -494,8 +713,12 @@ function public_widget_inline_html(string $text): string
  * @param string $listTag Current list element name, cleared after flushing.
  * @return void Appends safe blocks to the output accumulator.
  */
-function public_widget_flush_markdown_blocks(array &$blocks, array &$paragraph, array &$listItems, string &$listTag): void
-{
+function public_widget_flush_markdown_blocks(
+    array &$blocks,
+    array &$paragraph,
+    array &$listItems,
+    string &$listTag,
+): void {
     if ($paragraph !== []) {
         $parts = [];
         foreach ($paragraph as $line) {
@@ -505,7 +728,14 @@ function public_widget_flush_markdown_blocks(array &$blocks, array &$paragraph, 
         $paragraph = [];
     }
     if ($listItems !== []) {
-        $blocks[] = '<' . $listTag . '>' . implode('', $listItems) . '</' . $listTag . '>';
+        $blocks[] =
+            '<'
+            . $listTag
+            . '>'
+            . implode('', $listItems)
+            . '</'
+            . $listTag
+            . '>';
         $listItems = [];
         $listTag = '';
     }
@@ -523,7 +753,10 @@ function public_widget_flush_markdown_blocks(array &$blocks, array &$paragraph, 
  */
 function public_widget_markdown_html(string $markdown): string
 {
-    if (strlen($markdown) > PUBLIC_WIDGET_CONTENT_MAX_BYTES || preg_match('//u', $markdown) !== 1) {
+    if (
+        strlen($markdown) > PUBLIC_WIDGET_CONTENT_MAX_BYTES
+        || preg_match('//u', $markdown) !== 1
+    ) {
         return '';
     }
     $source = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
@@ -536,37 +769,80 @@ function public_widget_markdown_html(string $markdown): string
     $listTag = '';
     foreach (explode("\n", $source) as $line) {
         if (trim($line) === '') {
-            public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
+            public_widget_flush_markdown_blocks(
+                $blocks,
+                $paragraph,
+                $listItems,
+                $listTag,
+            );
             continue;
         }
         if (preg_match('/^\s{0,3}(#{1,3})\s+(.+)$/u', $line, $heading) === 1) {
-            public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
+            public_widget_flush_markdown_blocks(
+                $blocks,
+                $paragraph,
+                $listItems,
+                $listTag,
+            );
             $level = min(4, strlen($heading[1]) + 1);
-            $blocks[] = '<h' . $level . '>' . public_widget_inline_html(trim($heading[2])) . '</h' . $level . '>';
+            $blocks[] =
+                '<h'
+                . $level
+                . '>'
+                . public_widget_inline_html(trim($heading[2]))
+                . '</h'
+                . $level
+                . '>';
             continue;
         }
-        if (preg_match('/^\s{0,3}(?:[-*+]\s+([^\r\n]+)|[0-9]{1,3}[.)]\s+([^\r\n]+))$/u', $line, $item) === 1) {
+        if (
+            preg_match(
+                '/^\s{0,3}(?:[-*+]\s+([^\r\n]+)|[0-9]{1,3}[.)]\s+([^\r\n]+))$/u',
+                $line,
+                $item,
+            ) === 1
+        ) {
             if ($paragraph !== []) {
-                public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
+                public_widget_flush_markdown_blocks(
+                    $blocks,
+                    $paragraph,
+                    $listItems,
+                    $listTag,
+                );
             }
             $tag = isset($item[2]) && $item[2] !== '' ? 'ol' : 'ul';
             if ($listTag !== '' && $listTag !== $tag) {
-                public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
+                public_widget_flush_markdown_blocks(
+                    $blocks,
+                    $paragraph,
+                    $listItems,
+                    $listTag,
+                );
             }
             $listTag = $tag;
             $itemText = $tag === 'ol' ? $item[2] : $item[1];
-            $listItems[] = '<li>' . public_widget_inline_html(trim($itemText)) . '</li>';
+            $listItems[] =
+                '<li>' . public_widget_inline_html(trim($itemText)) . '</li>';
             continue;
         }
         if ($listItems !== []) {
-            public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
+            public_widget_flush_markdown_blocks(
+                $blocks,
+                $paragraph,
+                $listItems,
+                $listTag,
+            );
         }
         $paragraph[] = trim($line);
     }
-    public_widget_flush_markdown_blocks($blocks, $paragraph, $listItems, $listTag);
+    public_widget_flush_markdown_blocks(
+        $blocks,
+        $paragraph,
+        $listItems,
+        $listTag,
+    );
     return implode("\n", $blocks);
 }
-
 
 /**
  * Group published records into the seven public in-flow zones and a single
@@ -583,10 +859,14 @@ function public_widget_markdown_html(string $markdown): string
 function public_widget_plan_rows(array $rows, string $pageType): array
 {
     $plan = [
-        'content_top' => [], 'content_bottom' => [],
-        'left_rail' => [], 'right_rail' => [],
-        'home_before_grid' => [], 'home_after_grid' => [],
-        'footer' => [], 'floating' => [],
+        'content_top' => [],
+        'content_bottom' => [],
+        'left_rail' => [],
+        'right_rail' => [],
+        'home_before_grid' => [],
+        'home_after_grid' => [],
+        'footer' => [],
+        'floating' => [],
     ];
     if (!in_array($pageType, ['home', 'gallery'], true)) {
         return $plan;
@@ -598,14 +878,25 @@ function public_widget_plan_rows(array $rows, string $pageType): array
                 continue;
             }
             $widgetId = public_widget_id($row['widget_id'] ?? null);
-            $slot = $widget['placement_mode'] === 'floating' ? 'floating' : $widget['flow_slot'];
-            if ($pageType === 'gallery' && in_array($slot, ['home_before_grid', 'home_after_grid'], true)) {
+            $slot = $widget['placement_mode'] === 'floating'
+                ? 'floating'
+                : $widget['flow_slot'];
+            if (
+                $pageType === 'gallery'
+                && in_array(
+                    $slot,
+                    ['home_before_grid', 'home_after_grid'],
+                    true,
+                )
+            ) {
                 $slot = 'content_bottom';
             }
             $plan[$slot][] = [
                 'widget_id' => $widgetId,
                 'title' => $widget['title'],
-                'body_html' => public_widget_markdown_html($widget['content_md']),
+                'body_html' => public_widget_markdown_html(
+                    $widget['content_md'],
+                ),
                 'appearance' => $widget['appearance'],
                 'source_language' => $widget['source_language'],
                 'placement_mode' => $widget['placement_mode'],
@@ -633,5 +924,8 @@ function public_widget_plan_rows(array $rows, string $pageType): array
  */
 function public_widget_public_plan(string $pageType): array
 {
-    return public_widget_plan_rows(public_widget_public_rows($pageType), $pageType);
+    return public_widget_plan_rows(
+        public_widget_public_rows($pageType),
+        $pageType,
+    );
 }

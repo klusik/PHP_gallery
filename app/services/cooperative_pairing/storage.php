@@ -20,12 +20,35 @@ namespace Gallery\Services;
 function cooperative_pairing_schema_status(): array
 {
     $requirements = [schema_inspection_table('cooperative_pairings')];
-    foreach (['id', 'invitation_id', 'peer_id', 'role', 'state', 'revision', 'expires_at', 'secret_hash',
-        'payload_cipher', 'attempts', 'next_attempt_at', 'last_error', 'updated_at'] as $column) {
-        $requirements[] = schema_inspection_column('cooperative_pairings', $column);
+    foreach ([
+        'id',
+        'invitation_id',
+        'peer_id',
+        'role',
+        'state',
+        'revision',
+        'expires_at',
+        'secret_hash',
+        'payload_cipher',
+        'attempts',
+        'next_attempt_at',
+        'last_error',
+        'updated_at',
+    ] as $column) {
+        $requirements[] = schema_inspection_column(
+            'cooperative_pairings',
+            $column,
+        );
     }
-    foreach (['PRIMARY', 'cooperative_pairings_invitation', 'cooperative_pairings_peer'] as $index) {
-        $requirements[] = schema_inspection_index('cooperative_pairings', $index);
+    foreach ([
+        'PRIMARY',
+        'cooperative_pairings_invitation',
+        'cooperative_pairings_peer',
+    ] as $index) {
+        $requirements[] = schema_inspection_index(
+            'cooperative_pairings',
+            $index,
+        );
     }
     return schema_inspection_feature('cooperative.pairing', $requirements);
 }
@@ -40,7 +63,11 @@ function cooperative_pairing_storage_assert(): void
     cooperative_storage_assert('peers');
     $state = cooperative_pairing_schema_status();
     if (!schema_inspection_is_available($state)) {
-        throw new CooperativeException(schema_inspection_is_missing($state) ? 'schema_missing' : 'schema_unknown');
+        throw new CooperativeException(
+            schema_inspection_is_missing($state)
+                ? 'schema_missing'
+                : 'schema_unknown',
+        );
     }
 }
 
@@ -51,8 +78,17 @@ function cooperative_pairing_storage_assert(): void
  */
 function cooperative_pairing_pack(array $pair): string
 {
-    return security_secret_seal(json_encode($pair['payload'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
-        cooperative_storage_key(), 'cooperative-pairing:' . cooperative_instance_id() . ':' . $pair['invitation_id']);
+    return security_secret_seal(
+        json_encode(
+            $pair['payload'],
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+        ),
+        cooperative_storage_key(),
+        'cooperative-pairing:'
+            . cooperative_instance_id()
+            . ':'
+            . $pair['invitation_id'],
+    );
 }
 
 /** Read encrypted local state; no remote body is accepted as a persisted snapshot.
@@ -62,8 +98,14 @@ function cooperative_pairing_pack(array $pair): string
  */
 function cooperative_pairing_unpack(array $pair): array
 {
-    $plain = security_secret_open($pair['payload_cipher'], cooperative_storage_key(),
-        'cooperative-pairing:' . cooperative_instance_id() . ':' . $pair['invitation_id']);
+    $plain = security_secret_open(
+        $pair['payload_cipher'],
+        cooperative_storage_key(),
+        'cooperative-pairing:'
+            . cooperative_instance_id()
+            . ':'
+            . $pair['invitation_id'],
+    );
     if ($plain === null) {
         throw new CooperativeException('pairing_secret_unavailable');
     }
@@ -87,7 +129,9 @@ function cooperative_pairing_unpack(array $pair): array
 function cooperative_pairing_load(string $invitationId): array
 {
     cooperative_pairing_storage_assert();
-    $pair = \Gallery\Models\cooperative_pairing_model_find(cooperative_id_validate($invitationId));
+    $pair = \Gallery\Models\cooperative_pairing_model_find(cooperative_id_validate(
+        $invitationId,
+    ));
     if ($pair === null) {
         throw new CooperativeException('pairing_not_found');
     }
@@ -103,33 +147,52 @@ function cooperative_pairing_load(string $invitationId): array
  * @param callable $operation Trusted local callback; never obtained from request data.
  * @return array<string,mixed> Result described by the operation above.
  */
-function cooperative_pairing_change(string $invitationId, callable $operation): array
-{
+function cooperative_pairing_change(
+    string $invitationId,
+    callable $operation,
+): array {
     cooperative_pairing_storage_assert();
     cooperative_id_validate($invitationId);
-    return \Gallery\Models\cooperative_pairing_model_transaction(/** Apply the local transition or bounded response callback.
-     * @return array<string,mixed> Transition result or accepted byte count.
-     */ static function () use ($invitationId, $operation): array {
-        $stored = \Gallery\Models\cooperative_pairing_model_find($invitationId, true);
-        if ($stored === null) {
-            throw new CooperativeException('pairing_not_found');
-        }
-        $pair = cooperative_pairing_unpack($stored);
-        $peer = \Gallery\Models\cooperative_pairing_model_lock_peer($pair['peer_id']);
-        if ($peer === null) {
-            throw new CooperativeException('peer_unavailable');
-        }
-        [$next, $nextPeer] = $operation($pair, $peer);
-        $next['payload_cipher'] = cooperative_pairing_pack($next);
-        if ($nextPeer !== $peer && !\Gallery\Models\cooperative_model_peer_save($nextPeer, $peer['revision'], gmdate('Y-m-d H:i:s'))) {
-            throw new CooperativeException('revision_conflict');
-        }
-        if (!\Gallery\Models\cooperative_pairing_model_save($next, gmdate('Y-m-d H:i:s'))) {
-            throw new CooperativeException('revision_conflict');
-        }
-        $next['revision']++;
-        return $next;
-    });
+    return \Gallery\Models\cooperative_pairing_model_transaction(
+        /** Apply the local transition or bounded response callback.
+         * @return array<string,mixed> Transition result or accepted byte count.
+         */ static function () use ($invitationId, $operation): array {
+            $stored = \Gallery\Models\cooperative_pairing_model_find(
+                $invitationId,
+                true,
+            );
+            if ($stored === null) {
+                throw new CooperativeException('pairing_not_found');
+            }
+            $pair = cooperative_pairing_unpack($stored);
+            $peer = \Gallery\Models\cooperative_pairing_model_lock_peer(
+                $pair['peer_id'],
+            );
+            if ($peer === null) {
+                throw new CooperativeException('peer_unavailable');
+            }
+            [$next, $nextPeer] = $operation($pair, $peer);
+            $next['payload_cipher'] = cooperative_pairing_pack($next);
+            if (
+                $nextPeer !== $peer
+                && !\Gallery\Models\cooperative_model_peer_save(
+                    $nextPeer,
+                    $peer['revision'],
+                    gmdate('Y-m-d H:i:s'),
+                )
+            ) {
+                throw new CooperativeException('revision_conflict');
+            }
+            if (!\Gallery\Models\cooperative_pairing_model_save(
+                $next,
+                gmdate('Y-m-d H:i:s'),
+            )) {
+                throw new CooperativeException('revision_conflict');
+            }
+            $next['revision']++;
+            return $next;
+        },
+    );
 }
 
 /** Insert the invitation and pending peer in one transaction, with no network under locks.
@@ -146,23 +209,43 @@ function cooperative_pairing_store_new(array $pair, array $peer): array
         /** Start a fresh lifecycle only after old authority has been revoked.
          * @return array<string,mixed> Persisted new invitation with monotonic peer generation.
          */ static function () use ($pair, $peer): array {
-            $previous = \Gallery\Models\cooperative_pairing_model_find_peer($peer['instance_id']);
-            $previousPeer = \Gallery\Models\cooperative_pairing_model_lock_peer($peer['instance_id']);
+            $previous = \Gallery\Models\cooperative_pairing_model_find_peer(
+                $peer['instance_id'],
+            );
+            $previousPeer = \Gallery\Models\cooperative_pairing_model_lock_peer(
+                $peer['instance_id'],
+            );
             $now = gmdate('Y-m-d H:i:s');
             if ($previousPeer !== null) {
-                if ($previousPeer['state'] !== 'revoked' || ($previous['state'] ?? '') === 'revoking') {
+                if (
+                    $previousPeer['state'] !== 'revoked'
+                    || ($previous['state'] ?? '') === 'revoking'
+                ) {
                     throw new CooperativeException('peer_already_registered');
                 }
-                if (!\Gallery\Models\cooperative_model_peer_save($peer, $previousPeer['revision'], $now)) {
+                if (!\Gallery\Models\cooperative_model_peer_save(
+                    $peer,
+                    $previousPeer['revision'],
+                    $now,
+                )) {
                     throw new CooperativeException('revision_conflict');
                 }
             }
             if ($previous !== null) {
-                return \Gallery\Models\cooperative_pairing_model_replace($pair, $previous, $now);
+                return \Gallery\Models\cooperative_pairing_model_replace(
+                    $pair,
+                    $previous,
+                    $now,
+                );
             }
-            $pair['id'] = \Gallery\Models\cooperative_pairing_model_insert($pair, $peer, $now, $previousPeer === null);
+            $pair['id'] = \Gallery\Models\cooperative_pairing_model_insert(
+                $pair,
+                $peer,
+                $now,
+                $previousPeer === null,
+            );
             return $pair;
-        }
+        },
     );
 }
 

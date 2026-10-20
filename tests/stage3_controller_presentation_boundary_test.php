@@ -38,6 +38,9 @@ if (!is_dir($controllerRoot)) {
 
 /**
  * Return true when a PHP string literal contains presentation markup.
+ *
+ * @param string $literal Complete quoted PHP string token.
+ * @return bool Whether the literal body contains markup syntax or an entity.
  */
 function stage3_controller_literal_contains_markup(string $literal): bool
 {
@@ -46,7 +49,12 @@ function stage3_controller_literal_contains_markup(string $literal): bool
     }
 
     $body = substr($literal, 1, -1);
-    return preg_match('~</?[A-Za-z!][^>]*>|<\?xml|&(?:nbsp|amp|lt|gt|quot|#\d+);~', $body) === 1;
+    return (
+        preg_match(
+            '~</?[A-Za-z!][^>]*>|<\?xml|&(?:nbsp|amp|lt|gt|quot|#\d+);~',
+            $body,
+        ) === 1
+    );
 }
 
 /**
@@ -60,7 +68,10 @@ function stage3_controller_excerpt(string $value): string
 
 $violations = [];
 $iterator = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($controllerRoot, FilesystemIterator::SKIP_DOTS)
+    new RecursiveDirectoryIterator(
+        $controllerRoot,
+        FilesystemIterator::SKIP_DOTS,
+    ),
 );
 
 foreach ($iterator as $file) {
@@ -70,7 +81,9 @@ foreach ($iterator as $file) {
 
     $source = file_get_contents($file->getPathname());
     if ($source === false) {
-        throw new RuntimeException('Unable to read controller: ' . $file->getPathname());
+        throw new RuntimeException(
+            'Unable to read controller: ' . $file->getPathname(),
+        );
     }
 
     $tokens = token_get_all($source);
@@ -90,7 +103,10 @@ foreach ($iterator as $file) {
             continue;
         }
 
-        if ($tokenId === T_CONSTANT_ENCAPSED_STRING && stage3_controller_literal_contains_markup($text)) {
+        if (
+            $tokenId === T_CONSTANT_ENCAPSED_STRING
+            && stage3_controller_literal_contains_markup($text)
+        ) {
             $violations[] = [
                 'file' => substr($file->getPathname(), strlen($root) + 1),
                 'line' => $line,
@@ -109,7 +125,7 @@ if ($violations !== []) {
             $violation['file'],
             $violation['line'],
             $violation['kind'],
-            $violation['excerpt']
+            $violation['excerpt'],
         );
     }
     throw new RuntimeException(implode(PHP_EOL, $lines));

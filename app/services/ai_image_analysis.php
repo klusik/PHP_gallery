@@ -67,11 +67,17 @@ use function Gallery\Models\ai_image_analysis_model_validate_claim;
  */
 
 const AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS = 600;
+
 const AI_IMAGE_ANALYSIS_MIN_LEASE_SECONDS = 60;
+
 const AI_IMAGE_ANALYSIS_MAX_LEASE_SECONDS = 3600;
+
 const AI_IMAGE_ANALYSIS_MAX_ATTEMPTS = 5;
+
 const AI_IMAGE_ANALYSIS_ENQUEUE_BATCH_SIZE = 30;
+
 const AI_IMAGE_ANALYSIS_SEARCH_TEXT_LIMIT = 60000;
+
 const AI_IMAGE_ANALYSIS_ERROR_LIMIT = 2000;
 
 /**
@@ -81,7 +87,10 @@ const AI_IMAGE_ANALYSIS_ERROR_LIMIT = 2000;
  */
 function ai_image_analysis_schema_ready(): bool
 {
-    return presentation_schema_render_available(presentation_ai_image_analysis_schema_status(), 'ai_image_analysis_render');
+    return presentation_schema_render_available(
+        presentation_ai_image_analysis_schema_status(),
+        'ai_image_analysis_render',
+    );
 }
 
 /**
@@ -97,7 +106,11 @@ function ai_image_analysis_schema_ready(): bool
 function ai_image_analysis_write_schema_ready(string $operation): bool
 {
     $schemaStatus = presentation_ai_image_analysis_schema_status();
-    presentation_schema_assert_known($schemaStatus, $operation, 'AI image-analysis storage could not be verified. No queue or metadata row was changed.');
+    presentation_schema_assert_known(
+        $schemaStatus,
+        $operation,
+        'AI image-analysis storage could not be verified. No queue or metadata row was changed.',
+    );
     return schema_inspection_is_available($schemaStatus);
 }
 
@@ -109,8 +122,11 @@ function ai_image_analysis_write_schema_ready(string $operation): bool
  * @param int $maxLength Max length value.
  * @return string Text result for the caller.
  */
-function ai_image_analysis_normalize_label(string $value, string $fallback, int $maxLength = 120): string
-{
+function ai_image_analysis_normalize_label(
+    string $value,
+    string $fallback,
+    int $maxLength = 120,
+): string {
     // $normalized stores a compact printable value for queue comparisons.
     $normalized = trim(preg_replace('/\s+/', ' ', $value) ?? '');
     if ($normalized === '') {
@@ -152,7 +168,10 @@ function ai_image_analysis_normalize_lease_seconds(int $leaseSeconds): int
     if ($leaseSeconds <= 0) {
         $leaseSeconds = AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS;
     }
-    return max(AI_IMAGE_ANALYSIS_MIN_LEASE_SECONDS, min(AI_IMAGE_ANALYSIS_MAX_LEASE_SECONDS, $leaseSeconds));
+    return max(AI_IMAGE_ANALYSIS_MIN_LEASE_SECONDS, min(
+        AI_IMAGE_ANALYSIS_MAX_LEASE_SECONDS,
+        $leaseSeconds,
+    ));
 }
 
 /**
@@ -191,8 +210,12 @@ function ai_image_analysis_claim_token_hash(string $claimToken): string
  * @param int $limit Maximum number of items.
  * @return int Integer result for the caller.
  */
-function ai_image_analysis_enqueue_missing_jobs(int $galleryId, string $modelName, string $modelVersion, int $limit = AI_IMAGE_ANALYSIS_ENQUEUE_BATCH_SIZE): int
-{
+function ai_image_analysis_enqueue_missing_jobs(
+    int $galleryId,
+    string $modelName,
+    string $modelVersion,
+    int $limit = AI_IMAGE_ANALYSIS_ENQUEUE_BATCH_SIZE,
+): int {
     if (!ai_image_analysis_write_schema_ready('ai_analysis_enqueue')) {
         return 0;
     }
@@ -203,7 +226,7 @@ function ai_image_analysis_enqueue_missing_jobs(int $galleryId, string $modelNam
         $modelName,
         $modelVersion,
         $limit,
-        now_sql()
+        now_sql(),
     );
 }
 
@@ -219,7 +242,10 @@ function ai_image_analysis_release_expired_claims(int $galleryId): int
         return 0;
     }
 
-    return ai_image_analysis_model_release_expired_claims($galleryId, now_sql());
+    return ai_image_analysis_model_release_expired_claims(
+        $galleryId,
+        now_sql(),
+    );
 }
 
 /**
@@ -232,18 +258,30 @@ function ai_image_analysis_release_expired_claims(int $galleryId): int
  * @param int $leaseSeconds Lease seconds value.
  * @return array<string,mixed>|null Claimed job payload, or null when no work exists.
  */
-function ai_image_analysis_claim_next_job(int $galleryId, string $workerId, string $modelName, string $modelVersion, int $leaseSeconds): ?array
-{
+function ai_image_analysis_claim_next_job(
+    int $galleryId,
+    string $workerId,
+    string $modelName,
+    string $modelVersion,
+    int $leaseSeconds,
+): ?array {
     if (!ai_image_analysis_write_schema_ready('ai_analysis_claim')) {
         return null;
     }
 
     $workerId = ai_image_analysis_normalize_worker_id($workerId);
-    $modelName = ai_image_analysis_normalize_label($modelName, 'local-image-metadata');
+    $modelName = ai_image_analysis_normalize_label(
+        $modelName,
+        'local-image-metadata',
+    );
     $modelVersion = ai_image_analysis_normalize_label($modelVersion, '1');
     $leaseSeconds = ai_image_analysis_normalize_lease_seconds($leaseSeconds);
 
-    ai_image_analysis_enqueue_missing_jobs($galleryId, $modelName, $modelVersion);
+    ai_image_analysis_enqueue_missing_jobs(
+        $galleryId,
+        $modelName,
+        $modelVersion,
+    );
 
     $now = now_sql();
     $claimUntil = ai_image_analysis_time_offset($leaseSeconds);
@@ -256,7 +294,7 @@ function ai_image_analysis_claim_next_job(int $galleryId, string $workerId, stri
         $workerId,
         $claimTokenHash,
         $now,
-        $claimUntil
+        $claimUntil,
     );
     if ($jobId === null) {
         return null;
@@ -267,7 +305,11 @@ function ai_image_analysis_claim_next_job(int $galleryId, string $workerId, stri
         return null;
     }
 
-    return ai_image_analysis_job_payload($claimedJob, $claimToken, $leaseSeconds);
+    return ai_image_analysis_job_payload(
+        $claimedJob,
+        $claimToken,
+        $leaseSeconds,
+    );
 }
 
 /**
@@ -293,12 +335,19 @@ function ai_image_analysis_find_job(int $jobId): ?array
  * @param int $leaseSeconds Lease seconds value.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function ai_image_analysis_job_payload(array $job, string $claimToken, int $leaseSeconds): array
-{
+function ai_image_analysis_job_payload(
+    array $job,
+    string $claimToken,
+    int $leaseSeconds,
+): array {
     $image = find_image((int) ($job['image_id'] ?? 0));
-    $gallery = $image ? find_gallery((int) ($image['gallery_id'] ?? 0), true) : null;
+    $gallery = $image
+        ? find_gallery((int) ($image['gallery_id'] ?? 0), true)
+        : null;
     if (!$image || !$gallery) {
-        throw new RuntimeException('Claimed AI-analysis job references a missing image or gallery.');
+        throw new RuntimeException(
+            'Claimed AI-analysis job references a missing image or gallery.',
+        );
     }
 
     return [
@@ -333,9 +382,16 @@ function ai_image_analysis_job_payload(array $job, string $claimToken, int $leas
  * @param string $claimToken Claim token value.
  * @return array<string,mixed>|null Matching job row, or null when the lease is invalid.
  */
-function ai_image_analysis_validate_claim(int $galleryId, int $jobId, string $claimToken): ?array
-{
-    if (!ai_image_analysis_schema_ready() || $jobId <= 0 || trim($claimToken) === '') {
+function ai_image_analysis_validate_claim(
+    int $galleryId,
+    int $jobId,
+    string $claimToken,
+): ?array {
+    if (
+        !ai_image_analysis_schema_ready()
+        || $jobId <= 0
+        || trim($claimToken) === ''
+    ) {
         return null;
     }
 
@@ -343,7 +399,7 @@ function ai_image_analysis_validate_claim(int $galleryId, int $jobId, string $cl
         $galleryId,
         $jobId,
         ai_image_analysis_claim_token_hash($claimToken),
-        now_sql()
+        now_sql(),
     );
 }
 
@@ -355,16 +411,23 @@ function ai_image_analysis_validate_claim(int $galleryId, int $jobId, string $cl
  * @param string $claimToken Claim token value.
  * @return bool True when the condition matches.
  */
-function ai_image_analysis_claim_already_completed(int $galleryId, int $jobId, string $claimToken): bool
-{
-    if (!ai_image_analysis_schema_ready() || $jobId <= 0 || trim($claimToken) === '') {
+function ai_image_analysis_claim_already_completed(
+    int $galleryId,
+    int $jobId,
+    string $claimToken,
+): bool {
+    if (
+        !ai_image_analysis_schema_ready()
+        || $jobId <= 0
+        || trim($claimToken) === ''
+    ) {
         return false;
     }
 
     return ai_image_analysis_model_claim_completed(
         $galleryId,
         $jobId,
-        ai_image_analysis_claim_token_hash($claimToken)
+        ai_image_analysis_claim_token_hash($claimToken),
     );
 }
 
@@ -379,8 +442,14 @@ function ai_image_analysis_claim_already_completed(int $galleryId, int $jobId, s
  * @param string $message Message value.
  * @return bool True when the condition matches.
  */
-function ai_image_analysis_record_heartbeat(int $galleryId, int $jobId, string $claimToken, int $leaseSeconds, int $progressPercent, string $message): bool
-{
+function ai_image_analysis_record_heartbeat(
+    int $galleryId,
+    int $jobId,
+    string $claimToken,
+    int $leaseSeconds,
+    int $progressPercent,
+    string $message,
+): bool {
     if (!ai_image_analysis_write_schema_ready('ai_analysis_heartbeat')) {
         return false;
     }
@@ -400,7 +469,7 @@ function ai_image_analysis_record_heartbeat(int $galleryId, int $jobId, string $
         $now,
         ai_image_analysis_time_offset($leaseSeconds),
         $progressPercent,
-        $message
+        $message,
     );
 }
 
@@ -414,14 +483,23 @@ function ai_image_analysis_record_heartbeat(int $galleryId, int $jobId, string $
  * @param string $searchableText Searchable text value.
  * @return bool True when the condition matches.
  */
-function ai_image_analysis_complete_success(int $galleryId, int $jobId, string $claimToken, array $metadata, string $searchableText): bool
-{
+function ai_image_analysis_complete_success(
+    int $galleryId,
+    int $jobId,
+    string $claimToken,
+    array $metadata,
+    string $searchableText,
+): bool {
     if (!ai_image_analysis_write_schema_ready('ai_analysis_complete_success')) {
         return false;
     }
     $job = ai_image_analysis_validate_claim($galleryId, $jobId, $claimToken);
     if (!$job) {
-        return ai_image_analysis_claim_already_completed($galleryId, $jobId, $claimToken);
+        return ai_image_analysis_claim_already_completed(
+            $galleryId,
+            $jobId,
+            $claimToken,
+        );
     }
 
     $image = find_image((int) ($job['image_id'] ?? 0));
@@ -430,7 +508,10 @@ function ai_image_analysis_complete_success(int $galleryId, int $jobId, string $
     }
 
     $metadataJson = ai_image_analysis_encode_metadata($metadata);
-    $searchableText = ai_image_analysis_searchable_text($metadata, $searchableText);
+    $searchableText = ai_image_analysis_searchable_text(
+        $metadata,
+        $searchableText,
+    );
     $now = now_sql();
 
     ai_image_analysis_model_complete_success(
@@ -444,7 +525,7 @@ function ai_image_analysis_complete_success(int $galleryId, int $jobId, string $
         $image['modified_at'] ?? $job['source_modified_at'] ?? null,
         $metadataJson,
         $searchableText,
-        $now
+        $now,
     );
 
     return true;
@@ -459,8 +540,12 @@ function ai_image_analysis_complete_success(int $galleryId, int $jobId, string $
  * @param string $errorMessage Error message value.
  * @return bool True when the condition matches.
  */
-function ai_image_analysis_complete_failure(int $galleryId, int $jobId, string $claimToken, string $errorMessage): bool
-{
+function ai_image_analysis_complete_failure(
+    int $galleryId,
+    int $jobId,
+    string $claimToken,
+    string $errorMessage,
+): bool {
     if (!ai_image_analysis_write_schema_ready('ai_analysis_complete_failure')) {
         return false;
     }
@@ -480,7 +565,10 @@ function ai_image_analysis_complete_failure(int $galleryId, int $jobId, string $
         $finalFailure,
         $now,
         $finalFailure ? null : ai_image_analysis_time_offset($backoffSeconds),
-        ai_image_analysis_limit_text($errorMessage, AI_IMAGE_ANALYSIS_ERROR_LIMIT)
+        ai_image_analysis_limit_text(
+            $errorMessage,
+            AI_IMAGE_ANALYSIS_ERROR_LIMIT,
+        ),
     );
 }
 
@@ -492,15 +580,20 @@ function ai_image_analysis_complete_failure(int $galleryId, int $jobId, string $
  * @param string $claimToken Claim token value.
  * @return array{path:string,mime:string,filename:string,variant:string}|null Structured result data for the caller.
  */
-function ai_image_analysis_claimed_asset(int $galleryId, int $jobId, string $claimToken): ?array
-{
+function ai_image_analysis_claimed_asset(
+    int $galleryId,
+    int $jobId,
+    string $claimToken,
+): ?array {
     $job = ai_image_analysis_validate_claim($galleryId, $jobId, $claimToken);
     if (!$job) {
         return null;
     }
 
     $image = find_image((int) ($job['image_id'] ?? 0));
-    $gallery = $image ? find_gallery((int) ($image['gallery_id'] ?? 0), true) : null;
+    $gallery = $image
+        ? find_gallery((int) ($image['gallery_id'] ?? 0), true)
+        : null;
     if (!$image || !$gallery || (int) $gallery['id'] !== $galleryId) {
         return null;
     }
@@ -508,8 +601,15 @@ function ai_image_analysis_claimed_asset(int $galleryId, int $jobId, string $cla
     // Prefer an already-generated display master for DNG files, but do not
     // create derivatives here. The shared host must not do expensive analysis or
     // conversion work just because a worker asks for an asset.
-    $displayFile = function_exists('Gallery\\Services\\image_public_display_file') ? image_public_display_file($image, $gallery, false) : null;
-    if (is_array($displayFile) && is_file((string) ($displayFile['path'] ?? ''))) {
+    $displayFile = function_exists(
+        'Gallery\\Services\\image_public_display_file',
+    )
+        ? image_public_display_file($image, $gallery, false)
+        : null;
+    if (
+        is_array($displayFile)
+        && is_file((string) ($displayFile['path'] ?? ''))
+    ) {
         return $displayFile;
     }
 
@@ -523,12 +623,12 @@ function ai_image_analysis_claimed_asset(int $galleryId, int $jobId, string $cla
     return [
         'path' => $path,
         'mime' => $mime !== '' ? $mime : 'application/octet-stream',
-        'filename' => basename((string) ($image['filename'] ?? basename($path))),
+        'filename' => basename(
+            (string) ($image['filename'] ?? basename($path)),
+        ),
         'variant' => 'original',
     ];
 }
-
-
 
 /**
  * Remove stored AI results and queue rows for direct images in one gallery.
@@ -544,7 +644,10 @@ function ai_image_analysis_claimed_asset(int $galleryId, int $jobId, string $cla
  */
 function ai_image_analysis_force_gallery_reprocess(int $galleryId): array
 {
-    if ($galleryId <= 0 || !ai_image_analysis_write_schema_ready('ai_analysis_force_reprocess')) {
+    if (
+        $galleryId <= 0
+        || !ai_image_analysis_write_schema_ready('ai_analysis_force_reprocess')
+    ) {
         return [
             'galleries' => 0,
             'images' => 0,
@@ -587,7 +690,7 @@ function ai_image_analysis_force_gallery_reprocess(int $galleryId): array
                 (int) $branchGalleryId,
                 (string) $modelPair['model_name'],
                 (string) $modelPair['model_version'],
-                100
+                100,
             );
         }
     }
@@ -600,7 +703,6 @@ function ai_image_analysis_force_gallery_reprocess(int $galleryId): array
         'jobs_queued' => $jobsQueued,
     ];
 }
-
 
 /**
  * Return one gallery id plus all descendant gallery ids for AI regeneration.
@@ -615,7 +717,9 @@ function ai_image_analysis_force_gallery_reprocess(int $galleryId): array
 function ai_image_analysis_gallery_branch_ids(array $gallery): array
 {
     $galleryId = (int) ($gallery['id'] ?? 0);
-    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    $folderPath = normalize_relative_path(
+        (string) ($gallery['folder_path'] ?? ''),
+    );
     if ($galleryId <= 0 || $folderPath === '') {
         return $galleryId > 0 ? [$galleryId] : [];
     }
@@ -636,7 +740,10 @@ function ai_image_analysis_gallery_branch_ids(array $gallery): array
  */
 function ai_image_analysis_reprocess_model_pairs(array $imageIds): array
 {
-    $imageIds = array_values(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0));
+    $imageIds = array_values(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    ));
     if (!$imageIds) {
         return [
             ['model_name' => 'local-image-metadata', 'model_version' => '1'],
@@ -645,8 +752,14 @@ function ai_image_analysis_reprocess_model_pairs(array $imageIds): array
 
     $pairs = [];
     foreach (ai_image_analysis_model_reprocess_pairs($imageIds) as $row) {
-        $modelName = ai_image_analysis_normalize_label((string) ($row['model_name'] ?? ''), 'local-image-metadata');
-        $modelVersion = ai_image_analysis_normalize_label((string) ($row['model_version'] ?? ''), '1');
+        $modelName = ai_image_analysis_normalize_label(
+            (string) ($row['model_name'] ?? ''),
+            'local-image-metadata',
+        );
+        $modelVersion = ai_image_analysis_normalize_label(
+            (string) ($row['model_version'] ?? ''),
+            '1',
+        );
         $key = $modelName . "\0" . $modelVersion;
         $pairs[$key] = [
             'model_name' => $modelName,
@@ -719,7 +832,13 @@ function ai_image_analysis_metadata_pretty_json(array $metadataRow): string
     }
 
     try {
-        return json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        return json_encode(
+            $decoded,
+            JSON_PRETTY_PRINT
+                | JSON_UNESCAPED_SLASHES
+                | JSON_UNESCAPED_UNICODE
+                | JSON_THROW_ON_ERROR,
+        );
     } catch (JsonException) {
         return (string) ($metadataRow['metadata_json'] ?? '');
     }
@@ -734,9 +853,18 @@ function ai_image_analysis_metadata_pretty_json(array $metadataRow): string
 function ai_image_analysis_encode_metadata(array $metadata): string
 {
     try {
-        $json = json_encode($metadata, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $json = json_encode(
+            $metadata,
+            JSON_UNESCAPED_SLASHES
+                | JSON_UNESCAPED_UNICODE
+                | JSON_THROW_ON_ERROR,
+        );
     } catch (JsonException $exception) {
-        throw new RuntimeException('AI metadata could not be encoded as JSON.', 0, $exception);
+        throw new RuntimeException(
+            'AI metadata could not be encoded as JSON.',
+            0,
+            $exception,
+        );
     }
 
     return $json;
@@ -749,27 +877,42 @@ function ai_image_analysis_encode_metadata(array $metadata): string
  * @param string $explicitText Explicit text value.
  * @return string Text result for the caller.
  */
-function ai_image_analysis_searchable_text(array $metadata, string $explicitText): string
-{
+function ai_image_analysis_searchable_text(
+    array $metadata,
+    string $explicitText,
+): string {
     $parts = [];
     if (trim($explicitText) !== '') {
         $parts[] = $explicitText;
     }
     ai_image_analysis_collect_search_terms($metadata, $parts, 0);
 
-    $text = preg_replace('/\s+/', ' ', implode(' ', array_filter(array_map('strval', $parts)))) ?? '';
-    return ai_image_analysis_limit_text(trim($text), AI_IMAGE_ANALYSIS_SEARCH_TEXT_LIMIT);
+    $text =
+        preg_replace(
+            '/\s+/',
+            ' ',
+            implode(' ', array_filter(array_map('strval', $parts))),
+        ) ?? '';
+    return ai_image_analysis_limit_text(
+        trim($text),
+        AI_IMAGE_ANALYSIS_SEARCH_TEXT_LIMIT,
+    );
 }
 
 /**
  * Recursively collect simple scalar metadata values for search indexing.
  *
- * @param mixed $value Metadata value from the decoded worker payload.
+ * @phpstan-type SearchMetadataValue array<array-key,SearchMetadataValue>|string|int|float|bool|null
+ * @param SearchMetadataValue $value Decoded metadata value; nested arrays are traversed recursively.
  * @param array<int,string> $parts Collected text fragments.
  * @param int $depth Depth value.
+ * @return void Appends searchable scalar values recursively, stopping at depth five and excluding diagnostic metadata keys.
  */
-function ai_image_analysis_collect_search_terms(mixed $value, array &$parts, int $depth): void
-{
+function ai_image_analysis_collect_search_terms(
+    mixed $value,
+    array &$parts,
+    int $depth,
+): void {
     if ($depth > 5) {
         return;
     }
@@ -792,7 +935,10 @@ function ai_image_analysis_collect_search_terms(mixed $value, array &$parts, int
     }
 
     foreach ($value as $key => $child) {
-        if (is_string($key) && ai_image_analysis_is_diagnostic_metadata_key($key)) {
+        if (
+            is_string($key)
+            && ai_image_analysis_is_diagnostic_metadata_key($key)
+        ) {
             continue;
         }
         ai_image_analysis_collect_search_terms($child, $parts, $depth + 1);
@@ -838,10 +984,12 @@ function ai_image_analysis_is_diagnostic_metadata_key(string $key): bool
         return true;
     }
 
-    return str_contains($normalized, 'error')
-        || str_contains($normalized, 'exception')
-        || str_contains($normalized, 'diagnostic')
-        || str_contains($normalized, 'traceback');
+    return (
+        str_contains($normalized, 'error')
+            || str_contains($normalized, 'exception')
+            || str_contains($normalized, 'diagnostic')
+            || str_contains($normalized, 'traceback')
+    );
 }
 
 /**

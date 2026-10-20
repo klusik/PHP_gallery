@@ -24,11 +24,18 @@ require_once __DIR__ . '/policy_scan.php';
  * @param string $path Relative source identity, also used by disposable fixtures.
  * @return array<string,mixed> Added/changed/unchanged sites and value-free contract findings.
  */
-function changed_policy_source(string $before, string $after, string $path): array
-{
+function changed_policy_source(
+    string $before,
+    string $after,
+    string $path,
+): array {
     $old = policy_site_snapshots($before, $path);
     $current = policy_site_snapshots($after, $path);
-    return compare_declaration_snapshots($old['snapshots'], $current['snapshots'], __NAMESPACE__ . '\\policy_site_issues');
+    return compare_declaration_snapshots(
+        $old['snapshots'],
+        $current['snapshots'],
+        __NAMESPACE__ . '\\policy_site_issues',
+    );
 }
 
 /**
@@ -39,12 +46,32 @@ function changed_policy_source(string $before, string $after, string $path): arr
  * @param string $base Immutable Git comparison ref; defaults to the local HEAD.
  * @return array<string,mixed> Scoped status, counters, findings, explicit review gaps and safe blockers.
  */
-function changed_policy_report(string $root, array $paths = [], ?callable $git = null, string $base = 'HEAD'): array
-{
-    $report = ['status' => 'BLOCKED', 'summary' => ['base' => $base, 'source_files' => 0, 'runtime_files' => 0,
-        'changed_files' => 0, 'added' => 0, 'changed' => 0, 'unchanged' => 0, 'moved' => 0,
-        'doc_regressions' => 0, 'finding_count' => 0, 'sites_with_findings' => 0, 'coverage_review_count' => 0],
-        'findings' => [], 'blocked' => [], 'coverage_review' => [], 'coverage' => [
+function changed_policy_report(
+    string $root,
+    array $paths = [],
+    ?callable $git = null,
+    string $base = 'HEAD',
+): array {
+    $report = [
+        'status' => 'BLOCKED',
+        'summary' => [
+            'base' => $base,
+            'source_files' => 0,
+            'runtime_files' => 0,
+            'changed_files' => 0,
+            'added' => 0,
+            'changed' => 0,
+            'unchanged' => 0,
+            'moved' => 0,
+            'doc_regressions' => 0,
+            'finding_count' => 0,
+            'sites_with_findings' => 0,
+            'coverage_review_count' => 0,
+        ],
+        'findings' => [],
+        'blocked' => [],
+        'coverage_review' => [],
+        'coverage' => [
             'scope' => 'Only app/, public/ and root index.php PHP/JS/MJS/CJS policy sites. PASS means these recognized change rules passed, not complete policy compliance.',
             'rules' => 'Uppercase const/static-name define and JS const/let/var definitions; operationally named direct numeric assignments; direct sleep/usleep/set_time_limit and global setTimeout/setInterval numeric arguments.',
             'matching' => 'Read-only selected comparison base, scope identities and site-token fingerprints. Header/formatting and unrelated body edits preserve unchanged legacy sites. Exact moves are matched after same-path originals; copies remain additions.',
@@ -52,32 +79,65 @@ function changed_policy_report(string $root, array $paths = [], ?callable $git =
             'maps' => 'Configurable-map and object-property policy entries are counted for review, not enforced or silently declared compliant. configuration_defaults.php remains the tunable owner; policy_constants.php remains immutable.',
             'languages' => 'PHP/JS source only. Embedded scripts, CSS, Python, shell, PowerShell and other formats retain explicit review gaps. Private/generated/vendor content is never read.',
             'semantics' => 'Conservative JS lexer; dynamic definitions, numeric syntax outside recognized arithmetic, imported/shadowed timer names, resolved duplicate ownership and explanation truthfulness require review. No values, hashes, snippets or documentation text are emitted.',
-        ]];
+        ],
+    ];
     $activePath = '';
     try {
         $root = realpath($root) ?: $root;
         $inventory = inventory($root);
-        $selected = $paths === [] ? $inventory['files'] : array_intersect_key($inventory['files'], array_fill_keys($paths, true));
+        $selected = $paths === []
+            ? $inventory['files']
+            : array_intersect_key($inventory['files'], array_fill_keys(
+                $paths,
+                true,
+            ));
         if (array_diff($paths, array_keys($selected)) !== []) {
             throw new \RuntimeException('Selected source absent or excluded.');
         }
         $report['summary']['source_files'] = count($selected);
         $git ??= __NAMESPACE__ . '\\source_git_read';
-        if ($base === '' || preg_match('/^[A-Za-z0-9_][A-Za-z0-9_\/^.~{}@-]*$/D', $base) !== 1) {
+        if (
+            $base === ''
+            || preg_match('/^[A-Za-z0-9_][A-Za-z0-9_\/^.~{}@-]*$/D', $base)
+                !== 1
+        ) {
             throw new \RuntimeException('Unsupported Git comparison ref.');
         }
         $top = $git(['rev-parse', '--show-toplevel'], $root);
-        if ($top['status'] !== 0 || strcasecmp(str_replace('\\', '/', trim($top['stdout'])), str_replace('\\', '/', $root)) !== 0) {
+        if (
+            $top['status'] !== 0
+            || strcasecmp(
+                str_replace('\\', '/', trim($top['stdout'])),
+                str_replace('\\', '/', $root),
+            ) !== 0
+        ) {
             throw new \RuntimeException('Git root unavailable.');
         }
         $tree = $git(['ls-tree', '-r', '-z', $base], $root);
-        $delta = $git(['diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', $base, '--'], $root);
+        $delta = $git([
+            'diff',
+            '--no-ext-diff',
+            '--no-renames',
+            '--name-only',
+            '-z',
+            $base,
+            '--',
+        ], $root);
         if ($tree['status'] !== 0 || $delta['status'] !== 0) {
-            throw new \RuntimeException('Git comparison base/change list unavailable.');
+            throw new \RuntimeException(
+                'Git comparison base/change list unavailable.',
+            );
         }
         $tracked = [];
         foreach (explode("\0", $tree['stdout']) as $entry) {
-            if ($entry !== '' && preg_match('/^([0-9]+) blob [a-f0-9]+\t(.*)$/s', $entry, $match) === 1) {
+            if (
+                $entry !== ''
+                && preg_match(
+                    '/^([0-9]+) blob [a-f0-9]+\t(.*)$/s',
+                    $entry,
+                    $match,
+                ) === 1
+            ) {
                 $tracked[$match[2]] = $match[1];
             }
         }
@@ -87,62 +147,112 @@ function changed_policy_report(string $root, array $paths = [], ?callable $git =
         foreach ($selected as $path => $extension) {
             $activePath = $path;
             if (!policy_runtime_path($path)) {
-                $report['coverage_review'][] = ['path' => $path, 'reason' => 'outside_runtime_gate_scope'];
+                $report['coverage_review'][] = [
+                    'path' => $path,
+                    'reason' => 'outside_runtime_gate_scope',
+                ];
                 continue;
             }
             if (!in_array($extension, ['php', 'js', 'mjs', 'cjs'], true)) {
-                $report['coverage_review'][] = ['path' => $path, 'reason' => 'native_format_not_policy_parsed'];
+                $report['coverage_review'][] = [
+                    'path' => $path,
+                    'reason' => 'native_format_not_policy_parsed',
+                ];
                 continue;
             }
             $report['summary']['runtime_files']++;
             $after = file_get_contents($root . '/' . $path);
             if (!is_string($after)) {
-                throw new \RuntimeException('Current runtime source unreadable.');
+                throw new \RuntimeException(
+                    'Current runtime source unreadable.',
+                );
             }
             $before = '';
             if (isset($tracked[$path])) {
                 if (!in_array($tracked[$path], ['100644', '100755'], true)) {
-                    throw new \RuntimeException('Unsupported comparison-base source mode.');
+                    throw new \RuntimeException(
+                        'Unsupported comparison-base source mode.',
+                    );
                 }
                 if (!isset($changedPaths[$path])) {
                     $before = $after; // Git confirms no byte change; still consume original sites before copy matching.
                 } else {
-                    $blob = $git(['cat-file', 'blob', $base . ':' . $path], $root);
+                    $blob = $git(
+                        ['cat-file', 'blob', $base . ':' . $path],
+                        $root,
+                    );
                     if ($blob['status'] !== 0) {
-                        throw new \RuntimeException('Required comparison-base blob unreadable.');
+                        throw new \RuntimeException(
+                            'Required comparison-base blob unreadable.',
+                        );
                     }
                     $before = $blob['stdout'];
                 }
             }
             $report['summary']['changed_files'] += $before !== $after ? 1 : 0;
             $current = policy_site_snapshots($after, $path);
-            $old = $before === $after ? $current : policy_site_snapshots($before, $path);
+            $old = $before === $after
+                ? $current
+                : policy_site_snapshots($before, $path);
             array_push($oldSites, ...$old['snapshots']);
             array_push($currentSites, ...$current['snapshots']);
             foreach ($current['review'] as $reason => $count) {
-                $report['coverage_review'][] = ['path' => $path, 'reason' => $reason, 'count' => $count];
+                $report['coverage_review'][] = [
+                    'path' => $path,
+                    'reason' => $reason,
+                    'count' => $count,
+                ];
             }
             if ($extension === 'php' && str_contains($after, '<script')) {
-                $report['coverage_review'][] = ['path' => $path, 'reason' => 'embedded_javascript_requires_separate_review'];
+                $report['coverage_review'][] = [
+                    'path' => $path,
+                    'reason' => 'embedded_javascript_requires_separate_review',
+                ];
             }
         }
         if ($paths === []) {
             foreach ($tracked as $path => $mode) {
-                if (!isset($changedPaths[$path]) || isset($inventory['files'][$path])
-                    || !policy_runtime_path($path) || !source_head_declaration_allowed($path)
-                    || !in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['php', 'js', 'mjs', 'cjs'], true)
-                    || !in_array($mode, ['100644', '100755'], true)) {
+                if (
+                    !isset($changedPaths[$path])
+                    || isset($inventory['files'][$path])
+                    || !policy_runtime_path($path)
+                    || !source_head_declaration_allowed($path)
+                    || !in_array(
+                        strtolower(pathinfo($path, PATHINFO_EXTENSION)),
+                        ['php', 'js', 'mjs', 'cjs'],
+                        true,
+                    )
+                    || !in_array($mode, ['100644', '100755'], true)
+                ) {
                     continue;
                 }
                 $blob = $git(['cat-file', 'blob', $base . ':' . $path], $root);
                 if ($blob['status'] !== 0) {
-                    throw new \RuntimeException('Deleted comparison-base blob unreadable.');
+                    throw new \RuntimeException(
+                        'Deleted comparison-base blob unreadable.',
+                    );
                 }
-                array_push($oldSites, ...policy_site_snapshots($blob['stdout'], $path)['snapshots']);
+                array_push(
+                    $oldSites,
+                    ...policy_site_snapshots(
+                        $blob['stdout'],
+                        $path,
+                    )['snapshots'],
+                );
             }
         }
-        $result = compare_declaration_snapshots($oldSites, $currentSites, __NAMESPACE__ . '\\policy_site_issues');
-        foreach (['added', 'changed', 'unchanged', 'moved', 'doc_regressions'] as $counter) {
+        $result = compare_declaration_snapshots(
+            $oldSites,
+            $currentSites,
+            __NAMESPACE__ . '\\policy_site_issues',
+        );
+        foreach ([
+            'added',
+            'changed',
+            'unchanged',
+            'moved',
+            'doc_regressions',
+        ] as $counter) {
             $report['summary'][$counter] = $result[$counter];
         }
         $report['findings'] = $result['findings'];
@@ -150,13 +260,24 @@ function changed_policy_report(string $root, array $paths = [], ?callable $git =
         $report['summary']['finding_count'] = count($report['findings']);
         $sites = [];
         foreach ($report['findings'] as $finding) {
-            $sites[$finding['path'] . ':' . $finding['line'] . ':' . $finding['identity']] = true;
+            $sites[$finding['path']
+                . ':'
+                . $finding['line']
+                . ':'
+                . $finding['identity']] = true;
         }
         $report['summary']['sites_with_findings'] = count($sites);
-        $report['summary']['coverage_review_count'] = count($report['coverage_review']);
-        $report['status'] = $report['blocked'] !== [] ? 'BLOCKED' : ($report['findings'] !== [] ? 'FAIL' : 'PASS');
+        $report['summary']['coverage_review_count'] = count(
+            $report['coverage_review'],
+        );
+        $report['status'] = $report['blocked'] !== []
+            ? 'BLOCKED'
+            : ($report['findings'] !== [] ? 'FAIL' : 'PASS');
     } catch (\Throwable $error) {
-        $report['blocked'][] = ['path' => $activePath, 'reason' => 'Git comparison-base/runtime policy comparison could not complete; coverage unknown.'];
+        $report['blocked'][] = [
+            'path' => $activePath,
+            'reason' => 'Git comparison-base/runtime policy comparison could not complete; coverage unknown.',
+        ];
         $report['status'] = 'BLOCKED';
     }
     return $report;

@@ -53,14 +53,21 @@ require_once __DIR__ . '/../app/services/simbrief_descriptions.php';
 /**
  * Throw when a SimBrief model expectation fails.
  *
- * @param mixed $expected Expected value.
- * @param mixed $actual Actual value.
+ * @param bool|int|float|string|null|array<array-key,scalar|null|array<array-key,scalar|null|array<array-key,scalar|null>>> $expected Expected scalar or nested SimBrief model value.
+ * @param bool|int|float|string|null|array<array-key,scalar|null|array<array-key,scalar|null|array<array-key,scalar|null>>> $actual Actual scalar or nested SimBrief model value.
  * @param string $label Human-readable assertion label.
+ * @return void Throw when the actual value differs strictly from the expected value.
  */
-function assert_simbrief_description_same(mixed $expected, mixed $actual, string $label): void
-{
+function assert_simbrief_description_same(
+    mixed $expected,
+    mixed $actual,
+    string $label,
+): void {
     if ($expected !== $actual) {
-        throw new RuntimeException($label . ' expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        throw new RuntimeException(
+            $label . ' expected ' . var_export($expected, true) . ', got '
+                . var_export($actual, true),
+        );
     }
 }
 
@@ -70,27 +77,78 @@ function assert_simbrief_description_same(mixed $expected, mixed $actual, string
  * @param string $needle Required text.
  * @param string $haystack Generated description.
  * @param string $label Human-readable assertion label.
+ * @return void Throw when the generated description omits the required text.
  */
-function assert_simbrief_description_contains(string $needle, string $haystack, string $label): void
-{
+function assert_simbrief_description_contains(
+    string $needle,
+    string $haystack,
+    string $label,
+): void {
     if (!str_contains($haystack, $needle)) {
-        throw new RuntimeException($label . ' missing ' . var_export($needle, true) . ' in ' . var_export($haystack, true));
+        throw new RuntimeException(
+            $label . ' missing ' . var_export($needle, true) . ' in '
+                . var_export($haystack, true),
+        );
     }
 }
 
 $id = simbrief_description_identifier('123456', 'Ignored Name');
-assert_simbrief_description_same('userid', $id['kind'], 'Pilot ID identifier kind');
-assert_simbrief_description_same('123456', $id['value'], 'Pilot ID identifier value');
+assert_simbrief_description_same(
+    'userid',
+    $id['kind'],
+    'Pilot ID identifier kind',
+);
+assert_simbrief_description_same(
+    '123456',
+    $id['value'],
+    'Pilot ID identifier value',
+);
 
-assert_simbrief_description_same(['simbrief_identifier' => ' 123456 ', 'simbrief_pilot_id' => '123456', 'simbrief_pilot_name' => ''],
-    simbrief_description_expand_identifier_input(['simbrief_identifier' => ' 123456 ']), 'compact numeric Pilot ID');
-assert_simbrief_description_same(['simbrief_identifier' => 'Rudolf Pilot', 'remember_simbrief_identifier' => '1', 'simbrief_pilot_id' => '', 'simbrief_pilot_name' => 'Rudolf Pilot', 'remember_simbrief_pilot_id' => 1, 'remember_simbrief_pilot_name' => 1],
-    simbrief_description_expand_identifier_input(['simbrief_identifier' => 'Rudolf Pilot', 'remember_simbrief_identifier' => '1']), 'compact name and remembered default');
-assert_simbrief_description_same(['simbrief_pilot_id' => 'pilot-11'], simbrief_description_expand_identifier_input(['simbrief_pilot_id' => 'pilot-11']), 'legacy identifier input');
+assert_simbrief_description_same(
+    [
+        'simbrief_identifier' => ' 123456 ',
+        'simbrief_pilot_id' => '123456',
+        'simbrief_pilot_name' => '',
+    ],
+    simbrief_description_expand_identifier_input([
+        'simbrief_identifier' => ' 123456 ',
+    ]),
+    'compact numeric Pilot ID',
+);
+assert_simbrief_description_same(
+    [
+        'simbrief_identifier' => 'Rudolf Pilot',
+        'remember_simbrief_identifier' => '1',
+        'simbrief_pilot_id' => '',
+        'simbrief_pilot_name' => 'Rudolf Pilot',
+        'remember_simbrief_pilot_id' => 1,
+        'remember_simbrief_pilot_name' => 1,
+    ],
+    simbrief_description_expand_identifier_input([
+        'simbrief_identifier' => 'Rudolf Pilot',
+        'remember_simbrief_identifier' => '1',
+    ]),
+    'compact name and remembered default',
+);
+assert_simbrief_description_same(
+    ['simbrief_pilot_id' => 'pilot-11'],
+    simbrief_description_expand_identifier_input([
+        'simbrief_pilot_id' => 'pilot-11',
+    ]),
+    'legacy identifier input',
+);
 
 $name = simbrief_description_identifier('', 'Rudolf Pilot');
-assert_simbrief_description_same('username', $name['kind'], 'pilot name identifier kind');
-assert_simbrief_description_same('Rudolf Pilot', $name['value'], 'pilot name identifier value');
+assert_simbrief_description_same(
+    'username',
+    $name['kind'],
+    'pilot name identifier kind',
+);
+assert_simbrief_description_same(
+    'Rudolf Pilot',
+    $name['value'],
+    'pilot name identifier value',
+);
 
 $payload = [
     'origin' => [
@@ -137,38 +195,131 @@ $payload = [
 ];
 
 $details = simbrief_description_extract_details($payload);
-assert_simbrief_description_same('LKPR', $details['origin_code'], 'origin code');
-assert_simbrief_description_same('EDDM', $details['destination_code'], 'destination code');
-assert_simbrief_description_same('Airbus A321neo (A21N)', $details['aircraft'], 'aircraft label');
-assert_simbrief_description_same('FL350', $details['cruise'], 'cruise altitude');
-assert_simbrief_description_same('1 h 25 min', $details['ete'], 'en-route duration');
+assert_simbrief_description_same(
+    'LKPR',
+    $details['origin_code'],
+    'origin code',
+);
+assert_simbrief_description_same(
+    'EDDM',
+    $details['destination_code'],
+    'destination code',
+);
+assert_simbrief_description_same(
+    'Airbus A321neo (A21N)',
+    $details['aircraft'],
+    'aircraft label',
+);
+assert_simbrief_description_same(
+    'FL350',
+    $details['cruise'],
+    'cruise altitude',
+);
+assert_simbrief_description_same(
+    '1 h 25 min',
+    $details['ete'],
+    'en-route duration',
+);
 assert_simbrief_description_same('6 100 kg', $details['fuel'], 'fuel format');
 
 $description = simbrief_description_build_markdown($details);
-assert_simbrief_description_contains('**LKPR to EDDM**', $description, 'route heading');
+assert_simbrief_description_contains(
+    '**LKPR to EDDM**',
+    $description,
+    'route heading',
+);
 assert_simbrief_description_contains('`CY1004`', $description, 'flight number');
-assert_simbrief_description_contains('`LKPR DCT OKL DCT EDDM`', $description, 'filed route');
-assert_simbrief_description_contains('184 passengers', $description, 'passenger count');
+assert_simbrief_description_contains(
+    '`LKPR DCT OKL DCT EDDM`',
+    $description,
+    'filed route',
+);
+assert_simbrief_description_contains(
+    '184 passengers',
+    $description,
+    'passenger count',
+);
 
-$localizedDrafts = simbrief_description_localized_drafts($details, 'de', ['en', 'cs', 'de', 'sv']);
-assert_simbrief_description_same(['en', 'cs', 'de', 'sv'], array_keys($localizedDrafts['translations']), 'all maintained languages receive description drafts');
-assert_simbrief_description_same('de', $localizedDrafts['source_language'], 'selected source language is returned');
-assert_simbrief_description_same($description, $localizedDrafts['translations']['en'], 'English translation retains the existing generator output');
-assert_simbrief_description_contains('Letový plán uvádí', $localizedDrafts['translations']['cs'], 'Czech localized draft');
-assert_simbrief_description_contains('Der OFP nennt', $localizedDrafts['translations']['de'], 'German localized draft');
-assert_simbrief_description_contains('OFP:n anger', $localizedDrafts['translations']['sv'], 'Swedish localized draft');
-assert_simbrief_description_contains('**LKPR → EDDM** ist als Flug', $localizedDrafts['description'], 'selected German source uses localized draft in the main field');
+$localizedDrafts = simbrief_description_localized_drafts($details, 'de', [
+    'en',
+    'cs',
+    'de',
+    'sv',
+]);
+assert_simbrief_description_same(
+    ['en', 'cs', 'de', 'sv'],
+    array_keys($localizedDrafts['translations']),
+    'all maintained languages receive description drafts',
+);
+assert_simbrief_description_same(
+    'de',
+    $localizedDrafts['source_language'],
+    'selected source language is returned',
+);
+assert_simbrief_description_same(
+    $description,
+    $localizedDrafts['translations']['en'],
+    'English translation retains the existing generator output',
+);
+assert_simbrief_description_contains(
+    'Letový plán uvádí',
+    $localizedDrafts['translations']['cs'],
+    'Czech localized draft',
+);
+assert_simbrief_description_contains(
+    'Der OFP nennt',
+    $localizedDrafts['translations']['de'],
+    'German localized draft',
+);
+assert_simbrief_description_contains(
+    'OFP:n anger',
+    $localizedDrafts['translations']['sv'],
+    'Swedish localized draft',
+);
+assert_simbrief_description_contains(
+    '**LKPR → EDDM** ist als Flug',
+    $localizedDrafts['description'],
+    'selected German source uses localized draft in the main field',
+);
 $unlocalizedDraft = simbrief_description_localized_drafts($details, 'en', []);
-assert_simbrief_description_same([], $unlocalizedDraft['translations'], 'localization-disabled response keeps translation mapping empty');
-assert_simbrief_description_same($description, $unlocalizedDraft['description'], 'localization-disabled response keeps the English source description');
+assert_simbrief_description_same(
+    [],
+    $unlocalizedDraft['translations'],
+    'localization-disabled response keeps translation mapping empty',
+);
+assert_simbrief_description_same(
+    $description,
+    $unlocalizedDraft['description'],
+    'localization-disabled response keeps the English source description',
+);
 
-$simbriefController = file_get_contents(__DIR__ . '/../app/controllers/admin_simbrief.php');
-assert_simbrief_description_same(true, is_string($simbriefController) && str_contains($simbriefController, 'translation_public_language()'), 'unset source resolves through public language preference');
-assert_simbrief_description_same(false, is_string($simbriefController) && str_contains($simbriefController, 'translation_active_language()'), 'SimBrief source does not use the Admin language resolver');
-assert_simbrief_description_same(true, is_string($simbriefController)
-    && str_contains($simbriefController, "if (\$selectedSourceLanguage === 'en')")
-    && str_contains($simbriefController, "\$localizedDrafts['translations']['en'] = \$description;"), 'English source and translation preserve the legacy renderer output');
-
+$simbriefController = file_get_contents(__DIR__
+    . '/../app/controllers/admin_simbrief.php');
+assert_simbrief_description_same(
+    true,
+    is_string($simbriefController)
+        && str_contains($simbriefController, 'translation_public_language()'),
+    'unset source resolves through public language preference',
+);
+assert_simbrief_description_same(
+    false,
+    is_string($simbriefController)
+        && str_contains($simbriefController, 'translation_active_language()'),
+    'SimBrief source does not use the Admin language resolver',
+);
+assert_simbrief_description_same(
+    true,
+    is_string($simbriefController)
+        && str_contains(
+            $simbriefController,
+            "if (\$selectedSourceLanguage === 'en')",
+        )
+        && str_contains(
+            $simbriefController,
+            "\$localizedDrafts['translations']['en'] = \$description;",
+        ),
+    'English source and translation preserve the legacy renderer output',
+);
 
 $routePayload = $payload;
 $routePayload['origin']['pos_lat'] = '50.1008';
@@ -181,55 +332,158 @@ $routePayload['navlog'] = [
         ['ident' => 'BODAL', 'pos_lat' => '4916.8', 'pos_long' => '01217.4'],
     ],
 ];
-$routePoints = simbrief_description_extract_route_points($routePayload, $details);
-assert_simbrief_description_same(4, count($routePoints), 'SimBrief route point count');
-assert_simbrief_description_same('start', $routePoints[0]['role'], 'SimBrief route start role');
-assert_simbrief_description_same('via', $routePoints[1]['role'], 'SimBrief route via role');
-assert_simbrief_description_same('end', $routePoints[3]['role'], 'SimBrief route end role');
-assert_simbrief_description_same('LKPR DCT OKL DCT EDDM', simbrief_description_route_text_from_points($routePoints, $details), 'SimBrief route text preserves filed DCT tokens');
-assert_simbrief_description_same('LKPR OKL BODAL EDDM', simbrief_description_route_text_from_points($routePoints, array_replace($details, ['route' => ''])), 'coordinate-name fallback when the filed route is missing');
+$routePoints = simbrief_description_extract_route_points(
+    $routePayload,
+    $details,
+);
+assert_simbrief_description_same(
+    4,
+    count($routePoints),
+    'SimBrief route point count',
+);
+assert_simbrief_description_same(
+    'start',
+    $routePoints[0]['role'],
+    'SimBrief route start role',
+);
+assert_simbrief_description_same(
+    'via',
+    $routePoints[1]['role'],
+    'SimBrief route via role',
+);
+assert_simbrief_description_same(
+    'end',
+    $routePoints[3]['role'],
+    'SimBrief route end role',
+);
+assert_simbrief_description_same(
+    'LKPR DCT OKL DCT EDDM',
+    simbrief_description_route_text_from_points($routePoints, $details),
+    'SimBrief route text preserves filed DCT tokens',
+);
+assert_simbrief_description_same(
+    'LKPR OKL BODAL EDDM',
+    simbrief_description_route_text_from_points($routePoints, array_replace($details, [
+        'route' => '',
+    ])),
+    'coordinate-name fallback when the filed route is missing',
+);
 
 $filedRoute = 'DCT TREEL DCT UQQ DCT YZT DCT PR DCT';
 $completeRoute = 'CYVR ' . $filedRoute . ' CYPR';
-assert_simbrief_description_same($completeRoute, simbrief_description_complete_route_text($filedRoute, 'CYVR', 'CYPR'), 'missing route airports are added');
-foreach ([$completeRoute, 'CYVR ' . $filedRoute, $filedRoute . ' CYPR'] as $partialRoute) {
-    assert_simbrief_description_same($completeRoute, simbrief_description_complete_route_text($partialRoute, 'CYVR', 'CYPR'), 'existing endpoint airports are not duplicated');
+assert_simbrief_description_same(
+    $completeRoute,
+    simbrief_description_complete_route_text($filedRoute, 'CYVR', 'CYPR'),
+    'missing route airports are added',
+);
+foreach ([
+    $completeRoute,
+    'CYVR ' . $filedRoute,
+    $filedRoute . ' CYPR',
+] as $partialRoute) {
+    assert_simbrief_description_same(
+        $completeRoute,
+        simbrief_description_complete_route_text($partialRoute, 'CYVR', 'CYPR'),
+        'existing endpoint airports are not duplicated',
+    );
 }
-assert_simbrief_description_same('CYVR/08R DCT CYPR/13', simbrief_description_complete_route_text('CYVR/08R DCT CYPR/13', 'CYVR', 'CYPR'), 'airport runway tokens retain their endpoint identity');
+assert_simbrief_description_same(
+    'CYVR/08R DCT CYPR/13',
+    simbrief_description_complete_route_text(
+        'CYVR/08R DCT CYPR/13',
+        'CYVR',
+        'CYPR',
+    ),
+    'airport runway tokens retain their endpoint identity',
+);
 
 $endpointPayload = $payload;
 $endpointPayload['origin']['icao_code'] = 'CYVR';
 $endpointPayload['destination']['icao_code'] = 'CYPR';
 $endpointPayload['general']['route'] = $filedRoute;
 $endpointDetails = simbrief_description_extract_details($endpointPayload);
-assert_simbrief_description_same($completeRoute, $endpointDetails['route'], 'normalized flight details carry the complete route');
-foreach (simbrief_description_localized_drafts($endpointDetails, 'cs', ['en', 'cs', 'de', 'sv'])['translations'] as $language => $draft) {
-    assert_simbrief_description_contains('`' . $completeRoute . '`', $draft, $language . ' description includes the same complete route');
+assert_simbrief_description_same(
+    $completeRoute,
+    $endpointDetails['route'],
+    'normalized flight details carry the complete route',
+);
+foreach (simbrief_description_localized_drafts($endpointDetails, 'cs', [
+    'en',
+    'cs',
+    'de',
+    'sv',
+])['translations'] as $language => $draft) {
+    assert_simbrief_description_contains(
+        '`' . $completeRoute . '`',
+        $draft,
+        $language . ' description includes the same complete route',
+    );
 }
 require_once __DIR__ . '/../app/views/simbrief_descriptions.php';
-assert_simbrief_description_contains('`' . $completeRoute . '`', \Gallery\Views\view_simbrief_description_markdown($endpointDetails), 'production English view includes both airports');
+assert_simbrief_description_contains(
+    '`' . $completeRoute . '`',
+    \Gallery\Views\view_simbrief_description_markdown($endpointDetails),
+    'production English view includes both airports',
+);
 
 $endpointPayload['general']['route'] = str_repeat('DCT TREEL ', 40) . 'DCT';
 $longRouteDetails = simbrief_description_extract_details($endpointPayload);
-foreach (simbrief_description_localized_drafts($longRouteDetails, 'cs', ['en', 'cs', 'de', 'sv'])['translations'] as $language => $draft) {
-    assert_simbrief_description_contains('`' . $longRouteDetails['route'] . '`', $draft, $language . ' long route retains the destination');
+foreach (simbrief_description_localized_drafts($longRouteDetails, 'cs', [
+    'en',
+    'cs',
+    'de',
+    'sv',
+])['translations'] as $language => $draft) {
+    assert_simbrief_description_contains(
+        '`' . $longRouteDetails['route'] . '`',
+        $draft,
+        $language . ' long route retains the destination',
+    );
 }
-assert_simbrief_description_contains('`' . $longRouteDetails['route'] . '`', \Gallery\Views\view_simbrief_description_markdown($longRouteDetails), 'production English view retains the full long route');
-assert_simbrief_description_same(49.28, round((float) $routePoints[2]['latitude'], 2), 'compact latitude parsing');
-assert_simbrief_description_same(12.29, round((float) $routePoints[2]['longitude'], 2), 'compact longitude parsing');
-assert_simbrief_description_same(-2.72, round((float) simbrief_description_coordinate_value('W00243.2', 'lon'), 2), 'west compact longitude parsing');
-assert_simbrief_description_same('https://www.simbrief.com/ofp/flightplans/LKPREDDM_PDF_1779895813.84b5b08c.pdf', simbrief_description_pdf_url($payload), 'SimBrief PDF URL normalization');
+assert_simbrief_description_contains(
+    '`' . $longRouteDetails['route'] . '`',
+    \Gallery\Views\view_simbrief_description_markdown($longRouteDetails),
+    'production English view retains the full long route',
+);
+assert_simbrief_description_same(
+    49.28,
+    round((float) $routePoints[2]['latitude'], 2),
+    'compact latitude parsing',
+);
+assert_simbrief_description_same(
+    12.29,
+    round((float) $routePoints[2]['longitude'], 2),
+    'compact longitude parsing',
+);
+assert_simbrief_description_same(
+    -2.72,
+    round((float) simbrief_description_coordinate_value('W00243.2', 'lon'), 2),
+    'west compact longitude parsing',
+);
+assert_simbrief_description_same(
+    'https://www.simbrief.com/ofp/flightplans/LKPREDDM_PDF_1779895813.84b5b08c.pdf',
+    simbrief_description_pdf_url($payload),
+    'SimBrief PDF URL normalization',
+);
 
 $unsafeDetails = $details;
 $unsafeDetails['aircraft'] = 'A*321 <script>';
 $unsafeDescription = simbrief_description_build_markdown($unsafeDetails);
-assert_simbrief_description_contains('A\*321 script', $unsafeDescription, 'Markdown escaping');
+assert_simbrief_description_contains(
+    'A\*321 script',
+    $unsafeDescription,
+    'Markdown escaping',
+);
 
 try {
     simbrief_description_identifier('', '');
     throw new RuntimeException('missing identifier did not throw');
 } catch (RuntimeException $exception) {
-    assert_simbrief_description_contains('Enter either', $exception->getMessage(), 'missing identifier message');
+    assert_simbrief_description_contains(
+        'Enter either',
+        $exception->getMessage(),
+        'missing identifier message',
+    );
 }
 
 echo "SimBrief description model tests passed.\n";

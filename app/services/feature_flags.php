@@ -40,6 +40,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 const FEATURE_FLAG_SETTING_PREFIX = 'feature_flag.';
+
 const FEATURE_FLAG_SETTING_SUFFIX = '.enabled';
 
 // This module is split into focused part files under app/services/feature_flags/.

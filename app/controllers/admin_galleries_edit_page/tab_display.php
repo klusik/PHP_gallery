@@ -36,8 +36,8 @@
 declare(strict_types=1);
 
 namespace Gallery\Controllers;
-use function Gallery\Services\admin_thumbnail_bound_slider_state;
 
+use function Gallery\Services\admin_thumbnail_bound_slider_state;
 use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
 use function Gallery\Services\gallery_count_badge_override_label;
@@ -75,7 +75,6 @@ use function Gallery\Services\theme_breadcrumb_style;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_bounds_schema_ready;
 use function Gallery\Views\view_render_admin_gallery_display_tab;
-
 use function Gallery\Views\render_admin_thumbnail_bound_slider;
 
 /**
@@ -86,71 +85,145 @@ use function Gallery\Views\render_admin_thumbnail_bound_slider;
  * @param array<string, mixed> $capabilities Resolved editor capabilities.
  * @return void Render the Display tab.
  */
-function admin_edit_gallery_render_display_tab(array $gallery, string $activeEditTab, array $capabilities): void
-{
+function admin_edit_gallery_render_display_tab(
+    array $gallery,
+    string $activeEditTab,
+    array $capabilities,
+): void {
     $gps = ['state' => 'hidden'];
     if ($capabilities['gps_map_override_ready']) {
         // $currentGpsMapOverride stores the explicit override saved on this gallery, or null for inherited behavior.
-        $currentGpsMapOverride = gallery_gps_map_storage_value($gallery['gps_map_enabled'] ?? null);
+        $currentGpsMapOverride = gallery_gps_map_storage_value(
+            $gallery['gps_map_enabled'] ?? null,
+        );
         // $currentGpsMapMode stores the selected form value for the gallery override dropdown.
-        $currentGpsMapMode = $currentGpsMapOverride === null ? 'inherit' : ($currentGpsMapOverride === 1 ? 'enabled' : 'disabled');
+        $currentGpsMapMode = $currentGpsMapOverride === null
+            ? 'inherit'
+            : ($currentGpsMapOverride === 1 ? 'enabled' : 'disabled');
         // $effectiveGpsMapEnabled stores the state visitors currently receive after inheritance.
         $effectiveGpsMapEnabled = gallery_effective_gps_map_enabled($gallery);
         $gps = [
             'state' => 'override',
             'current_mode' => $currentGpsMapMode,
-            'title' => t('admin.gallery_editor.exif_gps_display_title', 'EXIF / GPS display'),
-            'label' => t('admin.gallery_editor.exif_gps_display_label', 'EXIF / GPS display mode'),
+            'title' => t(
+                'admin.gallery_editor.exif_gps_display_title',
+                'EXIF / GPS display',
+            ),
+            'label' => t(
+                'admin.gallery_editor.exif_gps_display_label',
+                'EXIF / GPS display mode',
+            ),
             'options' => [
-                ['value' => 'inherit', 'label' => t('admin.gallery_editor.exif_gps_inherit', 'Use global default')],
-                ['value' => 'enabled', 'label' => t('admin.gallery_editor.exif_gps_force_on', 'Force on')],
-                ['value' => 'disabled', 'label' => t('admin.gallery_editor.exif_gps_force_off', 'Force off')],
+                [
+                    'value' => 'inherit',
+                    'label' => t(
+                        'admin.gallery_editor.exif_gps_inherit',
+                        'Use global default',
+                    ),
+                ],
+                [
+                    'value' => 'enabled',
+                    'label' => t(
+                        'admin.gallery_editor.exif_gps_force_on',
+                        'Force on',
+                    ),
+                ],
+                [
+                    'value' => 'disabled',
+                    'label' => t(
+                        'admin.gallery_editor.exif_gps_force_off',
+                        'Force off',
+                    ),
+                ],
             ],
-            'help' => t('admin.gallery_editor.exif_gps_display_help', 'Default is on. Use Force off when this gallery branch should hide photo map pins, gallery EXIF maps, and GPS coordinates from public display. Current effective state: {state}.', [
-                'state' => $effectiveGpsMapEnabled ? t('admin.common.on', 'On') : t('admin.common.off', 'Off'),
-            ]),
+            'help' => t(
+                'admin.gallery_editor.exif_gps_display_help',
+                'Default is on. Use Force off when this gallery branch should hide photo map pins, gallery EXIF maps, and GPS coordinates from public display. Current effective state: {state}.',
+                [
+                    'state' => $effectiveGpsMapEnabled
+                        ? t('admin.common.on', 'On')
+                        : t('admin.common.off', 'Off'),
+                ],
+            ),
         ];
     } elseif ($capabilities['gps_map_ready']) {
         $gps = [
             'state' => 'legacy',
             'checked' => (int) ($gallery['gps_map_enabled'] ?? 0) === 1,
-            'legacy_label' => t('admin.gallery_editor.enable_gps_maps', 'Enable EXIF GPS maps for this gallery branch'),
-            'legacy_help' => t('admin.gallery_editor.enable_gps_maps_help', 'When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.'),
+            'legacy_label' => t(
+                'admin.gallery_editor.enable_gps_maps',
+                'Enable EXIF GPS maps for this gallery branch',
+            ),
+            'legacy_help' => t(
+                'admin.gallery_editor.enable_gps_maps_help',
+                'When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.',
+            ),
         ];
     }
 
     $descriptionLayout = [
         'ready' => gallery_description_layout_schema_ready(),
-        'migration_message' => t('admin.gallery_editor.description_layout_migration_hidden', 'Gallery description format overrides will be available after the database migration is applied.'),
+        'migration_message' => t(
+            'admin.gallery_editor.description_layout_migration_hidden',
+            'Gallery description format overrides will be available after the database migration is applied.',
+        ),
     ];
     if ($descriptionLayout['ready']) {
         // $currentDescriptionLayout stores the optional value saved directly on this gallery.
-        $currentDescriptionLayout = gallery_description_layout_storage_value($gallery['description_layout'] ?? null);
+        $currentDescriptionLayout = gallery_description_layout_storage_value(
+            $gallery['description_layout'] ?? null,
+        );
         // $effectiveDescriptionLayout stores the layout that visitors currently see for this gallery card.
-        $effectiveDescriptionLayout = gallery_effective_description_layout($gallery);
+        $effectiveDescriptionLayout =
+            gallery_effective_description_layout($gallery);
         $descriptionLayout += [
             'current' => $currentDescriptionLayout,
-            'title' => t('admin.gallery_editor.description_layout_title', 'Gallery description format'),
-            'label' => t('admin.gallery_editor.description_layout_label', 'Card layout'),
-            'inherit_label' => t('admin.gallery_editor.description_layout_inherit', 'Inherit from Theme'),
-            'options' => array_map(
-                static fn (string $value): array => ['value' => $value, 'label' => gallery_description_layout_label($value)],
-                gallery_description_layout_options()
+            'title' => t(
+                'admin.gallery_editor.description_layout_title',
+                'Gallery description format',
             ),
-            'help' => t('admin.gallery_editor.description_layout_help', 'Current source: {source}. Effective layout: {layout}. Vertical cards place the photo above the description; horizontal cards place it beside the description. Cards also show the title, date, tags, and a shortened Markdown-capable description.', [
-                'source' => gallery_description_layout_source_label($gallery),
-                'layout' => gallery_description_layout_label($effectiveDescriptionLayout),
-            ]),
+            'label' => t(
+                'admin.gallery_editor.description_layout_label',
+                'Card layout',
+            ),
+            'inherit_label' => t(
+                'admin.gallery_editor.description_layout_inherit',
+                'Inherit from Theme',
+            ),
+            'options' => array_map(
+                static fn(string $value): array => [
+                    'value' => $value,
+                    'label' => gallery_description_layout_label($value),
+                ],
+                gallery_description_layout_options(),
+            ),
+            'help' => t(
+                'admin.gallery_editor.description_layout_help',
+                'Current source: {source}. Effective layout: {layout}. Vertical cards place the photo above the description; horizontal cards place it beside the description. Cards also show the title, date, tags, and a shortened Markdown-capable description.',
+                [
+                    'source' =>
+                        gallery_description_layout_source_label($gallery),
+                    'layout' => gallery_description_layout_label(
+                        $effectiveDescriptionLayout,
+                    ),
+                ],
+            ),
         ];
     }
 
     $countBadge = [
         'ready' => gallery_count_badge_schema_ready(),
-        'migration_message' => t('admin.gallery_editor.count_badge_migration_hidden', 'Contained-picture badge overrides will be available after the database migration is applied.'),
+        'migration_message' => t(
+            'admin.gallery_editor.count_badge_migration_hidden',
+            'Contained-picture badge overrides will be available after the database migration is applied.',
+        ),
     ];
     if ($countBadge['ready']) {
         // $currentCountBadgeVisibility stores the optional value saved directly on this gallery.
-        $currentCountBadgeVisibility = gallery_count_badge_storage_value($gallery['count_badge_visibility'] ?? null) ?? 'inherit';
+        $currentCountBadgeVisibility =
+            gallery_count_badge_storage_value(
+                $gallery['count_badge_visibility'] ?? null,
+            ) ?? 'inherit';
         // Preserve the legacy explicit Show override as the new Both selection.
         if ($currentCountBadgeVisibility === 'show') {
             $currentCountBadgeVisibility = 'both';
@@ -158,58 +231,112 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
         $effectiveCountBadgeMode = gallery_effective_count_badge_mode($gallery);
         $countBadge += [
             'current' => $currentCountBadgeVisibility,
-            'title' => t('admin.gallery_editor.count_badge_title', 'Contained-picture badge'),
-            'label' => t('admin.gallery_editor.count_badge_label', 'Card badge'),
-            'options' => array_map(
-                static fn (string $value): array => ['value' => $value, 'label' => gallery_count_badge_override_label($value)],
-                gallery_count_badge_override_values()
+            'title' => t(
+                'admin.gallery_editor.count_badge_title',
+                'Contained-picture badge',
             ),
-            'help' => t('admin.gallery_editor.count_badge_help', 'Source: {source}. Effective mode: {state}. Visitors see only their public photo count; Show icons is configured in Theme.', [
-                'source' => gallery_count_badge_source_label($gallery),
-                'state' => gallery_count_badge_mode_label($effectiveCountBadgeMode),
-            ]),
+            'label' => t(
+                'admin.gallery_editor.count_badge_label',
+                'Card badge',
+            ),
+            'options' => array_map(
+                static fn(string $value): array => [
+                    'value' => $value,
+                    'label' => gallery_count_badge_override_label($value),
+                ],
+                gallery_count_badge_override_values(),
+            ),
+            'help' => t(
+                'admin.gallery_editor.count_badge_help',
+                'Source: {source}. Effective mode: {state}. Visitors see only their public photo count; Show icons is configured in Theme.',
+                [
+                    'source' => gallery_count_badge_source_label($gallery),
+                    'state' => gallery_count_badge_mode_label(
+                        $effectiveCountBadgeMode,
+                    ),
+                ],
+            ),
         ];
     }
 
     $lightbox = ['state' => 'hidden'];
     if ($capabilities['lightbox_mode_ready']) {
         // $currentLightboxBrowsingMode stores the optional value saved directly on this gallery.
-        $currentLightboxBrowsingMode = gallery_lightbox_browsing_mode_storage_value($gallery['lightbox_browsing_mode'] ?? null) ?? 'inherit';
+        $currentLightboxBrowsingMode =
+            gallery_lightbox_browsing_mode_storage_value(
+                $gallery['lightbox_browsing_mode'] ?? null,
+            ) ?? 'inherit';
         // $effectiveLightboxBrowsingMode stores the public mode before any form edits.
-        $effectiveLightboxBrowsingMode = gallery_effective_lightbox_browsing_mode($gallery);
+        $effectiveLightboxBrowsingMode =
+            gallery_effective_lightbox_browsing_mode($gallery);
         $lightbox = [
             'state' => 'ready',
             'current' => $currentLightboxBrowsingMode,
-            'title' => t('admin.gallery_editor.lightbox_mode_title', 'Lightbox browsing mode'),
-            'label' => t('admin.gallery_editor.lightbox_mode_label', 'Gallery lightbox'),
-            'inherit_label' => gallery_lightbox_browsing_mode_override_label('inherit'),
-            'options' => array_map(
-                static fn (string $value): array => ['value' => $value, 'label' => gallery_lightbox_browsing_mode_label($value)],
-                gallery_lightbox_browsing_mode_options()
+            'title' => t(
+                'admin.gallery_editor.lightbox_mode_title',
+                'Lightbox browsing mode',
             ),
-            'help' => t('admin.gallery_editor.lightbox_mode_help', 'Current source: {source}. Effective mode: {mode}. Single image keeps the classic viewer, picture strip adds nearby thumbnails below the photo, and 3D carousel places a small set of neighboring photos behind the active image. Fullscreen and slideshow keep their existing behavior.', [
-                'source' => gallery_lightbox_browsing_mode_source_label($gallery),
-                'mode' => gallery_lightbox_browsing_mode_label($effectiveLightboxBrowsingMode),
-            ]),
+            'label' => t(
+                'admin.gallery_editor.lightbox_mode_label',
+                'Gallery lightbox',
+            ),
+            'inherit_label' => gallery_lightbox_browsing_mode_override_label(
+                'inherit',
+            ),
+            'options' => array_map(
+                static fn(string $value): array => [
+                    'value' => $value,
+                    'label' => gallery_lightbox_browsing_mode_label($value),
+                ],
+                gallery_lightbox_browsing_mode_options(),
+            ),
+            'help' => t(
+                'admin.gallery_editor.lightbox_mode_help',
+                'Current source: {source}. Effective mode: {mode}. Single image keeps the classic viewer, picture strip adds nearby thumbnails below the photo, and 3D carousel places a small set of neighboring photos behind the active image. Fullscreen and slideshow keep their existing behavior.',
+                [
+                    'source' =>
+                        gallery_lightbox_browsing_mode_source_label($gallery),
+                    'mode' => gallery_lightbox_browsing_mode_label(
+                        $effectiveLightboxBrowsingMode,
+                    ),
+                ],
+            ),
         ];
     } elseif ($capabilities['lightbox_mode_feature_enabled']) {
         $lightbox = [
             'state' => 'migration',
-            'migration_message' => t('admin.gallery_editor.lightbox_mode_migration_hidden', 'Lightbox browsing-mode overrides will be available after the database migration is applied.'),
+            'migration_message' => t(
+                'admin.gallery_editor.lightbox_mode_migration_hidden',
+                'Lightbox browsing-mode overrides will be available after the database migration is applied.',
+            ),
         ];
     }
 
     $breadcrumbStyle = [
         'field_name' => 'gallery_breadcrumb_style',
-        'current' => gallery_breadcrumb_style_override((int) ($gallery['id'] ?? 0)),
-        'label' => t('admin.gallery_editor.breadcrumb_style_label', 'Breadcrumb style'),
-        'options' => breadcrumb_style_picker_options(true, theme_breadcrumb_style()),
-        'help' => t('admin.gallery_editor.breadcrumb_style_help', 'Choose the breadcrumb appearance for this gallery. Inherit from Theme uses the default style configured in Theme settings.'),
+        'current' => gallery_breadcrumb_style_override(
+            (int) ($gallery['id'] ?? 0),
+        ),
+        'label' => t(
+            'admin.gallery_editor.breadcrumb_style_label',
+            'Breadcrumb style',
+        ),
+        'options' => breadcrumb_style_picker_options(
+            true,
+            theme_breadcrumb_style(),
+        ),
+        'help' => t(
+            'admin.gallery_editor.breadcrumb_style_help',
+            'Choose the breadcrumb appearance for this gallery. Inherit from Theme uses the default style configured in Theme settings.',
+        ),
     ];
 
     $grid = [
         'ready' => gallery_grid_schema_ready(),
-        'migration_message' => t('admin.gallery_editor.grid_migration_hidden', 'Gallery display-grid overrides will be available after the database migration is applied.'),
+        'migration_message' => t(
+            'admin.gallery_editor.grid_migration_hidden',
+            'Gallery display-grid overrides will be available after the database migration is applied.',
+        ),
     ];
     if ($grid['ready']) {
         // $galleryUsesCustomGrid stores whether this gallery row has its own display-grid override.
@@ -222,79 +349,156 @@ function admin_edit_gallery_render_display_tab(array $gallery, string $activeEdi
             $inheritedGallery = $gallery;
             $inheritedGallery['grid_columns'] = null;
             $inheritedGallery['grid_rows'] = null;
-            $inheritedGridSettings = gallery_effective_grid_settings($inheritedGallery);
+            $inheritedGridSettings =
+                gallery_effective_grid_settings($inheritedGallery);
         }
         // $gridColumns/$gridRows preview the saved override or the inherited dimensions until edited.
-        $gridColumns = $galleryUsesCustomGrid ? gallery_grid_form_columns($gallery) : (int) ($inheritedGridSettings['columns'] ?? $effectiveGridSettings['columns']);
-        $gridRows = $galleryUsesCustomGrid ? gallery_grid_form_rows($gallery) : (int) ($inheritedGridSettings['rows'] ?? $effectiveGridSettings['rows']);
+        $gridColumns = $galleryUsesCustomGrid
+            ? gallery_grid_form_columns($gallery)
+            : (int) (
+                $inheritedGridSettings['columns']
+                ?? $effectiveGridSettings['columns']
+            );
+        $gridRows = $galleryUsesCustomGrid
+            ? gallery_grid_form_rows($gallery)
+            : (int) (
+                $inheritedGridSettings['rows'] ?? $effectiveGridSettings['rows']
+            );
         $grid += [
             'title' => t('admin.gallery_editor.display_grid', 'Display grid'),
             'override_enabled' => $galleryUsesCustomGrid,
-            'override_label' => t('admin.gallery_editor.use_custom_grid', 'Use a custom grid for this gallery'),
-            'default_status_label' => t('admin.gallery_editor.grid_default_status', 'Default settings'),
-            'custom_status_label' => t('admin.gallery_editor.grid_custom_status', 'Custom settings'),
-            'reset_default_label' => t('admin.gallery_editor.grid_reset_default', 'Reset to default'),
-            'default_columns' => (int) ($inheritedGridSettings['columns'] ?? $effectiveGridSettings['columns']),
-            'default_rows' => (int) ($inheritedGridSettings['rows'] ?? $effectiveGridSettings['rows']),
+            'override_label' => t(
+                'admin.gallery_editor.use_custom_grid',
+                'Use a custom grid for this gallery',
+            ),
+            'default_status_label' => t(
+                'admin.gallery_editor.grid_default_status',
+                'Default settings',
+            ),
+            'custom_status_label' => t(
+                'admin.gallery_editor.grid_custom_status',
+                'Custom settings',
+            ),
+            'reset_default_label' => t(
+                'admin.gallery_editor.grid_reset_default',
+                'Reset to default',
+            ),
+            'default_columns' => (int) (
+                $inheritedGridSettings['columns']
+                ?? $effectiveGridSettings['columns']
+            ),
+            'default_rows' => (int) (
+                $inheritedGridSettings['rows'] ?? $effectiveGridSettings['rows']
+            ),
             'columns_label' => t('admin.gallery_editor.columns', 'Columns'),
             'rows_label' => t('admin.gallery_editor.rows', 'Rows'),
             'columns' => $gridColumns,
             'rows' => $gridRows,
             'max_columns' => CMS_PAGINATION_MAX_COLUMNS,
             'max_rows' => CMS_PAGINATION_MAX_ROWS,
-            'use_for_subgalleries' => (int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1,
-            'recursive_label' => t('admin.gallery_editor.use_for_subgalleries', 'Use for subgalleries'),
-            'help' => t('admin.gallery_editor.grid_inheritance_help', 'If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.'),
+            'use_for_subgalleries' =>
+                (int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1,
+            'recursive_label' => t(
+                'admin.gallery_editor.use_for_subgalleries',
+                'Use for subgalleries',
+            ),
+            'help' => t(
+                'admin.gallery_editor.grid_inheritance_help',
+                'If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.',
+            ),
         ];
     }
 
     $thumbnailBounds = [
         'ready' => thumbnail_bounds_schema_ready(),
-        'migration_message' => t('admin.gallery_editor.thumbnail_bounds_migration_hidden', 'Thumbnail quality bounds will be available after the database migration is applied.'),
+        'migration_message' => t(
+            'admin.gallery_editor.thumbnail_bounds_migration_hidden',
+            'Thumbnail quality bounds will be available after the database migration is applied.',
+        ),
     ];
     if ($thumbnailBounds['ready']) {
         ob_start();
         $thumbnailBoundState = admin_thumbnail_bound_slider_state(
-            isset($gallery['thumbnail_min_size']) ? (int) $gallery['thumbnail_min_size'] : null,
-            isset($gallery['thumbnail_max_size']) ? (int) $gallery['thumbnail_max_size'] : null
+            isset($gallery['thumbnail_min_size'])
+                ? (int) $gallery['thumbnail_min_size']
+                : null,
+            isset($gallery['thumbnail_max_size'])
+                ? (int) $gallery['thumbnail_max_size']
+                : null,
         );
         render_admin_thumbnail_bound_slider(
             'gallery_thumbnail',
             $thumbnailBoundState['values'],
             $thumbnailBoundState['min_index'],
             $thumbnailBoundState['max_index'],
-            t('admin.gallery_editor.thumbnail_quality_bounds', 'Responsive thumbnail quality bounds'),
-            ''
+            t(
+                'admin.gallery_editor.thumbnail_quality_bounds',
+                'Responsive thumbnail quality bounds',
+            ),
+            '',
         );
         $thumbnailBounds += [
-            'title' => t('admin.gallery_editor.thumbnail_quality_bounds', 'Responsive thumbnail quality bounds'),
-            'help' => t('admin.gallery_editor.thumbnail_quality_bounds_help', 'Optional guardrails for automatic thumbnail selection. Leave both sides on Auto to keep the current behavior.'),
+            'title' => t(
+                'admin.gallery_editor.thumbnail_quality_bounds',
+                'Responsive thumbnail quality bounds',
+            ),
+            'help' => t(
+                'admin.gallery_editor.thumbnail_quality_bounds_help',
+                'Optional guardrails for automatic thumbnail selection. Leave both sides on Auto to keep the current behavior.',
+            ),
             'control_html' => (string) ob_get_clean(),
-            'recursive_label' => t('admin.gallery_editor.save_bounds_recursively', 'Save these bounds recursively to subgalleries'),
-            'recursive_help' => t('admin.gallery_editor.recursive_bounds_help', 'Recursive save is intentionally off by default. It copies the selected bounds to every descendant gallery, but does not change individual photo overrides.'),
+            'recursive_label' => t(
+                'admin.gallery_editor.save_bounds_recursively',
+                'Save these bounds recursively to subgalleries',
+            ),
+            'recursive_help' => t(
+                'admin.gallery_editor.recursive_bounds_help',
+                'Recursive save is intentionally off by default. It copies the selected bounds to every descendant gallery, but does not change individual photo overrides.',
+            ),
         ];
     }
 
     view_render_admin_gallery_display_tab([
         'active' => $activeEditTab === 'admin-edit-display',
-        'advanced_label' => t('admin.gallery_editor.advanced_display_settings', 'Advanced display settings'),
+        'advanced_label' => t(
+            'admin.gallery_editor.advanced_display_settings',
+            'Advanced display settings',
+        ),
         'picture_game' => [
             'visible' => (bool) $capabilities['picture_game_ready'],
             'checked' => (int) ($gallery['picture_game_enabled'] ?? 0) === 1,
-            'label' => t('admin.gallery_editor.enable_picture_game', 'Enable picture game for this gallery branch'),
+            'label' => t(
+                'admin.gallery_editor.enable_picture_game',
+                'Enable picture game for this gallery branch',
+            ),
         ],
         'voting' => [
             'visible' => (bool) $capabilities['voting_ready'],
             'checked' => (int) ($gallery['voting_enabled'] ?? 0) === 1,
-            'label' => t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery'),
-            'help' => t('admin.gallery_editor.image_voting_help', 'When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.'),
+            'label' => t(
+                'admin.gallery_editor.enable_image_voting',
+                'Enable image voting for this gallery',
+            ),
+            'help' => t(
+                'admin.gallery_editor.image_voting_help',
+                'When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.',
+            ),
         ],
         'filenames' => [
             'ready' => gallery_filename_display_schema_ready(),
             'checked' => (int) ($gallery['show_filenames'] ?? 0) === 1,
-            'label' => t('admin.gallery_editor.show_file_names', 'Show file names'),
-            'help' => t('admin.gallery_editor.show_file_names_help', 'Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.'),
-            'migration_message' => t('admin.gallery_editor.filename_display_migration_hidden', 'File name display control will be available after the database migration is applied.'),
+            'label' => t(
+                'admin.gallery_editor.show_file_names',
+                'Show file names',
+            ),
+            'help' => t(
+                'admin.gallery_editor.show_file_names_help',
+                'Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.',
+            ),
+            'migration_message' => t(
+                'admin.gallery_editor.filename_display_migration_hidden',
+                'File name display control will be available after the database migration is applied.',
+            ),
         ],
         'gps' => $gps,
         'description_layout' => $descriptionLayout,

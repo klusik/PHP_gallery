@@ -37,7 +37,6 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Models\thumbnail_metadata_model_public_manifest_rows;
-
 use Throwable;
 use function Gallery\Core\image_public_asset_url_with_version;
 use function Gallery\Core\image_public_media_url;
@@ -98,8 +97,10 @@ function public_gallery_media_manifest_configured_sizes(): array
  * @param array<int,int> $sizes Sizes keyed and valued by size.
  * @return array<int,array<string,array<int,array<string,mixed>>>> Rows keyed by image id, format, and size.
  */
-function public_gallery_media_manifest_renderable_rows(array $imagesById, array $sizes): array
-{
+function public_gallery_media_manifest_renderable_rows(
+    array $imagesById,
+    array $sizes,
+): array {
     if (!thumbnail_metadata_schema_ready() || !$imagesById || !$sizes) {
         return [];
     }
@@ -107,7 +108,11 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
     // $imageIds stores image ids for the batched metadata lookup.
     $imageIds = array_keys($imagesById);
     // $formats stores only generated formats allowed by the active compatibility policy.
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
     $formats = array_values(array_intersect(['jpg', 'webp'], $formats));
     if (!$formats) {
         return [];
@@ -115,21 +120,34 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
 
     try {
         // $metadataRows stores the measured database result for this manifest-only lookup.
-        $metadataRows = public_render_profile_db('media_manifest_query_metadata', static function () use ($imageIds, $sizes, $formats): array {
+        $metadataRows = public_render_profile_db('media_manifest_query_metadata', static function () use (
+            $imageIds,
+            $sizes,
+            $formats,
+        ): array {
             return thumbnail_metadata_model_public_manifest_rows(
                 $imageIds,
                 array_values($sizes),
                 $formats,
-                thumbnail_metadata_variant_column_exists('derivative_version')
+                thumbnail_metadata_variant_column_exists('derivative_version'),
             );
         });
     } catch (Throwable) {
         return [];
     }
 
-    public_render_profile_count('thumbnail_manifest_rows_loaded', count($metadataRows));
+    public_render_profile_count(
+        'thumbnail_manifest_rows_loaded',
+        count($metadataRows),
+    );
 
-    return public_render_profile_span('media_manifest_group_rows', static function () use ($imageIds, $imagesById, $sizes, $formats, $metadataRows): array {
+    return public_render_profile_span('media_manifest_group_rows', static function () use (
+        $imageIds,
+        $imagesById,
+        $sizes,
+        $formats,
+        $metadataRows,
+    ): array {
         // $rowsByImage stores renderable rows grouped in the shape expected by the bundle builder.
         $rowsByImage = [];
         foreach ($imageIds as $imageId) {
@@ -149,7 +167,10 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
             if (!isset($sizes[$size]) || !in_array($format, $formats, true)) {
                 continue;
             }
-            if (!thumbnail_metadata_row_is_renderable($row, $imagesById[$imageId])) {
+            if (!thumbnail_metadata_row_is_renderable(
+                $row,
+                $imagesById[$imageId],
+            )) {
                 continue;
             }
             $rowsByImage[$imageId][$format][$size] = $row;
@@ -159,11 +180,17 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
         foreach ($rowsByImage as $imageId => $rows) {
             ksort($rowsByImage[$imageId]['jpg']);
             ksort($rowsByImage[$imageId]['webp']);
-            if (($rowsByImage[$imageId]['jpg'] ?? []) || ($rowsByImage[$imageId]['webp'] ?? [])) {
+            if (
+                ($rowsByImage[$imageId]['jpg'] ?? [])
+                || ($rowsByImage[$imageId]['webp'] ?? [])
+            ) {
                 $imagesWithRows++;
             }
         }
-        public_render_profile_count('thumbnail_manifest_images_with_rows', $imagesWithRows);
+        public_render_profile_count(
+            'thumbnail_manifest_images_with_rows',
+            $imagesWithRows,
+        );
 
         return $rowsByImage;
     });
@@ -176,8 +203,10 @@ function public_gallery_media_manifest_renderable_rows(array $imagesById, array 
  * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Gallery route fields used to build the public image route.
  * @return string Public image route without visual-preview query markers.
  */
-function public_gallery_media_manifest_image_base_url(array $image, array $gallery): string
-{
+function public_gallery_media_manifest_image_base_url(
+    array $image,
+    array $gallery,
+): string {
     return rtrim(image_public_route_url($image, $gallery), '/');
 }
 
@@ -189,17 +218,25 @@ function public_gallery_media_manifest_image_base_url(array $image, array $galle
  * @param string $imageBaseUrl Undecorated public image route used to append the clean media suffix before preview markers.
  * @return string Versioned public media URL with preview markers after the complete route path.
  */
-function public_gallery_media_manifest_media_url(array $image, array $gallery, string $imageBaseUrl): string
-{
+function public_gallery_media_manifest_media_url(
+    array $image,
+    array $gallery,
+    string $imageBaseUrl,
+): string {
     if (public_path_schema_ready()) {
         if (url_rewrite_should_emit_clean_urls()) {
-            return image_public_asset_url_with_version($imageBaseUrl . '/media', $image);
+            return image_public_asset_url_with_version(
+                $imageBaseUrl . '/media',
+                $image,
+            );
         }
         return image_public_media_url($image, $gallery);
     }
 
     unset($gallery);
-    return image_public_asset_url_with_version(url_for('media', ['id' => (int) ($image['id'] ?? 0)]), $image);
+    return image_public_asset_url_with_version(url_for('media', [
+        'id' => (int) ($image['id'] ?? 0),
+    ]), $image);
 }
 
 /**
@@ -212,15 +249,28 @@ function public_gallery_media_manifest_media_url(array $image, array $gallery, s
  * @param string $format Thumbnail format.
  * @return string Versioned public thumbnail URL with preview markers after the complete route path.
  */
-function public_gallery_media_manifest_variant_url(array $image, array $gallery, string $imageBaseUrl, int $size, string $format): string
-{
+function public_gallery_media_manifest_variant_url(
+    array $image,
+    array $gallery,
+    string $imageBaseUrl,
+    int $size,
+    string $format,
+): string {
     // $format stores the normalized generated thumbnail format.
     $format = $format === 'webp' ? 'webp' : 'jpg';
     if (public_path_schema_ready()) {
         if (url_rewrite_should_emit_clean_urls()) {
-            return image_public_asset_url_with_version($imageBaseUrl . '/thumb-' . (int) $size . '.' . $format, $image);
+            return image_public_asset_url_with_version(
+                $imageBaseUrl . '/thumb-' . (int) $size . '.' . $format,
+                $image,
+            );
         }
-        return image_public_thumbnail_url($image, $gallery, (int) $size, $format);
+        return image_public_thumbnail_url(
+            $image,
+            $gallery,
+            (int) $size,
+            $format,
+        );
     }
 
     return thumbnail_serving_url($image, $gallery, (int) $size, $format);
@@ -229,21 +279,34 @@ function public_gallery_media_manifest_variant_url(array $image, array $gallery,
 /**
  * Build one thumbnail bundle shape from already loaded durable metadata rows.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
+ * @param array<string,mixed> $image Image row with source identity fields.
+ * @param array<string,mixed> $gallery Gallery row with public route fields.
  * @param array<int,int> $allSizes All configured thumbnail sizes.
  * @param array<string,array<int,array<string,mixed>>> $rows Renderable metadata rows for this image.
  * @param string $imageBaseUrl Public image base URL.
- * @return array<string,mixed> Bundle-compatible thumbnail data.
+ * @return array{image:array<string,mixed>,gallery:array<string,mixed>,media_url:string,sizes:list<int>,variants:array{jpg:array<int,string>,webp:array<int,string>},warmup_sizes:array<int,int>} Bundle-compatible thumbnail data.
  */
-function public_gallery_media_manifest_metadata_bundle(array $image, array $gallery, array $allSizes, array $rows, string $imageBaseUrl): array
-{
+function public_gallery_media_manifest_metadata_bundle(
+    array $image,
+    array $gallery,
+    array $allSizes,
+    array $rows,
+    string $imageBaseUrl,
+): array {
     // $formats stores the only generated formats allowed into this public bundle.
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
     // $boundedSizes stores sizes allowed by gallery-specific thumbnail bounds.
     $boundedSizes = array_values($allSizes);
     if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
-        $boundedSizes = thumbnail_bound_filter_sizes($boundedSizes, $image, $gallery);
+        $boundedSizes = thumbnail_bound_filter_sizes(
+            $boundedSizes,
+            $image,
+            $gallery,
+        );
     }
     $boundedSizesBySize = [];
     foreach ($boundedSizes as $size) {
@@ -259,7 +322,11 @@ function public_gallery_media_manifest_metadata_bundle(array $image, array $gall
     $bundle = [
         'image' => $image,
         'gallery' => $gallery,
-        'media_url' => public_gallery_media_manifest_media_url($image, $gallery, $imageBaseUrl),
+        'media_url' => public_gallery_media_manifest_media_url(
+            $image,
+            $gallery,
+            $imageBaseUrl,
+        ),
         'sizes' => array_values($boundedSizesBySize),
         'variants' => [
             'jpg' => [],
@@ -276,7 +343,13 @@ function public_gallery_media_manifest_metadata_bundle(array $image, array $gall
                 continue;
             }
             unset($row);
-            $bundle['variants'][$format][$size] = public_gallery_media_manifest_variant_url($image, $gallery, $imageBaseUrl, $size, $format);
+            $bundle['variants'][$format][$size] = public_gallery_media_manifest_variant_url(
+                $image,
+                $gallery,
+                $imageBaseUrl,
+                $size,
+                $format,
+            );
             public_render_profile_count('thumbnail_manifest_variant_hits');
             public_render_profile_count('thumbnail_manifest_url_builds');
         }
@@ -285,7 +358,10 @@ function public_gallery_media_manifest_metadata_bundle(array $image, array $gall
 
     foreach ($boundedSizesBySize as $size) {
         // $size stores one allowed derivative size that may need background repair.
-        if (!isset($bundle['variants']['jpg'][$size]) && !isset($bundle['variants']['webp'][$size])) {
+        if (
+            !isset($bundle['variants']['jpg'][$size])
+            && !isset($bundle['variants']['webp'][$size])
+        ) {
             $bundle['warmup_sizes'][$size] = $size;
         }
     }
@@ -296,22 +372,37 @@ function public_gallery_media_manifest_metadata_bundle(array $image, array $gall
 /**
  * Select one URL from an already prepared manifest bundle using cheap array reads.
  *
- * @param array $bundle Bundle-compatible thumbnail data.
+ * @param array{image:array<string,mixed>,gallery:array<string,mixed>,media_url:string,sizes:list<int>,variants:array{jpg:array<int,string>,webp:array<int,string>},warmup_sizes:array<int,int>} $bundle Prepared thumbnail data.
  * @param int $preferredSize Preferred thumbnail size.
  * @param string $preferredFormat Preferred thumbnail format.
  * @param ?array<int,int> $candidateSizes Candidate sizes already sorted for this bundle.
- * @return string Text result for the caller.
+ * @return string Selected thumbnail URL, falling back to media when no variant exists.
  */
-function public_gallery_media_manifest_select_url(array $bundle, int $preferredSize, string $preferredFormat = 'webp', ?array $candidateSizes = null): string
-{
+function public_gallery_media_manifest_select_url(
+    array $bundle,
+    int $preferredSize,
+    string $preferredFormat = 'webp',
+    ?array $candidateSizes = null,
+): string {
     public_render_profile_count('thumbnail_manifest_selection_attempts');
     // $preferredFormat stores the normalized caller preference used for URL selection.
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
-    $preferredFormat = in_array($preferredFormat, $formats, true) ? $preferredFormat : (string) ($formats[0] ?? 'webp');
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
+    $preferredFormat = in_array($preferredFormat, $formats, true)
+        ? $preferredFormat
+        : (string) ($formats[0] ?? 'webp');
     // $effectiveSize stores the preferred size after optional gallery bounds.
-    $effectiveSize = thumbnail_bundle_effective_size($bundle, (int) $preferredSize);
+    $effectiveSize = thumbnail_bundle_effective_size(
+        $bundle,
+        (int) $preferredSize,
+    );
     // $variants stores prepared generated URLs indexed by format and size.
-    $variants = is_array($bundle['variants'] ?? null) ? $bundle['variants'] : ['jpg' => [], 'webp' => []];
+    $variants = is_array($bundle['variants'] ?? null)
+        ? $bundle['variants']
+        : ['jpg' => [], 'webp' => []];
 
     if (isset($variants[$preferredFormat][$effectiveSize])) {
         public_render_profile_count('thumbnail_manifest_exact_selections');
@@ -327,17 +418,24 @@ function public_gallery_media_manifest_select_url(array $bundle, int $preferredS
         }
     }
 
-    usort($candidateSizes, static function (int $left, int $right) use ($effectiveSize): int {
+    usort($candidateSizes, static function (int $left, int $right) use (
+        $effectiveSize,
+    ): int {
         return abs($left - $effectiveSize) <=> abs($right - $effectiveSize);
     });
 
     // $formats stores the same fallback order used by the generic bundle resolver.
-    $formats = array_values(array_unique(array_merge([$preferredFormat], $formats)));
+    $formats = array_values(array_unique(array_merge(
+        [$preferredFormat],
+        $formats,
+    )));
     foreach ($candidateSizes as $size) {
         foreach ($formats as $format) {
             if (isset($variants[$format][$size])) {
                 public_render_profile_count('thumbnail_bundle_fallback_hits');
-                public_render_profile_count('thumbnail_manifest_fallback_selections');
+                public_render_profile_count(
+                    'thumbnail_manifest_fallback_selections',
+                );
                 return (string) $variants[$format][$size];
             }
         }
@@ -345,22 +443,33 @@ function public_gallery_media_manifest_select_url(array $bundle, int $preferredS
 
     public_render_profile_count('thumbnail_bundle_media_fallbacks');
     public_render_profile_count('thumbnail_manifest_media_fallback_selections');
-    return (string) ($bundle['media_url'] ?? image_public_asset_url_with_version(url_for('media', ['id' => (int) (($bundle['image']['id'] ?? 0))]), (array) ($bundle['image'] ?? [])));
+    return (string) (
+        $bundle['media_url'] ?? image_public_asset_url_with_version(
+            url_for('media', ['id' => (int) ($bundle['image']['id'] ?? 0)]),
+            (array) ($bundle['image'] ?? []),
+        )
+    );
 }
 
 /**
  * Return candidate sizes present in a prepared manifest bundle.
  *
- * @param array $bundle Bundle-compatible thumbnail data.
- * @return array<int,int> Candidate sizes keyed and valued by size.
+ * @param array{variants?:array<string,array<int,string>>} $bundle Prepared bundle variant URLs.
+ * @return array<int,int> Available generated derivative sizes keyed and valued by size.
  */
 function public_gallery_media_manifest_candidate_sizes(array $bundle): array
 {
     // $candidateSizes stores generated derivative sizes available for this image.
     $candidateSizes = [];
-    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['webp'];
+    $formats = function_exists(
+        'Gallery\\Services\\thumbnail_policy_requested_formats',
+    )
+        ? thumbnail_policy_requested_formats()
+        : ['webp'];
     foreach ($formats as $format) {
-        foreach (array_keys((array) ($bundle['variants'][$format] ?? [])) as $size) {
+        foreach (array_keys(
+            (array) ($bundle['variants'][$format] ?? []),
+        ) as $size) {
             // $size stores one generated derivative size.
             $size = (int) $size;
             if ($size > 0) {
@@ -378,10 +487,19 @@ function public_gallery_media_manifest_candidate_sizes(array $bundle): array
  * @param string $purpose Purpose label.
  * @param int $size Thumbnail size.
  * @param string $format Thumbnail format.
+ * @return void
  */
-function public_gallery_media_manifest_record_purpose(string $purpose, int $size, string $format): void
-{
-    public_render_profile_record_thumbnail_purpose($purpose, (int) $size, $format === 'jpg' ? 'jpg' : 'webp', 'bundle');
+function public_gallery_media_manifest_record_purpose(
+    string $purpose,
+    int $size,
+    string $format,
+): void {
+    public_render_profile_record_thumbnail_purpose(
+        $purpose,
+        (int) $size,
+        $format === 'jpg' ? 'jpg' : 'webp',
+        'bundle',
+    );
 }
 
 /**
@@ -392,63 +510,136 @@ function public_gallery_media_manifest_record_purpose(string $purpose, int $size
  * with a narrow batched query, then each visible image receives a compatible
  * bundle value that existing thumbnail HTML helpers can consume unchanged.
  *
- * @param array $images Visible image rows.
- * @param array $gallery Current gallery row.
- * @return array<int,array<string,mixed>> Manifest rows keyed by image id.
+ * @param list<array{id:int|string,filename:string,title?:string,visibility?:string,sort_order?:int|string,exif_taken_at?:string|null}> $images Visible gallery image rows keyed by the fields consumed by media URL and thumbnail helpers; extra model fields are preserved.
+ * @param array{id:int|string,title?:string,folder_path?:string,url_path?:string,slug?:string,visibility?:string} $gallery Current gallery row supplying gallery identity and path/URL context; extra model fields are preserved.
+ * @return array<int,array{image:array<string,mixed>,gallery:array<string,mixed>,media_url:string,sizes:list<int>,variants:array{jpg:array<int,string>,webp:array<int,string>},warmup_sizes:array<int,int>}> Manifest bundles keyed by image ID.
  */
 function public_gallery_media_manifest(array $images, array $gallery): array
 {
-    return public_render_profile_span('public_gallery_media_manifest', static function () use ($images, $gallery): array {
+    return public_render_profile_span('public_gallery_media_manifest', static function () use (
+        $images,
+        $gallery,
+    ): array {
         // $imagesById stores unique visible image rows for this gallery render.
-        $imagesById = public_render_profile_span('media_manifest_collect_images', static fn (): array => public_gallery_media_manifest_images_by_id($images));
+        $imagesById = public_render_profile_span('media_manifest_collect_images', static fn(): array => public_gallery_media_manifest_images_by_id(
+            $images,
+        ));
         if (!$imagesById) {
             return [];
         }
 
-        public_render_profile_count('thumbnail_manifest_images', count($imagesById));
+        public_render_profile_count(
+            'thumbnail_manifest_images',
+            count($imagesById),
+        );
 
         // $allSizes stores every configured derivative size so one preload can serve later per-image selection.
-        $allSizes = public_render_profile_span('media_manifest_configured_sizes', static fn (): array => public_gallery_media_manifest_configured_sizes());
+        $allSizes = public_render_profile_span('media_manifest_configured_sizes', static fn(): array => public_gallery_media_manifest_configured_sizes());
 
         // $metadataReady stores whether DB-backed metadata can build bundles without per-card discovery.
-        $metadataReady = public_render_profile_span('media_manifest_schema_check', static fn (): bool => thumbnail_metadata_schema_ready());
+        $metadataReady = public_render_profile_span('media_manifest_schema_check', static fn(): bool => thumbnail_metadata_schema_ready());
         // $rowsByImage stores all renderable variant rows discovered for this request in one narrow query.
-        $rowsByImage = $metadataReady ? public_gallery_media_manifest_renderable_rows($imagesById, $allSizes) : [];
+        $rowsByImage = $metadataReady
+            ? public_gallery_media_manifest_renderable_rows(
+                $imagesById,
+                $allSizes,
+            )
+            : [];
         // $previewFormat stores the configured browser thumbnail format used by card preview URLs.
         $previewFormat = public_render_profile_span('media_manifest_preview_format', static function (): string {
-            $format = function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
+            $format = function_exists(
+                'Gallery\\Services\\thumbnail_preferred_browser_format',
+            )
+                ? thumbnail_preferred_browser_format()
+                : 'jpg';
             return $format === 'webp' ? 'webp' : 'jpg';
         });
 
-        return public_render_profile_span('media_manifest_build_entries', static function () use ($imagesById, $gallery, $allSizes, $metadataReady, $rowsByImage, $previewFormat): array {
+        return public_render_profile_span('media_manifest_build_entries', static function () use (
+            $imagesById,
+            $gallery,
+            $allSizes,
+            $metadataReady,
+            $rowsByImage,
+            $previewFormat,
+        ): array {
             // $manifest stores prepared media data keyed by image id.
             $manifest = [];
             foreach ($imagesById as $imageId => $image) {
                 // $imageBaseUrl stores the public image route once so clean thumbnail URLs can be composed cheaply when rewriting is active.
-                $imageBaseUrl = public_gallery_media_manifest_image_base_url($image, $gallery);
+                $imageBaseUrl = public_gallery_media_manifest_image_base_url(
+                    $image,
+                    $gallery,
+                );
                 // $bundle stores thumbnail variants for this image without invoking thumbnail_bundle() when metadata is available.
                 $bundle = $metadataReady
-                    ? public_render_profile_span('media_manifest_build_bundle', static fn (): array => public_gallery_media_manifest_metadata_bundle($image, $gallery, $allSizes, $rowsByImage[(int) $imageId] ?? ['jpg' => [], 'webp' => []], $imageBaseUrl))
-                    : public_render_profile_with_thumbnail_purpose('media manifest legacy bundle fallback', static fn (): array => thumbnail_bundle($image));
+                    ? public_render_profile_span('media_manifest_build_bundle', static fn(): array => public_gallery_media_manifest_metadata_bundle(
+                        $image,
+                        $gallery,
+                        $allSizes,
+                        $rowsByImage[(int) $imageId] ?? [
+                            'jpg' => [],
+                            'webp' => [],
+                        ],
+                        $imageBaseUrl,
+                    ))
+                    : public_render_profile_with_thumbnail_purpose('media manifest legacy bundle fallback', static fn(): array => thumbnail_bundle(
+                        $image,
+                    ));
 
                 if ($metadataReady) {
-                    public_render_profile_count('thumbnail_manifest_metadata_bundles');
+                    public_render_profile_count(
+                        'thumbnail_manifest_metadata_bundles',
+                    );
                 } else {
-                    public_render_profile_count('thumbnail_manifest_legacy_bundles');
+                    public_render_profile_count(
+                        'thumbnail_manifest_legacy_bundles',
+                    );
                 }
 
                 // $candidateSizes stores generated derivative sizes once for all URL choices below.
-                $candidateSizes = public_gallery_media_manifest_candidate_sizes($bundle);
-                public_render_profile_count('thumbnail_manifest_candidate_sizes', count($candidateSizes));
+                $candidateSizes =
+                    public_gallery_media_manifest_candidate_sizes($bundle);
+                public_render_profile_count(
+                    'thumbnail_manifest_candidate_sizes',
+                    count($candidateSizes),
+                );
                 // $previewUrl stores the lightbox preview URL used by cards, picture manager sharing, and JS metadata.
-                $previewUrl = public_gallery_media_manifest_select_url($bundle, 1600, $previewFormat, $candidateSizes);
-                public_gallery_media_manifest_record_purpose('media manifest lightbox preview 1600', 1600, $previewFormat);
+                $previewUrl = public_gallery_media_manifest_select_url(
+                    $bundle,
+                    1600,
+                    $previewFormat,
+                    $candidateSizes,
+                );
+                public_gallery_media_manifest_record_purpose(
+                    'media manifest lightbox preview 1600',
+                    1600,
+                    $previewFormat,
+                );
                 // $seoContentUrl stores the crawler content URL selected from the prepared bundle.
-                $seoContentUrl = public_gallery_media_manifest_select_url($bundle, 1200, 'webp', $candidateSizes);
-                public_gallery_media_manifest_record_purpose('media manifest seo content 1200', 1200, 'webp');
+                $seoContentUrl = public_gallery_media_manifest_select_url(
+                    $bundle,
+                    1200,
+                    'webp',
+                    $candidateSizes,
+                );
+                public_gallery_media_manifest_record_purpose(
+                    'media manifest seo content 1200',
+                    1200,
+                    'webp',
+                );
                 // $seoThumbnailUrl stores the crawler thumbnail URL selected from the prepared bundle.
-                $seoThumbnailUrl = public_gallery_media_manifest_select_url($bundle, 800, 'webp', $candidateSizes);
-                public_gallery_media_manifest_record_purpose('media manifest seo thumbnail 800', 800, 'webp');
+                $seoThumbnailUrl = public_gallery_media_manifest_select_url(
+                    $bundle,
+                    800,
+                    'webp',
+                    $candidateSizes,
+                );
+                public_gallery_media_manifest_record_purpose(
+                    'media manifest seo thumbnail 800',
+                    800,
+                    'webp',
+                );
 
                 $manifest[(int) $imageId] = [
                     'image' => $image,

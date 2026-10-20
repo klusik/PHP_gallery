@@ -44,13 +44,30 @@ function cooperative_proposal_body(array $body): array
 {
     $keys = array_keys($body);
     sort($keys);
-    if ($keys !== ['audience', 'base_revision', 'coordinator_id', 'expires_at', 'group_id', 'issued_at', 'members', 'proposal_id', 'protocol']
-        || $body['protocol'] !== COOPERATIVE_PROTOCOL_VERSION || $body['audience'] !== 'public'
-        || !is_int($body['base_revision']) || $body['base_revision'] < 0
-        || !is_int($body['issued_at']) || !is_int($body['expires_at']) || $body['issued_at'] < 1
+    if (
+        $keys !== [
+            'audience',
+            'base_revision',
+            'coordinator_id',
+            'expires_at',
+            'group_id',
+            'issued_at',
+            'members',
+            'proposal_id',
+            'protocol',
+        ]
+        || $body['protocol'] !== COOPERATIVE_PROTOCOL_VERSION
+        || $body['audience'] !== 'public'
+        || !is_int($body['base_revision'])
+        || $body['base_revision'] < 0
+        || !is_int($body['issued_at'])
+        || !is_int($body['expires_at'])
+        || $body['issued_at'] < 1
         || $body['expires_at'] <= $body['issued_at']
-        || $body['expires_at'] - $body['issued_at'] > COOPERATIVE_MAX_PROPOSAL_LIFETIME
-        || !is_array($body['members'])) {
+        || ($body['expires_at'] - $body['issued_at'])
+            > COOPERATIVE_MAX_PROPOSAL_LIFETIME
+        || !is_array($body['members'])
+    ) {
         throw new CooperativeException('invalid_proposal');
     }
     foreach (['proposal_id', 'group_id', 'coordinator_id'] as $key) {
@@ -79,7 +96,10 @@ function cooperative_proposal_body(array $body): array
  */
 function cooperative_proposal_digest(array $body): string
 {
-    return hash('sha256', json_encode(cooperative_proposal_body($body), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+    return hash('sha256', json_encode(
+        cooperative_proposal_body($body),
+        JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+    ));
 }
 
 /**
@@ -94,23 +114,43 @@ function cooperative_proposal_digest(array $body): string
  * @param int $lifetime Proposal validity in seconds, bounded by the protocol maximum.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_group_propose(array $group, string $actor, array $members, int $now, int $lifetime = 86400): array
-{
+function cooperative_group_propose(
+    array $group,
+    string $actor,
+    array $members,
+    int $now,
+    int $lifetime = 86400,
+): array {
     cooperative_id_validate($actor);
     if ($group['pending'] !== null) {
         throw new CooperativeException('proposal_unavailable');
     }
     $existingIds = array_column($group['members'], 'instance_id');
-    if (($group['revision'] === 0 && $actor !== $group['coordinator_id'])
-        || ($group['revision'] > 0 && !in_array($actor, $existingIds, true))) {
+    if (
+        (
+            $group['revision'] === 0
+            && $actor !== $group['coordinator_id']
+        )
+        || (
+            $group['revision'] > 0
+            && !in_array($actor, $existingIds, true)
+        )
+    ) {
         throw new CooperativeException('actor_not_member');
     }
     $members = cooperative_members_normalize($members);
-    if (!in_array($group['coordinator_id'], array_column($members, 'instance_id'), true)) {
+    if (!in_array(
+        $group['coordinator_id'],
+        array_column($members, 'instance_id'),
+        true,
+    )) {
         throw new CooperativeException('coordinator_not_member');
     }
     if ($group['revision'] > 0) {
-        if ($members !== $group['members'] && count($members) !== count($group['members']) + 1) {
+        if (
+            $members !== $group['members']
+            && count($members) !== (count($group['members']) + 1)
+        ) {
             throw new CooperativeException('expansion_required');
         }
         $byId = array_column($members, null, 'instance_id');
@@ -134,7 +174,11 @@ function cooperative_group_propose(array $group, string $actor, array $members, 
         'expires_at' => $now + $lifetime,
         'members' => $members,
     ]);
-    $group['pending'] = ['body' => $body, 'digest' => cooperative_proposal_digest($body), 'approvals' => []];
+    $group['pending'] = [
+        'body' => $body,
+        'digest' => cooperative_proposal_digest($body),
+        'approvals' => [],
+    ];
     return $group;
 }
 
@@ -145,17 +189,26 @@ function cooperative_group_propose(array $group, string $actor, array $members, 
  * @param int $now Explicit current Unix timestamp in seconds.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_group_pending(array $group, string $digest, int $now): array
-{
+function cooperative_group_pending(
+    array $group,
+    string $digest,
+    int $now,
+): array {
     $pending = $group['pending'];
-    if (!is_array($pending) || !is_string($pending['digest'] ?? null)
+    if (
+        !is_array($pending)
+        || !is_string($pending['digest'] ?? null)
         || !hash_equals($pending['digest'], $digest)
-        || !hash_equals(cooperative_proposal_digest($pending['body']), $digest)) {
+        || !hash_equals(cooperative_proposal_digest($pending['body']), $digest)
+    ) {
         throw new CooperativeException('proposal_mismatch');
     }
     $body = $pending['body'];
-    if ($body['group_id'] !== $group['group_id'] || $body['coordinator_id'] !== $group['coordinator_id']
-        || $body['base_revision'] !== $group['revision']) {
+    if (
+        $body['group_id'] !== $group['group_id']
+        || $body['coordinator_id'] !== $group['coordinator_id']
+        || $body['base_revision'] !== $group['revision']
+    ) {
         throw new CooperativeException('revision_conflict');
     }
     if ($now < $body['issued_at'] || $now >= $body['expires_at']) {
@@ -175,10 +228,18 @@ function cooperative_group_pending(array $group, string $digest, int $now): arra
  * @param int $now Explicit current Unix timestamp in seconds.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_group_approve(array $group, string $authenticatedActor, string $digest, int $now): array
-{
+function cooperative_group_approve(
+    array $group,
+    string $authenticatedActor,
+    string $digest,
+    int $now,
+): array {
     $pending = cooperative_group_pending($group, $digest, $now);
-    if (!in_array($authenticatedActor, array_column($pending['body']['members'], 'instance_id'), true)) {
+    if (!in_array(
+        $authenticatedActor,
+        array_column($pending['body']['members'], 'instance_id'),
+        true,
+    )) {
         throw new CooperativeException('actor_not_member');
     }
     $pending['approvals'][$authenticatedActor] = $digest;
@@ -194,10 +255,18 @@ function cooperative_group_approve(array $group, string $authenticatedActor, str
  * @param int $now Explicit current Unix timestamp in seconds.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_group_decline(array $group, string $actor, string $digest, int $now): array
-{
+function cooperative_group_decline(
+    array $group,
+    string $actor,
+    string $digest,
+    int $now,
+): array {
     $pending = cooperative_group_pending($group, $digest, $now);
-    if (!in_array($actor, array_column($pending['body']['members'], 'instance_id'), true)) {
+    if (!in_array(
+        $actor,
+        array_column($pending['body']['members'], 'instance_id'),
+        true,
+    )) {
         throw new CooperativeException('actor_not_member');
     }
     $group['pending'] = null;
@@ -212,7 +281,10 @@ function cooperative_group_decline(array $group, string $actor, string $digest, 
  */
 function cooperative_group_expire(array $group, int $now): array
 {
-    if ($group['pending'] !== null && $now >= $group['pending']['body']['expires_at']) {
+    if (
+        $group['pending'] !== null
+        && $now >= $group['pending']['body']['expires_at']
+    ) {
         $group['pending'] = null;
     }
     return $group;
@@ -228,13 +300,18 @@ function cooperative_group_expire(array $group, int $now): array
  * @param callable $resolve Trusted resolver of fresh pair-generation evidence; unknown state returns null.
  * @return array<string,mixed>|null Validated domain state, or null when no usable record exists.
  */
-function cooperative_friendship_evidence(array $members, callable $resolve): ?array
-{
+function cooperative_friendship_evidence(
+    array $members,
+    callable $resolve,
+): ?array {
     $evidence = [];
     foreach (cooperative_friendship_pairs($members) as [$first, $second]) {
         try {
             $stamp = $resolve($first, $second);
-            if (!is_string($stamp) || preg_match('/\A[a-f0-9]{64}\z/', $stamp) !== 1) {
+            if (
+                !is_string($stamp)
+                || preg_match('/\A[a-f0-9]{64}\z/', $stamp) !== 1
+            ) {
                 return null;
             }
             $evidence[$first . ':' . $second] = $stamp;
@@ -253,18 +330,31 @@ function cooperative_friendship_evidence(array $members, callable $resolve): ?ar
  * @param callable $friendshipResolver Trusted resolver returning current pair-generation stamps or null.
  * @return array<string,mixed> Validated domain state described above.
  */
-function cooperative_group_activate(array $group, string $digest, int $now, callable $friendshipResolver): array
-{
-    if ($group['pending'] === null && $group['state'] === 'active' && $group['last_proposal_digest'] === $digest) {
+function cooperative_group_activate(
+    array $group,
+    string $digest,
+    int $now,
+    callable $friendshipResolver,
+): array {
+    if (
+        $group['pending'] === null
+        && $group['state'] === 'active'
+        && $group['last_proposal_digest'] === $digest
+    ) {
         return $group;
     }
     $pending = cooperative_group_pending($group, $digest, $now);
     foreach ($pending['body']['members'] as $member) {
-        if (($pending['approvals'][$member['instance_id']] ?? null) !== $digest) {
+        if (
+            ($pending['approvals'][$member['instance_id']] ?? null) !== $digest
+        ) {
             throw new CooperativeException('consent_missing');
         }
     }
-    $evidence = cooperative_friendship_evidence($pending['body']['members'], $friendshipResolver);
+    $evidence = cooperative_friendship_evidence(
+        $pending['body']['members'],
+        $friendshipResolver,
+    );
     if ($evidence === null) {
         throw new CooperativeException('friendship_unavailable');
     }
@@ -293,16 +383,33 @@ function cooperative_group_activate(array $group, string $digest, int $now, call
  * @param callable $sourcePolicy Canonical source-authorization adapter; only literal true grants access.
  * @return bool Whether the exact validation or authorization contract holds.
  */
-function cooperative_group_allows(array $group, string $local, string $requester, string $album, int $revision,
-    string $scope, callable $friendshipResolver, callable $sourcePolicy): bool
-{
-    if ($group['state'] !== 'active' || $group['revision'] !== $revision || $local === $requester) {
+function cooperative_group_allows(
+    array $group,
+    string $local,
+    string $requester,
+    string $album,
+    int $revision,
+    string $scope,
+    callable $friendshipResolver,
+    callable $sourcePolicy,
+): bool {
+    if (
+        $group['state'] !== 'active'
+        || $group['revision'] !== $revision
+        || $local === $requester
+    ) {
         return false;
     }
     $members = array_column($group['members'], null, 'instance_id');
-    if (!isset($members[$local], $members[$requester]) || $members[$local]['album_id'] !== $album
+    if (
+        !isset($members[$local], $members[$requester])
+        || $members[$local]['album_id'] !== $album
         || !in_array($scope, $members[$local]['scopes'], true)
-        || cooperative_friendship_evidence($group['members'], $friendshipResolver) !== $group['friendships']) {
+        || cooperative_friendship_evidence(
+            $group['members'],
+            $friendshipResolver,
+        ) !== $group['friendships']
+    ) {
         return false;
     }
     try {
@@ -320,26 +427,37 @@ function cooperative_group_allows(array $group, string $local, string $requester
  */
 function cooperative_group_leave(array $group, string $actor): array
 {
-    if (!in_array($actor, array_column($group['members'], 'instance_id'), true)) {
+    if (!in_array(
+        $actor,
+        array_column($group['members'], 'instance_id'),
+        true,
+    )) {
         throw new CooperativeException('actor_not_member');
     }
     $group['members'] = array_values(array_filter($group['members'], /**
- * Retain only current participant or friendship entries after departure.
- * @param array<string,mixed> $member Canonical participant and its album grant.
- * @return bool Whether the exact validation or authorization contract holds.
- */ static fn(array $member): bool => $member['instance_id'] !== $actor));
+     * Retain only current participant or friendship entries after departure.
+     * @param array<string,mixed> $member Canonical participant and its album grant.
+     * @return bool Whether the exact validation or authorization contract holds.
+     */ static fn(array $member): bool => $member['instance_id'] !== $actor));
     $group['revision']++;
     $group['pending'] = null;
     $group['last_proposal_digest'] = null;
     $remaining = array_column($group['members'], 'instance_id');
-    $group['friendships'] = array_filter($group['friendships'], /**
- * Retain friendship evidence only when both participants remain.
- * @param string $pair Canonical pair key containing both installation identifiers.
- * @return bool Whether the exact validation or authorization contract holds.
- */ static function (string $pair) use ($remaining): bool {
-        [$first, $second] = explode(':', $pair);
-        return in_array($first, $remaining, true) && in_array($second, $remaining, true);
-    }, ARRAY_FILTER_USE_KEY);
+    $group['friendships'] = array_filter(
+        $group['friendships'],
+        /**
+         * Retain friendship evidence only when both participants remain.
+         * @param string $pair Canonical pair key containing both installation identifiers.
+         * @return bool Whether the exact validation or authorization contract holds.
+         */ static function (string $pair) use ($remaining): bool {
+            [$first, $second] = explode(':', $pair);
+            return (
+                in_array($first, $remaining, true)
+                    && in_array($second, $remaining, true)
+            );
+        },
+        ARRAY_FILTER_USE_KEY,
+    );
     if (count($group['members']) < 2 || $actor === $group['coordinator_id']) {
         $group['state'] = 'suspended';
     }

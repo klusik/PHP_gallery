@@ -98,7 +98,9 @@ function gallery_branding_asset_kind(string $kind): string
     // $kind stores an intermediate value used by the surrounding gallery workflow.
     $kind = strtolower(trim($kind));
     if (!array_key_exists($kind, gallery_branding_asset_types())) {
-        throw new InvalidArgumentException(t('gallery.branding.error_unknown_type'));
+        throw new InvalidArgumentException(t(
+            'gallery.branding.error_unknown_type',
+        ));
     }
     return $kind;
 }
@@ -168,7 +170,11 @@ function gallery_branding_mime_extension(string $mime): ?string
  */
 function gallery_branding_upload_extension_allowed(string $filename): bool
 {
-    return in_array(strtolower(pathinfo($filename, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
+    return in_array(
+        strtolower(pathinfo($filename, PATHINFO_EXTENSION)),
+        ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+        true,
+    );
 }
 
 /**
@@ -185,7 +191,8 @@ function gallery_branding_schema_ready(): bool
 
     try {
         // $ready stores an intermediate value used by the surrounding gallery workflow.
-        $ready = db_column_exists('galleries', 'banner_image_path')
+        $ready =
+            db_column_exists('galleries', 'banner_image_path')
             && db_column_exists('galleries', 'logo_image_path')
             && db_column_exists('galleries', 'separator_image_path');
     } catch (Throwable) {
@@ -242,16 +249,23 @@ function gallery_branding_asset_paths(array $gallery): array
  * @param int $galleryId Gallery identifier.
  * @param string $kind Kind value.
  * @param ?string $relativePath Relative path filesystem path.
+ * @return void Stores the normalized relative path, or clears it when null or blank; does nothing when branding columns are unavailable.
  */
-function set_gallery_branding_asset_path(int $galleryId, string $kind, ?string $relativePath): void
-{
+function set_gallery_branding_asset_path(
+    int $galleryId,
+    string $kind,
+    ?string $relativePath,
+): void {
     if (!gallery_branding_schema_ready()) {
         return;
     }
     // $column stores an intermediate value used by the surrounding gallery workflow.
     $column = gallery_branding_asset_column($kind);
     // $value stores an intermediate value used by the surrounding gallery workflow.
-    $value = $relativePath !== null && trim($relativePath) !== '' ? normalize_relative_path($relativePath) : null;
+    $value =
+        $relativePath !== null && trim($relativePath) !== ''
+            ? normalize_relative_path($relativePath)
+            : null;
     gallery_model_update_fields($galleryId, [$column => $value], now_sql());
 }
 
@@ -263,8 +277,11 @@ function set_gallery_branding_asset_path(int $galleryId, string $kind, ?string $
  * @param bool $publicOnly Public only value.
  * @return string Authorized asset URL, or an empty string when public visitor access is unavailable.
  */
-function gallery_branding_asset_url(array $gallery, string $kind, bool $publicOnly): string
-{
+function gallery_branding_asset_url(
+    array $gallery,
+    string $kind,
+    bool $publicOnly,
+): string {
     if ($publicOnly) {
         $anonymousPreview = admin_anonymous_preview_active();
         $galleryVisitorAllowed = $anonymousPreview
@@ -273,23 +290,32 @@ function gallery_branding_asset_url(array $gallery, string $kind, bool $publicOn
         $nsfwVisitorAllowed = $anonymousPreview
             ? visitor_can_access_nsfw_content_without_admin_bypass()
             : visitor_can_access_nsfw_content();
-        if (gallery_access_requirement($gallery) !== null && !$galleryVisitorAllowed) {
+        if (
+            gallery_access_requirement($gallery) !== null
+            && !$galleryVisitorAllowed
+        ) {
             return '';
         }
-        if (gallery_nsfw_requirement($gallery) !== null && !$nsfwVisitorAllowed) {
+        if (
+            gallery_nsfw_requirement($gallery) !== null
+            && !$nsfwVisitorAllowed
+        ) {
             return '';
         }
     }
     if (gallery_branding_asset_abs_path($gallery, $kind) === null) {
         return '';
     }
-    return url_for('gallery_branding_asset', ['id' => (int) $gallery['id'], 'kind' => gallery_branding_asset_kind($kind)]);
+    return url_for('gallery_branding_asset', [
+        'id' => (int) $gallery['id'],
+        'kind' => gallery_branding_asset_kind($kind),
+    ]);
 }
 
 /**
  * Return the absolute path for one stored branding asset, if it is safe and present.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{banner_image_path?:string|null,logo_image_path?:string|null,separator_image_path?:string|null,folder_path?:string} $gallery Gallery row fields used to find the configured branding asset.
  * @param string $kind Kind value.
  * @return ?string Text result for the caller.
  */
@@ -303,7 +329,10 @@ function gallery_branding_asset_abs_path(array $gallery, string $kind): ?string
     // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
-    $absolutePath = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $absolutePath =
+        $galleryRoot
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     if (!is_file($absolutePath) || !path_inside($galleryRoot, $absolutePath)) {
         return null;
     }
@@ -380,14 +409,16 @@ function theme_branding_asset_types(): array
  * Normalize and validate a global theme branding fallback asset kind.
  *
  * @param string $kind Kind value.
- * @return string Text result for the caller.
+ * @return string Normalized supported branding asset kind.
  */
 function theme_branding_asset_kind(string $kind): string
 {
     // $kind stores an intermediate value used by the surrounding gallery workflow.
     $kind = strtolower(trim($kind));
     if (!array_key_exists($kind, theme_branding_asset_types())) {
-        throw new InvalidArgumentException(t('theme.branding.error_unknown_type'));
+        throw new InvalidArgumentException(t(
+            'theme.branding.error_unknown_type',
+        ));
     }
     return $kind;
 }
@@ -438,7 +469,9 @@ function theme_branding_asset_path(string $kind): ?string
     // The setting is persisted state, not permission to stream files outside theme-branding.
     $storage = dirname(__DIR__, 2) . '/cache/theme-branding';
     $absolute = dirname(__DIR__, 2) . '/' . ltrim($path, '/');
-    return is_file($absolute) && path_inside($storage, $absolute) ? $path : null;
+    return is_file($absolute) && path_inside($storage, $absolute)
+        ? $path
+        : null;
 }
 
 /**
@@ -467,23 +500,33 @@ function theme_branding_asset_abs_path(string $kind): ?string
  */
 function theme_branding_asset_url(string $kind): string
 {
-    return theme_branding_asset_path($kind) !== null ? url_for('theme_branding_asset', ['kind' => theme_branding_asset_kind($kind)]) : '';
+    return (
+        theme_branding_asset_path($kind) !== null
+            ? url_for('theme_branding_asset', [
+                'kind' => theme_branding_asset_kind($kind),
+            ]) : ''
+    );
 }
 
 /**
  * Return the configured gallery asset URL, falling back to the matching Theme asset when allowed.
  *
- * @param array $gallery Gallery row or gallery data.
+ * @param array{banner_image_path?:string|null,logo_image_path?:string|null,separator_image_path?:string|null,folder_path?:string} $gallery Gallery row fields used to find the configured branding asset.
  * @param string $kind Kind value.
  * @param bool $publicOnly Public only value.
- * @return string Text result for the caller.
+ * @return string Gallery asset URL, Theme fallback URL when available, or an empty string.
  */
-function effective_gallery_branding_asset_url(array $gallery, string $kind, bool $publicOnly): string
-{
+function effective_gallery_branding_asset_url(
+    array $gallery,
+    string $kind,
+    bool $publicOnly,
+): string {
     // $kind stores an intermediate value used by the surrounding gallery workflow.
     $kind = gallery_branding_asset_kind($kind);
     // $galleryAssetUrl stores the per-gallery asset URL, if the gallery overrides the Theme fallback.
-    $galleryAssetUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, $kind, $publicOnly) : '';
+    $galleryAssetUrl = gallery_branding_schema_ready()
+        ? gallery_branding_asset_url($gallery, $kind, $publicOnly)
+        : '';
     if ($galleryAssetUrl !== '') {
         return $galleryAssetUrl;
     }
@@ -530,7 +573,9 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
     // $tmpPath stores an intermediate value used by the surrounding gallery workflow.
     $tmpPath = (string) ($file['tmp_name'] ?? '');
     if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
-        throw new RuntimeException(t('theme.branding.error_upload_unavailable'));
+        throw new RuntimeException(t(
+            'theme.branding.error_upload_unavailable',
+        ));
     }
     // $originalName stores an intermediate value used by the surrounding gallery workflow.
     $originalName = (string) ($file['name'] ?? '');
@@ -559,7 +604,15 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = $storageDir . DIRECTORY_SEPARATOR . $stem . '.' . $extension;
     // $stagedTarget stores the uploaded file before the previous asset is replaced.
-    $stagedTarget = $storageDir . DIRECTORY_SEPARATOR . '.upload-' . $stem . '-' . bin2hex(random_bytes(6)) . '.' . $extension;
+    $stagedTarget =
+        $storageDir
+        . DIRECTORY_SEPARATOR
+        . '.upload-'
+        . $stem
+        . '-'
+        . bin2hex(random_bytes(6))
+        . '.'
+        . $extension;
     if (!move_uploaded_file($tmpPath, $stagedTarget)) {
         @unlink($stagedTarget);
         throw new RuntimeException(t('theme.branding.error_store_failed'));
@@ -573,7 +626,8 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
     // $relative stores the new validated source identity.
     $relative = 'cache/theme-branding/' . $stem . '.' . $extension;
     set_app_setting(theme_branding_asset_setting($kind), $relative);
-    foreach (glob($storageDir . DIRECTORY_SEPARATOR . $stem . '.*') ?: [] as $oldFile) {
+    foreach (glob($storageDir . DIRECTORY_SEPARATOR . $stem . '.*')
+        ?: [] as $oldFile) {
         if ($oldFile !== $target && is_file($oldFile)) {
             @unlink($oldFile);
         }

@@ -34,36 +34,86 @@ function script_source_tokens(string $source, bool $powershell): array
         $comment = false;
         $masked = false;
         if (ctype_space($character)) {
-            $pendingSpace = $character === "\n" || $pendingSpace === "\n" ? "\n" : ' ';
+            $pendingSpace =
+                $character === "\n" || $pendingSpace === "\n" ? "\n" : ' ';
             $cursor++;
             continue;
         }
         if ($powershell && substr($source, $cursor, 2) === '<#') {
             $end = strpos($source, '#>', $cursor + 2);
             if ($end === false) {
-                throw new \RuntimeException('Unterminated script block comment.');
+                throw new \RuntimeException(
+                    'Unterminated script block comment.',
+                );
             }
             $cursor = $end + 2;
             $comment = true;
-        } elseif ($character === '#' && ($powershell || $cursor === 0
-            || ctype_space($source[$cursor - 1]) || str_contains(';|&()', $source[$cursor - 1]))) {
+        } elseif (
+            $character === '#'
+            && (
+                $powershell
+                || $cursor === 0
+                || ctype_space($source[$cursor - 1])
+                || str_contains(';|&()', $source[$cursor - 1])
+            )
+        ) {
             $cursor = strpos($source, "\n", $cursor) ?: $length;
             $comment = true;
-        } elseif (!$powershell && substr($source, $cursor, 2) === '<<' && substr($source, $cursor, 3) !== '<<<') {
-            if (preg_match('/\A<<(-?)[ \t]*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\2[^\n]*\n/', substr($source, $cursor), $match) !== 1) {
-                throw new \RuntimeException('Unsupported script here-document delimiter.');
+        } elseif (
+            !$powershell
+            && substr($source, $cursor, 2) === '<<'
+            && substr($source, $cursor, 3) !== '<<<'
+        ) {
+            if (
+                preg_match(
+                    '/\A<<(-?)[ \t]*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\2[^\n]*\n/',
+                    substr($source, $cursor),
+                    $match,
+                ) !== 1
+            ) {
+                throw new \RuntimeException(
+                    'Unsupported script here-document delimiter.',
+                );
             }
             $bodyStart = $cursor + strlen($match[0]);
-            $terminator = '/^' . ($match[1] === '-' ? '\t*' : '') . preg_quote($match[3], '/') . '(?:\n|$)/m';
-            if (preg_match($terminator, $source, $closing, PREG_OFFSET_CAPTURE, $bodyStart) !== 1) {
-                throw new \RuntimeException('Unterminated script here-document.');
+            $terminator =
+                '/^'
+                . ($match[1] === '-' ? '\t*' : '')
+                . preg_quote($match[3], '/')
+                . '(?:\n|$)/m';
+            if (
+                preg_match(
+                    $terminator,
+                    $source,
+                    $closing,
+                    PREG_OFFSET_CAPTURE,
+                    $bodyStart,
+                ) !== 1
+            ) {
+                throw new \RuntimeException(
+                    'Unterminated script here-document.',
+                );
             }
             $cursor = $closing[0][1] + strlen(rtrim($closing[0][0], "\n"));
             $masked = true;
-        } elseif ($powershell && $character === '@' && in_array($source[$cursor + 1] ?? '', ['"', "'"], true)) {
+        } elseif (
+            $powershell
+            && $character === '@'
+            && in_array($source[$cursor + 1] ?? '', ['"', "'"], true)
+        ) {
             $quote = $source[$cursor + 1];
-            if (preg_match('/^' . preg_quote($quote . '@', '/') . '(?:\n|$)/m', $source, $closing, PREG_OFFSET_CAPTURE, $cursor + 2) !== 1) {
-                throw new \RuntimeException('Unterminated PowerShell here-string.');
+            if (
+                preg_match(
+                    '/^' . preg_quote($quote . '@', '/') . '(?:\n|$)/m',
+                    $source,
+                    $closing,
+                    PREG_OFFSET_CAPTURE,
+                    $cursor + 2,
+                ) !== 1
+            ) {
+                throw new \RuntimeException(
+                    'Unterminated PowerShell here-string.',
+                );
             }
             $cursor = $closing[0][1] + strlen(rtrim($closing[0][0], "\n"));
             $masked = true;
@@ -71,11 +121,23 @@ function script_source_tokens(string $source, bool $powershell): array
             $quote = $character;
             $closed = false;
             for ($cursor++; $cursor < $length; $cursor++) {
-                if (($powershell && $source[$cursor] === '`')
-                    || (!$powershell && $quote === '"' && $source[$cursor] === '\\')) {
+                if (
+                    (
+                        $powershell
+                        && $source[$cursor] === '`'
+                    )
+                    || (
+                        !$powershell
+                        && $quote === '"'
+                        && $source[$cursor] === '\\'
+                    )
+                ) {
                     $cursor++;
                 } elseif ($source[$cursor] === $quote) {
-                    if ($powershell && ($source[$cursor + 1] ?? '') === $quote) {
+                    if (
+                        $powershell
+                        && ($source[$cursor + 1] ?? '') === $quote
+                    ) {
                         $cursor++;
                         continue;
                     }
@@ -92,19 +154,36 @@ function script_source_tokens(string $source, bool $powershell): array
             $cursor += 2;
             $masked = true;
         } elseif (!$powershell && $character === '`') {
-            throw new \RuntimeException('Legacy shell command substitution requires additional scanner coverage.');
-        } elseif (preg_match('/\A[A-Za-z_][A-Za-z0-9_:-]*/', substr($source, $cursor), $word) === 1) {
+            throw new \RuntimeException(
+                'Legacy shell command substitution requires additional scanner coverage.',
+            );
+        } elseif (
+            preg_match(
+                '/\A[A-Za-z_][A-Za-z0-9_:-]*/',
+                substr($source, $cursor),
+                $word,
+            ) === 1
+        ) {
             $cursor += strlen($word[0]);
         } else {
             $cursor++;
         }
         $text = substr($source, $start, $cursor - $start);
         if ($comment || $masked) {
-            $structure = substr_replace($structure, preg_replace('/[^\n]/', ' ', $text), $start, strlen($text));
+            $structure = substr_replace(
+                $structure,
+                preg_replace('/[^\n]/', ' ', $text),
+                $start,
+                strlen($text),
+            );
         }
         if (!$comment) {
             if ($pendingSpace !== '' && $tokens !== []) {
-                $tokens[] = ['start' => $start, 'end' => $start, 'text' => $pendingSpace];
+                $tokens[] = [
+                    'start' => $start,
+                    'end' => $start,
+                    'text' => $pendingSpace,
+                ];
             }
             $tokens[] = ['start' => $start, 'end' => $cursor, 'text' => $text];
             $pendingSpace = '';
@@ -130,7 +209,10 @@ function script_leading_documentation(string $source, int $offset): string
     }
     $comments = [];
     $lines = explode("\n", $prefix);
-    while ($lines !== [] && str_starts_with(ltrim($lines[count($lines) - 1]), '#')) {
+    while (
+        $lines !== []
+        && str_starts_with(ltrim($lines[count($lines) - 1]), '#')
+    ) {
         array_unshift($comments, array_pop($lines));
     }
     return implode("\n", $comments);
@@ -150,24 +232,44 @@ function script_declaration_snapshots(string $source, string $extension): array
     $powershell = $extension !== 'sh';
     $lexed = script_source_tokens($source, $powershell);
     $structure = $lexed['structure'];
-    if (preg_match('/\b(?:class|filter|workflow|configuration)\s+[A-Za-z_]/i', $structure) === 1
-        || preg_match('/\b(?:eval|Invoke-Expression)\b/i', $structure) === 1) {
-        throw new \RuntimeException('Unsupported or dynamically generated script declarations.');
+    if (
+        preg_match(
+            '/\b(?:class|filter|workflow|configuration)\s+[A-Za-z_]/i',
+            $structure,
+        ) === 1
+        || preg_match('/\b(?:eval|Invoke-Expression)\b/i', $structure) === 1
+    ) {
+        throw new \RuntimeException(
+            'Unsupported or dynamically generated script declarations.',
+        );
     }
     $pattern = $powershell
         ? '/^[ \t]*function[ \t]+([A-Za-z_][A-Za-z0-9_-]*)[ \t]*(?:\([^\n{}]*\)[ \t]*)?\s*\{/mi'
         : '/^[ \t]*(?:function[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*\([ \t]*\)[ \t]*\s*\{/m';
     preg_match_all($pattern, $structure, $matches, PREG_OFFSET_CAPTURE);
-    $candidatePattern = $powershell ? '/\bfunction\b/i'
+    $candidatePattern = $powershell
+        ? '/\bfunction\b/i'
         : '/\bfunction\b|\b[A-Za-z_][A-Za-z0-9_]*[ \t]*\([ \t]*\)/i';
-    preg_match_all($candidatePattern, $structure, $keywords, PREG_OFFSET_CAPTURE);
+    preg_match_all(
+        $candidatePattern,
+        $structure,
+        $keywords,
+        PREG_OFFSET_CAPTURE,
+    );
     foreach ($keywords[0] as $keyword) {
         $covered = false;
         foreach ($matches[0] as $match) {
-            $covered = $covered || ($keyword[1] >= $match[1] && $keyword[1] < $match[1] + strlen($match[0]));
+            $covered =
+                $covered
+                || (
+                    $keyword[1] >= $match[1]
+                    && $keyword[1] < ($match[1] + strlen($match[0]))
+                );
         }
         if (!$covered) {
-            throw new \RuntimeException('Unsupported script function declaration.');
+            throw new \RuntimeException(
+                'Unsupported script function declaration.',
+            );
         }
     }
     $stack = [];
@@ -197,14 +299,25 @@ function script_declaration_snapshots(string $source, string $extension): array
         $name = $matches[1][$index][0];
         $executable = [];
         foreach ($lexed['tokens'] as $token) {
-            if ($token['start'] >= $start && $token['end'] <= $end + 1) {
+            if ($token['start'] >= $start && $token['end'] <= ($end + 1)) {
                 $executable[] = $token['text'];
             }
         }
-        $snapshots[] = ['identity' => $extension . '/function:' . $name,
-            'fingerprint' => hash('sha256', json_encode($executable, JSON_THROW_ON_ERROR)),
-            'record' => ['kind' => 'function', 'name' => $name, 'line' => substr_count(substr($source, 0, $start), "\n") + 1,
-                'doc' => script_leading_documentation($source, $start), 'language' => 'script'], 'uncertain' => false];
+        $snapshots[] = [
+            'identity' => $extension . '/function:' . $name,
+            'fingerprint' => hash('sha256', json_encode(
+                $executable,
+                JSON_THROW_ON_ERROR,
+            )),
+            'record' => [
+                'kind' => 'function',
+                'name' => $name,
+                'line' => substr_count(substr($source, 0, $start), "\n") + 1,
+                'doc' => script_leading_documentation($source, $start),
+                'language' => 'script',
+            ],
+            'uncertain' => false,
+        ];
     }
     return $snapshots;
 }

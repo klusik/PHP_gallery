@@ -51,7 +51,8 @@ use function Gallery\Services\gallery_cover_selection_storage_valid;
 use function Gallery\Models\gallery_mutation_model_delete_dependency;
 use function Gallery\Models\gallery_mutation_model_delete_images;
 use function Gallery\Models\gallery_mutation_model_delete_subtree;
-use function Gallery\Models\gallery_mutation_model_delete_subtree_in_transaction;
+use function Gallery\Models\gallery_mutation_model_delete_subtree_in_transaction
+;
 use function Gallery\Models\gallery_mutation_model_first_cover_candidate;
 use function Gallery\Models\gallery_mutation_model_hierarchy_rows;
 use function Gallery\Models\gallery_mutation_model_image_belongs_to_galleries;
@@ -102,7 +103,10 @@ function gallery_subtree_rows(int $galleryId): array
     }
     // $folderPath stores an intermediate value used by the surrounding gallery workflow.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
-    return gallery_mutation_model_subtree_rows($folderPath, gallery_folder_path_descendant_like_pattern($folderPath));
+    return gallery_mutation_model_subtree_rows(
+        $folderPath,
+        gallery_folder_path_descendant_like_pattern($folderPath),
+    );
 }
 
 /**
@@ -131,7 +135,10 @@ function delete_gallery_subtrees(array $galleryIds): array
 function delete_gallery_subtrees_owned(array $galleryIds): array
 {
     // Variable $rootIds stores this steps working value.
-    $rootIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds))));
+    $rootIds = array_values(array_unique(array_filter(array_map(
+        'intval',
+        $galleryIds,
+    ))));
     if (!$rootIds) {
         return ['root_count' => 0, 'row_count' => 0, 'missing_folders' => 0];
     }
@@ -141,7 +148,7 @@ function delete_gallery_subtrees_owned(array $galleryIds): array
         gallery_deletion_schema_status(),
         'gallery.delete_subtree',
         'Gallery deletion requires the current core gallery/image database schema. Run pending migrations first.',
-        'Gallery deletion is temporarily unavailable because the required database schema could not be verified.'
+        'Gallery deletion is temporarily unavailable because the required database schema could not be verified.',
     );
 
     // Variable $roots stores this steps working value.
@@ -158,12 +165,19 @@ function delete_gallery_subtrees_owned(array $galleryIds): array
         return ['root_count' => 0, 'row_count' => 0, 'missing_folders' => 0];
     }
 
-    usort($roots, /**
-     * Order ancestors before descendants so overlapping deletion roots are folded.
-     * @param array{folder_path:string} $left First physical catalog row.
-     * @param array{folder_path:string} $right Second physical catalog row.
-     * @return int Comparison of path lengths, not lexical gallery ordering.
-     */ static fn (array $left, array $right): int => strlen((string) $left['folder_path']) <=> strlen((string) $right['folder_path']));
+    usort(
+        $roots,
+        /**
+         * Order ancestors before descendants so overlapping deletion roots are folded.
+         * @param array{folder_path:string} $left First physical catalog row.
+         * @param array{folder_path:string} $right Second physical catalog row.
+         * @return int Comparison of path lengths, not lexical gallery ordering.
+         */ static fn(array $left, array $right): int => (
+            strlen((string) $left['folder_path']) <=> strlen(
+                (string) $right['folder_path'],
+            )
+        ),
+    );
 
     // Variable $keptRoots stores this steps working value.
     $keptRoots = [];
@@ -174,8 +188,13 @@ function delete_gallery_subtrees_owned(array $galleryIds): array
         $isCoveredByEarlierRoot = false;
         foreach ($keptRoots as $keptRoot) {
             // Variable $keptPath stores this steps working value.
-            $keptPath = normalize_relative_path((string) $keptRoot['folder_path']);
-            if ($folderPath === $keptPath || str_starts_with($folderPath, $keptPath . '/')) {
+            $keptPath = normalize_relative_path(
+                (string) $keptRoot['folder_path'],
+            );
+            if (
+                $folderPath === $keptPath
+                || str_starts_with($folderPath, $keptPath . '/')
+            ) {
                 // $isCoveredByEarlierRoot stores an intermediate value used by the surrounding gallery workflow.
                 $isCoveredByEarlierRoot = true;
                 break;
@@ -206,7 +225,9 @@ function delete_gallery_subtrees_owned(array $galleryIds): array
             continue;
         }
         if (!path_inside(galleries_root(), $absolutePath)) {
-            throw new RuntimeException('Refusing to delete a gallery path outside the gallery root.');
+            throw new RuntimeException(
+                'Refusing to delete a gallery path outside the gallery root.',
+            );
         }
         $foldersToDelete[] = $absolutePath;
     }
@@ -228,7 +249,11 @@ function delete_gallery_subtrees_owned(array $galleryIds): array
         refresh_gallery_public_paths();
     }
 
-    return ['root_count' => count($deletedFolders), 'row_count' => count($allRowIds), 'missing_folders' => $missingFolders];
+    return [
+        'root_count' => count($deletedFolders),
+        'row_count' => count($allRowIds),
+        'missing_folders' => $missingFolders,
+    ];
 }
 
 /**
@@ -244,7 +269,10 @@ function delete_gallery_subtrees_owned(array $galleryIds): array
 function gallery_delete_database_subtree_rows(array $galleryIds): int
 {
     // $galleryIds stores unique positive gallery ids accepted by cleanup.
-    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $galleryId): bool => $galleryId > 0,
+    )));
     if (!$galleryIds) {
         return 0;
     }
@@ -253,10 +281,13 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
         gallery_deletion_schema_status(),
         'gallery.delete_database_subtree',
         'Gallery deletion requires the current core gallery/image database schema. Run pending migrations first.',
-        'Gallery deletion is temporarily unavailable because the required database schema could not be verified.'
+        'Gallery deletion is temporarily unavailable because the required database schema could not be verified.',
     );
 
-    $deletedRows = gallery_mutation_model_delete_subtree($galleryIds, gallery_mutation_delete_dependency_availability());
+    $deletedRows = gallery_mutation_model_delete_subtree(
+        $galleryIds,
+        gallery_mutation_delete_dependency_availability(),
+    );
     app_settings_reset_request_cache();
     return $deletedRows;
 }
@@ -275,12 +306,18 @@ function gallery_delete_database_subtree_rows(array $galleryIds): int
 function gallery_delete_database_subtree_rows_in_transaction(array $galleryIds): int
 {
     // $galleryIds stores unique positive gallery ids accepted by cleanup.
-    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $galleryId): bool => $galleryId > 0,
+    )));
     if (!$galleryIds) {
         return 0;
     }
 
-    return gallery_mutation_model_delete_subtree_in_transaction($galleryIds, gallery_mutation_delete_dependency_availability());
+    return gallery_mutation_model_delete_subtree_in_transaction(
+        $galleryIds,
+        gallery_mutation_delete_dependency_availability(),
+    );
 }
 
 /**
@@ -298,7 +335,11 @@ function delete_missing_gallery_database_subtree_by_folder_path(string $folderPa
     }
 
     // $ids stores stale gallery ids that can no longer be reached on disk.
-    $ids = gallery_mutation_model_subtree_ids($folderPath, gallery_folder_path_descendant_like_pattern($folderPath), true);
+    $ids = gallery_mutation_model_subtree_ids(
+        $folderPath,
+        gallery_folder_path_descendant_like_pattern($folderPath),
+        true,
+    );
     if (!$ids) {
         return 0;
     }
@@ -315,15 +356,21 @@ function delete_missing_gallery_database_subtree_by_folder_path(string $folderPa
 function gallery_image_ids_for_gallery_ids(array $galleryIds): array
 {
     // $galleryIds stores unique positive ids accepted by the image lookup.
-    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $galleryId): bool => $galleryId > 0,
+    )));
     if (!$galleryIds) {
         return [];
     }
     mutation_schema_assert_available(
-        mutation_schema_tables_status('mutation.gallery_delete_image_lookup', ['images' => ['gallery_id', 'id']]),
+        mutation_schema_tables_status('mutation.gallery_delete_image_lookup', ['images' => [
+            'gallery_id',
+            'id',
+        ]]),
         'gallery.delete_image_lookup',
         'Gallery image ownership schema is incomplete. Run pending migrations first.',
-        'Gallery image ownership schema could not be verified. The deletion was not started.'
+        'Gallery image ownership schema could not be verified. The deletion was not started.',
     );
 
     return gallery_mutation_model_image_ids_for_galleries($galleryIds);
@@ -337,17 +384,31 @@ function gallery_image_ids_for_gallery_ids(array $galleryIds): array
  * @param array<int> $ids Id values.
  * @return int Deleted row count.
  */
-function gallery_delete_rows_by_ids(string $table, string $column, array $ids): int
-{
+function gallery_delete_rows_by_ids(
+    string $table,
+    string $column,
+    array $ids,
+): int {
     // $ids stores unique positive ids accepted by this mutation.
-    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $ids),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$ids) {
         return 0;
     }
-    if (!mutation_schema_optional_table_column_available('mutation.gallery_delete_dependency', $table, $column, 'gallery.delete_dependency_rows')) {
+    if (!mutation_schema_optional_table_column_available(
+        'mutation.gallery_delete_dependency',
+        $table,
+        $column,
+        'gallery.delete_dependency_rows',
+    )) {
         return 0;
     }
-    return gallery_mutation_model_delete_dependency($table . '.' . $column, $ids);
+    return gallery_mutation_model_delete_dependency(
+        $table . '.' . $column,
+        $ids,
+    );
 }
 
 /**
@@ -358,14 +419,25 @@ function gallery_delete_rows_by_ids(string $table, string $column, array $ids): 
  * @param array<int> $ids Id values.
  * @return int Updated row count.
  */
-function gallery_null_rows_by_ids(string $table, string $column, array $ids): int
-{
+function gallery_null_rows_by_ids(
+    string $table,
+    string $column,
+    array $ids,
+): int {
     // $ids stores unique positive ids accepted by this mutation.
-    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $ids),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$ids) {
         return 0;
     }
-    if (!mutation_schema_optional_table_column_available('mutation.gallery_delete_dependency', $table, $column, 'gallery.null_dependency_rows')) {
+    if (!mutation_schema_optional_table_column_available(
+        'mutation.gallery_delete_dependency',
+        $table,
+        $column,
+        'gallery.null_dependency_rows',
+    )) {
         return 0;
     }
     return gallery_mutation_model_null_dependency($table . '.' . $column, $ids);
@@ -383,22 +455,38 @@ function gallery_null_rows_by_ids(string $table, string $column, array $ids): in
 function gallery_mutation_delete_dependency_availability(): array
 {
     $dependencies = [
-        'galleries.cover_image_id', 'galleries.parent_id',
-        'telemetry_sessions.first_image_id', 'telemetry_sessions.last_image_id',
-        'telemetry_events.image_id', 'telemetry_job_runs.image_id',
-        'telemetry_sessions.first_gallery_id', 'telemetry_sessions.last_gallery_id',
-        'telemetry_events.gallery_id', 'telemetry_job_runs.gallery_id',
-        'image_thumbnail_variants.image_id', 'image_thumbnail_variants.gallery_id',
-        'image_ai_analysis_jobs.image_id', 'image_ai_analysis_jobs.gallery_id',
+        'galleries.cover_image_id',
+        'galleries.parent_id',
+        'telemetry_sessions.first_image_id',
+        'telemetry_sessions.last_image_id',
+        'telemetry_events.image_id',
+        'telemetry_job_runs.image_id',
+        'telemetry_sessions.first_gallery_id',
+        'telemetry_sessions.last_gallery_id',
+        'telemetry_events.gallery_id',
+        'telemetry_job_runs.gallery_id',
+        'image_thumbnail_variants.image_id',
+        'image_thumbnail_variants.gallery_id',
+        'image_ai_analysis_jobs.image_id',
+        'image_ai_analysis_jobs.gallery_id',
         'image_ai_metadata.image_id',
-        'picture_game_votes.image_a_id', 'picture_game_votes.image_b_id',
-        'picture_game_votes.winner_image_id', 'picture_game_votes.gallery_id',
-        'image_tags.image_id', 'image_votes.image_id', 'image_translations.image_id',
-        'viewer_favourites.image_id', 'viewer_collection_items.image_id',
-        'duplicate_photo_ledger_pairs.image_id_low', 'duplicate_photo_ledger_pairs.image_id_high',
-        'gallery_flight_maps.gallery_id', 'gallery_upload_tokens.gallery_id',
-        'mobile_webdav_upload_tokens.gallery_id', 'gallery_tags.gallery_id',
-        'zip_archives.gallery_id', 'images.gallery_id',
+        'picture_game_votes.image_a_id',
+        'picture_game_votes.image_b_id',
+        'picture_game_votes.winner_image_id',
+        'picture_game_votes.gallery_id',
+        'image_tags.image_id',
+        'image_votes.image_id',
+        'image_translations.image_id',
+        'viewer_favourites.image_id',
+        'viewer_collection_items.image_id',
+        'duplicate_photo_ledger_pairs.image_id_low',
+        'duplicate_photo_ledger_pairs.image_id_high',
+        'gallery_flight_maps.gallery_id',
+        'gallery_upload_tokens.gallery_id',
+        'mobile_webdav_upload_tokens.gallery_id',
+        'gallery_tags.gallery_id',
+        'zip_archives.gallery_id',
+        'images.gallery_id',
     ];
     $availability = [];
     foreach ($dependencies as $dependency) {
@@ -407,7 +495,7 @@ function gallery_mutation_delete_dependency_availability(): array
             'mutation.gallery_delete_dependency',
             $table,
             $column,
-            'gallery.delete_dependency_rows'
+            'gallery.delete_dependency_rows',
         );
     }
     return $availability;
@@ -428,10 +516,11 @@ function gallery_mutation_sql_identifier(string $identifier): string
 }
 
 /**
- * Handles delete directory tree logic for the gallery application.
+ * Recursively delete a directory tree without following links, constrained below an allowed root.
  *
- * @param mixed $directory Input used by this operation.
- * @param mixed $allowedRoot Input used by this operation.
+ * @param string $directory Absolute directory path to remove; it must not equal the allowed root.
+ * @param string $allowedRoot Absolute parent boundary containing the directory.
+ * @return void Removes the directory tree, or throws RuntimeException when the target is unsafe or deletion fails.
  */
 function delete_directory_tree(string $directory, string $allowedRoot): void
 {
@@ -439,8 +528,14 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
     $directory = rtrim($directory, DIRECTORY_SEPARATOR);
     // Variable $allowedRoot stores this steps working value.
     $allowedRoot = rtrim($allowedRoot, DIRECTORY_SEPARATOR);
-    if ($directory === '' || $directory === $allowedRoot || !path_inside($allowedRoot, $directory)) {
-        throw new RuntimeException('Refusing to delete an unsafe gallery path.');
+    if (
+        $directory === ''
+        || $directory === $allowedRoot
+        || !path_inside($allowedRoot, $directory)
+    ) {
+        throw new RuntimeException(
+            'Refusing to delete an unsafe gallery path.',
+        );
     }
     if (!is_dir($directory)) {
         return;
@@ -448,8 +543,11 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
 
     // Variable $iterator stores this steps working value.
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
+        new RecursiveDirectoryIterator(
+            $directory,
+            FilesystemIterator::SKIP_DOTS,
+        ),
+        RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $entry) {
         // Variable $path stores this steps working value.
@@ -458,19 +556,25 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
             // Never resolve or follow a link target for deletion. The link itself is safe to
             // unlink only when its containing directory is inside the allowed managed root.
             if (!path_inside($allowedRoot, dirname($path))) {
-                throw new RuntimeException('Refusing to delete a symbolic link outside the gallery root.');
+                throw new RuntimeException(
+                    'Refusing to delete a symbolic link outside the gallery root.',
+                );
             }
             if (!@unlink($path)) {
-                throw new RuntimeException('Could not remove symbolic link: ' . $path);
+                throw new RuntimeException('Could not remove symbolic link: '
+                    . $path);
             }
             continue;
         }
         if (!path_inside($allowedRoot, $path)) {
-            throw new RuntimeException('Refusing to delete a path outside the gallery root.');
+            throw new RuntimeException(
+                'Refusing to delete a path outside the gallery root.',
+            );
         }
         if ($entry->isDir()) {
             if (!@rmdir($path)) {
-                throw new RuntimeException('Could not remove directory: ' . $path);
+                throw new RuntimeException('Could not remove directory: '
+                    . $path);
             }
             continue;
         }
@@ -480,10 +584,10 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
     }
 
     if (!@rmdir($directory)) {
-        throw new RuntimeException('Could not remove gallery folder: ' . $directory);
+        throw new RuntimeException('Could not remove gallery folder: '
+            . $directory);
     }
 }
-
 
 /**
  * Return every generated derivative cache file that belongs to one image deletion.
@@ -499,8 +603,11 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
  * @param string $galleryRoot galleryRoot input for this operation.
  * @return array<string,mixed> Result produced by this operation.
  */
-function gallery_image_deletion_derivative_paths(array $image, array $gallery, string $galleryRoot): array
-{
+function gallery_image_deletion_derivative_paths(
+    array $image,
+    array $gallery,
+    string $galleryRoot,
+): array {
     // $paths stores normalized unique cache artifacts keyed by absolute path.
     $paths = [];
     // Confirmed shared files must disappear before a competing row is deleted.
@@ -512,15 +619,31 @@ function gallery_image_deletion_derivative_paths(array $image, array $gallery, s
                 continue;
             }
             $path = thumbnail_abs_path($image, $gallery, (int) $size, $format);
-            if (thumbnail_path_inside_existing_gallery($galleryRoot, $path) && is_file($path)) {
+            if (
+                thumbnail_path_inside_existing_gallery($galleryRoot, $path)
+                && is_file($path)
+            ) {
                 $paths[$path] = $path;
             }
         }
     }
 
-    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
-        $displayMasterPath = dng_display_master_abs_path($image, $gallery, false);
-        if (thumbnail_path_inside_existing_gallery($galleryRoot, $displayMasterPath) && is_file($displayMasterPath)) {
+    if (
+        function_exists('Gallery\\Services\\image_uses_dng_display_derivatives')
+        && image_uses_dng_display_derivatives($image)
+    ) {
+        $displayMasterPath = dng_display_master_abs_path(
+            $image,
+            $gallery,
+            false,
+        );
+        if (
+            thumbnail_path_inside_existing_gallery(
+                $galleryRoot,
+                $displayMasterPath,
+            )
+            && is_file($displayMasterPath)
+        ) {
             $paths[$displayMasterPath] = $displayMasterPath;
         }
     }
@@ -529,18 +652,30 @@ function gallery_image_deletion_derivative_paths(array $image, array $gallery, s
     // one gallery and avoids assuming that today's thumbnail size list matches the
     // sizes that existed when an older cache file was created.
     $thumbsDir = gallery_thumbs_dir($gallery, false);
-    if (!is_dir($thumbsDir) || !thumbnail_path_inside_existing_gallery($galleryRoot, $thumbsDir)) {
+    if (
+        !is_dir($thumbsDir)
+        || !thumbnail_path_inside_existing_gallery($galleryRoot, $thumbsDir)
+    ) {
         return array_values($paths);
     }
 
     // $stem identifies only derivatives owned by this complete source path.
     // $thumbnailPattern matches canonical configured sizes plus interrupted
     // atomic-write temporary files such as name_thumb300.jpg.<token>.tmp.jpg.
-    $thumbnailPattern = $stem === null ? '/^(?!)$/' : '/^' . preg_quote($stem, '/') . '_thumb\\d+\\.(?:jpg|webp)(?:\\.[A-Fa-f0-9]+\\.tmp\\.(?:jpg|webp))?$/i';
+    $thumbnailPattern = $stem === null
+        ? '/^(?!)$/'
+        : '/^'
+        . preg_quote($stem, '/')
+        . '_thumb\\d+\\.(?:jpg|webp)(?:\\.[A-Fa-f0-9]+\\.tmp\\.(?:jpg|webp))?$/i';
     // $dngPattern catches a DNG display master for this exact image id even when a
     // future cleanup runs after the source MIME metadata has become incomplete.
     $dngStem = pathinfo((string) ($image['filename'] ?? ''), PATHINFO_FILENAME);
-    $dngPattern = '/^' . preg_quote($dngStem, '/') . '_display_' . max(0, (int) ($image['id'] ?? 0)) . '\\.webp$/i';
+    $dngPattern =
+        '/^'
+        . preg_quote($dngStem, '/')
+        . '_display_'
+        . max(0, (int) ($image['id'] ?? 0))
+        . '\\.webp$/i';
 
     try {
         $iterator = new \DirectoryIterator($thumbsDir);
@@ -549,7 +684,10 @@ function gallery_image_deletion_derivative_paths(array $image, array $gallery, s
                 continue;
             }
             $filename = $entry->getFilename();
-            if (preg_match($thumbnailPattern, $filename) !== 1 && preg_match($dngPattern, $filename) !== 1) {
+            if (
+                preg_match($thumbnailPattern, $filename) !== 1
+                && preg_match($dngPattern, $filename) !== 1
+            ) {
                 continue;
             }
             $path = $entry->getPathname();
@@ -577,26 +715,41 @@ function gallery_image_deletion_derivative_paths(array $image, array $gallery, s
  * @param string $galleryRoot Absolute owning gallery directory.
  * @return array{original:string,staged:string} Staged file mapping.
  */
-function gallery_stage_file_for_deletion(string $path, string $galleryRoot): array
-{
-    if (!thumbnail_path_inside_existing_gallery($galleryRoot, $path) || !is_file($path)) {
-        throw new RuntimeException('Refusing to stage a deletion file outside its gallery.');
+function gallery_stage_file_for_deletion(
+    string $path,
+    string $galleryRoot,
+): array {
+    if (
+        !thumbnail_path_inside_existing_gallery($galleryRoot, $path)
+        || !is_file($path)
+    ) {
+        throw new RuntimeException(
+            'Refusing to stage a deletion file outside its gallery.',
+        );
     }
 
     $directory = dirname($path);
     $basename = basename($path);
     for ($attempt = 0; $attempt < 20; $attempt++) {
-        $staged = $directory . DIRECTORY_SEPARATOR . '.' . $basename . '.delete-' . bin2hex(random_bytes(6));
+        $staged =
+            $directory
+            . DIRECTORY_SEPARATOR
+            . '.'
+            . $basename
+            . '.delete-'
+            . bin2hex(random_bytes(6));
         if (file_exists($staged)) {
             continue;
         }
         if (@rename($path, $staged)) {
             return ['original' => $path, 'staged' => $staged];
         }
-        throw new RuntimeException('Could not stage file for deletion: ' . $basename);
+        throw new RuntimeException('Could not stage file for deletion: '
+            . $basename);
     }
 
-    throw new RuntimeException('Could not allocate a safe deletion staging filename for: ' . $basename);
+    throw new RuntimeException('Could not allocate a safe deletion staging filename for: '
+        . $basename);
 }
 
 /**
@@ -650,19 +803,29 @@ function gallery_finalize_staged_deletion_files(array $stagedFiles): int
  * @return list<int>|null Ordered retained direct-photo IDs; an empty list retains explicit Automatic, while null means legacy mode or no schema rewrite.
  * @throws RuntimeException When schema state or persisted selection cannot be trusted.
  */
-function gallery_mutation_cover_selection_after_change(array $gallery, array $excludedImageIds, string $schemaState): ?array
-{
+function gallery_mutation_cover_selection_after_change(
+    array $gallery,
+    array $excludedImageIds,
+    string $schemaState,
+): ?array {
     if ($schemaState === 'missing') {
         return null;
     }
-    if ($schemaState !== 'available' || !array_key_exists('cover_image_ids', $gallery)) {
-        throw new RuntimeException('Gallery cover-selection storage could not be verified.');
+    if (
+        $schemaState !== 'available'
+        || !array_key_exists('cover_image_ids', $gallery)
+    ) {
+        throw new RuntimeException(
+            'Gallery cover-selection storage could not be verified.',
+        );
     }
     if ($gallery['cover_image_ids'] === null) {
         return null;
     }
     if (!gallery_cover_selection_storage_valid($gallery)) {
-        throw new RuntimeException('Gallery cover selection is invalid and cannot be safely reconciled.');
+        throw new RuntimeException(
+            'Gallery cover selection is invalid and cannot be safely reconciled.',
+        );
     }
 
     $currentIds = gallery_cover_selection_ids($gallery);
@@ -672,8 +835,11 @@ function gallery_mutation_cover_selection_after_change(array $gallery, array $ex
             continue;
         }
         $image = find_image($imageId, true);
-        if (!$image || (int) ($image['gallery_id'] ?? 0) !== (int) ($gallery['id'] ?? 0)
-            || str_contains((string) ($image['relative_path'] ?? ''), '/')) {
+        if (
+            !$image
+            || (int) ($image['gallery_id'] ?? 0) !== (int) ($gallery['id'] ?? 0)
+            || str_contains((string) ($image['relative_path'] ?? ''), '/')
+        ) {
             continue;
         }
         $retainedIds[] = $imageId;
@@ -714,20 +880,30 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
 function delete_gallery_images_owned(int $galleryId, array $imageIds): array
 {
     // $normalizedIds stores the unique positive image ids selected by the admin.
-    $normalizedIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), /**
-     * Exclude nonpositive image identifiers before scoped deletion lookup.
-     * @param int $imageId Integer-normalized submitted identifier.
-     * @return bool Whether this identifier can name a persisted image.
-     */ static fn (int $imageId): bool => $imageId > 0)));
+    $normalizedIds = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        /**
+         * Exclude nonpositive image identifiers before scoped deletion lookup.
+         * @param int $imageId Integer-normalized submitted identifier.
+         * @return bool Whether this identifier can name a persisted image.
+         */ static fn(int $imageId): bool => $imageId > 0,
+    )));
     if (!$normalizedIds) {
-        return ['requested' => 0, 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0, 'cleanup_failed' => 0];
+        return [
+            'requested' => 0,
+            'deleted' => 0,
+            'files_deleted' => 0,
+            'derivatives_deleted' => 0,
+            'missing_files' => 0,
+            'cleanup_failed' => 0,
+        ];
     }
 
     mutation_schema_assert_available(
         gallery_deletion_schema_status(),
         'gallery.delete_images',
         'Image deletion requires the current core gallery/image database schema. Run pending migrations first.',
-        'Image deletion is temporarily unavailable because the required database schema could not be verified.'
+        'Image deletion is temporarily unavailable because the required database schema could not be verified.',
     );
 
     // $gallery stores the parent gallery row used for path safety and sidecar updates.
@@ -737,7 +913,9 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
     }
     $coverSchemaState = gallery_cover_selection_schema_state();
     if ($coverSchemaState === 'unknown') {
-        throw new RuntimeException('Image deletion is temporarily unavailable because gallery cover-selection storage could not be verified.');
+        throw new RuntimeException(
+            'Image deletion is temporarily unavailable because gallery cover-selection storage could not be verified.',
+        );
     }
 
     // $images stores only rows owned by the requested gallery.
@@ -750,12 +928,19 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
         }
     }
     if (!$images) {
-        return ['requested' => count($normalizedIds), 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0, 'cleanup_failed' => 0];
+        return [
+            'requested' => count($normalizedIds),
+            'deleted' => 0,
+            'files_deleted' => 0,
+            'derivatives_deleted' => 0,
+            'missing_files' => 0,
+            'cleanup_failed' => 0,
+        ];
     }
     $coverImageIdsAfterDelete = gallery_mutation_cover_selection_after_change(
         $gallery,
-        array_map(static fn (array $image): int => (int) $image['id'], $images),
-        $coverSchemaState
+        array_map(static fn(array $image): int => (int) $image['id'], $images),
+        $coverSchemaState,
     );
 
     // $galleryRoot stores the allowed filesystem boundary for originals and derivatives.
@@ -775,8 +960,13 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
     foreach ($images as $image) {
         // $originalPath stores the absolute path for the image source file.
         $originalPath = image_abs_path($image, $gallery);
-        if (!thumbnail_path_inside_existing_gallery($galleryRoot, $originalPath)) {
-            throw new RuntimeException('Refusing to delete an image outside its gallery.');
+        if (!thumbnail_path_inside_existing_gallery(
+            $galleryRoot,
+            $originalPath,
+        )) {
+            throw new RuntimeException(
+                'Refusing to delete an image outside its gallery.',
+            );
         }
         if (is_file($originalPath)) {
             $originalPaths[$originalPath] = $originalPath;
@@ -784,7 +974,11 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
             $missingFiles++;
         }
 
-        foreach (gallery_image_deletion_derivative_paths($image, $gallery, $galleryRoot) as $derivativePath) {
+        foreach (gallery_image_deletion_derivative_paths(
+            $image,
+            $gallery,
+            $galleryRoot,
+        ) as $derivativePath) {
             $derivativePaths[$derivativePath] = $derivativePath;
         }
     }
@@ -800,14 +994,20 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
             if (!is_file($path)) {
                 continue;
             }
-            $stagedFiles[] = gallery_stage_file_for_deletion($path, $galleryRoot);
+            $stagedFiles[] = gallery_stage_file_for_deletion(
+                $path,
+                $galleryRoot,
+            );
             $stagedDerivativeCount++;
         }
         foreach (array_values($originalPaths) as $path) {
             if (!is_file($path)) {
                 continue;
             }
-            $stagedFiles[] = gallery_stage_file_for_deletion($path, $galleryRoot);
+            $stagedFiles[] = gallery_stage_file_for_deletion(
+                $path,
+                $galleryRoot,
+            );
             $stagedOriginalCount++;
         }
     } catch (Throwable $exception) {
@@ -816,11 +1016,14 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
     }
 
     // $imageIdsToDelete stores the actual database rows that will be removed.
-    $imageIdsToDelete = array_map(/**
-     * Project already scoped image rows into the model's deletion identifiers.
-     * @param array{id:int|string} $image Image row verified against the requested gallery.
-     * @return int Positive persisted identifier.
-     */ static fn (array $image): int => (int) $image['id'], $images);
+    $imageIdsToDelete = array_map(
+        /**
+         * Project already scoped image rows into the model's deletion identifiers.
+         * @param array{id:int|string} $image Image row verified against the requested gallery.
+         * @return int Positive persisted identifier.
+         */ static fn(array $image): int => (int) $image['id'],
+        $images,
+    );
     try {
         // $deletedRows stores the number of rows removed from images after dependency cleanup.
         $deletedRows = gallery_mutation_model_delete_images(
@@ -828,7 +1031,7 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
             $imageIdsToDelete,
             gallery_mutation_delete_dependency_availability(),
             $coverImageIdsAfterDelete,
-            now_sql()
+            now_sql(),
         );
     } catch (Throwable $exception) {
         gallery_restore_staged_deletion_files($stagedFiles);
@@ -873,48 +1076,82 @@ function delete_gallery_images_owned(int $galleryId, array $imageIds): array
  * @param array{checkpoint?:callable(string,string,int):void} $options Internal fault-injection checkpoint; never sourced from HTTP.
  * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null} Counts and source/destination primary cover IDs after the durable move.
  */
-function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds, array $options = []): array
-{
-    mutation_schema_assert_available(gallery_image_move_journal_schema_status(), 'gallery.move_images');
+function move_gallery_images(
+    int $sourceGalleryId,
+    int $destinationGalleryId,
+    array $imageIds,
+    array $options = [],
+): array {
+    mutation_schema_assert_available(
+        gallery_image_move_journal_schema_status(),
+        'gallery.move_images',
+    );
     $writerLock = gallery_edit_writer_begin();
     $phase = 'gallery_lock';
     $locks = [];
     try {
-        $locks = \Gallery\Models\gallery_image_move_model_lock([$sourceGalleryId, $destinationGalleryId]);
+        $locks = \Gallery\Models\gallery_image_move_model_lock([
+            $sourceGalleryId,
+            $destinationGalleryId,
+        ]);
         $phase = 'pending_check';
-        \Gallery\Models\gallery_image_move_model_assert_idle($sourceGalleryId, $destinationGalleryId);
+        \Gallery\Models\gallery_image_move_model_assert_idle(
+            $sourceGalleryId,
+            $destinationGalleryId,
+        );
         $phase = 'move_preflight';
-        return gallery_move_images_locked($sourceGalleryId, $destinationGalleryId, $imageIds, $options);
+        return gallery_move_images_locked(
+            $sourceGalleryId,
+            $destinationGalleryId,
+            $imageIds,
+            $options,
+        );
     } catch (Throwable $exception) {
-        $diagnostic = $exception instanceof ImageMoveDiagnosticFailure ? $exception : null;
+        $diagnostic = $exception instanceof ImageMoveDiagnosticFailure
+            ? $exception
+            : null;
         $safePhase = $diagnostic?->phase ?? $phase;
         $reason = $diagnostic?->reason ?? match ($exception->getMessage()) {
-            'An earlier image move needs reconciliation before another move can use this gallery.' => 'pending_operation',
-            'Another image move or recovery is using this gallery.' => 'gallery_busy',
+            'An earlier image move needs reconciliation before another move can use this gallery.'
+                => 'pending_operation',
+            'Another image move or recovery is using this gallery.'
+                => 'gallery_busy',
             'Source or destination gallery was not found.' => 'gallery_missing',
-            'Source or destination gallery folder does not exist on disk.' => 'gallery_folder_missing',
+            'Source or destination gallery folder does not exist on disk.'
+                => 'gallery_folder_missing',
             'Choose a different destination gallery.' => 'same_gallery',
             default => 'operation_unavailable',
         };
         if (function_exists('Gallery\\Services\\admin_log_event')) {
             try {
-                admin_log_event('warning', 'gallery.image_move_failed', 'Image move failed; file and exception details are in this Admin log entry.', [
-                    'source_gallery_id' => $sourceGalleryId,
-                    'destination_gallery_id' => $destinationGalleryId,
-                    'requested_images' => count($imageIds),
-                    'phase' => $safePhase,
-                    'reason' => $reason,
-                    'operation_id' => $diagnostic?->operationId,
-                    'file_number' => $diagnostic?->fileNumber,
-                    'file_kind' => $diagnostic?->fileKind,
-                    'debug' => gallery_image_move_exception_context($exception),
-                ], ['category' => 'media', 'severity' => 'warning']);
+                admin_log_event(
+                    'warning',
+                    'gallery.image_move_failed',
+                    'Image move failed; file and exception details are in this Admin log entry.',
+                    [
+                        'source_gallery_id' => $sourceGalleryId,
+                        'destination_gallery_id' => $destinationGalleryId,
+                        'requested_images' => count($imageIds),
+                        'phase' => $safePhase,
+                        'reason' => $reason,
+                        'operation_id' => $diagnostic?->operationId,
+                        'file_number' => $diagnostic?->fileNumber,
+                        'file_kind' => $diagnostic?->fileKind,
+                        'debug' =>
+                            gallery_image_move_exception_context($exception),
+                    ],
+                    ['category' => 'media', 'severity' => 'warning'],
+                );
             } catch (Throwable) {
                 // Logging failure must not replace the safe move diagnostic.
             }
         }
-        $message = $diagnostic?->getMessage()
-            ?? 'Image move failed at ' . str_replace('_', ' ', $safePhase) . ': ' . gallery_image_move_reason_description($reason)
+        $message =
+            $diagnostic?->getMessage()
+            ?? 'Image move failed at '
+                . str_replace('_', ' ', $safePhase)
+                . ': '
+                . gallery_image_move_reason_description($reason)
                 . '. Inspect pending image-move operations before retrying.';
         throw new RuntimeException($message, 0, $exception);
     } finally {
@@ -935,21 +1172,28 @@ function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
  * @param array{checkpoint?:callable(string,string,int):void} $options Internal fault-injection checkpoint; never sourced from HTTP.
  * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null} Counts and source/destination primary cover IDs after the durable move.
  */
-function gallery_move_images_locked(int $sourceGalleryId, int $destinationGalleryId, array $imageIds, array $options = []): array
-{
+function gallery_move_images_locked(
+    int $sourceGalleryId,
+    int $destinationGalleryId,
+    array $imageIds,
+    array $options = [],
+): array {
     mutation_schema_assert_available(
         gallery_move_schema_status(),
         'gallery.move_images',
         'Image moves require the current gallery/image ownership schema. Run pending migrations first.',
-        'Image moves are temporarily unavailable because the required database schema could not be verified.'
+        'Image moves are temporarily unavailable because the required database schema could not be verified.',
     );
 
     // $normalizedIds stores the unique positive image ids selected by the admin.
-    $normalizedIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), /**
-     * Exclude nonpositive image identifiers before preparing a durable move.
-     * @param int $imageId Integer-normalized submitted identifier.
-     * @return bool Whether the identifier is eligible for scoped lookup.
-     */ static fn (int $imageId): bool => $imageId > 0)));
+    $normalizedIds = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        /**
+         * Exclude nonpositive image identifiers before preparing a durable move.
+         * @param int $imageId Integer-normalized submitted identifier.
+         * @return bool Whether the identifier is eligible for scoped lookup.
+         */ static fn(int $imageId): bool => $imageId > 0,
+    )));
     if (!$normalizedIds) {
         return [
             'requested' => 0,
@@ -970,19 +1214,27 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
     // $destinationGallery stores the gallery that will receive the selected rows.
     $destinationGallery = find_gallery($destinationGalleryId, true);
     if (!$sourceGallery || !$destinationGallery) {
-        throw new RuntimeException('Source or destination gallery was not found.');
+        throw new RuntimeException(
+            'Source or destination gallery was not found.',
+        );
     }
     $coverSchemaState = gallery_cover_selection_schema_state();
     if ($coverSchemaState === 'unknown') {
-        throw new RuntimeException('Image moves are temporarily unavailable because gallery cover-selection storage could not be verified.');
+        throw new RuntimeException(
+            'Image moves are temporarily unavailable because gallery cover-selection storage could not be verified.',
+        );
     }
 
     // $sourceRoot stores the filesystem boundary for current originals and derivatives.
     $sourceRoot = gallery_abs_path((string) $sourceGallery['folder_path']);
     // $destinationRoot stores the filesystem boundary for moved originals and derivatives.
-    $destinationRoot = gallery_abs_path((string) $destinationGallery['folder_path']);
+    $destinationRoot = gallery_abs_path(
+        (string) $destinationGallery['folder_path'],
+    );
     if (!is_dir($sourceRoot) || !is_dir($destinationRoot)) {
-        throw new RuntimeException('Source or destination gallery folder does not exist on disk.');
+        throw new RuntimeException(
+            'Source or destination gallery folder does not exist on disk.',
+        );
     }
 
     // $images stores validated image rows in the requested visual order.
@@ -993,7 +1245,8 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
         // $image stores one selected database row.
         $image = find_image($imageId, true);
         if (!$image || (int) $image['gallery_id'] !== $sourceGalleryId) {
-            $failures[] = 'Image #' . $imageId . ' is not part of the source gallery.';
+            $failures[] =
+                'Image #' . $imageId . ' is not part of the source gallery.';
             continue;
         }
         $images[] = $image;
@@ -1010,29 +1263,48 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
         ];
     }
 
-    $imageIdsToMove = array_map(static fn (array $image): int => (int) $image['id'], $images);
-    $sourceCoverImageIds = gallery_mutation_cover_selection_after_change($sourceGallery, $imageIdsToMove, $coverSchemaState);
-    $destinationCoverImageIds = gallery_mutation_cover_selection_after_change($destinationGallery, [], $coverSchemaState);
+    $imageIdsToMove = array_map(
+        static fn(array $image): int => (int) $image['id'],
+        $images,
+    );
+    $sourceCoverImageIds = gallery_mutation_cover_selection_after_change(
+        $sourceGallery,
+        $imageIdsToMove,
+        $coverSchemaState,
+    );
+    $destinationCoverImageIds = gallery_mutation_cover_selection_after_change(
+        $destinationGallery,
+        [],
+        $coverSchemaState,
+    );
 
     thumbnail_source_identity_preload($images);
-    usort($images, /**
-     * Preserve displayed source order, then filename and ID, during destination append.
-     * @param array{id?:int|string,sort_order?:int|string,filename?:string} $left First validated image row.
-     * @param array{id?:int|string,sort_order?:int|string,filename?:string} $right Second validated image row.
-     * @return int Stable comparison using order, filename and persisted identity.
-     */ static function (array $left, array $right): int {
-        // $sortCompare keeps moved images in the same relative order the admin sees in the source gallery.
-        $sortCompare = (int) ($left['sort_order'] ?? 0) <=> (int) ($right['sort_order'] ?? 0);
-        if ($sortCompare !== 0) {
-            return $sortCompare;
-        }
-        // $nameCompare gives a stable fallback when several rows share one order value.
-        $nameCompare = strcmp((string) ($left['filename'] ?? ''), (string) ($right['filename'] ?? ''));
-        if ($nameCompare !== 0) {
-            return $nameCompare;
-        }
-        return (int) ($left['id'] ?? 0) <=> (int) ($right['id'] ?? 0);
-    });
+    usort(
+        $images,
+        /**
+         * Preserve displayed source order, then filename and ID, during destination append.
+         * @param array{id?:int|string,sort_order?:int|string,filename?:string} $left First validated image row.
+         * @param array{id?:int|string,sort_order?:int|string,filename?:string} $right Second validated image row.
+         * @return int Stable comparison using order, filename and persisted identity.
+         */ static function (array $left, array $right): int {
+            // $sortCompare keeps moved images in the same relative order the admin sees in the source gallery.
+            $sortCompare =
+                (int) ($left['sort_order'] ?? 0)
+                <=> (int) ($right['sort_order'] ?? 0);
+            if ($sortCompare !== 0) {
+                return $sortCompare;
+            }
+            // $nameCompare gives a stable fallback when several rows share one order value.
+            $nameCompare = strcmp(
+                (string) ($left['filename'] ?? ''),
+                (string) ($right['filename'] ?? ''),
+            );
+            if ($nameCompare !== 0) {
+                return $nameCompare;
+            }
+            return (int) ($left['id'] ?? 0) <=> (int) ($right['id'] ?? 0);
+        },
+    );
 
     // $manifest stores every physical rename required for originals and generated files.
     $manifest = [];
@@ -1040,15 +1312,23 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
     $targetPaths = [];
     foreach ($images as $image) {
         // $imageLabel stores a readable name for failure messages.
-        $imageLabel = (string) ($image['relative_path'] ?: $image['filename'] ?: ('#' . (int) $image['id']));
+        $imageLabel = (string) (
+            $image['relative_path']
+            ?: $image['filename']
+            ?: '#' . (int) $image['id']
+        );
         // $relativePath stores the same path under the destination gallery.
-        $relativePath = normalize_relative_path((string) $image['relative_path']);
+        $relativePath = normalize_relative_path(
+            (string) $image['relative_path'],
+        );
         if ($relativePath === '') {
             $failures[] = $imageLabel . ': image relative path is empty.';
             continue;
         }
         if (find_image_by_path($destinationGalleryId, $relativePath)) {
-            $failures[] = $imageLabel . ': destination gallery already has a database record with this path.';
+            $failures[] =
+                $imageLabel
+                . ': destination gallery already has a database record with this path.';
             continue;
         }
 
@@ -1056,18 +1336,28 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
             // $sourceOriginal stores the current original file location.
             $sourceOriginal = image_abs_path($image, $sourceGallery);
             // $destinationOriginal stores the future original file location.
-            $destinationOriginal = gallery_image_target_abs_path($image, $destinationGallery);
+            $destinationOriginal = gallery_image_target_abs_path(
+                $image,
+                $destinationGallery,
+            );
         } catch (Throwable $exception) {
             $failures[] = $imageLabel . ': ' . $exception->getMessage();
             continue;
         }
 
-        if (!thumbnail_path_inside_existing_gallery($sourceRoot, $sourceOriginal)) {
+        if (!thumbnail_path_inside_existing_gallery(
+            $sourceRoot,
+            $sourceOriginal,
+        )) {
             $failures[] = $imageLabel . ': source path is outside its gallery.';
             continue;
         }
-        if (!thumbnail_path_inside_existing_gallery($destinationRoot, $destinationOriginal)) {
-            $failures[] = $imageLabel . ': destination path is outside its gallery.';
+        if (!thumbnail_path_inside_existing_gallery(
+            $destinationRoot,
+            $destinationOriginal,
+        )) {
+            $failures[] =
+                $imageLabel . ': destination path is outside its gallery.';
             continue;
         }
         if (!is_file($sourceOriginal)) {
@@ -1075,14 +1365,29 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
             continue;
         }
         if (file_exists($destinationOriginal)) {
-            $failures[] = $imageLabel . ': destination original file already exists.';
+            $failures[] =
+                $imageLabel . ': destination original file already exists.';
             continue;
         }
-        gallery_add_image_move_manifest_entry($manifest, $targetPaths, $sourceOriginal, $destinationOriginal, 'original', $imageLabel, $failures);
+        gallery_add_image_move_manifest_entry(
+            $manifest,
+            $targetPaths,
+            $sourceOriginal,
+            $destinationOriginal,
+            'original',
+            $imageLabel,
+            $failures,
+        );
 
         try {
             // $derivatives stores generated files already present on disk for this image.
-            $derivatives = gallery_image_derivative_move_paths($image, $sourceGallery, $destinationGallery, $sourceRoot, $destinationRoot);
+            $derivatives = gallery_image_derivative_move_paths(
+                $image,
+                $sourceGallery,
+                $destinationGallery,
+                $sourceRoot,
+                $destinationRoot,
+            );
         } catch (Throwable $exception) {
             $failures[] = $imageLabel . ': ' . $exception->getMessage();
             continue;
@@ -1095,7 +1400,7 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
                 (string) $derivative['to'],
                 'derivative',
                 $imageLabel,
-                $failures
+                $failures,
             );
         }
     }
@@ -1112,32 +1417,52 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
         ];
     }
 
-    $imageIdsToMove = array_map(/**
-     * Capture the validated ownership set in the durable intent.
-     * @param array{id:int|string} $image Source-scoped image row.
-     * @return int Persisted identifier recorded before filesystem changes.
-     */ static fn (array $image): int => (int) $image['id'], $images);
-    $operationId = gallery_image_move_prepare($sourceGallery, $destinationGallery, $imageIdsToMove, $manifest);
-    $checkpoint = isset($options['checkpoint']) && is_callable($options['checkpoint']) ? $options['checkpoint'] : null;
+    $imageIdsToMove = array_map(
+        /**
+         * Capture the validated ownership set in the durable intent.
+         * @param array{id:int|string} $image Source-scoped image row.
+         * @return int Persisted identifier recorded before filesystem changes.
+         */ static fn(array $image): int => (int) $image['id'],
+        $images,
+    );
+    $operationId = gallery_image_move_prepare(
+        $sourceGallery,
+        $destinationGallery,
+        $imageIdsToMove,
+        $manifest,
+    );
+    $checkpoint = isset($options['checkpoint'])
+    && is_callable($options['checkpoint'])
+        ? $options['checkpoint']
+        : null;
     if ($checkpoint !== null) {
         $checkpoint('prepared', $operationId, 0);
     }
     try {
-        $movedFiles = gallery_image_move_execute_files($operationId, $checkpoint);
+        $movedFiles = gallery_image_move_execute_files(
+            $operationId,
+            $checkpoint,
+        );
     } catch (Throwable $exception) {
         gallery_image_move_recover_locked($operationId);
         throw $exception;
     }
 
     // $imageIdsToMove stores validated row IDs for the database update.
-    $imageIdsToMove = array_map(/**
-     * Pass the same validated ownership set to the atomic database move.
-     * @param array{id:int|string} $image Source-scoped image row retained under the writer lock.
-     * @return int Persisted identifier already recorded in the move intent.
-     */ static fn (array $image): int => (int) $image['id'], $images);
+    $imageIdsToMove = array_map(
+        /**
+         * Pass the same validated ownership set to the atomic database move.
+         * @param array{id:int|string} $image Source-scoped image row retained under the writer lock.
+         * @return int Persisted identifier already recorded in the move intent.
+         */ static fn(array $image): int => (int) $image['id'],
+        $images,
+    );
     // $destinationSortOrders stores append-style order values assigned in the destination gallery.
     try {
-        $destinationSortOrders = gallery_destination_sort_orders($destinationGalleryId, $imageIdsToMove);
+        $destinationSortOrders = gallery_destination_sort_orders(
+            $destinationGalleryId,
+            $imageIdsToMove,
+        );
         // $moveResult stores the atomic ownership and title-picture update result.
         $moveResult = gallery_mutation_model_move_images(
             $sourceGalleryId,
@@ -1148,7 +1473,7 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
             now_sql(),
             $operationId,
             $sourceCoverImageIds,
-            $destinationCoverImageIds
+            $destinationCoverImageIds,
         );
         $updatedRows = (int) $moveResult['moved'];
         thumbnail_legacy_identity_cache_clear();
@@ -1158,7 +1483,12 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
         // Recovery reads the transaction's durable marker; an uncertain COMMIT is never guessed.
         thumbnail_legacy_identity_cache_clear();
         gallery_image_move_recover_locked($operationId);
-        throw new ImageMoveDiagnosticFailure('database_commit', 'ownership_update_failed', $operationId, previous: $exception);
+        throw new ImageMoveDiagnosticFailure(
+            'database_commit',
+            'ownership_update_failed',
+            $operationId,
+            previous: $exception,
+        );
     }
 
     if ($checkpoint !== null) {
@@ -1172,13 +1502,17 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
      * Count completed original-file transfers independently of generated derivatives.
      * @param array{kind:string} $entry Executed manifest entry.
      * @return bool Whether the entry identifies an original.
-     */ static fn (array $entry): bool => (string) $entry['kind'] === 'original'));
+     */ static fn(array $entry): bool => (
+        (string) $entry['kind'] === 'original'
+    )));
     // $derivativesMoved stores moved generated files.
     $derivativesMoved = count(array_filter($movedFiles, /**
      * Count completed derivative transfers independently of originals.
      * @param array{kind:string} $entry Executed manifest entry.
      * @return bool Whether the entry identifies a derivative.
-     */ static fn (array $entry): bool => (string) $entry['kind'] === 'derivative'));
+     */ static fn(array $entry): bool => (
+        (string) $entry['kind'] === 'derivative'
+    )));
 
     return [
         'requested' => count($normalizedIds),
@@ -1195,9 +1529,9 @@ function gallery_move_images_locked(int $sourceGalleryId, int $destinationGaller
 /**
  * Resolve a destination image path without requiring nested target directories to exist yet.
  *
- * @param array $image Image row or image data.
- * @param array $gallery Gallery row or gallery data.
- * @return string Text result for the caller.
+ * @param array{relative_path:string} $image Image row containing its relative file path.
+ * @param array{folder_path:string} $gallery Destination gallery row containing its folder path.
+ * @return string Absolute destination path for the image, whether or not nested target directories exist.
  */
 function gallery_image_target_abs_path(array $image, array $gallery): string
 {
@@ -1209,9 +1543,14 @@ function gallery_image_target_abs_path(array $image, array $gallery): string
         throw new RuntimeException('Image path is empty.');
     }
     // $targetPath stores the future absolute path for the moved original.
-    $targetPath = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $targetPath =
+        $galleryRoot
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     if (!thumbnail_path_inside_existing_gallery($galleryRoot, $targetPath)) {
-        throw new RuntimeException('Destination image path is outside its gallery.');
+        throw new RuntimeException(
+            'Destination image path is outside its gallery.',
+        );
     }
     return $targetPath;
 }
@@ -1226,21 +1565,41 @@ function gallery_image_target_abs_path(array $image, array $gallery): string
  * @param string $kind Kind value.
  * @param string $imageLabel Image label value.
  * @param array<int,string> $failures Mutable validation errors.
+ * @return void Adds a rename entry when its target is available; otherwise appends a collision message.
  */
-function gallery_add_image_move_manifest_entry(array &$manifest, array &$targetPaths, string $sourcePath, string $destinationPath, string $kind, string $imageLabel, array &$failures): void
-{
+function gallery_add_image_move_manifest_entry(
+    array &$manifest,
+    array &$targetPaths,
+    string $sourcePath,
+    string $destinationPath,
+    string $kind,
+    string $imageLabel,
+    array &$failures,
+): void {
     // $normalizedDestination stores a platform-consistent key for duplicate target detection.
     $normalizedDestination = normalize_filesystem_path($destinationPath);
     if (isset($targetPaths[$normalizedDestination])) {
-        $failures[] = $imageLabel . ': generated file target conflicts with ' . $targetPaths[$normalizedDestination] . '.';
+        $failures[] =
+            $imageLabel
+            . ': generated file target conflicts with '
+            . $targetPaths[$normalizedDestination]
+            . '.';
         return;
     }
     if (file_exists($destinationPath)) {
-        $failures[] = $imageLabel . ': destination file already exists: ' . basename($destinationPath) . '.';
+        $failures[] =
+            $imageLabel
+            . ': destination file already exists: '
+            . basename($destinationPath)
+            . '.';
         return;
     }
     $targetPaths[$normalizedDestination] = $imageLabel;
-    $manifest[] = ['from' => $sourcePath, 'to' => $destinationPath, 'kind' => $kind];
+    $manifest[] = [
+        'from' => $sourcePath,
+        'to' => $destinationPath,
+        'kind' => $kind,
+    ];
 }
 
 /**
@@ -1253,24 +1612,49 @@ function gallery_add_image_move_manifest_entry(array &$manifest, array &$targetP
  * @param string $destinationRoot Destination root value.
  * @return array<int,array{from:string,to:string}> Structured result data for the caller.
  */
-function gallery_image_derivative_move_paths(array $image, array $sourceGallery, array $destinationGallery, string $sourceRoot, string $destinationRoot): array
-{
+function gallery_image_derivative_move_paths(
+    array $image,
+    array $sourceGallery,
+    array $destinationGallery,
+    string $sourceRoot,
+    string $destinationRoot,
+): array {
     // This planner executes before the durable manifest can move any original.
     // Pure naming must never promote a shared legacy artifact into new ownership.
     thumbnail_assert_source_identity_owned($image);
     $stem = thumbnail_filename_stem($image);
     // Candidate observation includes every access class and a finite
     // overflow sentinel; no full-gallery inventory or provisional grant.
-    $targetRows = thumbnail_identity_candidates((int) $destinationGallery['id'], [], [$stem], 65);
-    if ($targetRows === null) { throw new RuntimeException('Destination thumbnail ownership could not be verified.'); }
+    $targetRows = thumbnail_identity_candidates(
+        (int) $destinationGallery['id'],
+        [],
+        [$stem],
+        65,
+    );
+    if ($targetRows === null) {
+        throw new RuntimeException(
+            'Destination thumbnail ownership could not be verified.',
+        );
+    }
     foreach ($targetRows as $targetRow) {
-        if (!in_array(thumbnail_source_identity_version($targetRow), [0, 1], true)) {
-            throw new RuntimeException('Destination thumbnail source identity could not be verified.');
+        if (!in_array(
+            thumbnail_source_identity_version($targetRow),
+            [0, 1],
+            true,
+        )) {
+            throw new RuntimeException(
+                'Destination thumbnail source identity could not be verified.',
+            );
         }
         $targetStem = thumbnail_filename_stem($targetRow);
-        $match = preg_match('/^' . preg_quote($stem, '/') . '$/iuD', $targetStem);
+        $match = preg_match(
+            '/^' . preg_quote($stem, '/') . '$/iuD',
+            $targetStem,
+        );
         if ($match === false || $match === 1) {
-            throw new RuntimeException('Destination contains an image sharing this thumbnail identity.');
+            throw new RuntimeException(
+                'Destination contains an image sharing this thumbnail identity.',
+            );
         }
     }
     // $paths stores derivative file renames that are present on disk.
@@ -1278,35 +1662,90 @@ function gallery_image_derivative_move_paths(array $image, array $sourceGallery,
     foreach (thumbnail_sizes() as $size) {
         foreach (['jpg', 'webp'] as $format) {
             // $sourceThumbnail stores one generated thumbnail path.
-            $sourceThumbnail = thumbnail_abs_path($image, $sourceGallery, (int) $size, $format);
+            $sourceThumbnail = thumbnail_abs_path(
+                $image,
+                $sourceGallery,
+                (int) $size,
+                $format,
+            );
             // $destinationThumbnail stores the matching generated thumbnail path in the receiving gallery.
-            $destinationThumbnail = thumbnail_abs_path($image, $destinationGallery, (int) $size, $format);
-            if (!thumbnail_path_inside_existing_gallery($destinationRoot, $destinationThumbnail)) {
-                throw new RuntimeException('Destination thumbnail path is outside its gallery.');
+            $destinationThumbnail = thumbnail_abs_path(
+                $image,
+                $destinationGallery,
+                (int) $size,
+                $format,
+            );
+            if (!thumbnail_path_inside_existing_gallery(
+                $destinationRoot,
+                $destinationThumbnail,
+            )) {
+                throw new RuntimeException(
+                    'Destination thumbnail path is outside its gallery.',
+                );
             }
             if (file_exists($destinationThumbnail)) {
-                throw new RuntimeException('Destination generated file already exists: ' . basename($destinationThumbnail) . '.');
+                throw new RuntimeException(
+                    'Destination generated file already exists: '
+                        . basename($destinationThumbnail)
+                        . '.',
+                );
             }
-            if (!thumbnail_path_inside_existing_gallery($sourceRoot, $sourceThumbnail) || !is_file($sourceThumbnail)) {
+            if (
+                !thumbnail_path_inside_existing_gallery(
+                    $sourceRoot,
+                    $sourceThumbnail,
+                )
+                || !is_file($sourceThumbnail)
+            ) {
                 continue;
             }
-            $paths[] = ['from' => $sourceThumbnail, 'to' => $destinationThumbnail];
+            $paths[] = [
+                'from' => $sourceThumbnail,
+                'to' => $destinationThumbnail,
+            ];
         }
     }
 
-    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+    if (
+        function_exists('Gallery\\Services\\image_uses_dng_display_derivatives')
+        && image_uses_dng_display_derivatives($image)
+    ) {
         // $sourceDisplayMaster stores the generated full-size WebP display derivative.
-        $sourceDisplayMaster = dng_display_master_abs_path($image, $sourceGallery, false);
-        if (thumbnail_path_inside_existing_gallery($sourceRoot, $sourceDisplayMaster) && is_file($sourceDisplayMaster)) {
+        $sourceDisplayMaster = dng_display_master_abs_path(
+            $image,
+            $sourceGallery,
+            false,
+        );
+        if (
+            thumbnail_path_inside_existing_gallery(
+                $sourceRoot,
+                $sourceDisplayMaster,
+            )
+            && is_file($sourceDisplayMaster)
+        ) {
             // $destinationDisplayMaster stores the matching DNG display derivative in the receiving gallery.
-            $destinationDisplayMaster = dng_display_master_abs_path($image, $destinationGallery, false);
-            if (!thumbnail_path_inside_existing_gallery($destinationRoot, $destinationDisplayMaster)) {
-                throw new RuntimeException('Destination DNG display derivative path is outside its gallery.');
+            $destinationDisplayMaster = dng_display_master_abs_path(
+                $image,
+                $destinationGallery,
+                false,
+            );
+            if (!thumbnail_path_inside_existing_gallery(
+                $destinationRoot,
+                $destinationDisplayMaster,
+            )) {
+                throw new RuntimeException(
+                    'Destination DNG display derivative path is outside its gallery.',
+                );
             }
             if (file_exists($destinationDisplayMaster)) {
-                throw new RuntimeException('Destination DNG display derivative already exists.');
+                throw new RuntimeException(
+                    'Destination DNG display derivative already exists.',
+                );
             }
-            $paths[] = ['from' => $sourceDisplayMaster, 'to' => $destinationDisplayMaster];
+            $paths[] = [
+                'from' => $sourceDisplayMaster,
+                'to' => $destinationDisplayMaster,
+            ];
         }
     }
 
@@ -1323,7 +1762,10 @@ function gallery_rollback_image_file_moves(array $movedFiles): void
     for ($index = count($movedFiles) - 1; $index >= 0; $index--) {
         // $entry stores one file that should be restored to the source path.
         $entry = $movedFiles[$index];
-        if (is_file((string) $entry['to']) && !is_file((string) $entry['from'])) {
+        if (
+            is_file((string) $entry['to'])
+            && !is_file((string) $entry['from'])
+        ) {
             @mkdir(dirname((string) $entry['from']), 0775, true);
             @rename((string) $entry['to'], (string) $entry['from']);
         }
@@ -1337,10 +1779,13 @@ function gallery_rollback_image_file_moves(array $movedFiles): void
  * @param array<int> $imageIdsToMove Validated image ids in source order.
  * @return array<int,int> Structured result data for the caller.
  */
-function gallery_destination_sort_orders(int $destinationGalleryId, array $imageIdsToMove): array
-{
+function gallery_destination_sort_orders(
+    int $destinationGalleryId,
+    array $imageIdsToMove,
+): array {
     // $nextSortOrder stores the first appended order number.
-    $nextSortOrder = gallery_mutation_model_max_image_sort_order($destinationGalleryId) + 10;
+    $nextSortOrder =
+        gallery_mutation_model_max_image_sort_order($destinationGalleryId) + 10;
     // $orders stores a sort_order value for each moved image id.
     $orders = [];
     foreach ($imageIdsToMove as $imageId) {
@@ -1357,8 +1802,10 @@ function gallery_destination_sort_orders(int $destinationGalleryId, array $image
  * @param array<int> $movedImageIds Validated image ids that are being moved away.
  * @return ?int Integer result for the caller.
  */
-function gallery_cover_id_after_source_move(int $sourceGalleryId, array $movedImageIds): ?int
-{
+function gallery_cover_id_after_source_move(
+    int $sourceGalleryId,
+    array $movedImageIds,
+): ?int {
     // $gallery stores the source row whose current cover determines whether reassignment is needed.
     $gallery = find_gallery($sourceGalleryId, true);
     if (!$gallery || empty($gallery['cover_image_id'])) {
@@ -1367,7 +1814,10 @@ function gallery_cover_id_after_source_move(int $sourceGalleryId, array $movedIm
     if (!in_array((int) $gallery['cover_image_id'], $movedImageIds, true)) {
         return (int) $gallery['cover_image_id'];
     }
-    return gallery_first_cover_candidate_excluding($sourceGalleryId, $movedImageIds);
+    return gallery_first_cover_candidate_excluding(
+        $sourceGalleryId,
+        $movedImageIds,
+    );
 }
 
 /**
@@ -1385,7 +1835,13 @@ function gallery_cover_id_after_destination_move(int $destinationGalleryId): ?in
     }
     // $currentCoverId stores the existing title picture value, if any.
     $currentCoverId = (int) ($gallery['cover_image_id'] ?? 0);
-    if ($currentCoverId > 0 && gallery_image_belongs_to_gallery_branch($currentCoverId, $destinationGalleryId)) {
+    if (
+        $currentCoverId > 0
+        && gallery_image_belongs_to_gallery_branch(
+            $currentCoverId,
+            $destinationGalleryId,
+        )
+    ) {
         return $currentCoverId;
     }
     return gallery_first_cover_candidate_excluding($destinationGalleryId, []);
@@ -1398,9 +1854,14 @@ function gallery_cover_id_after_destination_move(int $destinationGalleryId): ?in
  * @param array<int> $excludedImageIds Image ids not eligible for the result.
  * @return ?int Integer result for the caller.
  */
-function gallery_first_cover_candidate_excluding(int $galleryId, array $excludedImageIds): ?int
-{
-    return gallery_mutation_model_first_cover_candidate($galleryId, $excludedImageIds);
+function gallery_first_cover_candidate_excluding(
+    int $galleryId,
+    array $excludedImageIds,
+): ?int {
+    return gallery_mutation_model_first_cover_candidate(
+        $galleryId,
+        $excludedImageIds,
+    );
 }
 
 /**
@@ -1410,11 +1871,16 @@ function gallery_first_cover_candidate_excluding(int $galleryId, array $excluded
  * @param int $galleryId Gallery identifier.
  * @return bool True when the condition matches.
  */
-function gallery_image_belongs_to_gallery_branch(int $imageId, int $galleryId): bool
-{
+function gallery_image_belongs_to_gallery_branch(
+    int $imageId,
+    int $galleryId,
+): bool {
     // $galleryIds stores the receiving gallery and all descendant galleries accepted by title-picture selection.
     $galleryIds = gallery_subtree_ids($galleryId);
-    return gallery_mutation_model_image_belongs_to_galleries($imageId, $galleryIds);
+    return gallery_mutation_model_image_belongs_to_galleries(
+        $imageId,
+        $galleryIds,
+    );
 }
 
 /**
@@ -1426,11 +1892,20 @@ function gallery_image_belongs_to_gallery_branch(int $imageId, int $galleryId): 
  * @param bool $smartGalleryGraphPrevalidated True only for a caller that already validated the complete final parent map and will run final hierarchy maintenance.
  * @return array{moved:bool,from:string,to:string,galleries:int} Relative source/target paths and rewritten row count; moved=false is a no-op.
  */
-function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $folderName = null, bool $smartGalleryGraphPrevalidated = false): array
-{
+function move_gallery_folder_to_parent(
+    int $galleryId,
+    ?int $parentId,
+    ?string $folderName = null,
+    bool $smartGalleryGraphPrevalidated = false,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return move_gallery_folder_to_parent_owned($galleryId, $parentId, $folderName, $smartGalleryGraphPrevalidated);
+        return move_gallery_folder_to_parent_owned(
+            $galleryId,
+            $parentId,
+            $folderName,
+            $smartGalleryGraphPrevalidated,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -1445,13 +1920,17 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
  * @param bool $smartGalleryGraphPrevalidated Whether the caller already validated the attachment graph.
  * @return array{moved:bool,from:string,to:string,galleries:int} Physical move result and affected hierarchy count.
  */
-function move_gallery_folder_to_parent_owned(int $galleryId, ?int $parentId, ?string $folderName = null, bool $smartGalleryGraphPrevalidated = false): array
-{
+function move_gallery_folder_to_parent_owned(
+    int $galleryId,
+    ?int $parentId,
+    ?string $folderName = null,
+    bool $smartGalleryGraphPrevalidated = false,
+): array {
     mutation_schema_assert_available(
         gallery_move_schema_status(),
         'gallery.move_folder',
         'Gallery folder moves require the current gallery/image ownership schema. Run pending migrations first.',
-        'Gallery folder moves are temporarily unavailable because the required database schema could not be verified.'
+        'Gallery folder moves are temporarily unavailable because the required database schema could not be verified.',
     );
 
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -1464,11 +1943,16 @@ function move_gallery_folder_to_parent_owned(int $galleryId, ?int $parentId, ?st
     // $oldAbs stores an intermediate value used by the surrounding gallery workflow.
     $oldAbs = gallery_abs_path($oldPath);
     if (!is_dir($oldAbs)) {
-        throw new RuntimeException('Current gallery folder does not exist on disk.');
+        throw new RuntimeException(
+            'Current gallery folder does not exist on disk.',
+        );
     }
 
     // $parent stores an intermediate value used by the surrounding gallery workflow.
-    $parent = $parentId !== null && $parentId > 0 ? find_gallery($parentId, true) : null;
+    $parent =
+        $parentId !== null && $parentId > 0
+            ? find_gallery($parentId, true)
+            : null;
     if ($parentId !== null && $parentId > 0 && !$parent) {
         throw new RuntimeException('Selected parent gallery does not exist.');
     }
@@ -1478,36 +1962,66 @@ function move_gallery_folder_to_parent_owned(int $galleryId, ?int $parentId, ?st
     if ($parent) {
         // $parentPath stores an intermediate value used by the surrounding gallery workflow.
         $parentPath = normalize_relative_path((string) $parent['folder_path']);
-        if ($parentPath === $oldPath || str_starts_with($parentPath . '/', $oldPath . '/')) {
-            throw new RuntimeException('A gallery cannot be moved under one of its own subgalleries.');
+        if (
+            $parentPath === $oldPath
+            || str_starts_with($parentPath . '/', $oldPath . '/')
+        ) {
+            throw new RuntimeException(
+                'A gallery cannot be moved under one of its own subgalleries.',
+            );
         }
         if (!is_dir(gallery_abs_path($parentPath))) {
-            throw new RuntimeException('Selected parent folder does not exist on disk.');
+            throw new RuntimeException(
+                'Selected parent folder does not exist on disk.',
+            );
         }
     }
-    if (!$smartGalleryGraphPrevalidated && function_exists(__NAMESPACE__ . '\\smart_gallery_validate_gallery_parent_change')) {
-        smart_gallery_validate_gallery_parent_change($galleryId, $parent ? (int) $parent['id'] : null);
+    if (
+        !$smartGalleryGraphPrevalidated
+        && function_exists(__NAMESPACE__
+            . '\\smart_gallery_validate_gallery_parent_change')
+    ) {
+        smart_gallery_validate_gallery_parent_change(
+            $galleryId,
+            $parent ? (int) $parent['id'] : null,
+        );
     }
 
     // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
     $currentFolderName = gallery_folder_name_from_path($oldPath);
     // $targetFolderName stores an intermediate value used by the surrounding gallery workflow.
-    $targetFolderName = $folderName !== null && trim($folderName) !== '' ? gallery_folder_segment($folderName) : $currentFolderName;
+    $targetFolderName =
+        $folderName !== null && trim($folderName) !== ''
+            ? gallery_folder_segment($folderName)
+            : $currentFolderName;
     if ($targetFolderName === '') {
         throw new RuntimeException('Gallery folder name cannot be empty.');
     }
     // $newPath stores an intermediate value used by the surrounding gallery workflow.
-    $newPath = $parent ? normalize_relative_path((string) $parent['folder_path'] . '/' . $targetFolderName) : $targetFolderName;
+    $newPath = $parent
+        ? normalize_relative_path(
+            (string) $parent['folder_path'] . '/' . $targetFolderName,
+        )
+        : $targetFolderName;
     if ($newPath === $oldPath) {
-        return ['moved' => false, 'from' => $oldPath, 'to' => $newPath, 'galleries' => 0];
+        return [
+            'moved' => false,
+            'from' => $oldPath,
+            'to' => $newPath,
+            'galleries' => 0,
+        ];
     }
     if (find_gallery_by_folder_path($newPath)) {
-        throw new RuntimeException('Another gallery already uses the destination folder path.');
+        throw new RuntimeException(
+            'Another gallery already uses the destination folder path.',
+        );
     }
     // $newAbs stores an intermediate value used by the surrounding gallery workflow.
     $newAbs = gallery_target_abs_path($newPath);
     if (file_exists($newAbs)) {
-        throw new RuntimeException('Destination folder already exists on disk.');
+        throw new RuntimeException(
+            'Destination folder already exists on disk.',
+        );
     }
 
     // $rows stores an intermediate value used by the surrounding gallery workflow.
@@ -1518,8 +2032,12 @@ function move_gallery_folder_to_parent_owned(int $galleryId, ?int $parentId, ?st
         // $rowPath stores an intermediate value used by the surrounding gallery workflow.
         $rowPath = normalize_relative_path((string) $row['folder_path']);
         // $suffix stores an intermediate value used by the surrounding gallery workflow.
-        $suffix = $rowPath === $oldPath ? '' : substr($rowPath, strlen($oldPath) + 1);
-        $pathMap[(int) $row['id']] = $suffix === '' ? $newPath : normalize_relative_path($newPath . '/' . $suffix);
+        $suffix = $rowPath === $oldPath
+            ? ''
+            : substr($rowPath, strlen($oldPath) + 1);
+        $pathMap[(int) $row['id']] = $suffix === ''
+            ? $newPath
+            : normalize_relative_path($newPath . '/' . $suffix);
     }
 
     // $updates stores the complete path and parent map persisted after the filesystem rename.
@@ -1532,9 +2050,20 @@ function move_gallery_folder_to_parent_owned(int $galleryId, ?int $parentId, ?st
         if ((int) $id === $galleryId) {
             $rowParentId = $parent ? (int) $parent['id'] : null;
         } else {
-            $parentPath = normalize_relative_path(str_replace('\\', '/', dirname($path)));
-            $rowParentId = ($parentPath === '' || $parentPath === '.') ? null : ($idsByNewPath[$parentPath] ?? null);
-            if ($rowParentId === null && $parentPath !== '' && $parentPath !== '.') {
+            $parentPath = normalize_relative_path(str_replace(
+                '\\',
+                '/',
+                dirname($path),
+            ));
+            $rowParentId =
+                $parentPath === '' || $parentPath === '.'
+                    ? null
+                    : $idsByNewPath[$parentPath] ?? null;
+            if (
+                $rowParentId === null
+                && $parentPath !== ''
+                && $parentPath !== '.'
+            ) {
                 $rowParent = find_parent_gallery_for_path($path);
                 $rowParentId = $rowParent ? (int) $rowParent['id'] : null;
             }
@@ -1551,18 +2080,25 @@ function move_gallery_folder_to_parent_owned(int $galleryId, ?int $parentId, ?st
     $moved = false;
     try {
         if (!rename($oldAbs, $newAbs)) {
-            throw new RuntimeException('Could not move gallery folder on disk.');
+            throw new RuntimeException(
+                'Could not move gallery folder on disk.',
+            );
         }
         $moved = true;
         gallery_mutation_model_update_gallery_paths($updates, now_sql());
-        if (function_exists(__NAMESPACE__ . '\smart_gallery_graph_cache_clear')) {
+        if (function_exists(__NAMESPACE__
+            . '\smart_gallery_graph_cache_clear')) {
             smart_gallery_graph_cache_clear();
         }
     } catch (Throwable $exception) {
         if ($moved && is_dir($newAbs) && !is_dir($oldAbs)) {
             @rename($newAbs, $oldAbs);
         }
-        throw new RuntimeException('Gallery move failed: ' . $exception->getMessage(), 0, $exception);
+        throw new RuntimeException(
+            'Gallery move failed: ' . $exception->getMessage(),
+            0,
+            $exception,
+        );
     }
 
     if (!$smartGalleryGraphPrevalidated) {
@@ -1579,7 +2115,12 @@ function move_gallery_folder_to_parent_owned(int $galleryId, ?int $parentId, ?st
         }
     }
 
-    return ['moved' => true, 'from' => $oldPath, 'to' => $newPath, 'galleries' => count($pathMap)];
+    return [
+        'moved' => true,
+        'from' => $oldPath,
+        'to' => $newPath,
+        'galleries' => count($pathMap),
+    ];
 }
 
 /**
@@ -1601,7 +2142,10 @@ function ensure_gallery_ancestors_for_path(string $folderPath): array
         $currentSegments[] = array_shift($segments);
         // Variable $ancestorPath stores this steps working value.
         $ancestorPath = implode('/', $currentSegments);
-        if ($ancestorPath === '' || find_gallery_by_folder_path($ancestorPath)) {
+        if (
+            $ancestorPath === ''
+            || find_gallery_by_folder_path($ancestorPath)
+        ) {
             continue;
         }
         if (!is_dir(gallery_abs_path($ancestorPath))) {
@@ -1624,8 +2168,10 @@ function ensure_gallery_ancestors_for_path(string $folderPath): array
  * @param bool $createThumbnails Whether newly imported galleries receive recursive thumbnail generation.
  * @return array{imported:int,scanned:int,thumbnails:int,gallery_ids:list<int>} New gallery IDs and work counts under one writer lease.
  */
-function import_galleries(array $folderPaths, bool $createThumbnails = false): array
-{
+function import_galleries(
+    array $folderPaths,
+    bool $createThumbnails = false,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
         return import_galleries_owned($folderPaths, $createThumbnails);
@@ -1641,10 +2187,13 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
  * @param bool $createThumbnails Whether ingestion should generate derivatives.
  * @return array{imported:int,scanned:int,thumbnails:int,gallery_ids:list<int>} New catalog identities and ingestion counts.
  */
-function import_galleries_owned(array $folderPaths, bool $createThumbnails = false): array
-{
+function import_galleries_owned(
+    array $folderPaths,
+    bool $createThumbnails = false,
+): array {
     // $folderPaths stores the ordered import queue expanded from the admin selection.
-    $folderPaths = admin_gallery_discovery_expand_requested_import_paths($folderPaths);
+    $folderPaths =
+        admin_gallery_discovery_expand_requested_import_paths($folderPaths);
 
     // Variable $imported stores this steps working value.
     $imported = 0;
@@ -1682,7 +2231,12 @@ function import_galleries_owned(array $folderPaths, bool $createThumbnails = fal
             $thumbs += create_gallery_thumbnails($galleryId);
         }
     }
-    return ['imported' => $imported, 'scanned' => $scanned, 'thumbnails' => $thumbs, 'gallery_ids' => $importedIds];
+    return [
+        'imported' => $imported,
+        'scanned' => $scanned,
+        'thumbnails' => $thumbs,
+        'gallery_ids' => $importedIds,
+    ];
 }
 
 /**
@@ -1710,7 +2264,8 @@ function import_galleries_without_thumbnails(array $folderPaths): array
 function import_galleries_without_thumbnails_owned(array $folderPaths): array
 {
     // $folderPaths stores the ordered import queue expanded from the admin selection.
-    $folderPaths = admin_gallery_discovery_expand_requested_import_paths($folderPaths);
+    $folderPaths =
+        admin_gallery_discovery_expand_requested_import_paths($folderPaths);
 
     // $imported stores an intermediate value used by the surrounding gallery workflow.
     $imported = 0;
@@ -1737,13 +2292,19 @@ function import_galleries_without_thumbnails_owned(array $folderPaths): array
     foreach ($importedIds as $galleryId) {
         $scanned += scan_gallery_images($galleryId);
     }
-    return ['imported' => $imported, 'scanned' => $scanned, 'gallery_ids' => $importedIds, 'thumbnails' => 0];
+    return [
+        'imported' => $imported,
+        'scanned' => $scanned,
+        'gallery_ids' => $importedIds,
+        'thumbnails' => 0,
+    ];
 }
 
 /**
- * Handles sync gallery parent ids logic for the gallery application.
+ * Repair missing gallery ancestors and synchronize parent identifiers and hierarchy sidecars.
  *
  * @param bool $smartGalleryGraphPrevalidated True only when the caller already validated the complete final parent map.
+ * @return void Updates parent relationships and rebuilds affected hierarchy metadata.
  */
 function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): void
 {
@@ -1755,7 +2316,10 @@ function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): v
         // Missing intermediate gallery rows are repaired before parent lookup.
         // This fixes older imports where a deep folder was imported without its
         // parent and therefore appeared on the public homepage as a root gallery.
-        if (ensure_gallery_ancestors_for_path((string) $gallery['folder_path']) !== []) {
+        if (
+            ensure_gallery_ancestors_for_path((string) $gallery['folder_path'])
+            !== []
+        ) {
             $hierarchyChanged = true;
         }
     }
@@ -1765,7 +2329,9 @@ function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): v
     // $galleryIdsByPath stores gallery ids by normalized folder path for O(1) parent lookup.
     $galleryIdsByPath = [];
     foreach ($galleries as $gallery) {
-        $galleryIdsByPath[normalize_relative_path((string) $gallery['folder_path'])] = (int) $gallery['id'];
+        $galleryIdsByPath[normalize_relative_path(
+            (string) $gallery['folder_path'],
+        )] = (int) $gallery['id'];
     }
 
     // $desiredParentById stores the complete filesystem-derived parent map before any parent_id write occurs.
@@ -1774,17 +2340,30 @@ function sync_gallery_parent_ids(bool $smartGalleryGraphPrevalidated = false): v
         $galleryId = (int) $gallery['id'];
         $folderPath = normalize_relative_path((string) $gallery['folder_path']);
         $parentPath = trim(str_replace('\\', '/', dirname($folderPath)), '.');
-        $desiredParentById[$galleryId] = ($parentPath === '' || $parentPath === '/')
-            ? 0
-            : (int) ($galleryIdsByPath[$parentPath] ?? 0);
+        $desiredParentById[$galleryId] =
+            $parentPath === '' || $parentPath === '/'
+                ? 0
+                : (int) ($galleryIdsByPath[$parentPath] ?? 0);
     }
-    if (!$smartGalleryGraphPrevalidated && function_exists(__NAMESPACE__ . '\smart_gallery_validate_gallery_parent_map')) {
+    if (
+        !$smartGalleryGraphPrevalidated
+        && function_exists(__NAMESPACE__
+            . '\smart_gallery_validate_gallery_parent_map')
+    ) {
         smart_gallery_validate_gallery_parent_map($desiredParentById);
     }
 
-    $hierarchyChanged = gallery_mutation_model_sync_parent_map($galleries, $desiredParentById, now_sql()) || $hierarchyChanged;
+    $hierarchyChanged =
+        gallery_mutation_model_sync_parent_map(
+            $galleries,
+            $desiredParentById,
+            now_sql(),
+        ) || $hierarchyChanged;
 
-    if ($hierarchyChanged && function_exists(__NAMESPACE__ . '\smart_gallery_graph_cache_clear')) {
+    if (
+        $hierarchyChanged
+        && function_exists(__NAMESPACE__ . '\smart_gallery_graph_cache_clear')
+    ) {
         smart_gallery_graph_cache_clear();
     }
     if ($hierarchyChanged && public_path_schema_ready()) {
@@ -1807,5 +2386,8 @@ function gallery_subtree_ids(int $galleryId): array
     }
     // $folderPath stores this steps working value.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
-    return gallery_mutation_model_subtree_ids($folderPath, gallery_folder_path_descendant_like_pattern($folderPath));
+    return gallery_mutation_model_subtree_ids(
+        $folderPath,
+        gallery_folder_path_descendant_like_pattern($folderPath),
+    );
 }

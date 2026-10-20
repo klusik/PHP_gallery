@@ -53,12 +53,14 @@ use function Gallery\Services\gallery_images;
 use function Gallery\Services\admin_save_image_order;
 
 /**
- * Handles cms admin image reorder logic for the gallery application.
+ * Handle an administrator image reorder request.
  *
  * The edit-gallery image table sends the complete ordered image-id list after a
  * drag-and-drop operation. This endpoint validates that every submitted image
  * belongs to the selected gallery before it touches sort_order values, so a
  * forged request cannot reorder images in another gallery.
+ *
+ * @return void Validates and persists the submitted order, then emits JSON or fallback response.
  */
 function cms_admin_reorder_images(): void
 {
@@ -74,21 +76,37 @@ function cms_admin_reorder_images(): void
     }
 
     // $submittedIds stores the ordered image ids exactly as submitted by the browser.
-    $submittedIds = admin_decode_reorder_id_list((string) ($_POST['image_order'] ?? '[]'));
+    $submittedIds = admin_decode_reorder_id_list(
+        (string) ($_POST['image_order'] ?? '[]'),
+    );
     if ($submittedIds === null) {
-        admin_reorder_images_response(false, 'The submitted image order was not valid JSON or contained duplicate images.', $galleryId);
+        admin_reorder_images_response(
+            false,
+            'The submitted image order was not valid JSON or contained duplicate images.',
+            $galleryId,
+        );
         return;
     }
 
     // $currentRows stores every direct image currently owned by this gallery.
     $currentRows = gallery_images($galleryId, false);
     // $currentOrderedIds stores the complete direct-image order before the requested change.
-    $currentOrderedIds = array_map(static fn (array $image): int => (int) $image['id'], $currentRows);
+    $currentOrderedIds = array_map(
+        static fn(array $image): int => (int) $image['id'],
+        $currentRows,
+    );
     // $reorderScope stores whether this request is the full Admin table or the public visible-page path.
     $reorderScope = (string) ($_POST['reorder_scope'] ?? 'full');
 
-    if ($reorderScope === 'visible_page' && !feature_capability_effective_enabled('inline_administration')) {
-        admin_reorder_images_response(false, 'Inline administration on public pages is disabled.', $galleryId);
+    if (
+        $reorderScope === 'visible_page'
+        && !feature_capability_effective_enabled('inline_administration')
+    ) {
+        admin_reorder_images_response(
+            false,
+            'Inline administration on public pages is disabled.',
+            $galleryId,
+        );
         return;
     }
 
@@ -98,20 +116,44 @@ function cms_admin_reorder_images(): void
         // $visibleCount stores the number of images rendered on the current pagination page.
         $visibleCount = (int) ($_POST['visible_count'] ?? 0);
         // $nextIds stores the full gallery image order with only the current visible page rearranged.
-        $nextIds = admin_visible_page_reordered_ids($currentOrderedIds, $submittedIds, $visibleOffset, $visibleCount);
+        $nextIds = admin_visible_page_reordered_ids(
+            $currentOrderedIds,
+            $submittedIds,
+            $visibleOffset,
+            $visibleCount,
+        );
         if ($nextIds === null) {
-            admin_reorder_images_response(false, 'The visible photo page changed while you were reordering. Reload the page and try again.', $galleryId);
+            admin_reorder_images_response(
+                false,
+                'The visible photo page changed while you were reordering. Reload the page and try again.',
+                $galleryId,
+            );
             return;
         }
         try {
-            admin_save_image_order($galleryId, $nextIds, 'image.public_page_reordered', 'Admin reordered visible public-page photos.', [
-                'visible_offset' => $visibleOffset,
-                'visible_count' => $visibleCount,
-                'submitted_image_ids' => $submittedIds,
-            ]);
-            admin_reorder_images_response(true, 'Visible photo order saved.', $galleryId, $nextIds);
+            admin_save_image_order(
+                $galleryId,
+                $nextIds,
+                'image.public_page_reordered',
+                'Admin reordered visible public-page photos.',
+                [
+                    'visible_offset' => $visibleOffset,
+                    'visible_count' => $visibleCount,
+                    'submitted_image_ids' => $submittedIds,
+                ],
+            );
+            admin_reorder_images_response(
+                true,
+                'Visible photo order saved.',
+                $galleryId,
+                $nextIds,
+            );
         } catch (Throwable $exception) {
-            admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+            admin_reorder_images_response(
+                false,
+                'Image order could not be saved: ' . $exception->getMessage(),
+                $galleryId,
+            );
         }
         return;
     }
@@ -123,17 +165,36 @@ function cms_admin_reorder_images(): void
     $sortedSubmittedIds = $submittedIds;
     sort($sortedSubmittedIds);
     if ($sortedSubmittedIds !== $currentIds) {
-        admin_reorder_images_response(false, 'The image list changed while you were reordering. Reload the page and try again.', $galleryId);
+        admin_reorder_images_response(
+            false,
+            'The image list changed while you were reordering. Reload the page and try again.',
+            $galleryId,
+        );
         return;
     }
 
     try {
-        admin_save_image_order($galleryId, $submittedIds, 'image.reordered', 'Admin reordered gallery images.', [
-            'images' => count($submittedIds),
-        ]);
-        admin_reorder_images_response(true, 'Image order saved.', $galleryId, $submittedIds);
+        admin_save_image_order(
+            $galleryId,
+            $submittedIds,
+            'image.reordered',
+            'Admin reordered gallery images.',
+            [
+                'images' => count($submittedIds),
+            ],
+        );
+        admin_reorder_images_response(
+            true,
+            'Image order saved.',
+            $galleryId,
+            $submittedIds,
+        );
     } catch (Throwable $exception) {
-        admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+        admin_reorder_images_response(
+            false,
+            'Image order could not be saved: ' . $exception->getMessage(),
+            $galleryId,
+        );
     }
 }
 
@@ -145,35 +206,58 @@ function cms_admin_reorder_images(): void
  * @param string $message Human-readable status message for the admin UI.
  * @param int $galleryId Gallery id used to build the redirect fallback.
  * @param array<int> $orderedIds Complete persisted image order after a successful save.
+ * @return void Emits JSON or performs the normal admin redirect.
  */
-function admin_reorder_images_response(bool $ok, string $message, int $galleryId, array $orderedIds = []): void
-{
+function admin_reorder_images_response(
+    bool $ok,
+    string $message,
+    int $galleryId,
+    array $orderedIds = [],
+): void {
     // Variable $acceptHeader stores the browser Accept header used to detect the JavaScript request path.
     $acceptHeader = (string) ($_SERVER['HTTP_ACCEPT'] ?? '');
     // Variable $isJsonRequest stores whether the client explicitly expects a JSON response.
-    $isJsonRequest = str_contains($acceptHeader, 'application/json') || (string) ($_POST['ajax'] ?? '') === '1';
+    $isJsonRequest =
+        str_contains($acceptHeader, 'application/json')
+        || (string) ($_POST['ajax'] ?? '') === '1';
     if ($isJsonRequest) {
         header('Content-Type: application/json; charset=utf-8');
         if ($ok) {
             $gallery = $galleryId > 0 ? find_gallery($galleryId, true) : null;
-            $editUrl = admin_edit_gallery_tab_url($galleryId, 'admin-edit-images');
-            $normalizedOrderedIds = array_values(array_unique(array_filter(array_map('intval', $orderedIds), static fn (int $imageId): bool => $imageId > 0)));
+            $editUrl = admin_edit_gallery_tab_url(
+                $galleryId,
+                'admin-edit-images',
+            );
+            $normalizedOrderedIds = array_values(array_unique(array_filter(
+                array_map('intval', $orderedIds),
+                static fn(int $imageId): bool => $imageId > 0,
+            )));
             echo json_encode(admin_mutation_success_envelope(
                 $message,
-                admin_mutation_descriptor('image.reorder', 'image', 'reorder', $normalizedOrderedIds),
+                admin_mutation_descriptor(
+                    'image.reorder',
+                    'image',
+                    'reorder',
+                    $normalizedOrderedIds,
+                ),
                 admin_mutation_panel_metadata('gallery-edit', $editUrl, true),
-                is_array($gallery) ? [admin_mutation_public_gallery_context(
-                    $galleryId,
-                    gallery_public_url($gallery),
-                    admin_mutation_postcondition('image_order', [
-                        'image_ids' => $normalizedOrderedIds,
-                        'count' => count($normalizedOrderedIds),
-                    ])
-                )] : [],
-                ['redirect_url' => $editUrl]
+                is_array($gallery)
+                    ? [admin_mutation_public_gallery_context(
+                        $galleryId,
+                        gallery_public_url($gallery),
+                        admin_mutation_postcondition('image_order', [
+                            'image_ids' => $normalizedOrderedIds,
+                            'count' => count($normalizedOrderedIds),
+                        ]),
+                    )] : [],
+                ['redirect_url' => $editUrl],
             ), JSON_THROW_ON_ERROR);
         } else {
-            echo json_encode(['ok' => false, 'message' => $message, 'error' => $message], JSON_THROW_ON_ERROR);
+            echo json_encode([
+                'ok' => false,
+                'message' => $message,
+                'error' => $message,
+            ], JSON_THROW_ON_ERROR);
         }
         return;
     }

@@ -40,7 +40,10 @@ function gallery_migration_allocate_temporary_file(string $kind): string
     }
     $path = @tempnam(sys_get_temp_dir(), $prefix);
     if ($path === false) {
-        throw new \RuntimeException(gallery_migration_t('gallery_migration.error.temp_failed', 'Could not create a temporary migration file.'));
+        throw new \RuntimeException(gallery_migration_t(
+            'gallery_migration.error.temp_failed',
+            'Could not create a temporary migration file.',
+        ));
     }
     $paths = &gallery_migration_temporary_files();
     $paths[$path] = true;

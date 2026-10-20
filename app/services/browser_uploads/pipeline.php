@@ -64,7 +64,7 @@ function browser_upload_format_bytes(int $bytes): string
     $units = ['KB', 'MB', 'GB', 'TB'];
     $value = $bytes / 1024;
     $unitIndex = 0;
-    while ($value >= 1024 && $unitIndex < count($units) - 1) {
+    while ($value >= 1024 && $unitIndex < (count($units) - 1)) {
         $value /= 1024;
         $unitIndex++;
     }
@@ -80,30 +80,51 @@ function browser_upload_format_bytes(int $bytes): string
  * @return array{manifest_sha256:string,pdf_page_numbers:list<int>,pdf_page_sha256:array<string,string>} Receipt fields persisted with a successful conversion batch response.
  * @throws RuntimeException When the manifest does not contain unique, readable PDF page PNGs.
  */
-function browser_upload_conversion_receipt(array $manifest, array $entries): array
-{
+function browser_upload_conversion_receipt(
+    array $manifest,
+    array $entries,
+): array {
     $manifestBytes = (string) ($entries['manifest.json'] ?? '');
     $pages = [];
     $hashes = [];
-    foreach (browser_upload_manifest_items_in_source_order((array) ($manifest['items'] ?? [])) as $item) {
+    foreach (browser_upload_manifest_items_in_source_order(
+        (array) ($manifest['items'] ?? []),
+    ) as $item) {
         $filename = basename((string) ($item['prepared_name'] ?? ''));
         if (preg_match('/-page-([0-9]+)\.png$/D', $filename, $match) !== 1) {
-            throw new RuntimeException('The PDF conversion receipt contains an invalid page filename.');
+            throw new RuntimeException(
+                'The PDF conversion receipt contains an invalid page filename.',
+            );
         }
         $page = (int) $match[1];
-        $path = normalize_relative_path((string) ($item['original_path'] ?? ''));
-        $bytes = $path !== '' ? ($entries[$path] ?? null) : null;
-        if ($page < 1 || in_array($page, $pages, true) || !is_string($bytes) || strlen($bytes) < 8
-            || substr($bytes, 0, 8) !== "\x89PNG\r\n\x1a\n") {
-            throw new RuntimeException('The PDF conversion receipt contains a repeated, missing or invalid PNG page.');
+        $path = normalize_relative_path(
+            (string) ($item['original_path'] ?? ''),
+        );
+        $bytes = $path !== '' ? $entries[$path] ?? null : null;
+        if (
+            $page < 1
+            || in_array($page, $pages, true)
+            || !is_string($bytes)
+            || strlen($bytes) < 8
+            || substr($bytes, 0, 8) !== "\x89PNG\r\n\x1a\n"
+        ) {
+            throw new RuntimeException(
+                'The PDF conversion receipt contains a repeated, missing or invalid PNG page.',
+            );
         }
         $pages[] = $page;
         $hashes[(string) $page] = hash('sha256', $bytes);
     }
     if ($pages === []) {
-        throw new RuntimeException('The PDF conversion receipt cannot be empty.');
+        throw new RuntimeException(
+            'The PDF conversion receipt cannot be empty.',
+        );
     }
-    return ['manifest_sha256' => hash('sha256', $manifestBytes), 'pdf_page_numbers' => $pages, 'pdf_page_sha256' => $hashes];
+    return [
+        'manifest_sha256' => hash('sha256', $manifestBytes),
+        'pdf_page_numbers' => $pages,
+        'pdf_page_sha256' => $hashes,
+    ];
 }
 
 /**
@@ -113,19 +134,38 @@ function browser_upload_conversion_receipt(array $manifest, array $entries): arr
  * @param array{manifest_sha256:string,pdf_page_numbers:list<int>,pdf_page_sha256:array<string,string>} $current Receipt reconstructed from the retried ZIP.
  * @return bool True when all manifest, page-order and payload hashes match exactly.
  */
-function browser_upload_conversion_receipt_matches(array $cached, array $current): bool
-{
-    $cachedPages = array_values(array_map('intval', (array) ($cached['pdf_page_numbers'] ?? [])));
-    $currentPages = array_values(array_map('intval', $current['pdf_page_numbers']));
+function browser_upload_conversion_receipt_matches(
+    array $cached,
+    array $current,
+): bool {
+    $cachedPages = array_values(array_map(
+        'intval',
+        (array) ($cached['pdf_page_numbers'] ?? []),
+    ));
+    $currentPages = array_values(array_map(
+        'intval',
+        $current['pdf_page_numbers'],
+    ));
     $cachedHashes = (array) ($cached['pdf_page_sha256'] ?? []);
-    if (!is_string($cached['manifest_sha256'] ?? null)
-        || !hash_equals($current['manifest_sha256'], (string) $cached['manifest_sha256'])
-        || $cachedPages !== $currentPages) {
+    if (
+        !is_string($cached['manifest_sha256'] ?? null)
+        || !hash_equals(
+            $current['manifest_sha256'],
+            (string) $cached['manifest_sha256'],
+        )
+        || $cachedPages !== $currentPages
+    ) {
         return false;
     }
     foreach ($currentPages as $page) {
         $key = (string) $page;
-        if (!is_string($cachedHashes[$key] ?? null) || !hash_equals($current['pdf_page_sha256'][$key], $cachedHashes[$key])) {
+        if (
+            !is_string($cachedHashes[$key] ?? null)
+            || !hash_equals(
+                $current['pdf_page_sha256'][$key],
+                $cachedHashes[$key],
+            )
+        ) {
             return false;
         }
     }
@@ -137,11 +177,14 @@ function browser_upload_conversion_receipt_matches(array $cached, array $current
  *
  * @param float $startedAt Request start timestamp.
  * @param string $message Event message.
- * @param array $context Event context.
- * @return array<string,mixed> Structured result data for the caller.
+ * @param array<string,mixed> $context Optional structured event context.
+ * @return array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>} Timestamped progress event for the browser mini log.
  */
-function browser_upload_progress_event(float $startedAt, string $message, array $context = []): array
-{
+function browser_upload_progress_event(
+    float $startedAt,
+    string $message,
+    array $context = [],
+): array {
     return [
         'time' => date('H:i:s'),
         'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
@@ -153,12 +196,15 @@ function browser_upload_progress_event(float $startedAt, string $message, array 
 /**
  * Return database image rows keyed by image id.
  *
- * @param array $imageIds Image ids value.
- * @return array<int array<string, mixed>>.
+ * @param array<int,int> $imageIds Requested image identifiers; values are normalized to positive unique integers.
+ * @return array<int,array<string,mixed>> Image database rows keyed by image id, or an empty array when no ids remain.
  */
 function browser_upload_image_rows_by_ids(array $imageIds): array
 {
-    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', $imageIds),
+        static fn(int $id): bool => $id > 0,
+    )));
     if (!$ids) {
         return [];
     }
@@ -176,11 +222,24 @@ function browser_upload_image_rows_by_ids(array $imageIds): array
  * @param bool $preservePreparedNames Preserve conversion-owned filenames after caller validation.
  * @return array<string,mixed> Batch response with image_ids, filenames, upload counters and events; conversion responses also include manifest_sha256, pdf_page_numbers and per-page pdf_page_sha256; cached retries add cached=true.
  */
-function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false, bool $preservePreparedNames = false): array
-{
+function browser_upload_store_prepared_zip_batch(
+    int $galleryId,
+    array $uploadedZip,
+    string $sessionId,
+    int $batchIndex,
+    bool $preparedThumbnailsRequired = false,
+    bool $preservePreparedNames = false,
+): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return browser_upload_store_prepared_zip_batch_owned($galleryId, $uploadedZip, $sessionId, $batchIndex, $preparedThumbnailsRequired, $preservePreparedNames);
+        return browser_upload_store_prepared_zip_batch_owned(
+            $galleryId,
+            $uploadedZip,
+            $sessionId,
+            $batchIndex,
+            $preparedThumbnailsRequired,
+            $preservePreparedNames,
+        );
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -201,15 +260,31 @@ function browser_upload_store_prepared_zip_batch(int $galleryId, array $uploaded
  * @return array<string,mixed> Registered batch response with image_ids, filenames, upload/scan/thumbnail counters and events; conversion responses also include manifest_sha256, pdf_page_numbers and per-page pdf_page_sha256; replay may add cached=true.
  * @author Rudolf Klusal
  */
-function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex, bool $preparedThumbnailsRequired = false, bool $preservePreparedNames = false): array
-{
+function browser_upload_store_prepared_zip_batch_owned(
+    int $galleryId,
+    array $uploadedZip,
+    string $sessionId,
+    int $batchIndex,
+    bool $preparedThumbnailsRequired = false,
+    bool $preservePreparedNames = false,
+): array {
     $startedAt = microtime(true);
-    $events = [browser_upload_progress_event($startedAt, 'PHP received prepared ZIP request for batch ' . ($batchIndex + 1) . '.')];
+    $events = [browser_upload_progress_event(
+        $startedAt,
+        'PHP received prepared ZIP request for batch '
+            . ($batchIndex + 1)
+            . '.',
+    )];
     if ($galleryId <= 0) {
-        throw new RuntimeException(t('browser_upload.error_gallery_required', 'Choose an existing gallery before using the browser upload pipeline.'));
+        throw new RuntimeException(t(
+            'browser_upload.error_gallery_required',
+            'Choose an existing gallery before using the browser upload pipeline.',
+        ));
     }
     if ($preservePreparedNames && !$preparedThumbnailsRequired) {
-        throw new RuntimeException('Exact conversion filenames require a complete browser-prepared image package.');
+        throw new RuntimeException(
+            'Exact conversion filenames require a complete browser-prepared image package.',
+        );
     }
     $conversionEntries = null;
     $conversionManifest = null;
@@ -217,24 +292,62 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
     if ($preservePreparedNames) {
         $error = (int) ($uploadedZip['error'] ?? UPLOAD_ERR_NO_FILE);
         $tmpName = (string) ($uploadedZip['tmp_name'] ?? '');
-        if ($error !== UPLOAD_ERR_OK || $tmpName === '' || !is_uploaded_file($tmpName)) {
-            throw new RuntimeException(t('upload.error.file_unavailable', 'Uploaded file is not available.'));
+        if (
+            $error !== UPLOAD_ERR_OK
+            || $tmpName === ''
+            || !is_uploaded_file($tmpName)
+        ) {
+            throw new RuntimeException(t(
+                'upload.error.file_unavailable',
+                'Uploaded file is not available.',
+            ));
         }
-        $conversionEntries = browser_upload_parse_store_zip($tmpName, browser_upload_server_upload_limit_bytes());
-        $conversionManifest = browser_upload_manifest_from_entries($conversionEntries);
-        browser_upload_validate_manifest_identity($conversionManifest, $sessionId, $batchIndex);
-        browser_upload_validate_required_thumbnail_manifest($conversionManifest, $conversionEntries);
-        $conversionReceipt = browser_upload_conversion_receipt($conversionManifest, $conversionEntries);
+        $conversionEntries = browser_upload_parse_store_zip(
+            $tmpName,
+            browser_upload_server_upload_limit_bytes(),
+        );
+        $conversionManifest =
+            browser_upload_manifest_from_entries($conversionEntries);
+        browser_upload_validate_manifest_identity(
+            $conversionManifest,
+            $sessionId,
+            $batchIndex,
+        );
+        browser_upload_validate_required_thumbnail_manifest(
+            $conversionManifest,
+            $conversionEntries,
+        );
+        $conversionReceipt = browser_upload_conversion_receipt(
+            $conversionManifest,
+            $conversionEntries,
+        );
     }
-    if (($cached = browser_upload_cached_batch_response($galleryId, $sessionId, $batchIndex)) !== null) {
-        if ($preservePreparedNames && !browser_upload_conversion_receipt_matches($cached, (array) $conversionReceipt)) {
-            throw new RuntimeException('The cached PDF page batch does not match the retried manifest and page bytes. Restart from the last acknowledged page.');
+    if (
+        ($cached = browser_upload_cached_batch_response(
+            $galleryId,
+            $sessionId,
+            $batchIndex,
+        )) !== null
+    ) {
+        if (
+            $preservePreparedNames
+            && !browser_upload_conversion_receipt_matches(
+                $cached,
+                (array) $conversionReceipt,
+            )
+        ) {
+            throw new RuntimeException(
+                'The cached PDF page batch does not match the retried manifest and page bytes. Restart from the last acknowledged page.',
+            );
         }
         $cached['cached'] = true;
         $cached['upload_events'] = array_merge(
             $events,
-            [browser_upload_progress_event($startedAt, 'Reused cached result for this already accepted ZIP batch.')],
-            array_values((array) ($cached['upload_events'] ?? []))
+            [browser_upload_progress_event(
+                $startedAt,
+                'Reused cached result for this already accepted ZIP batch.',
+            )],
+            array_values((array) ($cached['upload_events'] ?? [])),
         );
         return $cached;
     }
@@ -243,54 +356,119 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
         upload_ingestion_schema_status(),
         'browser_upload.store_prepared_batch',
         'Browser upload requires the current gallery/image database schema. Run pending migrations first.',
-        'Browser upload is temporarily unavailable because the required database schema could not be verified. The prepared ZIP remains uncommitted.'
+        'Browser upload is temporarily unavailable because the required database schema could not be verified. The prepared ZIP remains uncommitted.',
     );
-    thumbnail_metadata_preflight_write_schema('browser_upload.thumbnail_metadata_preflight');
+    thumbnail_metadata_preflight_write_schema(
+        'browser_upload.thumbnail_metadata_preflight',
+    );
 
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
-        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
+        throw new RuntimeException(t(
+            'gallery.error.not_found',
+            'Gallery not found.',
+        ));
     }
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {
-        throw new RuntimeException(t('gallery.error.folder_not_writable', 'Gallery folder is not writable.'));
+        throw new RuntimeException(t(
+            'gallery.error.folder_not_writable',
+            'Gallery folder is not writable.',
+        ));
     }
 
     $error = (int) ($uploadedZip['error'] ?? UPLOAD_ERR_NO_FILE);
     if ($error === UPLOAD_ERR_NO_FILE) {
-        throw new RuntimeException(t('browser_upload.error_choose_zip', 'Choose a prepared upload package.'));
+        throw new RuntimeException(t(
+            'browser_upload.error_choose_zip',
+            'Choose a prepared upload package.',
+        ));
     }
     if ($error !== UPLOAD_ERR_OK) {
         throw new RuntimeException(upload_error_message($error));
     }
     $tmpName = (string) ($uploadedZip['tmp_name'] ?? '');
     if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-        throw new RuntimeException(t('upload.error.file_unavailable', 'Uploaded file is not available.'));
+        throw new RuntimeException(t(
+            'upload.error.file_unavailable',
+            'Uploaded file is not available.',
+        ));
     }
     $zipSize = (int) ($uploadedZip['size'] ?? (@filesize($tmpName) ?: 0));
-    $events[] = browser_upload_progress_event($startedAt, 'Uploaded ZIP is available in PHP temp storage, ' . browser_upload_format_bytes($zipSize) . '.');
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Uploaded ZIP is available in PHP temp storage, '
+            . browser_upload_format_bytes($zipSize)
+            . '.',
+    );
 
     $uploadLimit = browser_upload_server_upload_limit_bytes();
     // The configured ZIP size remains a client-side packing target. One prepared
     // image plus its thumbnails may legitimately exceed that target because the
     // image package is atomic. PHP's effective request upload limit is therefore
     // the authoritative hard ceiling for an already received browser upload ZIP.
-    $entries = is_array($conversionEntries) ? $conversionEntries : browser_upload_parse_store_zip($tmpName, $uploadLimit);
-    $events[] = browser_upload_progress_event($startedAt, 'Parsed store-only ZIP with ' . count($entries) . ' file entr' . (count($entries) === 1 ? 'y' : 'ies') . '.');
-    $manifest = is_array($conversionManifest) ? $conversionManifest : browser_upload_manifest_from_entries($entries);
-    browser_upload_validate_manifest_identity($manifest, $sessionId, $batchIndex);
-    $events[] = browser_upload_progress_event($startedAt, 'Validated ZIP manifest for batch ' . ($batchIndex + 1) . '.');
+    $entries = is_array($conversionEntries)
+        ? $conversionEntries
+        : browser_upload_parse_store_zip($tmpName, $uploadLimit);
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Parsed store-only ZIP with '
+            . count($entries)
+            . ' file entr'
+            . (count($entries) === 1 ? 'y' : 'ies')
+            . '.',
+    );
+    $manifest = is_array($conversionManifest)
+        ? $conversionManifest
+        : browser_upload_manifest_from_entries($entries);
+    browser_upload_validate_manifest_identity(
+        $manifest,
+        $sessionId,
+        $batchIndex,
+    );
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Validated ZIP manifest for batch ' . ($batchIndex + 1) . '.',
+    );
     if ($preparedThumbnailsRequired) {
-        browser_upload_validate_required_thumbnail_manifest($manifest, $entries);
-        $events[] = browser_upload_progress_event($startedAt, 'Verified complete browser-prepared thumbnail coverage before storing originals.');
+        browser_upload_validate_required_thumbnail_manifest(
+            $manifest,
+            $entries,
+        );
+        $events[] = browser_upload_progress_event(
+            $startedAt,
+            'Verified complete browser-prepared thumbnail coverage before storing originals.',
+        );
     }
-    $events[] = browser_upload_progress_event($startedAt, 'Preserving browser source order for accepted images.');
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Preserving browser source order for accepted images.',
+    );
     $sortBase = browser_upload_session_sort_base($galleryId, $sessionId);
-    $events[] = browser_upload_progress_event($startedAt, 'Reserved deterministic upload order base ' . $sortBase . ' for this browser session.');
-    $manifestHash = (string) ($conversionReceipt['manifest_sha256'] ?? hash('sha256', (string) ($entries['manifest.json'] ?? '')));
-    $batchState = browser_upload_load_batch_state($galleryId, $sessionId, $batchIndex, $manifestHash);
-    $batchStateItems = is_array($batchState['items'] ?? null) ? $batchState['items'] : [];
-    $items = browser_upload_manifest_items_in_source_order((array) ($manifest['items'] ?? []));
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Reserved deterministic upload order base '
+            . $sortBase
+            . ' for this browser session.',
+    );
+    $manifestHash = (string) (
+        $conversionReceipt['manifest_sha256'] ?? hash(
+            'sha256',
+            (string) ($entries['manifest.json'] ?? ''),
+        )
+    );
+    $batchState = browser_upload_load_batch_state(
+        $galleryId,
+        $sessionId,
+        $batchIndex,
+        $manifestHash,
+    );
+    $batchStateItems = is_array($batchState['items'] ?? null)
+        ? $batchState['items']
+        : [];
+    $items = browser_upload_manifest_items_in_source_order(
+        (array) ($manifest['items'] ?? []),
+    );
     $storedItems = [];
     $storedFilenames = [];
 
@@ -299,14 +477,37 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
             continue;
         }
         $manifestOrderIndex = (int) ($item['_manifest_order_index'] ?? $index);
-        $sourceIndex = browser_upload_manifest_source_index($item, $manifestOrderIndex);
-        $stateKey = browser_upload_manifest_state_key($item, $manifestOrderIndex);
-        $existingStateItem = is_array($batchStateItems[$stateKey] ?? null) ? $batchStateItems[$stateKey] : [];
-        $storedFilename = browser_upload_reusable_state_filename($gallery, $existingStateItem);
+        $sourceIndex = browser_upload_manifest_source_index(
+            $item,
+            $manifestOrderIndex,
+        );
+        $stateKey = browser_upload_manifest_state_key(
+            $item,
+            $manifestOrderIndex,
+        );
+        $existingStateItem = is_array($batchStateItems[$stateKey] ?? null)
+            ? $batchStateItems[$stateKey]
+            : [];
+        $storedFilename = browser_upload_reusable_state_filename(
+            $gallery,
+            $existingStateItem,
+        );
         if ($storedFilename === null) {
-            $browserOriginalName = (string) ($item['original_name'] ?? ('image-' . ($index + 1) . '.jpg'));
-            $preparedName = safe_uploaded_image_filename((string) ($item['prepared_name'] ?? $browserOriginalName));
-            $originalPath = normalize_relative_path((string) ($item['original_path'] ?? ('originals/' . $preparedName)));
+            $browserOriginalName = (string) (
+                $item['original_name']
+                ?? 'image-'
+                . ($index + 1)
+                . '.jpg'
+            );
+            $preparedName = safe_uploaded_image_filename(
+                (string) ($item['prepared_name'] ?? $browserOriginalName),
+            );
+            $originalPath = normalize_relative_path(
+                (string) (
+                    $item['original_path']
+                    ?? 'originals/' . $preparedName
+                ),
+            );
             $originalContext = [
                 'gallery_id' => $galleryId,
                 'batch_index' => $batchIndex,
@@ -316,29 +517,73 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
                 'original_name' => $browserOriginalName,
                 'prepared_name' => $preparedName,
                 'original_path' => $originalPath,
-                'manifest_original_mime' => (string) ($item['original_mime'] ?? $item['mime'] ?? ''),
-                'manifest_original_detected_format' => (string) ($item['original_detected_format'] ?? ''),
+                'manifest_original_mime' => (string) (
+                    $item['original_mime']
+                    ?? $item['mime']
+                    ?? ''
+                ),
+                'manifest_original_detected_format' => (string) (
+                    $item['original_detected_format'] ?? ''
+                ),
                 'manifest_original_size' => (int) ($item['original_size'] ?? 0),
-                'manifest_original_width' => (int) ($item['original_width'] ?? $item['width'] ?? 0),
-                'manifest_original_height' => (int) ($item['original_height'] ?? $item['height'] ?? 0),
+                'manifest_original_width' => (int) (
+                    $item['original_width']
+                    ?? $item['width']
+                    ?? 0
+                ),
+                'manifest_original_height' => (int) (
+                    $item['original_height']
+                    ?? $item['height']
+                    ?? 0
+                ),
             ];
             if ($originalPath === '' || !isset($entries[$originalPath])) {
                 throw new BrowserUploadValidationException(
-                    t('browser_upload.error_original_missing_detail', 'The prepared upload package is missing an original image entry: {path}. Source file: {filename}.', [
-                        'path' => $originalPath !== '' ? $originalPath : '(empty)',
-                        'filename' => $browserOriginalName,
-                    ]),
-                    $originalContext + ['validation_stage' => 'original_entry_missing']
+                    t(
+                        'browser_upload.error_original_missing_detail',
+                        'The prepared upload package is missing an original image entry: {path}. Source file: {filename}.',
+                        [
+                            'path' => $originalPath !== ''
+                                ? $originalPath
+                                : '(empty)',
+                            'filename' => $browserOriginalName,
+                        ],
+                    ),
+                    $originalContext
+                        + ['validation_stage' => 'original_entry_missing'],
                 );
             }
-            $validatedPreparedName = browser_upload_prepare_original_filename($preparedName, $entries[$originalPath], $originalContext);
+            $validatedPreparedName = browser_upload_prepare_original_filename(
+                $preparedName,
+                $entries[$originalPath],
+                $originalContext,
+            );
             if ($validatedPreparedName !== $preparedName) {
-                $events[] = browser_upload_progress_event($startedAt, 'Corrected original filename extension from ' . $preparedName . ' to ' . $validatedPreparedName . ' after reading the payload signature.');
+                $events[] = browser_upload_progress_event(
+                    $startedAt,
+                    'Corrected original filename extension from '
+                        . $preparedName
+                        . ' to '
+                        . $validatedPreparedName
+                        . ' after reading the payload signature.',
+                );
                 $preparedName = $validatedPreparedName;
             }
-            [$storedFilename, $targetPath] = unique_gallery_upload_target($gallery, $preparedName);
-            if (@file_put_contents($targetPath, $entries[$originalPath], LOCK_EX) === false) {
-                throw new RuntimeException(t('upload.error.store_image_failed', 'Could not store uploaded image.'));
+            [$storedFilename, $targetPath] = unique_gallery_upload_target(
+                $gallery,
+                $preparedName,
+            );
+            if (
+                @file_put_contents(
+                    $targetPath,
+                    $entries[$originalPath],
+                    LOCK_EX,
+                ) === false
+            ) {
+                throw new RuntimeException(t(
+                    'upload.error.store_image_failed',
+                    'Could not store uploaded image.',
+                ));
             }
             $batchStateItems[$stateKey] = [
                 'manifest_index' => $manifestOrderIndex,
@@ -347,7 +592,12 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
                 'image_id' => 0,
             ];
             $batchState['items'] = $batchStateItems;
-            browser_upload_store_batch_state($galleryId, $sessionId, $batchIndex, $batchState);
+            browser_upload_store_batch_state(
+                $galleryId,
+                $sessionId,
+                $batchIndex,
+                $batchState,
+            );
         }
         $storedFilenames[] = $storedFilename;
         $storedItems[] = [
@@ -356,13 +606,39 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
             'state_key' => $stateKey,
             'stored_filename' => $storedFilename,
             'source_metadata' => [
-                'width' => (int) ($item['original_width'] ?? $item['width'] ?? 0),
-                'height' => (int) ($item['original_height'] ?? $item['height'] ?? 0),
-                'display_width' => (int) ($item['original_display_width'] ?? $item['original_width'] ?? $item['width'] ?? 0),
-                'display_height' => (int) ($item['original_display_height'] ?? $item['original_height'] ?? $item['height'] ?? 0),
-                'exif_orientation' => (int) ($item['original_exif_orientation'] ?? 1),
-                'mime' => (string) ($item['original_mime'] ?? $item['mime'] ?? ''),
-                'exif' => is_array($item['client_exif'] ?? null) ? $item['client_exif'] : [],
+                'width' => (int) (
+                    $item['original_width']
+                    ?? $item['width']
+                    ?? 0
+                ),
+                'height' => (int) (
+                    $item['original_height']
+                    ?? $item['height']
+                    ?? 0
+                ),
+                'display_width' => (int) (
+                    $item['original_display_width']
+                    ?? $item['original_width']
+                    ?? $item['width']
+                    ?? 0
+                ),
+                'display_height' => (int) (
+                    $item['original_display_height']
+                    ?? $item['original_height']
+                    ?? $item['height']
+                    ?? 0
+                ),
+                'exif_orientation' => (int) (
+                    $item['original_exif_orientation'] ?? 1
+                ),
+                'mime' => (string) (
+                    $item['original_mime']
+                    ?? $item['mime']
+                    ?? ''
+                ),
+                'exif' => is_array($item['client_exif'] ?? null)
+                    ? $item['client_exif']
+                    : [],
             ],
             'variants' => array_values((array) ($item['variants'] ?? [])),
         ];
@@ -372,24 +648,44 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
     $storedOriginalBytes = 0;
     foreach ($storedFilenames as $filename) {
         $path = $galleryRoot . DIRECTORY_SEPARATOR . $filename;
-        $storedOriginalBytes += is_file($path) ? (int) (@filesize($path) ?: 0) : 0;
+        $storedOriginalBytes += is_file($path)
+            ? (int) (@filesize($path) ?: 0)
+            : 0;
     }
-    $events[] = browser_upload_progress_event($startedAt, 'Stored or reused ' . $uploadedCount . ' original image file(s), ' . browser_upload_format_bytes($storedOriginalBytes) . '.');
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Stored or reused '
+            . $uploadedCount
+            . ' original image file(s), '
+            . browser_upload_format_bytes($storedOriginalBytes)
+            . '.',
+    );
     $sourceMetadataByFilename = [];
     $sourceIndexByFilename = [];
     foreach ($storedItems as $storedItem) {
-        $filename = normalize_relative_path((string) ($storedItem['stored_filename'] ?? ''));
-        if ($filename !== '' && is_array($storedItem['source_metadata'] ?? null)) {
-            $sourceMetadataByFilename[$filename] = $storedItem['source_metadata'];
+        $filename = normalize_relative_path(
+            (string) ($storedItem['stored_filename'] ?? ''),
+        );
+        if (
+            $filename !== ''
+            && is_array($storedItem['source_metadata'] ?? null)
+        ) {
+            $sourceMetadataByFilename[$filename] =
+                $storedItem['source_metadata'];
         }
         if ($filename !== '') {
-            $sourceIndexByFilename[$filename] = browser_upload_manifest_source_index($storedItem, (int) ($storedItem['manifest_index'] ?? 0));
+            $sourceIndexByFilename[$filename] = browser_upload_manifest_source_index(
+                $storedItem,
+                (int) ($storedItem['manifest_index'] ?? 0),
+            );
         }
     }
     $clientExifCount = 0;
     $clientGpsCount = 0;
     foreach ($sourceMetadataByFilename as $sourceMetadata) {
-        $clientExif = is_array($sourceMetadata['exif'] ?? null) ? $sourceMetadata['exif'] : [];
+        $clientExif = is_array($sourceMetadata['exif'] ?? null)
+            ? $sourceMetadata['exif']
+            : [];
         if ($clientExif !== []) {
             $clientExifCount++;
         }
@@ -398,18 +694,46 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
         }
     }
     $changed = $uploadedCount > 0
-        ? scan_gallery_selected_uploaded_images($galleryId, $storedFilenames, $sourceMetadataByFilename)
+        ? scan_gallery_selected_uploaded_images(
+            $galleryId,
+            $storedFilenames,
+            $sourceMetadataByFilename,
+        )
         : 0;
-    $events[] = browser_upload_progress_event($startedAt, 'Indexed uploaded originals in the database, changed rows: ' . $changed . '.');
-    $orderedRows = browser_upload_apply_source_sort_order($galleryId, $sourceIndexByFilename, $sortBase);
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Indexed uploaded originals in the database, changed rows: '
+            . $changed
+            . '.',
+    );
+    $orderedRows = browser_upload_apply_source_sort_order(
+        $galleryId,
+        $sourceIndexByFilename,
+        $sortBase,
+    );
     if ($orderedRows > 0) {
-        $events[] = browser_upload_progress_event($startedAt, 'Applied deterministic source order to ' . $orderedRows . ' image row(s).');
+        $events[] = browser_upload_progress_event(
+            $startedAt,
+            'Applied deterministic source order to '
+                . $orderedRows
+                . ' image row(s).',
+        );
     }
     if ($clientExifCount > 0 || $clientGpsCount > 0) {
-        $events[] = browser_upload_progress_event($startedAt, 'Stored client-side EXIF metadata for ' . $clientExifCount . ' image(s), including GPS for ' . $clientGpsCount . ' image(s).');
+        $events[] = browser_upload_progress_event(
+            $startedAt,
+            'Stored client-side EXIF metadata for '
+                . $clientExifCount
+                . ' image(s), including GPS for '
+                . $clientGpsCount
+                . ' image(s).',
+        );
     }
     $imageIds = uploaded_gallery_image_ids($galleryId, $storedFilenames);
-    $scanFailedFilenames = gallery_upload_scan_failed_filenames($galleryId, $storedFilenames);
+    $scanFailedFilenames = gallery_upload_scan_failed_filenames(
+        $galleryId,
+        $storedFilenames,
+    );
     $preRenameRowsByPath = [];
     foreach ($storedFilenames as $filename) {
         $row = uploaded_gallery_image_row_by_path($galleryId, $filename);
@@ -418,38 +742,80 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
         }
     }
     foreach ($storedItems as $storedItem) {
-        $stateKey = (string) ($storedItem['state_key'] ?? ($storedItem['manifest_index'] ?? ''));
+        $stateKey = (string) (
+            $storedItem['state_key']
+            ?? $storedItem['manifest_index']
+            ?? ''
+        );
         $filename = (string) ($storedItem['stored_filename'] ?? '');
         $row = $preRenameRowsByPath[$filename] ?? null;
         if ($stateKey !== '' && is_array($row)) {
             $batchStateItems[$stateKey]['image_id'] = (int) ($row['id'] ?? 0);
-            $batchStateItems[$stateKey]['stored_filename'] = (string) ($row['relative_path'] ?? $filename);
+            $batchStateItems[$stateKey]['stored_filename'] = (string) (
+                $row['relative_path'] ?? $filename
+            );
         }
     }
     $batchState['items'] = $batchStateItems;
-    browser_upload_store_batch_state($galleryId, $sessionId, $batchIndex, $batchState);
+    browser_upload_store_batch_state(
+        $galleryId,
+        $sessionId,
+        $batchIndex,
+        $batchState,
+    );
 
     $renameResult = null;
-    if (!$preservePreparedNames && admin_upload_auto_rename_enabled() && $imageIds) {
-        $events[] = browser_upload_progress_event($startedAt, 'Auto-renaming uploaded image rows.');
-        $renameResult = gallery_upload_auto_rename_image_ids($galleryId, $imageIds);
+    if (
+        !$preservePreparedNames
+        && admin_upload_auto_rename_enabled()
+        && $imageIds
+    ) {
+        $events[] = browser_upload_progress_event(
+            $startedAt,
+            'Auto-renaming uploaded image rows.',
+        );
+        $renameResult = gallery_upload_auto_rename_image_ids(
+            $galleryId,
+            $imageIds,
+        );
         $imageIds = uploaded_gallery_existing_image_ids($galleryId, $imageIds);
-        $events[] = browser_upload_progress_event($startedAt, 'Auto-renaming finished, renamed rows: ' . (int) ($renameResult['renamed'] ?? 0) . '.');
+        $events[] = browser_upload_progress_event(
+            $startedAt,
+            'Auto-renaming finished, renamed rows: '
+                . (int) ($renameResult['renamed'] ?? 0)
+                . '.',
+        );
     }
     $rowsById = browser_upload_image_rows_by_ids($imageIds);
-    $finalFilenames = uploaded_gallery_filenames_for_image_ids($galleryId, $imageIds);
+    $finalFilenames = uploaded_gallery_filenames_for_image_ids(
+        $galleryId,
+        $imageIds,
+    );
     foreach ($storedItems as $storedItem) {
-        $stateKey = (string) ($storedItem['state_key'] ?? ($storedItem['manifest_index'] ?? ''));
+        $stateKey = (string) (
+            $storedItem['state_key']
+            ?? $storedItem['manifest_index']
+            ?? ''
+        );
         $storedFilename = (string) ($storedItem['stored_filename'] ?? '');
         $preRenameRow = $preRenameRowsByPath[$storedFilename] ?? null;
-        $imageId = is_array($preRenameRow) ? (int) ($preRenameRow['id'] ?? 0) : 0;
+        $imageId = is_array($preRenameRow)
+            ? (int) ($preRenameRow['id'] ?? 0)
+            : 0;
         if ($stateKey !== '' && $imageId > 0 && isset($rowsById[$imageId])) {
             $batchStateItems[$stateKey]['image_id'] = $imageId;
-            $batchStateItems[$stateKey]['stored_filename'] = (string) ($rowsById[$imageId]['relative_path'] ?? $storedFilename);
+            $batchStateItems[$stateKey]['stored_filename'] = (string) (
+                $rowsById[$imageId]['relative_path'] ?? $storedFilename
+            );
         }
     }
     $batchState['items'] = $batchStateItems;
-    browser_upload_store_batch_state($galleryId, $sessionId, $batchIndex, $batchState);
+    browser_upload_store_batch_state(
+        $galleryId,
+        $sessionId,
+        $batchIndex,
+        $batchState,
+    );
 
     $thumbsCreated = 0;
     $thumbnailFailed = 0;
@@ -458,12 +824,19 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
         gallery_thumbs_dir($gallery, true);
     }
 
-    $events[] = browser_upload_progress_event($startedAt, 'Writing prepared thumbnail files for accepted images.');
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Writing prepared thumbnail files for accepted images.',
+    );
     foreach ($storedItems as $storedItem) {
         $storedFilename = (string) $storedItem['stored_filename'];
         $preRenameRow = $preRenameRowsByPath[$storedFilename] ?? null;
-        $imageId = is_array($preRenameRow) ? (int) ($preRenameRow['id'] ?? 0) : 0;
-        $image = $imageId > 0 && isset($rowsById[$imageId]) ? $rowsById[$imageId] : null;
+        $imageId = is_array($preRenameRow)
+            ? (int) ($preRenameRow['id'] ?? 0)
+            : 0;
+        $image = $imageId > 0 && isset($rowsById[$imageId])
+            ? $rowsById[$imageId]
+            : null;
         if (!is_array($image)) {
             continue;
         }
@@ -473,8 +846,14 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
             }
             $size = (int) ($variant['size'] ?? 0);
             $format = strtolower((string) ($variant['format'] ?? ''));
-            $zipPath = normalize_relative_path((string) ($variant['path'] ?? ''));
-            if (!in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true) || $zipPath === '') {
+            $zipPath = normalize_relative_path(
+                (string) ($variant['path'] ?? ''),
+            );
+            if (
+                !in_array($size, thumbnail_sizes(), true)
+                || !in_array($format, ['jpg', 'webp'], true)
+                || $zipPath === ''
+            ) {
                 continue;
             }
             if (!isset($entries[$zipPath])) {
@@ -483,20 +862,44 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
                 continue;
             }
             try {
-                browser_upload_validate_thumbnail_payload($format, $entries[$zipPath]);
-                $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
+                browser_upload_validate_thumbnail_payload(
+                    $format,
+                    $entries[$zipPath],
+                );
+                $targetPath = thumbnail_abs_path(
+                    $image,
+                    $gallery,
+                    $size,
+                    $format,
+                );
                 $targetDir = dirname($targetPath);
                 if (!is_dir($targetDir)) {
                     @mkdir($targetDir, 0775, true);
                 }
-                if (@file_put_contents($targetPath, $entries[$zipPath], LOCK_EX) === false) {
-                    throw new RuntimeException(t('browser_upload.error_thumbnail_store_failed', 'Could not store a prepared thumbnail.'));
+                if (
+                    @file_put_contents($targetPath, $entries[$zipPath], LOCK_EX)
+                    === false
+                ) {
+                    throw new RuntimeException(t(
+                        'browser_upload.error_thumbnail_store_failed',
+                        'Could not store a prepared thumbnail.',
+                    ));
                 }
                 $sourcePath = image_abs_path($image, $gallery);
-                if (function_exists('Gallery\\Services\\thumbnail_touch_generated_file_for_source')) {
-                    thumbnail_touch_generated_file_for_source($targetPath, $sourcePath);
+                if (function_exists(
+                    'Gallery\\Services\\thumbnail_touch_generated_file_for_source',
+                )) {
+                    thumbnail_touch_generated_file_for_source(
+                        $targetPath,
+                        $sourcePath,
+                    );
                 }
-                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_prepared_variant') && thumbnail_metadata_schema_ready()) {
+                if (
+                    function_exists(
+                        'Gallery\\Services\\thumbnail_metadata_record_prepared_variant',
+                    )
+                    && thumbnail_metadata_schema_ready()
+                ) {
                     $metadata = thumbnail_metadata_record_prepared_variant(
                         $image,
                         $gallery,
@@ -504,18 +907,35 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
                         $format,
                         $targetPath,
                         (int) ($variant['width'] ?? 0),
-                        (int) ($variant['height'] ?? 0)
+                        (int) ($variant['height'] ?? 0),
                     );
                     if (empty($metadata['valid'])) {
                         $thumbnailFailed++;
-                        $thumbnailErrors[] = 'Invalid prepared thumbnail: ' . basename($targetPath);
+                        $thumbnailErrors[] =
+                            'Invalid prepared thumbnail: '
+                            . basename($targetPath);
                         continue;
                     }
-                } elseif (function_exists('Gallery\\Services\\thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
-                    $metadata = thumbnail_metadata_record_file($image, $gallery, $size, $format, $targetPath, $sourcePath, true);
+                } elseif (
+                    function_exists(
+                        'Gallery\\Services\\thumbnail_metadata_record_file',
+                    )
+                    && thumbnail_metadata_schema_ready()
+                ) {
+                    $metadata = thumbnail_metadata_record_file(
+                        $image,
+                        $gallery,
+                        $size,
+                        $format,
+                        $targetPath,
+                        $sourcePath,
+                        true,
+                    );
                     if (empty($metadata['valid'])) {
                         $thumbnailFailed++;
-                        $thumbnailErrors[] = 'Invalid prepared thumbnail: ' . basename($targetPath);
+                        $thumbnailErrors[] =
+                            'Invalid prepared thumbnail: '
+                            . basename($targetPath);
                         continue;
                     }
                 }
@@ -527,7 +947,14 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
         }
     }
 
-    $events[] = browser_upload_progress_event($startedAt, 'Registered prepared thumbnails, created ' . $thumbsCreated . ', failed ' . $thumbnailFailed . '.');
+    $events[] = browser_upload_progress_event(
+        $startedAt,
+        'Registered prepared thumbnails, created '
+            . $thumbsCreated
+            . ', failed '
+            . $thumbnailFailed
+            . '.',
+    );
 
     $response = [
         'ok' => true,
@@ -535,7 +962,13 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
         'gallery_ids' => [$galleryId],
         'gallery_title' => (string) ($gallery['title'] ?? ''),
         'gallery_url' => gallery_public_url($gallery),
-        'edit_url' => url_for('admin_edit_gallery', ['id' => $galleryId, 'uploaded' => $uploadedCount, 'scanned' => $changed, 'tab' => 'admin-edit-images']) . '#admin-edit-images',
+        'edit_url' =>
+            url_for('admin_edit_gallery', [
+                'id' => $galleryId,
+                'uploaded' => $uploadedCount,
+                'scanned' => $changed,
+                'tab' => 'admin-edit-images',
+            ]) . '#admin-edit-images',
         'parent_gallery_id' => (int) ($gallery['parent_id'] ?? 0),
         'parent_gallery_url' => '',
         'refresh_gallery_id' => $galleryId,
@@ -548,30 +981,61 @@ function browser_upload_store_prepared_zip_batch_owned(int $galleryId, array $up
         'thumbnails' => $thumbsCreated,
         'thumbnail_skipped' => 0,
         'thumbnail_failed' => $thumbnailFailed,
-        'thumbnail_processing' => $preparedThumbnailsRequired ? 'browser_prepared' : 'none',
-        'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
+        'thumbnail_processing' => $preparedThumbnailsRequired
+            ? 'browser_prepared'
+            : 'none',
+        'thumbnail_errors' => array_values(array_unique(array_filter(
+            $thumbnailErrors,
+        ))),
         'scan_failed' => count($scanFailedFilenames),
         'scan_failed_filenames' => array_values($scanFailedFilenames),
-        'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
-        'rename_warnings' => $renameResult === null ? [] : array_values((array) ($renameResult['warnings'] ?? [])),
-        'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
+        'renamed' => $renameResult === null
+            ? 0
+            : (int) ($renameResult['renamed'] ?? 0),
+        'rename_warnings' => $renameResult === null
+            ? []
+            : array_values((array) ($renameResult['warnings'] ?? [])),
+        'rename_failures' => $renameResult === null
+            ? []
+            : array_values((array) ($renameResult['failures'] ?? [])),
         'upload_events' => array_values($events),
-        'redirect_url' => url_for('admin_edit_gallery', ['id' => $galleryId, 'uploaded' => $uploadedCount, 'scanned' => $changed, 'thumbnails' => $thumbsCreated, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images',
+        'redirect_url' =>
+            url_for('admin_edit_gallery', [
+                'id' => $galleryId,
+                'uploaded' => $uploadedCount,
+                'scanned' => $changed,
+                'thumbnails' => $thumbsCreated,
+                'thumbnail_failed' => $thumbnailFailed,
+                'scan_failed' => count($scanFailedFilenames),
+                'tab' => 'admin-edit-images',
+            ]) . '#admin-edit-images',
     ];
     if ($preservePreparedNames && is_array($conversionReceipt)) {
         $response += $conversionReceipt;
     }
 
-    browser_upload_store_cached_batch_response($galleryId, $sessionId, $batchIndex, $response);
-    admin_log_event('info', 'gallery.browser_upload_batch', 'Admin uploaded a browser-prepared ZIP batch.', [
-        'gallery_id' => $galleryId,
-        'uploaded' => $uploadedCount,
-        'scanned' => $changed,
-        'thumbnails' => $thumbsCreated,
-        'thumbnail_failed' => $thumbnailFailed,
-        'thumbnail_processing' => $preparedThumbnailsRequired ? 'browser_prepared' : 'none',
-        'batch_index' => $batchIndex,
-    ]);
+    browser_upload_store_cached_batch_response(
+        $galleryId,
+        $sessionId,
+        $batchIndex,
+        $response,
+    );
+    admin_log_event(
+        'info',
+        'gallery.browser_upload_batch',
+        'Admin uploaded a browser-prepared ZIP batch.',
+        [
+            'gallery_id' => $galleryId,
+            'uploaded' => $uploadedCount,
+            'scanned' => $changed,
+            'thumbnails' => $thumbsCreated,
+            'thumbnail_failed' => $thumbnailFailed,
+            'thumbnail_processing' => $preparedThumbnailsRequired
+                ? 'browser_prepared'
+                : 'none',
+            'batch_index' => $batchIndex,
+        ],
+    );
 
     return $response;
 }

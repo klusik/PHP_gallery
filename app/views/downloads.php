@@ -52,10 +52,16 @@ function view_render_download_legacy_confirmation(array $viewModel): void
     $capability = (string) ($viewModel['capability'] ?? '');
 
     render_header($label);
-    echo '<section class="hero"><div><h1>' . e($label) . '</h1></div><div class="hero-actions">';
+    echo
+        '<section class="hero"><div><h1>'
+            . e($label)
+            . '</h1></div><div class="hero-actions">';
     echo '<form method="post" action="' . e($actionUrl) . '">';
     echo '<input type="hidden" name="id" value="' . $resourceId . '">';
-    echo '<input type="hidden" name="capability" value="' . e($capability) . '">';
+    echo
+        '<input type="hidden" name="capability" value="'
+            . e($capability)
+            . '">';
     echo '<button type="submit" class="button">' . e($label) . '</button>';
     echo '</form>';
     echo '</div></section>';

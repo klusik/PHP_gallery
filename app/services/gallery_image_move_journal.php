@@ -58,16 +58,31 @@ final class ImageMoveDiagnosticFailure extends RuntimeException
         public readonly ?int $fileNumber = null,
         public readonly ?string $fileKind = null,
         ?Throwable $previous = null,
-        public readonly array $fileContext = []
+        public readonly array $fileContext = [],
     ) {
-        $details = str_replace('_', ' ', $phase) . ': ' . gallery_image_move_reason_description($reason);
-        if ($fileNumber !== null && in_array($fileKind, ['original', 'derivative'], true)) {
+        $details =
+            str_replace('_', ' ', $phase)
+            . ': '
+            . gallery_image_move_reason_description($reason);
+        if (
+            $fileNumber !== null
+            && in_array($fileKind, ['original', 'derivative'], true)
+        ) {
             $details .= ' (' . $fileKind . ' file ' . $fileNumber . ')';
         }
-        if ($operationId !== null && preg_match('/^[a-f0-9]{32}$/D', $operationId) === 1) {
+        if (
+            $operationId !== null
+            && preg_match('/^[a-f0-9]{32}$/D', $operationId) === 1
+        ) {
             $details .= '. Operation ' . $operationId;
         }
-        parent::__construct('Image move failed at ' . $details . '. Inspect pending image-move operations before retrying.', 0, $previous);
+        parent::__construct(
+            'Image move failed at '
+                . $details
+                . '. Inspect pending image-move operations before retrying.',
+            0,
+            $previous,
+        );
     }
 }
 
@@ -79,17 +94,25 @@ final class ImageMoveDiagnosticFailure extends RuntimeException
  */
 function gallery_image_move_exception_context(Throwable $exception): array
 {
-    $fileContext = $exception instanceof ImageMoveDiagnosticFailure ? $exception->fileContext : [];
+    $fileContext = $exception instanceof ImageMoveDiagnosticFailure
+        ? $exception->fileContext
+        : [];
     $chain = [];
     $current = $exception;
     $origin = $exception;
-    for ($depth = 0; $current !== null && $depth < 6; $depth++, $current = $current->getPrevious()) {
+    for (
+        $depth = 0;
+        $current !== null && $depth < 6;
+        $depth++, $current = $current->getPrevious()
+    ) {
         $origin = $current;
         $databaseException = $current instanceof \PDOException;
         $chain[] = [
             'class' => get_class($current),
             'code' => $current->getCode(),
-            'message' => $databaseException ? '[database exception message withheld]' : $current->getMessage(),
+            'message' => $databaseException
+                ? '[database exception message withheld]'
+                : $current->getMessage(),
             'php_file' => $current->getFile(),
             'php_line' => $current->getLine(),
         ];
@@ -99,10 +122,17 @@ function gallery_image_move_exception_context(Throwable $exception): array
         $trace[] = [
             'php_file' => (string) ($frame['file'] ?? ''),
             'php_line' => (int) ($frame['line'] ?? 0),
-            'call' => (string) ($frame['class'] ?? '') . (string) ($frame['type'] ?? '') . (string) ($frame['function'] ?? ''),
+            'call' =>
+                (string) ($frame['class'] ?? '')
+                    . (string) ($frame['type'] ?? '')
+                    . (string) ($frame['function'] ?? ''),
         ];
     }
-    return ['file_context' => $fileContext, 'exceptions' => $chain, 'origin_trace' => $trace];
+    return [
+        'file_context' => $fileContext,
+        'exceptions' => $chain,
+        'origin_trace' => $trace,
+    ];
 }
 
 /**
@@ -116,8 +146,13 @@ function gallery_image_move_last_warning(): ?Throwable
     if (!is_array($warning) || !is_string($warning['message'] ?? null)) {
         return null;
     }
-    return new \ErrorException($warning['message'], 0, (int) ($warning['type'] ?? E_WARNING),
-        (string) ($warning['file'] ?? __FILE__), (int) ($warning['line'] ?? 0));
+    return new \ErrorException(
+        $warning['message'],
+        0,
+        (int) ($warning['type'] ?? E_WARNING),
+        (string) ($warning['file'] ?? __FILE__),
+        (int) ($warning['line'] ?? 0),
+    );
 }
 
 /**
@@ -128,36 +163,61 @@ function gallery_image_move_last_warning(): ?Throwable
 function gallery_image_move_reason_description(string $reason): string
 {
     return match ($reason) {
-        'exclusive_link_unavailable' => 'an earlier hard-link move could not create its destination',
-        'file_rename_failed' => 'the original file could not be moved to its destination; check filesystem permissions and storage boundaries',
-        'destination_directory_unavailable' => 'the destination directory cannot be created; check storage write permissions',
-        'destination_boundary_unverified', 'storage_boundary_unverified' => 'gallery storage confinement could not be verified',
-        'manifest_path_invalid' => 'the journal file path does not belong to its recorded gallery',
-        'gallery_directory_missing' => 'the recorded gallery directory is missing',
+        'exclusive_link_unavailable'
+            => 'an earlier hard-link move could not create its destination',
+        'file_rename_failed'
+            => 'the original file could not be moved to its destination; check filesystem permissions and storage boundaries',
+        'destination_directory_unavailable'
+            => 'the destination directory cannot be created; check storage write permissions',
+        'destination_boundary_unverified',
+        'storage_boundary_unverified',
+            => 'gallery storage confinement could not be verified',
+        'manifest_path_invalid'
+            => 'the journal file path does not belong to its recorded gallery',
+        'gallery_directory_missing'
+            => 'the recorded gallery directory is missing',
         'path_outside_gallery' => 'the file path resolves outside its gallery',
         'file_symlink' => 'the file path is a symbolic link',
-        'gallery_ancestry_changed' => 'the file parent resolves outside its recorded gallery',
-        'storage_ancestry_untrusted' => 'the file parent is outside trusted gallery storage',
-        'storage_ancestry_missing' => 'the file parent has no verifiable existing ancestor',
-        'source_unlink_failed' => 'an earlier move could not remove its source file',
+        'gallery_ancestry_changed'
+            => 'the file parent resolves outside its recorded gallery',
+        'storage_ancestry_untrusted'
+            => 'the file parent is outside trusted gallery storage',
+        'storage_ancestry_missing'
+            => 'the file parent has no verifiable existing ancestor',
+        'source_unlink_failed'
+            => 'an earlier move could not remove its source file',
         'destination_occupied' => 'the destination file is already occupied',
-        'destination_identity_unverified' => 'the new destination file could not be verified',
-        'source_identity_changed', 'source_identity_unverified' => 'the source file changed or could not be verified',
-        'journal_write_failed', 'journal_update_failed', 'journal_read_failed' => 'the move journal could not be accessed; check database availability and migrations',
+        'destination_identity_unverified'
+            => 'the new destination file could not be verified',
+        'source_identity_changed',
+        'source_identity_unverified',
+            => 'the source file changed or could not be verified',
+        'journal_write_failed',
+        'journal_update_failed',
+        'journal_read_failed',
+            => 'the move journal could not be accessed; check database availability and migrations',
         'journal_missing' => 'the prepared move journal is missing',
-        'ownership_update_failed' => 'the image ownership transaction failed; check database availability and schema',
-        'metadata_refresh_failed' => 'gallery metadata refresh failed; check gallery write permissions',
+        'ownership_update_failed'
+            => 'the image ownership transaction failed; check database availability and schema',
+        'metadata_refresh_failed'
+            => 'gallery metadata refresh failed; check gallery write permissions',
         'file_missing_or_changed' => 'a recovery file is missing or changed',
-        'duplicate_identity_unverified' => 'both file names exist but their expected content could not be verified',
-        'duplicate_unlink_failed' => 'the verified extra file could not be removed',
-        'image_ownership_changed' => 'image ownership no longer matches the journal',
-        'gallery_ownership_changed' => 'gallery ownership or storage no longer matches the journal',
+        'duplicate_identity_unverified'
+            => 'both file names exist but their expected content could not be verified',
+        'duplicate_unlink_failed'
+            => 'the verified extra file could not be removed',
+        'image_ownership_changed'
+            => 'image ownership no longer matches the journal',
+        'gallery_ownership_changed'
+            => 'gallery ownership or storage no longer matches the journal',
         'manifest_invalid' => 'the move journal manifest is invalid',
-        'recovery_verification_failed' => 'recovery could not verify the stored move',
+        'recovery_verification_failed'
+            => 'recovery could not verify the stored move',
         'pending_operation' => 'an earlier move still needs reconciliation',
         'gallery_busy' => 'another move or recovery is using this gallery',
         'gallery_missing' => 'the source or destination gallery is missing',
-        'gallery_folder_missing' => 'the source or destination gallery folder is missing',
+        'gallery_folder_missing'
+            => 'the source or destination gallery folder is missing',
         'same_gallery' => 'the source and destination are the same gallery',
         'operation_unavailable' => 'the operation could not be verified',
         default => 'unclassified failure',
@@ -170,9 +230,13 @@ function gallery_image_move_reason_description(string $reason): string
  * @param string $fallback Safe fallback reason.
  * @return string Safe reason code.
  */
-function gallery_image_move_failure_reason(Throwable $exception, string $fallback): string
-{
-    return $exception instanceof ImageMoveDiagnosticFailure ? $exception->reason : $fallback;
+function gallery_image_move_failure_reason(
+    Throwable $exception,
+    string $fallback,
+): string {
+    return $exception instanceof ImageMoveDiagnosticFailure
+        ? $exception->reason
+        : $fallback;
 }
 
 /**
@@ -186,12 +250,17 @@ function gallery_image_move_recovery_reason(Throwable $exception): string
         return $exception->reason;
     }
     return match ($exception->getMessage()) {
-        'Image move recovery found a missing or changed file.' => 'file_missing_or_changed',
-        'Image move recovery found two names without verified expected content.' => 'duplicate_identity_unverified',
-        'Image move recovery could not remove a verified extra file.' => 'duplicate_unlink_failed',
+        'Image move recovery found a missing or changed file.'
+            => 'file_missing_or_changed',
+        'Image move recovery found two names without verified expected content.'
+            => 'duplicate_identity_unverified',
+        'Image move recovery could not remove a verified extra file.'
+            => 'duplicate_unlink_failed',
         'Image move image ownership changed.' => 'image_ownership_changed',
-        'Image move gallery ownership or storage changed.' => 'gallery_ownership_changed',
-        'Image move metadata refresh requires retry.' => 'metadata_refresh_failed',
+        'Image move gallery ownership or storage changed.'
+            => 'gallery_ownership_changed',
+        'Image move metadata refresh requires retry.'
+            => 'metadata_refresh_failed',
         'Unsupported image move manifest.' => 'manifest_invalid',
         default => 'recovery_verification_failed',
     };
@@ -204,11 +273,16 @@ function gallery_image_move_recovery_reason(Throwable $exception): string
  */
 function gallery_image_move_pending(): array
 {
-    mutation_schema_assert_available(gallery_image_move_journal_schema_status(), 'gallery.move_inspect');
+    mutation_schema_assert_available(
+        gallery_image_move_journal_schema_status(),
+        'gallery.move_inspect',
+    );
     try {
         return gallery_image_move_model_pending();
     } catch (Throwable) {
-        throw new RuntimeException('Image move journal inspection is unavailable; existing records are retained.');
+        throw new RuntimeException(
+            'Image move journal inspection is unavailable; existing records are retained.',
+        );
     }
 }
 
@@ -223,7 +297,9 @@ function gallery_image_move_release_locks(array $locks): void
     try {
         gallery_image_move_model_unlock($locks);
     } catch (Throwable) {
-        throw new RuntimeException('Image move lock release could not be verified. Inspect the retained journal before retrying.');
+        throw new RuntimeException(
+            'Image move lock release could not be verified. Inspect the retained journal before retrying.',
+        );
     }
 }
 
@@ -240,18 +316,33 @@ function gallery_image_move_fingerprint(string $path): array
 {
     clearstatcache(true, $path);
     if (is_link($path) || !is_file($path)) {
-        throw new RuntimeException('Image move file identity could not be verified.');
+        throw new RuntimeException(
+            'Image move file identity could not be verified.',
+        );
     }
     $before = @stat($path);
     $hash = @hash_file('sha256', $path);
     clearstatcache(true, $path);
     $after = @stat($path);
-    if ($before === false || $after === false || !is_string($hash)
-        || $before['dev'] !== $after['dev'] || $before['ino'] !== $after['ino']
-        || $before['size'] !== $after['size'] || $before['mtime'] !== $after['mtime']) {
-        throw new RuntimeException('Image move file changed during observation.');
+    if (
+        $before === false
+        || $after === false
+        || !is_string($hash)
+        || $before['dev'] !== $after['dev']
+        || $before['ino'] !== $after['ino']
+        || $before['size'] !== $after['size']
+        || $before['mtime'] !== $after['mtime']
+    ) {
+        throw new RuntimeException(
+            'Image move file changed during observation.',
+        );
     }
-    return ['size' => (int) $after['size'], 'sha256' => $hash, 'dev' => (int) $after['dev'], 'ino' => (int) $after['ino']];
+    return [
+        'size' => (int) $after['size'],
+        'sha256' => $hash,
+        'dev' => (int) $after['dev'],
+        'ino' => (int) $after['ino'],
+    ];
 }
 
 /**
@@ -265,7 +356,8 @@ function gallery_image_move_file_matches(string $path, array $identity): bool
 {
     try {
         $observed = gallery_image_move_fingerprint($path);
-        return $observed['size'] === $identity['size'] && hash_equals($identity['sha256'], $observed['sha256']);
+        return $observed['size'] === $identity['size']
+            && hash_equals($identity['sha256'], $observed['sha256']);
     } catch (Throwable) {
         return false;
     }
@@ -282,36 +374,73 @@ function gallery_image_move_file_matches(string $path, array $identity): bool
  * @param array{size:int,sha256:string} $identity Expected content identity.
  * @return void
  */
-function gallery_image_move_file_exclusive(string $from, string $to, array $identity): void
-{
+function gallery_image_move_file_exclusive(
+    string $from,
+    string $to,
+    array $identity,
+): void {
     if (!gallery_image_move_file_matches($from, $identity)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'source_identity_changed');
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'source_identity_changed',
+        );
     }
     if (file_exists($to) || is_link($to)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'destination_occupied');
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'destination_occupied',
+        );
     }
     $parent = dirname($to);
     try {
         gallery_image_move_assert_parent_boundary($parent);
     } catch (Throwable $exception) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', gallery_image_move_failure_reason($exception, 'destination_boundary_unverified'), previous: $exception);
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            gallery_image_move_failure_reason(
+                $exception,
+                'destination_boundary_unverified',
+            ),
+            previous: $exception,
+        );
     }
     error_clear_last();
-    if (!is_dir($parent) && !@mkdir($parent, GALLERY_DIRECTORY_PERMISSIONS, true) && !is_dir($parent)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'destination_directory_unavailable', previous: gallery_image_move_last_warning());
+    if (
+        !is_dir($parent)
+        && !@mkdir($parent, GALLERY_DIRECTORY_PERMISSIONS, true)
+        && !is_dir($parent)
+    ) {
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'destination_directory_unavailable',
+            previous: gallery_image_move_last_warning(),
+        );
     }
     if (!gallery_filesystem_path_inside_root($parent)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'destination_boundary_unverified');
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'destination_boundary_unverified',
+        );
     }
     if (file_exists($to) || is_link($to)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'destination_occupied');
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'destination_occupied',
+        );
     }
     error_clear_last();
     if (!@rename($from, $to)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'file_rename_failed', previous: gallery_image_move_last_warning());
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'file_rename_failed',
+            previous: gallery_image_move_last_warning(),
+        );
     }
     if (!gallery_image_move_file_matches($to, $identity)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'destination_identity_unverified');
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'destination_identity_unverified',
+        );
     }
 }
 
@@ -328,25 +457,45 @@ function gallery_image_move_file_exclusive(string $from, string $to, array $iden
  * @return void
  * @throws RuntimeException When existing storage cannot prove confinement.
  */
-function gallery_image_move_assert_parent_boundary(string $parent, ?string $galleryRoot = null): void
-{
+function gallery_image_move_assert_parent_boundary(
+    string $parent,
+    ?string $galleryRoot = null,
+): void {
     $existing = $parent;
     while (!file_exists($existing) && !is_link($existing)) {
         $ancestor = dirname($existing);
         if ($ancestor === $existing) {
-            throw new ImageMoveDiagnosticFailure('file_transfer', 'storage_ancestry_missing');
+            throw new ImageMoveDiagnosticFailure(
+                'file_transfer',
+                'storage_ancestry_missing',
+            );
         }
         $existing = $ancestor;
     }
     if (!is_dir($existing) || !gallery_filesystem_path_inside_root($existing)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'storage_ancestry_untrusted');
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'storage_ancestry_untrusted',
+        );
     }
     if ($galleryRoot !== null) {
         $rootReal = realpath($galleryRoot);
         $ancestorReal = realpath($existing);
-        if ($rootReal === false || $ancestorReal === false
-            || ($ancestorReal !== $rootReal && !str_starts_with($ancestorReal, rtrim($rootReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR))) {
-            throw new ImageMoveDiagnosticFailure('file_transfer', 'gallery_ancestry_changed');
+        if (
+            $rootReal === false
+            || $ancestorReal === false
+            || (
+                $ancestorReal !== $rootReal
+                && !str_starts_with(
+                    $ancestorReal,
+                    rtrim($rootReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR,
+                )
+            )
+        ) {
+            throw new ImageMoveDiagnosticFailure(
+                'file_transfer',
+                'gallery_ancestry_changed',
+            );
         }
     }
 }
@@ -360,34 +509,72 @@ function gallery_image_move_assert_parent_boundary(string $parent, ?string $gall
  * @param array<int,array{from:string,to:string,kind:string}> $entries Confined absolute file move entries.
  * @return string Durable random operation identifier.
  */
-function gallery_image_move_prepare(array $source, array $destination, array $imageIds, array $entries): string
-{
+function gallery_image_move_prepare(
+    array $source,
+    array $destination,
+    array $imageIds,
+    array $entries,
+): string {
     $root = rtrim(str_replace('\\', '/', galleries_root()), '/') . '/';
     $files = [];
     foreach ($entries as $index => $entry) {
         $from = str_replace('\\', '/', $entry['from']);
         $to = str_replace('\\', '/', $entry['to']);
-        if (!str_starts_with($from, $root) || !str_starts_with($to, $root)
-            || !gallery_filesystem_path_inside_root(dirname($from))) {
-            throw new ImageMoveDiagnosticFailure('prepare', 'storage_boundary_unverified', fileNumber: $index + 1, fileKind: $entry['kind']);
+        if (
+            !str_starts_with($from, $root)
+            || !str_starts_with($to, $root)
+            || !gallery_filesystem_path_inside_root(dirname($from))
+        ) {
+            throw new ImageMoveDiagnosticFailure(
+                'prepare',
+                'storage_boundary_unverified',
+                fileNumber: $index + 1,
+                fileKind: $entry['kind'],
+            );
         }
         try {
             $identity = gallery_image_move_fingerprint($entry['from']);
         } catch (Throwable $exception) {
-            throw new ImageMoveDiagnosticFailure('prepare', 'source_identity_unverified', fileNumber: $index + 1, fileKind: $entry['kind'], previous: $exception);
+            throw new ImageMoveDiagnosticFailure(
+                'prepare',
+                'source_identity_unverified',
+                fileNumber: $index + 1,
+                fileKind: $entry['kind'],
+                previous: $exception,
+            );
         }
-        $files[] = ['from' => normalize_relative_path(substr($from, strlen($root))),
-            'to' => normalize_relative_path(substr($to, strlen($root))), 'kind' => $entry['kind'],
-            'identity' => $identity];
+        $files[] = [
+            'from' => normalize_relative_path(substr($from, strlen($root))),
+            'to' => normalize_relative_path(substr($to, strlen($root))),
+            'kind' => $entry['kind'],
+            'identity' => $identity,
+        ];
     }
-    $manifest = ['version' => IMAGE_MOVE_MANIFEST_VERSION, 'source_path' => (string) $source['folder_path'],
-        'destination_path' => (string) $destination['folder_path'], 'image_ids' => $imageIds, 'files' => $files];
+    $manifest = [
+        'version' => IMAGE_MOVE_MANIFEST_VERSION,
+        'source_path' => (string) $source['folder_path'],
+        'destination_path' => (string) $destination['folder_path'],
+        'image_ids' => $imageIds,
+        'files' => $files,
+    ];
     $id = bin2hex(random_bytes(IMAGE_MOVE_OPERATION_RANDOM_BYTES));
     try {
-        gallery_image_move_model_prepare($id, (int) $source['id'], (int) $destination['id'],
-            json_encode($manifest, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES), now_sql());
+        gallery_image_move_model_prepare(
+            $id,
+            (int) $source['id'],
+            (int) $destination['id'],
+            json_encode(
+                $manifest,
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+            ),
+            now_sql(),
+        );
     } catch (Throwable $exception) {
-        throw new ImageMoveDiagnosticFailure('prepare', 'journal_write_failed', previous: $exception);
+        throw new ImageMoveDiagnosticFailure(
+            'prepare',
+            'journal_write_failed',
+            previous: $exception,
+        );
     }
     return $id;
 }
@@ -399,27 +586,48 @@ function gallery_image_move_prepare(array $source, array $destination, array $im
  * @param string $galleryPath Manifest's original gallery folder path.
  * @return string Confined absolute path, including a not-yet-created target.
  */
-function gallery_image_move_manifest_path(string $relativePath, string $galleryPath): string
-{
+function gallery_image_move_manifest_path(
+    string $relativePath,
+    string $galleryPath,
+): string {
     // Persisted gallery paths can retain legacy separators or dot segments even
     // though file paths in the journal are canonical forward-slash paths.
     try {
         $normalizedGalleryPath = normalize_relative_path($galleryPath);
         $normalizedRelativePath = normalize_relative_path($relativePath);
     } catch (Throwable $exception) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'manifest_path_invalid', previous: $exception);
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'manifest_path_invalid',
+            previous: $exception,
+        );
     }
-    if ($normalizedGalleryPath === '' || $relativePath !== $normalizedRelativePath
-        || !str_starts_with($relativePath, $normalizedGalleryPath . '/')) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'manifest_path_invalid');
+    if (
+        $normalizedGalleryPath === ''
+        || $relativePath !== $normalizedRelativePath
+        || !str_starts_with($relativePath, $normalizedGalleryPath . '/')
+    ) {
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'manifest_path_invalid',
+        );
     }
     $root = gallery_abs_path($galleryPath);
-    $path = galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $path =
+        galleries_root()
+        . DIRECTORY_SEPARATOR
+        . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     if (!is_dir($root)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'gallery_directory_missing');
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'gallery_directory_missing',
+        );
     }
     if (!thumbnail_path_inside_existing_gallery($root, $path)) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'path_outside_gallery');
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'path_outside_gallery',
+        );
     }
     if (is_link($path)) {
         throw new ImageMoveDiagnosticFailure('file_transfer', 'file_symlink');
@@ -435,52 +643,120 @@ function gallery_image_move_manifest_path(string $relativePath, string $galleryP
  * @param ?callable(string,string,int):void $checkpoint Optional internal fault-injection observer; never sourced from HTTP.
  * @return array<int,array{from:string,to:string,kind:string}> Successfully moved files for existing response counts.
  */
-function gallery_image_move_execute_files(string $operationId, ?callable $checkpoint = null): array
-{
+function gallery_image_move_execute_files(
+    string $operationId,
+    ?callable $checkpoint = null,
+): array {
     try {
         $job = gallery_image_move_model_find($operationId);
     } catch (Throwable $exception) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'journal_read_failed', $operationId, previous: $exception);
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'journal_read_failed',
+            $operationId,
+            previous: $exception,
+        );
     }
     if (!$job) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'journal_missing', $operationId);
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'journal_missing',
+            $operationId,
+        );
     }
     try {
-        $manifest = json_decode($job['manifest_json'], true, 512, JSON_THROW_ON_ERROR);
-        gallery_image_move_model_state($operationId, IMAGE_MOVE_MOVING, now_sql());
+        $manifest = json_decode(
+            $job['manifest_json'],
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+        gallery_image_move_model_state(
+            $operationId,
+            IMAGE_MOVE_MOVING,
+            now_sql(),
+        );
     } catch (Throwable $exception) {
-        throw new ImageMoveDiagnosticFailure('file_transfer', 'journal_update_failed', $operationId, previous: $exception);
+        throw new ImageMoveDiagnosticFailure(
+            'file_transfer',
+            'journal_update_failed',
+            $operationId,
+            previous: $exception,
+        );
     }
     $moved = [];
     foreach ($manifest['files'] as $index => $entry) {
         $step = 'resolve_source';
         try {
-            $from = gallery_image_move_manifest_path($entry['from'], $manifest['source_path']);
+            $from = gallery_image_move_manifest_path(
+                $entry['from'],
+                $manifest['source_path'],
+            );
             $step = 'resolve_destination';
-            $to = gallery_image_move_manifest_path($entry['to'], $manifest['destination_path']);
+            $to = gallery_image_move_manifest_path(
+                $entry['to'],
+                $manifest['destination_path'],
+            );
             $step = 'exclusive_transfer';
             gallery_image_move_file_exclusive($from, $to, $entry['identity']);
         } catch (Throwable $exception) {
             $storageRoot = galleries_root();
-            $sourcePath = $storageRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string) ($entry['from'] ?? ''));
-            $destinationPath = $storageRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string) ($entry['to'] ?? ''));
-            throw new ImageMoveDiagnosticFailure('file_transfer', gallery_image_move_failure_reason($exception, 'storage_boundary_unverified'),
-                $operationId, $index + 1, $entry['kind'] ?? null, $exception, [
+            $sourcePath =
+                $storageRoot
+                . DIRECTORY_SEPARATOR
+                . str_replace(
+                    '/',
+                    DIRECTORY_SEPARATOR,
+                    (string) ($entry['from'] ?? ''),
+                );
+            $destinationPath =
+                $storageRoot
+                . DIRECTORY_SEPARATOR
+                . str_replace(
+                    '/',
+                    DIRECTORY_SEPARATOR,
+                    (string) ($entry['to'] ?? ''),
+                );
+            throw new ImageMoveDiagnosticFailure(
+                'file_transfer',
+                gallery_image_move_failure_reason(
+                    $exception,
+                    'storage_boundary_unverified',
+                ),
+                $operationId,
+                $index + 1,
+                $entry['kind'] ?? null,
+                $exception,
+                [
                     'failed_step' => $step,
                     'source_relative_path' => (string) ($entry['from'] ?? ''),
-                    'destination_relative_path' => (string) ($entry['to'] ?? ''),
+                    'destination_relative_path' => (string) (
+                        $entry['to'] ?? ''
+                    ),
                     'source_absolute_path' => $sourcePath,
                     'destination_absolute_path' => $destinationPath,
                     'storage_root_realpath' => realpath($storageRoot) ?: '',
-                    'source_parent_realpath' => realpath(dirname($sourcePath)) ?: '',
-                    'destination_parent_realpath' => realpath(dirname($destinationPath)) ?: '',
-                    'manifest_source_gallery_path' => (string) ($manifest['source_path'] ?? ''),
-                    'manifest_destination_gallery_path' => (string) ($manifest['destination_path'] ?? ''),
+                    'source_parent_realpath' => realpath(dirname($sourcePath))
+                        ?: '',
+                    'destination_parent_realpath' => realpath(dirname(
+                        $destinationPath,
+                    )) ?: '',
+                    'manifest_source_gallery_path' => (string) (
+                        $manifest['source_path'] ?? ''
+                    ),
+                    'manifest_destination_gallery_path' => (string) (
+                        $manifest['destination_path'] ?? ''
+                    ),
                     'source_exists' => file_exists($sourcePath) ? 'yes' : 'no',
-                    'destination_exists' => file_exists($destinationPath) ? 'yes' : 'no',
+                    'destination_exists' => file_exists($destinationPath)
+                        ? 'yes'
+                        : 'no',
                     'source_is_link' => is_link($sourcePath) ? 'yes' : 'no',
-                    'destination_is_link' => is_link($destinationPath) ? 'yes' : 'no',
-                ]);
+                    'destination_is_link' => is_link($destinationPath)
+                        ? 'yes'
+                        : 'no',
+                ],
+            );
         }
         $moved[] = ['from' => $from, 'to' => $to, 'kind' => $entry['kind']];
         if ($checkpoint !== null) {
@@ -498,26 +774,40 @@ function gallery_image_move_execute_files(string $operationId, ?callable $checkp
  * @param array{size:int,sha256:string} $identity Persisted content fingerprint.
  * @return void
  */
-function gallery_image_move_reconcile_file(string $wanted, string $other, array $identity): void
-{
+function gallery_image_move_reconcile_file(
+    string $wanted,
+    string $other,
+    array $identity,
+): void {
     $wantedExists = file_exists($wanted) || is_link($wanted);
     $otherExists = file_exists($other) || is_link($other);
     if (!$wantedExists && $otherExists) {
         gallery_image_move_file_exclusive($other, $wanted, $identity);
         return;
     }
-    if (!$wantedExists || !gallery_image_move_file_matches($wanted, $identity)) {
-        throw new RuntimeException('Image move recovery found a missing or changed file.');
+    if (
+        !$wantedExists
+        || !gallery_image_move_file_matches($wanted, $identity)
+    ) {
+        throw new RuntimeException(
+            'Image move recovery found a missing or changed file.',
+        );
     }
     if (!$otherExists) {
         return;
     }
-    if (!gallery_image_move_file_matches($other, $identity)
-        || !gallery_image_move_file_matches($wanted, $identity)) {
-        throw new RuntimeException('Image move recovery found two names without verified expected content.');
+    if (
+        !gallery_image_move_file_matches($other, $identity)
+        || !gallery_image_move_file_matches($wanted, $identity)
+    ) {
+        throw new RuntimeException(
+            'Image move recovery found two names without verified expected content.',
+        );
     }
     if (!@unlink($other)) {
-        throw new RuntimeException('Image move recovery could not remove a verified extra file.');
+        throw new RuntimeException(
+            'Image move recovery could not remove a verified extra file.',
+        );
     }
 }
 
@@ -534,38 +824,78 @@ function gallery_image_move_recover_locked(string $operationId): array
 {
     $job = gallery_image_move_model_find($operationId);
     if (!$job) {
-        throw new ImageMoveDiagnosticFailure('recovery', 'journal_missing', $operationId);
+        throw new ImageMoveDiagnosticFailure(
+            'recovery',
+            'journal_missing',
+            $operationId,
+        );
     }
-    if (in_array($job['state'], [IMAGE_MOVE_FINALIZED, IMAGE_MOVE_ROLLED_BACK], true)) {
+    if (in_array(
+        $job['state'],
+        [IMAGE_MOVE_FINALIZED, IMAGE_MOVE_ROLLED_BACK],
+        true,
+    )) {
         return ['operation_id' => $operationId, 'state' => $job['state']];
     }
     try {
-        $manifest = json_decode($job['manifest_json'], true, 512, JSON_THROW_ON_ERROR);
-        if (($manifest['version'] ?? null) !== IMAGE_MOVE_MANIFEST_VERSION || !is_array($manifest['files'] ?? null)
-            || !is_array($manifest['image_ids'] ?? null)) {
+        $manifest = json_decode(
+            $job['manifest_json'],
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+        if (
+            ($manifest['version'] ?? null) !== IMAGE_MOVE_MANIFEST_VERSION
+            || !is_array($manifest['files'] ?? null)
+            || !is_array($manifest['image_ids'] ?? null)
+        ) {
             throw new RuntimeException('Unsupported image move manifest.');
         }
         $source = find_gallery((int) $job['source_gallery_id'], true);
         $destination = find_gallery((int) $job['destination_gallery_id'], true);
-        if (!$source || !$destination || $source['folder_path'] !== $manifest['source_path']
-            || $destination['folder_path'] !== $manifest['destination_path']) {
-            throw new RuntimeException('Image move gallery ownership or storage changed.');
+        if (
+            !$source
+            || !$destination
+            || $source['folder_path'] !== $manifest['source_path']
+            || $destination['folder_path'] !== $manifest['destination_path']
+        ) {
+            throw new RuntimeException(
+                'Image move gallery ownership or storage changed.',
+            );
         }
         $committed = (bool) $job['database_committed'];
-        $expectedOwner = (int) ($committed ? $job['destination_gallery_id'] : $job['source_gallery_id']);
+        $expectedOwner = (int) (
+            $committed
+                ? $job['destination_gallery_id']
+                : $job['source_gallery_id']
+        );
         foreach ($manifest['image_ids'] as $imageId) {
             $image = find_image((int) $imageId, true);
             if (!$image || (int) $image['gallery_id'] !== $expectedOwner) {
-                throw new RuntimeException('Image move image ownership changed.');
+                throw new RuntimeException(
+                    'Image move image ownership changed.',
+                );
             }
         }
-        $files = $committed ? $manifest['files'] : array_reverse($manifest['files']);
+        $files = $committed
+            ? $manifest['files']
+            : array_reverse($manifest['files']);
         // Preflight every entry before reconciling any entry.
         $paths = [];
         foreach ($files as $entry) {
-            $from = gallery_image_move_manifest_path($entry['from'], $manifest['source_path']);
-            $to = gallery_image_move_manifest_path($entry['to'], $manifest['destination_path']);
-            $paths[] = [$committed ? $to : $from, $committed ? $from : $to, $entry['identity']];
+            $from = gallery_image_move_manifest_path(
+                $entry['from'],
+                $manifest['source_path'],
+            );
+            $to = gallery_image_move_manifest_path(
+                $entry['to'],
+                $manifest['destination_path'],
+            );
+            $paths[] = [
+                $committed ? $to : $from,
+                $committed ? $from : $to,
+                $entry['identity'],
+            ];
         }
         foreach ($paths as [$wanted, $other, $identity]) {
             gallery_image_move_reconcile_file($wanted, $other, $identity);
@@ -577,9 +907,18 @@ function gallery_image_move_recover_locked(string $operationId): array
                 regenerate_gallery_image_public_slugs((int) $source['id']);
                 regenerate_gallery_image_public_slugs((int) $destination['id']);
             }
-            if (!write_gallery_sidecar(find_gallery((int) $source['id'], true) ?: $source)
-                || !write_gallery_sidecar(find_gallery((int) $destination['id'], true) ?: $destination)) {
-                throw new RuntimeException('Image move metadata refresh requires retry.');
+            if (
+                !write_gallery_sidecar(
+                    find_gallery((int) $source['id'], true) ?: $source,
+                )
+                || !write_gallery_sidecar(
+                    find_gallery((int) $destination['id'], true)
+                        ?: $destination,
+                )
+            ) {
+                throw new RuntimeException(
+                    'Image move metadata refresh requires retry.',
+                );
             }
         }
         $state = $committed ? IMAGE_MOVE_FINALIZED : IMAGE_MOVE_ROLLED_BACK;
@@ -588,11 +927,21 @@ function gallery_image_move_recover_locked(string $operationId): array
     } catch (Throwable $exception) {
         $reason = gallery_image_move_recovery_reason($exception);
         try {
-            gallery_image_move_model_state($operationId, IMAGE_MOVE_NEEDS_RECONCILIATION, now_sql(), $reason);
+            gallery_image_move_model_state(
+                $operationId,
+                IMAGE_MOVE_NEEDS_RECONCILIATION,
+                now_sql(),
+                $reason,
+            );
         } catch (Throwable) {
             // The original durable intent/commit marker still remains; never erase it.
         }
-        throw new ImageMoveDiagnosticFailure('recovery', $reason, $operationId, previous: $exception);
+        throw new ImageMoveDiagnosticFailure(
+            'recovery',
+            $reason,
+            $operationId,
+            previous: $exception,
+        );
     }
 }
 
@@ -604,7 +953,10 @@ function gallery_image_move_recover_locked(string $operationId): array
  */
 function gallery_image_move_recover(string $operationId): array
 {
-    mutation_schema_assert_available(gallery_image_move_journal_schema_status(), 'gallery.move_recover');
+    mutation_schema_assert_available(
+        gallery_image_move_journal_schema_status(),
+        'gallery.move_recover',
+    );
     $job = gallery_image_move_model_find($operationId);
     if (!$job) {
         throw new RuntimeException('Image move journal was not found.');
@@ -612,7 +964,10 @@ function gallery_image_move_recover(string $operationId): array
     $writerLock = gallery_edit_writer_begin();
     $locks = [];
     try {
-        $locks = gallery_image_move_model_lock([(int) $job['source_gallery_id'], (int) $job['destination_gallery_id']]);
+        $locks = gallery_image_move_model_lock([
+            (int) $job['source_gallery_id'],
+            (int) $job['destination_gallery_id'],
+        ]);
         return gallery_image_move_recover_locked($operationId);
     } finally {
         try {

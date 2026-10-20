@@ -52,7 +52,12 @@ function view_render_setup_locked(array $viewModel): void
     $message = (string) ($viewModel['message'] ?? '');
 
     render_header($title);
-    echo '<section class="panel"><h1>' . e($title) . '</h1><p>' . e($message) . '</p></section>';
+    echo
+        '<section class="panel"><h1>'
+            . e($title)
+            . '</h1><p>'
+            . e($message)
+            . '</p></section>';
     render_footer();
 }
 
@@ -60,6 +65,7 @@ function view_render_setup_locked(array $viewModel): void
  * Render the first-install administrator setup form.
  *
  * @param array<string, mixed> $viewModel Controller-prepared error, migration list, and CSRF field.
+ * @return void Writes the first-install setup form.
  */
 function view_render_setup_form(array $viewModel): void
 {
@@ -72,12 +78,37 @@ function view_render_setup_form(array $viewModel): void
     if ($error !== '') {
         echo '<div class="notice">' . e($error) . '</div>';
     }
-    echo '<section class="panel"><h1>' . e($title) . '</h1><p>' . e(t('setup.applied_migrations', 'Applied migrations: {migrations}', ['migrations' => $migrations !== [] ? implode(', ', $migrations) : t('admin.common.none')])) . '</p>';
+    echo
+        '<section class="panel"><h1>'
+            . e($title)
+            . '</h1><p>'
+            . e(t(
+                'setup.applied_migrations',
+                'Applied migrations: {migrations}',
+                [
+                    'migrations' => $migrations !== []
+                        ? implode(', ', $migrations)
+                        : t('admin.common.none'),
+                ],
+            ))
+            . '</p>';
     echo '<form method="post" class="form-grid">' . $csrfHtml;
-    echo '<label>' . e(t('setup.admin_username')) . '<input name="username" required autocomplete="username"></label>';
-    echo '<label>' . e(t('setup.admin_recovery_email')) . '<input name="email" type="email" autocomplete="email"></label>';
+    echo
+        '<label>'
+            . e(t('setup.admin_username'))
+            . '<input name="username" required autocomplete="username"></label>';
+    echo
+        '<label>'
+            . e(t('setup.admin_recovery_email'))
+            . '<input name="email" type="email" autocomplete="email"></label>';
     echo '<p class="muted">' . e(t('setup.recovery_email_help')) . '</p>';
-    echo '<label>' . e(t('setup.admin_password')) . '<input name="password" type="password" required autocomplete="new-password"></label>';
-    echo '<button type="submit">' . e(t('setup.create_or_update_admin')) . '</button></form></section>';
+    echo
+        '<label>'
+            . e(t('setup.admin_password'))
+            . '<input name="password" type="password" required autocomplete="new-password"></label>';
+    echo
+        '<button type="submit">'
+            . e(t('setup.create_or_update_admin'))
+            . '</button></form></section>';
     render_footer();
 }

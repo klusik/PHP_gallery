@@ -84,7 +84,15 @@ function application_update_commit_zip_url(string $commitId): string
         throw new RuntimeException('Enter a valid beta code.');
     }
     [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
-    return 'https://github.com/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/archive/' . rawurlencode($commitId) . '.zip';
+    return (
+        'https://github.com/'
+            . rawurlencode($owner)
+            . '/'
+            . rawurlencode($repo)
+            . '/archive/'
+            . rawurlencode($commitId)
+            . '.zip'
+    );
 }
 
 /**
@@ -97,18 +105,30 @@ function application_update_zip_url(string $branch): string
 {
     application_update_assert_allowed_branch($branch);
     [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
-    return 'https://codeload.github.com/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/zip/refs/heads/' . rawurlencode($branch) . '?nocache=' . rawurlencode((string) time());
+    return (
+        'https://codeload.github.com/'
+            . rawurlencode($owner)
+            . '/'
+            . rawurlencode($repo)
+            . '/zip/refs/heads/'
+            . rawurlencode($branch)
+            . '?nocache='
+            . rawurlencode((string) time())
+    );
 }
 
 /**
  * Reject update sources outside the stable GitHub branches.
  *
  * @param string $branch Branch value.
+ * @return void Throws when the source is not an allowed stable branch.
  */
 function application_update_assert_allowed_branch(string $branch): void
 {
     if (!in_array($branch, CMS_UPDATE_BRANCHES, true)) {
-        throw new RuntimeException('Updates are allowed only from the main or master GitHub branch.');
+        throw new RuntimeException(
+            'Updates are allowed only from the main or master GitHub branch.',
+        );
     }
 }
 
@@ -119,13 +139,24 @@ function application_update_assert_allowed_branch(string $branch): void
  * @param string $path Filesystem path.
  * @return string Text result for the caller.
  */
-function application_update_github_contents_api_url(string $branch, string $path): string
-{
+function application_update_github_contents_api_url(
+    string $branch,
+    string $path,
+): string {
     application_update_assert_allowed_branch($branch);
     [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
     // $cleanPath stores the repository-relative file path accepted by the Contents API.
     $cleanPath = ltrim(str_replace('\\', '/', $path), '/');
-    return 'https://api.github.com/repos/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/contents/' . str_replace('%2F', '/', rawurlencode($cleanPath)) . '?ref=' . rawurlencode($branch);
+    return (
+        'https://api.github.com/repos/'
+            . rawurlencode($owner)
+            . '/'
+            . rawurlencode($repo)
+            . '/contents/'
+            . str_replace('%2F', '/', rawurlencode($cleanPath))
+            . '?ref='
+            . rawurlencode($branch)
+    );
 }
 
 /**
@@ -136,8 +167,11 @@ function application_update_github_contents_api_url(string $branch, string $path
  * @param int $timeoutSeconds Timeout seconds value.
  * @return string Text result for the caller.
  */
-function application_update_fetch_github_content(string $branch, string $path, int $timeoutSeconds): string
-{
+function application_update_fetch_github_content(
+    string $branch,
+    string $path,
+    int $timeoutSeconds,
+): string {
     // $headers stores the media type that asks GitHub to return raw file contents instead of JSON metadata.
     $headers = [
         'Accept: application/vnd.github.raw+json',
@@ -174,8 +208,10 @@ function application_update_remote_version_candidates(string $branch): array
  * @param int $defaultSeconds Maximum timeout when no tighter deadline applies.
  * @return int Timeout seconds, or zero when the budget is exhausted.
  */
-function application_update_remote_timeout_seconds(?float $deadline, int $defaultSeconds = 12): int
-{
+function application_update_remote_timeout_seconds(
+    ?float $deadline,
+    int $defaultSeconds = 12,
+): int {
     $defaultSeconds = max(1, min(15, $defaultSeconds));
     if ($deadline === null) {
         return $defaultSeconds;
@@ -196,8 +232,10 @@ function application_update_remote_timeout_seconds(?float $deadline, int $defaul
  * @param ?float $deadline Absolute microtime deadline for external I/O.
  * @return array{candidates:array<string,string>,reachable:bool,diagnostic:string,budget_exhausted:bool} Bounded trusted-branch probe.
  */
-function application_update_remote_version_result(string $branch, ?float $deadline = null): array
-{
+function application_update_remote_version_result(
+    string $branch,
+    ?float $deadline = null,
+): array {
     // $versionCandidates stores trusted version markers found in remote files.
     $versionCandidates = [];
     // $diagnostics stores non-fatal parsing details used by the update page and logs.
@@ -205,62 +243,105 @@ function application_update_remote_version_result(string $branch, ?float $deadli
     // $reachable stores whether at least one trusted GitHub file was fetched successfully.
     $reachable = false;
 
-    $bootstrapTimeout = application_update_remote_timeout_seconds($deadline, 12);
+    $bootstrapTimeout = application_update_remote_timeout_seconds(
+        $deadline,
+        12,
+    );
     try {
         if ($bootstrapTimeout < 1) {
-            throw new RuntimeException('Remote update metadata request budget exhausted before bootstrap fetch.');
+            throw new RuntimeException(
+                'Remote update metadata request budget exhausted before bootstrap fetch.',
+            );
         }
         // $bootstrap stores the remote bootstrap file fetched through GitHub Contents API.
-        $bootstrap = application_update_fetch_github_content($branch, 'app/bootstrap.php', $bootstrapTimeout);
+        $bootstrap = application_update_fetch_github_content(
+            $branch,
+            'app/bootstrap.php',
+            $bootstrapTimeout,
+        );
         $reachable = true;
         // $bootstrapVersion stores the version parsed from the bootstrap constant when present.
-        $bootstrapVersion = application_update_version_from_bootstrap($bootstrap);
+        $bootstrapVersion =
+            application_update_version_from_bootstrap($bootstrap);
         if ($bootstrapVersion !== null) {
             $versionCandidates['app/bootstrap.php'] = $bootstrapVersion;
         } else {
-            $diagnostics[] = 'No CMS_VERSION marker was found in app/bootstrap.php on branch ' . $branch . '.';
+            $diagnostics[] =
+                'No CMS_VERSION marker was found in app/bootstrap.php on branch '
+                . $branch
+                . '.';
         }
     } catch (Throwable $exception) {
-        $diagnostics[] = 'app/bootstrap.php fetch failed. Reference: ' . application_update_safe_error($exception)['reference'];
+        $diagnostics[] =
+            'app/bootstrap.php fetch failed. Reference: '
+            . application_update_safe_error($exception)['reference'];
     }
 
     if ($versionCandidates === []) {
-        $patchTimeout = application_update_remote_timeout_seconds($deadline, 12);
+        $patchTimeout = application_update_remote_timeout_seconds(
+            $deadline,
+            12,
+        );
         try {
             if ($patchTimeout < 1) {
-                throw new RuntimeException('Remote update metadata request budget exhausted before patch-notes fetch.');
+                throw new RuntimeException(
+                    'Remote update metadata request budget exhausted before patch-notes fetch.',
+                );
             }
             // $patchNotes stores the remote release notes used as a secondary version signal.
-            $patchNotes = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', $patchTimeout);
+            $patchNotes = application_update_fetch_github_content(
+                $branch,
+                'PATCH_NOTES.md',
+                $patchTimeout,
+            );
             application_patch_notes_write_cache($branch, [
-                'ok' => true, 'branch' => $branch, 'cached_at' => time(),
-                'source' => 'github-api', 'versions' => application_patch_notes_parse_versions($patchNotes), 'error' => '',
+                'ok' => true,
+                'branch' => $branch,
+                'cached_at' => time(),
+                'source' => 'github-api',
+                'versions' =>
+                    application_patch_notes_parse_versions($patchNotes),
+                'error' => '',
             ]);
             $reachable = true;
             // $patchNotesVersion stores the newest heading parsed from the release notes.
-            $patchNotesVersion = application_update_version_from_patch_notes($patchNotes);
+            $patchNotesVersion =
+                application_update_version_from_patch_notes($patchNotes);
             if ($patchNotesVersion !== null) {
                 $versionCandidates['PATCH_NOTES.md'] = $patchNotesVersion;
             } else {
-                $diagnostics[] = 'No version heading was found in PATCH_NOTES.md on branch ' . $branch . '.';
+                $diagnostics[] =
+                    'No version heading was found in PATCH_NOTES.md on branch '
+                    . $branch
+                    . '.';
             }
         } catch (Throwable $exception) {
-            $diagnostics[] = 'PATCH_NOTES.md fetch failed. Reference: ' . application_update_safe_error($exception)['reference'];
+            $diagnostics[] =
+                'PATCH_NOTES.md fetch failed. Reference: '
+                . application_update_safe_error($exception)['reference'];
         }
     }
 
     return [
-        'candidates' => array_filter($versionCandidates, static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null),
+        'candidates' => array_filter(
+            $versionCandidates,
+            static fn(mixed $value): bool => (
+                is_string($value)
+                && application_update_normalize_version($value) !== null
+            ),
+        ),
         'reachable' => $reachable,
         'diagnostic' => implode(' ', array_filter($diagnostics)),
-        'budget_exhausted' => application_update_remote_timeout_seconds($deadline, 12) < 1,
+        'budget_exhausted' =>
+            application_update_remote_timeout_seconds($deadline, 12) < 1,
     ];
 }
 
 /**
  * Return the highest semantic version from remote version candidates.
  *
- * @param array $versionCandidates Version candidates value.
+ * @param array<string,string> $versionCandidates Version markers keyed by
+ *     remote file path.
  * @return string Text result for the caller.
  */
 function application_update_highest_version(array $versionCandidates): string
@@ -269,18 +350,25 @@ function application_update_highest_version(array $versionCandidates): string
     $highestVersion = null;
     foreach ($versionCandidates as $version) {
         // $normalizedVersion stores an intermediate value used by the surrounding gallery workflow.
-        $normalizedVersion = application_update_normalize_version((string) $version);
+        $normalizedVersion = application_update_normalize_version(
+            (string) $version,
+        );
         if ($normalizedVersion === null) {
             continue;
         }
-        if ($highestVersion === null || version_compare($normalizedVersion, $highestVersion, '>')) {
+        if (
+            $highestVersion === null
+            || version_compare($normalizedVersion, $highestVersion, '>')
+        ) {
             // $highestVersion stores an intermediate value used by the surrounding gallery workflow.
             $highestVersion = $normalizedVersion;
         }
     }
 
     if ($highestVersion === null) {
-        throw new RuntimeException('Remote version candidates did not contain a valid version number.');
+        throw new RuntimeException(
+            'Remote version candidates did not contain a valid version number.',
+        );
     }
 
     return $highestVersion;
@@ -289,17 +377,22 @@ function application_update_highest_version(array $versionCandidates): string
 /**
  * Return a readable label for the remote source that provided the selected version.
  *
- * @param array $versionCandidates Version candidates value.
+ * @param array<string,string> $versionCandidates Version markers keyed by
+ *     remote file path.
  * @param string $latestVersion Latest version value.
  * @return string Text result for the caller.
  */
-function application_update_version_source_label(array $versionCandidates, string $latestVersion): string
-{
+function application_update_version_source_label(
+    array $versionCandidates,
+    string $latestVersion,
+): string {
     // $labels stores an intermediate value used by the surrounding gallery workflow.
     $labels = [];
     foreach ($versionCandidates as $source => $version) {
         // $normalizedVersion stores an intermediate value used by the surrounding gallery workflow.
-        $normalizedVersion = application_update_normalize_version((string) $version);
+        $normalizedVersion = application_update_normalize_version(
+            (string) $version,
+        );
         if ($normalizedVersion === $latestVersion) {
             $labels[] = (string) $source;
         }
@@ -315,7 +408,11 @@ function application_update_version_source_label(array $versionCandidates, strin
  */
 function application_update_version_from_bootstrap(string $bootstrap): ?string
 {
-    if (preg_match("/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i", $bootstrap, $match)) {
+    if (preg_match(
+        "/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i",
+        $bootstrap,
+        $match,
+    )) {
         return application_update_normalize_version((string) $match[1]);
     }
     return null;
@@ -329,10 +426,16 @@ function application_update_version_from_bootstrap(string $bootstrap): ?string
  */
 function application_update_version_from_patch_notes(string $markdown): ?string
 {
-    if (preg_match_all('/^##\s+Version\s+([^\r\n]+)/mi', $markdown, $matches) !== false && !empty($matches[1])) {
+    if (
+        preg_match_all('/^##\s+Version\s+([^\r\n]+)/mi', $markdown, $matches)
+            !== false
+        && !empty($matches[1])
+    ) {
         foreach ($matches[1] as $candidate) {
             // $version stores the normalized heading version when it follows the project release format.
-            $version = application_update_normalize_version((string) $candidate);
+            $version = application_update_normalize_version(
+                (string) $candidate,
+            );
             if ($version !== null) {
                 return $version;
             }
@@ -376,13 +479,20 @@ function http_fetch(string $url, int $timeoutSeconds): string
  *
  * @param string $url URL used by this workflow.
  * @param int $timeoutSeconds Timeout seconds value.
- * @param array $headers Headers value.
+ * @param list<string> $headers Request header lines.
  * @return string Text result for the caller.
  */
-function http_fetch_with_headers(string $url, int $timeoutSeconds, array $headers = []): string
-{
+function http_fetch_with_headers(
+    string $url,
+    int $timeoutSeconds,
+    array $headers = [],
+): string {
     // $response stores the complete HTTP response while this legacy wrapper returns only the body.
-    $response = http_fetch_response_with_headers($url, $timeoutSeconds, $headers);
+    $response = http_fetch_response_with_headers(
+        $url,
+        $timeoutSeconds,
+        $headers,
+    );
     return (string) $response['body'];
 }
 
@@ -391,11 +501,15 @@ function http_fetch_with_headers(string $url, int $timeoutSeconds, array $header
  *
  * @param string $url URL used by this workflow.
  * @param int $timeoutSeconds Timeout seconds value.
- * @param array $headers Headers value.
- * @return array Structured result data for the caller.
+ * @param list<string> $headers Request header lines.
+ * @return array{body:string,status:int,headers:array<string,string>} HTTP
+ *     response body, status code, and normalized response headers.
  */
-function http_fetch_response_with_headers(string $url, int $timeoutSeconds, array $headers = []): array
-{
+function http_fetch_response_with_headers(
+    string $url,
+    int $timeoutSeconds,
+    array $headers = [],
+): array {
     if (strpos($url, 'https://api.github.com/') === 0) {
         return cms_github_api_get($url, $timeoutSeconds, $headers, true);
     }
@@ -406,7 +520,10 @@ function http_fetch_response_with_headers(string $url, int $timeoutSeconds, arra
         'Pragma: no-cache',
     ];
     // $requestHeaders stores caller-provided headers after shared cache-control headers.
-    $requestHeaders = array_values(array_filter(array_merge($baseHeaders, $headers), static fn ($header): bool => is_string($header) && trim($header) !== ''));
+    $requestHeaders = array_values(array_filter(
+        array_merge($baseHeaders, $headers),
+        static fn($header): bool => is_string($header) && trim($header) !== '',
+    ));
 
     if (function_exists('curl_init')) {
         // $handle stores the cURL handle used for a single bounded HTTP request.
@@ -426,13 +543,18 @@ function http_fetch_response_with_headers(string $url, int $timeoutSeconds, arra
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => $requestHeaders,
-            CURLOPT_HEADERFUNCTION => static function ($curlHandle, string $headerLine) use (&$responseHeaders): int {
+            CURLOPT_HEADERFUNCTION => static function (
+                \CurlHandle $curlHandle,
+                string $headerLine,
+            ) use (&$responseHeaders): int {
                 // $length stores the raw header-line length cURL expects this callback to return.
                 $length = strlen($headerLine);
                 // $parts stores the parsed header name and value when the line is a normal response header.
                 $parts = explode(':', trim($headerLine), 2);
                 if (count($parts) === 2) {
-                    $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                    $responseHeaders[strtolower(trim($parts[0]))] = trim(
+                        $parts[1],
+                    );
                 }
                 return $length;
             },
@@ -446,15 +568,32 @@ function http_fetch_response_with_headers(string $url, int $timeoutSeconds, arra
         curl_close($handle);
         if ($body === false || $status >= 400) {
             if (strpos($url, 'https://api.github.com/') === 0) {
-                application_update_record_github_response($url, $status, $responseHeaders);
+                application_update_record_github_response(
+                    $url,
+                    $status,
+                    $responseHeaders,
+                );
             }
-            throw new RuntimeException($error !== '' ? $error : 'HTTP request failed with status ' . $status . '.');
+            throw new RuntimeException(
+                $error !== ''
+                    ? $error
+                    : 'HTTP request failed with status ' . $status . '.',
+            );
         }
-        return ['body' => (string) $body, 'status' => $status, 'headers' => $responseHeaders];
+        return [
+            'body' => (string) $body,
+            'status' => $status,
+            'headers' => $responseHeaders,
+        ];
     }
 
     // $headerText stores HTTP headers formatted for the stream wrapper fallback.
-    $headerText = "User-Agent: PHP-Gallery-CMS/" . cms_current_version() . "\r\n" . implode("\r\n", $requestHeaders) . "\r\n";
+    $headerText =
+        'User-Agent: PHP-Gallery-CMS/'
+        . cms_current_version()
+        . "\r\n"
+        . implode("\r\n", $requestHeaders)
+        . "\r\n";
     // $context stores stream options for a single bounded GET request.
     $context = stream_context_create([
         'http' => [
@@ -470,7 +609,7 @@ function http_fetch_response_with_headers(string $url, int $timeoutSeconds, arra
     $responseHeaders = [];
     // $status stores the parsed response code when stream metadata is available.
     $status = 0;
-    foreach (($http_response_header ?? []) as $line) {
+    foreach ($http_response_header ?? [] as $line) {
         if (preg_match('/^HTTP\/\S+\s+(\d+)/', $line, $match)) {
             $status = (int) $match[1];
             continue;
@@ -482,9 +621,21 @@ function http_fetch_response_with_headers(string $url, int $timeoutSeconds, arra
     }
     if ($body === false || $status >= 400) {
         if (strpos($url, 'https://api.github.com/') === 0) {
-            application_update_record_github_response($url, $status, $responseHeaders);
+            application_update_record_github_response(
+                $url,
+                $status,
+                $responseHeaders,
+            );
         }
-        throw new RuntimeException($status >= 400 ? 'HTTP request failed with status ' . $status . '.' : 'HTTP request failed. Enable curl or allow_url_fopen for update checks.');
+        throw new RuntimeException(
+            $status >= 400
+                ? 'HTTP request failed with status ' . $status . '.'
+                : 'HTTP request failed. Enable curl or allow_url_fopen for update checks.',
+        );
     }
-    return ['body' => (string) $body, 'status' => $status, 'headers' => $responseHeaders];
+    return [
+        'body' => (string) $body,
+        'status' => $status,
+        'headers' => $responseHeaders,
+    ];
 }

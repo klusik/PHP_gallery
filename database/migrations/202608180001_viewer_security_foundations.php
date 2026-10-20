@@ -55,7 +55,7 @@ return [
         UNIQUE KEY viewer_accounts_normalized_email_unique (normalized_email),
         KEY viewer_accounts_status_updated_index (status, updated_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_email_verification_tokens (
+    'CREATE TABLE IF NOT EXISTS viewer_email_verification_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_account_id BIGINT UNSIGNED NOT NULL,
         token_hash CHAR(64) NOT NULL,
@@ -68,8 +68,8 @@ return [
         KEY viewer_email_verification_account_expiry_index (viewer_account_id, expires_at, consumed_at, invalidated_at),
         KEY viewer_email_verification_expiry_index (expires_at),
         CONSTRAINT viewer_email_verification_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_password_reset_tokens (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_password_reset_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_account_id BIGINT UNSIGNED NOT NULL,
         token_hash CHAR(64) NOT NULL,
@@ -82,8 +82,8 @@ return [
         KEY viewer_password_reset_account_expiry_index (viewer_account_id, expires_at, consumed_at, invalidated_at),
         KEY viewer_password_reset_expiry_index (expires_at),
         CONSTRAINT viewer_password_reset_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_remember_tokens (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_remember_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_account_id BIGINT UNSIGNED NOT NULL,
         selector CHAR(36) NOT NULL,
@@ -98,8 +98,8 @@ return [
         KEY viewer_remember_tokens_account_expiry_index (viewer_account_id, expires_at, revoked_at),
         KEY viewer_remember_tokens_expiry_index (expires_at),
         CONSTRAINT viewer_remember_tokens_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_sessions (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_sessions (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_account_id BIGINT UNSIGNED NOT NULL,
         session_hash CHAR(64) NOT NULL,
@@ -114,8 +114,8 @@ return [
         KEY viewer_sessions_account_expiry_index (viewer_account_id, expires_at, revoked_at),
         KEY viewer_sessions_expiry_index (expires_at),
         CONSTRAINT viewer_sessions_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_security_events (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_security_events (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_account_id BIGINT UNSIGNED NULL,
         event_key VARCHAR(100) NOT NULL,
@@ -130,13 +130,13 @@ return [
         KEY viewer_security_events_event_created_index (event_key, created_at),
         KEY viewer_security_events_retention_index (retention_until),
         CONSTRAINT viewer_security_events_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_rate_limit_buckets (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_rate_limit_buckets (
         bucket VARCHAR(64) NOT NULL PRIMARY KEY,
         entry_count INT UNSIGNED NOT NULL DEFAULT 0,
         updated_at DATETIME NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_rate_limits (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_rate_limits (
         bucket VARCHAR(64) NOT NULL,
         subject_hash CHAR(64) NOT NULL,
         attempts INT UNSIGNED NOT NULL DEFAULT 0,
@@ -147,8 +147,8 @@ return [
         KEY viewer_rate_limits_locked_until_index (locked_until),
         KEY viewer_rate_limits_last_attempt_index (last_attempt_at),
         CONSTRAINT viewer_rate_limits_bucket_foreign FOREIGN KEY (bucket) REFERENCES viewer_rate_limit_buckets(bucket) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_favourites (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_favourites (
         viewer_account_id BIGINT UNSIGNED NOT NULL,
         image_id BIGINT UNSIGNED NOT NULL,
         created_at DATETIME NOT NULL,
@@ -156,8 +156,8 @@ return [
         KEY viewer_favourites_image_account_index (image_id, viewer_account_id),
         CONSTRAINT viewer_favourites_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE CASCADE,
         CONSTRAINT viewer_favourites_image_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_collections (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_collections (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_account_id BIGINT UNSIGNED NOT NULL,
         title VARCHAR(160) NOT NULL,
@@ -166,8 +166,8 @@ return [
         updated_at DATETIME NOT NULL,
         KEY viewer_collections_account_updated_index (viewer_account_id, updated_at, id),
         CONSTRAINT viewer_collections_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_collection_items (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_collection_items (
         viewer_collection_id BIGINT UNSIGNED NOT NULL,
         image_id BIGINT UNSIGNED NOT NULL,
         position INT UNSIGNED NOT NULL DEFAULT 0,
@@ -177,8 +177,8 @@ return [
         KEY viewer_collection_items_image_index (image_id),
         CONSTRAINT viewer_collection_items_collection_foreign FOREIGN KEY (viewer_collection_id) REFERENCES viewer_collections(id) ON DELETE CASCADE,
         CONSTRAINT viewer_collection_items_image_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_collection_share_tokens (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_collection_share_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_collection_id BIGINT UNSIGNED NOT NULL,
         created_by_viewer_account_id BIGINT UNSIGNED NULL,
@@ -193,8 +193,8 @@ return [
         KEY viewer_collection_share_expiry_index (expires_at),
         CONSTRAINT viewer_collection_share_collection_foreign FOREIGN KEY (viewer_collection_id) REFERENCES viewer_collections(id) ON DELETE CASCADE,
         CONSTRAINT viewer_collection_share_creator_foreign FOREIGN KEY (created_by_viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE IF NOT EXISTS viewer_passkeys (
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+    'CREATE TABLE IF NOT EXISTS viewer_passkeys (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         viewer_account_id BIGINT UNSIGNED NOT NULL,
         credential_id VARBINARY(1024) NOT NULL,
@@ -210,5 +210,5 @@ return [
         UNIQUE KEY viewer_passkeys_credential_hash_unique (credential_id_hash),
         KEY viewer_passkeys_account_created_index (viewer_account_id, created_at),
         CONSTRAINT viewer_passkeys_account_foreign FOREIGN KEY (viewer_account_id) REFERENCES viewer_accounts(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

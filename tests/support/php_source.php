@@ -27,9 +27,16 @@ function php_source_contract_tokens(string $source): string
     foreach (token_get_all($source) as $token) {
         if (is_array($token)) {
             // Native token tuples contain kind, literal bytes and source line.
-            if (in_array($token[0], [
-                T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT,
-            ], true)) {
+            if (in_array(
+                $token[0],
+                [
+                    T_OPEN_TAG,
+                    T_WHITESPACE,
+                    T_COMMENT,
+                    T_DOC_COMMENT,
+                ],
+                true,
+            )) {
                 continue;
             }
             $tokens[] = [$token[0], $token[1]];
@@ -41,8 +48,10 @@ function php_source_contract_tokens(string $source): string
     $encoded = [];
     foreach ($tokens as $index => $token) {
         // One-token lookahead recognizes PHP's optional terminal comma only.
-        if ($token[1] === ','
-            && in_array($tokens[$index + 1][1] ?? null, [')', ']'], true)) {
+        if (
+            $token[1] === ','
+            && in_array($tokens[$index + 1][1] ?? null, [')', ']'], true)
+        ) {
             continue;
         }
         $encoded[] = json_encode($token, JSON_THROW_ON_ERROR);
@@ -63,11 +72,13 @@ function php_source_contract_tokens(string $source): string
  */
 function php_source_contains(string $source, string $fragment): bool
 {
-    return str_contains($source, $fragment)
-        || str_contains(
-            php_source_contract_tokens(
-                str_contains($source, '<?') ? $source : '<?php ' . $source,
-            ),
-            php_source_contract_tokens('<?php ' . $fragment),
-        );
+    return (
+        str_contains($source, $fragment)
+            || str_contains(
+                php_source_contract_tokens(
+                    str_contains($source, '<?') ? $source : '<?php ' . $source,
+                ),
+                php_source_contract_tokens('<?php ' . $fragment),
+            )
+    );
 }

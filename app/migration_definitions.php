@@ -39,7 +39,6 @@ namespace Gallery\Core;
 
 use RuntimeException;
 
-
 /**
  * Discover migration files in deterministic filename order.
  *
@@ -70,11 +69,11 @@ function pending_migration_files(array $files, array $appliedVersions): array
     $applied = array_fill_keys(array_map('strval', $appliedVersions), true);
     return array_values(array_filter(
         $files,
-        static fn (string $file): bool => !isset($applied[basename($file, '.php')])
+        static fn(string $file): bool => !isset(
+            $applied[basename($file, '.php')],
+        ),
     ));
 }
-
-
 
 /**
  * Return true when an array uses consecutive integer keys beginning at zero.
@@ -113,31 +112,52 @@ function load_migration_definition(string $file): array
 {
     $definition = require $file;
     if (!is_array($definition)) {
-        throw new RuntimeException('Migration ' . basename($file) . ' must return an array.');
+        throw new RuntimeException(
+            'Migration ' . basename($file) . ' must return an array.',
+        );
     }
 
     if (migration_array_is_list($definition)) {
         $statements = $definition;
         $after = null;
     } else {
-        $unknownKeys = array_diff(array_keys($definition), ['statements', 'after']);
+        $unknownKeys = array_diff(
+            array_keys($definition),
+            ['statements', 'after'],
+        );
         if ($unknownKeys !== []) {
-            throw new RuntimeException('Migration ' . basename($file) . ' contains unsupported keys: ' . implode(', ', $unknownKeys) . '.');
+            throw new RuntimeException(
+                'Migration '
+                    . basename($file)
+                    . ' contains unsupported keys: '
+                    . implode(', ', $unknownKeys)
+                    . '.',
+            );
         }
         $statements = $definition['statements'] ?? [];
         $after = $definition['after'] ?? null;
     }
 
     if (!is_array($statements) || !migration_array_is_list($statements)) {
-        throw new RuntimeException('Migration ' . basename($file) . ' statements must be a list.');
+        throw new RuntimeException(
+            'Migration ' . basename($file) . ' statements must be a list.',
+        );
     }
     foreach ($statements as $index => $statement) {
         if (!is_string($statement) || trim($statement) === '') {
-            throw new RuntimeException('Migration ' . basename($file) . ' statement ' . ((int) $index + 1) . ' must be a non-empty SQL string.');
+            throw new RuntimeException(
+                'Migration '
+                    . basename($file)
+                    . ' statement '
+                    . ((int) $index + 1)
+                    . ' must be a non-empty SQL string.',
+            );
         }
     }
     if ($after !== null && !is_callable($after)) {
-        throw new RuntimeException('Migration ' . basename($file) . ' after value must be callable.');
+        throw new RuntimeException(
+            'Migration ' . basename($file) . ' after value must be callable.',
+        );
     }
 
     return [
@@ -161,11 +181,16 @@ function load_migration_definitions(array $files): array
 {
     $definitions = [];
     foreach ($files as $file) {
-        if (!is_string($file) || $file === '' || !is_file($file) || !is_readable($file)) {
-            throw new RuntimeException('Migration file is missing or unreadable: ' . (string) $file);
+        if (
+            !is_string($file)
+            || $file === ''
+            || !is_file($file)
+            || !is_readable($file)
+        ) {
+            throw new RuntimeException('Migration file is missing or unreadable: '
+                . (string) $file);
         }
         $definitions[$file] = load_migration_definition($file);
     }
     return $definitions;
 }
-

@@ -74,7 +74,7 @@ function &public_search_diagnostics_profile_state(): array
  */
 function public_search_diagnostics_profile_start(): void
 {
-    $state =& public_search_diagnostics_profile_state();
+    $state = &public_search_diagnostics_profile_state();
     $state['active'] = true;
     $state['queries'] = [];
     $state['sequence'] = 0;
@@ -87,7 +87,7 @@ function public_search_diagnostics_profile_start(): void
  */
 function public_search_diagnostics_profile_stop(): array
 {
-    $state =& public_search_diagnostics_profile_state();
+    $state = &public_search_diagnostics_profile_state();
     $queries = $state['queries'];
     $state['active'] = false;
     $state['queries'] = [];
@@ -100,7 +100,7 @@ function public_search_diagnostics_profile_stop(): array
  */
 function public_search_diagnostics_profile_active(): bool
 {
-    $state =& public_search_diagnostics_profile_state();
+    $state = &public_search_diagnostics_profile_state();
     return $state['active'] === true;
 }
 
@@ -112,8 +112,11 @@ function public_search_diagnostics_profile_active(): bool
  * @param array<int, mixed> $params Bound statement parameters.
  * @return array<int, array<string, mixed>> Fetched rows.
  */
-function public_search_diagnostics_fetch_all(string $label, string $sql, array $params = []): array
-{
+function public_search_diagnostics_fetch_all(
+    string $label,
+    string $sql,
+    array $params = [],
+): array {
     $profile = public_search_diagnostics_profile_active();
     $startedAt = $profile ? hrtime(true) : 0;
     $ok = false;
@@ -132,7 +135,7 @@ function public_search_diagnostics_fetch_all(string $label, string $sql, array $
     } finally {
         if ($profile) {
             $elapsedMs = max(0.0, (hrtime(true) - $startedAt) / 1_000_000);
-            $state =& public_search_diagnostics_profile_state();
+            $state = &public_search_diagnostics_profile_state();
             $state['sequence']++;
             $state['queries'][] = [
                 'sequence' => $state['sequence'],
@@ -158,7 +161,12 @@ function public_search_diagnostics_normalize_params(array $params): array
 {
     $normalized = [];
     foreach ($params as $value) {
-        if ($value === null || is_int($value) || is_float($value) || is_bool($value)) {
+        if (
+            $value === null
+            || is_int($value)
+            || is_float($value)
+            || is_bool($value)
+        ) {
             $normalized[] = $value;
             continue;
         }
@@ -193,14 +201,27 @@ function public_search_diagnostics_explain_queries(array $queries): array
             continue;
         }
         $label = (string) ($query['label'] ?? 'query');
-        $params = is_array($query['params'] ?? null) ? array_values($query['params']) : [];
-        $signature = hash('sha256', $label . "\n" . $sql . "\n" . json_encode($params, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $params = is_array($query['params'] ?? null)
+            ? array_values($query['params'])
+            : [];
+        $signature = hash(
+            'sha256',
+            $label . "\n" . $sql . "\n"
+                . json_encode(
+                    $params,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+                ),
+        );
         if (isset($seen[$signature])) {
             continue;
         }
         $seen[$signature] = true;
 
-        $reports[] = public_search_diagnostics_explain_one($label, $sql, $params);
+        $reports[] = public_search_diagnostics_explain_one(
+            $label,
+            $sql,
+            $params,
+        );
     }
 
     return $reports;
@@ -214,8 +235,11 @@ function public_search_diagnostics_explain_queries(array $queries): array
  * @param array<int, mixed> $params Bound parameters.
  * @return array<string, mixed> Explain result.
  */
-function public_search_diagnostics_explain_one(string $label, string $sql, array $params): array
-{
+function public_search_diagnostics_explain_one(
+    string $label,
+    string $sql,
+    array $params,
+): array {
     $startedAt = hrtime(true);
     try {
         $stmt = db()->prepare('EXPLAIN FORMAT=JSON ' . $sql);
@@ -226,7 +250,10 @@ function public_search_diagnostics_explain_one(string $label, string $sql, array
             'label' => $label,
             'status' => 'ok',
             'format' => 'json',
-            'elapsed_ms' => round(max(0.0, (hrtime(true) - $startedAt) / 1_000_000), 3),
+            'elapsed_ms' => round(
+                max(0.0, (hrtime(true) - $startedAt) / 1_000_000),
+                3,
+            ),
             'plan' => is_array($decoded) ? $decoded : (string) $raw,
         ];
     } catch (Throwable $jsonException) {
@@ -237,7 +264,10 @@ function public_search_diagnostics_explain_one(string $label, string $sql, array
                 'label' => $label,
                 'status' => 'ok',
                 'format' => 'table',
-                'elapsed_ms' => round(max(0.0, (hrtime(true) - $startedAt) / 1_000_000), 3),
+                'elapsed_ms' => round(
+                    max(0.0, (hrtime(true) - $startedAt) / 1_000_000),
+                    3,
+                ),
                 'plan' => $stmt->fetchAll(),
             ];
         } catch (Throwable $fallbackException) {
@@ -245,7 +275,10 @@ function public_search_diagnostics_explain_one(string $label, string $sql, array
                 'label' => $label,
                 'status' => 'error',
                 'format' => 'unavailable',
-                'elapsed_ms' => round(max(0.0, (hrtime(true) - $startedAt) / 1_000_000), 3),
+                'elapsed_ms' => round(
+                    max(0.0, (hrtime(true) - $startedAt) / 1_000_000),
+                    3,
+                ),
                 'error_class' => get_class($fallbackException),
                 'json_error_class' => get_class($jsonException),
             ];
@@ -263,7 +296,9 @@ function public_search_diagnostics_database_snapshot(): array
     $pdo = db();
     $snapshot = [
         'driver' => (string) $pdo->getAttribute(PDO::ATTR_DRIVER_NAME),
-        'server_version' => (string) $pdo->getAttribute(PDO::ATTR_SERVER_VERSION),
+        'server_version' => (string) $pdo->getAttribute(
+            PDO::ATTR_SERVER_VERSION,
+        ),
         'server_info' => '',
         'sql_mode' => '',
         'tables' => [],
@@ -271,23 +306,33 @@ function public_search_diagnostics_database_snapshot(): array
     ];
 
     try {
-        $stmt = $pdo->query('SELECT VERSION() AS version, @@version_comment AS version_comment, @@sql_mode AS sql_mode');
+        $stmt = $pdo->query(
+            'SELECT VERSION() AS version, @@version_comment AS version_comment, @@sql_mode AS sql_mode',
+        );
         $row = $stmt !== false ? $stmt->fetch() : false;
         if (is_array($row)) {
-            $snapshot['server_version'] = (string) ($row['version'] ?? $snapshot['server_version']);
+            $snapshot['server_version'] = (string) (
+                $row['version'] ?? $snapshot['server_version']
+            );
             $snapshot['server_info'] = (string) ($row['version_comment'] ?? '');
             $snapshot['sql_mode'] = (string) ($row['sql_mode'] ?? '');
         }
     } catch (Throwable) {
     }
 
-    $placeholders = implode(', ', array_fill(0, count(PUBLIC_SEARCH_DIAGNOSTIC_TABLES), '?'));
+    $placeholders = implode(', ', array_fill(
+        0,
+        count(PUBLIC_SEARCH_DIAGNOSTIC_TABLES),
+        '?',
+    ));
     try {
-        $stmt = $pdo->prepare("SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, DATA_FREE
+        $stmt = $pdo->prepare(
+            "SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, DATA_FREE
             FROM information_schema.TABLES
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME IN ($placeholders)
-            ORDER BY TABLE_NAME ASC");
+            ORDER BY TABLE_NAME ASC",
+        );
         $stmt->execute(PUBLIC_SEARCH_DIAGNOSTIC_TABLES);
         foreach ($stmt->fetchAll() as $row) {
             $snapshot['tables'][] = [
@@ -315,7 +360,9 @@ function public_search_diagnostics_database_snapshot(): array
                     'seq_in_index' => (int) ($row['Seq_in_index'] ?? 0),
                     'column_name' => (string) ($row['Column_name'] ?? ''),
                     'collation' => (string) ($row['Collation'] ?? ''),
-                    'cardinality' => isset($row['Cardinality']) ? (int) $row['Cardinality'] : null,
+                    'cardinality' => isset($row['Cardinality'])
+                        ? (int) $row['Cardinality']
+                        : null,
                     'index_type' => (string) ($row['Index_type'] ?? ''),
                 ];
             }

@@ -28,12 +28,22 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/support/php_source.php';
+
 use function Gallery\Models\telemetry_model_traffic_segment_condition;
 use function Gallery\Services\telemetry_traffic_segment;
 
-/** Throw when one traffic-segmentation contract fails. */
-function telemetry_traffic_segment_contract_assert(bool $condition, string $label): void
-{
+/**
+ * Throw when one traffic-segmentation contract fails.
+ *
+ * @param bool $condition Whether the contract assertion passed.
+ * @param string $label Failure message identifying the violated contract.
+ * @return void
+ */
+function telemetry_traffic_segment_contract_assert(
+    bool $condition,
+    string $label,
+): void {
     if (!$condition) {
         throw new RuntimeException($label);
     }
@@ -43,22 +53,49 @@ $root = dirname(__DIR__);
 require_once $root . '/app/models/telemetry.php';
 require_once $root . '/app/services/telemetry.php';
 
-telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('all') === 'all', 'All-traffic segment must remain available.');
-telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('non_bot') === 'non_bot', 'Non-bot-classified segment must remain available.');
-telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('bot') === 'bot', 'Bot-classified segment must remain available.');
-telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('unknown') === 'unknown', 'Unclassified traffic must be a distinct segment.');
-telemetry_traffic_segment_contract_assert(telemetry_model_traffic_segment_condition('unknown') === " AND device_type = 'unknown'", 'Unknown must not be folded into non-bot traffic.');
-telemetry_traffic_segment_contract_assert(telemetry_traffic_segment('HUMAN') === 'all', 'Unsupported identity-like segment names must fall back to all traffic.');
-telemetry_traffic_segment_contract_assert(telemetry_traffic_segment(['bot']) === 'all', 'Non-scalar segment input must fall back to all traffic.');
-
-telemetry_traffic_segment_contract_assert(telemetry_model_traffic_segment_condition('all') === '', 'All traffic must not add a device predicate.');
 telemetry_traffic_segment_contract_assert(
-    telemetry_model_traffic_segment_condition('non_bot') === " AND device_type IN ('desktop', 'tablet', 'phone')",
-    'Non-bot-classified traffic must exclude bots AND unclassified historical media.'
+    telemetry_traffic_segment('all') === 'all',
+    'All-traffic segment must remain available.',
 );
 telemetry_traffic_segment_contract_assert(
-    telemetry_model_traffic_segment_condition('bot', 'm.device_type') === " AND m.device_type = 'bot'",
-    'Bot-classified traffic must support the constrained hourly-metric alias.'
+    telemetry_traffic_segment('non_bot') === 'non_bot',
+    'Non-bot-classified segment must remain available.',
+);
+telemetry_traffic_segment_contract_assert(
+    telemetry_traffic_segment('bot') === 'bot',
+    'Bot-classified segment must remain available.',
+);
+telemetry_traffic_segment_contract_assert(
+    telemetry_traffic_segment('unknown') === 'unknown',
+    'Unclassified traffic must be a distinct segment.',
+);
+telemetry_traffic_segment_contract_assert(
+    telemetry_model_traffic_segment_condition('unknown')
+        === " AND device_type = 'unknown'",
+    'Unknown must not be folded into non-bot traffic.',
+);
+telemetry_traffic_segment_contract_assert(
+    telemetry_traffic_segment('HUMAN') === 'all',
+    'Unsupported identity-like segment names must fall back to all traffic.',
+);
+telemetry_traffic_segment_contract_assert(
+    telemetry_traffic_segment(['bot']) === 'all',
+    'Non-scalar segment input must fall back to all traffic.',
+);
+
+telemetry_traffic_segment_contract_assert(
+    telemetry_model_traffic_segment_condition('all') === '',
+    'All traffic must not add a device predicate.',
+);
+telemetry_traffic_segment_contract_assert(
+    telemetry_model_traffic_segment_condition('non_bot')
+        === " AND device_type IN ('desktop', 'tablet', 'phone')",
+    'Non-bot-classified traffic must exclude bots AND unclassified historical media.',
+);
+telemetry_traffic_segment_contract_assert(
+    telemetry_model_traffic_segment_condition('bot', 'm.device_type')
+        === " AND m.device_type = 'bot'",
+    'Bot-classified traffic must support the constrained hourly-metric alias.',
 );
 
 $invalidSegmentRejected = false;
@@ -67,7 +104,10 @@ try {
 } catch (InvalidArgumentException) {
     $invalidSegmentRejected = true;
 }
-telemetry_traffic_segment_contract_assert($invalidSegmentRejected, 'The model must reject unsupported traffic segments.');
+telemetry_traffic_segment_contract_assert(
+    $invalidSegmentRejected,
+    'The model must reject unsupported traffic segments.',
+);
 
 $invalidColumnRejected = false;
 try {
@@ -75,11 +115,17 @@ try {
 } catch (InvalidArgumentException) {
     $invalidColumnRejected = true;
 }
-telemetry_traffic_segment_contract_assert($invalidColumnRejected, 'The model must reject arbitrary SQL column identifiers.');
+telemetry_traffic_segment_contract_assert(
+    $invalidColumnRejected,
+    'The model must reject arbitrary SQL column identifiers.',
+);
 
-$controllerSource = (string) file_get_contents($root . '/app/controllers/admin_telemetry.php');
-$serviceSource = (string) file_get_contents($root . '/app/services/telemetry.php');
-$viewSource = (string) file_get_contents($root . '/app/views/admin_telemetry.php');
+$controllerSource = (string) file_get_contents($root
+    . '/app/controllers/admin_telemetry.php');
+$serviceSource = (string) file_get_contents($root
+    . '/app/services/telemetry.php');
+$viewSource = (string) file_get_contents($root
+    . '/app/views/admin_telemetry.php');
 
 foreach ([
     'telemetry_report_session_summary($days, $trafficSegment)',
@@ -94,32 +140,45 @@ foreach ([
     'telemetry_top_photos($days, 25, $trafficSegment)',
 ] as $requiredCall) {
     telemetry_traffic_segment_contract_assert(
-        str_contains($controllerSource, $requiredCall),
-        'Telemetry export must consistently segment visitor-derived dataset: ' . $requiredCall
+        php_source_contains($controllerSource, $requiredCall),
+        'Telemetry export must consistently segment visitor-derived dataset: '
+            . $requiredCall,
     );
 }
 
 telemetry_traffic_segment_contract_assert(
-    str_contains($controllerSource, "telemetry_report_database_totals(\$days)")
-        && !str_contains($controllerSource, "telemetry_report_database_totals(\$days, \$trafficSegment)"),
-    'Operational database telemetry must remain independent of visitor traffic segmentation.'
+    php_source_contains($controllerSource, "telemetry_report_database_totals(\$days)")
+        && !php_source_contains(
+            $controllerSource,
+            "telemetry_report_database_totals(\$days, \$trafficSegment)",
+        ),
+    'Operational database telemetry must remain independent of visitor traffic segmentation.',
 );
 telemetry_traffic_segment_contract_assert(
-    str_contains($serviceSource, "['all', 'non_bot', 'bot', 'unknown']")
-        && str_contains($viewSource, "traffic_segment_note")
-        && str_contains($viewSource, "export_non_bot_traffic"),
-    'Service and presentation layers must expose the constrained segmentation contract.'
+    php_source_contains($serviceSource, "['all', 'non_bot', 'bot', 'unknown']")
+        && php_source_contains($viewSource, 'traffic_segment_note')
+        && php_source_contains($viewSource, 'export_non_bot_traffic'),
+    'Service and presentation layers must expose the constrained segmentation contract.',
 );
 
 foreach (['en', 'cs', 'de', 'sv'] as $language) {
-    $translations = json_decode((string) file_get_contents($root . '/app/lang/' . $language . '.json'), true, 512, JSON_THROW_ON_ERROR);
+    $translations = json_decode(
+        (string) file_get_contents($root . '/app/lang/' . $language . '.json'),
+        true,
+        512,
+        JSON_THROW_ON_ERROR,
+    );
     foreach ([
         'admin.telemetry.traffic_segment_all',
         'admin.telemetry.traffic_segment_non_bot',
         'admin.telemetry.traffic_segment_bot',
         'admin.telemetry.export.traffic_segment_note',
     ] as $key) {
-        telemetry_traffic_segment_contract_assert(isset($translations[$key]) && trim((string) $translations[$key]) !== '', $language . ' translation missing: ' . $key);
+        telemetry_traffic_segment_contract_assert(
+            isset($translations[$key])
+                && trim((string) $translations[$key]) !== '',
+            $language . ' translation missing: ' . $key,
+        );
     }
 }
 

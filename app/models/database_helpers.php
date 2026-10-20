@@ -34,9 +34,17 @@ namespace Gallery\Models;
 
 use function Gallery\Core\db;
 
-/** Return whether one validated table contains one validated column. */
-function database_helpers_model_column_exists(string $table, string $column): bool
-{
+/**
+ * Return whether one validated table contains one validated column.
+ *
+ * @param string $table Validated table name.
+ * @param string $column Validated column name.
+ * @return bool True when the column exists on the table.
+ */
+function database_helpers_model_column_exists(
+    string $table,
+    string $column,
+): bool {
     $safeColumn = str_replace(["\\", "'"], ['', "\\'"], $column);
     $stmt = db()->query("SHOW COLUMNS FROM `{$table}` LIKE '{$safeColumn}'");
     return (bool) ($stmt && $stmt->fetch());

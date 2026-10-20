@@ -25,9 +25,10 @@ final class Request
      * @param array<string,mixed> $parameters Normalized clean-URL parameters.
      * @return void Initializes the request snapshot.
      */
-    public function __construct(public readonly string $page, public readonly array $parameters = [])
-    {
-    }
+    public function __construct(
+        public readonly string $page,
+        public readonly array $parameters = [],
+    ) {}
 
     /**
      * Convert the established URL parser's result into a request snapshot.

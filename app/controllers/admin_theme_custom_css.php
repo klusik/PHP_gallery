@@ -81,7 +81,8 @@ use function Gallery\Services\main_page_gallery_grid_settings;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\pagination_global_settings;
 use function Gallery\Services\public_thumbnail_rendering_mode;
-use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision;
+use function Gallery\Services\public_thumbnail_rendering_mode_save_with_revision
+;
 use function Gallery\Services\remove_stored_favicon;
 use function Gallery\Services\reset_all_gallery_grid_overrides;
 use function Gallery\Services\sanitize_hex_color;
@@ -154,103 +155,81 @@ use function Gallery\Views\view_render_admin_theme_custom_css_tab;
  * Send validators for a streamed file and stop on a matching browser cache entry.
  */
 
-
-
 /**
  * Render the public scroll helper next to a listing without joining the listing grid.
  */
-
 
 /**
  * Public homepage showing top-level public galleries.
  */
 
-
 /**
  * Public gallery detail page with breadcrumbs, subgalleries, images, tags, and votes.
  */
-
 
 /**
  * Render gallery ancestor links for public navigation.
  */
 
-
 /**
  * Render the password prompt for a protected public gallery.
  */
-
 
 /**
  * Process a public protected-gallery password unlock.
  */
 
-
 /**
  * Resolve a share token and redirect to its protected gallery.
  */
-
 
 /**
  * Build the canonical copyable share URL for one gallery/token pair.
  */
 
-
 /**
  * Render one gallery card, including direct cover or child-cover collage.
  */
-
 
 /**
  * Render logged-in admin metadata controls directly on public gallery pages.
  */
 
-
 /**
  * Render logged-in admin metadata controls for a public image card.
  */
-
 
 /**
  * Render the lightbox shell used by public gallery JavaScript.
  */
 
-
 /**
  * Stream a generated thumbnail after the same visibility checks as originals.
  */
-
-
 
 /**
  * Stream a generated thumbnail addressed through the clean public image URL.
  */
 
-
 /**
  * Stream an original image addressed through the clean public image URL.
  */
-
 
 /**
  * Stream an uploaded gallery thumbnail asset.
  */
 
-
 /**
  * Stream a protected image file after checking gallery/image visibility.
  */
-
 
 /**
  * Serve robots.txt for search engines.
  */
 
-
 /**
  * Serve sitemap.xml for public gallery pages.
  */
-
 
 /**
  * Render and process the admin login form.
@@ -269,19 +248,33 @@ function render_admin_theme_custom_css_tab(): void
     $presetOptions = [];
     foreach (custom_css_presets() as $filename => $path) {
         // Variable $label stores this steps working value.
-        $label = ucwords(str_replace(['-', '_'], ' ', pathinfo((string) $filename, PATHINFO_FILENAME)));
+        $label = ucwords(str_replace(
+            ['-', '_'],
+            ' ',
+            pathinfo((string) $filename, PATHINFO_FILENAME),
+        ));
         $presetOptions[] = [
             'filename' => (string) $filename,
             'label' => $label,
         ];
         if ($state['preset'] === (string) $filename) {
-            $lastPresetLabel = t('admin.theme.custom_css.last_preset', 'Last selected preset: {preset}', ['preset' => $label]);
+            $lastPresetLabel = t(
+                'admin.theme.custom_css.last_preset',
+                'Last selected preset: {preset}',
+                ['preset' => $label],
+            );
         }
     }
     if ($state['preset'] === 'uploaded') {
-        $lastPresetLabel = t('admin.theme.custom_css.source_uploaded', 'Uploaded stylesheet');
+        $lastPresetLabel = t(
+            'admin.theme.custom_css.source_uploaded',
+            'Uploaded stylesheet',
+        );
     } elseif ($lastPresetLabel === '' && $state['active']) {
-        $lastPresetLabel = t('admin.theme.custom_css.source_custom', 'Custom stylesheet');
+        $lastPresetLabel = t(
+            'admin.theme.custom_css.source_custom',
+            'Custom stylesheet',
+        );
     }
     $errors = (array) ($_SESSION['cms_custom_css_errors'] ?? []);
     unset($_SESSION['cms_custom_css_errors']);
@@ -289,54 +282,137 @@ function render_admin_theme_custom_css_tab(): void
     $overrideReady = true;
     try {
         $overrideState = \Gallery\Services\custom_css_overrides_state();
-    } catch (\RuntimeException | \InvalidArgumentException) {
+    } catch (\RuntimeException|\InvalidArgumentException) {
         $overrideReady = false;
-        $errors[] = t('admin.theme.overrides.failed', 'Overrides could not be read or saved. The previous stylesheet was kept. Check asset permissions and retry.');
+        $errors[] = t(
+            'admin.theme.overrides.failed',
+            'Overrides could not be read or saved. The previous stylesheet was kept. Check asset permissions and retry.',
+        );
     }
     $overrideDraft = $_SESSION['cms_css_override_draft'] ?? null;
     $overrideNotice = $_SESSION['cms_css_override_notice'] ?? null;
-    unset($_SESSION['cms_css_override_draft'], $_SESSION['cms_css_override_notice']);
+    unset(
+        $_SESSION['cms_css_override_draft'],
+        $_SESSION['cms_css_override_notice'],
+    );
     $themeSettings = \Gallery\Services\theme_settings();
-    $background = ['available' => false, 'revision' => '', 'source' => '', 'url' => '', 'ready' => true];
+    $background = [
+        'available' => false,
+        'revision' => '',
+        'source' => '',
+        'url' => '',
+        'ready' => true,
+    ];
     try {
         $background = \Gallery\Services\theme_background_editor_state();
         $background['ready'] = true;
     } catch (RuntimeException) {
         // An unreadable configured Theme image disables only image editing; the independent CSS editor remains usable.
-        $background = ['available' => false, 'revision' => '', 'source' => '', 'url' => '', 'ready' => false];
+        $background = [
+            'available' => false,
+            'revision' => '',
+            'source' => '',
+            'url' => '',
+            'ready' => false,
+        ];
     }
 
     view_render_admin_theme_custom_css_tab([
         'presets' => $presetOptions,
         'errors' => $errors,
-        'overrides' => ['state' => $overrideState, 'draft' => $overrideDraft, 'notice' => $overrideNotice, 'ready' => $overrideReady, 'active' => !empty($_GET['css_editor']), 'preview_url' => public_visual_preview_home_url(), 'background' => $background, 'page_width' => ['mode' => (string) ($themeSettings['page_width'] ?? 'default'), 'custom_px' => (int) ($themeSettings['page_width_custom'] ?? 1440)]],
+        'overrides' => [
+            'state' => $overrideState,
+            'draft' => $overrideDraft,
+            'notice' => $overrideNotice,
+            'ready' => $overrideReady,
+            'active' => !empty($_GET['css_editor']),
+            'preview_url' => public_visual_preview_home_url(),
+            'background' => $background,
+            'page_width' => [
+                'mode' => (string) ($themeSettings['page_width'] ?? 'default'),
+                'custom_px' => (int) (
+                    $themeSettings['page_width_custom'] ?? 1440
+                ),
+            ],
+        ],
         'current_css' => [
             'active' => $state['active'],
             'status_label' => $state['active']
-                ? t('admin.theme.custom_css.status_active', 'Custom stylesheet is active')
-                : t('admin.theme.custom_css.status_none', 'No custom stylesheet is installed'),
+                ? t(
+                    'admin.theme.custom_css.status_active',
+                    'Custom stylesheet is active',
+                )
+                : t(
+                    'admin.theme.custom_css.status_none',
+                    'No custom stylesheet is installed',
+                ),
             'preset_label' => $state['active'] ? $lastPresetLabel : '',
-            'size_label' => $state['active'] ? number_format($state['bytes'] / 1024, 1) . ' KB' : '',
-            'modified_label' => $state['active'] && $state['modified'] > 0 ? gmdate('Y-m-d H:i', $state['modified']) . ' UTC' : '',
-            'public_url' => $state['active'] ? $state['url'] . '?v=' . $state['modified'] : '',
+            'size_label' => $state['active']
+                ? number_format($state['bytes'] / 1024, 1) . ' KB'
+                : '',
+            'modified_label' => $state['active'] && $state['modified'] > 0
+                ? gmdate('Y-m-d H:i', $state['modified']) . ' UTC'
+                : '',
+            'public_url' => $state['active']
+                ? $state['url'] . '?v=' . $state['modified']
+                : '',
         ],
         'labels' => [
             'kicker' => t('admin.theme.custom_css.kicker', 'Custom CSS'),
-            'title' => t('admin.theme.custom_css.title', 'Skins and manual CSS'),
-            'description' => t('admin.theme.custom_css.description', 'Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.'),
+            'title' => t(
+                'admin.theme.custom_css.title',
+                'Skins and manual CSS',
+            ),
+            'description' => t(
+                'admin.theme.custom_css.description',
+                'Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.',
+            ),
             'subtab_source' => t('admin.theme.subtab_css_source', 'CSS source'),
-            'subtab_reset' => t('admin.theme.subtab_css_reset', 'Reset actions'),
-            'subtabs_label' => t('admin.theme.custom_css.subtabs_label', 'Custom CSS subsections'),
+            'subtab_reset' => t(
+                'admin.theme.subtab_css_reset',
+                'Reset actions',
+            ),
+            'subtabs_label' => t(
+                'admin.theme.custom_css.subtabs_label',
+                'Custom CSS subsections',
+            ),
             'legend' => t('admin.theme.custom_css.legend', 'Custom CSS'),
-            'skin_label' => t('admin.theme.custom_css.skin_label', 'Custom CSS skin'),
-            'keep_current' => t('admin.theme.custom_css.keep_current', 'Keep current custom CSS'),
-            'skin_hint' => t('admin.theme.custom_css.skin_hint', 'Selecting a skin copies it from custom_css/ into the active custom stylesheet.'),
-            'file_label' => t('admin.theme.custom_css.file_label', 'Custom CSS file'),
-            'file_hint' => t('admin.theme.custom_css.file_hint', 'Uploaded CSS is saved as public/assets/custom.css and loaded after the built-in stylesheet and theme controls.'),
-            'reset_legend' => t('admin.theme.custom_css.reset_legend', 'Reset actions'),
-            'reset_hint' => t('admin.theme.custom_css.reset_hint', 'Reset saved color overrides or remove the uploaded custom stylesheet without changing other Theme form values.'),
-            'reset_to_css' => t('admin.theme.custom_css.reset_to_css', 'Reset to CSS'),
-            'reset_custom_css' => t('admin.theme.custom_css.reset_custom_css', 'Reset custom CSS'),
+            'skin_label' => t(
+                'admin.theme.custom_css.skin_label',
+                'Custom CSS skin',
+            ),
+            'keep_current' => t(
+                'admin.theme.custom_css.keep_current',
+                'Keep current custom CSS',
+            ),
+            'skin_hint' => t(
+                'admin.theme.custom_css.skin_hint',
+                'Selecting a skin copies it from custom_css/ into the active custom stylesheet.',
+            ),
+            'file_label' => t(
+                'admin.theme.custom_css.file_label',
+                'Custom CSS file',
+            ),
+            'file_hint' => t(
+                'admin.theme.custom_css.file_hint',
+                'Uploaded CSS is saved as public/assets/custom.css and loaded after the built-in stylesheet and theme controls.',
+            ),
+            'reset_legend' => t(
+                'admin.theme.custom_css.reset_legend',
+                'Reset actions',
+            ),
+            'reset_hint' => t(
+                'admin.theme.custom_css.reset_hint',
+                'Reset saved color overrides or remove the uploaded custom stylesheet without changing other Theme form values.',
+            ),
+            'reset_to_css' => t(
+                'admin.theme.custom_css.reset_to_css',
+                'Reset to CSS',
+            ),
+            'reset_custom_css' => t(
+                'admin.theme.custom_css.reset_custom_css',
+                'Reset custom CSS',
+            ),
         ],
     ]);
 }

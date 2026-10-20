@@ -36,7 +36,6 @@ namespace Gallery\Services;
 use GdImage;
 use Throwable;
 use function Gallery\Core\cms_runtime_limit;
-
 use const Gallery\Core\IMAGE_DECODE_GD_BYTES_PER_PIXEL;
 use const Gallery\Core\IMAGE_DECODE_IMAGICK_BYTES_PER_PIXEL;
 use const Gallery\Core\IMAGE_DECODE_COMPRESSED_COPY_COUNT;
@@ -57,7 +56,8 @@ function image_decode_limits(?array $overrides = null): array
 {
     static $defaults = null;
     if ($defaults === null) {
-        $configuration = require dirname(__DIR__) . '/configuration_defaults.php';
+        $configuration = require
+            dirname(__DIR__) . '/configuration_defaults.php';
         $defaults = [];
         foreach ($configuration['runtime_limits'] as $key => $value) {
             if (str_starts_with($key, 'image_decode.')) {
@@ -68,8 +68,12 @@ function image_decode_limits(?array $overrides = null): array
     $limits = [];
     foreach ($defaults as $key => $default) {
         $value = $overrides !== null
-            ? ($overrides[$key] ?? $default)
-            : (function_exists('Gallery\\Core\\cms_runtime_limit') ? cms_runtime_limit('image_decode.' . $key) : $default);
+            ? $overrides[$key] ?? $default
+            : (
+                function_exists('Gallery\\Core\\cms_runtime_limit')
+                    ? cms_runtime_limit('image_decode.' . $key)
+                    : $default
+            );
         $limits[$key] = is_int($value) && $value > 0 ? $value : $default;
     }
     return $limits;
@@ -95,8 +99,14 @@ function image_decode_memory_limit_bytes(string|false $value): ?int
     }
     $digits = ltrim($matches[1], '0');
     $maximum = (string) PHP_INT_MAX;
-    if ($digits === '' || strlen($digits) > strlen($maximum)
-        || (strlen($digits) === strlen($maximum) && strcmp($digits, $maximum) > 0)) {
+    if (
+        $digits === ''
+        || strlen($digits) > strlen($maximum)
+        || (
+            strlen($digits) === strlen($maximum)
+            && strcmp($digits, $maximum) > 0
+        )
+    ) {
         return null;
     }
     $multiplier = match (strtoupper($matches[2])) {
@@ -106,7 +116,9 @@ function image_decode_memory_limit_bytes(string|false $value): ?int
         default => 1,
     };
     $bytes = (int) $digits;
-    return $bytes <= intdiv(PHP_INT_MAX, $multiplier) ? $bytes * $multiplier : null;
+    return $bytes <= intdiv(PHP_INT_MAX, $multiplier)
+        ? $bytes * $multiplier
+        : null;
 }
 
 /**
@@ -118,7 +130,14 @@ function image_decode_memory_limit_bytes(string|false $value): ?int
  */
 function image_decode_product(int $left, int $right): ?int
 {
-    if ($left < 0 || $right < 0 || ($right !== 0 && $left > intdiv(PHP_INT_MAX, $right))) {
+    if (
+        $left < 0
+        || $right < 0
+        || (
+            $right !== 0
+            && $left > intdiv(PHP_INT_MAX, $right)
+        )
+    ) {
         return null;
     }
     return $left * $right;
@@ -134,13 +153,36 @@ function image_decode_status(string $reason): array
 {
     $fallback = match ($reason) {
         'allowed' => '',
-        'unsupported_format' => 'This image format cannot be decoded by the server.',
-        'metadata_unavailable', 'invalid_dimensions' => 'Image dimensions could not be verified. Thumbnail generation was deferred.',
-        'dimension_limit', 'pixel_limit', 'arithmetic_overflow', 'memory_budget' => 'This image exceeds the safe server image-processing budget. Thumbnail generation was deferred.',
-        'memory_limit_unknown' => 'The server image-processing memory budget could not be verified. Thumbnail generation was deferred.',
+        'unsupported_format'
+            => 'This image format cannot be decoded by the server.',
+        'metadata_unavailable',
+        'invalid_dimensions',
+            => 'Image dimensions could not be verified. Thumbnail generation was deferred.',
+        'dimension_limit',
+        'pixel_limit',
+        'arithmetic_overflow',
+        'memory_budget',
+            => 'This image exceeds the safe server image-processing budget. Thumbnail generation was deferred.',
+        'memory_limit_unknown'
+            => 'The server image-processing memory budget could not be verified. Thumbnail generation was deferred.',
         default => 'Image processing failed. The original image was retained; thumbnail generation can be retried.',
     };
-    if (!in_array($reason, ['allowed', 'unsupported_format', 'metadata_unavailable', 'invalid_dimensions', 'dimension_limit', 'pixel_limit', 'arithmetic_overflow', 'memory_budget', 'memory_limit_unknown', 'processing_failed'], true)) {
+    if (!in_array(
+        $reason,
+        [
+            'allowed',
+            'unsupported_format',
+            'metadata_unavailable',
+            'invalid_dimensions',
+            'dimension_limit',
+            'pixel_limit',
+            'arithmetic_overflow',
+            'memory_budget',
+            'memory_limit_unknown',
+            'processing_failed',
+        ],
+        true,
+    )) {
         $reason = 'processing_failed';
     }
     return [
@@ -169,24 +211,54 @@ function image_decode_status(string $reason): array
  * @param bool $retainGdSource Whether Imagick runs while a GD source remains alive.
  * @return array<string,mixed> Safe decision and bounded numeric admission evidence.
  */
-function image_decode_admission(?array $metadata, ?int $targetMaxSide, bool $mayRotate, string|false $memoryLimit, int $memoryUsage, ?array $limits = null, string $backend = 'gd', bool $retainGdSource = false): array
-{
-    if ($metadata === null || !isset($metadata[0], $metadata[1], $metadata['mime'])) {
+function image_decode_admission(
+    ?array $metadata,
+    ?int $targetMaxSide,
+    bool $mayRotate,
+    string|false $memoryLimit,
+    int $memoryUsage,
+    ?array $limits = null,
+    string $backend = 'gd',
+    bool $retainGdSource = false,
+): array {
+    if (
+        $metadata === null
+        || !isset($metadata[0], $metadata[1], $metadata['mime'])
+    ) {
         return image_decode_status('metadata_unavailable');
     }
-    if (!in_array($metadata['mime'], ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)
-        || !in_array($backend, ['gd', 'imagick'], true)) {
+    if (
+        !in_array(
+            $metadata['mime'],
+            ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+            true,
+        )
+        || !in_array($backend, ['gd', 'imagick'], true)
+    ) {
         return image_decode_status('unsupported_format');
     }
     $width = $metadata[0];
     $height = $metadata[1];
     $sourceBytes = $metadata['source_bytes'] ?? 0;
-    if (!is_int($width) || !is_int($height) || $width <= 0 || $height <= 0
-        || !is_int($sourceBytes) || $sourceBytes < 0 || ($targetMaxSide !== null && $targetMaxSide <= 0)) {
+    if (
+        !is_int($width)
+        || !is_int($height)
+        || $width <= 0
+        || $height <= 0
+        || !is_int($sourceBytes)
+        || $sourceBytes < 0
+        || (
+            $targetMaxSide !== null
+            && $targetMaxSide <= 0
+        )
+    ) {
         return image_decode_status('invalid_dimensions');
     }
     $limits = image_decode_limits($limits);
-    if ($width > $limits['max_dimension'] || $height > $limits['max_dimension']) {
+    if (
+        $width > $limits['max_dimension']
+        || $height > $limits['max_dimension']
+    ) {
         return image_decode_status('dimension_limit');
     }
     $pixels = image_decode_product($width, $height);
@@ -197,22 +269,34 @@ function image_decode_admission(?array $metadata, ?int $targetMaxSide, bool $may
         return image_decode_status('pixel_limit');
     }
     // ceil intentionally reserves at least the rounded dimensions used by GD/Imagick.
-    $scale = $targetMaxSide === null ? 1.0 : min(1.0, $targetMaxSide / max($width, $height));
-    $targetWidth = $scale === 1.0 ? $width : max(1, (int) ceil($width * $scale));
-    $targetHeight = $scale === 1.0 ? $height : max(1, (int) ceil($height * $scale));
+    $scale = $targetMaxSide === null
+        ? 1.0
+        : min(1.0, $targetMaxSide / max($width, $height));
+    $targetWidth = $scale === 1.0
+        ? $width
+        : max(1, (int) ceil($width * $scale));
+    $targetHeight = $scale === 1.0
+        ? $height
+        : max(1, (int) ceil($height * $scale));
     $targetPixels = image_decode_product($targetWidth, $targetHeight);
-    $bytesPerPixel = $backend === 'gd' ? IMAGE_DECODE_GD_BYTES_PER_PIXEL : IMAGE_DECODE_IMAGICK_BYTES_PER_PIXEL;
+    $bytesPerPixel = $backend === 'gd'
+        ? IMAGE_DECODE_GD_BYTES_PER_PIXEL
+        : IMAGE_DECODE_IMAGICK_BYTES_PER_PIXEL;
     $parts = [
         image_decode_product($pixels, $bytesPerPixel),
         $mayRotate ? image_decode_product($pixels, $bytesPerPixel) : 0,
-        $targetPixels !== null ? image_decode_product($targetPixels, $bytesPerPixel) : null,
+        $targetPixels !== null
+            ? image_decode_product($targetPixels, $bytesPerPixel)
+            : null,
         image_decode_product($sourceBytes, IMAGE_DECODE_COMPRESSED_COPY_COUNT),
-        $retainGdSource ? image_decode_product($pixels, IMAGE_DECODE_GD_BYTES_PER_PIXEL) : 0,
+        $retainGdSource
+            ? image_decode_product($pixels, IMAGE_DECODE_GD_BYTES_PER_PIXEL)
+            : 0,
         IMAGE_DECODE_FIXED_OVERHEAD_BYTES,
     ];
     $estimated = 0;
     foreach ($parts as $part) {
-        if ($part === null || $part > PHP_INT_MAX - $estimated) {
+        if ($part === null || $part > (PHP_INT_MAX - $estimated)) {
             return image_decode_status('arithmetic_overflow');
         }
         $estimated += $part;
@@ -221,18 +305,28 @@ function image_decode_admission(?array $metadata, ?int $targetMaxSide, bool $may
     if ($phpLimit === null || $memoryUsage < 0) {
         return image_decode_status('memory_limit_unknown');
     }
-    $ceiling = $phpLimit === -1 ? $limits['max_memory_bytes'] : min($phpLimit, $limits['max_memory_bytes']);
+    $ceiling = $phpLimit === -1
+        ? $limits['max_memory_bytes']
+        : min($phpLimit, $limits['max_memory_bytes']);
     $available = max(0, $ceiling - min($ceiling, $memoryUsage));
-    $available = max(0, $available - min($available, $limits['memory_reserve_bytes']));
-    return image_decode_status($estimated <= $available ? 'allowed' : 'memory_budget') + [
-        'width' => $width,
-        'height' => $height,
-        'pixels' => $pixels,
-        'estimated_bytes' => $estimated,
-        'available_bytes' => $available,
-        'memory_ceiling_bytes' => $ceiling,
-        'backend' => $backend,
-    ];
+    $available = max(
+        0,
+        $available - min($available, $limits['memory_reserve_bytes']),
+    );
+    return (
+        image_decode_status(
+            $estimated <= $available ? 'allowed' : 'memory_budget',
+        )
+            + [
+                'width' => $width,
+                'height' => $height,
+                'pixels' => $pixels,
+                'estimated_bytes' => $estimated,
+                'available_bytes' => $available,
+                'memory_ceiling_bytes' => $ceiling,
+                'backend' => $backend,
+            ]
+    );
 }
 
 /**
@@ -246,8 +340,14 @@ function image_decode_admission(?array $metadata, ?int $targetMaxSide, bool $may
  * @param bool $retainGdSource Whether an earlier GD decode remains live.
  * @return array<string,mixed> Safe admission evidence without the local path.
  */
-function image_decode_path_admission(string $path, string $mime, ?int $targetMaxSide = null, bool $mayRotate = true, string $backend = 'gd', bool $retainGdSource = false): array
-{
+function image_decode_path_admission(
+    string $path,
+    string $mime,
+    ?int $targetMaxSide = null,
+    bool $mayRotate = true,
+    string $backend = 'gd',
+    bool $retainGdSource = false,
+): array {
     try {
         // A prior request-local stat must not understate a replaced source's packed bytes.
         clearstatcache(true, $path);
@@ -263,7 +363,16 @@ function image_decode_path_admission(string $path, string $mime, ?int $targetMax
             return image_decode_status('unsupported_format');
         }
         $metadata['source_bytes'] = $sourceBytes;
-        return image_decode_admission($metadata, $targetMaxSide, $mayRotate, ini_get('memory_limit'), memory_get_usage(true), null, $backend, $retainGdSource);
+        return image_decode_admission(
+            $metadata,
+            $targetMaxSide,
+            $mayRotate,
+            ini_get('memory_limit'),
+            memory_get_usage(true),
+            null,
+            $backend,
+            $retainGdSource,
+        );
     } catch (Throwable) {
         return image_decode_status('metadata_unavailable');
     }
@@ -278,9 +387,18 @@ function image_decode_path_admission(string $path, string $mime, ?int $targetMax
  * @param bool $mayRotate Whether to reserve an additional full-size source surface.
  * @return array{image:GdImage|false,status:array<string,mixed>} Decoded source or bounded failure.
  */
-function image_decode_gd_path_result(string $path, string $mime, ?int $targetMaxSide = null, bool $mayRotate = true): array
-{
-    $status = image_decode_path_admission($path, $mime, $targetMaxSide, $mayRotate);
+function image_decode_gd_path_result(
+    string $path,
+    string $mime,
+    ?int $targetMaxSide = null,
+    bool $mayRotate = true,
+): array {
+    $status = image_decode_path_admission(
+        $path,
+        $mime,
+        $targetMaxSide,
+        $mayRotate,
+    );
     if (!$status['allowed']) {
         return ['image' => false, 'status' => $status];
     }
@@ -292,7 +410,10 @@ function image_decode_gd_path_result(string $path, string $mime, ?int $targetMax
         default => '',
     };
     if ($decoder === '' || !function_exists($decoder)) {
-        return ['image' => false, 'status' => image_decode_status('unsupported_format')];
+        return [
+            'image' => false,
+            'status' => image_decode_status('unsupported_format'),
+        ];
     }
     try {
         $source = match ($mime) {
@@ -302,7 +423,10 @@ function image_decode_gd_path_result(string $path, string $mime, ?int $targetMax
             'image/webp' => @imagecreatefromwebp($path),
         };
         if ($source instanceof GdImage) {
-            if (imagesx($source) === $status['width'] && imagesy($source) === $status['height']) {
+            if (
+                imagesx($source) === $status['width']
+                && imagesy($source) === $status['height']
+            ) {
                 return ['image' => $source, 'status' => $status];
             }
             imagedestroy($source);
@@ -310,5 +434,8 @@ function image_decode_gd_path_result(string $path, string $mime, ?int $targetMax
     } catch (Throwable) {
         // Native OOM/worker termination cannot be caught; admission is preventive.
     }
-    return ['image' => false, 'status' => image_decode_status('processing_failed')];
+    return [
+        'image' => false,
+        'status' => image_decode_status('processing_failed'),
+    ];
 }

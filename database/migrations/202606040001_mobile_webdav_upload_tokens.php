@@ -33,7 +33,7 @@
  */
 
 return [
-    "CREATE TABLE IF NOT EXISTS mobile_webdav_upload_tokens (
+    'CREATE TABLE IF NOT EXISTS mobile_webdav_upload_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id BIGINT UNSIGNED NOT NULL,
         gallery_id BIGINT UNSIGNED NOT NULL,
@@ -50,5 +50,5 @@ return [
         KEY mobile_webdav_upload_tokens_gallery_index (gallery_id),
         CONSTRAINT mobile_webdav_upload_tokens_user_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         CONSTRAINT mobile_webdav_upload_tokens_gallery_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
 ];

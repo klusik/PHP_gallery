@@ -45,10 +45,13 @@ use function Gallery\Models\viewer_security_operations_model_account_capacity;
 use function Gallery\Models\viewer_security_operations_model_event_aggregates;
 use function Gallery\Models\viewer_security_operations_model_event_trend;
 use function Gallery\Models\viewer_security_operations_model_rate_limit_rows;
-use function Gallery\Models\viewer_security_operations_model_registration_capacity;
+use function Gallery\Models\viewer_security_operations_model_registration_capacity
+;
 
 const VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE = 'available';
+
 const VIEWER_SECURITY_OPERATIONS_STATUS_UNAVAILABLE = 'unavailable';
+
 const VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN = 'unknown';
 
 /**
@@ -158,20 +161,32 @@ function viewer_security_operations_status_snapshot(): array
     return [
         'master_feature_enabled' => viewer_accounts_master_feature_enabled(),
         'registration_mode' => viewer_registration_mode(),
-        'open_registration_http_available' => viewer_http_open_registration_available(),
-        'verification_resend_http_available' => viewer_http_verification_resend_available(),
+        'open_registration_http_available' =>
+            viewer_http_open_registration_available(),
+        'verification_resend_http_available' =>
+            viewer_http_verification_resend_available(),
         'anti_automation' => [
             'enabled' => viewer_anti_automation_enabled(),
-            'min_form_age_seconds' => (int) $config['anti_automation_min_form_age_seconds'],
-            'form_lifetime_seconds' => (int) $config['anti_automation_form_lifetime_seconds'],
+            'min_form_age_seconds' =>
+                (int) $config['anti_automation_min_form_age_seconds'],
+            'form_lifetime_seconds' =>
+                (int) $config['anti_automation_form_lifetime_seconds'],
             'pow_min_bits' => (int) $config['anti_automation_pow_min_bits'],
             'pow_max_bits' => (int) $config['anti_automation_pow_max_bits'],
         ],
         'storage' => [
-            'viewer_auth' => viewer_security_operations_schema_state(viewer_auth_schema_status()),
-            'viewer_registration' => viewer_security_operations_schema_state(viewer_registration_schema_status()),
-            'viewer_security_events' => viewer_security_operations_schema_state(viewer_security_event_schema_status()),
-            'viewer_rate_limits' => viewer_security_operations_schema_state(viewer_rate_limit_schema_status()),
+            'viewer_auth' => viewer_security_operations_schema_state(
+                viewer_auth_schema_status(),
+            ),
+            'viewer_registration' => viewer_security_operations_schema_state(
+                viewer_registration_schema_status(),
+            ),
+            'viewer_security_events' => viewer_security_operations_schema_state(
+                viewer_security_event_schema_status(),
+            ),
+            'viewer_rate_limits' => viewer_security_operations_schema_state(
+                viewer_rate_limit_schema_status(),
+            ),
         ],
     ];
 }
@@ -187,8 +202,12 @@ function viewer_security_operations_status_snapshot(): array
  */
 function viewer_security_operations_capacity_snapshot(): array
 {
-    $accountsStatus = viewer_security_operations_schema_state(viewer_admin_account_schema_status());
-    $registrationsStatus = viewer_security_operations_schema_state(viewer_registration_schema_status());
+    $accountsStatus = viewer_security_operations_schema_state(
+        viewer_admin_account_schema_status(),
+    );
+    $registrationsStatus = viewer_security_operations_schema_state(
+        viewer_registration_schema_status(),
+    );
     $result = [
         'accounts' => [
             'status' => $accountsStatus,
@@ -210,31 +229,45 @@ function viewer_security_operations_capacity_snapshot(): array
 
     if ($accountsStatus === VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
         try {
-            $row = viewer_security_operations_model_account_capacity(VIEWER_ACCOUNT_CAPACITY_STATE_KEY);
+            $row = viewer_security_operations_model_account_capacity(
+                VIEWER_ACCOUNT_CAPACITY_STATE_KEY,
+            );
             $currentCount = (int) ($row['current_count'] ?? 0);
             $counterRaw = $row['capacity_counter_count'] ?? null;
             $counterCount = $counterRaw === null ? null : (int) $counterRaw;
             $result['accounts']['current_count'] = $currentCount;
             $result['accounts']['capacity_counter_count'] = $counterCount;
-            $result['accounts']['capacity_counter_consistent'] = $counterCount === null ? null : $counterCount === $currentCount;
+            $result['accounts']['capacity_counter_consistent'] = $counterCount
+            === null
+                ? null
+                : $counterCount === $currentCount;
         } catch (Throwable) {
-            $result['accounts']['status'] = VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN;
+            $result['accounts']['status'] =
+                VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN;
         }
     }
 
     if ($registrationsStatus === VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
         try {
-            $row = viewer_security_operations_model_registration_capacity(VIEWER_REGISTRATION_STATE_KEY);
+            $row = viewer_security_operations_model_registration_capacity(
+                VIEWER_REGISTRATION_STATE_KEY,
+            );
             $currentCount = (int) ($row['current_count'] ?? 0);
             $counterRaw = $row['capacity_counter_count'] ?? null;
             $counterCount = $counterRaw === null ? null : (int) $counterRaw;
             $result['registrations']['current_count'] = $currentCount;
-            $result['registrations']['open_origin_count'] = (int) ($row['open_origin_count'] ?? 0);
-            $result['registrations']['invitation_backed_count'] = (int) ($row['invitation_backed_count'] ?? 0);
+            $result['registrations']['open_origin_count'] = (int) (
+                $row['open_origin_count'] ?? 0
+            );
+            $result['registrations']['invitation_backed_count'] = (int) (
+                $row['invitation_backed_count'] ?? 0
+            );
             $result['registrations']['capacity_counter_count'] = $counterCount;
-            $result['registrations']['capacity_counter_consistent'] = $counterCount === null ? null : $counterCount === $currentCount;
+            $result['registrations']['capacity_counter_consistent'] =
+                $counterCount === null ? null : $counterCount === $currentCount;
         } catch (Throwable) {
-            $result['registrations']['status'] = VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN;
+            $result['registrations']['status'] =
+                VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN;
         }
     }
 
@@ -249,7 +282,9 @@ function viewer_security_operations_capacity_snapshot(): array
  */
 function viewer_security_operations_event_snapshot(?int $nowTimestamp = null): array
 {
-    $status = viewer_security_operations_schema_state(viewer_security_event_schema_status());
+    $status = viewer_security_operations_schema_state(
+        viewer_security_event_schema_status(),
+    );
     $eventKeys = viewer_security_operations_event_keys();
     $emptyWindow = array_fill_keys(array_keys($eventKeys), null);
     $result = [
@@ -276,7 +311,11 @@ function viewer_security_operations_event_snapshot(?int $nowTimestamp = null): a
     try {
         $persistedKeys = array_values($eventKeys);
         $byEvent = [];
-        foreach (viewer_security_operations_model_event_aggregates($persistedKeys, $cutoff24, $cutoff7) as $row) {
+        foreach (viewer_security_operations_model_event_aggregates(
+            $persistedKeys,
+            $cutoff24,
+            $cutoff7,
+        ) as $row) {
             $eventKey = (string) ($row['event_key'] ?? '');
             if (in_array($eventKey, $persistedKeys, true)) {
                 $byEvent[$eventKey] = [
@@ -286,22 +325,35 @@ function viewer_security_operations_event_snapshot(?int $nowTimestamp = null): a
             }
         }
         foreach ($eventKeys as $metricKey => $eventKey) {
-            $result['last_24_hours'][$metricKey] = (int) ($byEvent[$eventKey]['count_24h'] ?? 0);
-            $result['last_7_days'][$metricKey] = (int) ($byEvent[$eventKey]['count_7d'] ?? 0);
+            $result['last_24_hours'][$metricKey] = (int) (
+                $byEvent[$eventKey]['count_24h'] ?? 0
+            );
+            $result['last_7_days'][$metricKey] = (int) (
+                $byEvent[$eventKey]['count_7d'] ?? 0
+            );
         }
 
         $trendKeys = viewer_security_operations_trend_event_keys();
         $trendCounts = [];
-        foreach (viewer_security_operations_model_event_trend($trendKeys, $trendStart, $nowSql) as $row) {
+        foreach (viewer_security_operations_model_event_trend(
+            $trendKeys,
+            $trendStart,
+            $nowSql,
+        ) as $row) {
             $date = (string) ($row['activity_date'] ?? '');
             $eventKey = (string) ($row['event_key'] ?? '');
             if ($date !== '' && in_array($eventKey, $trendKeys, true)) {
-                $trendCounts[$date][$eventKey] = (int) ($row['event_count'] ?? 0);
+                $trendCounts[$date][$eventKey] = (int) (
+                    $row['event_count'] ?? 0
+                );
             }
         }
 
         for ($day = 0; $day < 7; $day++) {
-            $dayTimestamp = strtotime('+' . $day . ' days', $trendStartTimestamp);
+            $dayTimestamp = strtotime(
+                '+' . $day . ' days',
+                $trendStartTimestamp,
+            );
             if ($dayTimestamp === false) {
                 continue;
             }
@@ -309,11 +361,23 @@ function viewer_security_operations_event_snapshot(?int $nowTimestamp = null): a
             $dayCounts = $trendCounts[$date] ?? [];
             $result['trend'][] = [
                 'date' => $date,
-                'accepted_registrations' => (int) ($dayCounts['viewer.registration_requested'] ?? 0),
-                'verification_messages_sent' => (int) ($dayCounts['viewer.verification_sent'] ?? 0),
-                'verification_resend_messages_sent' => (int) ($dayCounts['viewer.verification_resent'] ?? 0),
-                'anti_automation_interventions' => (int) ($dayCounts['viewer.automation_challenge_required'] ?? 0)
-                    + (int) ($dayCounts['viewer.automation_request_suppressed'] ?? 0),
+                'accepted_registrations' => (int) (
+                    $dayCounts['viewer.registration_requested'] ?? 0
+                ),
+                'verification_messages_sent' => (int) (
+                    $dayCounts['viewer.verification_sent'] ?? 0
+                ),
+                'verification_resend_messages_sent' => (int) (
+                    $dayCounts['viewer.verification_resent'] ?? 0
+                ),
+                'anti_automation_interventions' =>
+                    (int) (
+                        $dayCounts['viewer.automation_challenge_required'] ?? 0
+                    )
+                        + (int) (
+                            $dayCounts['viewer.automation_request_suppressed']
+                            ?? 0
+                        ),
             ];
         }
     } catch (Throwable) {
@@ -355,8 +419,10 @@ function viewer_security_operations_rate_limit_policies(): array
  * @param int $nowTimestamp Deterministic current time.
  * @return string Aggregate SQL returning no subject hashes.
  */
-function viewer_security_operations_rate_limit_query(array $policies, int $nowTimestamp): string
-{
+function viewer_security_operations_rate_limit_query(
+    array $policies,
+    int $nowTimestamp,
+): string {
     // Kept only as a compatibility signal for older callers; SQL construction belongs to the model.
     return '';
 }
@@ -373,7 +439,9 @@ function viewer_security_operations_rate_limit_query(array $policies, int $nowTi
  */
 function viewer_security_operations_rate_limit_snapshot(?int $nowTimestamp = null): array
 {
-    $status = viewer_security_operations_schema_state(viewer_rate_limit_schema_status());
+    $status = viewer_security_operations_schema_state(
+        viewer_rate_limit_schema_status(),
+    );
     $policies = viewer_security_operations_rate_limit_policies();
     $groups = viewer_security_operations_rate_limit_groups();
     $buckets = [];
@@ -386,7 +454,11 @@ function viewer_security_operations_rate_limit_snapshot(?int $nowTimestamp = nul
             'locked_subjects' => null,
             'stored_subjects' => null,
             'current_window_attempts' => null,
-            'is_global' => in_array($bucket, ['viewer_register_global_day', 'viewer_verify_mail_global_day'], true),
+            'is_global' => in_array(
+                $bucket,
+                ['viewer_register_global_day', 'viewer_verify_mail_global_day'],
+                true,
+            ),
         ];
     }
 
@@ -399,12 +471,18 @@ function viewer_security_operations_rate_limit_snapshot(?int $nowTimestamp = nul
             'viewer_verify_mail_global_day' => null,
         ],
     ];
-    if ($status !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE || $policies === []) {
+    if (
+        $status !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE
+        || $policies === []
+    ) {
         return $result;
     }
 
     try {
-        $rows = viewer_security_operations_model_rate_limit_rows($policies, $nowTimestamp ?? time());
+        $rows = viewer_security_operations_model_rate_limit_rows(
+            $policies,
+            $nowTimestamp ?? time(),
+        );
         foreach ($buckets as $bucket => $bucketData) {
             $result['buckets'][$bucket]['active_subjects'] = 0;
             $result['buckets'][$bucket]['locked_subjects'] = 0;
@@ -416,10 +494,18 @@ function viewer_security_operations_rate_limit_snapshot(?int $nowTimestamp = nul
             if (!isset($result['buckets'][$bucket])) {
                 continue;
             }
-            $result['buckets'][$bucket]['active_subjects'] = (int) ($row['active_subjects'] ?? 0);
-            $result['buckets'][$bucket]['locked_subjects'] = (int) ($row['locked_subjects'] ?? 0);
-            $result['buckets'][$bucket]['stored_subjects'] = (int) ($row['entry_count'] ?? 0);
-            $result['buckets'][$bucket]['current_window_attempts'] = (int) ($row['current_window_attempts'] ?? 0);
+            $result['buckets'][$bucket]['active_subjects'] = (int) (
+                $row['active_subjects'] ?? 0
+            );
+            $result['buckets'][$bucket]['locked_subjects'] = (int) (
+                $row['locked_subjects'] ?? 0
+            );
+            $result['buckets'][$bucket]['stored_subjects'] = (int) (
+                $row['entry_count'] ?? 0
+            );
+            $result['buckets'][$bucket]['current_window_attempts'] = (int) (
+                $row['current_window_attempts'] ?? 0
+            );
         }
 
         foreach (array_keys($result['global_budgets']) as $bucket) {
@@ -427,9 +513,15 @@ function viewer_security_operations_rate_limit_snapshot(?int $nowTimestamp = nul
                 continue;
             }
             $result['global_budgets'][$bucket] = [
-                'current_attempts' => (int) ($result['buckets'][$bucket]['current_window_attempts'] ?? 0),
-                'limit' => (int) ($result['buckets'][$bucket]['max_attempts'] ?? 0),
-                'locked_subjects' => (int) ($result['buckets'][$bucket]['locked_subjects'] ?? 0),
+                'current_attempts' => (int) (
+                    $result['buckets'][$bucket]['current_window_attempts'] ?? 0
+                ),
+                'limit' => (int) (
+                    $result['buckets'][$bucket]['max_attempts'] ?? 0
+                ),
+                'locked_subjects' => (int) (
+                    $result['buckets'][$bucket]['locked_subjects'] ?? 0
+                ),
             ];
         }
     } catch (Throwable) {
@@ -455,17 +547,39 @@ function viewer_security_operations_snapshot(?int $nowTimestamp = null): array
     $events = viewer_security_operations_event_snapshot($nowTimestamp);
     $rateLimits = viewer_security_operations_rate_limit_snapshot($nowTimestamp);
 
-    if (($events['status'] ?? '') !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
-        $status['storage']['viewer_security_events'] = (string) ($events['status'] ?? VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN);
+    if (
+        ($events['status'] ?? '')
+        !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE
+    ) {
+        $status['storage']['viewer_security_events'] = (string) (
+            $events['status'] ?? VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN
+        );
     }
-    if (($rateLimits['status'] ?? '') !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
-        $status['storage']['viewer_rate_limits'] = (string) ($rateLimits['status'] ?? VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN);
+    if (
+        ($rateLimits['status'] ?? '')
+        !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE
+    ) {
+        $status['storage']['viewer_rate_limits'] = (string) (
+            $rateLimits['status'] ?? VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN
+        );
     }
-    if (($capacity['accounts']['status'] ?? '') !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
-        $status['storage']['viewer_auth'] = (string) ($capacity['accounts']['status'] ?? VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN);
+    if (
+        ($capacity['accounts']['status'] ?? '')
+        !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE
+    ) {
+        $status['storage']['viewer_auth'] = (string) (
+            $capacity['accounts']['status']
+            ?? VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN
+        );
     }
-    if (($capacity['registrations']['status'] ?? '') !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE) {
-        $status['storage']['viewer_registration'] = (string) ($capacity['registrations']['status'] ?? VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN);
+    if (
+        ($capacity['registrations']['status'] ?? '')
+        !== VIEWER_SECURITY_OPERATIONS_STATUS_AVAILABLE
+    ) {
+        $status['storage']['viewer_registration'] = (string) (
+            $capacity['registrations']['status']
+            ?? VIEWER_SECURITY_OPERATIONS_STATUS_UNKNOWN
+        );
     }
 
     return [

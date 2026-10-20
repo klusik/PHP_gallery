@@ -56,9 +56,11 @@ use function Gallery\Models\gallery_model_reset_grid_overrides;
  */
 function gallery_grid_schema_ready(): bool
 {
-    return db_column_exists('galleries', 'grid_columns')
-        && db_column_exists('galleries', 'grid_rows')
-        && db_column_exists('galleries', 'grid_use_for_subgalleries');
+    return (
+        db_column_exists('galleries', 'grid_columns')
+            && db_column_exists('galleries', 'grid_rows')
+            && db_column_exists('galleries', 'grid_use_for_subgalleries')
+    );
 }
 
 /**
@@ -68,17 +70,19 @@ function gallery_grid_schema_ready(): bool
  * and rows filled before it becomes an override source, because rows are used by
  * pagination slicing while columns are used by the CSS grid.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return bool True when the condition matches.
+ * @param array{grid_columns?:int|string|null,grid_rows?:int|string|null} $gallery Gallery row with optional grid override dimensions.
+ * @return bool True when grid storage exists and both override dimensions are non-null.
  */
 function gallery_grid_has_explicit_override(array $gallery): bool
 {
     if (!gallery_grid_schema_ready()) {
         return false;
     }
-    return isset($gallery['grid_columns'], $gallery['grid_rows'])
-        && $gallery['grid_columns'] !== null
-        && $gallery['grid_rows'] !== null;
+    return (
+        isset($gallery['grid_columns'], $gallery['grid_rows'])
+            && $gallery['grid_columns'] !== null
+            && $gallery['grid_rows'] !== null
+    );
 }
 
 /**
@@ -92,14 +96,26 @@ function gallery_grid_has_explicit_override(array $gallery): bool
  * @param int $rows Rows to process.
  * @param bool $paginationEnabled Pagination enabled value.
  * @param string $source Source value.
- * @return array Structured result data for the caller.
+ * @return array{enabled:bool,columns:int,rows:int,items_per_page:int,grid_columns_enabled:bool,grid_source:string} Normalized grid and pagination settings.
  */
-function gallery_grid_settings_from_dimensions(int $columns, int $rows, bool $paginationEnabled, string $source): array
-{
+function gallery_grid_settings_from_dimensions(
+    int $columns,
+    int $rows,
+    bool $paginationEnabled,
+    string $source,
+): array {
     // $safeColumns stores the clamped public-grid column count.
-    $safeColumns = pagination_dimension_value($columns, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS);
+    $safeColumns = pagination_dimension_value(
+        $columns,
+        CMS_PAGINATION_DEFAULT_COLUMNS,
+        CMS_PAGINATION_MAX_COLUMNS,
+    );
     // $safeRows stores the clamped public-grid row count used by optional pagination.
-    $safeRows = pagination_dimension_value($rows, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS);
+    $safeRows = pagination_dimension_value(
+        $rows,
+        CMS_PAGINATION_DEFAULT_ROWS,
+        CMS_PAGINATION_MAX_ROWS,
+    );
 
     return [
         'enabled' => $paginationEnabled,
@@ -118,18 +134,31 @@ function gallery_grid_settings_from_dimensions(int $columns, int $rows, bool $pa
  * upgraded installations keep their current visual layout until the admin saves
  * a distinct main-page grid.
  *
- * @return array Structured result data for the caller.
+ * @return array{enabled:bool,columns:int,rows:int,items_per_page:int,grid_columns_enabled:bool,grid_source:string} Home-page grid and pagination settings.
  */
 function main_page_gallery_grid_settings(): array
 {
     // $global stores the compatibility fallback and the shared pagination switch.
     $global = pagination_global_settings(['listing' => 'home_galleries']);
     // $columns stores the home-page gallery-card column count.
-    $columns = pagination_dimension_value(app_setting('home_gallery_grid_columns', (string) $global['columns']), (int) $global['columns'], CMS_PAGINATION_MAX_COLUMNS);
+    $columns = pagination_dimension_value(
+        app_setting('home_gallery_grid_columns', (string) $global['columns']),
+        (int) $global['columns'],
+        CMS_PAGINATION_MAX_COLUMNS,
+    );
     // $rows stores the home-page row count used when pagination is enabled.
-    $rows = pagination_dimension_value(app_setting('home_gallery_grid_rows', (string) $global['rows']), (int) $global['rows'], CMS_PAGINATION_MAX_ROWS);
+    $rows = pagination_dimension_value(
+        app_setting('home_gallery_grid_rows', (string) $global['rows']),
+        (int) $global['rows'],
+        CMS_PAGINATION_MAX_ROWS,
+    );
 
-    return gallery_grid_settings_from_dimensions($columns, $rows, !empty($global['enabled']), 'home');
+    return gallery_grid_settings_from_dimensions(
+        $columns,
+        $rows,
+        !empty($global['enabled']),
+        'home',
+    );
 }
 
 /**
@@ -140,33 +169,62 @@ function main_page_gallery_grid_settings(): array
  * 2. The nearest ancestor that has a custom grid and has enabled inheritance.
  * 3. The global Theme pagination dimensions, which preserve previous behavior.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return array Structured result data for the caller.
+ * @param array{id?:int|string,parent_id?:int|string|null,grid_columns?:int|string|null,grid_rows?:int|string|null,grid_use_for_subgalleries?:int|string|null} $gallery Gallery row fields used for explicit and inherited overrides.
+ * @return array{enabled:bool,columns:int,rows:int,items_per_page:int,grid_columns_enabled:bool,grid_source:string} Effective grid settings and the source identifier.
  */
 function gallery_effective_grid_settings(array $gallery): array
 {
     // $global stores the existing cross-site fallback and pagination switch.
-    $global = pagination_global_settings(['listing' => 'gallery', 'gallery' => $gallery]);
+    $global = pagination_global_settings([
+        'listing' => 'gallery',
+        'gallery' => $gallery,
+    ]);
     if (!gallery_grid_schema_ready()) {
-        return gallery_grid_settings_from_dimensions((int) $global['columns'], (int) $global['rows'], !empty($global['enabled']), 'global');
+        return gallery_grid_settings_from_dimensions(
+            (int) $global['columns'],
+            (int) $global['rows'],
+            !empty($global['enabled']),
+            'global',
+        );
     }
 
     if (gallery_grid_has_explicit_override($gallery)) {
-        return gallery_grid_settings_from_dimensions((int) $gallery['grid_columns'], (int) $gallery['grid_rows'], !empty($global['enabled']), 'gallery:' . (int) $gallery['id']);
+        return gallery_grid_settings_from_dimensions(
+            (int) $gallery['grid_columns'],
+            (int) $gallery['grid_rows'],
+            !empty($global['enabled']),
+            'gallery:' . (int) $gallery['id'],
+        );
     }
 
     // $ancestor stores the currently inspected parent gallery while walking upward.
-    $ancestor = !empty($gallery['parent_id']) ? find_gallery((int) $gallery['parent_id']) : null;
+    $ancestor = !empty($gallery['parent_id'])
+        ? find_gallery((int) $gallery['parent_id'])
+        : null;
     while ($ancestor) {
-        if (gallery_grid_has_explicit_override($ancestor) && (int) ($ancestor['grid_use_for_subgalleries'] ?? 1) === 1) {
-            return gallery_grid_settings_from_dimensions((int) $ancestor['grid_columns'], (int) $ancestor['grid_rows'], !empty($global['enabled']), 'ancestor:' . (int) $ancestor['id']);
+        if (
+            gallery_grid_has_explicit_override($ancestor)
+            && (int) ($ancestor['grid_use_for_subgalleries'] ?? 1) === 1
+        ) {
+            return gallery_grid_settings_from_dimensions(
+                (int) $ancestor['grid_columns'],
+                (int) $ancestor['grid_rows'],
+                !empty($global['enabled']),
+                'ancestor:' . (int) $ancestor['id'],
+            );
         }
-        $ancestor = !empty($ancestor['parent_id']) ? find_gallery((int) $ancestor['parent_id']) : null;
+        $ancestor = !empty($ancestor['parent_id'])
+            ? find_gallery((int) $ancestor['parent_id'])
+            : null;
     }
 
-    return gallery_grid_settings_from_dimensions((int) $global['columns'], (int) $global['rows'], !empty($global['enabled']), 'global');
+    return gallery_grid_settings_from_dimensions(
+        (int) $global['columns'],
+        (int) $global['rows'],
+        !empty($global['enabled']),
+        'global',
+    );
 }
-
 
 /**
  * Remove every custom gallery-grid override from the database and gallery.json sidecars.
@@ -218,13 +276,18 @@ function reset_all_gallery_grid_overrides_owned(): array
 
     foreach ($galleryRows as $galleryRow) {
         // $folderPath stores the normalized gallery folder path used to locate gallery.json.
-        $folderPath = normalize_relative_path((string) ($galleryRow['folder_path'] ?? ''));
+        $folderPath = normalize_relative_path(
+            (string) ($galleryRow['folder_path'] ?? ''),
+        );
         if ($folderPath === '') {
             continue;
         }
 
         // $sidecarPath stores the absolute path to the optional metadata file for this gallery.
-        $sidecarPath = gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
+        $sidecarPath =
+            gallery_abs_path($folderPath)
+            . DIRECTORY_SEPARATOR
+            . 'gallery.json';
         if (!is_file($sidecarPath)) {
             continue;
         }
@@ -232,7 +295,8 @@ function reset_all_gallery_grid_overrides_owned(): array
         // $sidecar stores existing metadata so non-grid settings are not lost during cleanup.
         $sidecar = read_gallery_sidecar($sidecarPath);
         // $hadGridMetadata stores whether this sidecar actually contained stale custom-grid keys.
-        $hadGridMetadata = array_key_exists('grid_columns', $sidecar)
+        $hadGridMetadata =
+            array_key_exists('grid_columns', $sidecar)
             || array_key_exists('grid_rows', $sidecar)
             || array_key_exists('grid_use_for_subgalleries', $sidecar);
 
@@ -240,7 +304,11 @@ function reset_all_gallery_grid_overrides_owned(): array
             continue;
         }
 
-        unset($sidecar['grid_columns'], $sidecar['grid_rows'], $sidecar['grid_use_for_subgalleries']);
+        unset(
+            $sidecar['grid_columns'],
+            $sidecar['grid_rows'],
+            $sidecar['grid_use_for_subgalleries'],
+        );
         if (write_gallery_sidecar_for_path($folderPath, $sidecar)) {
             $result['sidecars']++;
         }
@@ -252,13 +320,17 @@ function reset_all_gallery_grid_overrides_owned(): array
 /**
  * Return the selected custom-grid columns for an Admin form.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return int Integer result for the caller.
+ * @param array<string,mixed> $gallery Gallery row used to resolve an explicit, inherited, or global grid.
+ * @return int Selected grid column count for the Admin form.
  */
 function gallery_grid_form_columns(array $gallery): int
 {
     if (gallery_grid_has_explicit_override($gallery)) {
-        return pagination_dimension_value($gallery['grid_columns'], CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS);
+        return pagination_dimension_value(
+            $gallery['grid_columns'],
+            CMS_PAGINATION_DEFAULT_COLUMNS,
+            CMS_PAGINATION_MAX_COLUMNS,
+        );
     }
     $settings = gallery_effective_grid_settings($gallery);
     return (int) $settings['columns'];
@@ -267,13 +339,17 @@ function gallery_grid_form_columns(array $gallery): int
 /**
  * Return the selected custom-grid rows for an Admin form.
  *
- * @param array $gallery Gallery row or gallery data.
- * @return int Integer result for the caller.
+ * @param array<string,mixed> $gallery Gallery row used to resolve an explicit, inherited, or global grid.
+ * @return int Selected grid row count for the Admin form.
  */
 function gallery_grid_form_rows(array $gallery): int
 {
     if (gallery_grid_has_explicit_override($gallery)) {
-        return pagination_dimension_value($gallery['grid_rows'], CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS);
+        return pagination_dimension_value(
+            $gallery['grid_rows'],
+            CMS_PAGINATION_DEFAULT_ROWS,
+            CMS_PAGINATION_MAX_ROWS,
+        );
     }
     $settings = gallery_effective_grid_settings($gallery);
     return (int) $settings['rows'];

@@ -60,12 +60,16 @@ namespace Gallery\Models {
      */
     function admin_storage_statistics_model_thumbnail_summary_rows(
         array $sizes,
-        bool $matchDerivativeVersion
+        bool $matchDerivativeVersion,
     ): array {
         if (($GLOBALS['storage_fail_read'] ?? '') === 'thumbnails') {
             throw new \RuntimeException('Fixture thumbnail aggregate failed.');
         }
-        return [['format' => 'webp', 'variant_count' => 1, 'total_bytes' => 17]];
+        return [[
+            'format' => 'webp',
+            'variant_count' => 1,
+            'total_bytes' => 17,
+        ]];
     }
 
     /**
@@ -79,12 +83,22 @@ namespace Gallery\Models {
      * @return void Persist the in-memory ledger row.
      */
     function gallery_attachment_storage_model_store(
-        int $galleryId, string $kind, int $count, int $bytes,
-        int $errors = 0, bool $onlyMissing = false
+        int $galleryId,
+        string $kind,
+        int $count,
+        int $bytes,
+        int $errors = 0,
+        bool $onlyMissing = false,
     ): void {
-        if ($onlyMissing && isset($GLOBALS['storage_ledger'][$galleryId][$kind])) return;
+        if (
+            $onlyMissing
+            && isset($GLOBALS['storage_ledger'][$galleryId][$kind])
+        )
+            return;
         $GLOBALS['storage_ledger'][$galleryId][$kind] = [
-            'count' => $count, 'bytes' => $bytes, 'errors' => $errors,
+            'count' => $count,
+            'bytes' => $bytes,
+            'errors' => $errors,
         ];
     }
 
@@ -94,8 +108,10 @@ namespace Gallery\Models {
      * @param string $kind Category whose persistence failed.
      * @return void Remove only derived accounting.
      */
-    function gallery_attachment_storage_model_forget(int $galleryId, string $kind): void
-    {
+    function gallery_attachment_storage_model_forget(
+        int $galleryId,
+        string $kind,
+    ): void {
         unset($GLOBALS['storage_ledger'][$galleryId][$kind]);
     }
 
@@ -108,16 +124,28 @@ namespace Gallery\Models {
     function gallery_attachment_storage_model_pending(int $limit): array
     {
         $GLOBALS['storage_gallery_limits'][] = $limit;
-        $owners = array_slice(array_values(array_filter(
-            $GLOBALS['storage_fixture_galleries'] ?? [],
-            static fn(array $row): bool => count(
-                $GLOBALS['storage_ledger'][$row['id']] ?? []
-            ) < 3
-        )), 0, $limit);
-        return array_map(static fn(array $row): array => $row + [
-            'missing_kinds' => array_values(array_diff(['pdf', 'music', 'ofp'],
-                array_keys($GLOBALS['storage_ledger'][$row['id']] ?? []))),
-        ], $owners);
+        $owners = array_slice(
+            array_values(array_filter(
+                $GLOBALS['storage_fixture_galleries'] ?? [],
+                static fn(array $row): bool => (
+                    count(
+                        $GLOBALS['storage_ledger'][$row['id']] ?? [],
+                    ) < 3
+                ),
+            )),
+            0,
+            $limit,
+        );
+        return array_map(
+            static fn(array $row): array => $row
+            + [
+                'missing_kinds' => array_values(array_diff(
+                    ['pdf', 'music', 'ofp'],
+                    array_keys($GLOBALS['storage_ledger'][$row['id']] ?? []),
+                )),
+            ],
+            $owners,
+        );
     }
 
     /**
@@ -128,9 +156,11 @@ namespace Gallery\Models {
     {
         return count(array_filter(
             $GLOBALS['storage_fixture_galleries'] ?? [],
-            static fn(array $row): bool => count(
-                $GLOBALS['storage_ledger'][$row['id']] ?? []
-            ) < 3
+            static fn(array $row): bool => (
+                count(
+                    $GLOBALS['storage_ledger'][$row['id']] ?? [],
+                ) < 3
+            ),
         ));
     }
 
@@ -141,10 +171,16 @@ namespace Gallery\Models {
      */
     function gallery_attachment_storage_model_summary(): array
     {
-        $summary = ['pdf_count' => 0, 'pdf_bytes' => 0,
-            'music_count' => 0, 'music_bytes' => 0, 'errors' => 0];
+        $summary = [
+            'pdf_count' => 0,
+            'pdf_bytes' => 0,
+            'music_count' => 0,
+            'music_bytes' => 0,
+            'errors' => 0,
+        ];
         foreach ($GLOBALS['storage_fixture_galleries'] ?? [] as $gallery) {
-            foreach ($GLOBALS['storage_ledger'][$gallery['id']] ?? [] as $kind => $row) {
+            foreach ($GLOBALS['storage_ledger'][$gallery['id']]
+                ?? [] as $kind => $row) {
                 $prefix = $kind === 'ofp' ? 'pdf' : $kind;
                 $summary[$prefix . '_count'] += $row['count'];
                 $summary[$prefix . '_bytes'] += $row['bytes'];
@@ -162,9 +198,16 @@ namespace Gallery\Models {
     function admin_storage_statistics_model_fingerprint_rows(): array
     {
         $images = $GLOBALS['storage_fixture_images'] ?? [];
-        return [['image_count' => count($images),
-            'original_bytes' => array_sum(array_column($images, 'file_size'))],
-            ['gallery_count' => admin_storage_statistics_model_gallery_count()]];
+        return [
+            [
+                'image_count' => count($images),
+                'original_bytes' => array_sum(array_column(
+                    $images,
+                    'file_size',
+                )),
+            ],
+            ['gallery_count' => admin_storage_statistics_model_gallery_count()],
+        ];
     }
 
     /**
@@ -184,13 +227,17 @@ namespace Gallery\Models {
      */
     function admin_storage_statistics_model_gallery_rows_after_id(
         int $lastGalleryId,
-        int $limit
+        int $limit,
     ): array {
         $GLOBALS['storage_gallery_limits'][] = $limit;
-        return array_slice(array_values(array_filter(
-            $GLOBALS['storage_fixture_galleries'] ?? [],
-            static fn(array $row): bool => $row['id'] > $lastGalleryId
-        )), 0, $limit);
+        return array_slice(
+            array_values(array_filter(
+                $GLOBALS['storage_fixture_galleries'] ?? [],
+                static fn(array $row): bool => $row['id'] > $lastGalleryId,
+            )),
+            0,
+            $limit,
+        );
     }
 
     /**
@@ -200,7 +247,7 @@ namespace Gallery\Models {
      *     file_size:int}> Minimal rows consumed by the real source accumulator.
      */
     function admin_storage_statistics_model_image_rows(
-        bool $hasDerivativeVersion
+        bool $hasDerivativeVersion,
     ): array {
         if (($GLOBALS['storage_fail_read'] ?? '') === 'source') {
             throw new \RuntimeException('Fixture source query failed.');
@@ -221,20 +268,33 @@ namespace Gallery\Models {
         int $lastImageId,
         int $limit,
         bool $hasDerivativeVersion,
-        bool $displayMastersOnly = false
+        bool $displayMastersOnly = false,
     ): array {
         $GLOBALS['storage_batch_modes'][] = $displayMastersOnly;
         if (($GLOBALS['storage_fail_read'] ?? '') === 'batch') {
             throw new \RuntimeException('Fixture batch query failed.');
         }
-        if (!empty($GLOBALS['storage_force_empty_batch'])) return [];
-        return array_slice(array_values(array_filter(
-            admin_storage_statistics_model_image_rows($hasDerivativeVersion),
-            static fn(array $row): bool => $row['image_id'] > $lastImageId
-                && (!$displayMastersOnly || strtolower(pathinfo(
-                    $row['relative_path'] ?? $row['filename'], PATHINFO_EXTENSION
-                )) === 'dng')
-        )), 0, $limit);
+        if (!empty($GLOBALS['storage_force_empty_batch']))
+            return [];
+        return array_slice(
+            array_values(array_filter(
+                admin_storage_statistics_model_image_rows(
+                    $hasDerivativeVersion,
+                ),
+                static fn(array $row): bool => (
+                    $row['image_id'] > $lastImageId
+                    && (
+                        !$displayMastersOnly
+                        || strtolower(pathinfo(
+                            $row['relative_path'] ?? $row['filename'],
+                            PATHINFO_EXTENSION,
+                        )) === 'dng'
+                    )
+                ),
+            )),
+            0,
+            $limit,
+        );
     }
 }
 
@@ -246,7 +306,10 @@ namespace Gallery\Services {
      */
     function image_uses_dng_display_derivatives(array $image): bool
     {
-        return strtolower(pathinfo($image['relative_path'], PATHINFO_EXTENSION)) === 'dng';
+        return (
+            strtolower(pathinfo($image['relative_path'], PATHINFO_EXTENSION))
+                === 'dng'
+        );
     }
 
     /**
@@ -256,8 +319,11 @@ namespace Gallery\Services {
      * @param bool $ensure Whether generation is allowed; statistics passes false.
      * @return string Existing fixture path for observational byte measurement.
      */
-    function dng_display_master_abs_path(array $image, array $gallery, bool $ensure): string
-    {
+    function dng_display_master_abs_path(
+        array $image,
+        array $gallery,
+        bool $ensure,
+    ): string {
         return galleries_root() . '/display-master.webp';
     }
 
@@ -373,12 +439,16 @@ namespace {
     const ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT = 40000;
 
     use function Gallery\Services\admin_storage_statistics_add_group_value;
-    use function Gallery\Services\admin_storage_statistics_compact_source_summary;
+    use function Gallery\Services\admin_storage_statistics_compact_source_summary
+    ;
     use function Gallery\Services\admin_storage_statistics_finalize_group_rows;
-    use function Gallery\Services\admin_storage_statistics_normalize_file_extension;
-    use function Gallery\Services\admin_storage_statistics_normalize_generated_summary;
+    use function Gallery\Services\admin_storage_statistics_normalize_file_extension
+    ;
+    use function Gallery\Services\admin_storage_statistics_normalize_generated_summary
+    ;
     use function Gallery\Services\admin_storage_statistics_size_bucket_key;
-    use function Gallery\Services\admin_storage_statistics_snapshot_from_summaries;
+    use function Gallery\Services\admin_storage_statistics_snapshot_from_summaries
+    ;
     use function Gallery\Services\admin_storage_statistics_source_summary;
 
     require_once __DIR__ . '/../app/services/admin_storage_statistics.php';
@@ -394,12 +464,16 @@ namespace {
     function assert_admin_storage_same(
         int|float|string|bool $expected,
         int|float|string|bool $actual,
-        string $label
+        string $label,
     ): void {
         if ($expected !== $actual) {
-            throw new RuntimeException($label . ' expected '
-                . var_export($expected, true) . ', got '
-                . var_export($actual, true));
+            throw new RuntimeException(
+                $label
+                    . ' expected '
+                    . var_export($expected, true)
+                    . ', got '
+                    . var_export($actual, true),
+            );
         }
     }
 
@@ -409,9 +483,11 @@ namespace {
         'README' => 'unknown',
         'photo.bad-extension-name' => 'other',
     ] as $path => $expected) {
-        assert_admin_storage_same($expected,
+        assert_admin_storage_same(
+            $expected,
             admin_storage_statistics_normalize_file_extension($path),
-            'extension normalization for ' . $path);
+            'extension normalization for ' . $path,
+        );
     }
     // Exact byte vectors exercise each established size-range boundary.
     foreach ([
@@ -423,28 +499,50 @@ namespace {
         [30 * 1024 * 1024, '20_50mb'],
         [90 * 1024 * 1024, 'over_50mb'],
     ] as [$bytes, $expected]) {
-        assert_admin_storage_same($expected,
+        assert_admin_storage_same(
+            $expected,
             admin_storage_statistics_size_bucket_key($bytes),
-            'size bucket for ' . $bytes);
+            'size bucket for ' . $bytes,
+        );
     }
 
     $groups = [];
-    admin_storage_statistics_add_group_value($groups, 'jpg', 'JPG', 2, 400, ['extension' => 'jpg']);
-    admin_storage_statistics_add_group_value($groups,
-        'webp', 'WEBP', 1, 100, ['extension' => 'webp']);
-    admin_storage_statistics_add_group_value($groups, 'jpg', 'JPG', 1, 100, ['extension' => 'jpg']);
+    admin_storage_statistics_add_group_value($groups, 'jpg', 'JPG', 2, 400, [
+        'extension' => 'jpg',
+    ]);
+    admin_storage_statistics_add_group_value($groups, 'webp', 'WEBP', 1, 100, [
+        'extension' => 'webp',
+    ]);
+    admin_storage_statistics_add_group_value($groups, 'jpg', 'JPG', 1, 100, [
+        'extension' => 'jpg',
+    ]);
     $rows = admin_storage_statistics_finalize_group_rows($groups, 'bytes');
 
-    assert_admin_storage_same('jpg', (string) ($rows[0]['key'] ?? ''),
-        'largest byte group sorts first');
-    assert_admin_storage_same(3, (int) ($rows[0]['count'] ?? 0),
-        'duplicate group counts accumulate');
-    assert_admin_storage_same(500, (int) ($rows[0]['bytes'] ?? 0),
-        'duplicate group bytes accumulate');
-    assert_admin_storage_same(83.3, (float) ($rows[0]['percent'] ?? 0.0),
-        'percentage calculation uses total grouped bytes');
-    assert_admin_storage_same(16.7, (float) ($rows[1]['percent'] ?? 0.0),
-        'smaller row percentage remains stable');
+    assert_admin_storage_same(
+        'jpg',
+        (string) ($rows[0]['key'] ?? ''),
+        'largest byte group sorts first',
+    );
+    assert_admin_storage_same(
+        3,
+        (int) ($rows[0]['count'] ?? 0),
+        'duplicate group counts accumulate',
+    );
+    assert_admin_storage_same(
+        500,
+        (int) ($rows[0]['bytes'] ?? 0),
+        'duplicate group bytes accumulate',
+    );
+    assert_admin_storage_same(
+        83.3,
+        (float) ($rows[0]['percent'] ?? 0.0),
+        'percentage calculation uses total grouped bytes',
+    );
+    assert_admin_storage_same(
+        16.7,
+        (float) ($rows[1]['percent'] ?? 0.0),
+        'smaller row percentage remains stable',
+    );
 
     $sourceRows = [
         [
@@ -471,19 +569,28 @@ namespace {
         ],
     ];
     $sourceSummary = admin_storage_statistics_compact_source_summary(
-        admin_storage_statistics_source_summary($sourceRows)
+        admin_storage_statistics_source_summary($sourceRows),
     );
-    assert_admin_storage_same(2, (int) ($sourceSummary['image_count'] ?? 0),
-        'source summary counts rows');
-    assert_admin_storage_same(57 * 1024 * 1024,
+    assert_admin_storage_same(
+        2,
+        (int) ($sourceSummary['image_count'] ?? 0),
+        'source summary counts rows',
+    );
+    assert_admin_storage_same(
+        57 * 1024 * 1024,
         (int) ($sourceSummary['original_bytes'] ?? 0),
-        'source summary totals source bytes');
-    assert_admin_storage_same('Trip/RAW_0002.DNG',
+        'source summary totals source bytes',
+    );
+    assert_admin_storage_same(
+        'Trip/RAW_0002.DNG',
         (string) ($sourceSummary['largest_original_name'] ?? ''),
-        'source summary tracks largest source');
-    assert_admin_storage_same('source-type-dng',
-        (string) (($sourceSummary['type_rows'][0]['key'] ?? '')),
-        'source type rows sort by bytes');
+        'source summary tracks largest source',
+    );
+    assert_admin_storage_same(
+        'source-type-dng',
+        (string) ($sourceSummary['type_rows'][0]['key'] ?? ''),
+        'source type rows sort by bytes',
+    );
 
     $generatedSummary = admin_storage_statistics_normalize_generated_summary([
         'thumbnail_bytes' => 300,
@@ -495,13 +602,20 @@ namespace {
     ]);
     $generatedSummary['generated_bytes'] = 1000;
     $snapshot = admin_storage_statistics_snapshot_from_summaries(
-        'abc', $sourceSummary, $generatedSummary
+        'abc',
+        $sourceSummary,
+        $generatedSummary,
     );
-    assert_admin_storage_same(57 * 1024 * 1024 + 1000,
+    assert_admin_storage_same(
+        (57 * 1024 * 1024) + 1000,
         (int) ($snapshot['total_picture_bytes'] ?? 0),
-        'snapshot combines source and generated bytes');
-    assert_admin_storage_same(1000, (int) ($snapshot['generated_bytes'] ?? 0),
-        'snapshot stores generated bytes');
+        'snapshot combines source and generated bytes',
+    );
+    assert_admin_storage_same(
+        1000,
+        (int) ($snapshot['generated_bytes'] ?? 0),
+        'snapshot stores generated bytes',
+    );
 
     require_once __DIR__ . '/../app/services/gallery_pdf_documents.php';
     require_once __DIR__ . '/../app/services/simbrief_ofp_attachments.php';
@@ -509,7 +623,9 @@ namespace {
     require_once __DIR__ . '/../app/services/gallery_pdf_settings.php';
     require_once __DIR__ . '/../app/services/simbrief_descriptions.php';
 
-    $fixtureRoot = sys_get_temp_dir() . '/gallery-storage-'
+    $fixtureRoot =
+        sys_get_temp_dir()
+        . '/gallery-storage-'
         . bin2hex(random_bytes(8));
     $GLOBALS['storage_fixture_root'] = $fixtureRoot;
     $GLOBALS['storage_fixture_galleries'] = [
@@ -518,14 +634,21 @@ namespace {
         ['id' => 9, 'folder_path' => 'music-only'],
     ];
     $GLOBALS['storage_fixture_images'] = [
-        ['image_id' => 1, 'gallery_id' => 2,
-            'filename' => 'photo.jpg', 'file_size' => 123],
+        [
+            'image_id' => 1,
+            'gallery_id' => 2,
+            'filename' => 'photo.jpg',
+            'file_size' => 123,
+        ],
     ];
     $GLOBALS['storage_fixture_settings'] = [];
     $GLOBALS['storage_gallery_limits'] = [];
     foreach ($GLOBALS['storage_fixture_galleries'] as $owner) {
-        mkdir($fixtureRoot . '/' . $owner['folder_path'],
-            ADMIN_STORAGE_FIXTURE_DIRECTORY_MODE, true);
+        mkdir(
+            $fixtureRoot . '/' . $owner['folder_path'],
+            ADMIN_STORAGE_FIXTURE_DIRECTORY_MODE,
+            true,
+        );
     }
     $pdfBytes = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n";
     $pdfSource = $fixtureRoot . '/source.pdf';
@@ -537,73 +660,140 @@ namespace {
     $audioTracks = [];
     foreach ([false, true] as $position => $hidden) {
         $trackId = sprintf('%032x', $position + 1);
-        file_put_contents($musicDirectory . '/' . $trackId . '.bin', $audioBytes);
-        $audioTracks[] = ['id' => $trackId, 'filename' => 'Same.wav',
-            'title' => 'Same.wav', 'mime' => 'audio/wav',
-            'size' => strlen($audioBytes), 'sha256' => hash('sha256', $audioBytes),
-            'hidden' => $hidden, 'downloadable' => false];
+        file_put_contents(
+            $musicDirectory . '/' . $trackId . '.bin',
+            $audioBytes,
+        );
+        $audioTracks[] = [
+            'id' => $trackId,
+            'filename' => 'Same.wav',
+            'title' => 'Same.wav',
+            'mime' => 'audio/wav',
+            'size' => strlen($audioBytes),
+            'sha256' => hash('sha256', $audioBytes),
+            'hidden' => $hidden,
+            'downloadable' => false,
+        ];
     }
     \Gallery\Models\gallery_music_model_write($musicDirectory, [
-        'revision' => str_repeat('a', 32), 'enabled' => false,
+        'revision' => str_repeat('a', 32),
+        'enabled' => false,
         'tracks' => $audioTracks,
     ]);
 
     try {
         $owner = $GLOBALS['storage_fixture_galleries'][0];
         $attached = \Gallery\Services\gallery_pdf_documents_attach(
-            $owner, $pdfSource, 'Original.pdf', 'Original', 'manual'
+            $owner,
+            $pdfSource,
+            'Original.pdf',
+            'Original',
+            'manual',
         );
         \Gallery\Services\gallery_pdf_documents_set_hidden(
-            $owner, $attached['id'], true
+            $owner,
+            $attached['id'],
+            true,
         );
-        file_put_contents($fixtureRoot . '/documents/simbrief-ofp.pdf', $pdfBytes);
-        file_put_contents($fixtureRoot . '/documents/simbrief-ofp-manifest.json',
-            json_encode(['format' => 'php_gallery_simbrief_ofp_manifest_v1',
-                'ofp_pdf_file' => 'simbrief-ofp.pdf'], JSON_THROW_ON_ERROR));
-        file_put_contents($musicDirectory . '/unindexed.bin', 'Excluded orphan');
+        file_put_contents(
+            $fixtureRoot . '/documents/simbrief-ofp.pdf',
+            $pdfBytes,
+        );
+        file_put_contents($fixtureRoot
+            . '/documents/simbrief-ofp-manifest.json', json_encode([
+            'format' => 'php_gallery_simbrief_ofp_manifest_v1',
+            'ofp_pdf_file' => 'simbrief-ofp.pdf',
+        ], JSON_THROW_ON_ERROR));
+        file_put_contents(
+            $musicDirectory . '/unindexed.bin',
+            'Excluded orphan',
+        );
 
         \Gallery\Core\storage_observer_start();
         $state = \Gallery\Services\admin_storage_statistics_start_job();
-        assert_admin_storage_same(4, $state['total'],
-            'job counts one photo plus three independent physical owners');
-        $state = \Gallery\Services\admin_storage_statistics_process_job(
-            \Gallery\Services\ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE
+        assert_admin_storage_same(
+            4,
+            $state['total'],
+            'job counts one photo plus three independent physical owners',
         );
-        assert_admin_storage_same('running', $state['status'],
-            'gallery ceiling keeps the music-only gallery for the next step');
-        assert_admin_storage_same(3, $state['processed'],
-            'progress combines observed photo and gallery records');
+        $state = \Gallery\Services\admin_storage_statistics_process_job(
+            \Gallery\Services\ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE,
+        );
+        assert_admin_storage_same(
+            'running',
+            $state['status'],
+            'gallery ceiling keeps the music-only gallery for the next step',
+        );
+        assert_admin_storage_same(
+            3,
+            $state['processed'],
+            'progress combines observed photo and gallery records',
+        );
         assert_admin_storage_same(
             \Gallery\Services\ADMIN_STORAGE_STATISTICS_GALLERY_BATCH_SIZE,
             max($GLOBALS['storage_gallery_limits']),
-            'a large photo batch never widens attachment work'
+            'a large photo batch never widens attachment work',
         );
         $state = \Gallery\Services\admin_storage_statistics_process_job();
-        assert_admin_storage_same('complete', $state['status'],
-            'all gallery cursors complete');
+        assert_admin_storage_same(
+            'complete',
+            $state['status'],
+            'all gallery cursors complete',
+        );
         $snapshot = $state['snapshot'];
-        assert_admin_storage_same(2, $snapshot['pdf_count'],
-            'hidden manual PDF and OFP are separate physical originals');
-        assert_admin_storage_same(2 * strlen($pdfBytes), $snapshot['pdf_bytes'],
-            'PDF originals have exact physical byte accounting');
-        assert_admin_storage_same(2, $snapshot['music_count'],
-            'same-byte stored copies, hidden and locked tracks all consume disk');
-        assert_admin_storage_same(2 * strlen($audioBytes), $snapshot['music_bytes'],
-            'music-only owner is measured without counting index or orphan bytes');
-        assert_admin_storage_same(123, $snapshot['total_picture_bytes'],
-            'attachment accounting preserves photograph-only total semantics');
-        assert_admin_storage_same(123 + 2 * strlen($pdfBytes)
-            + 2 * strlen($audioBytes), $snapshot['total_media_bytes'],
-            'overall total adds each physical media category once');
-        assert_admin_storage_same(0, $snapshot['attachment_scan_errors'],
-            'complete confined indexes have no accounting warnings');
+        assert_admin_storage_same(
+            2,
+            $snapshot['pdf_count'],
+            'hidden manual PDF and OFP are separate physical originals',
+        );
+        assert_admin_storage_same(
+            2 * strlen($pdfBytes),
+            $snapshot['pdf_bytes'],
+            'PDF originals have exact physical byte accounting',
+        );
+        assert_admin_storage_same(
+            2,
+            $snapshot['music_count'],
+            'same-byte stored copies, hidden and locked tracks all consume disk',
+        );
+        assert_admin_storage_same(
+            2 * strlen($audioBytes),
+            $snapshot['music_bytes'],
+            'music-only owner is measured without counting index or orphan bytes',
+        );
+        assert_admin_storage_same(
+            123,
+            $snapshot['total_picture_bytes'],
+            'attachment accounting preserves photograph-only total semantics',
+        );
+        assert_admin_storage_same(
+            123
+                + (2 * strlen($pdfBytes))
+                + (2 * strlen($audioBytes)),
+            $snapshot['total_media_bytes'],
+            'overall total adds each physical media category once',
+        );
+        assert_admin_storage_same(
+            0,
+            $snapshot['attachment_scan_errors'],
+            'complete confined indexes have no accounting warnings',
+        );
         $importMetrics = \Gallery\Core\storage_observer_finish();
-        assert_admin_storage_same(1, $importMetrics['fs.read.music_index.calls'],
-            'first import records its actual music-index read');
-        assert_admin_storage_same(5, $importMetrics['fs.read.ofp_magic.bytes'],
-            'OFP validation records only the PDF magic bytes actually read');
-        assert_admin_storage_same(3, $importMetrics['counts.imported_gallery_rows'],
-            'import diagnostics retain registered gallery observations');
+        assert_admin_storage_same(
+            1,
+            $importMetrics['fs.read.music_index.calls'],
+            'first import records its actual music-index read',
+        );
+        assert_admin_storage_same(
+            5,
+            $importMetrics['fs.read.ofp_magic.bytes'],
+            'OFP validation records only the PDF magic bytes actually read',
+        );
+        assert_admin_storage_same(
+            3,
+            $importMetrics['counts.imported_gallery_rows'],
+            'import diagnostics retain registered gallery observations',
+        );
         // Remove every source directory temporarily: a second update must use
         // durable totals and must not load attachment files or their indexes.
         $offlineRoot = $fixtureRoot . '-offline';
@@ -611,77 +801,135 @@ namespace {
         try {
             \Gallery\Core\storage_observer_start();
             \Gallery\Services\admin_storage_statistics_start_job();
-            $databaseOnly = \Gallery\Services\admin_storage_statistics_process_job();
+            $databaseOnly =
+                \Gallery\Services\admin_storage_statistics_process_job();
             $repeatMetrics = \Gallery\Core\storage_observer_finish();
-            assert_admin_storage_same(0, count(array_filter(
-                array_keys($repeatMetrics),
-                static fn(string $key): bool => str_starts_with($key, 'fs.')
-            )), 'repeat DB updates report no instrumented attachment filesystem calls');
-            assert_admin_storage_same('complete', $databaseOnly['status'],
-                'repeat updates complete while attachment directories are offline');
-            assert_admin_storage_same($snapshot['pdf_bytes'],
+            assert_admin_storage_same(
+                0,
+                count(array_filter(
+                    array_keys($repeatMetrics),
+                    static fn(string $key): bool => str_starts_with(
+                        $key,
+                        'fs.',
+                    ),
+                )),
+                'repeat DB updates report no instrumented attachment filesystem calls',
+            );
+            assert_admin_storage_same(
+                'complete',
+                $databaseOnly['status'],
+                'repeat updates complete while attachment directories are offline',
+            );
+            assert_admin_storage_same(
+                $snapshot['pdf_bytes'],
                 $databaseOnly['snapshot']['pdf_bytes'],
-                'repeat updates retain database PDF totals without disk access');
-            assert_admin_storage_same($snapshot['music_bytes'],
+                'repeat updates retain database PDF totals without disk access',
+            );
+            assert_admin_storage_same(
+                $snapshot['music_bytes'],
                 $databaseOnly['snapshot']['music_bytes'],
-                'repeat updates retain database music totals without disk access');
+                'repeat updates retain database music totals without disk access',
+            );
         } finally {
             rename($offlineRoot, $fixtureRoot);
         }
         \Gallery\Models\gallery_attachment_storage_model_store(
-            $owner['id'], 'pdf', 99, 99, 0, true
+            $owner['id'],
+            'pdf',
+            99,
+            99,
+            0,
+            true,
         );
-        assert_admin_storage_same($snapshot['pdf_bytes'],
+        assert_admin_storage_same(
+            $snapshot['pdf_bytes'],
             \Gallery\Models\gallery_attachment_storage_model_summary()['pdf_bytes'],
-            'legacy import cannot overwrite totals published by a mutation');
+            'legacy import cannot overwrite totals published by a mutation',
+        );
         $observations = count($GLOBALS['storage_gallery_limits']);
         \Gallery\Services\admin_storage_statistics();
         \Gallery\Services\admin_storage_statistics_cached_snapshot();
-        assert_admin_storage_same($observations,
+        assert_admin_storage_same(
+            $observations,
             count($GLOBALS['storage_gallery_limits']),
-            'passive cached reads never start attachment scanning');
+            'passive cached reads never start attachment scanning',
+        );
 
         $GLOBALS['storage_media_features'] = [
-            'gallery_pdf_documents' => false, 'gallery_music' => false,
+            'gallery_pdf_documents' => false,
+            'gallery_music' => false,
         ];
-        $disabledTotals = \Gallery\Services\gallery_attachment_storage_summary($owner);
-        assert_admin_storage_same(2, $disabledTotals['pdf_count'],
-            'global PDF OFF cannot remove stored bytes from accounting');
-        $savedOfp = \Gallery\Services\simbrief_description_save_ofp_for_gallery(
-            $owner, ['files' => ['pdf' =>
-                'https://example.invalid/never-fetch-this.pdf']], [], []
+        $disabledTotals =
+            \Gallery\Services\gallery_attachment_storage_summary($owner);
+        assert_admin_storage_same(
+            2,
+            $disabledTotals['pdf_count'],
+            'global PDF OFF cannot remove stored bytes from accounting',
         );
-        assert_admin_storage_same(true, $savedOfp['saved'],
-            'PDF OFF preserves independent SimBrief JSON import');
-        assert_admin_storage_same(false, $savedOfp['pdf_saved'],
-            'PDF OFF performs no optional original download');
-        $manifest = json_decode(file_get_contents(
-            $fixtureRoot . '/documents/simbrief-ofp-manifest.json'
-        ), true, flags: JSON_THROW_ON_ERROR);
-        assert_admin_storage_same('simbrief-ofp.pdf', $manifest['ofp_pdf_file'],
-            'an old PDF remains discoverable after re-enabling');
-        assert_admin_storage_same($pdfBytes,
+        $savedOfp = \Gallery\Services\simbrief_description_save_ofp_for_gallery(
+            $owner,
+            ['files' => [
+                'pdf' => 'https://example.invalid/never-fetch-this.pdf',
+            ]],
+            [],
+            [],
+        );
+        assert_admin_storage_same(
+            true,
+            $savedOfp['saved'],
+            'PDF OFF preserves independent SimBrief JSON import',
+        );
+        assert_admin_storage_same(
+            false,
+            $savedOfp['pdf_saved'],
+            'PDF OFF performs no optional original download',
+        );
+        $manifest = json_decode(
+            file_get_contents(
+                $fixtureRoot . '/documents/simbrief-ofp-manifest.json',
+            ),
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        );
+        assert_admin_storage_same(
+            'simbrief-ofp.pdf',
+            $manifest['ofp_pdf_file'],
+            'an old PDF remains discoverable after re-enabling',
+        );
+        assert_admin_storage_same(
+            $pdfBytes,
             file_get_contents($fixtureRoot . '/documents/simbrief-ofp.pdf'),
-            'independent JSON refresh never rewrites an old disabled PDF');
-        assert_admin_storage_same($snapshot['pdf_bytes'],
+            'independent JSON refresh never rewrites an old disabled PDF',
+        );
+        assert_admin_storage_same(
+            $snapshot['pdf_bytes'],
             \Gallery\Models\gallery_attachment_storage_model_summary()['pdf_bytes'],
-            'PDF OFF retains the stored OFP bytes in database accounting');
+            'PDF OFF retains the stored OFP bytes in database accounting',
+        );
         $deniedPdf = \Gallery\Services\simbrief_description_save_pdf_for_gallery(
             'https://example.invalid/never-fetch-this.pdf',
-            $fixtureRoot . '/must-not-exist.pdf'
+            $fixtureRoot . '/must-not-exist.pdf',
         );
-        assert_admin_storage_same('Gallery PDF documents are disabled.',
-            $deniedPdf['error'], 'the direct PDF fetch owner honors global OFF');
-        assert_admin_storage_same(false,
+        assert_admin_storage_same(
+            'Gallery PDF documents are disabled.',
+            $deniedPdf['error'],
+            'the direct PDF fetch owner honors global OFF',
+        );
+        assert_admin_storage_same(
+            false,
             file_exists($fixtureRoot . '/must-not-exist.pdf'),
-            'disabled direct imports cannot create an original');
+            'disabled direct imports cannot create an original',
+        );
         $GLOBALS['storage_media_features'] = [];
 
         $retainedSnapshot = \Gallery\Services\app_setting(
-            \Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''
+            \Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY,
+            '',
         );
         foreach (['source', 'batch'] as $failedOwner) {
-            $GLOBALS['storage_fail_read'] = $failedOwner === 'source' ? 'source' : '';
+            $GLOBALS['storage_fail_read'] = $failedOwner === 'source'
+                ? 'source'
+                : '';
             $refused = false;
             try {
                 \Gallery\Services\admin_storage_statistics_start_job();
@@ -692,8 +940,11 @@ namespace {
             } finally {
                 $GLOBALS['storage_fail_read'] = '';
             }
-            assert_admin_storage_same(true, $refused,
-                'database failure must not masquerade as source/batch exhaustion');
+            assert_admin_storage_same(
+                true,
+                $refused,
+                'database failure must not masquerade as source/batch exhaustion',
+            );
         }
         \Gallery\Services\admin_storage_statistics_start_job();
         $GLOBALS['storage_force_empty_batch'] = true;
@@ -705,62 +956,114 @@ namespace {
         } finally {
             $GLOBALS['storage_force_empty_batch'] = false;
         }
-        assert_admin_storage_same(true, $refused,
-            'premature empty derivative batches must fail instead of claiming completion');
-        assert_admin_storage_same($retainedSnapshot,
-            \Gallery\Services\app_setting(\Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''),
-            'failed source/batch work must preserve the last successful snapshot');
+        assert_admin_storage_same(
+            true,
+            $refused,
+            'premature empty derivative batches must fail instead of claiming completion',
+        );
+        assert_admin_storage_same(
+            $retainedSnapshot,
+            \Gallery\Services\app_setting(
+                \Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY,
+                '',
+            ),
+            'failed source/batch work must preserve the last successful snapshot',
+        );
 
         $savedImages = $GLOBALS['storage_fixture_images'];
         $GLOBALS['storage_thumbnail_metadata'] = true;
         // The scale vector shares one gallery/type; no physical originals exist.
         $GLOBALS['storage_fixture_images'] = array_map(
-            static fn(int $id): array => ['image_id' => $id, 'gallery_id' => 1,
-                'relative_path' => 'photo.jpg', 'filename' => 'photo.jpg',
-                'file_size' => 123],
-            range(1, ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT)
+            static fn(int $id): array => [
+                'image_id' => $id,
+                'gallery_id' => 1,
+                'relative_path' => 'photo.jpg',
+                'filename' => 'photo.jpg',
+                'file_size' => 123,
+            ],
+            range(1, ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT),
         );
         $GLOBALS['storage_batch_modes'] = [];
         \Gallery\Core\storage_observer_start();
         $largeJob = \Gallery\Services\admin_storage_statistics_start_job();
         $largeMetrics = \Gallery\Core\storage_observer_finish();
-        assert_admin_storage_same('complete', $largeJob['status'],
-            '40000 ordinary photos finish in the initial database request');
-        assert_admin_storage_same(ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT,
-            $largeJob['snapshot']['image_count'], 'large-job photo totals stay exact');
-        assert_admin_storage_same(17, $largeJob['snapshot']['generated_thumbnail_bytes'],
-            'the fast path preserves durable thumbnail byte totals');
-        assert_admin_storage_same(0, count($GLOBALS['storage_batch_modes']),
-            'database-only completion issues no derivative image batch queries');
-        assert_admin_storage_same(ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT,
+        assert_admin_storage_same(
+            'complete',
+            $largeJob['status'],
+            '40000 ordinary photos finish in the initial database request',
+        );
+        assert_admin_storage_same(
+            ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT,
+            $largeJob['snapshot']['image_count'],
+            'large-job photo totals stay exact',
+        );
+        assert_admin_storage_same(
+            17,
+            $largeJob['snapshot']['generated_thumbnail_bytes'],
+            'the fast path preserves durable thumbnail byte totals',
+        );
+        assert_admin_storage_same(
+            0,
+            count($GLOBALS['storage_batch_modes']),
+            'database-only completion issues no derivative image batch queries',
+        );
+        assert_admin_storage_same(
+            ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT,
             $largeMetrics['counts.photos_completed_from_database'],
-            'diagnostics distinguish database-completed photographs');
-        assert_admin_storage_same(0, count(array_filter(array_keys($largeMetrics),
-            static fn(string $key): bool => str_starts_with($key, 'fs.'))),
-            'ordinary-photo completion performs no instrumented filesystem calls');
+            'diagnostics distinguish database-completed photographs',
+        );
+        assert_admin_storage_same(
+            0,
+            count(array_filter(
+                array_keys($largeMetrics),
+                static fn(string $key): bool => str_starts_with($key, 'fs.'),
+            )),
+            'ordinary-photo completion performs no instrumented filesystem calls',
+        );
 
         // One DNG among ordinary photos must retain bounded real-file work.
         $GLOBALS['storage_fixture_images'][0]['relative_path'] = 'raw.DNG';
         $GLOBALS['storage_fixture_images'][0]['filename'] = 'raw.DNG';
-        file_put_contents($fixtureRoot . '/display-master.webp', 'known display bytes');
+        file_put_contents(
+            $fixtureRoot . '/display-master.webp',
+            'known display bytes',
+        );
         $mixedJob = \Gallery\Services\admin_storage_statistics_start_job();
-        assert_admin_storage_same('running', $mixedJob['status'],
-            'DNG work is not skipped by the database fast path');
-        assert_admin_storage_same(ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT - 1,
-            $mixedJob['processed'], 'only the DNG photo remains pending');
+        assert_admin_storage_same(
+            'running',
+            $mixedJob['status'],
+            'DNG work is not skipped by the database fast path',
+        );
+        assert_admin_storage_same(
+            ADMIN_STORAGE_FIXTURE_LARGE_PHOTO_COUNT - 1,
+            $mixedJob['processed'],
+            'only the DNG photo remains pending',
+        );
         $mixedJob = \Gallery\Services\admin_storage_statistics_process_job();
-        assert_admin_storage_same('complete', $mixedJob['status'],
-            'one DNG completes without paging all ordinary photographs');
-        assert_admin_storage_same(true, $GLOBALS['storage_batch_modes'][0],
-            'the derivative query selects only DNG rows');
-        assert_admin_storage_same(1, $mixedJob['snapshot']['display_master_count'],
-            'the real DNG display master remains counted');
-        assert_admin_storage_same(strlen('known display bytes'),
+        assert_admin_storage_same(
+            'complete',
+            $mixedJob['status'],
+            'one DNG completes without paging all ordinary photographs',
+        );
+        assert_admin_storage_same(
+            true,
+            $GLOBALS['storage_batch_modes'][0],
+            'the derivative query selects only DNG rows',
+        );
+        assert_admin_storage_same(
+            1,
+            $mixedJob['snapshot']['display_master_count'],
+            'the real DNG display master remains counted',
+        );
+        assert_admin_storage_same(
+            strlen('known display bytes'),
             $mixedJob['snapshot']['display_master_bytes'],
-            'DNG byte accounting stays physical and exact');
+            'DNG byte accounting stays physical and exact',
+        );
 
         $retainedFastSnapshot = \Gallery\Services\app_setting(
-            \Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''
+            \Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY,
+            '',
         );
         $GLOBALS['storage_fail_read'] = 'thumbnails';
         $refused = false;
@@ -771,31 +1074,54 @@ namespace {
         } finally {
             $GLOBALS['storage_fail_read'] = '';
         }
-        assert_admin_storage_same(true, $refused,
-            'failed thumbnail SQL must not authorize a false database-only success');
-        assert_admin_storage_same($retainedFastSnapshot,
-            \Gallery\Services\app_setting(\Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY, ''),
-            'aggregate failure retains the last successful snapshot');
+        assert_admin_storage_same(
+            true,
+            $refused,
+            'failed thumbnail SQL must not authorize a false database-only success',
+        );
+        assert_admin_storage_same(
+            $retainedFastSnapshot,
+            \Gallery\Services\app_setting(
+                \Gallery\Services\ADMIN_STORAGE_STATISTICS_CACHE_KEY,
+                '',
+            ),
+            'aggregate failure retains the last successful snapshot',
+        );
         $GLOBALS['storage_thumbnail_metadata'] = false;
         $GLOBALS['storage_fixture_images'] = $savedImages;
 
         $GLOBALS['storage_fixture_images'] = [];
         $emptyPhotoJob = \Gallery\Services\admin_storage_statistics_start_job();
-        assert_admin_storage_same('complete', $emptyPhotoJob['status'],
-            'a photo-free installation with imported totals completes immediately');
-        assert_admin_storage_same(0, $emptyPhotoJob['total'],
-            'already imported galleries need no filesystem work');
+        assert_admin_storage_same(
+            'complete',
+            $emptyPhotoJob['status'],
+            'a photo-free installation with imported totals completes immediately',
+        );
+        assert_admin_storage_same(
+            0,
+            $emptyPhotoJob['total'],
+            'already imported galleries need no filesystem work',
+        );
 
-        $GLOBALS['storage_fixture_images'] = [['image_id' => 1,
-            'gallery_id' => 1, 'filename' => 'test.jpg', 'file_size' => 123]];
+        $GLOBALS['storage_fixture_images'] = [[
+            'image_id' => 1,
+            'gallery_id' => 1,
+            'filename' => 'test.jpg',
+            'file_size' => 123,
+        ]];
         \Gallery\Services\admin_storage_statistics_start_job();
         \Gallery\Services\gallery_attachment_storage_changed();
         $state = \Gallery\Services\admin_storage_statistics_process_job();
-        assert_admin_storage_same('stale', $state['status'],
-            'attachment mutation revision invalidates a running scan');
-        assert_admin_storage_same(true,
+        assert_admin_storage_same(
+            'stale',
+            $state['status'],
+            'attachment mutation revision invalidates a running scan',
+        );
+        assert_admin_storage_same(
+            true,
             \Gallery\Services\admin_storage_statistics_cached_snapshot()['cache_stale'],
-            'the last successful snapshot remains visible and explicitly stale');
+            'the last successful snapshot remains visible and explicitly stale',
+        );
         $GLOBALS['storage_fail_write'] = true;
         \Gallery\Services\gallery_attachment_storage_changed();
         $GLOBALS['storage_fail_write'] = false;
@@ -804,36 +1130,60 @@ namespace {
         $originalIndex = file_get_contents($indexPath);
         file_put_contents($indexPath, '{damaged');
         $partial = \Gallery\Services\gallery_attachment_storage_summary(
-            $GLOBALS['storage_fixture_galleries'][2]
+            $GLOBALS['storage_fixture_galleries'][2],
         );
-        assert_admin_storage_same(1, $partial['errors'],
-            'a damaged index is a visible accounting warning');
-        assert_admin_storage_same('{damaged', file_get_contents($indexPath),
-            'accounting never repairs damaged metadata');
+        assert_admin_storage_same(
+            1,
+            $partial['errors'],
+            'a damaged index is a visible accounting warning',
+        );
+        assert_admin_storage_same(
+            '{damaged',
+            file_get_contents($indexPath),
+            'accounting never repairs damaged metadata',
+        );
         file_put_contents($indexPath, $originalIndex);
-        $missingOriginal = $musicDirectory . '/' . $audioTracks[0]['id'] . '.bin';
+        $missingOriginal =
+            $musicDirectory . '/' . $audioTracks[0]['id'] . '.bin';
         unlink($missingOriginal);
         $partial = \Gallery\Services\gallery_attachment_storage_summary(
-            $GLOBALS['storage_fixture_galleries'][2]
+            $GLOBALS['storage_fixture_galleries'][2],
         );
-        assert_admin_storage_same(1, $partial['music_count'],
-            'missing indexed bytes are excluded without losing other tracks');
-        assert_admin_storage_same(1, $partial['errors'],
-            'missing originals are explicit partial coverage');
-        if (function_exists('symlink') && @symlink($pdfSource, $missingOriginal)) {
+        assert_admin_storage_same(
+            1,
+            $partial['music_count'],
+            'missing indexed bytes are excluded without losing other tracks',
+        );
+        assert_admin_storage_same(
+            1,
+            $partial['errors'],
+            'missing originals are explicit partial coverage',
+        );
+        if (
+            function_exists('symlink')
+            && @symlink($pdfSource, $missingOriginal)
+        ) {
             $partial = \Gallery\Services\gallery_attachment_storage_summary(
-                $GLOBALS['storage_fixture_galleries'][2]
+                $GLOBALS['storage_fixture_galleries'][2],
             );
-            assert_admin_storage_same(1, $partial['music_count'],
-                'symlink originals cannot inflate media totals');
-            assert_admin_storage_same($pdfBytes, file_get_contents($pdfSource),
-                'an accounting probe never mutates the symlink target');
+            assert_admin_storage_same(
+                1,
+                $partial['music_count'],
+                'symlink originals cannot inflate media totals',
+            );
+            assert_admin_storage_same(
+                $pdfBytes,
+                file_get_contents($pdfSource),
+                'an accounting probe never mutates the symlink target',
+            );
         }
     } finally {
         $ownedPaths = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($fixtureRoot,
-                FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
+            new RecursiveDirectoryIterator(
+                $fixtureRoot,
+                FilesystemIterator::SKIP_DOTS,
+            ),
+            RecursiveIteratorIterator::CHILD_FIRST,
         );
         foreach ($ownedPaths as $entry) {
             if ($entry->isDir() && !$entry->isLink()) {
@@ -846,5 +1196,4 @@ namespace {
     }
 
     echo "Admin storage statistics helper tests passed.\n";
-
 }

@@ -40,28 +40,46 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\request_data;
-
 use function Gallery\Models\admin_gallery_report_model_mysql_version;
-
 use function Gallery\Core\cms_config;
 use function Gallery\Core\cms_current_version;
 
 /**
  * Build a storage snapshot from report accumulators.
  *
- * @param array $job Job data.
- * @return array<string, mixed> Storage snapshot.
+ * @param array<string, mixed> $job Report job fields including compact source
+ *     and generated-storage summaries.
+ * @return array{available:bool,error?:string,thumbnail_metadata_used?:bool,total_bytes?:int,source_bytes?:int,generated_bytes?:int,source?:array<string,mixed>,generated?:array<string,mixed>} Storage snapshot or unavailable-service result.
  */
 function admin_gallery_report_storage_snapshot(array $job): array
 {
-    if (!function_exists('Gallery\\Services\\admin_storage_statistics_compact_source_summary') || !function_exists('Gallery\\Services\\admin_storage_statistics_snapshot_from_summaries')) {
-        return ['available' => false, 'error' => 'Storage statistics service is not available.'];
+    if (
+        !function_exists(
+            'Gallery\\Services\\admin_storage_statistics_compact_source_summary',
+        )
+        || !function_exists(
+            'Gallery\\Services\\admin_storage_statistics_snapshot_from_summaries',
+        )
+    ) {
+        return [
+            'available' => false,
+            'error' => 'Storage statistics service is not available.',
+        ];
     }
-    $source = admin_storage_statistics_compact_source_summary(is_array($job['storage_source'] ?? null) ? $job['storage_source'] : []);
-    $generated = is_array($job['storage_generated'] ?? null) ? $job['storage_generated'] : [];
-    $snapshot = admin_storage_statistics_snapshot_from_summaries('', $source, $generated);
+    $source = admin_storage_statistics_compact_source_summary(
+        is_array($job['storage_source'] ?? null) ? $job['storage_source'] : [],
+    );
+    $generated = is_array($job['storage_generated'] ?? null)
+        ? $job['storage_generated']
+        : [];
+    $snapshot = admin_storage_statistics_snapshot_from_summaries(
+        '',
+        $source,
+        $generated,
+    );
     $snapshot['available'] = true;
-    $snapshot['thumbnail_metadata_used'] = !empty($job['thumbnail_metadata_used']);
+    $snapshot['thumbnail_metadata_used'] =
+        !empty($job['thumbnail_metadata_used']);
     return $snapshot;
 }
 
@@ -74,10 +92,18 @@ function admin_gallery_report_site_summary(): array
 {
     $config = cms_config();
     return [
-        'site_name' => function_exists('Gallery\\Services\\site_name') ? site_name() : 'PHP Gallery',
-        'version' => function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : '',
+        'site_name' => function_exists('Gallery\\Services\\site_name')
+            ? site_name()
+            : 'PHP Gallery',
+        'version' => function_exists('Gallery\\Core\\cms_current_version')
+            ? cms_current_version()
+            : '',
         'base_url' => (string) ($config['base_url'] ?? ''),
-        'language' => function_exists('Gallery\\Services\\translation_active_language') ? translation_active_language() : 'en',
+        'language' => function_exists(
+            'Gallery\\Services\\translation_active_language',
+        )
+            ? translation_active_language()
+            : 'en',
         'generated_at_utc' => gmdate('c'),
         'server_time' => date('c'),
     ];
@@ -90,10 +116,24 @@ function admin_gallery_report_site_summary(): array
  */
 function admin_gallery_report_runtime_summary(): array
 {
-    $extensions = ['exif', 'gd', 'imagick', 'pdo_mysql', 'zip', 'json', 'mbstring', 'fileinfo', 'openssl', 'curl'];
+    $extensions = [
+        'exif',
+        'gd',
+        'imagick',
+        'pdo_mysql',
+        'zip',
+        'json',
+        'mbstring',
+        'fileinfo',
+        'openssl',
+        'curl',
+    ];
     $extensionRows = [];
     foreach ($extensions as $extension) {
-        $extensionRows[] = ['extension' => $extension, 'loaded' => extension_loaded($extension) ? 'yes' : 'no'];
+        $extensionRows[] = [
+            'extension' => $extension,
+            'loaded' => extension_loaded($extension) ? 'yes' : 'no',
+        ];
     }
 
     return [
@@ -101,8 +141,12 @@ function admin_gallery_report_runtime_summary(): array
         'php_sapi' => PHP_SAPI,
         'os' => PHP_OS_FAMILY . ' / ' . PHP_OS,
         'uname' => php_uname(),
-        'server_software' => (string) (request_data('server')['SERVER_SOFTWARE'] ?? ''),
-        'document_root' => (string) (request_data('server')['DOCUMENT_ROOT'] ?? ''),
+        'server_software' => (string) (
+            request_data('server')['SERVER_SOFTWARE'] ?? ''
+        ),
+        'document_root' => (string) (
+            request_data('server')['DOCUMENT_ROOT'] ?? ''
+        ),
         'memory_limit' => (string) ini_get('memory_limit'),
         'max_execution_time' => (string) ini_get('max_execution_time'),
         'max_input_vars' => (string) ini_get('max_input_vars'),
@@ -113,10 +157,14 @@ function admin_gallery_report_runtime_summary(): array
         'current_memory_usage_bytes' => memory_get_usage(true),
         'peak_memory_usage_bytes' => memory_get_peak_usage(true),
         'server_memory' => admin_gallery_report_server_memory_summary(),
-        'load_average' => function_exists('sys_getloadavg') ? (sys_getloadavg() ?: []) : [],
+        'load_average' => function_exists('sys_getloadavg')
+            ? (sys_getloadavg() ?: [])
+            : [],
         'extensions' => $extensionRows,
         'gd_info' => function_exists('gd_info') ? gd_info() : [],
-        'imagick_version' => class_exists('Imagick') ? (string) (\Imagick::getVersion()['versionString'] ?? '') : '',
+        'imagick_version' => class_exists('Imagick')
+            ? (string) (\Imagick::getVersion()['versionString'] ?? '')
+            : '',
         'mysql_version' => admin_gallery_report_mysql_version(),
     ];
 }
@@ -141,13 +189,20 @@ function admin_gallery_report_server_memory_summary(): array
         return $summary;
     }
 
-    $raw = @file('/proc/meminfo', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    $raw = @file(
+        '/proc/meminfo',
+        FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES,
+    );
     if (!is_array($raw)) {
         return $summary;
     }
     $values = [];
     foreach ($raw as $line) {
-        if (!preg_match('/^([A-Za-z_()]+):\s+(\d+)\s+kB$/', (string) $line, $matches)) {
+        if (!preg_match(
+            '/^([A-Za-z_()]+):\s+(\d+)\s+kB$/',
+            (string) $line,
+            $matches,
+        )) {
             continue;
         }
         $values[$matches[1]] = (int) $matches[2] * 1024;
@@ -182,20 +237,48 @@ function admin_gallery_report_data_path_summary(): array
 {
     $config = cms_config();
     $paths = [
-        ['label' => 'Gallery root', 'path' => (string) ($config['galleries_root'] ?? '')],
-        ['label' => 'ZIP cache', 'path' => (string) ($config['zip_cache_path'] ?? '')],
-        ['label' => 'Application cache', 'path' => dirname(__DIR__, 3) . '/cache'],
-        ['label' => 'Navigation data', 'path' => (string) ($config['navigation_data']['bundled_navdata_path'] ?? '')],
+        [
+            'label' => 'Gallery root',
+            'path' => (string) ($config['galleries_root'] ?? ''),
+        ],
+        [
+            'label' => 'ZIP cache',
+            'path' => (string) ($config['zip_cache_path'] ?? ''),
+        ],
+        [
+            'label' => 'Application cache',
+            'path' => dirname(__DIR__, 3) . '/cache',
+        ],
+        [
+            'label' => 'Navigation data',
+            'path' => (string) (
+                $config['navigation_data']['bundled_navdata_path'] ?? ''
+            ),
+        ],
     ];
     foreach ($paths as &$path) {
-        $path['exists'] = $path['path'] !== '' && file_exists((string) $path['path']) ? 'yes' : 'no';
-        $path['readable'] = $path['path'] !== '' && is_readable((string) $path['path']) ? 'yes' : 'no';
-        $path['writable'] = $path['path'] !== '' && is_writable((string) $path['path']) ? 'yes' : 'no';
-        $path['free_bytes'] = admin_gallery_report_disk_free_bytes((string) $path['path']);
-        $path['total_bytes'] = admin_gallery_report_disk_total_bytes((string) $path['path']);
+        $path['exists'] = $path['path'] !== ''
+        && file_exists((string) $path['path'])
+            ? 'yes'
+            : 'no';
+        $path['readable'] = $path['path'] !== ''
+        && is_readable((string) $path['path'])
+            ? 'yes'
+            : 'no';
+        $path['writable'] = $path['path'] !== ''
+        && is_writable((string) $path['path'])
+            ? 'yes'
+            : 'no';
+        $path['free_bytes'] = admin_gallery_report_disk_free_bytes(
+            (string) $path['path'],
+        );
+        $path['total_bytes'] = admin_gallery_report_disk_total_bytes(
+            (string) $path['path'],
+        );
     }
     unset($path);
-    $legacyDownloadCache = function_exists(__NAMESPACE__ . '\\legacy_download_artifact_cache_status')
+    $legacyDownloadCache = function_exists(__NAMESPACE__
+        . '\\legacy_download_artifact_cache_status')
         ? legacy_download_artifact_cache_status(true)
         : [
             'legacy_server_build_capable' => false,

@@ -79,7 +79,9 @@ namespace Gallery\Services {
      */
     function galleries_root(): string
     {
-        return sys_get_temp_dir() . '/php-gallery-nonexistent-admin-trash-root-' . getmypid();
+        return sys_get_temp_dir()
+            . '/php-gallery-nonexistent-admin-trash-root-'
+            . getmypid();
     }
 
     require_once dirname(__DIR__) . '/app/services/gallery_trash.php';
@@ -100,23 +102,65 @@ namespace Gallery\Services {
     $GLOBALS['trash_admin_schema_state'] = 'available';
     $GLOBALS['trash_admin_overlap_queries'] = [];
     $GLOBALS['trash_admin_rows'] = [
-        ['status' => 'trashed', 'purge_after' => date('Y-m-d H:i:s', time() + 7 * 86400), 'original_folder_path' => 'isolated'],
-        ['status' => 'restoring', 'purge_after' => date('Y-m-d H:i:s', time() + 2 * 86400), 'original_folder_path' => 'in-progress'],
-        ['status' => 'broken', 'purge_after' => '', 'original_folder_path' => 'safe-broken'],
-        ['status' => 'broken', 'purge_after' => '', 'original_folder_path' => 'live-overlap'],
+        [
+            'status' => 'trashed',
+            'purge_after' => date('Y-m-d H:i:s', time() + (7 * 86400)),
+            'original_folder_path' => 'isolated',
+        ],
+        [
+            'status' => 'restoring',
+            'purge_after' => date('Y-m-d H:i:s', time() + (2 * 86400)),
+            'original_folder_path' => 'in-progress',
+        ],
+        [
+            'status' => 'broken',
+            'purge_after' => '',
+            'original_folder_path' => 'safe-broken',
+        ],
+        [
+            'status' => 'broken',
+            'purge_after' => '',
+            'original_folder_path' => 'live-overlap',
+        ],
     ];
     $raw = gallery_trash_entries(['status' => 'active', 'limit' => 200]);
     $rows = gallery_trash_admin_entries(['status' => 'active', 'limit' => 200]);
-    trash_admin_assert($GLOBALS['trash_admin_list_args'] === ['active', 200], 'Shared Admin preparation must preserve the active filter and bounded limit.');
-    trash_admin_assert($rows[0]['view_days_remaining'] === 7 && $rows[1]['view_days_remaining'] === 2, 'Shared rows must expose the actual retention countdown rather than a missing-field zero.');
-    trash_admin_assert(array_column($rows, 'view_can_purge') === [true, false, true, false], 'Purge affordances must follow ordinary, transitional, isolated broken, and overlapping broken policies.');
-    trash_admin_assert($GLOBALS['trash_admin_overlap_queries'] === ['safe-broken', 'live-overlap'], 'Normal and transitional rows must not add live-overlap queries.');
-    trash_admin_assert(!array_key_exists('view_can_purge', $raw[0]) && $GLOBALS['trash_admin_rows'] === $raw, 'The historical raw list contract must remain unchanged.');
+    trash_admin_assert(
+        $GLOBALS['trash_admin_list_args'] === ['active', 200],
+        'Shared Admin preparation must preserve the active filter and bounded limit.',
+    );
+    trash_admin_assert(
+        $rows[0]['view_days_remaining'] === 7
+            && $rows[1]['view_days_remaining'] === 2,
+        'Shared rows must expose the actual retention countdown rather than a missing-field zero.',
+    );
+    trash_admin_assert(
+        array_column($rows, 'view_can_purge') === [true, false, true, false],
+        'Purge affordances must follow ordinary, transitional, isolated broken, and overlapping broken policies.',
+    );
+    trash_admin_assert(
+        $GLOBALS['trash_admin_overlap_queries'] === [
+            'safe-broken',
+            'live-overlap',
+        ],
+        'Normal and transitional rows must not add live-overlap queries.',
+    );
+    trash_admin_assert(
+        !array_key_exists('view_can_purge', $raw[0])
+            && $GLOBALS['trash_admin_rows'] === $raw,
+        'The historical raw list contract must remain unchanged.',
+    );
     foreach ($rows as $index => $row) {
         unset($row['view_days_remaining'], $row['view_can_purge']);
-        trash_admin_assert($row === $raw[$index], 'Admin preparation must preserve every existing raw field.');
+        trash_admin_assert(
+            $row === $raw[$index],
+            'Admin preparation must preserve every existing raw field.',
+        );
     }
     $GLOBALS['trash_admin_schema_state'] = 'unknown';
-    trash_admin_assert(gallery_trash_admin_entries() === [], 'Unknown schema must retain the existing refusal boundary.');
+    trash_admin_assert(
+        gallery_trash_admin_entries() === [],
+        'Unknown schema must retain the existing refusal boundary.',
+    );
     echo "Gallery Trash Admin entries tests passed.\n";
 }

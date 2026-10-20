@@ -50,7 +50,7 @@ use function Gallery\Models\image_model_find_by_path_hash;
 use function Gallery\Models\image_model_rows_for_gallery;
 
 /**
-Read-oriented gallery and image lookup helpers.
+ * Read-oriented gallery and image lookup helpers.
  *
  * This module groups database lookups used by public pages and admin pages.
  * The functions preserve their original SQL and return shapes so templates and
@@ -101,31 +101,37 @@ function child_galleries_cache_key(int $parentId, bool $publicOnly): string
  *
  * @param int $parentId Parent id identifier.
  * @param bool $publicOnly Public only value.
- * @param array $children Child gallery rows for this parent.
- * @return array Structured result data for the caller.
+ * @param list<array<string,int|float|string|bool|null>> $children Child gallery rows to store under the parent cache key.
+ * @return list<array<string,int|float|string|bool|null>> Direct child gallery rows stored for this parent and visibility mode.
  */
-function child_galleries_cache_store(int $parentId, bool $publicOnly, array $children): array
-{
+function child_galleries_cache_store(
+    int $parentId,
+    bool $publicOnly,
+    array $children,
+): array {
     // $cache stores direct child-gallery rows reused by card cover and collage lookups.
     $cache = &child_galleries_request_cache();
-    return $cache[child_galleries_cache_key($parentId, $publicOnly)] = array_values($children);
+    return $cache[child_galleries_cache_key($parentId, $publicOnly)] =
+        array_values($children);
 }
 
 /**
  * Return direct child galleries for many parents and warm the single-parent cache.
- *
  * Public gallery cards often need child rows while resolving card collages. A
  * batched lookup avoids one database round-trip for each visible card and each
  * recursive collage branch.
  *
- * @param array $parentIds Parent gallery identifiers.
+ * @param list<int> $parentIds Parent gallery IDs whose child rows should be loaded.
  * @param bool $publicOnly Public only value.
- * @return array<int,array<int,array<string,mixed>>> Child rows keyed by parent id.
+ * @return array<int,list<array<string,int|float|string|bool|null>>> Direct child gallery rows keyed by requested parent gallery ID.
  */
 function child_galleries_preload(array $parentIds, bool $publicOnly): array
 {
     // $parentIds stores sanitized parent ids requested by the caller.
-    $parentIds = array_values(array_unique(array_filter(array_map('intval', $parentIds), static fn (int $parentId): bool => $parentId > 0)));
+    $parentIds = array_values(array_unique(array_filter(
+        array_map('intval', $parentIds),
+        static fn(int $parentId): bool => $parentId > 0,
+    )));
     if (!$parentIds) {
         return [];
     }
@@ -154,7 +160,11 @@ function child_galleries_preload(array $parentIds, bool $publicOnly): array
     $requireListedAccess = gallery_lookup_require_listed_access($publicOnly);
     $rows = public_render_profile_db(
         'child_galleries_batch_db',
-        static fn (): array => gallery_model_child_rows_for_parents($missingParentIds, $publicOnly, $requireListedAccess)
+        static fn(): array => gallery_model_child_rows_for_parents(
+            $missingParentIds,
+            $publicOnly,
+            $requireListedAccess,
+        ),
     );
     foreach ($rows as $child) {
         // $parentId stores the direct parent for the fetched child row.
@@ -166,25 +176,32 @@ function child_galleries_preload(array $parentIds, bool $publicOnly): array
     }
 
     foreach ($missingParentIds as $parentId) {
-        child_galleries_cache_store($parentId, $publicOnly, $childrenByParent[$parentId] ?? []);
+        child_galleries_cache_store(
+            $parentId,
+            $publicOnly,
+            $childrenByParent[$parentId] ?? [],
+        );
     }
     return $childrenByParent;
 }
 
 /**
  * Warm direct child-gallery rows for every gallery below the requested roots.
- *
  * Collage cover resolution walks child galleries recursively. Preloading the
  * visible branch tree lets that existing recursive logic reuse cached rows
  * instead of issuing one database query per branch node.
  *
- * @param array $rootIds Root gallery identifiers.
+ * @param list<int> $rootIds Root gallery IDs whose descendant rows should be loaded.
  * @param bool $publicOnly Public only value.
+ * @return void Returns after recursively loading descendant child rows into the request-local cache.
  */
 function child_galleries_tree_preload(array $rootIds, bool $publicOnly): void
 {
     // $rootIds stores sanitized root ids requested by the caller.
-    $rootIds = array_values(array_unique(array_filter(array_map('intval', $rootIds), static fn (int $rootId): bool => $rootId > 0)));
+    $rootIds = array_values(array_unique(array_filter(
+        array_map('intval', $rootIds),
+        static fn(int $rootId): bool => $rootId > 0,
+    )));
     if (!$rootIds) {
         return;
     }
@@ -194,7 +211,10 @@ function child_galleries_tree_preload(array $rootIds, bool $publicOnly): void
     // $missingRootIds stores roots that are not already represented in the child cache.
     $missingRootIds = [];
     foreach ($rootIds as $rootId) {
-        if (!array_key_exists(child_galleries_cache_key($rootId, $publicOnly), $cache)) {
+        if (!array_key_exists(
+            child_galleries_cache_key($rootId, $publicOnly),
+            $cache,
+        )) {
             $missingRootIds[] = $rootId;
         }
     }
@@ -205,7 +225,11 @@ function child_galleries_tree_preload(array $rootIds, bool $publicOnly): void
     $requireListedAccess = gallery_lookup_require_listed_access($publicOnly);
     $rows = public_render_profile_db(
         'child_galleries_tree_batch_db',
-        static fn (): array => gallery_model_descendant_rows_for_roots($missingRootIds, $publicOnly, $requireListedAccess)
+        static fn(): array => gallery_model_descendant_rows_for_roots(
+            $missingRootIds,
+            $publicOnly,
+            $requireListedAccess,
+        ),
     );
 
     // $childrenByParent stores direct child rows keyed by parent id for the preloaded tree.
@@ -317,10 +341,17 @@ function gallery_breadcrumb_ancestors(array $gallery): array
  * @param bool $withoutAdminBypass Apply ordinary visitor access even for Admin sessions.
  * @return int Integer result for the caller.
  */
-function gallery_branch_image_count(int $galleryId, bool $publicOnly, bool $withoutAdminBypass = false): int
-{
+function gallery_branch_image_count(
+    int $galleryId,
+    bool $publicOnly,
+    bool $withoutAdminBypass = false,
+): int {
     // $counts stores the batch count result reused by the single-gallery compatibility wrapper.
-    $counts = gallery_branch_image_counts([$galleryId], $publicOnly, $withoutAdminBypass);
+    $counts = gallery_branch_image_counts(
+        [$galleryId],
+        $publicOnly,
+        $withoutAdminBypass,
+    );
     return (int) ($counts[$galleryId] ?? 0);
 }
 
@@ -337,11 +368,17 @@ function gallery_branch_image_count(int $galleryId, bool $publicOnly, bool $with
  * @param bool $withoutAdminBypass Apply ordinary visitor access even for Admin sessions.
  * @return array<int, int> Image counts keyed by root gallery id.
  */
-function gallery_branch_image_counts(array $galleryIds, bool $publicOnly, bool $withoutAdminBypass = false): array
-{
+function gallery_branch_image_counts(
+    array $galleryIds,
+    bool $publicOnly,
+    bool $withoutAdminBypass = false,
+): array {
     static $cache = [];
     // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
-    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $galleryId): bool => $galleryId > 0)));
+    $galleryIds = array_values(array_unique(array_filter(
+        array_map('intval', $galleryIds),
+        static fn(int $galleryId): bool => $galleryId > 0,
+    )));
     if (!$galleryIds) {
         return [];
     }
@@ -352,7 +389,12 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly, bool $
     $missingIds = [];
     foreach ($galleryIds as $galleryId) {
         // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
-        $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0') . ':' . ($withoutAdminBypass ? 'visitor' : 'request');
+        $cacheKey =
+            $galleryId
+            . ':'
+            . ($publicOnly ? '1' : '0')
+            . ':'
+            . ($withoutAdminBypass ? 'visitor' : 'request');
         if (array_key_exists($cacheKey, $cache)) {
             $counts[$galleryId] = $cache[$cacheKey];
             continue;
@@ -365,7 +407,11 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly, bool $
     }
 
     $requireListedAccess = gallery_lookup_require_listed_access($publicOnly);
-    $descendantRows = gallery_model_branch_descendant_rows($missingIds, $publicOnly, $requireListedAccess);
+    $descendantRows = gallery_model_branch_descendant_rows(
+        $missingIds,
+        $publicOnly,
+        $requireListedAccess,
+    );
 
     // $rootIdsByGallery stores reverse membership so one image count can serve every requested root.
     $rootIdsByGallery = [];
@@ -377,7 +423,14 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly, bool $
         if ($rootId <= 0 || $descendantId <= 0) {
             continue;
         }
-        if ($publicOnly && !($withoutAdminBypass ? visitor_can_access_gallery_without_admin_bypass($row) : visitor_can_access_gallery($row))) {
+        if (
+            $publicOnly
+            && !(
+                $withoutAdminBypass
+                    ? visitor_can_access_gallery_without_admin_bypass($row)
+                    : visitor_can_access_gallery($row)
+            )
+        ) {
             continue;
         }
         $rootIdsByGallery[$descendantId][$rootId] = $rootId;
@@ -385,16 +438,25 @@ function gallery_branch_image_counts(array $galleryIds, bool $publicOnly, bool $
 
     // $countableGalleryIds stores every descendant gallery that needs one grouped image count.
     $countableGalleryIds = array_keys($rootIdsByGallery);
-    $directCounts = image_model_counts_for_galleries($countableGalleryIds, $publicOnly);
+    $directCounts = image_model_counts_for_galleries(
+        $countableGalleryIds,
+        $publicOnly,
+    );
     foreach ($directCounts as $descendantId => $imageCount) {
-        foreach (($rootIdsByGallery[(int) $descendantId] ?? []) as $rootId) {
-            $counts[$rootId] = (int) ($counts[$rootId] ?? 0) + (int) $imageCount;
+        foreach ($rootIdsByGallery[(int) $descendantId] ?? [] as $rootId) {
+            $counts[$rootId] =
+                (int) ($counts[$rootId] ?? 0) + (int) $imageCount;
         }
     }
 
     foreach ($missingIds as $galleryId) {
         // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
-        $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0') . ':' . ($withoutAdminBypass ? 'visitor' : 'request');
+        $cacheKey =
+            $galleryId
+            . ':'
+            . ($publicOnly ? '1' : '0')
+            . ':'
+            . ($withoutAdminBypass ? 'visitor' : 'request');
         $cache[$cacheKey] = (int) ($counts[$galleryId] ?? 0);
         $counts[$galleryId] = $cache[$cacheKey];
     }
@@ -444,8 +506,10 @@ function find_gallery_by_slug(string $slug): ?array
  * @param bool $fresh True to bypass the per-request lookup cache after mutations.
  * @return ?array Structured result data for the caller.
  */
-function find_gallery_by_folder_path(string $folderPath, bool $fresh = false): ?array
-{
+function find_gallery_by_folder_path(
+    string $folderPath,
+    bool $fresh = false,
+): ?array {
     static $cache = [];
 
     // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
@@ -454,7 +518,10 @@ function find_gallery_by_folder_path(string $folderPath, bool $fresh = false): ?
         return $cache[$normalizedPath];
     }
 
-    return $cache[$normalizedPath] = gallery_model_find_by_folder_path_hash(hash('sha256', $normalizedPath));
+    return $cache[$normalizedPath] = gallery_model_find_by_folder_path_hash(hash(
+        'sha256',
+        $normalizedPath,
+    ));
 }
 
 /**
@@ -515,7 +582,10 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
         return $cache[$cacheKey];
     }
 
-    $image = image_model_find_by_path_hash($galleryId, hash('sha256', $normalizedPath));
+    $image = image_model_find_by_path_hash($galleryId, hash(
+        'sha256',
+        $normalizedPath,
+    ));
     if ($image !== null) {
         $cache[$cacheKey] = $image;
         return $cache[$cacheKey];
@@ -570,7 +640,12 @@ function gallery_catalog_is_empty(): bool
     } catch (\Throwable) {
         // A failed catalog read must never be presented as a confirmed empty installation.
     }
-    admin_log_event('warning', 'gallery.onboarding.catalog_unavailable', 'The gallery catalog could not be verified for onboarding.', ['capability' => 'gallery_catalog']);
+    admin_log_event(
+        'warning',
+        'gallery.onboarding.catalog_unavailable',
+        'The gallery catalog could not be verified for onboarding.',
+        ['capability' => 'gallery_catalog'],
+    );
     return false;
 }
 
@@ -588,7 +663,7 @@ function gallery_mutation_context_count(int $parentGalleryId): int
     }
     return \Gallery\Models\gallery_model_mutation_context_count(
         $parentGalleryId,
-        $parentGalleryId <= 0 && gallery_access_schema_ready()
+        $parentGalleryId <= 0 && gallery_access_schema_ready(),
     );
 }
 
@@ -614,5 +689,9 @@ function gallery_editor_image_page(int $galleryId, int $offset): array
     // Type: int; Units: rows; Scope: one authorized editor response;
     // Consumers: image_model_editor_page; Rationale: cap each fragment at 100 rows.
     $pageSize = 100;
-    return \Gallery\Models\image_model_editor_page($galleryId, $offset, $pageSize);
+    return \Gallery\Models\image_model_editor_page(
+        $galleryId,
+        $offset,
+        $pageSize,
+    );
 }

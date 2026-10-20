@@ -30,18 +30,24 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-$source = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox.js');
-$resourceSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-resource-lifecycle.js');
-$preloadSource = (string) file_get_contents($root . '/public/assets/gallery-modules/lightbox-preload-lifecycle.js');
+$source = (string) file_get_contents($root
+    . '/public/assets/gallery-modules/lightbox.js');
+$resourceSource = (string) file_get_contents($root
+    . '/public/assets/gallery-modules/lightbox-resource-lifecycle.js');
+$preloadSource = (string) file_get_contents($root
+    . '/public/assets/gallery-modules/lightbox-preload-lifecycle.js');
 
 /**
  * Throw when a decoded-cache/navigation liveness contract fails.
  *
  * @param bool $condition Assertion result.
  * @param string $message Failure diagnostic.
+ * @return void Throws when the liveness condition is false.
  */
-function lightbox_cache_eviction_liveness_assert(bool $condition, string $message): void
-{
+function lightbox_cache_eviction_liveness_assert(
+    bool $condition,
+    string $message,
+): void {
     if (!$condition) {
         throw new RuntimeException($message);
     }
@@ -55,8 +61,11 @@ function lightbox_cache_eviction_liveness_assert(bool $condition, string $messag
  * @param string $nextName Next function name used as the slice boundary.
  * @return string Function source or an empty string.
  */
-function lightbox_cache_eviction_liveness_function(string $source, string $name, string $nextName): string
-{
+function lightbox_cache_eviction_liveness_function(
+    string $source,
+    string $name,
+    string $nextName,
+): string {
     $start = strpos($source, 'function ' . $name . '(');
     if ($start === false) {
         return '';
@@ -68,28 +77,53 @@ function lightbox_cache_eviction_liveness_function(string $source, string $name,
 lightbox_cache_eviction_liveness_assert(
     str_contains($resourceSource, 'if (!entry?.settled)')
         && str_contains($resourceSource, 'cache.delete(src);')
-        && str_contains($resourceSource, 'if (cache.get(src) !== entry || epoch !== insertionEpoch)'),
-    'The resource owner must evict settled entries only and fence late cache completion by epoch and exact entry.'
+        && str_contains(
+            $resourceSource,
+            'if (cache.get(src) !== entry || epoch !== insertionEpoch)',
+        ),
+    'The resource owner must evict settled entries only and fence late cache completion by epoch and exact entry.',
 );
 lightbox_cache_eviction_liveness_assert(
     str_contains($source, 'function telemetryLightboxCacheEvent(')
         && str_contains($source, 'window.PHPGalleryTelemetryCacheEvent(')
         && str_contains($source, '} catch (error) {'),
-    'Optional cache telemetry must remain isolated in the coordinator and cannot interrupt cache control flow.'
+    'Optional cache telemetry must remain isolated in the coordinator and cannot interrupt cache control flow.',
 );
 
 $drainSource = lightbox_cache_eviction_liveness_function(
     $preloadSource,
     'drainLightboxPreloadQueue',
-    'reportError'
+    'reportError',
 );
-lightbox_cache_eviction_liveness_assert($drainSource !== '', 'Queued preload drain helper is missing.');
+lightbox_cache_eviction_liveness_assert(
+    $drainSource !== '',
+    'Queued preload drain helper is missing.',
+);
 $incrementPosition = strpos($drainSource, 'activeLightboxPreloads += 1;');
-$tryPosition = strpos($drainSource, 'try {', $incrementPosition === false ? 0 : $incrementPosition);
-$preloadPosition = strpos($drainSource, 'preloadPromise = preload(', $tryPosition === false ? 0 : $tryPosition);
-$catchPosition = strpos($drainSource, '} catch (error) {', $preloadPosition === false ? 0 : $preloadPosition);
-$syncReleasePosition = strpos($drainSource, 'activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);', $catchPosition === false ? 0 : $catchPosition);
-$settlementPosition = strpos($drainSource, 'Promise.resolve(preloadPromise).then(releaseSlot, releaseSlot);');
+$tryPosition = strpos(
+    $drainSource,
+    'try {',
+    $incrementPosition === false ? 0 : $incrementPosition,
+);
+$preloadPosition = strpos(
+    $drainSource,
+    'preloadPromise = preload(',
+    $tryPosition === false ? 0 : $tryPosition,
+);
+$catchPosition = strpos(
+    $drainSource,
+    '} catch (error) {',
+    $preloadPosition === false ? 0 : $preloadPosition,
+);
+$syncReleasePosition = strpos(
+    $drainSource,
+    'activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);',
+    $catchPosition === false ? 0 : $catchPosition,
+);
+$settlementPosition = strpos(
+    $drainSource,
+    'Promise.resolve(preloadPromise).then(releaseSlot, releaseSlot);',
+);
 lightbox_cache_eviction_liveness_assert(
     $incrementPosition !== false
         && $tryPosition !== false
@@ -102,14 +136,35 @@ lightbox_cache_eviction_liveness_assert(
         && $catchPosition < $syncReleasePosition
         && $settlementPosition !== false
         && str_contains($drainSource, 'function releaseSlot()'),
-    'Every queued preload slot must be released for both synchronous throws and asynchronous settlement.'
+    'Every queued preload slot must be released for both synchronous throws and asynchronous settlement.',
 );
 
-$openSource = lightbox_cache_eviction_liveness_function($source, 'openAt', 'step');
-lightbox_cache_eviction_liveness_assert($openSource !== '', 'openAt() source is missing.');
-$currentPreloadPosition = strpos($openSource, "preloadCardLightboxImages(card, false, {reason: 'current-preview'});");
-$currentPreloadTryPosition = strrpos(substr($openSource, 0, $currentPreloadPosition === false ? 0 : $currentPreloadPosition), 'try {');
-$currentPreloadCatchPosition = strpos($openSource, '} catch (error) {', $currentPreloadPosition === false ? 0 : $currentPreloadPosition);
+$openSource = lightbox_cache_eviction_liveness_function(
+    $source,
+    'openAt',
+    'step',
+);
+lightbox_cache_eviction_liveness_assert(
+    $openSource !== '',
+    'openAt() source is missing.',
+);
+$currentPreloadPosition = strpos(
+    $openSource,
+    "preloadCardLightboxImages(card, false, {reason: 'current-preview'});",
+);
+$currentPreloadTryPosition = strrpos(
+    substr(
+        $openSource,
+        0,
+        $currentPreloadPosition === false ? 0 : $currentPreloadPosition,
+    ),
+    'try {',
+);
+$currentPreloadCatchPosition = strpos(
+    $openSource,
+    '} catch (error) {',
+    $currentPreloadPosition === false ? 0 : $currentPreloadPosition,
+);
 $previewHelperPosition = strpos($openSource, 'const showPreviewFirst = () =>');
 lightbox_cache_eviction_liveness_assert(
     $currentPreloadPosition !== false
@@ -119,13 +174,25 @@ lightbox_cache_eviction_liveness_assert(
         && $currentPreloadTryPosition < $currentPreloadPosition
         && $currentPreloadPosition < $currentPreloadCatchPosition
         && $currentPreloadCatchPosition < $previewHelperPosition,
-    'Current-preview preload must be an optional guarded optimization and must not prevent foreground source setup.'
+    'Current-preview preload must be an optional guarded optimization and must not prevent foreground source setup.',
 );
 
 $initialPromisePosition = strpos($openSource, 'let initialMainPromise = null;');
-$sourceSetupTryPosition = strpos($openSource, 'try {', $initialPromisePosition === false ? 0 : $initialPromisePosition);
-$showPreviewPosition = strpos($openSource, '? showPreviewFirst().then(', $sourceSetupTryPosition === false ? 0 : $sourceSetupTryPosition);
-$sourceSetupCatchPosition = strpos($openSource, "presentationFailureReason = lightboxNavigationExceptionReason('source-setup', error);", $showPreviewPosition === false ? 0 : $showPreviewPosition);
+$sourceSetupTryPosition = strpos(
+    $openSource,
+    'try {',
+    $initialPromisePosition === false ? 0 : $initialPromisePosition,
+);
+$showPreviewPosition = strpos(
+    $openSource,
+    '? showPreviewFirst().then(',
+    $sourceSetupTryPosition === false ? 0 : $sourceSetupTryPosition,
+);
+$sourceSetupCatchPosition = strpos(
+    $openSource,
+    "presentationFailureReason = lightboxNavigationExceptionReason('source-setup', error);",
+    $showPreviewPosition === false ? 0 : $showPreviewPosition,
+);
 $finalizePosition = strpos($openSource, 'Promise.resolve(initialMainPromise)');
 lightbox_cache_eviction_liveness_assert(
     $initialPromisePosition !== false
@@ -137,17 +204,17 @@ lightbox_cache_eviction_liveness_assert(
         && $sourceSetupTryPosition < $showPreviewPosition
         && $showPreviewPosition < $sourceSetupCatchPosition
         && $sourceSetupCatchPosition < $finalizePosition,
-    'Synchronous foreground source setup failures must be converted into the owned navigation finalization path.'
+    'Synchronous foreground source setup failures must be converted into the owned navigation finalization path.',
 );
 
 $reasonSource = lightbox_cache_eviction_liveness_function(
     $source,
     'lightboxNavigationExceptionReason',
-    'beginLightboxNavigationTransaction'
+    'beginLightboxNavigationTransaction',
 );
 lightbox_cache_eviction_liveness_assert(
-    $reasonSource !== '' && str_contains($reasonSource, ".slice(0, 64)"),
-    'Navigation setup/rejection diagnostics must remain bounded for the DEV overlay.'
+    $reasonSource !== '' && str_contains($reasonSource, '.slice(0, 64)'),
+    'Navigation setup/rejection diagnostics must remain bounded for the DEV overlay.',
 );
 
 fwrite(STDOUT, "Lightbox decoded-cache eviction liveness checks passed.\n");

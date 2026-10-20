@@ -133,12 +133,15 @@ if (!function_exists('admin_log_english_t')) {
      * Used by HTTP controller routing for this workflow.
      *
      * @param string $key Lookup key.
-     * @param string|array|null $fallback Fallback value.
-     * @param array $parameters Parameters value.
+     * @param string|array<string,string|int|float>|null $fallback Translation fallback text or interpolation values.
+     * @param array<string,string|int|float> $parameters Interpolation values keyed by placeholder name.
      * @return string Text result for the caller.
      */
-    function admin_log_english_t(string $key, string|array|null $fallback = null, array $parameters = []): string
-    {
+    function admin_log_english_t(
+        string $key,
+        string|array|null $fallback = null,
+        array $parameters = [],
+    ): string {
         if (is_array($fallback)) {
             $parameters = $fallback;
             $fallback = null;
@@ -151,7 +154,10 @@ if (!function_exists('admin_log_english_t')) {
         $text = null;
         if (function_exists('Gallery\\Services\\translation_load_language')) {
             $englishStrings = translation_load_language('en');
-            if (array_key_exists($key, $englishStrings) && is_string($englishStrings[$key])) {
+            if (
+                array_key_exists($key, $englishStrings)
+                && is_string($englishStrings[$key])
+            ) {
                 $text = $englishStrings[$key];
             }
         }
@@ -165,7 +171,11 @@ if (!function_exists('admin_log_english_t')) {
         }
 
         foreach ($parameters as $name => $value) {
-            $text = str_replace('{' . (string) $name . '}', (string) $value, $text);
+            $text = str_replace(
+                '{' . (string) $name . '}',
+                (string) $value,
+                $text,
+            );
         }
         return $text;
     }
@@ -176,7 +186,7 @@ if (!function_exists('admin_log_english_t')) {
  *
  * Used by HTTP controller routing for this workflow.
  *
- * @param array $entry Entry value.
+ * @param array<string,mixed> $entry Log row fields, including optional context_json.
  * @param bool $withActions With actions value.
  * @return string Text result for the caller.
  */
@@ -187,7 +197,10 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
     if (!empty($entry['context_json'])) {
         $decoded = json_decode((string) $entry['context_json'], true);
         if (is_array($decoded) && $decoded !== []) {
-            $encoded = json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $encoded = json_encode(
+                $decoded,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+            );
             $contextJson = $encoded === false ? '' : $encoded;
         }
     }
@@ -195,18 +208,20 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
 }
 
 /**
- * Handles render admin feature flag logic for the gallery application.
+ * Render a feature state indicator using the shared Admin feature-flag view.
  *
- * @param mixed $enabled Input used by this operation.
- * @param mixed $symbol Input used by this operation.
- * @param mixed $label Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param bool $enabled Whether the feature is enabled.
+ * @param string $symbol Escaped symbol displayed with the feature state.
+ * @param string $label Visible feature label.
+ * @return string Rendered feature-state HTML.
  */
-function render_admin_feature_flag(bool $enabled, string $symbol, string $label): string
-{
+function render_admin_feature_flag(
+    bool $enabled,
+    string $symbol,
+    string $label,
+): string {
     return view_render_admin_feature_flag($enabled, e($symbol), $label);
 }
-
 
 /**
  * Return a normalized admin log time order key.
@@ -233,7 +248,7 @@ function admin_log_severity_filter_setting_key(): string
  * Return validated severity values while preserving the visible option order.
  *
  * @param mixed $rawValues Raw values value.
- * @return array Structured result data for the caller.
+ * @return list<string> Supported severity values in display order.
  */
 function admin_log_normalize_severity_filter(mixed $rawValues): array
 {
@@ -270,7 +285,7 @@ function admin_log_normalize_severity_filter(mixed $rawValues): array
 /**
  * Decode the persistent severity filter from app settings.
  *
- * @return array Structured result data for the caller.
+ * @return list<string> Supported severity values in display order.
  */
 function admin_log_persisted_severity_filter(): array
 {
@@ -278,13 +293,16 @@ function admin_log_persisted_severity_filter(): array
     $encoded = app_setting(admin_log_severity_filter_setting_key(), '[]');
     // $decoded stores candidate values before option validation.
     $decoded = json_decode((string) $encoded, true);
-    return admin_log_normalize_severity_filter(is_array($decoded) ? $decoded : []);
+    return admin_log_normalize_severity_filter(
+        is_array($decoded) ? $decoded : [],
+    );
 }
 
 /**
  * Persist or clear the severity filter depending on the selected values.
  *
- * @param array $severities Severities value.
+ * @param list<string> $severities Validated severity values; an empty list clears the saved filter.
+ * @return void Saves the selected values or removes the setting for an empty selection.
  */
 function admin_log_save_severity_filter(array $severities): void
 {
@@ -293,7 +311,10 @@ function admin_log_save_severity_filter(array $severities): void
         delete_app_settings([admin_log_severity_filter_setting_key()]);
         return;
     }
-    set_app_setting(admin_log_severity_filter_setting_key(), json_encode(array_values($severities), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    set_app_setting(admin_log_severity_filter_setting_key(), json_encode(
+        array_values($severities),
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+    ));
 }
 
 /**
@@ -303,15 +324,17 @@ function admin_log_save_severity_filter(array $severities): void
  */
 function admin_log_request_has_severity_filter_input(): bool
 {
-    return array_key_exists('severity_filter_submitted', $_GET)
-        || array_key_exists('severities', $_GET)
-        || array_key_exists('severity', $_GET);
+    return (
+        array_key_exists('severity_filter_submitted', $_GET)
+            || array_key_exists('severities', $_GET)
+            || array_key_exists('severity', $_GET)
+    );
 }
 
 /**
  * Resolve selected severities from reset action, request data, or persisted settings.
  *
- * @return array Structured result data for the caller.
+ * @return list<string> Selected supported severity values in display order.
  */
 function admin_log_resolve_selected_severities(): array
 {
@@ -322,7 +345,7 @@ function admin_log_resolve_selected_severities(): array
 
     if (admin_log_request_has_severity_filter_input()) {
         // $rawValues stores the new multi-select field first, then legacy single severity values.
-        $rawValues = $_GET['severities'] ?? ($_GET['severity'] ?? []);
+        $rawValues = $_GET['severities'] ?? $_GET['severity'] ?? [];
         $severities = admin_log_normalize_severity_filter($rawValues);
         admin_log_save_severity_filter($severities);
         return $severities;
@@ -334,13 +357,16 @@ function admin_log_resolve_selected_severities(): array
 /**
  * Build compact human-readable text for the active severity filter.
  *
- * @param array $selectedSeverities Selected severities value.
+ * @param list<string> $selectedSeverities Selected supported severity identifiers.
  * @return string Text result for the caller.
  */
 function admin_log_severity_filter_summary(array $selectedSeverities): string
 {
     if ($selectedSeverities === []) {
-        return admin_log_english_t('admin.logs.severity_filter_all_summary', 'All severities are shown.');
+        return admin_log_english_t(
+            'admin.logs.severity_filter_all_summary',
+            'All severities are shown.',
+        );
     }
 
     // $labels stores labels in the same order as the checkbox list.
@@ -350,7 +376,11 @@ function admin_log_severity_filter_summary(array $selectedSeverities): string
             $labels[] = $label;
         }
     }
-    return admin_log_english_t('admin.logs.severity_filter_active_summary', 'Active severities: {values}', ['values' => implode(', ', $labels)]);
+    return admin_log_english_t(
+        'admin.logs.severity_filter_active_summary',
+        'Active severities: {values}',
+        ['values' => implode(', ', $labels)],
+    );
 }
 
 /**
@@ -373,7 +403,9 @@ function admin_log_normalize_page_size(mixed $value): int
 {
     // $pageSize stores the requested visible row count.
     $pageSize = (int) $value;
-    return in_array($pageSize, admin_log_page_size_options(), true) ? $pageSize : 150;
+    return in_array($pageSize, admin_log_page_size_options(), true)
+        ? $pageSize
+        : 150;
 }
 
 /**
@@ -406,17 +438,24 @@ function admin_log_grouping_enabled(mixed $value): bool
  * @param bool $grouped Grouped value.
  * @return string Text result for the caller.
  */
-function admin_log_result_count_text(int $shown, int $total, bool $grouped): string
-{
+function admin_log_result_count_text(
+    int $shown,
+    int $total,
+    bool $grouped,
+): string {
     // $unit stores the visible item type so grouped counts are not confused with raw log rows.
     $unit = $grouped
         ? admin_log_english_t('admin.logs.grouped_rows', 'groups')
         : admin_log_english_t('admin.logs.raw_rows', 'log rows');
-    return admin_log_english_t('admin.logs.result_count', '{shown} shown of {total} {unit}', [
-        'shown' => $shown,
-        'total' => $total,
-        'unit' => $unit,
-    ]);
+    return admin_log_english_t(
+        'admin.logs.result_count',
+        '{shown} shown of {total} {unit}',
+        [
+            'shown' => $shown,
+            'total' => $total,
+            'unit' => $unit,
+        ],
+    );
 }
 
 /**
@@ -430,17 +469,24 @@ function admin_log_result_count_text(int $shown, int $total, bool $grouped): str
 function admin_log_page_range_text(int $page, int $perPage, int $total): string
 {
     if ($total <= 0) {
-        return admin_log_english_t('admin.logs.page_range_empty', 'No matching log rows.');
+        return admin_log_english_t(
+            'admin.logs.page_range_empty',
+            'No matching log rows.',
+        );
     }
     // $from stores the first one-based visible row number.
     $from = (($page - 1) * $perPage) + 1;
     // $to stores the last one-based visible row number.
     $to = min($total, $from + $perPage - 1);
-    return admin_log_english_t('admin.logs.page_range', 'Showing {from}-{to} of {total}', [
-        'from' => $from,
-        'to' => $to,
-        'total' => $total,
-    ]);
+    return admin_log_english_t(
+        'admin.logs.page_range',
+        'Showing {from}-{to} of {total}',
+        [
+            'from' => $from,
+            'to' => $to,
+            'total' => $total,
+        ],
+    );
 }
 
 /**
@@ -452,14 +498,23 @@ function admin_log_page_range_text(int $page, int $perPage, int $total): string
  * @param int $perPage Items per page.
  * @return string Text result for the caller.
  */
-function render_admin_log_pagination(int $page, int $totalPages, int $total, int $perPage): string
-{
+function render_admin_log_pagination(
+    int $page,
+    int $totalPages,
+    int $total,
+    int $perPage,
+): string {
     $page = max(1, $page);
     $totalPages = max(1, $totalPages);
     $previousPage = max(1, $page - 1);
     $nextPage = min($totalPages, $page + 1);
     $pages = [1, $page - 1, $page, $page + 1, $totalPages];
-    $pages = array_values(array_unique(array_filter($pages, static fn (int $candidate): bool => $candidate >= 1 && $candidate <= $totalPages)));
+    $pages = array_values(array_unique(array_filter(
+        $pages,
+        static fn(int $candidate): bool => (
+            $candidate >= 1 && $candidate <= $totalPages
+        ),
+    )));
     sort($pages);
     $links = [];
     $lastPage = 0;
@@ -467,8 +522,10 @@ function render_admin_log_pagination(int $page, int $totalPages, int $total, int
         $links[] = [
             'page' => $pageNumber,
             'current' => $pageNumber === $page,
-            'gap_before' => $lastPage > 0 && $pageNumber > $lastPage + 1,
-            'url' => $pageNumber === $page ? '' : admin_log_filter_url(['log_page' => $pageNumber]),
+            'gap_before' => $lastPage > 0 && $pageNumber > ($lastPage + 1),
+            'url' => $pageNumber === $page
+                ? ''
+                : admin_log_filter_url(['log_page' => $pageNumber]),
         ];
         $lastPage = $pageNumber;
     }
@@ -478,10 +535,17 @@ function render_admin_log_pagination(int $page, int $totalPages, int $total, int
         'range_label' => admin_log_page_range_text($page, $perPage, $total),
         'aria_label' => admin_log_english_t('pagination.label', 'Pagination'),
         'previous_url' => admin_log_filter_url(['log_page' => $previousPage]),
-        'previous_label' => admin_log_english_t('pagination.previous', 'Previous'),
+        'previous_label' => admin_log_english_t(
+            'pagination.previous',
+            'Previous',
+        ),
         'next_url' => admin_log_filter_url(['log_page' => $nextPage]),
         'next_label' => admin_log_english_t('pagination.next', 'Next'),
-        'status_label' => admin_log_english_t('pagination.status', 'Page {current} of {total}', ['current' => $page, 'total' => $totalPages]),
+        'status_label' => admin_log_english_t(
+            'pagination.status',
+            'Page {current} of {total}',
+            ['current' => $page, 'total' => $totalPages],
+        ),
         'links' => $links,
     ]);
 }
@@ -489,7 +553,7 @@ function render_admin_log_pagination(int $page, int $totalPages, int $total, int
 /**
  * Build the admin log URL while preserving active filters.
  *
- * @param array $overrides Overrides value.
+ * @param array<string,string|int|bool|array> $overrides Query parameters that replace preserved filter values.
  * @return string Text result for the caller.
  */
 function admin_log_filter_url(array $overrides = []): string
@@ -498,16 +562,22 @@ function admin_log_filter_url(array $overrides = []): string
     $params = [
         'category' => (string) ($_GET['category'] ?? ''),
         'q' => trim((string) ($_GET['q'] ?? '')),
-        'time_sort' => admin_log_normalize_time_sort((string) ($_GET['time_sort'] ?? 'desc')),
+        'time_sort' => admin_log_normalize_time_sort(
+            (string) ($_GET['time_sort'] ?? 'desc'),
+        ),
         'per_page' => admin_log_normalize_page_size($_GET['per_page'] ?? 150),
-        'grouped' => admin_log_grouping_enabled($_GET['grouped'] ?? '1') ? '1' : '0',
+        'grouped' => admin_log_grouping_enabled($_GET['grouped'] ?? '1')
+            ? '1'
+            : '0',
         'log_page' => admin_log_normalize_page_number($_GET['log_page'] ?? 1),
     ];
 
     // Preserve multi-select severities when building sort links. Legacy single severity links
     // are normalized into the new array-shaped query parameter.
     $activeSeverities = admin_log_request_has_severity_filter_input()
-        ? admin_log_normalize_severity_filter($_GET['severities'] ?? ($_GET['severity'] ?? []))
+        ? admin_log_normalize_severity_filter(
+            $_GET['severities'] ?? $_GET['severity'] ?? [],
+        )
         : admin_log_persisted_severity_filter();
     if ($activeSeverities !== []) {
         $params['severities'] = $activeSeverities;
@@ -532,8 +602,10 @@ function admin_log_filter_url(array $overrides = []): string
  * @param int $startIndex Zero-based index of the first rendered member.
  * @return array<int,array<string,int|string|null>> Member rows with export URLs, indexes and serialized contexts.
  */
-function admin_log_group_member_view_models(array $members, int $startIndex = 0): array
-{
+function admin_log_group_member_view_models(
+    array $members,
+    int $startIndex = 0,
+): array {
     $viewModels = [];
     foreach ($members as $index => $member) {
         if (!is_array($member)) {
@@ -541,9 +613,14 @@ function admin_log_group_member_view_models(array $members, int $startIndex = 0)
         }
         $context = admin_log_context_array($member);
         $member['display_index'] = max(0, $startIndex) + $index + 1;
-        $member['export_url'] = url_for('admin_log_export', ['id' => (int) ($member['id'] ?? 0)]);
+        $member['export_url'] = url_for('admin_log_export', [
+            'id' => (int) ($member['id'] ?? 0),
+        ]);
         $member['context_compact_json'] = $context !== []
-            ? (string) json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            ? (string) json_encode(
+                $context,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+            )
             : '';
         $viewModels[] = $member;
     }
@@ -557,12 +634,14 @@ function admin_log_group_member_view_models(array $members, int $startIndex = 0)
  * @param int $startIndex Zero-based index of the first rendered member.
  * @return string Text result for the caller.
  */
-function render_admin_log_group_member_rows(array $members, int $startIndex = 0): string
-{
+function render_admin_log_group_member_rows(
+    array $members,
+    int $startIndex = 0,
+): string {
     return view_render_admin_log_group_member_rows(
         admin_log_group_member_view_models($members, $startIndex),
         admin_log_english_t('admin.logs.request_prefix', 'Request'),
-        admin_log_export_labels()
+        admin_log_export_labels(),
     );
 }
 
@@ -574,26 +653,68 @@ function render_admin_log_group_member_rows(array $members, int $startIndex = 0)
 function admin_log_table_row_labels(): array
 {
     return array_merge(admin_log_export_labels(), [
-        'group_count_one' => admin_log_english_t('admin.logs.group_count_one', 'entry'),
-        'group_count_many' => admin_log_english_t('admin.logs.group_count_many', 'entries'),
-        'save_details_txt' => admin_log_english_t('admin.logs.save_details_txt', 'Save details as TXT'),
+        'group_count_one' => admin_log_english_t(
+            'admin.logs.group_count_one',
+            'entry',
+        ),
+        'group_count_many' => admin_log_english_t(
+            'admin.logs.group_count_many',
+            'entries',
+        ),
+        'save_details_txt' => admin_log_english_t(
+            'admin.logs.save_details_txt',
+            'Save details as TXT',
+        ),
         'log_id' => admin_log_english_t('admin.logs.log_id', 'Log ID'),
-        'group_count' => admin_log_english_t('admin.logs.group_count', 'Grouped entries'),
-        'first_seen' => admin_log_english_t('admin.logs.first_seen', 'First seen'),
-        'latest_seen' => admin_log_english_t('admin.logs.latest_seen', 'Latest seen'),
-        'created_at' => admin_log_english_t('admin.logs.created_at', 'Created at'),
+        'group_count' => admin_log_english_t(
+            'admin.logs.group_count',
+            'Grouped entries',
+        ),
+        'first_seen' => admin_log_english_t(
+            'admin.logs.first_seen',
+            'First seen',
+        ),
+        'latest_seen' => admin_log_english_t(
+            'admin.logs.latest_seen',
+            'Latest seen',
+        ),
+        'created_at' => admin_log_english_t(
+            'admin.logs.created_at',
+            'Created at',
+        ),
         'level' => admin_log_english_t('admin.logs.level', 'Level'),
         'severity' => admin_log_english_t('admin.logs.severity', 'Severity'),
         'category' => admin_log_english_t('admin.logs.category', 'Category'),
         'route' => admin_log_english_t('admin.logs.route', 'Route'),
-        'request_id' => admin_log_english_t('admin.logs.request_id', 'Request ID'),
-        'all_instances' => admin_log_english_t('admin.logs.all_instances', 'All grouped instances'),
-        'instances_lazy_hint' => admin_log_english_t('admin.logs.instances_lazy_hint', 'Open this section to load raw instances in small batches.'),
-        'load_more_instances' => admin_log_english_t('admin.logs.load_more_instances', 'Load more instances'),
-        'grouped_row_note' => admin_log_english_t('admin.logs.grouped_row_note', 'Grouped row; showing one representative entry.'),
+        'request_id' => admin_log_english_t(
+            'admin.logs.request_id',
+            'Request ID',
+        ),
+        'all_instances' => admin_log_english_t(
+            'admin.logs.all_instances',
+            'All grouped instances',
+        ),
+        'instances_lazy_hint' => admin_log_english_t(
+            'admin.logs.instances_lazy_hint',
+            'Open this section to load raw instances in small batches.',
+        ),
+        'load_more_instances' => admin_log_english_t(
+            'admin.logs.load_more_instances',
+            'Load more instances',
+        ),
+        'grouped_row_note' => admin_log_english_t(
+            'admin.logs.grouped_row_note',
+            'Grouped row; showing one representative entry.',
+        ),
         'details' => admin_log_english_t('admin.logs.details', 'Details'),
-        'context_match' => admin_log_english_t('admin.logs.context_match', 'Match in details'),
-        'request_prefix' => admin_log_english_t('admin.logs.request_prefix', 'Request'),
+        'context_match' => admin_log_english_t(
+            'admin.logs.context_match',
+            'Match in details',
+        ),
+        'request_prefix' => admin_log_english_t(
+            'admin.logs.request_prefix',
+            'Request',
+        ),
     ]);
 }
 
@@ -604,18 +725,33 @@ function admin_log_table_row_labels(): array
 function admin_log_export_labels(): array
 {
     $defaults = [
-        'copy' => 'Copy log', 'save' => 'Save log', 'copy_group' => 'Copy entire group',
-        'save_group' => 'Save entire group', 'copy_logs' => 'Copy logs', 'save_logs' => 'Save logs',
-        'selected' => 'Selected', 'this_page' => 'This page', 'all_filtered' => 'All filtered',
-        'select_page' => 'Select this page', 'select_log' => 'Select log', 'export_scope' => 'Export scope',
-        'selection_count' => '{count} selected', 'copying' => 'Copying…', 'copied' => 'Copied.',
-        'export_failed' => 'Unable to export logs. Please try again.', 'select_first' => 'Select at least one log.',
-        'manual_copy' => 'Copy the text below with Ctrl+C or ⌘C.', 'close' => 'Close',
+        'copy' => 'Copy log',
+        'save' => 'Save log',
+        'copy_group' => 'Copy entire group',
+        'save_group' => 'Save entire group',
+        'copy_logs' => 'Copy logs',
+        'save_logs' => 'Save logs',
+        'selected' => 'Selected',
+        'this_page' => 'This page',
+        'all_filtered' => 'All filtered',
+        'select_page' => 'Select this page',
+        'select_log' => 'Select log',
+        'export_scope' => 'Export scope',
+        'selection_count' => '{count} selected',
+        'copying' => 'Copying…',
+        'copied' => 'Copied.',
+        'export_failed' => 'Unable to export logs. Please try again.',
+        'select_first' => 'Select at least one log.',
+        'manual_copy' => 'Copy the text below with Ctrl+C or ⌘C.',
+        'close' => 'Close',
         'preparing' => 'TXT download started.',
     ];
     $labels = [];
     foreach ($defaults as $key => $fallback) {
-        $labels[$key] = admin_log_english_t('admin.logs.actions.' . $key, $fallback);
+        $labels[$key] = admin_log_english_t(
+            'admin.logs.actions.' . $key,
+            $fallback,
+        );
     }
     return $labels;
 }
@@ -639,17 +775,25 @@ function admin_log_table_row_view_models(array $logs): array
             $context = is_array($decoded) ? $decoded : [];
         }
         $groupCount = max(1, (int) ($entry['group_count'] ?? 1));
-        $entry['selection_value'] = $groupCount > 1 && !empty($entry['group_hash'])
+        $entry['selection_value'] = $groupCount > 1
+        && !empty($entry['group_hash'])
             ? 'group:' . (string) $entry['group_hash']
-            : (string) ((int) ($entry['id'] ?? 0));
+            : (string) (int) ($entry['id'] ?? 0);
         $exportParams = ['id' => (int) ($entry['id'] ?? 0)];
         if ($groupCount > 1 && !empty($entry['group_hash'])) {
             $exportParams['group'] = (string) $entry['group_hash'];
         }
         $entry['export_url'] = url_for('admin_log_export', $exportParams);
-        $entry['export_token'] = (string) ((int) ($entry['id'] ?? 0))
-            . (isset($exportParams['group']) ? ':' . $exportParams['group'] : '');
-        $entry['single_export_url'] = url_for('admin_log_export', ['id' => (int) ($entry['id'] ?? 0)]);
+        $entry['export_token'] =
+            (string) (int) ($entry['id'] ?? 0)
+            . (
+                isset($exportParams['group'])
+                    ? ':' . $exportParams['group']
+                    : ''
+            );
+        $entry['single_export_url'] = url_for('admin_log_export', [
+            'id' => (int) ($entry['id'] ?? 0),
+        ]);
         $entry['members_url'] = $groupCount > 1 && !empty($entry['group_hash'])
             ? url_for('admin_log_group_members', [
                 'id' => (int) ($entry['id'] ?? 0),
@@ -657,7 +801,12 @@ function admin_log_table_row_view_models(array $logs): array
             ])
             : '';
         $entry['context_pretty_json'] = $context !== []
-            ? (string) json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            ? (string) json_encode(
+                $context,
+                JSON_PRETTY_PRINT
+                    | JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES,
+            )
             : '';
         $viewModels[] = $entry;
     }
@@ -673,7 +822,11 @@ function admin_log_table_row_view_models(array $logs): array
  */
 function render_admin_log_table_rows(array $logs, string $query = ''): string
 {
-    return view_render_admin_log_table_rows(admin_log_table_row_view_models($logs), admin_log_table_row_labels(), $query);
+    return view_render_admin_log_table_rows(
+        admin_log_table_row_view_models($logs),
+        admin_log_table_row_labels(),
+        $query,
+    );
 }
 
 /**
@@ -715,15 +868,29 @@ function admin_log_archive_pagination_view_model(int $page, int $pages): array
     $pages = max(1, $pages);
     return [
         'visible' => $pages > 1,
-        'previous_url' => $page > 1 ? admin_log_archive_page_url($page - 1) : '',
-        'next_url' => $page < $pages ? admin_log_archive_page_url($page + 1) : '',
-        'aria_label' => admin_log_english_t('admin.logs.archive.pagination_aria', 'Archived log pages'),
-        'previous_label' => admin_log_english_t('pagination.previous', 'Previous'),
+        'previous_url' => $page > 1
+            ? admin_log_archive_page_url($page - 1)
+            : '',
+        'next_url' => $page < $pages
+            ? admin_log_archive_page_url($page + 1)
+            : '',
+        'aria_label' => admin_log_english_t(
+            'admin.logs.archive.pagination_aria',
+            'Archived log pages',
+        ),
+        'previous_label' => admin_log_english_t(
+            'pagination.previous',
+            'Previous',
+        ),
         'next_label' => admin_log_english_t('pagination.next', 'Next'),
-        'status_label' => admin_log_english_t('pagination.page_of', 'Page {page} of {pages}', [
-            'page' => (string) $page,
-            'pages' => (string) $pages,
-        ]),
+        'status_label' => admin_log_english_t(
+            'pagination.page_of',
+            'Page {page} of {pages}',
+            [
+                'page' => (string) $page,
+                'pages' => (string) $pages,
+            ],
+        ),
     ];
 }
 
@@ -736,7 +903,10 @@ function admin_log_archive_pagination_view_model(int $page, int $pages): array
  */
 function render_admin_log_archive_pagination(int $page, int $pages): string
 {
-    return view_render_admin_log_archive_pagination(admin_log_archive_pagination_view_model($page, $pages));
+    return view_render_admin_log_archive_pagination(admin_log_archive_pagination_view_model(
+        $page,
+        $pages,
+    ));
 }
 
 /**
@@ -747,34 +917,62 @@ function render_admin_log_archive_pagination(int $page, int $pages): string
  * @param string $notice Optional controller flash notice.
  * @return array<string, mixed> Presentation-only archive model.
  */
-function admin_log_archive_panel_view_model(array $status, array $archiveList, string $notice = ''): array
-{
+function admin_log_archive_panel_view_model(
+    array $status,
+    array $archiveList,
+    string $notice = '',
+): array {
     $retentionDays = max(0, (int) ($status['retention_days'] ?? 30));
-    $inventory = is_array($status['inventory'] ?? null) ? $status['inventory'] : [];
+    $inventory = is_array($status['inventory'] ?? null)
+        ? $status['inventory']
+        : [];
     $nextRunAt = max(0, (int) ($status['next_run_at'] ?? 0));
-    $lastResult = is_array($status['last_result'] ?? null) ? $status['last_result'] : [];
+    $lastResult = is_array($status['last_result'] ?? null)
+        ? $status['last_result']
+        : [];
     $archivePage = max(1, (int) ($archiveList['page'] ?? 1));
     $archivePages = max(1, (int) ($archiveList['pages'] ?? 1));
-    $items = is_array($archiveList['items'] ?? null) ? $archiveList['items'] : [];
+    $items = is_array($archiveList['items'] ?? null)
+        ? $archiveList['items']
+        : [];
 
     $retentionOptions = [];
     foreach (admin_log_archive_retention_options() as $days) {
         $retentionOptions[] = [
             'days' => (int) $days,
             'label' => $days === 0
-                ? admin_log_english_t('admin.logs.archive.retention_forever_option', 'Forever, disable automatic archiving')
-                : admin_log_english_t('common.days_count', '{count} days', ['count' => (string) $days]),
+                ? admin_log_english_t(
+                    'admin.logs.archive.retention_forever_option',
+                    'Forever, disable automatic archiving',
+                )
+                : admin_log_english_t('common.days_count', '{count} days', [
+                    'count' => (string) $days,
+                ]),
         ];
     }
 
     $retentionLabel = $retentionDays === 0
         ? admin_log_english_t('common.forever', 'Forever')
-        : admin_log_english_t('common.days_count', '{count} days', ['count' => (string) $retentionDays]);
-    $oldestDate = (string) (($inventory['oldest_date'] ?? '') !== '' ? $inventory['oldest_date'] : admin_log_english_t('common.none', 'none'));
-    $newestDate = (string) (($inventory['newest_date'] ?? '') !== '' ? $inventory['newest_date'] : admin_log_english_t('common.none', 'none'));
+        : admin_log_english_t('common.days_count', '{count} days', [
+            'count' => (string) $retentionDays,
+        ]);
+    $oldestDate = (string) (
+        ($inventory['oldest_date'] ?? '') !== ''
+            ? $inventory['oldest_date']
+            : admin_log_english_t('common.none', 'none')
+    );
+    $newestDate = (string) (
+        ($inventory['newest_date'] ?? '') !== ''
+            ? $inventory['newest_date']
+            : admin_log_english_t('common.none', 'none')
+    );
     $nextRunLabel = $retentionDays === 0
         ? admin_log_english_t('common.disabled', 'disabled')
-        : ($nextRunAt <= time() ? admin_log_english_t('admin.logs.archive.due_now', 'due now') : date('Y-m-d H:i:s', $nextRunAt));
+        : (
+            $nextRunAt <= time()
+                ? admin_log_english_t('admin.logs.archive.due_now', 'due now')
+                : date('Y-m-d H:i:s', $nextRunAt)
+        );
 
     $lastSummary = '';
     if ($lastResult !== []) {
@@ -785,18 +983,31 @@ function admin_log_archive_panel_view_model(array $status, array $archiveList, s
         $fallbackState = !empty($lastResult['ok'])
             ? admin_log_english_t('common.completed', 'completed')
             : admin_log_english_t('common.failed', 'failed');
-        $lastSummary = admin_log_english_t('admin.logs.archive.last_cycle', 'Last cycle: {state}.', [
-            'state' => $lastReason !== '' ? $lastReason : $fallbackState,
-        ]);
+        $lastSummary = admin_log_english_t(
+            'admin.logs.archive.last_cycle',
+            'Last cycle: {state}.',
+            [
+                'state' => $lastReason !== '' ? $lastReason : $fallbackState,
+            ],
+        );
         if ($lastDate !== '') {
-            $lastSummary .= ' ' . admin_log_english_t('admin.logs.archive.last_cycle_archive', 'Archive day {date}, {preserved} rows preserved, {removed} live rows removed.', [
-                'date' => $lastDate,
-                'preserved' => (string) $lastRows,
-                'removed' => (string) $lastDeleted,
-            ]);
+            $lastSummary .= ' '
+            . admin_log_english_t(
+                'admin.logs.archive.last_cycle_archive',
+                'Archive day {date}, {preserved} rows preserved, {removed} live rows removed.',
+                [
+                    'date' => $lastDate,
+                    'preserved' => (string) $lastRows,
+                    'removed' => (string) $lastDeleted,
+                ],
+            );
         }
         if (!empty($lastResult['error'])) {
-            $lastSummary .= ' ' . admin_log_english_t('common.error_detail', 'Error: {error}', ['error' => (string) $lastResult['error']]);
+            $lastSummary .=
+                ' '
+                . admin_log_english_t('common.error_detail', 'Error: {error}', [
+                    'error' => (string) $lastResult['error'],
+                ]);
         }
     }
 
@@ -809,22 +1020,49 @@ function admin_log_archive_panel_view_model(array $status, array $archiveList, s
         if (!admin_log_archive_valid_date($date)) {
             continue;
         }
-        $fileName = (string) ($item['file_name'] ?? admin_log_archive_file_name($date));
-        $deleteConfirm = admin_log_english_t('admin.logs.archive.delete_confirm', 'Permanently delete {file}? This archived log data cannot be recovered from PHP Gallery.', [
-            'file' => $fileName,
-        ]);
+        $fileName = (string) (
+            $item['file_name'] ?? admin_log_archive_file_name($date)
+        );
+        $deleteConfirm = admin_log_english_t(
+            'admin.logs.archive.delete_confirm',
+            'Permanently delete {file}? This archived log data cannot be recovered from PHP Gallery.',
+            [
+                'file' => $fileName,
+            ],
+        );
         $itemModels[] = [
             'date' => $date,
             'file_name' => $fileName,
             'manifest_value' => !empty($item['manifest_available'])
                 ? (string) max(0, (int) ($item['row_count'] ?? 0))
-                : admin_log_english_t('admin.logs.archive.manifest_unavailable', 'manifest unavailable'),
-            'size_label' => admin_dashboard_format_bytes(max(0, (int) ($item['bytes'] ?? 0))),
-            'created_at_label' => (string) (($item['created_at'] ?? '') !== '' ? $item['created_at'] : admin_log_english_t('common.unknown', 'unknown')),
-            'html_url' => url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'html']),
-            'json_url' => url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'json']),
-            'download_url' => url_for('admin_log_archive_download', ['date' => $date]),
-            'delete_confirm_json' => (string) json_encode($deleteConfirm, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                : admin_log_english_t(
+                    'admin.logs.archive.manifest_unavailable',
+                    'manifest unavailable',
+                ),
+            'size_label' => admin_dashboard_format_bytes(max(
+                0,
+                (int) ($item['bytes'] ?? 0),
+            )),
+            'created_at_label' => (string) (
+                ($item['created_at'] ?? '') !== ''
+                    ? $item['created_at']
+                    : admin_log_english_t('common.unknown', 'unknown')
+            ),
+            'html_url' => url_for('admin_log_archive_view', [
+                'date' => $date,
+                'kind' => 'html',
+            ]),
+            'json_url' => url_for('admin_log_archive_view', [
+                'date' => $date,
+                'kind' => 'json',
+            ]),
+            'download_url' => url_for('admin_log_archive_download', [
+                'date' => $date,
+            ]),
+            'delete_confirm_json' => (string) json_encode(
+                $deleteConfirm,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+            ),
         ];
     }
 
@@ -835,11 +1073,17 @@ function admin_log_archive_panel_view_model(array $status, array $archiveList, s
         'retention_options' => $retentionOptions,
         'maintenance_url' => url_for('admin_log_archive_maintenance'),
         'csrf_html' => csrf_field(),
-        'pagination_html' => render_admin_log_archive_pagination($archivePage, $archivePages),
+        'pagination_html' => render_admin_log_archive_pagination(
+            $archivePage,
+            $archivePages,
+        ),
         'metrics' => [
             'retention' => $retentionLabel,
             'count' => (string) max(0, (int) ($inventory['count'] ?? 0)),
-            'storage' => admin_dashboard_format_bytes(max(0, (int) ($inventory['total_bytes'] ?? 0))),
+            'storage' => admin_dashboard_format_bytes(max(
+                0,
+                (int) ($inventory['total_bytes'] ?? 0),
+            )),
             'oldest' => $oldestDate,
             'newest' => $newestDate,
             'next_check' => $nextRunLabel,
@@ -848,30 +1092,93 @@ function admin_log_archive_panel_view_model(array $status, array $archiveList, s
         'items' => $itemModels,
         'labels' => [
             'details' => admin_log_english_t('admin.logs.details', 'Details'),
-            'maintenance_title' => admin_log_english_t('admin.logs.archive.maintenance_title', 'Planned Admin log maintenance'),
-            'maintenance_intro' => admin_log_english_t('admin.logs.archive.maintenance_intro', 'Recent logs stay live in MariaDB. Older completed days are archived as permanent daily ZIP files containing JSON, a fully expanded static HTML report, and a verification manifest. Database rows are deleted only after that ZIP has been verified.'),
-            'zip_unavailable' => admin_log_english_t('admin.logs.archive.zip_unavailable', 'PHP ZipArchive is not available. Automatic Admin log archival cannot run safely until the ZIP extension is enabled.'),
-            'keep_live_logs' => admin_log_english_t('admin.logs.archive.keep_live_logs', 'Keep live logs'),
-            'save_retention' => admin_log_english_t('admin.logs.archive.save_retention', 'Save retention'),
-            'run_now' => admin_log_english_t('admin.logs.archive.run_now', 'Run maintenance cycle now'),
-            'policy' => admin_log_english_t('admin.logs.archive.policy', 'The lightweight due counter is checked on normal gallery and Admin page loads. When due, one safe daily archive cycle runs after the visible response. A backlog is retried shortly; once caught up, the next normal check is approximately 24 hours later. Archived ZIP files are never deleted automatically.'),
-            'live_retention' => admin_log_english_t('admin.logs.archive.live_retention', 'Live retention'),
-            'archived_zips' => admin_log_english_t('admin.logs.archive.archived_zips', 'Archived ZIPs'),
-            'storage' => admin_log_english_t('admin.logs.archive.storage', 'Archive storage'),
-            'oldest' => admin_log_english_t('admin.logs.archive.oldest', 'Oldest archive'),
-            'newest' => admin_log_english_t('admin.logs.archive.newest', 'Newest archive'),
-            'next_check' => admin_log_english_t('admin.logs.archive.next_check', 'Next automatic check'),
-            'files_title' => admin_log_english_t('admin.logs.archive.files_title', 'Archived logs'),
-            'files_intro' => admin_log_english_t('admin.logs.archive.files_intro', 'These rows come directly from ZIP files on disk. View the frozen HTML/JSON through authenticated routes, download the original ZIP, or delete a selected archive manually.'),
-            'none_yet' => admin_log_english_t('admin.logs.archive.none_yet', 'No Admin log ZIP archives exist yet.'),
+            'maintenance_title' => admin_log_english_t(
+                'admin.logs.archive.maintenance_title',
+                'Planned Admin log maintenance',
+            ),
+            'maintenance_intro' => admin_log_english_t(
+                'admin.logs.archive.maintenance_intro',
+                'Recent logs stay live in MariaDB. Older completed days are archived as permanent daily ZIP files containing JSON, a fully expanded static HTML report, and a verification manifest. Database rows are deleted only after that ZIP has been verified.',
+            ),
+            'zip_unavailable' => admin_log_english_t(
+                'admin.logs.archive.zip_unavailable',
+                'PHP ZipArchive is not available. Automatic Admin log archival cannot run safely until the ZIP extension is enabled.',
+            ),
+            'keep_live_logs' => admin_log_english_t(
+                'admin.logs.archive.keep_live_logs',
+                'Keep live logs',
+            ),
+            'save_retention' => admin_log_english_t(
+                'admin.logs.archive.save_retention',
+                'Save retention',
+            ),
+            'run_now' => admin_log_english_t(
+                'admin.logs.archive.run_now',
+                'Run maintenance cycle now',
+            ),
+            'policy' => admin_log_english_t(
+                'admin.logs.archive.policy',
+                'The lightweight due counter is checked on normal gallery and Admin page loads. When due, one safe daily archive cycle runs after the visible response. A backlog is retried shortly; once caught up, the next normal check is approximately 24 hours later. Archived ZIP files are never deleted automatically.',
+            ),
+            'live_retention' => admin_log_english_t(
+                'admin.logs.archive.live_retention',
+                'Live retention',
+            ),
+            'archived_zips' => admin_log_english_t(
+                'admin.logs.archive.archived_zips',
+                'Archived ZIPs',
+            ),
+            'storage' => admin_log_english_t(
+                'admin.logs.archive.storage',
+                'Archive storage',
+            ),
+            'oldest' => admin_log_english_t(
+                'admin.logs.archive.oldest',
+                'Oldest archive',
+            ),
+            'newest' => admin_log_english_t(
+                'admin.logs.archive.newest',
+                'Newest archive',
+            ),
+            'next_check' => admin_log_english_t(
+                'admin.logs.archive.next_check',
+                'Next automatic check',
+            ),
+            'files_title' => admin_log_english_t(
+                'admin.logs.archive.files_title',
+                'Archived logs',
+            ),
+            'files_intro' => admin_log_english_t(
+                'admin.logs.archive.files_intro',
+                'These rows come directly from ZIP files on disk. View the frozen HTML/JSON through authenticated routes, download the original ZIP, or delete a selected archive manually.',
+            ),
+            'none_yet' => admin_log_english_t(
+                'admin.logs.archive.none_yet',
+                'No Admin log ZIP archives exist yet.',
+            ),
             'date' => admin_log_english_t('common.date', 'Date'),
-            'records' => admin_log_english_t('admin.logs.archive.records', 'Records'),
-            'zip_size' => admin_log_english_t('admin.logs.archive.zip_size', 'ZIP size'),
+            'records' => admin_log_english_t(
+                'admin.logs.archive.records',
+                'Records',
+            ),
+            'zip_size' => admin_log_english_t(
+                'admin.logs.archive.zip_size',
+                'ZIP size',
+            ),
             'created' => admin_log_english_t('common.created', 'Created'),
             'actions' => admin_log_english_t('common.actions', 'Actions'),
-            'view_html' => admin_log_english_t('admin.logs.archive.view_html', 'View HTML'),
-            'view_json' => admin_log_english_t('admin.logs.archive.view_json', 'View JSON'),
-            'download_zip' => admin_log_english_t('admin.logs.archive.download_zip', 'Download ZIP'),
+            'view_html' => admin_log_english_t(
+                'admin.logs.archive.view_html',
+                'View HTML',
+            ),
+            'view_json' => admin_log_english_t(
+                'admin.logs.archive.view_json',
+                'View JSON',
+            ),
+            'download_zip' => admin_log_english_t(
+                'admin.logs.archive.download_zip',
+                'Download ZIP',
+            ),
             'delete' => admin_log_english_t('common.delete', 'Delete'),
         ],
     ];
@@ -883,12 +1190,19 @@ function admin_log_archive_panel_view_model(array $status, array $archiveList, s
  * @param array<string,mixed> $status Archive-maintenance status.
  * @param array<string,mixed> $archiveList Paginated archive listing.
  * @param string $notice Optional controller flash notice.
+ * @return void Renders the prepared archive controls and archive listing.
  */
-function render_admin_log_archive_panel(array $status, array $archiveList, string $notice = ''): void
-{
-    view_render_admin_log_archive_panel(admin_log_archive_panel_view_model($status, $archiveList, $notice));
+function render_admin_log_archive_panel(
+    array $status,
+    array $archiveList,
+    string $notice = '',
+): void {
+    view_render_admin_log_archive_panel(admin_log_archive_panel_view_model(
+        $status,
+        $archiveList,
+        $notice,
+    ));
 }
-
 
 /**
  * Normalize the selected Admin Logs subsection.
@@ -898,7 +1212,9 @@ function render_admin_log_archive_panel(array $status, array $archiveList, strin
  */
 function admin_log_section(mixed $value): string
 {
-    return strtolower(trim((string) $value)) === 'maintenance' ? 'maintenance' : 'logs';
+    return strtolower(trim((string) $value)) === 'maintenance'
+        ? 'maintenance'
+        : 'logs';
 }
 
 /**
@@ -914,25 +1230,52 @@ function admin_log_page_heading_view_model(string $activeSection): array
 {
     // $preservedParams keeps live-log filter state when temporarily opening maintenance.
     $preservedParams = $_GET;
-    unset($preservedParams['page'], $preservedParams['section'], $preservedParams['ajax'], $preservedParams['archive_page']);
+    unset(
+        $preservedParams['page'],
+        $preservedParams['section'],
+        $preservedParams['ajax'],
+        $preservedParams['archive_page'],
+    );
 
     return [
         'active_section' => $activeSection,
-        'telemetry_enabled' => feature_capability_effective_enabled('telemetry'),
+        'telemetry_enabled' => feature_capability_effective_enabled(
+            'telemetry',
+        ),
         'urls' => [
             'admin' => url_for('admin'),
             'telemetry' => url_for('admin_telemetry'),
             'logs' => url_for('admin_logs', $preservedParams),
-            'maintenance' => url_for('admin_logs', array_merge($preservedParams, ['section' => 'maintenance'])),
+            'maintenance' => url_for('admin_logs', array_merge($preservedParams, [
+                'section' => 'maintenance',
+            ])),
         ],
         'labels' => [
             'title' => admin_log_english_t('admin.logs.title', 'Admin log'),
-            'intro' => admin_log_english_t('admin.logs.intro', 'Operational events, failures, and maintenance actions.'),
-            'back_to_dashboard' => admin_log_english_t('admin.logs.back_to_dashboard', 'Back to dashboard'),
-            'anonymous_telemetry' => admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry'),
-            'sections_aria' => admin_log_english_t('admin.logs.sections_aria', 'Admin log sections'),
-            'section_logs' => admin_log_english_t('admin.logs.section_logs', 'Logs'),
-            'section_maintenance' => admin_log_english_t('admin.logs.section_maintenance', 'Maintenance & archives'),
+            'intro' => admin_log_english_t(
+                'admin.logs.intro',
+                'Operational events, failures, and maintenance actions.',
+            ),
+            'back_to_dashboard' => admin_log_english_t(
+                'admin.logs.back_to_dashboard',
+                'Back to dashboard',
+            ),
+            'anonymous_telemetry' => admin_log_english_t(
+                'admin.logs.anonymous_telemetry',
+                'Anonymous telemetry',
+            ),
+            'sections_aria' => admin_log_english_t(
+                'admin.logs.sections_aria',
+                'Admin log sections',
+            ),
+            'section_logs' => admin_log_english_t(
+                'admin.logs.section_logs',
+                'Logs',
+            ),
+            'section_maintenance' => admin_log_english_t(
+                'admin.logs.section_maintenance',
+                'Maintenance & archives',
+            ),
         ],
     ];
 }
@@ -943,20 +1286,26 @@ function admin_log_page_heading_view_model(string $activeSection): array
  * Compatibility wrapper retained for existing controller call sites.
  *
  * @param string $activeSection Current normalized subsection.
+ * @return void Renders the Admin Logs subsection navigation.
  */
 function render_admin_log_section_tabs(string $activeSection): void
 {
-    view_render_admin_log_section_tabs(admin_log_page_heading_view_model($activeSection));
+    view_render_admin_log_section_tabs(admin_log_page_heading_view_model(
+        $activeSection,
+    ));
 }
 
 /**
  * Render the shared Admin Logs page heading and subsection navigation.
  *
  * @param string $activeSection Current normalized subsection.
+ * @return void Renders the shared Admin Logs heading and navigation.
  */
 function render_admin_log_page_heading(string $activeSection): void
 {
-    view_render_admin_log_page_heading(admin_log_page_heading_view_model($activeSection));
+    view_render_admin_log_page_heading(admin_log_page_heading_view_model(
+        $activeSection,
+    ));
 }
 
 /**
@@ -973,7 +1322,9 @@ function cms_admin_logs(): void
 
     if ($section === 'maintenance') {
         // $archivePage stores the filesystem archive browser page independently of live-log pagination.
-        $archivePage = admin_log_archive_page_number($_GET['archive_page'] ?? 1);
+        $archivePage = admin_log_archive_page_number(
+            $_GET['archive_page'] ?? 1,
+        );
         // $archiveStatus stores the lightweight counter state and filesystem inventory.
         $archiveStatus = admin_log_archive_status();
         // $archiveList opens manifests only for the currently visible archive page.
@@ -995,7 +1346,9 @@ function cms_admin_logs(): void
     // $query stores the text search filter.
     $query = trim((string) ($_GET['q'] ?? ''));
     // $timeSort stores the selected chronological order.
-    $timeSort = admin_log_normalize_time_sort((string) ($_GET['time_sort'] ?? 'desc'));
+    $timeSort = admin_log_normalize_time_sort(
+        (string) ($_GET['time_sort'] ?? 'desc'),
+    );
     // $pageSize stores the requested number of visible rows per page.
     $pageSize = admin_log_normalize_page_size($_GET['per_page'] ?? 150);
     // $grouped stores whether repeated log events are collapsed before pagination.
@@ -1010,7 +1363,9 @@ function cms_admin_logs(): void
         'time_sort' => $timeSort,
     ];
     // $totalRows stores the filtered row count after optional grouping.
-    $totalRows = $grouped ? admin_log_grouped_count($status, $filters) : admin_log_count($status, $filters);
+    $totalRows = $grouped
+        ? admin_log_grouped_count($status, $filters)
+        : admin_log_count($status, $filters);
     // $totalPages stores the bounded number of available pages.
     $totalPages = max(1, (int) ceil($totalRows / $pageSize));
     if ($currentPage > $totalPages) {
@@ -1023,9 +1378,18 @@ function cms_admin_logs(): void
         ? admin_log_grouped_list($status, $pageSize, $filters, $offset)
         : admin_log_list($status, $pageSize, $filters, $offset);
     // $countText stores the compact result count shown in the page heading.
-    $countText = admin_log_result_count_text(count($logs), $totalRows, $grouped);
+    $countText = admin_log_result_count_text(
+        count($logs),
+        $totalRows,
+        $grouped,
+    );
     // $paginationHtml stores the current pagination controls for normal and live responses.
-    $paginationHtml = render_admin_log_pagination($currentPage, $totalPages, $totalRows, $pageSize);
+    $paginationHtml = render_admin_log_pagination(
+        $currentPage,
+        $totalPages,
+        $totalRows,
+        $pageSize,
+    );
 
     if ((string) ($_GET['ajax'] ?? '') === '1') {
         if (ob_get_level() > 0) {
@@ -1043,7 +1407,10 @@ function cms_admin_logs(): void
             'per_page' => $pageSize,
             'grouped' => $grouped ? 1 : 0,
             'time_sort' => $timeSort,
-            'empty_html' => view_render_admin_log_empty(admin_log_english_t('admin.logs.no_entries_match', 'No log entries match the current filters.')),
+            'empty_html' => view_render_admin_log_empty(admin_log_english_t(
+                'admin.logs.no_entries_match',
+                'No log entries match the current filters.',
+            )),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         return;
     }
@@ -1066,8 +1433,13 @@ function cms_admin_logs(): void
         'has_logs' => $logs !== [],
         'pagination_html' => $paginationHtml,
         'rows_html' => render_admin_log_table_rows($logs, $query),
-        'export_tokens' => array_column(admin_log_table_row_view_models($logs), 'export_token', 'selection_value'),
-        'severity_summary' => admin_log_severity_filter_summary($selectedSeverities),
+        'export_tokens' => array_column(
+            admin_log_table_row_view_models($logs),
+            'export_token',
+            'selection_value',
+        ),
+        'severity_summary' =>
+            admin_log_severity_filter_summary($selectedSeverities),
         'category_options' => admin_log_category_options(),
         'severity_options' => admin_log_severity_options(),
         'status_options' => admin_log_status_options(),
@@ -1077,47 +1449,133 @@ function cms_admin_logs(): void
             'live' => url_for('admin_logs'),
             'export_all_zip' => url_for('admin_logs_export_zip'),
             'export_text' => url_for('admin_log_export'),
-            'reset_severity' => url_for('admin_logs', ['reset_severity' => '1']),
-            'time_sort' => admin_log_filter_url(['time_sort' => $nextTimeSort, 'log_page' => 1]),
+            'reset_severity' => url_for('admin_logs', [
+                'reset_severity' => '1',
+            ]),
+            'time_sort' => admin_log_filter_url([
+                'time_sort' => $nextTimeSort,
+                'log_page' => 1,
+            ]),
             'update' => url_for('admin_log_update'),
         ],
         'labels' => array_merge(admin_log_export_labels(), [
             'filters' => admin_log_english_t('admin.logs.filters', 'Filters'),
-            'filters_intro' => admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log by category, severity, grouping, and row count.'),
-            'export_all_zip' => admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP'),
-            'searching' => admin_log_english_t('admin.logs.searching', 'Searching...'),
+            'filters_intro' => admin_log_english_t(
+                'admin.logs.filters_intro',
+                'Refine the operational log by category, severity, grouping, and row count.',
+            ),
+            'export_all_zip' => admin_log_english_t(
+                'admin.logs.export_all_zip',
+                'Export all logs ZIP',
+            ),
+            'searching' => admin_log_english_t(
+                'admin.logs.searching',
+                'Searching...',
+            ),
             'updated' => admin_log_english_t('admin.logs.updated', 'Updated.'),
-            'live_search_failed' => admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.'),
-            'shown_suffix' => admin_log_english_t('admin.logs.shown_suffix', 'shown'),
+            'live_search_failed' => admin_log_english_t(
+                'admin.logs.live_search_failed',
+                'Live search failed. Use Apply filters.',
+            ),
+            'shown_suffix' => admin_log_english_t(
+                'admin.logs.shown_suffix',
+                'shown',
+            ),
             'when' => admin_log_english_t('admin.logs.when', 'When'),
-            'filter_scope' => admin_log_english_t('admin.logs.filter_scope', 'Log scope'),
-            'category' => admin_log_english_t('admin.logs.category', 'Category'),
-            'all_categories' => admin_log_english_t('admin.logs.all_categories', 'All categories'),
-            'time_order' => admin_log_english_t('admin.logs.time_order', 'Time order'),
-            'newest_first' => admin_log_english_t('admin.logs.newest_first', 'Newest first'),
-            'oldest_first' => admin_log_english_t('admin.logs.oldest_first', 'Oldest first'),
-            'grouping' => admin_log_english_t('admin.logs.grouping', 'Grouping'),
-            'group_similar' => admin_log_english_t('admin.logs.group_similar', 'Group similar events'),
-            'show_individual' => admin_log_english_t('admin.logs.show_individual', 'Show individual rows'),
-            'per_page' => admin_log_english_t('admin.logs.per_page', 'Rows per page'),
-            'severity_filter_all_summary' => admin_log_english_t('admin.logs.severity_filter_all_summary', 'All severities are shown.'),
-            'severity_filter_active_summary' => admin_log_english_t('admin.logs.severity_filter_active_summary', 'Active severities: {values}'),
-            'severity' => admin_log_english_t('admin.logs.severity', 'Severity'),
-            'severity_filter_hint' => admin_log_english_t('admin.logs.severity_filter_hint', 'Pick one or more severities. Empty means all.'),
+            'filter_scope' => admin_log_english_t(
+                'admin.logs.filter_scope',
+                'Log scope',
+            ),
+            'category' => admin_log_english_t(
+                'admin.logs.category',
+                'Category',
+            ),
+            'all_categories' => admin_log_english_t(
+                'admin.logs.all_categories',
+                'All categories',
+            ),
+            'time_order' => admin_log_english_t(
+                'admin.logs.time_order',
+                'Time order',
+            ),
+            'newest_first' => admin_log_english_t(
+                'admin.logs.newest_first',
+                'Newest first',
+            ),
+            'oldest_first' => admin_log_english_t(
+                'admin.logs.oldest_first',
+                'Oldest first',
+            ),
+            'grouping' => admin_log_english_t(
+                'admin.logs.grouping',
+                'Grouping',
+            ),
+            'group_similar' => admin_log_english_t(
+                'admin.logs.group_similar',
+                'Group similar events',
+            ),
+            'show_individual' => admin_log_english_t(
+                'admin.logs.show_individual',
+                'Show individual rows',
+            ),
+            'per_page' => admin_log_english_t(
+                'admin.logs.per_page',
+                'Rows per page',
+            ),
+            'severity_filter_all_summary' => admin_log_english_t(
+                'admin.logs.severity_filter_all_summary',
+                'All severities are shown.',
+            ),
+            'severity_filter_active_summary' => admin_log_english_t(
+                'admin.logs.severity_filter_active_summary',
+                'Active severities: {values}',
+            ),
+            'severity' => admin_log_english_t(
+                'admin.logs.severity',
+                'Severity',
+            ),
+            'severity_filter_hint' => admin_log_english_t(
+                'admin.logs.severity_filter_hint',
+                'Pick one or more severities. Empty means all.',
+            ),
             'search' => admin_log_english_t('admin.logs.search', 'Search'),
-            'search_placeholder' => admin_log_english_t('admin.logs.search_placeholder', 'Event key, message, context, request, or route'),
-            'apply_filters' => admin_log_english_t('admin.logs.apply_filters', 'Apply filters'),
-            'reset_severity_filter' => admin_log_english_t('admin.logs.reset_severity_filter', 'Reset severity filter'),
+            'search_placeholder' => admin_log_english_t(
+                'admin.logs.search_placeholder',
+                'Event key, message, context, request, or route',
+            ),
+            'apply_filters' => admin_log_english_t(
+                'admin.logs.apply_filters',
+                'Apply filters',
+            ),
+            'reset_severity_filter' => admin_log_english_t(
+                'admin.logs.reset_severity_filter',
+                'Reset severity filter',
+            ),
             'entries' => admin_log_english_t('admin.logs.entries', 'Entries'),
-            'no_entries_match' => admin_log_english_t('admin.logs.no_entries_match', 'No log entries match the current filters.'),
+            'no_entries_match' => admin_log_english_t(
+                'admin.logs.no_entries_match',
+                'No log entries match the current filters.',
+            ),
             'select' => admin_log_english_t('admin.logs.select', 'Select'),
-            'instances' => admin_log_english_t('admin.logs.instances', 'Instances'),
+            'instances' => admin_log_english_t(
+                'admin.logs.instances',
+                'Instances',
+            ),
             'event' => admin_log_english_t('admin.logs.event', 'Event'),
             'message' => admin_log_english_t('admin.logs.message', 'Message'),
             'by' => admin_log_english_t('admin.logs.by', 'By'),
-            'bulk_set_selected' => admin_log_english_t('admin.logs.bulk_set_selected', 'Bulk set selected'),
-            'apply_to_selected' => admin_log_english_t('admin.logs.apply_to_selected', 'Apply to selected'),
-            'bulk_grouping_hint' => admin_log_english_t('admin.logs.bulk_grouping_hint', 'Selecting a grouped row applies the state to every matching instance in that group.'),
+            'bulk_set_selected' => admin_log_english_t(
+                'admin.logs.bulk_set_selected',
+                'Bulk set selected',
+            ),
+            'apply_to_selected' => admin_log_english_t(
+                'admin.logs.apply_to_selected',
+                'Apply to selected',
+            ),
+            'bulk_grouping_hint' => admin_log_english_t(
+                'admin.logs.bulk_grouping_hint',
+                'Selecting a grouped row applies the state to every matching instance in that group.',
+            ),
         ]),
     ];
 
@@ -1129,6 +1587,8 @@ function cms_admin_logs(): void
 
 /**
  * Return one bounded lazy-loaded page of raw instances for a grouped Admin log row.
+ *
+ * @return void Emits the requested group members as JSON or a not-found response.
  */
 function cms_admin_log_group_members(): void
 {
@@ -1141,18 +1601,32 @@ function cms_admin_log_group_members(): void
     $offset = max(0, (int) ($_GET['offset'] ?? 0));
 
     $entry = $logId > 0 ? admin_log_find($logId) : null;
-    if ($entry === null || preg_match('/^[a-f0-9]{64}$/', $groupHash) !== 1 || !hash_equals(admin_log_group_hash_for_entry($entry), $groupHash)) {
+    if (
+        $entry === null
+        || preg_match('/^[a-f0-9]{64}$/', $groupHash) !== 1
+        || !hash_equals(admin_log_group_hash_for_entry($entry), $groupHash)
+    ) {
         if (ob_get_level() > 0) {
             ob_end_clean();
         }
         http_response_code(404);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => false, 'error' => admin_log_english_t('admin.logs.group_not_found', 'Grouped log entry not found.')], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode([
+            'ok' => false,
+            'error' => admin_log_english_t(
+                'admin.logs.group_not_found',
+                'Grouped log entry not found.',
+            ),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         return;
     }
 
     // Fetch one extra row so the response can expose has_more without a separate COUNT query.
-    $page = admin_log_group_member_page($entry, ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE + 1, $offset);
+    $page = admin_log_group_member_page(
+        $entry,
+        ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE + 1,
+        $offset,
+    );
     $hasMore = count($page) > ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE;
     if ($hasMore) {
         $page = array_slice($page, 0, ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE);
@@ -1170,12 +1644,18 @@ function cms_admin_log_group_members(): void
         'loaded' => count($page),
         'next_offset' => $nextOffset,
         'has_more' => $hasMore,
-        'state_text' => admin_log_english_t('admin.logs.instances_loaded', '{count} raw instances loaded.', ['count' => (string) $nextOffset]),
+        'state_text' => admin_log_english_t(
+            'admin.logs.instances_loaded',
+            '{count} raw instances loaded.',
+            ['count' => (string) $nextOffset],
+        ),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
 /**
  * Save Admin log retention, force one archive cycle, or explicitly delete an archive file.
+ *
+ * @return void Redirects to the archive maintenance subsection after handling the action.
  */
 function cms_admin_log_archive_maintenance(): void
 {
@@ -1184,13 +1664,21 @@ function cms_admin_log_archive_maintenance(): void
     $action = trim((string) ($_POST['action'] ?? ''));
 
     if ($action === 'save_retention') {
-        $days = admin_log_archive_set_retention_days((int) ($_POST['retention_days'] ?? 30));
+        $days = admin_log_archive_set_retention_days(
+            (int) ($_POST['retention_days'] ?? 30),
+        );
         $label = $days === 0
             ? admin_log_english_t('common.forever', 'Forever')
-            : admin_log_english_t('common.days_count', '{count} days', ['count' => (string) $days]);
-        flash_message('admin_notice', admin_log_english_t('admin.logs.archive.retention_saved', 'Admin log live retention saved: {retention}. Archived ZIP files are never deleted automatically.', [
-            'retention' => $label,
-        ]));
+            : admin_log_english_t('common.days_count', '{count} days', [
+                'count' => (string) $days,
+            ]);
+        flash_message('admin_notice', admin_log_english_t(
+            'admin.logs.archive.retention_saved',
+            'Admin log live retention saved: {retention}. Archived ZIP files are never deleted automatically.',
+            [
+                'retention' => $label,
+            ],
+        ));
         redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }
 
@@ -1200,27 +1688,65 @@ function cms_admin_log_archive_maintenance(): void
             'force' => true,
         ]);
         if (!empty($result['busy'])) {
-            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.already_running', 'Admin log archive maintenance is already running in another request.'));
+            flash_message('admin_notice', admin_log_english_t(
+                'admin.logs.archive.already_running',
+                'Admin log archive maintenance is already running in another request.',
+            ));
         } elseif (empty($result['ok'])) {
-            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.failed_with_error', 'Admin log archive maintenance failed: {error}', [
-                'error' => (string) ($result['error'] ?? $result['reason'] ?? admin_log_english_t('common.unknown_error', 'unknown error')),
-            ]));
+            flash_message('admin_notice', admin_log_english_t(
+                'admin.logs.archive.failed_with_error',
+                'Admin log archive maintenance failed: {error}',
+                [
+                    'error' => (string) (
+                        $result['error']
+                        ?? $result['reason']
+                        ?? admin_log_english_t(
+                            'common.unknown_error',
+                            'unknown error',
+                        )
+                    ),
+                ],
+            ));
         } elseif ((string) ($result['reason'] ?? '') === 'retention_forever') {
-            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.disabled_forever', 'Admin log archive maintenance is disabled because live retention is set to Forever.'));
+            flash_message('admin_notice', admin_log_english_t(
+                'admin.logs.archive.disabled_forever',
+                'Admin log archive maintenance is disabled because live retention is set to Forever.',
+            ));
         } elseif (!empty($result['archive_date'])) {
-            $message = admin_log_english_t('admin.logs.archive.cycle_archived', 'Admin log maintenance archived {date}: {archived} rows preserved in ZIP, {deleted} represented live rows removed.', [
-                'date' => (string) $result['archive_date'],
-                'archived' => (string) max(0, (int) ($result['archived_rows'] ?? 0)),
-                'deleted' => (string) max(0, (int) ($result['deleted_rows'] ?? 0)),
-            ]);
+            $message = admin_log_english_t(
+                'admin.logs.archive.cycle_archived',
+                'Admin log maintenance archived {date}: {archived} rows preserved in ZIP, {deleted} represented live rows removed.',
+                [
+                    'date' => (string) $result['archive_date'],
+                    'archived' => (string) max(
+                        0,
+                        (int) ($result['archived_rows'] ?? 0),
+                    ),
+                    'deleted' => (string) max(
+                        0,
+                        (int) ($result['deleted_rows'] ?? 0),
+                    ),
+                ],
+            );
             if (!empty($result['has_more'])) {
-                $message .= ' ' . admin_log_english_t('admin.logs.archive.more_days', 'More eligible days remain and will continue in later safe cycles.');
+                $message .= ' '
+                . admin_log_english_t(
+                    'admin.logs.archive.more_days',
+                    'More eligible days remain and will continue in later safe cycles.',
+                );
             } else {
-                $message .= ' ' . admin_log_english_t('admin.logs.archive.backlog_caught_up', 'The archive backlog is caught up.');
+                $message .= ' '
+                . admin_log_english_t(
+                    'admin.logs.archive.backlog_caught_up',
+                    'The archive backlog is caught up.',
+                );
             }
             flash_message('admin_notice', $message);
         } else {
-            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.nothing_to_archive', 'Admin log maintenance found no completed days old enough to archive.'));
+            flash_message('admin_notice', admin_log_english_t(
+                'admin.logs.archive.nothing_to_archive',
+                'Admin log maintenance found no completed days old enough to archive.',
+            ));
         }
         redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }
@@ -1228,29 +1754,49 @@ function cms_admin_log_archive_maintenance(): void
     if ($action === 'delete_archive') {
         $date = trim((string) ($_POST['date'] ?? ''));
         if (!admin_log_archive_valid_date($date)) {
-            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.invalid_date', 'Invalid Admin log archive date.'));
+            flash_message('admin_notice', admin_log_english_t(
+                'admin.logs.archive.invalid_date',
+                'Invalid Admin log archive date.',
+            ));
             redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
         }
         try {
             $deleted = admin_log_archive_delete_file($date);
             if ($deleted) {
-                admin_log_event('warning', 'admin_log.archive_deleted', 'An Admin log archive ZIP was deleted manually.', [
-                    'archive_date' => $date,
-                    'file_name' => admin_log_archive_file_name($date),
-                ], [
-                    'severity' => 'warning',
-                    'category' => 'admin',
-                ]);
-                flash_message('admin_notice', admin_log_english_t('admin.logs.archive.deleted_file', 'Deleted archived Admin log file {file}.', [
-                    'file' => admin_log_archive_file_name($date),
-                ]));
+                admin_log_event(
+                    'warning',
+                    'admin_log.archive_deleted',
+                    'An Admin log archive ZIP was deleted manually.',
+                    [
+                        'archive_date' => $date,
+                        'file_name' => admin_log_archive_file_name($date),
+                    ],
+                    [
+                        'severity' => 'warning',
+                        'category' => 'admin',
+                    ],
+                );
+                flash_message('admin_notice', admin_log_english_t(
+                    'admin.logs.archive.deleted_file',
+                    'Deleted archived Admin log file {file}.',
+                    [
+                        'file' => admin_log_archive_file_name($date),
+                    ],
+                ));
             } else {
-                flash_message('admin_notice', admin_log_english_t('admin.logs.archive.file_missing', 'The selected Admin log archive file no longer exists.'));
+                flash_message('admin_notice', admin_log_english_t(
+                    'admin.logs.archive.file_missing',
+                    'The selected Admin log archive file no longer exists.',
+                ));
             }
         } catch (Throwable $exception) {
-            flash_message('admin_notice', admin_log_english_t('admin.logs.archive.delete_failed', 'Unable to delete the selected Admin log archive: {error}', [
-                'error' => $exception->getMessage(),
-            ]));
+            flash_message('admin_notice', admin_log_english_t(
+                'admin.logs.archive.delete_failed',
+                'Unable to delete the selected Admin log archive: {error}',
+                [
+                    'error' => $exception->getMessage(),
+                ],
+            ));
         }
         redirect_to(url_for('admin_logs', ['section' => 'maintenance']));
     }
@@ -1260,13 +1806,18 @@ function cms_admin_log_archive_maintenance(): void
 
 /**
  * Stream the static HTML or canonical JSON member of one archived Admin log day.
+ *
+ * @return void Streams the selected archive member or returns not found.
  */
 function cms_admin_log_archive_view(): void
 {
     require_admin();
     $date = trim((string) ($_GET['date'] ?? ''));
     $kind = strtolower(trim((string) ($_GET['kind'] ?? 'html')));
-    if (!admin_log_archive_valid_date($date) || !in_array($kind, ['html', 'json'], true)) {
+    if (
+        !admin_log_archive_valid_date($date)
+        || !in_array($kind, ['html', 'json'], true)
+    ) {
         cms_not_found();
         return;
     }
@@ -1279,12 +1830,24 @@ function cms_admin_log_archive_view(): void
     while (ob_get_level() > 0) {
         ob_end_clean();
     }
-    header('Content-Type: ' . ($kind === 'json' ? 'application/json' : 'text/html') . '; charset=utf-8');
-    header('Content-Disposition: inline; filename="admin-logs-' . $date . '.' . $kind . '"');
+    header(
+        'Content-Type: '
+            . ($kind === 'json' ? 'application/json' : 'text/html')
+            . '; charset=utf-8',
+    );
+    header(
+        'Content-Disposition: inline; filename="admin-logs-'
+            . $date
+            . '.'
+            . $kind
+            . '"',
+    );
     header('Cache-Control: private, no-store');
     header('X-Content-Type-Options: nosniff');
     if ($kind === 'html') {
-        header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+        header(
+            "Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+        );
     }
     try {
         foreach (admin_log_archive_member_chunks($date, $kind) as $chunk) {
@@ -1300,6 +1863,8 @@ function cms_admin_log_archive_view(): void
 
 /**
  * Download one immutable daily Admin log ZIP archive.
+ *
+ * @return void Streams the selected ZIP or returns not found.
  */
 function cms_admin_log_archive_download(): void
 {
@@ -1319,7 +1884,11 @@ function cms_admin_log_archive_download(): void
         ob_end_clean();
     }
     header('Content-Type: application/zip');
-    header('Content-Disposition: attachment; filename="' . admin_log_archive_file_name($date) . '"');
+    header(
+        'Content-Disposition: attachment; filename="'
+            . admin_log_archive_file_name($date)
+            . '"',
+    );
     header('Content-Length: ' . max(0, (int) filesize($path)));
     header('Cache-Control: private, no-store');
     header('X-Content-Type-Options: nosniff');
@@ -1327,14 +1896,19 @@ function cms_admin_log_archive_download(): void
 }
 
 /**
- * Handles cms admin log update logic for the gallery application.
+ * Handle authenticated single or grouped Admin log status updates.
+ *
+ * @return void Emits a JSON result when requested, otherwise redirects after the update.
  */
 function cms_admin_log_update(): void
 {
     require_admin();
     verify_csrf();
     // Variable $wantsJson stores this steps working value.
-    $wantsJson = str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+    $wantsJson = str_contains(
+        (string) ($_SERVER['HTTP_ACCEPT'] ?? ''),
+        'application/json',
+    );
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? '');
     // Variable $status stores this steps working value.
@@ -1346,42 +1920,66 @@ function cms_admin_log_update(): void
             admin_log_update_status($logId, $status);
             if ($wantsJson) {
                 header('Content-Type: application/json');
-                echo json_encode(['ok' => true, 'status' => $status, 'label' => admin_log_status_label($status)]);
+                echo json_encode([
+                    'ok' => true,
+                    'status' => $status,
+                    'label' => admin_log_status_label($status),
+                ]);
                 return;
             }
         } catch (RuntimeException $exception) {
-            admin_log_event('error', 'admin_log.update_failed', 'Admin log status update failed.', [
-                'log_id' => $logId,
-                'status' => $status,
-                'error' => $exception->getMessage(),
-            ]);
+            admin_log_event(
+                'error',
+                'admin_log.update_failed',
+                'Admin log status update failed.',
+                [
+                    'log_id' => $logId,
+                    'status' => $status,
+                    'error' => $exception->getMessage(),
+                ],
+            );
             if ($wantsJson) {
                 if (ob_get_level() > 0) {
                     ob_end_clean();
                 }
                 http_response_code(422);
                 header('Content-Type: application/json');
-                echo json_encode(['ok' => false, 'error' => $exception->getMessage()]);
+                echo json_encode([
+                    'ok' => false,
+                    'error' => $exception->getMessage(),
+                ]);
                 return;
             }
         }
         redirect_to(url_for('admin_logs'));
     }
-    if ($action === 'bulk' && !empty($_POST['log_ids']) && is_array($_POST['log_ids'])) {
+    if (
+        $action === 'bulk'
+        && !empty($_POST['log_ids'])
+        && is_array($_POST['log_ids'])
+    ) {
         foreach ($_POST['log_ids'] as $selectedValue) {
             try {
                 $selectedValue = trim((string) $selectedValue);
                 if (str_starts_with($selectedValue, 'group:')) {
-                    admin_log_update_group_status(substr($selectedValue, 6), $status);
+                    admin_log_update_group_status(
+                        substr($selectedValue, 6),
+                        $status,
+                    );
                     continue;
                 }
                 admin_log_update_status((int) $selectedValue, $status);
             } catch (RuntimeException $exception) {
-                admin_log_event('error', 'admin_log.bulk_update_failed', 'Bulk admin log status update failed.', [
-                    'log_id' => $selectedValue,
-                    'status' => $status,
-                    'error' => $exception->getMessage(),
-                ]);
+                admin_log_event(
+                    'error',
+                    'admin_log.bulk_update_failed',
+                    'Bulk admin log status update failed.',
+                    [
+                        'log_id' => $selectedValue,
+                        'status' => $status,
+                        'error' => $exception->getMessage(),
+                    ],
+                );
             }
         }
         redirect_to(url_for('admin_logs'));
@@ -1389,7 +1987,6 @@ function cms_admin_log_update(): void
     cms_not_found();
     return;
 }
-
 
 /**
  * Export one event, an entire group, or a submitted selection as diagnostic text.
@@ -1420,7 +2017,10 @@ function cms_admin_log_export(): void
     // $isGroupedExport is true only when the supplied group hash matches the representative row.
     $isGroupedExport = false;
     if ($groupHash !== '') {
-        if (preg_match('/^[a-f0-9]{64}$/', $groupHash) !== 1 || !hash_equals(admin_log_group_hash_for_entry($entry), $groupHash)) {
+        if (
+            preg_match('/^[a-f0-9]{64}$/', $groupHash) !== 1
+            || !hash_equals(admin_log_group_hash_for_entry($entry), $groupHash)
+        ) {
             cms_not_found();
             return;
         }
@@ -1428,9 +2028,27 @@ function cms_admin_log_export(): void
     }
 
     // $fileName stores a filesystem-safe diagnostic export name.
-    $fileName = 'php-gallery-log-' . $logId . '-' . preg_replace('/[^0-9A-Za-z_-]/', '-', (string) ($entry['event_key'] ?? 'event')) . '.txt';
+    $fileName =
+        'php-gallery-log-'
+        . $logId
+        . '-'
+        . preg_replace(
+            '/[^0-9A-Za-z_-]/',
+            '-',
+            (string) ($entry['event_key'] ?? 'event'),
+        )
+        . '.txt';
     if ($isGroupedExport) {
-        $fileName = 'php-gallery-log-group-' . substr($groupHash, 0, 12) . '-' . preg_replace('/[^0-9A-Za-z_-]/', '-', (string) ($entry['event_key'] ?? 'event')) . '.txt';
+        $fileName =
+            'php-gallery-log-group-'
+            . substr($groupHash, 0, 12)
+            . '-'
+            . preg_replace(
+                '/[^0-9A-Za-z_-]/',
+                '-',
+                (string) ($entry['event_key'] ?? 'event'),
+            )
+            . '.txt';
     }
 
     // Remove all application output buffers so a very large grouped export can stream directly.
@@ -1451,7 +2069,9 @@ function cms_admin_log_export(): void
     $summary = admin_log_group_member_summary($entry);
     $groupCount = max(0, (int) ($summary['group_count'] ?? 0));
     $entry['first_created_at'] = (string) ($summary['first_created_at'] ?? '');
-    $entry['latest_created_at'] = (string) ($summary['latest_created_at'] ?? '');
+    $entry['latest_created_at'] = (string) (
+        $summary['latest_created_at'] ?? ''
+    );
     echo admin_log_export_group_header_text($entry, $groupCount);
 
     $beforeCreatedAt = null;
@@ -1460,7 +2080,12 @@ function cms_admin_log_export(): void
     $batchSize = 250;
     while (true) {
         // $members stores one indexed keyset page, keeping memory bounded regardless of group size.
-        $members = admin_log_group_member_export_batch($entry, $beforeCreatedAt, $beforeId, $batchSize);
+        $members = admin_log_group_member_export_batch(
+            $entry,
+            $beforeCreatedAt,
+            $beforeId,
+            $batchSize,
+        );
         if ($members === []) {
             break;
         }
@@ -1470,9 +2095,18 @@ function cms_admin_log_export(): void
             echo admin_log_export_text($member) . "\n";
         }
         $lastMember = end($members);
-        $beforeCreatedAt = is_array($lastMember) ? (string) ($lastMember['created_at'] ?? '') : '';
-        $beforeId = is_array($lastMember) ? max(0, (int) ($lastMember['id'] ?? 0)) : 0;
-        if (count($members) < $batchSize || $beforeCreatedAt === '' || $beforeId <= 0 || connection_aborted()) {
+        $beforeCreatedAt = is_array($lastMember)
+            ? (string) ($lastMember['created_at'] ?? '')
+            : '';
+        $beforeId = is_array($lastMember)
+            ? max(0, (int) ($lastMember['id'] ?? 0))
+            : 0;
+        if (
+            count($members) < $batchSize
+            || $beforeCreatedAt === ''
+            || $beforeId <= 0
+            || connection_aborted()
+        ) {
             break;
         }
         if (function_exists('flush')) {
@@ -1480,7 +2114,6 @@ function cms_admin_log_export(): void
         }
     }
 }
-
 
 /**
  * Stream the selected logs or all filtered raw records through the existing export route.
@@ -1497,7 +2130,12 @@ function cms_admin_log_export_selection(): void
             throw new RuntimeException('Invalid export scope.');
         }
         if ($scope !== 'filtered') {
-            $decodedMapping = json_decode(is_string($_POST['export_tokens_json'] ?? null) ? $_POST['export_tokens_json'] : '{}', true);
+            $decodedMapping = json_decode(
+                is_string($_POST['export_tokens_json'] ?? null)
+                    ? $_POST['export_tokens_json']
+                    : '{}',
+                true,
+            );
             $mapping = is_array($decodedMapping) ? $decodedMapping : [];
             $values = $scope === 'page' ? array_values($mapping) : [];
             if ($scope === 'selected') {
@@ -1507,7 +2145,10 @@ function cms_admin_log_export_selection(): void
                     }
                     $values[] = $mapping[$selectedValue] ?? $selectedValue;
                 }
-                array_push($values, ...(array) ($_POST['export_members'] ?? []));
+                array_push(
+                    $values,
+                    ...(array) ($_POST['export_members'] ?? []),
+                );
             }
             foreach ($values as $value) {
                 if (!is_string($value)) {
@@ -1524,23 +2165,38 @@ function cms_admin_log_export_selection(): void
         http_response_code(422);
         header('Content-Type: text/plain; charset=utf-8');
         header('Cache-Control: no-store');
-        echo admin_log_english_t('admin.logs.actions.export_failed', 'Unable to export logs. Please try again.');
+        echo admin_log_english_t(
+            'admin.logs.actions.export_failed',
+            'Unable to export logs. Please try again.',
+        );
         return;
     }
     $filters = [
-        'category' => is_string($_POST['category'] ?? null) ? $_POST['category'] : '',
-        'severities' => admin_log_normalize_severity_filter($_POST['severities'] ?? []),
+        'category' => is_string($_POST['category'] ?? null)
+            ? $_POST['category']
+            : '',
+        'severities' => admin_log_normalize_severity_filter(
+            $_POST['severities'] ?? [],
+        ),
         'q' => is_string($_POST['q'] ?? null) ? trim($_POST['q']) : '',
-        'time_sort' => admin_log_normalize_time_sort(is_string($_POST['time_sort'] ?? null) ? $_POST['time_sort'] : null),
+        'time_sort' => admin_log_normalize_time_sort(
+            is_string($_POST['time_sort'] ?? null) ? $_POST['time_sort'] : null,
+        ),
     ];
     while (ob_get_level() > 0) {
         ob_end_clean();
     }
     header('Content-Type: text/plain; charset=utf-8');
-    header('Content-Disposition: attachment; filename="php-gallery-logs-' . $scope . '.txt"');
+    header(
+        'Content-Disposition: attachment; filename="php-gallery-logs-'
+            . $scope
+            . '.txt"',
+    );
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: no-store');
-    $chunks = $scope === 'filtered' ? admin_log_filtered_text_chunks($filters) : admin_log_selection_text_chunks($selection);
+    $chunks = $scope === 'filtered'
+        ? admin_log_filtered_text_chunks($filters)
+        : admin_log_selection_text_chunks($selection);
     foreach ($chunks as $chunk) {
         echo $chunk;
         if (connection_aborted()) {
@@ -1564,9 +2220,16 @@ function cms_admin_logs_export_zip(): void
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
-        $download = admin_log_export_zip_descriptor($filePath, admin_log_export_zip_filename());
+        $download = admin_log_export_zip_descriptor(
+            $filePath,
+            admin_log_export_zip_filename(),
+        );
         header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="' . (string) $download['filename'] . '"');
+        header(
+            'Content-Disposition: attachment; filename="'
+                . (string) $download['filename']
+                . '"',
+        );
         header('Content-Length: ' . (int) $download['size']);
         header('X-Content-Type-Options: nosniff');
         readfile((string) $download['path']);
@@ -1574,18 +2237,27 @@ function cms_admin_logs_export_zip(): void
         return;
     } catch (Throwable $exception) {
         \Gallery\Services\admin_log_export_release($filePath);
-        admin_log_event('error', 'admin_log.export_zip_failed', 'Admin log ZIP export failed.', [
-            'error' => $exception->getMessage(),
-        ], [
-            'severity' => 'error',
-            'category' => 'admin',
-        ]);
+        admin_log_event(
+            'error',
+            'admin_log.export_zip_failed',
+            'Admin log ZIP export failed.',
+            [
+                'error' => $exception->getMessage(),
+            ],
+            [
+                'severity' => 'error',
+                'category' => 'admin',
+            ],
+        );
         if (ob_get_level() > 0) {
             ob_end_clean();
         }
         http_response_code(500);
         header('Content-Type: text/plain; charset=utf-8');
         header('X-Content-Type-Options: nosniff');
-        echo admin_log_english_t('admin.logs.export_failed_plain', 'Unable to export admin logs.');
+        echo admin_log_english_t(
+            'admin.logs.export_failed_plain',
+            'Unable to export admin logs.',
+        );
     }
 }
