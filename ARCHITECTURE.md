@@ -158,8 +158,10 @@ Passive pages only read cached totals. See the accounting scope in
 Gallery music originals and ordered preferences use a confined hidden sidecar.
 `app/services/gallery_music.php` owns content admission and revisioned
 filesystem
-workflows; `app/models/gallery_music.php` owns atomic index persistence. No SQL
-schema is added. See [music storage and limits](docs/GALLERY_MUSIC.md).
+workflows; `app/models/gallery_music.php` owns atomic index persistence. The
+separate SQL music catalog owns logical identities, stable gallery/track links,
+albums and song tags; it never owns audio bytes or source permissions. See
+[music storage and limits](docs/GALLERY_MUSIC.md).
 
 PDF and audio routes share the existing attachment runtime owner under its
 historical `gallery-pdf-documents` machine name. Public presentation loads it
@@ -176,7 +178,9 @@ share one description column; the existing miniplayer stays outside the list.
 
 Smart music resolves complete canonical source-summary IDs before optional
 attachment loading. The existing music service merges visible indexed tracks
-by stored content digest, without SQL or audio decoding. Source authorization
+by stored content digest and explicit logical identity, without audio decoding.
+Catalog metadata is projected in batches over the authorized track list;
+public requests never reconcile the whole filesystem. Source authorization
 and track visibility remain enforced by protected physical delivery. Smart
 presentation owns its independent default-off autoplay flag; no Smart music
 filesystem is created. See `docs/SMART_GALLERIES.md` for union semantics.
@@ -190,6 +194,14 @@ per track, defaults false and is checked in the protected controller as well as
 presentation. See the music contract for lifecycle and byte-capture limitations.
 The independent editor card uses canonical mutation completion and delegated
 fragment replacement.
+
+The compact `admin_music` controller delegates catalog operations to
+`app/services/music_catalog.php`; its model owns SQL and revision-locked
+transactions. The music capability gates the route and navigation together.
+The manager shares the existing taxonomy administration runtime root so the
+consumed logical-module allowance does not grow. `tags.media_type` isolates
+image/gallery assignments from music assignments, with PDF reserved. Existing
+image slugs retain their globally unique namespace.
 
 ## Runtime slideshow timing controls
 

@@ -45,6 +45,7 @@ return [
         // PDF and audio attachments share this established attachment owner.
         // Retain its historical machine name and full routing/access closure;
         // a separate music root would exceed the consumed module allowance.
+        // Music-tag titles and Trash catalog snapshots load it only on demand.
         'gallery-pdf-documents' => [
             'Gallery\\Services\\find_gallery_by_public_path',
             'Gallery\\Services\\resolve_public_gallery_path',
@@ -152,6 +153,10 @@ return [
         'Gallery\\Controllers\\cms_media' => 'public-media',
         'Gallery\\Controllers\\cms_gallery_ofp_pdf' => 'gallery-pdf-documents',
         'Gallery\\Controllers\\cms_gallery_music' => 'gallery-pdf-documents',
+        // Music identities reuse the shared taxonomy administration owner.
+        // The 98-module allowance is already consumed; this keeps one catalog
+        // administration root without adding a transitive dependency edge.
+        'Gallery\\Controllers\\cms_admin_music' => 'domain-admin-tags',
         'Gallery\\Controllers\\cms_public_media' => 'public-media',
         'Gallery\\Controllers\\cms_thumb' => 'public-thumbnails',
         'Gallery\\Controllers\\cms_public_thumb' => 'public-thumbnails',
@@ -271,6 +276,23 @@ return [
         // Reserved PDF children and attached documents load these modules before use.
         'Gallery\\Services\\gallery_effective_visibility' => [
             'Gallery\\Services\\gallery_pdf_publication_forces_private',
+        ],
+        // Music title policy is needed for music-tag usage only; Trash requires
+        // physical playlist/catalog readers only while capturing or restoring music.
+        // All deferred callers load the established gallery-pdf-documents root.
+        'Gallery\\Services\\admin_tag_usage_rows' => [
+            'Gallery\\Services\\music_catalog_display_title',
+        ],
+        'Gallery\\Services\\gallery_trash_music_catalog_write_mode' => [
+            'Gallery\\Services\\music_catalog_physical_write_mode',
+        ],
+        'Gallery\\Services\\gallery_trash_capture_snapshot' => [
+            'Gallery\\Services\\gallery_music_playlist',
+            'Gallery\\Models\\music_catalog_model_trash_track_refs',
+        ],
+        'Gallery\\Services\\restore_gallery_trash_entry_owned' => [
+            'Gallery\\Services\\gallery_music_playlist',
+            'Gallery\\Services\\music_catalog_restore_trash_snapshot',
         ],
         'Gallery\\Controllers\\render_public_gallery_branding_header' => [
             'Gallery\\Controllers\\gallery_music_view_model',

@@ -586,6 +586,75 @@ Volba \ui{Převést stránky PDF} vykreslí dokument v~prohlížeči. PDF.js vyt
 
 Zvolte vyhrazenou soukromou podřízenou galerii nebo připojení stránek za~poslední fotografii zdrojové galerie. Podřízená galerie zůstává soukromá, dokud výslovně nezměníte její viditelnost; dokud je převod PDF nedokončený nebo zrušený, nelze ji zveřejnit, proto převod nejprve dokončete nebo bezpečně uveďte do souladu. Připojení zachová viditelnost zdrojové galerie i~stávající fotografie a~vloží převedené stránky na~konec. Původní PDF se nikdy nepřepisuje. Značky průběhu jsou pro oba cíle uloženy v~skrytém úložišti zdrojové galerie a~obsahují ID cílové galerie. ZIP exporty fotografií ani migrace galerií tyto obecné originály PDF nepřenášejí. Úplná záloha souborového stromu musí zahrnout skryté složky s~bočními daty. Stávající JPG galerie se stránkami zůstávají samostatné. Dřívější požadavek na~serverový převod OFP nyní vrací HTTP 409 a~žádá o~obnovení editoru; rasterizační pomocná funkce je~určena pouze pro kompatibilitu CLI a~testů a~prohlížeč ji~nevolá. Podrobnosti: \codeword{docs/GALLERY\_PDF.md}.
 
+\subsubsection{Správce hudby}
+
+V~\ui{Administrace > Galerie > Správce hudby} je kompaktní globální katalog.
+Existující playlisty doplňujte po omezených dávkách; originály i~pořadí
+zůstávají zachovány. Hledání podle názvu, souboru a~hudebního štítku se
+průběžně aktualizuje; výsledky může změnit pouze nejnovější požadavek. Tabulka
+odděluje Název, Soubory, Umístění, Štítky a~Akce. Kliknutím na~název skladby
+otevřete editor s~možností přejmenovat skladbu, přidat ji~do~alba a~otevřít její
+štítky, soubory nebo umístění; samostatné zaškrtávací pole vybírá skladbu ke~sloučení.
+Záložka \ui{Skladby} zobrazuje katalog přes celou šířku. \ui{Alba a~playlisty}
+mají strom a~vytváření vlevo a~vybrané album se~skladbami vpravo; na~úzké obrazovce
+se~panely řadí pod sebe. Bez výběru se~zobrazí výzva k~výběru nebo vytvoření alba.
+Starší odkazy na~alba otevřou tuto záložku. Vytvořené album se~automaticky vybere;
+po~smazání vybraného alba se~výběr zruší a~zastaralý odkaz na~album zobrazí výzvu
+k~výběru. Přidání z~editoru názvu vloží skladbu na~konec alba; existující členství
+zůstane na~svém místě. Skladbu lze za~úchyt přetáhnout na~jinou pozici v~albu;
+čára ukazuje místo vložení. Šipky zůstávají pro~klávesnici a~posun o~jednu pozici.
+Ve sloupci Soubory rozbalení vypisuje fyzické varianty. Umístění zobrazuje
+přímé galerie a~hudební alba: dvě varianty v~jedné galerii se počítají jako jedno
+umístění; odvozené zařazení Smart se nepočítá. Odkazy na~galerie v~obou
+rozbaleních otevírají veřejnou galerii a~každý hudební štítek má vlastní
+kompaktní značku.
+Odkazy v~záhlaví řadí Název, Soubory, Umístění nebo Štítky oběma směry nad
+celým výsledkem ještě před stránkováním; shody se stabilně řadí podle ID.
+Štítky se řadí abecedně podle prvního hudebního štítku skladby.
+Úzký sloupec akcí se~zobrazí jen tehdy, když lze rozdělit varianty některé
+zobrazené skladby.
+Správce sdílí typografii a~zvýrazňující barvy webu; jeho plochy jsou kompaktní,
+průsvitné a~mají jemně zaoblené okraje. Počet souborů je vedle názvu skladby
+znázorněn ikonou vrstev a~číslem. Rozbalení variant a~umístění respektuje
+globální dobu animace pravého panelu administrace; hodnota 0 je okamžitá.
+
+Ozubené kolečko v~záhlaví katalogu obsahuje globální volbu přípon souborů.
+Sousední kolečko nového alba skrývá volbu nadřazeného alba i~popis, dokud
+je~nepotřebujete.
+Nativní rozbalování udržuje zavřené řádky skladeb a~alb kompaktní; počet
+čekajících synchronizací se zobrazuje jen~při nenulové hodnotě. Prázdný katalog
+zobrazuje u~Importu textový štítek; po naplnění přejde na~samotnou ikonu.
+Ikonové akce mají přístupný název a~viditelné zvýraznění klávesnicového fokusu.
+
+Kliknutím na název skladby otevřete editor poblíž ukazatele. Opětovné kliknutí
+na stejný název nebo kliknutí mimo editor jej zavře; kliknutí na jiný název
+editor přepne. Text se automaticky neoznačí. Editor zůstává ve výřezu okna a~dlouhé
+názvy zalamuje. Enter uloží název jako jeden řádek; zalomení textarey je pouze
+vizuální a~původní soubor se nikdy nepřejmenuje. Globální volba
+\ui{Zobrazovat přípony v názvech skladeb} je výchozí vypnutá i~po upgradu
+a~ovlivňuje jen názvy odvozené ze souboru; vlastní názvy zachovají svůj text.
+Vybrané skladby lze po náhledu výslovně spojit se~zvolenými metadaty.
+Odpojení varianty opraví chybnou vazbu. Spojení nezpřístupní jiný zdroj
+a~nemění jeho oprávnění ke stažení.
+
+Kompaktní strom alb rozbalujte nativními ovládacími prvky; při výběru alba se
+automaticky otevře cesta jeho předků. Navigaci doplňují drobečky. Skladby lze
+do alb a~podalb přidávat, odebírat a~řadit. Kolečko alba otevře nativní
+rozbalovací oblast s~názvem, popisem, přesunem a~smazáním; členství skladeb
+a~jejich pořadí zůstávají viditelné. Strom má nejvýše osm úrovní a~2\,000 alb.
+Počet čekajících galerií označuje nesladěné snímky; nečitelný
+zdroj brání úplnému dokončení.
+Odebrání vazby nemaže originál. Alba slouží v~Administraci,
+nevzniká veřejná hudební knihovna. Hudební tagy používají společnou taxonomii
+s~vlastním typem média; tagy a~hledání obrázků zůstávají oddělené. Typ PDF
+je rezervován. Stávající slugy zůstávají globálně jedinečné. Zálohujte SQL
+i~skryté složky hudby; po obnově použijte běžné dopředné migrace a~dávkové
+sladění. Po konfliktu revize načtěte aktuální stav. Vypnutí funkce hudby
+zachová metadata i~originály.
+Místní obnova z~Koše připojí skladby ke stávajícím identitám i~při změně ID
+galerie. Staré snímky či zaniklé identity vytvoří nové katalogové záznamy;
+přenášené archivy nedodávají důvěryhodná logická ID.
+
 \subsubsection{Úložiště hudby}
 
 Přes \ui{Nahrát fotografie} lze společně vybrat nebo přetáhnout fotografie, PDF
@@ -616,8 +685,8 @@ Smart galerie slučují viditelnou hudbu ze~všech přístupných fyzických
 zdrojů, které přispívají odpovídajícími fotografiemi. Stránkování ani dočasný
 filtr zdroje tento souhrn neomezí; vlastní složka hudby nevzniká. SHA-256
 odstraní opakování stejných původních bajtů i~po~přejmenování. Shodný název
-či~délka nestačí; jiné kódování či~změněné vložené tagy vyžadují budoucí
-otisk obsahu. Skryté skladby se~vynechají, viditelné zamčené proti stažení
+či~délka nestačí; jiná kódování zůstanou oddělená, dokud je správce výslovně
+nespojí ve~Správci hudby. Skryté skladby se~vynechají, viditelné zamčené proti stažení
 zůstanou přehratelné. Starší i~nové skladby jsou výchozí viditelné. Chráněné
 odkazy zdroje znovu kontrolují přístup a~viditelnost. V~přepsání prezentace
 Smart galerie lze zapnout její samostatnou výchozí hudbu slideshow; začíná

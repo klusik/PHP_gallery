@@ -12,7 +12,7 @@
  *
  * Responsibilities:
  *   - Move a deleted gallery folder tree out of the gallery root instead of destroying it
- *   - Keep a durable restore snapshot of gallery and image metadata
+ *   - Keep a durable restore snapshot of gallery, image and local music identity metadata
  *   - Restore a trashed subtree back to its original path and hierarchy
  *   - Purge trash entries on admin request or, when explicitly enabled, after the configured retention window
  *   - Refuse every destructive step when required schema state cannot be verified
@@ -1019,7 +1019,8 @@ function gallery_trash_snapshot_image_record(
  *
  * @param array<string,mixed> $rootGallery Root gallery row selected for deletion, including id and folder_path.
  * @param bool $payloadPresent Whether the physical source folder exists and will travel with the entry.
- * @return array<string,mixed> Snapshot document stored with the trash entry.
+ * @return array<string,mixed> Snapshot document stored with the trash entry;
+ *     each gallery may contain music_catalog_refs, a list of local track/song IDs.
  */
 function gallery_trash_capture_snapshot(
     array $rootGallery,
@@ -1032,12 +1033,42 @@ function gallery_trash_capture_snapshot(
     // $images stores one snapshot record per image across the whole subtree.
     $images = [];
 
+    $musicMode = gallery_trash_music_catalog_write_mode();
     foreach (gallery_subtree_rows((int) $rootGallery['id']) as $row) {
         // $galleryId stores the live gallery id used for dependent metadata lookups.
         $galleryId = (int) $row['id'];
         // $folderPath stores the normalized folder path of this subtree member.
         $folderPath = normalize_relative_path((string) $row['folder_path']);
-        $galleries[] = gallery_trash_snapshot_gallery_record($row);
+        $galleryRecord = gallery_trash_snapshot_gallery_record($row);
+        if ($musicMode === 'available') {
+            if (!function_exists('Gallery\\Services\\gallery_music_playlist')) {
+                throw new RuntimeException(
+                    'The current music playlist could not be verified for Trash.',
+                );
+            }
+            $playlist = gallery_music_playlist([
+                'id' => $galleryId,
+                'folder_path' => $folderPath,
+            ]);
+            $trackIds = array_values(array_map(
+                static fn(array $track): string => (string) $track['id'],
+                $playlist['tracks'],
+            ));
+            $knownRefs = \Gallery\Models\music_catalog_model_trash_track_refs(
+                $galleryId,
+                $trackIds,
+            );
+            $galleryRecord['music_catalog_refs'] = [];
+            foreach ($trackIds as $trackId) {
+                if (isset($knownRefs[$trackId])) {
+                    $galleryRecord['music_catalog_refs'][] = [
+                        'track_id' => $trackId,
+                        'song_id' => $knownRefs[$trackId],
+                    ];
+                }
+            }
+        }
+        $galleries[] = $galleryRecord;
 
         // $galleryImages stores image rows in a stable order for deterministic snapshots.
         $galleryImages = gallery_trash_image_rows($galleryId);
@@ -1076,6 +1107,31 @@ function gallery_trash_capture_snapshot(
         'galleries' => $galleries,
         'images' => $images,
     ];
+}
+
+/** Load and query the shared catalog owner only for a Trash music operation.
+ *
+ * @return string Physical catalog mode: available or legacy.
+ * @throws RuntimeException When the deferred catalog owner is unavailable or its schema is partial.
+ */
+function gallery_trash_music_catalog_write_mode(): string
+{
+    if (!function_exists('Gallery\\Services\\music_catalog_physical_write_mode')) {
+        if (!function_exists('Gallery\\Core\\cms_runtime_kernel')) {
+            throw new RuntimeException(
+                'The music catalog owner is unavailable for Trash.',
+            );
+        }
+        \Gallery\Core\cms_runtime_kernel()->load(
+            'gallery-pdf-documents',
+        );
+    }
+    if (!function_exists('Gallery\\Services\\music_catalog_physical_write_mode')) {
+        throw new RuntimeException(
+            'The music catalog owner did not load for Trash.',
+        );
+    }
+    return music_catalog_physical_write_mode();
 }
 
 /**
@@ -2050,6 +2106,36 @@ function restore_gallery_trash_entry_owned(
         if ($payloadPresent) {
             foreach ($galleryIdsByPath as $galleryId) {
                 $imageCount += scan_gallery_images($galleryId);
+            }
+            if (gallery_trash_music_catalog_write_mode() === 'available') {
+                foreach ($galleryIdsByPath as $recordPath => $galleryId) {
+                    if (!function_exists('Gallery\\Services\\gallery_music_playlist')) {
+                        throw new RuntimeException(
+                            'The restored music playlist could not be verified.',
+                        );
+                    }
+                    $restoredGallery = find_gallery($galleryId, true);
+                    if (!$restoredGallery) {
+                        throw new RuntimeException(
+                            'A restored gallery could not be read for catalog recovery.',
+                        );
+                    }
+                    $record = null;
+                    foreach ($galleryRecords as $candidate) {
+                        if ((string) ($candidate['folder_path'] ?? '') === $recordPath) {
+                            $record = $candidate;
+                            break;
+                        }
+                    }
+                    $savedRefs = is_array($record['music_catalog_refs'] ?? null)
+                        ? $record['music_catalog_refs']
+                        : [];
+                    music_catalog_restore_trash_snapshot(
+                        $galleryId,
+                        gallery_music_playlist($restoredGallery),
+                        $savedRefs,
+                    );
+                }
             }
             gallery_trash_apply_image_snapshot(
                 $galleryIdsByPath,

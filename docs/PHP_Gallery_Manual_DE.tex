@@ -598,6 +598,85 @@ Administratoren können einer physischen Galerie auch ohne SimBrief-Daten ein al
 
 Wählen Sie entweder eine reservierte private Untergalerie oder das Anhängen nach dem letzten Foto der Quellgalerie. Eine Untergalerie bleibt privat, bis Sie ihre Sichtbarkeit ausdrücklich ändern; solange die PDF-Konvertierung unvollständig oder abgebrochen ist, bleibt die Veröffentlichung gesperrt. Schließen Sie die Konvertierung zuerst ab oder gleichen Sie sie sicher ab. Beim Anhängen bleiben Sichtbarkeit und vorhandene Fotos erhalten; die neuen Seiten stehen am Ende. Das Original-PDF wird nie ersetzt. Fortschrittsmarker liegen für beide Ziele im verborgenen Quellgalerie-Sidecar und enthalten die Zielgalerie-ID. Foto-ZIP-Exporte und die Galeriemigration übertragen diese allgemeinen PDF-Originale nicht. Eine vollständige Dateisystemsicherung muss die verborgenen Sidecar-Ordner einschließen. Vorhandene JPG-Seitengalerien bleiben eigenständig. Die frühere serverseitige OFP-Konvertierungsanfrage antwortet jetzt mit HTTP 409 und fordert zum Neuladen des Editors auf; der Rasterizer-Helfer dient nur noch der CLI- und Testkompatibilität und wird von keiner Browseraktion aufgerufen. Einzelheiten stehen in \codeword{docs/GALLERY\_PDF.md}.
 
+\subsubsection{Musikverwaltung}
+
+Unter \ui{Admin > Galerien > Musikverwaltung} steht der~kompakte globale
+Katalog. Vorhandene Playlists werden in~begrenzten Schritten abgeglichen;
+Originale und~Reihenfolge bleiben erhalten. Die~Suche nach Titel, Dateiname
+und~Musik-Tag aktualisiert sich während der~Eingabe; nur~die~neueste Anfrage
+ändert die~Ergebnisse. Die~Tabelle trennt Titel, Dateien, Orte, Tags und~Aktionen.
+Ein Klick auf~den Songtitel öffnet die~vorhandene Titelbearbeitung; das~separate
+Kontrollkästchen wählt ihn unabhängig davon zum~Zusammenführen aus. Das~Popup
+bietet Titelbearbeitung, Albumzuordnung und~Schaltflächen für~Tags, Dateien und~Orte.
+Der~Tab \ui{Songs} zeigt den~Katalog über die~volle Breite. \ui{Alben \&
+Wiedergabelisten} zeigt links Baum und~Anlage, rechts das~gewählte Album mit~Songs;
+auf~schmalen Bildschirmen stehen beide Bereiche untereinander. Ohne Auswahl wird
+zur~Auswahl oder~Neuanlage aufgefordert. Alte Albumlinks öffnen diesen Tab.
+Ein neu angelegtes Album wird automatisch ausgewählt; nach dem~Löschen des~ausgewählten
+Albums wird die~Auswahl aufgehoben, und~ein veralteter Albumlink zeigt die~Aufforderung
+zur~Auswahl erneut an.
+Das~Hinzufügen aus~dem Titel-Popup hängt den~Song ans~Albumende; eine~bestehende
+Mitgliedschaft behält ihre~Position. Ziehen Sie einen Song am~Griff an~eine
+andere Albumposition; eine~Linie markiert das~Einfügeziel. Die~Pfeile bleiben
+für~Tastaturbedienung und~einzelne Schritte verfügbar.
+Die~Dateidetails listen physische Varianten. Die~Detailansicht unter~Orte zeigt
+direkte Galerien und~Musikalben: zwei Varianten derselben Galerie zählen
+als~ein Ort; abgeleitete Smart-Zugehörigkeit nicht. Galerielinks in~beiden Aufklappelementen öffnen die
+öffentliche Galerie; jedes Musik-Tag erscheint als~eigene kompakte
+Plakette.
+Kopfzeilenlinks sortieren Titel, Dateien, Orte oder~Tags aufsteigend oder
+absteigend über alle Ergebnisse vor der~Seitennavigation; gleiche Werte werden
+stabil nach ID sortiert. Tags werden alphabetisch nach~dem ersten Musik-Tag
+eines Songs sortiert.
+Die~schmale Aktionsspalte erscheint nur, wenn ein angezeigter Song trennbare
+Varianten hat.
+Die~Verwaltung übernimmt Typografie und~Akzentfarben der~Website und~nutzt
+kompakte, durchscheinende Flächen mit~sanft abgerundeten Rändern. Die~Dateizahl
+steht neben jedem Songtitel als~gestapeltes Symbol mit~Zahl. Die~Aufklappelemente
+für~Varianten und~Orte folgen der~globalen Animationsdauer des
+Admin-Seitenpanels;
+0 bedeutet sofortige Anzeige.
+
+Das~Zahnrad in~der Katalogüberschrift enthält die~globale Dateiendungsoption.
+Das~benachbarte Zahnrad zum~Anlegen eines Albums blendet die~Auswahl des
+übergeordneten Albums und~das~Beschreibungsfeld bei~Bedarf ein. Native
+Aufklappelemente halten eingeklappte Titel- und~Albumzeilen kompakt; die~Zahl
+wartender Abgleiche erscheint nur~bei~einem Wert über null.
+Bei~leerem Katalog bleibt die~Beschriftung Import sichtbar; nach dem~Befüllen
+bleibt nur~das~Symbol. Symbolaktionen behalten barrierefreie Namen und~eine
+sichtbare Markierung des Tastaturfokus.
+
+Klicken Sie auf einen Songtitel, um~den Inline-Editor nahe dem Mauszeiger zu~öffnen.
+Ein erneuter Klick auf denselben Titel oder außerhalb schließt ihn; ein Klick
+auf einen anderen Titel wechselt den Editor. Text wird nicht automatisch
+markiert. Der Editor bleibt im Ansichtsbereich und~bricht lange Titel um.
+Enter speichert den Titel als eine Zeile; der Umbruch im Textarea ist~nur~visuell
+und~benennt die Originaldatei nie~um.
+\ui{Dateiendungen in Musiktiteln anzeigen} ist~auch nach Upgrades zunächst
+ausgeschaltet und~betrifft nur~dateibasierte Namen; eigene Titel bleiben
+unverändert. Ausgewählte Songs lassen sich nach Vorschau ausdrücklich
+verknüpfen, mit~gewählten überlebenden Metadaten. Eine Variante kann wieder
+getrennt werden. Quellzugriff und~Downloadrechte bleiben unabhängig.
+
+Der~kompakte Albumbaum lässt sich mit nativen Aufklappelementen öffnen; bei~der
+Auswahl eines Albums wird sein~Vorgängerpfad automatisch geöffnet. Breadcrumbs
+ergänzen die~Navigation. Alben und~Unteralben enthalten geordnete Songs, die
+hinzugefügt, entfernt oder~sortiert werden können. Das~Kontext-Zahnrad eines
+Albums öffnet native Details für~Titel, Beschreibung, Verschieben und~Löschen;
+Songzugehörigkeit und~Reihenfolge bleiben sichtbar. Der~Baum umfasst höchstens
+acht Ebenen und~2\,000 Alben. Die~Zahl wartender Galerien zeigt ausstehende
+Abgleiche; unlesbare Quellen verhindern Abschluss.
+Entfernte Beziehungen löschen keine Originale. Diese Admin-Sammlungen
+veröffentlichen keine globale Musikbibliothek. Musik-Tags verwenden
+die~gemeinsame Taxonomie mit~eigenem Medientyp; Bild-Tags und~Bildsuche
+bleiben getrennt. PDF ist~reserviert. Bestehende Slugs bleiben global
+eindeutig. Sichern Sie~SQL und~versteckte Musikordner; nach Wiederherstellung
+folgen Vorwärtsmigration und~begrenzter Abgleich. Bei~veralteter Revision
+öffnen Sie~den~aktuellen Stand. Deaktivierte Musik behält Metadaten und~Audio.
+Lokale Papierkorb-Wiederherstellung verbindet aktuelle Titel nach geänderten
+Galerie-IDs mit~bestehenden Identitäten. Alte Snapshots oder~entfernte
+Identitäten erzeugen neue Einträge; fremde Archive liefern keine vertrauten IDs.
+
 \subsubsection{Musikspeicher}
 
 Über \ui{Fotos hochladen} lassen sich Fotos, PDFs und~Musik gemeinsam auswählen
@@ -630,8 +709,8 @@ Smart Galleries vereinen sichtbare Musik aller zugänglichen physischen
 Quellen mit~passenden Fotos. Fotoseiten und~temporäre Quellfilter begrenzen
 diese Vereinigung nicht; kein eigener Audioordner entsteht. SHA-256 entfernt
 identische Originalbytes auch nach Umbenennung. Gleiche Namen oder~Längen
-reichen nicht; andere Kodierungen oder~geänderte eingebettete Tags benötigen
-künftige Fingerabdrücke. Verborgene Titel entfallen, sichtbare gesperrte
+reichen nicht; andere Kodierungen bleiben getrennt, bis~ein~Administrator
+sie~in~der~Musikverwaltung verknüpft. Verborgene Titel entfallen, sichtbare gesperrte
 Downloads bleiben abspielbar. Bestehende und~neue Titel sind zunächst
 sichtbar. Geschützte Quell-URLs prüfen Zugriff und~Sichtbarkeit erneut.
 Die~Präsentationsüberschreibung im~Smart-Editor besitzt eine eigene anfangs

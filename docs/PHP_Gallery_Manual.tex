@@ -591,6 +591,74 @@ Choose \ui{Convert PDF pages} to~render the~document in~the~browser. PDF.js crea
 
 Choose either a~reserved private child gallery or~append after the~source gallery's last photograph. A~child stays private until you~change its visibility explicitly; publication is blocked while its PDF conversion is incomplete or~cancelled, so finish or~safely reconcile the conversion first. Appending keeps the~source gallery's visibility and~existing photographs, then places converted pages at~the~end. Conversion never replaces the~original PDF. Progress markers live in~the~source gallery's hidden conversion sidecar for~both destinations and~record the~target gallery ID. Photo ZIP exports and~gallery migration do~not~transfer these general PDF originals. A~full filesystem backup must include hidden sidecar folders. Existing JPG page galleries remain separate. The~former server-side OFP conversion request now returns HTTP 409 and~directs you~to~reload; its rasterizer helper is~for~CLI and~test compatibility only and~is~not~called by~browser actions. See \codeword{docs/GALLERY\_PDF.md} for~the~storage and~conversion contract.
 
+\subsubsection{Global Music Manager}
+
+Open \ui{Admin > Galleries > Music Manager} for~the~compact song catalog.
+Reconcile existing playlists in~bounded batches; originals and~playlist order
+remain intact. Search by~title, filename or~music tag as~you type; only the
+latest search response updates the~results. The~table separates Title, \ui{Files},
+\ui{Locations}, \ui{Tags}, and~Actions. Click a~song title to~open its~existing
+rename editor, add-to-album control, and~shortcuts to~tag, file, and~location
+details; its~independent checkbox selects it for~merge. The~\ui{Songs} tab is~a
+full-width catalog. \ui{Albums \& playlists} places the~tree and~creation form
+left of~the~selected album and~its songs, stacking on~narrow screens. With no
+selection, a~prompt invites you~to~choose or~create an~album. Legacy album links
+open this tab. Creating an~album selects it automatically; deleting the~selected
+album clears the~selection, and~a~stale album link returns to~the~prompt. Adding
+from~the title popup appends a~song to~an~album; an~existing
+membership stays in~its current order. Drag a~song by~its grip to~change album
+order; an~insertion line marks the~destination. Up/down buttons remain available
+for~keyboard use and~single-step moves. The~Files
+disclosure lists physical variants. \ui{Locations} expands to~direct gallery
+and~music-album placements: two variants in~one gallery count as~one location,
+and~derived Smart inclusion adds nothing. Gallery links in~both disclosures
+open the~public gallery, and~each music tag appears as~its own compact chip.
+Header links sort Title, Files, Locations, or~Tags in~either direction across
+the~complete result set before pagination, with stable ID tie-breaking. Tags
+sort alphabetically by~the~song's first music tag.
+The~narrow action column appears only when a~visible song has variants to~split.
+The~manager shares the~site's typography and~accent colors, with compact
+translucent surfaces and~softly rounded borders. Each song title sits beside
+its~file count, shown with a~stacked icon and~number. Variant and~\ui{Locations}
+disclosures follow the~global Admin side-panel duration; 0 makes them immediate.
+
+The~catalog-heading gear contains the~global filename-extension preference.
+The~adjacent new-album gear hides parent and~description fields until needed.
+Native disclosures keep collapsed song and~album rows compact; the~pending
+reconciliation count appears only when nonzero. Import keeps its~text label for
+an~empty catalog and~becomes icon-only after entries exist. Icon-only actions
+retain accessible names and~visible keyboard focus.
+
+Click a~song title to~open its~inline editor near the~pointer. Clicking the~same
+title or~outside closes it; clicking another title switches editors. Text is~not
+selected automatically. The~editor stays within the~viewport and~wraps long
+titles. Enter saves the~title as~one line; textarea wrapping is~visual only and
+never renames the~original file. The~global
+\ui{Show file extensions in song titles} switch defaults OFF, including after
+upgrade, and~affects filename-derived names only. Explicit titles keep their
+text. Select songs to~preview an~explicit same-song relationship and~choose
+surviving metadata; split a~variant to~undo a~wrong link. This never grants
+access to~another source or~changes its download permission.
+
+Create albums and~nested subalbums, then navigate the~compact tree with native
+disclosure controls or~use breadcrumbs. Selecting an~album opens its~ancestor
+path automatically. Its~context gear opens native details for~the~album title,
+description, move and~delete controls; song membership and~ordering stay
+visible. Add, remove or~reorder songs. The~tree supports eight levels and~2,000
+albums. A~pending gallery count identifies snapshots awaiting
+reconciliation; an~unreadable source prevents a~complete import. Removing
+relationships leaves originals in~their source galleries. Albums are~Admin
+collections without a~new public
+library. Music tags use the~shared taxonomy with a~separate media type;
+image/gallery tags and~public image searches remain isolated. PDF tagging
+is~reserved. Existing tag slugs remain globally unique. Back up~both SQL
+metadata and~hidden music sidecars; run normal forward migrations and~bounded
+reconciliation after recovery. Resolve stale-edit refusals by~reopening current
+state. Disabling \ui{Gallery music} preserves this metadata and~all~audio.
+Local Trash restore reconnects current tracks to~existing song identities
+after gallery IDs change. Old snapshots or~removed identities create fresh
+catalog entries; transferred archives never supply trusted logical IDs.
+
 \subsubsection{Music storage}
 
 Use \ui{Upload photos} to~select or~drop photographs, PDFs and~music together.
@@ -621,8 +689,9 @@ Smart Galleries merge visible music from~all~accessible physical sources
 contributing matching photos. Pagination and~temporary source filters do~not
 narrow this union; no~Smart audio folder is~created. SHA-256 deduplicates
 identical original bytes even after renaming. Equal names or~durations alone
-never remove different audio; changed encodings or~embedded tags need future
-fingerprinting. Hidden tracks are~excluded, while visible download-locked
+never remove different audio. Different encodings remain distinct unless
+an~administrator explicitly links them in~Music Manager. Hidden tracks
+are~excluded, while visible download-locked
 tracks remain playable. Existing and~new tracks default visible. Protected
 source URLs recheck access and~visibility. In~the~Smart editor's presentation
 overrides, enable its~independent slideshow music preference; it~starts off

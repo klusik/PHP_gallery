@@ -215,10 +215,10 @@ function public_search_parse_groups(string $query): array
 /**
  * Return compact public search results for galleries and photos.
  *
- * @param string $query Query value.
- * @param int $limit Maximum number of items.
- * @param ?array $contextGallery Context gallery value.
- * @return array<int,array<string,mixed>> Bounded public gallery and photo result models.
+ * @param string $query Search text normalized before candidate lookup.
+ * @param int $limit Maximum number of gallery and photo result cards.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional gallery branch that limits matches to its subtree.
+ * @return list<array{key:string,type:'gallery'|'photo',label:string,title:string,subtitle:string,url:string,score:int}> Ranked public gallery and photo result cards, or an empty list when the query is invalid.
  */
 function public_search_results(
     string $query,
@@ -380,7 +380,7 @@ function public_search_ai_metadata_ready(): bool
  *
  * @param string $query Query value.
  * @param int $limit Maximum number of items.
- * @param ?array<string,mixed> $contextGallery Optional gallery scope for the search.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional gallery scope for the search.
  * @return list<array{key:string,type:string,label:string,title:string,subtitle:string,url:string,score:int}> Ranked gallery result cards visible to this visitor.
  */
 function public_search_gallery_results(
@@ -394,6 +394,7 @@ function public_search_gallery_results(
     $localizedGallerySearchReady =
         content_localization_enabled()
         && content_localization_schema_ready('gallery');
+    $tagMediaTypeState = tag_media_type_schema_state();
 
     $galleryRows = public_search_model_compatibility_gallery_rows(
         $query,
@@ -402,6 +403,7 @@ function public_search_gallery_results(
         $aiSearchReady,
         $localizedGallerySearchReady,
         $contentLanguage,
+        $tagMediaTypeState,
         $limit,
     );
     $authorizedGalleryRows = [];
@@ -470,7 +472,7 @@ function public_search_gallery_results(
  *
  * @param string $query Query value.
  * @param int $limit Maximum number of items.
- * @param ?array<string,mixed> $contextGallery Optional gallery scope for the search.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional gallery scope for the search.
  * @return list<array{key:string,type:string,label:string,title:string,subtitle:string,url:string,score:int}> Ranked image result cards with authorized gallery context.
  */
 function public_search_image_results(
@@ -484,6 +486,7 @@ function public_search_image_results(
     $localizedSearchReady =
         content_localization_enabled()
         && content_localization_schema_ready('image');
+    $tagMediaTypeState = tag_media_type_schema_state();
 
     $rows = public_search_model_compatibility_image_rows(
         $query,
@@ -492,6 +495,7 @@ function public_search_image_results(
         $aiSearchReady,
         $localizedSearchReady,
         $contentLanguage,
+        $tagMediaTypeState,
         $limit,
     );
 
@@ -595,8 +599,8 @@ function public_search_image_results(
 /**
  * Build a gallery-shaped array from a joined image search row.
  *
- * @param array $row Row data.
- * @return array Structured result data for the caller.
+ * @param array<string,mixed> $row Joined compatibility-search row containing matched_gallery_* columns.
+ * @return array{id:int|string,parent_id:int|string|null,title:string,url_slug:string,url_path:string,folder_path:string} Gallery identity, hierarchy, and public URL fields extracted from the joined row.
  */
 function public_search_gallery_from_image_row(array $row): array
 {

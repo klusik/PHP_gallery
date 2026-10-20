@@ -1,5 +1,131 @@
 # Gallery music
 
+## Global Music Manager
+
+**Admin → Galleries → Music Manager** adds a compact catalog above the existing
+gallery upload and playlist controls. Search matches titles, original filenames
+and music tags as you type; only the latest search response updates the results.
+Page navigation bounds the displayed rows. The table separates **Title**,
+**Files**, **Locations**, **Tags** and **Actions**. Click a song title to open
+its popup with the rename editor, add-to-album control, and shortcuts to its
+tag, file, and location details; its checkbox remains an independent merge
+selection. **Songs** is a full-width catalog tab. **Albums & playlists** has the
+tree and album creation on the left, with selected album details and songs on
+the right; the columns stack on narrow screens. Selecting or creating an album
+is prompted when none is selected. Legacy album links open that tab.
+Creating an album selects it automatically; deleting the selected album clears
+the selection, and a stale album link returns to the album-selection prompt.
+Adding from the title popup appends the song to an album; an existing membership
+is disabled and keeps its current order.
+Drag a song by its grip to change its album order; the insertion line marks the
+destination. Up/down buttons remain available for keyboard use and single-step
+moves. Ordering saves through the same revision-checked album action.
+The narrow action column appears only when a visible song has variants to split.
+The Files disclosure lists physical variants. Locations expands to
+the direct gallery and music-album placements; two variants in one gallery
+count as one location, and derived Smart inclusion adds nothing. Gallery links
+in both disclosures open the public gallery. Each music tag appears as its own
+compact chip. Header links sort Title, Files, Locations or Tags in either
+direction across the complete result set before pagination, with stable ID
+tie-breaking. Tags sort alphabetically by the song's first music tag.
+The manager shares the site's typography and accent colors, with compact
+translucent surfaces and softly rounded borders. Each song title sits beside
+its file count, shown with a stacked icon and number. Variant and **Locations**
+disclosures follow the global Admin side-panel duration; zero makes them
+immediate.
+
+The catalog-heading gear contains the global filename-extension preference.
+New-album parent and description fields stay behind the adjacent gear, and
+native disclosures keep collapsed song and album rows compact. The pending
+reconciliation count appears only when nonzero. Import keeps its text label for
+an empty catalog and becomes icon-only after entries exist. Icon-only actions
+retain accessible names and visible keyboard focus.
+
+Reconcile existing playlists in bounded batches to discover previous uploads.
+The cursor permits continuation; originals and their JSON indexes are not
+rewritten merely to populate the catalog. Review failed sources before treating
+an import as complete. Public requests never crawl the library for this task.
+
+Click a song title to open its inline editor near the pointer. Clicking the
+same title or outside closes it; clicking another title switches editors.
+Text is not selected automatically. The editor stays within the viewport and
+wraps long titles. Enter saves the title as one line; textarea wrapping is
+visual only and never renames the original file.
+Title priority is logical override, meaningful saved track title, then original
+basename. **Show file extensions in song titles** is one global setting stored
+as `music_show_file_extensions`, default OFF when absent, including upgrades.
+It affects recognized audio extensions in filename-derived titles only. Custom
+titles retain their text even when they deliberately include an extension.
+Downloads and file details always retain the original filename.
+
+Select songs and open the relationship preview to mark different files as the
+same song. Review filenames/locations and explicitly choose the surviving
+metadata. Filename, duration and hash never automatically create this relation.
+Splitting an instance restores an independent logical identity with deterministic
+metadata inheritance; neither operation rewrites audio or saved physical order.
+Source visibility, passwords, shares, NSFW policy and download restrictions stay
+with each physical instance. Public and Smart projections choose only among
+already authorized instances, never from the Admin-wide variant inventory.
+
+Music albums are logical Admin collections with ordered songs and nested child
+albums. The compact album tree uses native disclosure controls to expand its
+branches; selecting an album opens its ancestor path automatically. Breadcrumbs
+also support navigation. An album's context gear reveals its title, description,
+move and delete controls in a native disclosure; song membership and ordering
+remain visible. Moving a parent below a descendant is refused; nesting is limited
+to eight levels and the tree to 2,000 albums. A song can belong to several
+albums. Removal changes membership only; source deletion remains in the existing
+gallery editor.
+Albums do not create a public global music library or physical gallery folders.
+
+Songs use the existing tag taxonomy with `media_type=music`. Existing tags and
+gallery/image assignments remain `image`; `pdf` is reserved without a PDF tag
+interface. The existing globally unique slug namespace is retained, with a
+media prefix for non-image names. Cross-type assignment and merge are refused.
+Image cards, gallery heroes, photo metadata, public tag pages, Smart image rules
+and image-search facets consume image tags only. Admin tag management filters
+the same taxonomy by media type.
+
+Catalog mutations use Admin authentication, CSRF and a shared optimistic catalog
+revision. Reopen the current state after a stale-edit refusal. The canonical
+mutation completion path updates the manager in place. Catalog title/settings
+changes advance public content revision so existing assignments use current
+names after refresh; no reupload is needed.
+
+Physical mutations mark their SQL snapshot dirty before changing the index when
+catalog schema is available, then synchronize that one committed playlist.
+If synchronization fails, the durable marker excludes stale direct usage until
+bounded reconciliation succeeds. The manager shows the pending count; an
+unreadable source blocks completion and remains available for recovery. Current
+authorized physical tracks may still resolve their logical title while dirty;
+that lookup cannot grant playback access. Inactive links preserve a restored
+track's logical identity. Unknown schema refuses the mutation; confirmed
+pre-catalog schema retains the original-only compatibility path.
+
+The `gallery_music` capability gates catalog navigation and mutations as well as
+existing music surfaces. OFF preserves songs, albums, tag relations and audio.
+SQL backup preserves logical metadata; hidden filesystem backup preserves audio
+and playlist authority. Whole-gallery moves retain stable gallery/track links.
+Local Trash snapshots retain current track-to-song references before gallery
+rows are deleted. Restoration remaps those trusted local references to the new
+gallery IDs only while the logical song still exists; absent or obsolete links
+receive fresh identities from the restored index. Song titles, tags and album
+membership remain in the global SQL layer. Older Trash snapshots have no such
+references and use this conservative fresh-identity path. These IDs are never
+accepted from gallery transfer packages. Removed-instance reconciliation uses
+the same stable references;
+cross-site archives must be reconciled locally rather than importing foreign
+song IDs. Photo ZIP and gallery transfer formats still do not export audio or
+the global catalog. See [database recovery](../DATABASE.md#gallery-music-storage).
+
+Catalog runtime impact starts from 98 logical modules, 4,072 direct file entries,
+437 unique PHP files and 3,635 duplicated entries in the tracked source plan.
+The global logical allowance is already consumed. The new Admin route therefore
+shares the existing taxonomy administration root; public metadata projection
+extends the deferred attachment owner. Limits and baselines remain unchanged.
+Hosted preparation establishes final file counts and duplicate/route conformance;
+these source-plan counts are static observations, not executed evidence.
+
 **Admin → Features → Gallery music** is the independent global master. It starts
 ON on new installations and upgrades without a saved preference. Explicit OFF
 preserves all originals, playlist order, download permissions and gallery/Smart

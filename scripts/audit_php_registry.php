@@ -87,6 +87,7 @@ return [
         'installer_first_install_test.php' => 'Starts a config-free HTTP installation and runs the complete migration chain in its own disposable database; exclusive execution prevents nested server contention.',
         'database_engine_contract_test.php' => 'Checks a migrated vote constraint inside a rolled-back transaction in the externally supplied disposable database; exclusive execution prevents fixture mutation overlap.',
         'gallery_attachment_storage_database_test.php' => 'Changes derived attachment totals inside a rolled-back transaction in the shared disposable database; serialize against gallery mutations.',
+        'music_catalog_database_test.php' => 'Commits revisioned catalog operations in the explicitly supplied shared disposable workflow database and restores its owned rows/settings; serialize against gallery and catalog writers.',
         'runtime_module_plan_test.php' => 'Compiles the dependency inventory and runs its own bounded four-worker module fixtures; exclusive execution avoids nested pool contention.',
         'audit_runner_test.php' => 'Runs its own bounded scheduler fixtures and timeout children; isolation prevents nested-pool oversubscription.',
         'patch_notes_ai_evidence_test.php' => 'Runs nested Git evidence children and forced timeout cleanup against an owned repository; isolation prevents nested-process contention.',

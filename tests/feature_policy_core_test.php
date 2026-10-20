@@ -185,8 +185,9 @@ namespace {
     }
     feature_policy_core_assert(
         !feature_flag_route_enabled('gallery_ofp_pdf')
-            && !feature_flag_route_enabled('gallery_music'),
-        'Each disabled attachment route must be guarded.',
+            && !feature_flag_route_enabled('gallery_music')
+            && !feature_flag_route_enabled('admin_music'),
+        'Disabled PDF and music routes, including the Music Manager, must be guarded.',
     );
     feature_policy_core_assert(
         feature_capability_effective_enabled('automatic_cache_cleanup')
@@ -208,7 +209,8 @@ namespace {
     set_feature_capability_enabled('gallery_music', false);
     feature_policy_core_assert(
         feature_flag_route_enabled('gallery_ofp_pdf')
-            && !feature_flag_route_enabled('gallery_music'),
+            && !feature_flag_route_enabled('gallery_music')
+            && !feature_flag_route_enabled('admin_music'),
         'PDF availability must remain independent of music OFF.',
     );
     set_feature_capability_enabled('gallery_music', true);

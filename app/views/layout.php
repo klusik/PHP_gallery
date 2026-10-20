@@ -1163,6 +1163,8 @@ function view_render_footer(string $page = 'home', array $model = []): void
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/admin-gallery-report.js',
             dirname(__DIR__, 2)
+                . '/public/assets/gallery-modules/admin-music.js',
+            dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/admin-maintenance-center.js',
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/admin-test-run.js',

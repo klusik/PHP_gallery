@@ -70,7 +70,7 @@ function public_search_model_prefix_pattern(string $query): string
  *
  * @param string $alias Gallery table alias.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @return array{0: string, 1: array<int, mixed>} SQL condition and bound values.
  */
 function public_search_model_listing_scope(
@@ -114,12 +114,13 @@ function public_search_model_listing_scope(
  *
  * @param string $query Normalized search query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param bool $aiSearchReady Whether AI searchable metadata may be queried.
  * @param bool $localizedGallerySearchReady Whether gallery translations may be queried.
  * @param string $contentLanguage Active content language.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown; unknown fails closed.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw compatibility gallery rows.
+ * @return list<array{id:int|string,title:string,description:?string,gallery_tag_names:?string,image_tag_names:?string,exact_title_score:int|string,title_score:int|string,gallery_tag_score:int|string,image_name_score:int|string,ai_score:int|string}> Gallery rows with joined tag labels and relevance scores.
  */
 function public_search_model_compatibility_gallery_rows(
     string $query,
@@ -128,6 +129,7 @@ function public_search_model_compatibility_gallery_rows(
     bool $aiSearchReady,
     bool $localizedGallerySearchReady,
     string $contentLanguage,
+    string $tagMediaTypeState,
     int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
@@ -149,6 +151,11 @@ function public_search_model_compatibility_gallery_rows(
     $localizedGalleryWhereSql = $localizedGallerySearchReady
         ? ' OR EXISTS (SELECT 1 FROM gallery_translations content_gallery_translation WHERE content_gallery_translation.gallery_id = g.id AND content_gallery_translation.language_code = ? AND (content_gallery_translation.title LIKE ? OR content_gallery_translation.description LIKE ?))'
         : '';
+    $tagTypeCondition = $tagMediaTypeState === 'available'
+        ? " AND %s.media_type = 'image'"
+        : ($tagMediaTypeState === 'missing' ? '' : ' AND 1 = 0');
+    $galleryTagTypeCondition = sprintf($tagTypeCondition, 'gallery_tag');
+    $imageTagTypeCondition = sprintf($tagTypeCondition, 'image_tag');
 
     $sql =
         "SELECT g.*,
@@ -163,9 +170,9 @@ function public_search_model_compatibility_gallery_rows(
         LEFT JOIN images public_image ON public_image.gallery_id = g.id AND public_image.visibility = 'public'
         $aiJoin
         LEFT JOIN gallery_tags gt ON gt.gallery_id = g.id
-        LEFT JOIN tags gallery_tag ON gallery_tag.id = gt.tag_id
+        LEFT JOIN tags gallery_tag ON gallery_tag.id = gt.tag_id$galleryTagTypeCondition
         LEFT JOIN image_tags it ON it.image_id = public_image.id
-        LEFT JOIN tags image_tag ON image_tag.id = it.tag_id
+        LEFT JOIN tags image_tag ON image_tag.id = it.tag_id$imageTagTypeCondition
         WHERE $listingCondition
           AND (
               g.title LIKE ? OR g.description LIKE ?
@@ -211,12 +218,13 @@ function public_search_model_compatibility_gallery_rows(
  *
  * @param string $query Normalized search query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param bool $aiSearchReady Whether AI searchable metadata may be queried.
  * @param bool $localizedSearchReady Whether image translations may be queried.
  * @param string $contentLanguage Active content language.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown; unknown fails closed.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw compatibility image rows.
+ * @return list<array{id:int|string,filename:string,title:?string,description:?string,image_tag_names:?string,matched_gallery_id:int|string,matched_gallery_title:string,matched_gallery_url_slug:string,matched_gallery_url_path:string,matched_gallery_folder_path:string,exact_name_score:int|string,name_score:int|string,tag_score:int|string,ai_score:int|string}> Image rows with matched gallery context and relevance scores.
  */
 function public_search_model_compatibility_image_rows(
     string $query,
@@ -225,6 +233,7 @@ function public_search_model_compatibility_image_rows(
     bool $aiSearchReady,
     bool $localizedSearchReady,
     string $contentLanguage,
+    string $tagMediaTypeState,
     int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
@@ -244,6 +253,9 @@ function public_search_model_compatibility_image_rows(
     $localizedWhereSql = $localizedSearchReady
         ? ' OR EXISTS (SELECT 1 FROM image_translations content_image_translation WHERE content_image_translation.image_id = i.id AND content_image_translation.language_code = ? AND (content_image_translation.title LIKE ? OR content_image_translation.description LIKE ?))'
         : '';
+    $tagTypeCondition = $tagMediaTypeState === 'available'
+        ? " AND image_tag.media_type = 'image'"
+        : ($tagMediaTypeState === 'missing' ? '' : ' AND 1 = 0');
 
     $sql =
         'SELECT i.*, g.id AS matched_gallery_id, g.parent_id AS matched_gallery_parent_id,
@@ -279,7 +291,7 @@ function public_search_model_compatibility_image_rows(
         INNER JOIN galleries g ON g.id = i.gallery_id
         $aiJoin
         LEFT JOIN image_tags it ON it.image_id = i.id
-        LEFT JOIN tags image_tag ON image_tag.id = it.tag_id
+        LEFT JOIN tags image_tag ON image_tag.id = it.tag_id$tagTypeCondition
         WHERE i.visibility = 'public'
           AND $listingCondition
           AND (

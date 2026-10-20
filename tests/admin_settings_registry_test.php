@@ -260,6 +260,23 @@ foreach ($routes as $route => $_unused) {
     }
 }
 
+$musicTitleSetting = $entryDefinitions['music_show_file_extensions'] ?? [];
+if (
+    settings_test_literal($musicTitleSetting[1] ?? '') !== 'media'
+    || settings_test_literal($musicTitleSetting[4] ?? '')
+        !== 'music_show_file_extensions'
+    || settings_test_literal($musicTitleSetting[5] ?? '') !== 'checkbox'
+    || settings_test_literal($musicTitleSetting[8] ?? '') !== 'admin_music'
+    || !str_contains(
+        $registrySource,
+        "if (\$id === 'music_show_file_extensions') {\n        return 'music_catalog';",
+    )
+) {
+    throw new RuntimeException(
+        'The filename-extension preference must remain a Music Manager checkbox owned by music_catalog.',
+    );
+}
+
 foreach ([
     'password_reset_smtp_password',
     'site_maintenance_token',

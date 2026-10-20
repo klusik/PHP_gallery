@@ -110,6 +110,21 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Models {
+    /** Return the fixture's explicitly disabled upload-renaming setting. @return array<int,array{setting_key:string,setting_value:string}> Owned application settings. */
+    function app_settings_model_all(): array
+    {
+        return [[
+            'setting_key' => 'admin_upload_auto_rename_enabled',
+            'setting_value' => '0',
+        ]];
+    }
+
+    /** Resolve one setting from the isolated application-settings rows. @param string $key Setting identity. @return string|false Stored fixture value or absence. */
+    function app_settings_model_get(string $key): string|false
+    {
+        return $key === 'admin_upload_auto_rename_enabled' ? '0' : false;
+    }
+
     /** Resolve scanner-produced fixture rows at the real upload model boundary. @param int $galleryId Owning gallery. @param string $pathHash Relative-filename SHA-256. @return array<string,mixed>|null Exact isolated image row. */
     function image_model_find_by_path_hash(
         int $galleryId,
@@ -128,6 +143,8 @@ namespace Gallery\Models {
 }
 
 namespace Gallery\Services {
+    require_once dirname(__DIR__) . '/app/services/app_settings.php';
+
     /** Format safe fixture messages without language/configuration persistence. @param string $key Translation key. @param string|array<string,string>|null $fallback Default text or replacements. @param array<string,string> $parameters Text substitutions. @return string Interpolated fixture message. */
     function t(
         string $key,
@@ -259,12 +276,6 @@ namespace Gallery\Services {
     function thumbnail_metadata_preflight_write_schema(string $operation): void
     {
         $GLOBALS['decode_upload_preflights'][] = $operation;
-    }
-
-    /** Resolve only the isolated upload rename preference and supplied fallbacks. @param string $key Domain setting name. @param string $fallback Value for unrelated settings. @return string Disabled fixture renaming or the caller fallback. */
-    function app_setting(string $key, string $fallback = ''): string
-    {
-        return $key === 'admin_upload_auto_rename_enabled' ? '0' : $fallback;
     }
 
     /** Supply an authoritative isolated completion postcondition. @param array<string,mixed> $gallery Owning gallery. @param bool $public Public-only selector. @param bool $cache Cache selector. @return int Accepted fixture image count. */

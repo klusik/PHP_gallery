@@ -69,6 +69,7 @@ require_once __DIR__ . '/models/openai_text_assist.php';
 require_once __DIR__ . '/models/gallery_creation_preferences.php';
 require_once __DIR__ . '/models/ai_image_analysis.php';
 require_once __DIR__ . '/models/tags.php';
+require_once __DIR__ . '/models/music_catalog.php';
 require_once __DIR__ . '/models/image_order.php';
 require_once __DIR__ . '/models/gallery_order.php';
 require_once __DIR__ . '/models/gallery_feature_plans.php';

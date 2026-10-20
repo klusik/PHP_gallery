@@ -50,6 +50,7 @@ use function Gallery\Models\public_search_model_primary_gallery_tag_rows;
 use function Gallery\Models\public_search_model_primary_gallery_title_rows;
 use function Gallery\Models\public_search_model_compound_gallery_rows;
 use function Gallery\Models\public_search_model_compound_image_rows;
+use function Gallery\Services\tag_media_type_schema_state;
 
 const PUBLIC_SEARCH_PHASE_PRIMARY = 'primary';
 
@@ -160,8 +161,8 @@ function public_search_result_key(string $type, int $id): string
  * @param string $phase Stable phase identifier.
  * @param string $query Query value.
  * @param int $limit Maximum number of result items.
- * @param ?array $contextGallery Optional branch-limiting gallery.
- * @return array<int, array<string, mixed>> Public phase results.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
+ * @return list<array{key:string,type:'gallery'|'photo',label:string,title:string,subtitle:string,url:string,rank:int,match_source:string}> Ranked public result cards for the requested phase, or an empty list when unsupported or unmatched.
  */
 function public_search_phase_results(
     string $phase,
@@ -227,8 +228,8 @@ function public_search_phase_results(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of gallery results.
- * @param ?array $contextGallery Optional branch-limiting gallery.
- * @return array<int, array<string, mixed>> Primary public result models.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
+ * @return list<array{key:string,type:'gallery',label:string,title:string,subtitle:string,url:string,rank:int,match_source:string}> Authorized gallery cards ordered by primary relevance.
  */
 function public_search_primary_results(
     string $query,
@@ -252,8 +253,8 @@ function public_search_primary_results(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates.
- * @param ?array $contextGallery Optional branch-limiting gallery.
- * @return array<int, array<string, mixed>> Candidate models ordered by relevance.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
+ * @return list<array{entity_type:'gallery',entity_id:int,result_key:string,score:int,match_source:string,title_sort:string}> Gallery candidates ordered by relevance, or an empty list.
  */
 function public_search_primary_gallery_candidates(
     string $query,
@@ -268,6 +269,7 @@ function public_search_primary_gallery_candidates(
     $limit = max(1, min(30, $limit));
     $candidateLimit = min(90, max($limit * 2, $limit + 8));
     $listedOnly = public_search_listing_requires_listed();
+    $tagState = tag_media_type_schema_state();
 
     $titleRows = public_search_model_primary_gallery_title_rows(
         $query,
@@ -296,6 +298,7 @@ function public_search_primary_gallery_candidates(
         ],
         $listedOnly,
         $contextGallery,
+        $tagState,
         $candidateLimit,
     );
 
@@ -449,6 +452,7 @@ function public_search_hydrate_primary_gallery_candidates(array $candidates): ar
     $tagNamesByGalleryId = [];
     foreach (public_search_model_gallery_tag_name_rows(
         $authorizedGalleryIds,
+        tag_media_type_schema_state(),
     ) as $row) {
         $galleryId = (int) ($row['gallery_id'] ?? 0);
         if ($galleryId > 0) {
@@ -512,8 +516,8 @@ function public_search_hydrate_primary_gallery_candidates(array $candidates): ar
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of photo results.
- * @param ?array $contextGallery Optional branch-limiting gallery.
- * @return array<int, array<string, mixed>> Lightweight public photo results.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
+ * @return list<array{key:string,type:'photo',label:string,title:string,subtitle:string,url:string,rank:int,match_source:string}> Authorized photo cards matching a filename, title, or image tag.
  */
 function public_search_media_results(
     string $query,
@@ -544,8 +548,8 @@ function public_search_media_results(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of final candidates.
- * @param ?array $contextGallery Optional branch-limiting gallery.
- * @return array<int, array<string, mixed>> Ordered media candidate models.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
+ * @return list<array{entity_type:'photo',entity_id:int,result_key:string,score:int,match_source:string,title_sort:string}> Photo candidates ordered by score, title, and identifier.
  */
 function public_search_media_image_candidates(
     string $query,
@@ -617,8 +621,8 @@ function public_search_media_image_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
- * @return array<int, array<string, mixed>> Name/title candidate models.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
+ * @return list<array{entity_type:'photo',entity_id:int,result_key:string,score:int,match_source:string,title_sort:string}> Photo candidates matched by filename or saved title.
  */
 function public_search_media_image_name_candidates(
     string $query,
@@ -671,8 +675,8 @@ function public_search_media_image_name_candidates(
  *
  * @param string $query Normalized query value.
  * @param int $limit Maximum number of candidates returned by this source.
- * @param ?array $contextGallery Optional branch-limiting gallery.
- * @return array<int, array<string, mixed>> Image-tag candidate models.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
+ * @return list<array{entity_type:'photo',entity_id:int,result_key:string,score:int,match_source:string,title_sort:string}> Photo candidates matched by an assigned image tag.
  */
 function public_search_media_image_tag_candidates(
     string $query,
@@ -690,6 +694,7 @@ function public_search_media_image_tag_candidates(
         ],
         $listedOnly,
         $contextGallery,
+        tag_media_type_schema_state(),
         $limit,
     );
 
@@ -761,8 +766,8 @@ function public_search_media_image_tag_match_source(int $score): string
  * eligibility.
  *
  * @param array<int, array<string, mixed>> $candidates Ordered candidate models.
- * @param ?array $contextGallery Optional branch-limiting gallery.
- * @return array<int, array<string, mixed>> Hydrated media result models.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch-limiting gallery.
+ * @return list<array{key:string,type:'photo',label:string,title:string,subtitle:string,url:string,rank:int,match_source:string}> Authorized photo cards in candidate order.
  */
 function public_search_hydrate_media_image_candidates(
     array $candidates,
@@ -885,6 +890,7 @@ function public_search_hydrate_media_image_candidates(
     $tagNamesByImageId = [];
     foreach (public_search_model_image_tag_name_rows(
         $authorizedImageIds,
+        tag_media_type_schema_state(),
     ) as $row) {
         $imageId = (int) ($row['image_id'] ?? 0);
         if ($imageId > 0) {
@@ -1035,7 +1041,7 @@ function public_search_compound_photo_candidates(array $rows): array
  * @param string $phase Supported public search phase.
  * @param array<int,array<int,string>> $groups OR groups containing AND terms.
  * @param int $limit Maximum returned items.
- * @param ?array $contextGallery Optional branch restriction.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional branch restriction.
  * @return array<int,array<string,mixed>> Progressive result payload items.
  */
 function public_search_compound_phase_results(
@@ -1052,6 +1058,7 @@ function public_search_compound_phase_results(
     $candidateLimit = min(90, max($limit * 3, $limit + 8));
     $listedOnly = public_search_listing_requires_listed();
     $language = translation_active_language();
+    $tagState = tag_media_type_schema_state();
 
     if (
         $phase === PUBLIC_SEARCH_PHASE_PRIMARY
@@ -1068,6 +1075,7 @@ function public_search_compound_phase_results(
             $contextGallery,
             $translated,
             $language,
+            $tagState,
             $candidateLimit,
         );
         $candidates = array_slice(
@@ -1087,6 +1095,7 @@ function public_search_compound_phase_results(
             false,
             $language,
             false,
+            $tagState,
             $candidateLimit,
         );
         $candidates = array_slice(
@@ -1114,6 +1123,7 @@ function public_search_compound_phase_results(
         $contextGallery,
         $galleryTranslated,
         $language,
+        $tagState,
         $candidateLimit,
     );
     $imageRows = public_search_model_compound_image_rows(
@@ -1124,6 +1134,7 @@ function public_search_compound_phase_results(
         $imageTranslated,
         $language,
         $aiReady,
+        $tagState,
         $candidateLimit,
     );
 
@@ -1153,7 +1164,7 @@ function public_search_compound_phase_results(
  *
  * @param array<int,array<int,string>> $groups Parsed boolean search expression.
  * @param int $limit Maximum returned results.
- * @param ?array $contextGallery Optional gallery-branch restriction.
+ * @param ?array{id:int,folder_path:string} $contextGallery Optional gallery-branch restriction.
  * @return array<int,array<string,mixed>> Bounded, merged search results.
  */
 function public_search_compound_results(

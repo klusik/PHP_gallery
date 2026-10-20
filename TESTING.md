@@ -1,5 +1,40 @@
 # Testing Guide
 
+## Global Music Manager
+
+`music_catalog_database_test.php` uses the serial, owned disposable database
+fixture to exercise stable gallery/track identities, a real index bridge across
+three playlist sources, revision conflicts, song merging and splitting, nested
+album membership, typed-tag isolation and whole-result sorting before
+pagination. Public image paths exclude music and
+PDF tag names, slugs and descriptions. Hero usage counts promote PHP warnings to
+failures and count image-category assignments only; cached single and plural
+tag reads must refuse results when schema inspection becomes unknown. Trash
+restore verifies local track-to-song remapping after gallery IDs change.
+Migration assertions retain existing tag IDs and slugs. Cleanup restores
+fixture settings and removes only records created by this test.
+
+`music_catalog_title_policy_test.php` calls the production title and settings
+owners with isolated SQLite storage. It covers the default-off extension
+preference, recognized extensions, meaningful indexed titles, exact custom
+Unicode titles and unknown extensions. `gallery_music_service_test.php` also
+requires SQLite for its production schema observer's confirmed legacy path.
+The central requirements registry marks missing SQLite as blocked coverage.
+
+`admin_music_browser_test.mjs` renders the production manager view and runs its
+production browser module at desktop and narrow mobile widths. It covers
+live-search response races, native title-summary editing with independent merge
+selection, title popover shortcuts, retained Songs/Albums tabs and return state,
+disclosures, visible tag actions, focus, composite split identities, album
+controls and pointer drag reorder through the existing mutation coordinator,
+including busy, stale, click, no-op, and native-fallback duplicate-write guards;
+the merge overlay's top-layer behavior and last-row visibility; and the shared
+mutation completion protocol.
+Refused writes preserve input; an unconfirmed fragment refresh locks further
+writes. These fixtures do not qualify a deployed database migration, real
+library reconciliation throughput, or live backup/Trash recovery. Review those
+against representative hosting data separately.
+
 `database_maintenance_test.php` checks indexed identifier membership against the
 legacy case-insensitive PCRE word-boundary contract, including underscores,
 numeric words, punctuation and non-ASCII names. It feeds the actual per-source

@@ -372,7 +372,15 @@ access/visibility and their own download permissions.
 
 Stored SHA-256 digests deduplicate identical original bytes, including renamed
 copies, in stable source/track order. Equal filenames/durations alone never
-remove a different recording. Different encodings or changed embedded tags need
-a future acoustic/container fingerprint strategy. A visible permitted duplicate
+remove a different recording. Different encodings remain distinct unless the
+administrator explicitly links their logical song identities in Music Manager.
+Logical identity and exact-byte identity remain independent deduplication keys.
+Only already authorized visible instances participate in either operation;
+album membership never grants source access. A visible permitted duplicate
 can supply the download URL; hidden/denied copies never grant permission.
 See [music ownership and lifecycle](GALLERY_MUSIC.md) and issue #249.
+
+Smart image rules, public tag searches and image facets explicitly consume only
+`image` tags. Music-song tag assignments use the shared taxonomy's `music`
+category and never contribute to image/gallery tags, counts or cards. Existing
+tag IDs, URLs and globally unique slugs remain stable; `pdf` stays reserved.

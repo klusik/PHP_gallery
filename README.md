@@ -1,5 +1,13 @@
 # PHP Gallery CMS
 
+**Admin → Galleries → Music Manager** provides global song identities, custom
+display titles, direct-usage details, nested logical albums and music tags.
+Existing audio stays in its source galleries; public access still follows each
+source's permissions. Filename-derived titles hide extensions by default.
+The shared tag taxonomy isolates image and music assignments and reserves PDF.
+Run normal schema migrations and bounded catalog reconciliation after upgrade.
+See [Music Manager and recovery](docs/GALLERY_MUSIC.md#global-music-manager).
+
 Gallery PDF documents and music have separate switches in **Admin → Features**.
 Both default ON for fresh and updated installations without a saved preference;
 OFF hides the corresponding media UI and rejects uploads/delivery while keeping

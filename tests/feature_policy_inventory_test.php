@@ -338,20 +338,28 @@ namespace Gallery\Core {
         'picture_manager_download_selection' => 'picture_manager',
         'smart_gallery' => 'smart_galleries',
         'admin_smart_galleries' => 'smart_galleries',
+        'admin_music' => 'gallery_music',
     ];
     foreach ($repairedOptionalRoutes as $route => $owner) {
         feature_policy_inventory_assert(
             in_array($route, $allRoutes, true),
-            'Repaired optional route is missing from the dispatcher: ' . $route,
+            'Registered optional route is missing from the dispatcher: ' . $route,
         );
         feature_policy_inventory_assert(
             \Gallery\Services\feature_flag_for_route($route) === $owner,
-            'Repaired optional route escaped its canonical owner: '
+            'Registered optional route escaped its canonical owner: '
                 . $route
                 . ' -> '
                 . $owner,
         );
     }
+    feature_policy_inventory_assert(
+        ($definitions['gallery_music']['routes'] ?? []) === [
+            'gallery_music',
+            'admin_music',
+        ],
+        'Gallery Music must own its public player and specialized Admin manager routes.',
+    );
     feature_policy_inventory_assert(
         \Gallery\Services\feature_flag_for_route('download_all') === null,
         'Legacy download_all route must remain outside the optional downloads capability policy.',

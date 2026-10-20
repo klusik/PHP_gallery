@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Gallery\Controllers;
 
 require_once __DIR__ . '/../services/gallery_music.php';
+require_once __DIR__ . '/../services/music_catalog.php';
 require_once __DIR__ . '/../views/gallery_music.php';
 
 /**
@@ -100,7 +101,11 @@ function gallery_music_present_playlist(
     $tracks = [];
     $audience = \Gallery\Core\admin_anonymous_preview_active()
         ? ['view_as' => 'anonymous'] : [];
-    foreach ($state['tracks'] as $track) {
+    $presentedTracks = \Gallery\Services\music_catalog_present_tracks(
+        $state['tracks'],
+        $galleryId,
+    );
+    foreach ($presentedTracks as $track) {
         if (
             !$editor
             && !\Gallery\Services\gallery_music_track_visible($track)
@@ -288,6 +293,7 @@ function admin_edit_gallery_handle_music_action(array $gallery): void
         $result['panel_html'] = admin_gallery_music_html($gallery);
         $result['music_revision'] = $outcome['revision'];
         $result['track_id'] = $outcome['track_id'];
+        $result['catalog_sync_pending'] = $outcome['catalog_sync_pending'];
     } catch (\Throwable $error) {
         $allowed = ['music.conflict', 'music.invalid_file', 'music.quota'];
         $message = \Gallery\Services\t('music.failed');

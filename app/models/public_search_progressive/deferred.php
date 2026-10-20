@@ -43,9 +43,9 @@ namespace Gallery\Models;
  *
  * @param string $query Normalized query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw gallery rows.
+ * @return list<array{id:int|string,title:string}> Gallery identifiers and canonical titles matching the description.
  */
 function public_search_model_gallery_description_rows(
     string $query,
@@ -79,14 +79,16 @@ function public_search_model_gallery_description_rows(
  *
  * @param string $query Normalized query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw gallery rows.
+ * @return list<array{id:int|string,title:string}> Gallery identifiers and titles matched through tag descriptions.
  */
 function public_search_model_gallery_tag_description_rows(
     string $query,
     bool $listedOnly,
     ?array $contextGallery,
+    string $tagMediaTypeState,
     int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
@@ -102,7 +104,7 @@ function public_search_model_gallery_tag_description_rows(
             SELECT DISTINCT gt.gallery_id
             FROM tags t
             INNER JOIN gallery_tags gt ON gt.tag_id = t.id
-            WHERE t.description LIKE ?
+            WHERE " . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . "t.description LIKE ?
         ) tag_match
         INNER JOIN galleries g ON g.id = tag_match.gallery_id
         WHERE $listingCondition
@@ -121,7 +123,7 @@ function public_search_model_gallery_tag_description_rows(
  * @param string $language Active content language.
  * @param string $query Normalized query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw translated gallery rows.
  */
@@ -161,7 +163,7 @@ function public_search_model_gallery_translated_title_rows(
  * @param string $language Active content language.
  * @param string $query Normalized query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw translated gallery rows.
  */
@@ -200,9 +202,9 @@ function public_search_model_gallery_translated_description_rows(
  *
  * @param string $query Normalized query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw image rows.
+ * @return list<array{id:int|string,filename:string,title:?string}> Image identifiers, filenames, and canonical titles matching the description.
  */
 function public_search_model_image_description_rows(
     string $query,
@@ -240,14 +242,16 @@ function public_search_model_image_description_rows(
  *
  * @param string $query Normalized query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
+ * @param string $tagMediaTypeState Confirmed tags.media_type state: available, missing, or unknown.
  * @param int $limit Maximum rows returned.
- * @return array<int, array<string, mixed>> Raw image rows.
+ * @return list<array{id:int|string,filename:string,title:?string}> Image identifiers and names matched through tag descriptions.
  */
 function public_search_model_image_tag_description_rows(
     string $query,
     bool $listedOnly,
     ?array $contextGallery,
+    string $tagMediaTypeState,
     int $limit,
 ): array {
     $limit = max(1, min(90, $limit));
@@ -263,7 +267,7 @@ function public_search_model_image_tag_description_rows(
             SELECT DISTINCT it.image_id
             FROM tags t
             INNER JOIN image_tags it ON it.tag_id = t.id
-            WHERE t.description LIKE ?
+            WHERE " . public_search_model_tag_media_predicate('t', $tagMediaTypeState) . "t.description LIKE ?
         ) tag_match
         INNER JOIN images i ON i.id = tag_match.image_id
         INNER JOIN galleries g ON g.id = i.gallery_id
@@ -337,7 +341,7 @@ function public_search_model_image_translation_rows(
  *
  * @param string $query Normalized query.
  * @param bool $listedOnly Whether public access policy requires listed galleries.
- * @param ?array $contextGallery Optional gallery branch context.
+ * @param ?array{folder_path:string} $contextGallery Optional gallery branch context.
  * @param int $limit Maximum rows returned.
  * @return array<int, array<string, mixed>> Raw image rows.
  */

@@ -16,7 +16,9 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 require_once __DIR__ . '/../models/gallery_music.php';
+require_once __DIR__ . '/../models/music_catalog.php';
 require_once __DIR__ . '/gallery_pdf_settings.php';
+require_once __DIR__ . '/music_catalog.php';
 
 /**
  * Bound one original audio upload without transcoding or decoding on the
@@ -52,6 +54,14 @@ const GALLERY_MUSIC_TOTAL_BYTES = 512 * 1024 * 1024;
  * Rationale: 240 bytes fit compact tables and bounded playlist JSON records.
  */
 const GALLERY_MUSIC_LABEL_BYTES = 240;
+
+/**
+ * Bound normalized catalog lookups for one merged Smart Gallery playlist.
+ * Type: int. Units: tracks. Scope: one SQL catalog-title lookup batch.
+ * Consumers: gallery_music_merge_playlists.
+ * Rationale: 100 references keep the query bounded while covering one playlist.
+ */
+const GALLERY_MUSIC_CATALOG_BATCH = 100;
 
 /**
  * Keep gallery audio sidecars private to the hosting account.
@@ -212,6 +222,50 @@ function gallery_music_playlist(array $gallery): array
     ));
 }
 
+/** Acquire the per-gallery playlist lock for a stable external snapshot.
+ * PHP has no native resource type; the documented stream handle is the contract.
+ * @param array{id:int,folder_path:string} $gallery Physical gallery identity/path.
+ * @return resource Open exclusive lock handle; caller must release it.
+ * @throws \RuntimeException When the gallery lock is unsafe or unavailable.
+ */
+function gallery_music_acquire_lock(array $gallery): mixed
+{
+    $directory = gallery_music_directory($gallery);
+    if (!is_dir($directory) && !@mkdir($directory, GALLERY_MUSIC_DIRECTORY_MODE)
+        && !is_dir($directory)) {
+        throw new \RuntimeException(t('music.failed'));
+    }
+    if (is_link($directory) || is_link($directory . '/.lock')) {
+        throw new \RuntimeException(t('music.failed'));
+    }
+    $lock = @fopen($directory . '/.lock', 'c');
+    if ($lock === false) {
+        throw new \RuntimeException(t('music.failed'));
+    }
+    try {
+        if (!flock($lock, LOCK_EX)) {
+            throw new \RuntimeException(t('music.failed'));
+        }
+        return $lock;
+    } catch (\Throwable $error) {
+        fclose($lock);
+        throw $error;
+    }
+}
+
+/** Release a playlist lock acquired for snapshot reconciliation.
+ * PHP has no native resource parameter type; the handle is checked before use.
+ * @param resource $lock Open locked playlist handle.
+ * @return void Unlock and close the handle.
+ */
+function gallery_music_release_lock(mixed $lock): void
+{
+    if (is_resource($lock)) {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
 /**
  * Keep track visibility independent of permission to download the original.
  * @param array{hidden?:bool} $track Normalized visibility or an older record.
@@ -229,8 +283,9 @@ function gallery_music_track_visible(array $track): bool
  * @return array{revision:string,enabled:bool,unavailable:int,
  *     tracks:list<array{source_gallery_id:int,id:string,filename:string,
  *     title:string,mime:string,size:int,sha256:string,hidden:bool,
- *     downloadable:bool}>} Stable source/track order, one original per digest,
- *     and the number of unreadable indexes omitted without modifying storage.
+ *     downloadable:bool}>} Stable source/track order with each connected
+ *     song/digest represented once, and unreadable indexes counted without
+ *     modifying storage.
  */
 function gallery_music_merge_playlists(array $sources): array
 {
@@ -242,7 +297,7 @@ function gallery_music_merge_playlists(array $sources): array
     );
     $tracks = [];
     $versions = [];
-    $seen = [];
+    $visibleTracks = [];
     $unavailable = 0;
     foreach ($sources as $source) {
         $galleryId = $source['id'];
@@ -262,32 +317,114 @@ function gallery_music_merge_playlists(array $sources): array
         foreach ($playlist['tracks'] as $track) {
             if (!gallery_music_track_visible($track))
                 continue;
-            $key = $track['sha256'];
-            $candidate = ['source_gallery_id' => $galleryId] + $track;
-            if (isset($seen[$key])) {
-                $position = $seen[$key];
-                // A downloadable visible copy may represent the same bytes.
-                // Its own protected endpoint remains the permission owner.
-                if (
-                    $track['downloadable']
-                    && !$tracks[$position]['downloadable']
-                ) {
-                    $tracks[$position] = $candidate;
-                }
-                continue;
-            }
-            $seen[$key] = count($tracks);
-            $tracks[] = $candidate;
+            $visibleTracks[] = ['source_gallery_id' => $galleryId] + $track;
         }
+    }
+    $catalogRows = [];
+    foreach (array_chunk($visibleTracks, GALLERY_MUSIC_CATALOG_BATCH) as $batch) {
+        $references = [];
+        foreach ($batch as $track) {
+            $references[] = [
+                'gallery_id' => (int) $track['source_gallery_id'],
+                'track_id' => $track['id'],
+            ];
+        }
+        try {
+            $catalogRows += music_catalog_titles_for_references($references);
+        } catch (\Throwable) {
+            // Catalog identity is optional for playback; digest grouping below
+            // still removes byte-identical copies without inventing song IDs.
+        }
+    }
+
+    // Union both independent keys before choosing representatives. This keeps
+    // a shared digest from hiding a song-ID bridge to a later visible copy.
+    $parents = array_keys($visibleTracks);
+    $rank = array_fill(0, count($visibleTracks), 0);
+    $keyOwners = [];
+    foreach ($visibleTracks as $position => $track) {
+        $reference = (int) $track['source_gallery_id'] . ':' . $track['id'];
+        $songId = (int) ($catalogRows[$reference]['song_id'] ?? 0);
+        $keys = ['sha:' . $track['sha256']];
+        if ($songId > 0) {
+            $keys[] = 'song:' . $songId;
+        }
+        foreach ($keys as $key) {
+            if (isset($keyOwners[$key])) {
+                $leftRoot = $position;
+                while ($parents[$leftRoot] !== $leftRoot) {
+                    $parents[$leftRoot] = $parents[$parents[$leftRoot]];
+                    $leftRoot = $parents[$leftRoot];
+                }
+                $rightRoot = $keyOwners[$key];
+                while ($parents[$rightRoot] !== $rightRoot) {
+                    $parents[$rightRoot] = $parents[$parents[$rightRoot]];
+                    $rightRoot = $parents[$rightRoot];
+                }
+                if ($leftRoot !== $rightRoot) {
+                    if ($rank[$leftRoot] < $rank[$rightRoot]) {
+                        [$leftRoot, $rightRoot] = [$rightRoot, $leftRoot];
+                    }
+                    $parents[$rightRoot] = $leftRoot;
+                    if ($rank[$leftRoot] === $rank[$rightRoot]) {
+                        $rank[$leftRoot] += 1;
+                    }
+                }
+            } else {
+                $keyOwners[$key] = $position;
+            }
+        }
+    }
+
+    $identityTracks = [];
+    $componentPositions = [];
+    $identityFingerprint = [];
+    foreach ($visibleTracks as $position => $track) {
+        $root = $position;
+        while ($parents[$root] !== $root) {
+            $parents[$root] = $parents[$parents[$root]];
+            $root = $parents[$root];
+        }
+        $reference = (int) $track['source_gallery_id'] . ':' . $track['id'];
+        $catalogRow = $catalogRows[$reference] ?? [];
+        $identityFingerprint[] = [
+            $reference,
+            (int) ($catalogRow['song_id'] ?? 0),
+            (string) ($catalogRow['custom'] ?? ''),
+            (string) ($catalogRow['indexed'] ?? ''),
+        ];
+        if (!isset($componentPositions[$root])) {
+            $componentPositions[$root] = count($identityTracks);
+            $identityTracks[] = $track;
+            continue;
+        }
+        $representative = $componentPositions[$root];
+        // Keep the first source-order item unless an authorized visible copy
+        // grants download access, in which case its own URL remains protected.
+        if (
+            $track['downloadable']
+            && !$identityTracks[$representative]['downloadable']
+        ) {
+            $identityTracks[$representative] = $track;
+        }
+    }
+    try {
+        $catalogRevision = music_catalog_revision();
+    } catch (\Throwable) {
+        $catalogRevision = 'unavailable';
     }
     return [
         'revision' => hash('sha256', json_encode(
-            $versions,
+            [
+                'sources' => $versions,
+                'catalog' => $catalogRevision,
+                'identities' => $identityFingerprint,
+            ],
             JSON_THROW_ON_ERROR,
         )),
         'enabled' => false,
         'unavailable' => $unavailable,
-        'tracks' => $tracks,
+        'tracks' => $identityTracks,
     ];
 }
 
@@ -347,9 +484,10 @@ function gallery_music_track(array $gallery, string $id): ?array
  * @param bool $enabled Explicit gallery slideshow preference for settings.
  * @param bool $downloadable Explicit download permission for
  *     download/download_all.
- * @return array{revision:string, track_id:?string} Exact committed revision
+ * @return array{revision:string, track_id:?string,catalog_sync_pending:bool} Exact committed revision
  *     and new upload identity, or null identity for non-upload actions;
- *     refusals preserve the prior playlist.
+ *     refusals preserve the prior playlist; pending flags a durable snapshot
+ *     marker awaiting reconciliation after the physical operation succeeded.
  * @throws \RuntimeException When validation, quota, revision or storage fails.
  */
 function gallery_music_mutate(
@@ -377,15 +515,15 @@ function gallery_music_mutate(
     )) {
         throw new \RuntimeException(t('music.failed'));
     }
+    $catalogMode = music_catalog_physical_write_mode();
     $validated = $action === 'upload'
         ? gallery_music_validate_source($source, $filename)
         : null;
     $directory = gallery_music_directory($gallery);
     if (
-        (
-            !is_dir($directory)
-            && !@mkdir($directory, GALLERY_MUSIC_DIRECTORY_MODE)
-        )
+        (!is_dir($directory) && !@mkdir($directory, GALLERY_MUSIC_DIRECTORY_MODE)
+            && !is_dir($directory))
+        || is_link($directory)
         || is_link($directory . '/.lock')
     ) {
         throw new \RuntimeException(t('music.failed'));
@@ -481,6 +619,18 @@ function gallery_music_mutate(
             }
         }
         $state['revision'] = bin2hex(random_bytes(16));
+        $catalogReady = $catalogMode === 'available';
+        if ($catalogReady) {
+            try {
+                \Gallery\Models\music_catalog_model_mark_gallery_dirty(
+                    (int) $gallery['id'],
+                );
+                $catalogRevision = music_catalog_revision();
+            } catch (\Throwable $error) {
+                error_log('Music catalog dirty marker failed before playlist write.');
+                throw new \RuntimeException(t('music.failed'), 0, $error);
+            }
+        }
         \Gallery\Models\gallery_music_model_write($directory, $state);
         $committed = true;
         gallery_attachment_storage_record(
@@ -488,6 +638,20 @@ function gallery_music_mutate(
             'music',
             $state['tracks'],
         );
+        $catalogSyncPending = false;
+        if ($catalogReady) {
+            try {
+                music_catalog_sync_gallery_snapshot(
+                    (int) $gallery['id'],
+                    $state['tracks'],
+                    $catalogRevision,
+                );
+            } catch (\Throwable) {
+                // The durable dirty marker suppresses stale usage until a
+                // bounded administrator reconciliation repairs the snapshot.
+                $catalogSyncPending = true;
+            }
+        }
         // Metadata is authoritative: an interrupted unlink leaves an inaccessible
         // orphan rather than a playlist that points to a deleted original.
         if ($action === 'delete') {
@@ -498,6 +662,7 @@ function gallery_music_mutate(
         return [
             'revision' => $state['revision'],
             'track_id' => $action === 'upload' ? $id : null,
+            'catalog_sync_pending' => $catalogSyncPending,
         ];
     } finally {
         if (!$committed && $newPath !== '' && is_file($newPath))

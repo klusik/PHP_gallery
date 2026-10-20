@@ -589,6 +589,76 @@ Välj \ui{Konvertera PDF-sidor} för att rendera dokumentet i webbläsaren. PDF.
 
 Välj antingen ett reserverat privat undergalleri eller lägg till sidorna efter källgalleriets sista foto. Ett undergalleri förblir privat tills du uttryckligen ändrar synligheten; publicering är spärrad medan PDF-konverteringen är ofullständig eller avbruten. Slutför eller stäm av konverteringen på ett säkert sätt först. Vid tillägg behålls källgalleriets synlighet och befintliga foton, och de nya sidorna placeras sist. Original-PDF-filen ersätts aldrig. För båda målen lagras förloppsmarkörer i källgalleriets dolda sidokatalog och innehåller målgalleriets ID. Foto-ZIP-exporter och gallerimigrering överför inte dessa allmänna PDF-original. En fullständig filsystemsbackup måste ta med dolda sidokataloger. Befintliga JPG-sidgallerier är fortsatt separata. Den tidigare serverbaserade OFP-konverteringsbegäran svarar nu med HTTP 409 och ber dig läsa om redigeraren; rasteriseringshjälpen finns endast för CLI- och testkompatibilitet och anropas inte av webbläsaråtgärder. Mer information finns i \codeword{docs/GALLERY\_PDF.md}.
 
+\subsubsection{Musikhanteraren}
+
+Öppna \ui{Admin > Gallerier > Musikhanteraren} för~den~kompakta globala
+katalogen. Stäm av~befintliga spellistor i~begränsade omgångar; original
+och~ordning bevaras. Sökningen efter titel, filnamn och~musiktaggar uppdateras
+medan du~skriver; endast den~senaste begäran ändrar resultaten. Tabellen skiljer
+mellan Titel, Filer, Platser, Taggar och~Åtgärder. Klicka på~en~låttitel för~att
+öppna den~befintliga titelredigeringen; kryssrutan väljer låten separat
+för~sammanslagning. Popupen innehåller titelredigering, tillägg i~album och~knappar
+för~taggar, filer och~platser. Fliken \ui{Låtar} visar katalogen över hela bredden.
+\ui{Album och~spellistor} visar trädet och~skapandet till~vänster samt valt album
+med låtar till~höger; på~smala skärmar placeras panelerna under varandra. Utan val
+visas en~uppmaning att välja eller~skapa ett album. Äldre albumlänkar öppnar fliken.
+Ett nyskapat album väljs automatiskt; när det valda albumet tas bort rensas valet,
+och en~inaktuell albumlänk visar uppmaningen att välja album igen.
+När en~låt läggs till från titelpopupen placeras den sist i~albumet; en~befintlig
+medlemsplats behåller sin ordning. Dra en~låt i~handtaget för~att ändra ordningen
+i~albumet; en~linje visar infogningsplatsen. Pilarna finns kvar för~tangentbord
+och~förflyttning ett steg i~taget.
+Filutfällningen listar fysiska varianter. Platser visar
+direkta gallerier och~musikalbum: två varianter i~samma galleri räknas
+som~en~plats, och~härledd Smart-tillhörighet räknas inte. Gallerilänkar i~båda utfällningarna
+öppnar det~offentliga galleriet; varje musiktagg visas som~en~egen kompakt
+bricka. Rubriklänkar sorterar Titel, Filer, Platser eller~Taggar i~båda
+riktningarna över hela resultatet före sidindelningen; lika värden sorteras
+stabilt efter ID. Taggar sorteras alfabetiskt efter låtens första musiktagg.
+Den~smala åtgärdskolumnen visas bara när en~synlig låt har varianter att dela.
+Hanteraren delar webbplatsens typografi och~accentfärger, med kompakta,
+genomskinliga ytor och~mjukt rundade kanter. Filantalet visas bredvid
+låttiteln med~en~staplad ikon och~siffra. Utfällningarna för~varianter och
+platser följer den~globala animationstiden för~Admin-sidopanelen; 0 gör dem
+omedelbara.
+
+Kugghjulet i~katalogrubriken innehåller den~globala inställningen för~filändelser.
+Det~intilliggande kugghjulet för~nya album döljer val av~överordnat album och~beskrivning
+tills de~behövs. Inbyggda utfällningar håller hopfällda låt- och~albumrader
+kompakta; antalet väntande avstämningar visas bara när~det är~större än~noll.
+Import har~en~synlig textetikett i~en~tom katalog och~blir ikonbaserad när~poster
+finns. Ikonåtgärder behåller tillgängliga namn och~synlig markering av~tangentbordsfokus.
+
+Klicka på en låttitel för att öppna redigeraren nära pekaren. Ett nytt klick på
+samma titel eller utanför stänger den; ett klick på en annan titel byter
+redigerare. Text markeras inte automatiskt. Redigeraren håller sig inom vyn och
+bryter långa titlar. Enter sparar titeln på en rad; radbrytningen i textarean är
+endast visuell och byter aldrig namn på originalfilen. Det~globala valet
+\ui{Visa filändelser i låttitlar} är~avstängt även efter uppgradering
+och~påverkar endast filbaserade namn; egna titlar behåller sin text.
+Markera låtar, förhandsgranska kopplingen och~välj vilka metadata som~behålls.
+En~variant kan~frikopplas igen. Åtkomst och~hämtningsrättigheter tillhör
+fortfarande varje källa.
+
+Det kompakta albumträdet använder inbyggda utfällningar; när ett album väljs
+öppnas automatiskt vägen till dess föräldrar. Brödsmulor ger ytterligare
+navigering. Album och~underalbum innehåller låtar som kan~läggas till, tas bort
+och~sorteras. Albumets kugghjul öppnar en~inbyggd utfällning med titel,
+beskrivning, flytt och~borttagning; låtarnas medlemskap och~ordning förblir
+synliga. Trädet stöder åtta nivåer och~2\,000 album. Antalet väntande
+gallerier visar ofärdiga avstämningar; oläsbara källor hindrar fullständigt
+slutförande.
+Borttagna relationer raderar inga original. Admin-samlingarna publicerar inget globalt
+musikbibliotek. Musiktaggar använder den~gemensamma taxonomin med~egen
+medietyp; bildtaggar och~bildsökning förblir separata. PDF är~reserverat.
+Befintliga sluggar är~fortsatt globalt unika. Säkerhetskopiera SQL och~dolda
+musikmappar; använd framåtriktad migrering och~begränsad avstämning efter
+återställning. Öppna aktuellt läge vid~revisionskonflikt. Avstängd musik
+bevarar metadata och~ljud.
+Lokal återställning ur~Papperskorgen återkopplar aktuella spår till befintliga
+identiteter efter ändrade galleri-ID:n. Äldre ögonblicksbilder eller~borttagna
+identiteter ger nya poster; överförda arkiv tillför inga betrodda logiska ID:n.
+
 \subsubsection{Musiklagring}
 
 Använd \ui{Ladda upp foton} för~att~välja eller~släppa foton, PDF och~musik
@@ -619,7 +689,8 @@ Smartgallerier förenar synlig musik från alla tillgängliga fysiska källor
 med~matchande foton. Fotosidor och~tillfälliga källfilter begränsar inte
 unionen; ingen egen ljudmapp skapas. SHA-256 tar~bort identiska originaldata
 även efter namnbyte. Lika namn eller~längd räcker inte; ändrad kodning
-eller~inbäddade taggar kräver framtida fingeravtryck. Dolda spår utelämnas,
+förblir separata tills en~administratör länkar dem i~Musikhanteraren.
+Dolda spår utelämnas,
 medan synliga hämtningsspärrade spår förblir spelbara. Befintliga och~nya
 spår är~synliga från början. Skyddade källadresser kontrollerar tillgång
 och~synlighet igen. Smartredigerarens presentationsundantag har~en~egen

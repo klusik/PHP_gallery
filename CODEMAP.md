@@ -24,6 +24,15 @@
   attachment retries in `gallery-music-upload.js`.
   The lightbox owns activation/stop/teardown. See `docs/GALLERY_MUSIC.md` for
   limits, backup boundaries, runtime closure review and browser compatibility.
+- Global music identities and albums: `app/models/music_catalog.php` owns SQL;
+  `app/services/music_catalog.php` owns reconciliation, title policy and logical
+  relationships. `app/controllers/admin_music.php` prepares the compact
+  `app/views/admin_music.php` interface; `admin-music.js` completes mutations in
+  place and `admin-music.css` contains its layout. Existing gallery music
+  projection applies shared titles without changing playlist order or files.
+- Typed tags: the existing tag model and `tag_metadata.php` service validate
+  image/music assignment types and retain the global slug namespace. The
+  `music_song_tags` relation references logical songs, never physical files.
   PDF/audio runtime loading shares the existing `gallery-pdf-documents` owner.
 
 - Updater status diagnostics expose nonmutating worker-lock observation and

@@ -145,13 +145,38 @@ public_search_authorization_assert(
         )
         && php_source_contains(
             $progressiveSource,
-            'public_search_model_gallery_tag_name_rows($authorizedGalleryIds)',
+            'public_search_model_gallery_tag_name_rows($authorizedGalleryIds, tag_media_type_schema_state())',
         )
         && php_source_contains(
             $progressiveSource,
-            'public_search_model_image_tag_name_rows($authorizedImageIds)',
+            'public_search_model_image_tag_name_rows($authorizedImageIds, tag_media_type_schema_state())',
         ),
     'Progressive search hydration must authorize before enriching protected gallery/image metadata.',
+);
+$galleryAuthorizationOffset = strpos(
+    $progressiveSource,
+    'public_search_gallery_visible_to_current_visitor($gallery)',
+);
+$galleryTagReadOffset = strpos(
+    $progressiveSource,
+    'public_search_model_gallery_tag_name_rows(',
+);
+$imageAuthorizationOffset = strpos(
+    $progressiveSource,
+    'public_search_image_visible_to_current_visitor($row, $gallery)',
+);
+$imageTagReadOffset = strpos(
+    $progressiveSource,
+    'public_search_model_image_tag_name_rows(',
+);
+public_search_authorization_assert(
+    is_int($galleryAuthorizationOffset)
+        && is_int($galleryTagReadOffset)
+        && $galleryAuthorizationOffset < $galleryTagReadOffset
+        && is_int($imageAuthorizationOffset)
+        && is_int($imageTagReadOffset)
+        && $imageAuthorizationOffset < $imageTagReadOffset,
+    'Progressive hydration must authorize each visitor-visible gallery/image set before querying its tag enrichment.',
 );
 
 echo "public_search_authorization_contract_test: ok\n";

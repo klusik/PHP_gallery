@@ -98,7 +98,7 @@ before Update all; repeat refreshes deliberately trust the database. See
 [attachment reconciliation](docs/GALLERY_PDF.md#admin-storage-accounting).
 Original storage remains under its existing owners.
 
-Music playlists introduce no tables or columns. Each physical gallery's denied
+Physical music playlists remain outside SQL. Each physical gallery's denied
 `.gallery-music/index.json` stores its ordered immutable-original metadata,
 optimistic revision, explicit slideshow-music default and per-track download
 permission. Both preferences default false. Older v1 records without a download
@@ -106,6 +106,39 @@ field remain locked without a storage rewrite. Atomic index writes
 belong to `app/models/gallery_music.php`; validation and file lifecycle belong
 to the music service. Backups must include the entire hidden sidecar. See
 [the music contract](docs/GALLERY_MUSIC.md).
+
+The global music layer adds `202610200001_tag_media_types.php` and
+`202610200002_music_catalog.php`. Existing tag IDs, slugs and image/gallery
+relations are retained; `tags.media_type` defaults to `image`, with `music`
+and reserved `pdf` categories. The globally unique slug constraint is retained.
+The shared tag owner allocates a media-prefixed slug for non-image names.
+
+`music_songs` stores optional logical title overrides. The composite primary
+key `(gallery_id, track_id)` in `music_track_instances` keeps each physical
+instance linked to one song; filename and digest are descriptive metadata,
+never identity evidence. `music_albums` has a separate parent/order hierarchy,
+`music_album_songs` stores ordered reusable membership and `music_song_tags`
+references the existing taxonomy. `music_catalog_state` serializes logical
+mutations through an optimistic revision. `music_catalog_dirty_galleries`
+records pending physical snapshot reconciliation; dirty snapshots are omitted
+from direct-usage counts. Inactive instance links retain identity for restored
+tracks. No table stores audio bytes.
+
+Local Trash snapshots include optional per-gallery `music_catalog_refs` with
+track/song IDs. Since restore creates new gallery IDs, the local restore owner
+rebinds verified current track IDs to extant songs; old/obsolete references use
+fresh imported identities. No foreign archive supplies these local references.
+
+Run normal forward migrations before opening the manager. Repeated ordinary
+DDL uses the existing interrupted-migration recovery; requests never create
+schema. Bounded Admin reconciliation imports existing JSON indexes without
+rewriting them. Public presentation reads catalog metadata only for requested
+tracks. SQL backup and hidden-sidecar backup are both needed to preserve the
+complete catalog and originals. Restore them as one site snapshot; metadata
+from another site must be reconciled using local gallery/track identities,
+never trusted as portable logical IDs. Recovery is forward-only: preserve
+tables and sidecars, repair schema through the supported migration runner and
+repeat reconciliation. Removing music relations never removes originals.
 
 ## Cache lifecycle regions
 
@@ -324,6 +357,8 @@ Current migration sequence:
 | `202609200003_admin_operation_keys.php` | Adds the actor/key-bound replay ledger for gallery creation and classic upload, including payload/owner hashes, lifecycle state, bounded original response, and pending-state index. |
 | `202609250001_gallery_creation_preferences.php` | Adds one user-owned row for optional SimBrief Pilot ID/name and gallery source-language defaults, with a foreign key that removes preferences when the administrator account is deleted. |
 | `202610020001_gallery_description_layout_semantics.php` | Replay-safe data/sidecar orientation conversion preserving legacy appearance, inheritance, Smart Gallery JSON and Trash snapshots; adds no table or column. |
+| `202610200001_tag_media_types.php` | Adds image/music/reserved-PDF media categories without changing existing tag IDs, slugs or assignments. |
+| `202610200002_music_catalog.php` | Adds logical songs, stable physical links, albums, song tags, revision state and pending snapshot reconciliation. |
 
 ## Entity Relationship Overview
 

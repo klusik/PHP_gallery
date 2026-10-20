@@ -109,6 +109,8 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$operation()
     Gallery\Models\gallery_feature_plan_model_transaction|variable_callable|$operation()
     Gallery\Models\app_settings_model_set_many_with_activation|variable_callable|$activate()
+    Gallery\Models\music_catalog_model_transaction|variable_callable|$mutation()
+    Gallery\Services\music_catalog_commit_mutation|variable_callable|$mutation()
     Gallery\Models\viewer_account_model_transaction|variable_callable|$operation()
     Gallery\Models\viewer_collection_model_transaction|variable_callable|$operation()
     Gallery\Models\viewer_favourite_model_set|variable_callable|$lockedAccountAllowed()
@@ -246,6 +248,12 @@ function runtime_dynamic_dependency_reviewed_sites(): array
                 'app_settings_model_set_many_with_activation|',
             )
                 => 'settings-model:transaction-activation-callback',
+            // The catalog service supplies lexical closures after schema and
+            // revision validation. Request data cannot select a callable; the
+            // compiler follows concrete calls inside each service closure.
+            str_contains($signature, 'music_catalog_model_transaction|'),
+            str_contains($signature, 'music_catalog_commit_mutation|')
+                => 'music-catalog-model:revision-locked-domain-mutation',
             str_contains($signature, 'theme_background_with_writer_lock|')
                 => 'theme-background-service:exclusive-writer-lock-operation',
             str_contains(

@@ -1,0 +1,1424 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/admin-music.css
+ * Module Type: Stylesheet
+ * Purpose: Keep the global music catalog compact and usable on narrow screens.
+ * Responsibilities: Style catalog rows, disclosures, album hierarchy, and focus states.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+.admin-music {
+    --music-accent: var(--accent, #2563eb);
+    --music-accent-dark: var(--accent-dark, #1e3a8a);
+    --music-line: var(--line, var(--border, #dbe4ef));
+    --music-panel: var(--gallery-panel, var(--panel, #fff));
+    --music-ink: var(--ink, #172033);
+    --music-muted: var(--muted, #64748b);
+    --music-radius: var(--radius, 10px);
+    /*
+     * Keep pointer-positioned title editors clear of viewport edges.
+     * Type: CSS length. Units: rem. Scope: one Music Manager instance.
+     * Consumers: title editor styling and delegated pointer positioning.
+     * Rationale: provide a font-scaled edge gutter on narrow screens.
+     */
+    --music-title-editor-gutter: .5rem;
+    /*
+     * Limit title-editor width before long names consume the whole catalog.
+     * Type: CSS length. Units: rem. Scope: one Music Manager title editor.
+     * Consumers: pointer-editor form and its viewport-bounded fallback.
+     * Rationale: retain room for nearby album controls while allowing wrapping.
+     * Value: 40rem, approximately 640px at the default root font size.
+     */
+    --music-title-editor-max-width: 40rem;
+    /*
+     * Bound hover and disclosure feedback to a brief, readable transition.
+     * Type: CSS time. Units: seconds. Scope: one Music Manager instance.
+     * Consumers: manager buttons, summaries, links, and catalog rows.
+     * Rationale: provide subtle state feedback without slowing repeated actions.
+     */
+    --music-control-motion-duration: .16s;
+    /*
+     * Follow the shared Admin side-panel timing for disclosure surfaces.
+     * Type: CSS time. Units: milliseconds. Scope: one Music Manager instance.
+     * Consumers: opened preference, album, variant, usage, and edit popups.
+     * Rationale: keep owned disclosure motion aligned with the shared panel.
+     */
+    --music-disclosure-motion-duration: var(--admin-side-panel-motion-duration, 260ms);
+
+    max-width: 1500px;
+    min-width: 0;
+    margin: 0 auto;
+    color: var(--music-ink);
+    font-family: var(--font-family, Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+
+.admin-music .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+.admin-music-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-bottom: .65rem;
+}
+
+#music-manager .admin-music-tabs {
+    margin: .4rem 0 .65rem;
+    padding: .22rem;
+    border: 1px solid color-mix(in srgb, var(--music-line) 78%, transparent);
+    border-radius: calc(var(--music-radius) * .75);
+    background: color-mix(in srgb, var(--music-panel) 76%, transparent);
+    box-shadow: 0 4px 14px rgba(30, 58, 138, .045);
+    -webkit-backdrop-filter: blur(8px) saturate(1.04);
+    backdrop-filter: blur(8px) saturate(1.04);
+}
+
+#music-manager .admin-music-tabs .admin-tab-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+}
+
+#music-manager .admin-music-tabs .admin-tab {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    padding: .3rem .65rem;
+    border: 1px solid transparent;
+    border-radius: .5rem;
+    background: transparent;
+    color: var(--music-muted);
+    font-size: .84rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color var(--music-control-motion-duration) ease,
+        border-color var(--music-control-motion-duration) ease,
+        color var(--music-control-motion-duration) ease;
+}
+
+#music-manager .admin-music-tabs .admin-tab:hover,
+#music-manager .admin-music-tabs .admin-tab[aria-selected="true"] {
+    border-color: color-mix(in srgb, var(--music-accent) 22%, transparent);
+    background: color-mix(in srgb, var(--music-accent) 8%, white);
+    color: var(--music-accent-dark);
+}
+
+#music-manager #admin-music-tab-songs,
+#music-manager #admin-music-tab-albums {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+#music-manager .admin-music-heading {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin: 0;
+    color: var(--music-ink);
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: -.02em;
+}
+
+.admin-music-heading svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    color: var(--music-accent);
+}
+
+#music-manager .admin-music-catalog {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .45rem .6rem;
+    align-items: start;
+}
+
+/* A frosted card forms a stacking context; lift it while its own popover is open. */
+#music-manager .admin-music-catalog:has(.admin-music-merge[open]),
+#music-manager .admin-music-catalog:has(.admin-music-table-wrap td details[open]) {
+    position: relative;
+    z-index: 40;
+}
+
+#music-manager #admin-music-tab-songs,
+#music-manager #admin-music-tab-albums {
+    min-width: 0;
+}
+
+#music-manager #admin-music-tab-songs .admin-music-catalog {
+    width: 100%;
+}
+
+#music-manager .admin-music-albums-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    gap: .65rem;
+    align-items: start;
+    min-width: 0;
+}
+
+#music-manager .admin-music-album-sidebar,
+#music-manager .admin-music-album-content {
+    min-width: 0;
+}
+
+#music-manager .admin-music-album-prompt {
+    margin: 0;
+    padding: .75rem;
+    border: 1px dashed color-mix(in srgb, var(--music-line) 82%, transparent);
+    border-radius: calc(var(--music-radius) * .75);
+    background: color-mix(in srgb, var(--music-panel) 54%, transparent);
+    color: var(--music-muted);
+}
+
+#music-manager #admin-music-tab-albums {
+    scroll-margin-block-start: 10rem;
+}
+
+.admin-music-catalog,
+.admin-music-albums,
+.admin-music-album-sidebar,
+.admin-music-album-detail {
+    min-width: 0;
+    padding: .65rem;
+    border: 1px solid color-mix(in srgb, var(--music-line) 78%, transparent);
+    border-radius: var(--music-radius);
+    background: rgba(255, 255, 255, .76);
+    background: color-mix(in srgb, var(--music-panel) 76%, transparent);
+    box-shadow: 0 8px 24px rgba(30, 58, 138, .07);
+    -webkit-backdrop-filter: blur(10px) saturate(1.06);
+    backdrop-filter: blur(10px) saturate(1.06);
+}
+
+.admin-music-albums h2,
+.admin-music-album-sidebar h2,
+.admin-music-album-detail h3 {
+    margin: 0 0 .45rem;
+    color: var(--music-ink);
+    font-size: 1rem;
+    line-height: 1.3;
+    font-weight: 700;
+    letter-spacing: normal;
+}
+
+.admin-music-preferences,
+.admin-music-toolbar,
+.admin-music-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+}
+
+.admin-music-preferences,
+.admin-music-album-options {
+    position: relative;
+}
+
+.admin-music-preferences > summary,
+.admin-music-album-options > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    min-height: 2rem;
+    list-style: none;
+    border: 1px solid var(--music-line);
+    border-radius: .55rem;
+    background: rgba(255, 255, 255, .68);
+    color: var(--music-accent-dark);
+    cursor: pointer;
+    transition: background-color var(--music-control-motion-duration) ease,
+        border-color var(--music-control-motion-duration) ease,
+        color var(--music-control-motion-duration) ease;
+}
+
+.admin-music-preferences > summary::-webkit-details-marker,
+.admin-music-album-options > summary::-webkit-details-marker {
+    display: none;
+}
+
+.admin-music-preferences > summary:hover,
+.admin-music-album-options > summary:hover {
+    border-color: color-mix(in srgb, var(--music-accent) 45%, var(--music-line));
+    background: color-mix(in srgb, var(--music-accent) 9%, white);
+    color: var(--music-accent);
+}
+
+.admin-music-preferences > form,
+.admin-music-album-fields {
+    position: absolute;
+    z-index: 30;
+    inset-block-start: 100%;
+    inset-inline-end: 0;
+    width: min(23rem, calc(100vw - 2rem));
+    padding: .65rem;
+    border: 1px solid var(--music-line);
+    border-radius: calc(var(--music-radius) * .75);
+    background: var(--music-panel, rgba(255, 255, 255, .96));
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .16);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+}
+
+.admin-music-preferences > form {
+    flex-wrap: wrap;
+}
+
+.admin-music-album-options:not([open]) > .admin-music-album-fields {
+    display: none;
+}
+
+.admin-music-preferences .admin-music-check {
+    flex: 1;
+    min-width: 0;
+}
+
+#music-manager .admin-music-preferences form,
+#music-manager .admin-music-inline,
+#music-manager .admin-music-split form,
+#music-manager .admin-music-album-detail form {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0;
+}
+
+.admin-music-preferences select,
+.admin-music-search input,
+.admin-music-new-album input,
+.admin-music-new-album select,
+.admin-music-inline input,
+.admin-music-album-detail input,
+.admin-music-album-detail select {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-music-check {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.admin-music label {
+    min-width: 0;
+}
+
+#music-manager input:not([type="checkbox"]):not([type="hidden"]),
+#music-manager select,
+#music-manager textarea {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    border: 1px solid var(--music-line);
+    border-radius: .55rem;
+    background: color-mix(in srgb, var(--music-panel) 72%, white);
+    color: var(--music-ink);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, .035);
+}
+
+#music-manager input:not([type="checkbox"]):not([type="hidden"]),
+#music-manager select {
+    min-height: 2rem;
+    padding: .32rem .5rem;
+}
+
+#music-manager input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--music-accent);
+}
+
+#music-manager input::placeholder {
+    color: var(--music-muted);
+    opacity: .82;
+}
+
+.admin-music textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+.admin-music-toolbar {
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    grid-column: 1;
+    margin: 0 0 .55rem;
+    min-width: 0;
+}
+
+.admin-music-toolbar > form {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+.admin-music-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+}
+
+.admin-music-search {
+    display: flex;
+    flex: 1;
+    gap: .35rem;
+    max-width: none;
+    min-width: 0;
+}
+
+.admin-music-search input {
+    flex: 1;
+    background: color-mix(in srgb, var(--music-accent) 4%, white);
+}
+
+.admin-music-bulk {
+    margin: .5rem 0;
+}
+
+.admin-music-catalog > .admin-music-merge {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+}
+
+.admin-music-catalog > .admin-music-table-wrap {
+    grid-column: 1 / -1;
+}
+
+.admin-music-bulk > label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    color: var(--music-muted);
+    font-size: .88rem;
+}
+
+.admin-music-table-wrap {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid color-mix(in srgb, var(--music-line) 85%, transparent);
+    border-radius: calc(var(--music-radius) * .7);
+}
+
+@keyframes admin-music-disclosure-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-.35rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#music-manager .admin-music-preferences[open] > form,
+#music-manager .admin-music-album-options[open] > .admin-music-album-fields,
+#music-manager .admin-music-merge[open] > form,
+#music-manager .admin-music-song-edit[open] > .admin-music-song-popover,
+#music-manager td details[open] > ul,
+#music-manager td details[open] > form {
+    animation: admin-music-disclosure-enter var(--music-disclosure-motion-duration) ease both;
+}
+
+#music-manager table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    background: transparent;
+    overflow: visible;
+}
+
+#music-manager thead,
+#music-manager thead tr,
+#music-manager thead th {
+    position: static;
+    inset: auto;
+    transform: none;
+}
+
+#music-manager th,
+#music-manager td {
+    position: relative;
+    padding: .4rem .45rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--music-line) 72%, transparent);
+    text-align: left;
+    vertical-align: top;
+}
+
+/* Put each open row-local popover above later positioned table cells. */
+#music-manager td:has(> details[open]) {
+    z-index: 2;
+}
+
+#music-manager th {
+    background: color-mix(in srgb, var(--music-accent) 5%, white);
+    color: var(--music-muted);
+    font-size: .76rem;
+    font-weight: 700;
+    letter-spacing: normal;
+    text-transform: none;
+    overflow-wrap: anywhere;
+}
+
+#music-manager tr:last-child td {
+    border-bottom: 0;
+}
+
+#music-manager tbody tr {
+    transition: background-color var(--music-control-motion-duration) ease;
+}
+
+#music-manager tbody tr:hover {
+    background: color-mix(in srgb, var(--music-accent) 4%, transparent);
+}
+
+#music-manager tbody tr:has(.admin-music-select input:checked) {
+    background: color-mix(in srgb, var(--music-accent) 8%, transparent);
+}
+
+#music-manager th:nth-child(1) { width: auto; }
+#music-manager th:nth-child(2) { width: 3.5rem; }
+#music-manager th:nth-child(3) { width: 4.5rem; }
+#music-manager th:nth-child(4) { width: 6rem; }
+#music-manager th:nth-child(5) { width: 3rem; }
+
+.admin-music td details {
+    display: inline-block;
+    margin: .12rem .35rem 0 0;
+}
+
+#music-manager td:nth-child(5) details {
+    margin-inline-end: .15rem;
+}
+
+.admin-music-merge {
+    position: relative;
+    display: inline-block;
+    margin-bottom: .3rem;
+}
+
+#music-manager .admin-music-edit > summary,
+#music-manager .admin-music-split > summary,
+#music-manager .admin-music-merge > summary {
+    display: inline-flex;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--music-line);
+    border-radius: .55rem;
+    background: rgba(255, 255, 255, .72);
+    color: var(--music-accent-dark);
+    line-height: 1;
+    list-style: none;
+    cursor: pointer;
+}
+
+#music-manager .admin-music-edit > summary::-webkit-details-marker,
+#music-manager .admin-music-split > summary::-webkit-details-marker,
+#music-manager .admin-music-merge > summary::-webkit-details-marker {
+    display: none;
+}
+
+#music-manager .admin-music-edit > summary svg,
+#music-manager .admin-music-split > summary svg,
+#music-manager .admin-music-merge > summary svg {
+    display: block;
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 1rem;
+}
+
+#music-manager .admin-music-edit[open] > summary,
+#music-manager .admin-music-split[open] > summary,
+#music-manager .admin-music-merge[open] > summary {
+    border-color: color-mix(in srgb, var(--music-accent) 42%, var(--music-line));
+    background: color-mix(in srgb, var(--music-accent) 9%, white);
+    color: var(--music-accent-dark);
+}
+
+.admin-music-merge > form {
+    position: absolute;
+    inset-block-start: 100%;
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+    z-index: 50;
+    width: min(26rem, calc(100vw - 2rem));
+    padding: .55rem;
+    border: 1px solid var(--music-line);
+    border-radius: calc(var(--music-radius) * .7);
+    background: var(--music-panel);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .14);
+}
+
+.admin-music-merge select {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-music summary {
+    cursor: pointer;
+    font-size: .82rem;
+}
+
+.admin-music td details > ul,
+.admin-music td details > form {
+    position: absolute;
+    inset-block-start: 100%;
+    inset-inline-end: 0;
+    z-index: 50;
+    width: max-content;
+    min-width: 180px;
+    max-width: min(24rem, calc(100vw - 2rem));
+    max-height: 280px;
+    overflow: auto;
+    margin: .2rem 0;
+    padding: .55rem;
+    border: 1px solid var(--music-line);
+    border-radius: calc(var(--music-radius) * .7);
+    background: var(--music-panel);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .14);
+}
+
+#music-manager td:nth-child(2) details > ul {
+    inset-inline-start: 0;
+    inset-inline-end: auto;
+}
+
+#music-manager tbody tr:last-child td details > ul,
+#music-manager tbody tr:last-child td details > form {
+    inset-block-start: auto;
+    inset-block-end: 100%;
+}
+
+.admin-music td details > ul {
+    padding-inline-start: 1.5rem;
+}
+
+.admin-music td details > form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.admin-music td details > form input {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-music td details > form ul {
+    padding-inline-start: 1rem;
+}
+
+#music-manager .admin-music-title-line > .admin-music-select {
+    display: flex;
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    align-items: flex-start;
+    gap: .35rem;
+    font-weight: 600;
+}
+
+#music-manager .admin-music-title-line {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: .3rem;
+}
+
+#music-manager .admin-music-select > input[type="checkbox"] {
+    flex: 0 0 1rem;
+    margin: 0;
+}
+
+#music-manager .admin-music-select > .admin-music-song-edit {
+    min-width: 0;
+    max-width: 100%;
+}
+
+#music-manager .admin-music-song-edit > summary.admin-music-song-title {
+    display: block;
+    width: auto;
+    min-width: 0;
+    height: auto;
+    min-height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--music-ink);
+    text-align: start;
+    list-style: none;
+}
+
+#music-manager .admin-music-song-edit[open] > summary.admin-music-song-title {
+    border: 0;
+    background: transparent;
+    color: var(--music-ink);
+}
+
+#music-manager .admin-music-song-edit > summary.admin-music-song-title:hover {
+    border: 0;
+    background: transparent;
+    color: var(--music-accent-dark);
+    text-decoration: none;
+    box-shadow: none;
+}
+
+#music-manager .admin-music-song-edit > summary.admin-music-song-title:focus-visible {
+    outline-offset: 1px;
+}
+
+#music-manager .admin-music-song-popover {
+    display: grid;
+    gap: .4rem;
+    min-width: 0;
+}
+
+#music-manager .admin-music-song-edit:not([open]) > .admin-music-song-popover {
+    display: none;
+}
+
+#music-manager .admin-music-song-popover > form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
+    min-width: 0;
+    margin: 0;
+}
+
+#music-manager .admin-music-song-popover > form > label {
+    display: block;
+    flex: 1 1 8rem;
+    min-width: 0;
+    margin: 0;
+}
+
+#music-manager .admin-music-song-popover form.admin-music-album-add-song > label {
+    flex-basis: 12rem;
+}
+
+#music-manager .admin-music-song-popover form.admin-music-album-add-song select {
+    width: 100%;
+}
+
+#music-manager .admin-music-context-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: .2rem;
+}
+
+#music-manager .admin-music-context-actions > .admin-music-context-button {
+    width: auto;
+    min-width: 2rem;
+    min-height: 2rem;
+    flex: 0 0 auto;
+    gap: .25rem;
+    padding: .2rem .4rem;
+    font-size: .75rem;
+    white-space: nowrap;
+}
+
+#music-manager .admin-music-song-popover textarea[name="title"] {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    max-height: calc(
+        100vh - var(--music-title-editor-gutter)
+            - var(--music-title-editor-gutter)
+    );
+    resize: none;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+#music-manager .admin-music-title-pointer-editor {
+    position: absolute;
+    inset-block: auto;
+    inset-inline: auto;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    box-sizing: border-box;
+    width: var(
+        --music-title-editor-width,
+        min(
+            var(--music-title-editor-max-width),
+            calc(
+                100vw - var(--music-title-editor-gutter)
+                    - var(--music-title-editor-gutter)
+            )
+        )
+    );
+    min-width: min(
+        20rem,
+        calc(
+            100vw - var(--music-title-editor-gutter)
+                - var(--music-title-editor-gutter)
+        )
+    );
+    max-width: min(
+        var(--music-title-editor-max-width),
+        calc(
+            100vw - var(--music-title-editor-gutter)
+                - var(--music-title-editor-gutter)
+        )
+    );
+    max-height: calc(
+        100vh - var(--music-title-editor-gutter)
+            - var(--music-title-editor-gutter)
+    );
+    padding: .55rem;
+    border: 1px solid var(--music-line);
+    border-radius: calc(var(--music-radius) * .7);
+    background: var(--music-panel);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .16);
+    z-index: 60;
+    overflow-y: auto;
+}
+
+#music-manager td:nth-child(2) > .admin-music-variants > summary,
+#music-manager tbody td:nth-child(3) > details > summary {
+    display: inline-flex;
+    align-items: center;
+    color: var(--music-muted);
+    line-height: 1.2;
+    list-style: none;
+    cursor: pointer;
+}
+
+#music-manager td:nth-child(2) > .admin-music-variants > summary {
+    display: inline-flex;
+    min-width: 2rem;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: center;
+    gap: .28rem;
+    padding: 0 .12rem;
+    color: var(--music-muted);
+    font-size: .76rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+#music-manager td:nth-child(4) .admin-music-edit > summary {
+    display: inline-flex;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--music-muted);
+    box-shadow: none;
+}
+
+#music-manager td:nth-child(4) .admin-music-edit[open] > summary,
+#music-manager td:nth-child(4) .admin-music-edit > summary:hover {
+    border: 0;
+    background: transparent;
+    color: var(--music-accent-dark);
+    box-shadow: none;
+}
+
+#music-manager .admin-music-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2rem;
+    max-width: 100%;
+    min-width: 0;
+}
+
+#music-manager .admin-music-tag {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    padding: .08rem .32rem;
+    border: 1px solid color-mix(in srgb, var(--music-accent) 16%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--music-accent) 6%, white);
+    color: var(--music-muted);
+    font-size: .68rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+#music-manager td:nth-child(2) > .admin-music-variants > summary:hover,
+#music-manager tbody td:nth-child(3) > details > summary:hover,
+#music-manager td:nth-child(4) .admin-music-edit > summary:hover {
+    color: var(--music-accent-dark);
+}
+
+#music-manager .admin-music-variants .subgallery-stack-icon {
+    position: relative;
+    display: inline-grid;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+}
+
+#music-manager .admin-music-variants .subgallery-stack-icon span {
+    position: absolute;
+    display: block;
+    width: .8rem;
+    height: .8rem;
+    border: 2px solid currentColor;
+    border-radius: calc(var(--music-radius) * .22);
+    background: transparent;
+}
+
+#music-manager .admin-music-variants .subgallery-stack-icon span:nth-child(1) {
+    top: 0;
+    right: 0;
+    opacity: .72;
+}
+
+#music-manager .admin-music-variants .subgallery-stack-icon span:nth-child(2) {
+    top: .2rem;
+    right: .2rem;
+    opacity: .86;
+}
+
+#music-manager .admin-music-variants .subgallery-stack-icon span:nth-child(3) {
+    top: .4rem;
+    right: .4rem;
+}
+
+#music-manager .admin-music-variants .subgallery-stack-count {
+    min-width: 1.1rem;
+    text-align: right;
+}
+
+#music-manager tbody td:nth-child(3) > details > summary {
+    display: inline-flex;
+    min-width: 2rem;
+    min-height: 2rem;
+    justify-content: center;
+    font-size: .8rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+#music-manager td:nth-child(2) > .admin-music-variants > summary::-webkit-details-marker,
+#music-manager tbody td:nth-child(3) > details > summary::-webkit-details-marker {
+    display: none;
+}
+
+#music-manager button,
+#music-manager a,
+#music-manager summary {
+    min-height: 2rem;
+}
+
+#music-manager button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 2rem;
+    min-width: 2rem;
+    padding: .1rem;
+    border: 1px solid color-mix(in srgb, var(--music-accent) 32%, var(--music-line));
+    border-radius: .55rem;
+    background: rgba(255, 255, 255, .7);
+    color: var(--music-accent-dark);
+    font-size: .82rem;
+    line-height: 1;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    transition: background-color var(--music-control-motion-duration) ease,
+        border-color var(--music-control-motion-duration) ease,
+        color var(--music-control-motion-duration) ease,
+        box-shadow var(--music-control-motion-duration) ease;
+}
+
+#music-manager button:hover:not(:disabled) {
+    border-color: var(--music-accent);
+    background: color-mix(in srgb, var(--music-accent) 9%, white);
+    color: var(--music-accent-dark);
+    box-shadow: 0 2px 7px rgba(37, 99, 235, .12);
+}
+
+#music-manager button:disabled {
+    opacity: .42;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+#music-manager .admin-music-toolbar > form button {
+    width: 2rem;
+    min-width: 2rem;
+    padding-inline: .1rem;
+}
+
+#music-manager .admin-music-toolbar > form button:has(span) {
+    width: auto;
+    min-width: 2rem;
+    gap: .3rem;
+    padding-inline: .5rem;
+}
+
+#music-manager .admin-music-toolbar > .admin-music-search button {
+    width: 2rem;
+    padding-inline: .1rem;
+    border-color: var(--music-accent);
+    background: var(--music-accent);
+    color: #fff;
+}
+
+.admin-music svg {
+    display: block;
+    width: 1rem;
+    height: 1rem;
+}
+
+#music-manager :focus-visible {
+    outline: 3px solid var(--music-accent);
+    outline-offset: 2px;
+}
+
+.admin-music-albums h2 {
+    margin-bottom: .55rem;
+}
+
+.admin-music-new-album {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 2rem 2rem;
+    gap: .3rem;
+    align-items: start;
+}
+
+.admin-music-new-album > label input {
+    width: 100%;
+}
+
+.admin-music-album-options {
+    position: static;
+}
+
+.admin-music-album-fields {
+    display: grid;
+    box-sizing: border-box;
+    width: 100%;
+    gap: .5rem;
+}
+
+.admin-music-album-fields label {
+    display: grid;
+    gap: .2rem;
+}
+
+.admin-music-album-detail form {
+    flex-wrap: wrap;
+}
+
+.admin-music-album-detail form > label {
+    flex: 1 1 6rem;
+}
+
+.admin-music-album-heading {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .4rem;
+    min-width: 0;
+}
+
+#music-manager .admin-music-album-detail > nav[aria-label] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .15rem .3rem;
+    margin: 0 0 .3rem;
+    color: var(--music-muted);
+    font-size: .75rem;
+    line-height: 1.3;
+}
+
+#music-manager .admin-music-album-detail > nav[aria-label]:empty {
+    display: none;
+}
+
+#music-manager .admin-music-album-detail > nav[aria-label] > a {
+    text-decoration: none;
+}
+
+#music-manager .admin-music-album-heading h3 {
+    font-size: 1rem;
+    line-height: 1.3;
+    font-weight: 700;
+}
+
+.admin-music-album-detail h3 {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-music-album-options > summary {
+    min-height: 2rem;
+}
+
+.admin-music-album-detail .admin-music-album-fields {
+    width: min(23rem, 100%);
+    max-width: 100%;
+}
+
+.admin-music-album-description {
+    margin: .35rem 0;
+    color: var(--music-muted);
+    overflow-wrap: anywhere;
+}
+
+.admin-music-album-detail > .admin-music-album-add-song {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 2rem;
+    gap: .35rem;
+    align-items: center;
+    margin: .4rem 0;
+}
+
+.admin-music-album-members:empty {
+    padding: 0;
+}
+
+.admin-music-album-detail .admin-music-album-members {
+    padding: 0;
+}
+
+.admin-music-album-detail .admin-music-album-members > li {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr) repeat(3, 2rem);
+    align-items: center;
+    gap: .2rem;
+    min-width: 0;
+    min-height: 2.25rem;
+    padding: .125rem 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--music-line) 65%, transparent);
+}
+
+#music-manager .admin-music-album-detail {
+    display: flex;
+    flex-direction: column;
+}
+
+#music-manager .admin-music-album-heading {
+    order: 1;
+}
+
+#music-manager .admin-music-album-detail > nav[aria-label] {
+    order: 2;
+}
+
+#music-manager .admin-music-album-description {
+    order: 3;
+}
+
+#music-manager .admin-music-album-detail > .admin-music-album-add-song {
+    order: 4;
+}
+
+#music-manager .admin-music-album-members {
+    order: 5;
+}
+
+.admin-music-album-detail .admin-music-album-members > li:last-child {
+    border-bottom: 0;
+}
+
+.admin-music-album-member-title {
+    min-width: 0;
+    color: var(--music-ink);
+    overflow-wrap: anywhere;
+}
+
+.admin-music-album-members > li > form {
+    min-width: 0;
+    margin: 0;
+}
+
+#music-manager .admin-music-album-members .admin-music-album-drag-handle {
+    display: inline-flex;
+    width: 2rem;
+    min-width: 2rem;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: center;
+    padding: .1rem;
+    border: 0;
+    background: transparent;
+    color: var(--music-muted);
+    box-shadow: none;
+    cursor: grab;
+    touch-action: none;
+}
+
+#music-manager .admin-music-album-drag-handle:active {
+    cursor: grabbing;
+}
+
+#music-manager .admin-music-album-members > li.is-dragging {
+    opacity: .48;
+    background: color-mix(in srgb, var(--music-accent) 5%, transparent);
+}
+
+#music-manager .admin-music-album-members > li[data-drop-position="before"] {
+    box-shadow: inset 0 2px 0 var(--music-accent);
+    background: color-mix(in srgb, var(--music-accent) 6%, transparent);
+}
+
+#music-manager .admin-music-album-members > li[data-drop-position="after"] {
+    box-shadow: inset 0 -2px 0 var(--music-accent);
+    background: color-mix(in srgb, var(--music-accent) 6%, transparent);
+}
+
+.admin-music-album-detail li {
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+}
+
+.admin-music-album-tree a {
+    color: var(--music-accent-dark);
+    overflow-wrap: anywhere;
+    text-decoration: none;
+    transition: color var(--music-control-motion-duration) ease;
+}
+
+.admin-music-album-tree a:hover {
+    color: var(--music-accent);
+}
+
+.admin-music-album-tree,
+.admin-music-album-tree ul {
+    list-style: none;
+    padding-left: .8rem;
+}
+
+.admin-music-album-tree {
+    padding-left: 0;
+}
+
+.admin-music-album-tree li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
+    padding: .18rem 0;
+}
+
+#music-manager .admin-music-album-tree li:has(> a[aria-current="page"]),
+#music-manager .admin-music-album-tree li:has(> details > summary > a[aria-current="page"]) {
+    padding-inline: .3rem;
+    border-radius: .45rem;
+    background: color-mix(in srgb, var(--music-accent) 8%, white);
+}
+
+#music-manager .admin-music-album-tree li > span,
+#music-manager .admin-music-album-branch > summary > span {
+    display: inline-flex;
+    min-width: 1.7rem;
+    min-height: 1.35rem;
+    align-items: center;
+    justify-content: center;
+    padding: .05rem .35rem;
+    border: 1px solid color-mix(in srgb, var(--music-accent) 17%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--music-accent) 7%, white);
+    color: var(--music-muted);
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+}
+
+#music-manager .admin-music-album-branch > summary > span {
+    margin-inline-start: .35rem;
+    vertical-align: middle;
+}
+
+.admin-music-album-branch {
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+.admin-music-album-branch > summary {
+    display: list-item;
+    min-height: 2rem;
+    list-style: disclosure-closed inside;
+    color: var(--music-accent-dark);
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.admin-music-album-branch[open] > summary {
+    list-style-type: disclosure-open;
+}
+
+.admin-music-album-branch > summary > a {
+    display: inline-block;
+    max-width: calc(100% - 3rem);
+    vertical-align: middle;
+}
+
+.admin-music-album-branch > ul {
+    flex-basis: 100%;
+    margin: 0 0 0 .35rem;
+}
+
+.admin-music-album-tree li ul {
+    flex-basis: 100%;
+    margin: 0 0 0 .35rem;
+}
+
+.admin-music-album-tree a[aria-current="page"] {
+    color: var(--music-accent-dark);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+#music-manager .admin-music-album-detail {
+    margin-top: 0;
+}
+
+#music-manager .admin-music-album-sidebar h2,
+#music-manager .admin-music-album-detail h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    line-height: 1.3;
+    font-weight: 700;
+}
+
+#music-manager .admin-music-album-sidebar h2 {
+    display: flex;
+    min-height: 2rem;
+    align-items: center;
+    margin-bottom: 0;
+}
+
+.admin-music-album-detail > form {
+    margin-bottom: .4rem;
+}
+
+.admin-music-album-detail ul {
+    padding-left: 1.2rem;
+}
+
+.admin-music-pagination {
+    display: flex;
+    justify-content: space-between;
+    padding: .7rem 0;
+}
+
+.admin-music-pagination:empty {
+    padding: 0;
+}
+
+.admin-music-pagination a {
+    color: var(--music-accent-dark);
+    text-decoration: none;
+}
+
+#music-manager a,
+#music-manager a:hover,
+#music-manager a:focus-visible,
+#music-manager .admin-music-song-title {
+    text-decoration: none;
+}
+
+.admin-music-notice,
+.admin-music-error {
+    padding: .45rem .65rem;
+    border: 1px solid transparent;
+    border-radius: calc(var(--music-radius) * .7);
+}
+
+.admin-music-notice {
+    border-color: rgba(22, 128, 61, .18);
+    background: rgba(22, 128, 61, .08);
+}
+
+.admin-music-error {
+    border-color: rgba(189, 37, 37, .2);
+    background: rgba(189, 37, 37, .08);
+}
+
+.admin-music [data-busy="1"] {
+    opacity: .7;
+}
+
+@media (max-width: 850px) {
+    #music-manager .admin-music-albums-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 560px) {
+    #music-manager .admin-music-catalog {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    #music-manager .admin-music-toolbar {
+        flex-wrap: wrap;
+    }
+    #music-manager .admin-music-catalog > .admin-music-merge {
+        grid-column: 1;
+        grid-row: auto;
+        justify-self: start;
+    }
+    #music-manager .admin-music-merge > form {
+        inset-inline-start: 0;
+        inset-inline-end: auto;
+    }
+    #music-manager th:nth-child(2) { width: 3rem; }
+    #music-manager th:nth-child(3) { width: 3.75rem; }
+    #music-manager th:nth-child(4) { width: 4rem; }
+    #music-manager th:nth-child(5) { width: 2.75rem; }
+    .admin-music td details { margin-inline-end: 0; }
+    #music-manager th,
+    #music-manager td { padding-inline: .2rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #music-manager button,
+    .admin-music-preferences > summary,
+    .admin-music-album-options > summary,
+    #music-manager tbody tr,
+    .admin-music-album-tree a {
+        transition: none;
+    }
+    #music-manager .admin-music-preferences[open] > form,
+    #music-manager .admin-music-album-options[open] > .admin-music-album-fields,
+    #music-manager .admin-music-merge[open] > form,
+    #music-manager .admin-music-song-edit[open] > .admin-music-song-popover,
+    #music-manager td details[open] > ul,
+    #music-manager td details[open] > form {
+        animation: none;
+    }
+}

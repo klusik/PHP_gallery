@@ -11,7 +11,7 @@
  *   Owns tag, tag-assignment, tag-reporting, and public tag lookup persistence.
  *
  * Responsibilities:
- *   - Persist canonical tag rows and gallery/image tag assignments
+ *   - Persist canonical media-typed tag rows and entity assignments
  *   - Provide bulk tag reads and usage aggregates
  *   - Provide tag suggestion source rows without owning scoring policy
  *   - Support admin tag maintenance and duplicate merges atomically
@@ -41,12 +41,13 @@ namespace Gallery\Models;
 
 use InvalidArgumentException;
 use PDO;
+use Throwable;
 use function Gallery\Core\db;
 
 /**
  * Return the storage table and entity-id column for a supported tag assignment type.
  *
- * @param string $type Assignment owner, either gallery or image.
+ * @param string $type Assignment owner: gallery, image, or logical music song.
  * @return array{0:string,1:string}
  *     Table name and matching entity-id column.
  * @throws InvalidArgumentException When the assignment type is unsupported.
@@ -56,6 +57,7 @@ function tag_model_assignment_target(string $type): array
     return match ($type) {
         'gallery' => ['gallery_tags', 'gallery_id'],
         'image' => ['image_tags', 'image_id'],
+        'music_song' => ['music_song_tags', 'song_id'],
         default => throw new InvalidArgumentException(
             'Unsupported tag assignment type.',
         ),
@@ -71,20 +73,59 @@ function tag_model_id_by_slug(string $slug): int
 }
 
 /**
+ * Return whether a tag has the requested media type when the column is ready.
+ *
+ * @param int $tagId Existing tag identifier.
+ * @param string $mediaType Validated tag media category.
+ * @param bool $mediaTypeReady Whether tags.media_type was confirmed available.
+ * @return bool True only when the existing row matches the requested category.
+ */
+function tag_model_matches_media_type(
+    int $tagId,
+    string $mediaType,
+    bool $mediaTypeReady,
+): bool {
+    if (!$mediaTypeReady) {
+        return $mediaType === 'image';
+    }
+    $stmt = db()->prepare('SELECT media_type FROM tags WHERE id = ?');
+    $stmt->execute([$tagId]);
+    return $stmt->fetchColumn() === $mediaType;
+}
+
+/**
  * Insert one canonical tag row and return its id.
  *
  * @param string $name Display name for the tag.
  * @param string $slug Canonical URL-safe tag slug.
  * @param string $now Timestamp used for both created_at and updated_at.
- * @return int Inserted tag identifier.
+ * @param string $mediaType Validated category image, music, or pdf; defaults to image.
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available; defaults to true.
+ * @return int Inserted tag ID, or 0 when legacy storage cannot represent the requested category.
  */
-function tag_model_create(string $name, string $slug, string $now): int
+function tag_model_create(
+    string $name,
+    string $slug,
+    string $now,
+    string $mediaType = 'image',
+    bool $mediaTypeReady = true,
+): int
 {
     $pdo = db();
+    if (!$mediaTypeReady) {
+        if ($mediaType !== 'image') {
+            return 0;
+        }
+        $stmt = $pdo->prepare(
+            'INSERT INTO tags (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)',
+        );
+        $stmt->execute([$name, $slug, $now, $now]);
+        return (int) $pdo->lastInsertId();
+    }
     $stmt = $pdo->prepare(
-        'INSERT INTO tags (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)',
+        'INSERT INTO tags (name, slug, media_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
     );
-    $stmt->execute([$name, $slug, $now, $now]);
+    $stmt->execute([$name, $slug, $mediaType, $now, $now]);
     return (int) $pdo->lastInsertId();
 }
 
@@ -100,14 +141,29 @@ function tag_model_clear_entity_tags(string $type, int $id): void
 /**
  * Attach one tag to one gallery or image, ignoring an existing identical assignment.
  *
- * @param string $type Assignment owner, either gallery or image.
- * @param int $id Gallery or image identifier.
+ * @param string $type Assignment owner: gallery, image, or music_song.
+ * @param int $id Stable gallery, image, or logical song identifier.
  * @param int $tagId Tag identifier to attach.
+ * @param string $mediaType Expected category image or music; defaults to image.
+ * @param bool $mediaTypeReady Whether the category column is confirmed available; defaults to true.
  * @return void Attach the tag unless the assignment already exists.
  */
-function tag_model_attach_entity_tag(string $type, int $id, int $tagId): void
+function tag_model_attach_entity_tag(
+    string $type,
+    int $id,
+    int $tagId,
+    string $mediaType = 'image',
+    bool $mediaTypeReady = true,
+): void
 {
     [$table, $idColumn] = tag_model_assignment_target($type);
+    $expectedType = $type === 'music_song' ? 'music' : 'image';
+    if (
+        $mediaType !== $expectedType
+        || !tag_model_matches_media_type($tagId, $expectedType, $mediaTypeReady)
+    ) {
+        throw new InvalidArgumentException('Tag media type does not match assignment type.');
+    }
     $stmt = db()->prepare(
         'INSERT IGNORE INTO '
             . $table
@@ -119,23 +175,103 @@ function tag_model_attach_entity_tag(string $type, int $id, int $tagId): void
 }
 
 /**
- * Return tags directly assigned to one gallery or image.
+ * Replace one entity's validated tag links as a single database transition.
  *
- * @param string $type Assignment owner, either gallery or image.
- * @param int $id Gallery or image identifier.
- * @return array<int,array<string,mixed>> Tag database rows ordered by name.
+ * @param string $type Allowlisted gallery, image, or music_song assignment.
+ * @param int $id Positive stable entity identifier.
+ * @param list<int> $tagIds Unique positive IDs resolved by the tag service.
+ * @param bool $mediaTypeReady Whether category schema is confirmed available;
+ *     false supports only the permanent legacy image-assignment path.
+ * @return void Preserves old links on failure and joins an existing catalog
+ *     transaction when present; otherwise commits its own transaction.
+ * @throws InvalidArgumentException When IDs, storage, or media types disagree.
+ * @throws \Throwable When persistence fails; the owning transaction rolls back.
  */
-function tag_model_tags_for_entity(string $type, int $id): array
+function tag_model_replace_entity_tags(
+    string $type,
+    int $id,
+    array $tagIds,
+    bool $mediaTypeReady,
+): void {
+    [$table, $column] = tag_model_assignment_target($type);
+    $mediaType = $type === 'music_song' ? 'music' : 'image';
+    if ($id < 1 || (!$mediaTypeReady && $mediaType !== 'image')) {
+        throw new InvalidArgumentException('Invalid typed tag assignment.');
+    }
+    foreach ($tagIds as $tagId) {
+        if (!is_int($tagId) || $tagId < 1) {
+            throw new InvalidArgumentException('Invalid tag identifier.');
+        }
+    }
+    $tagIds = array_values(array_unique($tagIds));
+    $connection = db();
+    $ownsTransaction = !$connection->inTransaction();
+    if ($ownsTransaction) {
+        $connection->beginTransaction();
+    }
+    try {
+        if ($tagIds !== []) {
+            $marks = implode(',', array_fill(0, count($tagIds), '?'));
+            $select = $connection->prepare(
+                "SELECT id FROM tags WHERE id IN ($marks)"
+                    . ($mediaTypeReady ? ' AND media_type = ?' : ''),
+            );
+            $select->execute($mediaTypeReady
+                ? [...$tagIds, $mediaType]
+                : $tagIds);
+            if (count($select->fetchAll(PDO::FETCH_COLUMN)) !== count($tagIds)) {
+                throw new InvalidArgumentException(
+                    'Tag media type does not match assignment type.',
+                );
+            }
+        }
+        tag_model_clear_entity_tags($type, $id);
+        $insert = $connection->prepare(
+            'INSERT INTO ' . $table . ' (' . $column . ', tag_id) VALUES (?, ?)',
+        );
+        foreach ($tagIds as $tagId) {
+            $insert->execute([$id, $tagId]);
+        }
+        if ($ownsTransaction) {
+            $connection->commit();
+        }
+    } catch (\Throwable $exception) {
+        if ($ownsTransaction && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $exception;
+    }
+}
+
+/**
+ * Return tags directly assigned to one gallery, image, or logical song.
+ *
+ * @param string $type Assignment owner: gallery, image, or music_song.
+ * @param int $id Gallery, image, or logical song identifier.
+ * @param bool $mediaTypeReady Whether tags.media_type was confirmed available.
+ * @return list<array{id:int|string,name:string,slug:string,media_type?:string,description?:string|null,created_at?:string|null,updated_at?:string|null}> Tag rows ordered by name, or an empty list.
+ */
+function tag_model_tags_for_entity(
+    string $type,
+    int $id,
+    bool $mediaTypeReady = true,
+): array
 {
     [$table, $idColumn] = tag_model_assignment_target($type);
+    $mediaType = $type === 'music_song' ? 'music' : 'image';
+    $mediaPredicate = $mediaTypeReady
+        ? ' AND t.media_type = ?'
+        : '';
     $stmt = db()->prepare(
         'SELECT t.* FROM tags t JOIN '
             . $table
             . ' mt ON mt.tag_id = t.id WHERE mt.'
             . $idColumn
-            . ' = ? ORDER BY t.name',
+            . ' = ?'
+            . $mediaPredicate
+            . ' ORDER BY t.name',
     );
-    $stmt->execute([$id]);
+    $stmt->execute($mediaTypeReady ? [$id, $mediaType] : [$id]);
     return $stmt->fetchAll() ?: [];
 }
 
@@ -143,10 +279,15 @@ function tag_model_tags_for_entity(string $type, int $id): array
  * Return combined gallery and image assignment counts for selected tags.
  *
  * @param array<int,int> $tagIds Tag identifiers whose usage should be counted.
- * @return array<int,array<string,mixed>> Rows containing tag_id and aggregate
- *     usage_count; empty when no ids or matches exist.
+ * @param bool $mediaTypeReady Whether the image category column is verified;
+ *     false selects the confirmed pre-category schema.
+ * @return list<array{tag_id:int|string,usage_count:int|string}> Image assignment
+ *     totals; empty when no IDs or matches exist.
  */
-function tag_model_usage_count_rows(array $tagIds): array
+function tag_model_usage_count_rows(
+    array $tagIds,
+    bool $mediaTypeReady = true,
+): array
 {
     if ($tagIds === []) {
         return [];
@@ -168,28 +309,37 @@ function tag_model_usage_count_rows(array $tagIds): array
             . $placeholders
             . ')
              GROUP BY tag_id
-         ) usage_rows
-         GROUP BY usage_rows.tag_id',
+         ) usage_rows '
+            . ($mediaTypeReady
+                ? "JOIN tags t ON t.id = usage_rows.tag_id AND t.media_type = 'image' "
+                : '')
+            . 'GROUP BY usage_rows.tag_id',
     );
     $stmt->execute(array_merge($tagIds, $tagIds));
     return $stmt->fetchAll() ?: [];
 }
 
 /**
- * Return assigned tags for a set of galleries or images.
+ * Return assigned tags for a set of galleries, images, or music songs.
  *
- * @param string $type Assignment owner, either gallery or image.
- * @param array<int,int> $ids Gallery or image identifiers.
- * @return array<int,array<string,mixed>> Rows containing entity_id and tag
- *     database columns, ordered by entity and tag name.
+ * @param string $type Assignment owner: gallery, image, or music_song.
+ * @param list<int> $ids Positive gallery, image, or song identifiers.
+ * @param bool $mediaTypeReady Whether category inspection confirms availability.
+ * @return list<array{entity_id:int|string,id:int|string,name:string,slug:string,media_type?:string,description?:string|null,created_at?:string|null,updated_at?:string|null}> Tag rows ordered by entity and name, or an empty list.
  */
-function tag_model_tags_for_entities(string $type, array $ids): array
+function tag_model_tags_for_entities(
+    string $type,
+    array $ids,
+    bool $mediaTypeReady = true,
+): array
 {
     if ($ids === []) {
         return [];
     }
     [$table, $idColumn] = tag_model_assignment_target($type);
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $mediaPredicate = $mediaTypeReady ? 't.media_type = ? AND ' : '';
+    $mediaType = $type === 'music_song' ? 'music' : 'image';
     $stmt = db()->prepare(
         'SELECT mt.'
             . $idColumn
@@ -198,7 +348,7 @@ function tag_model_tags_for_entities(string $type, array $ids): array
          JOIN '
             . $table
             . ' mt ON mt.tag_id = t.id
-         WHERE mt.'
+         WHERE ' . $mediaPredicate . 'mt.'
             . $idColumn
             . ' IN ('
             . $placeholders
@@ -207,18 +357,22 @@ function tag_model_tags_for_entities(string $type, array $ids): array
             . $idColumn
             . ', t.name',
     );
-    $stmt->execute($ids);
+    $stmt->execute($mediaTypeReady ? array_merge([$mediaType], $ids) : $ids);
     return $stmt->fetchAll() ?: [];
 }
 
 /**
- * Return all tag names in alphabetical order as a list of strings.
+ * Return image tag names in alphabetical order.
  *
- * @return list<string> Alphabetically ordered tag names.
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available.
+ * @return list<string> Alphabetically ordered image tag names.
  */
-function tag_model_all_names(): array
+function tag_model_all_names(bool $mediaTypeReady = true): array
 {
-    $stmt = db()->prepare('SELECT name FROM tags ORDER BY name');
+    $sql = $mediaTypeReady
+        ? 'SELECT name FROM tags WHERE media_type = \'image\' ORDER BY name'
+        : 'SELECT name FROM tags ORDER BY name';
+    $stmt = db()->prepare($sql);
     $stmt->execute();
     return array_values(array_map(
         'strval',
@@ -248,14 +402,15 @@ function tag_model_gallery_context(int $galleryId): ?array
  *
  * @param string $assignmentType gallery or image.
  * @param string $scope current, siblings, descendants, ancestors, or global.
- * @param array<string,mixed> $context Scope-specific normalized values.
- * @return array<int,array<string,mixed>> Rows containing id, name, slug, and
- *     usage_count; empty when the selected scope has no matches.
+ * @param array{gallery_id?:int,parent_id?:int,folder_prefix?:string,paths?:list<string>} $context Scope identifiers or paths required by the selected filter; defaults to no values.
+ * @param bool $mediaTypeReady Whether tags.media_type was confirmed available; defaults to true.
+ * @return list<array{id:int|string,name:string,slug:string,usage_count:int|string}> Matching image tag aggregates, or an empty list.
  */
 function tag_model_suggestion_usage_rows(
     string $assignmentType,
     string $scope,
     array $context = [],
+    bool $mediaTypeReady = true,
 ): array {
     if (!in_array($assignmentType, ['gallery', 'image'], true)) {
         throw new InvalidArgumentException(
@@ -273,17 +428,21 @@ function tag_model_suggestion_usage_rows(
     $join = $assignmentType === 'gallery'
         ? 'JOIN gallery_tags a ON a.tag_id = t.id JOIN galleries g ON g.id = a.gallery_id'
         : 'JOIN image_tags a ON a.tag_id = t.id JOIN images i ON i.id = a.image_id JOIN galleries g ON g.id = i.gallery_id';
-    $where = '';
+    $where = $mediaTypeReady
+        ? ' WHERE t.media_type = \'image\''
+        : '';
     $params = [];
     if ($scope === 'current') {
-        $where = ' WHERE g.id = ?';
+        $where .= ($where === '' ? ' WHERE ' : ' AND ') . 'g.id = ?';
         $params[] = (int) ($context['gallery_id'] ?? 0);
     } elseif ($scope === 'siblings') {
-        $where = ' WHERE g.parent_id = ? AND g.id <> ?';
+        $where .= ($where === '' ? ' WHERE ' : ' AND ')
+            . 'g.parent_id = ? AND g.id <> ?';
         $params[] = (int) ($context['parent_id'] ?? 0);
         $params[] = (int) ($context['gallery_id'] ?? 0);
     } elseif ($scope === 'descendants') {
-        $where = ' WHERE g.folder_path LIKE ? AND g.id <> ?';
+        $where .= ($where === '' ? ' WHERE ' : ' AND ')
+            . 'g.folder_path LIKE ? AND g.id <> ?';
         $params[] = (string) ($context['folder_prefix'] ?? '');
         $params[] = (int) ($context['gallery_id'] ?? 0);
     } elseif ($scope === 'ancestors') {
@@ -294,8 +453,9 @@ function tag_model_suggestion_usage_rows(
         if ($paths === []) {
             return [];
         }
-        $where =
-            ' WHERE g.folder_path IN ('
+        $where .=
+            ($where === '' ? ' WHERE ' : ' AND ')
+            . 'g.folder_path IN ('
             . implode(',', array_fill(0, count($paths), '?'))
             . ')';
         $params = $paths;
@@ -313,18 +473,58 @@ function tag_model_suggestion_usage_rows(
     return $stmt->fetchAll() ?: [];
 }
 
-/** @return array<int,array<string,mixed>> */
-function tag_model_global_suggestion_rows(int $limit): array
+/**
+ * Return globally ranked tag usage aggregates for one media category.
+ *
+ * @param int $limit Maximum returned row count.
+ * @param bool $mediaTypeReady Whether category storage is confirmed available; defaults to true.
+ * @param string $mediaType Category to suggest: image, music, or pdf; defaults to image.
+ * @param bool $musicAssignmentReady Whether song/tag assignments are confirmed available; defaults to false.
+ * @return list<array{id:int|string,name:string,slug:string,gallery_count:int|string,image_count:int|string,music_count:int|string}> Ranked tag usage aggregate rows.
+ */
+function tag_model_global_suggestion_rows(
+    int $limit,
+    bool $mediaTypeReady = true,
+    string $mediaType = 'image',
+    bool $musicAssignmentReady = false,
+): array
 {
     $limit = max(1, $limit);
-    return db()->query('SELECT t.id, t.name, t.slug,
-            COALESCE(gallery_usage.gallery_count, 0) AS gallery_count,
-            COALESCE(image_usage.image_count, 0) AS image_count
+    if (!in_array($mediaType, ['image', 'music', 'pdf'], true)) {
+        throw new InvalidArgumentException('Unsupported tag media type.');
+    }
+    if (!$mediaTypeReady && $mediaType !== 'image') {
+        return [];
+    }
+    $where = $mediaTypeReady ? 'WHERE t.media_type = ?' : '';
+    $galleryJoin = $mediaType === 'image'
+        ? 'LEFT JOIN (SELECT tag_id, COUNT(*) AS gallery_count FROM gallery_tags GROUP BY tag_id) gallery_usage ON gallery_usage.tag_id = t.id'
+        : '';
+    $imageJoin = $mediaType === 'image'
+        ? 'LEFT JOIN (SELECT tag_id, COUNT(*) AS image_count FROM image_tags GROUP BY tag_id) image_usage ON image_usage.tag_id = t.id'
+        : '';
+    $musicJoin = $mediaType === 'music' && $musicAssignmentReady
+        ? 'LEFT JOIN (SELECT tag_id, COUNT(*) AS music_count FROM music_song_tags GROUP BY tag_id) music_usage ON music_usage.tag_id = t.id'
+        : '';
+    $galleryCount = $mediaType === 'image' ? 'gallery_usage.gallery_count' : '0';
+    $imageCount = $mediaType === 'image' ? 'image_usage.image_count' : '0';
+    $musicCount = $mediaType === 'music' && $musicAssignmentReady
+        ? 'music_usage.music_count'
+        : '0';
+    $stmt = db()->prepare('SELECT t.id, t.name, t.slug,
+            COALESCE(' . $galleryCount . ', 0) AS gallery_count,
+            COALESCE(' . $imageCount . ', 0) AS image_count,
+            COALESCE(' . $musicCount . ', 0) AS music_count
         FROM tags t
-        LEFT JOIN (SELECT tag_id, COUNT(*) AS gallery_count FROM gallery_tags GROUP BY tag_id) gallery_usage ON gallery_usage.tag_id = t.id
-        LEFT JOIN (SELECT tag_id, COUNT(*) AS image_count FROM image_tags GROUP BY tag_id) image_usage ON image_usage.tag_id = t.id
-        ORDER BY (COALESCE(gallery_usage.gallery_count, 0) + COALESCE(image_usage.image_count, 0)) DESC, t.name
-        LIMIT ' . $limit)->fetchAll() ?: [];
+        ' . $galleryJoin . '
+        ' . $imageJoin . '
+        ' . $musicJoin . '
+        ' . $where . '
+        ORDER BY (COALESCE(' . $galleryCount . ', 0) + COALESCE(' . $imageCount
+            . ', 0) + COALESCE(' . $musicCount . ', 0)) DESC, t.name
+        LIMIT ' . $limit);
+    $stmt->execute($mediaTypeReady ? [$mediaType] : []);
+    return $stmt->fetchAll() ?: [];
 }
 
 /** Probe whether the optional tag description column is available. */
@@ -336,19 +536,24 @@ function tag_model_description_column_ready(): bool
 }
 
 /**
- * Return admin tag rows with gallery, image, and total usage counts.
+ * Return admin tag rows with media-specific usage counts.
  *
  * @param bool $descriptionReady Whether the optional description column exists.
  * @param string $sortField Requested sort field; only name and usage are used.
  * @param string $sortDirection Requested direction; only asc selects ascending
  *     order, otherwise descending order is used.
- * @return array<int,array<string,mixed>> Tag rows including description,
- *     timestamps and gallery_count, image_count, and usage_count aggregates.
+ * @param string $mediaType Media category image, music, or all; defaults to image.
+ * @param bool $mediaTypeReady Whether tags.media_type was confirmed available; defaults to true.
+ * @param bool $musicAssignmentReady Whether song/tag assignments are confirmed available; defaults to false.
+ * @return list<array{id:int|string,name:string,slug:string,description:string,media_type:string,created_at:string,updated_at:string,gallery_count:int|string,image_count:int|string,music_count:int|string,usage_count:int|string}> Admin rows with usage aggregates.
  */
 function tag_model_admin_rows(
     bool $descriptionReady,
     string $sortField,
     string $sortDirection,
+    string $mediaType = 'image',
+    bool $mediaTypeReady = true,
+    bool $musicAssignmentReady = false,
 ): array {
     $safeSortField = in_array($sortField, ['name', 'usage'], true)
         ? $sortField
@@ -361,26 +566,43 @@ function tag_model_admin_rows(
     $orderBy = $safeSortField === 'name'
         ? 't.name ' . $safeSortDirection . ', t.slug ' . $safeSortDirection
         : 'usage_count ' . $safeSortDirection . ', t.name ASC';
-    return (
-        db()
-            ->query(
-                'SELECT t.id, t.name, t.slug, '
-                    . $descriptionColumn
-                    . ', t.created_at, t.updated_at,
+    $typeField = $mediaTypeReady ? 't.media_type' : "'image' AS media_type";
+    $typeWhere = !$mediaTypeReady
+        ? ''
+        : ($mediaType === 'all'
+            ? "WHERE t.media_type IN ('image', 'music')"
+            : 'WHERE t.media_type = ?');
+    $musicJoin = $musicAssignmentReady
+        ? 'LEFT JOIN music_song_tags mst ON mst.tag_id = t.id'
+        : '';
+    $musicCount = $musicAssignmentReady
+        ? 'COUNT(DISTINCT mst.song_id)'
+        : '0';
+    $stmt = db()->prepare(
+        'SELECT t.id, t.name, t.slug, '
+            . $descriptionColumn
+            . ', ' . $typeField . ', t.created_at, t.updated_at,
         COUNT(DISTINCT gt.gallery_id) AS gallery_count,
         COUNT(DISTINCT it.image_id) AS image_count,
-        COUNT(DISTINCT gt.gallery_id) + COUNT(DISTINCT it.image_id) AS usage_count
+        COUNT(DISTINCT gt.gallery_id) + COUNT(DISTINCT it.image_id) + '
+            . $musicCount . ' AS usage_count,
+        ' . $musicCount . ' AS music_count
         FROM tags t
         LEFT JOIN gallery_tags gt ON gt.tag_id = t.id
         LEFT JOIN image_tags it ON it.tag_id = t.id
+        ' . $musicJoin . '
+        ' . $typeWhere . '
         GROUP BY t.id, t.name, t.slug'
-                    . $groupByDescription
-                    . ', t.created_at, t.updated_at
+            . $groupByDescription
+            . ($mediaTypeReady ? ', t.media_type' : '')
+            . ', t.created_at, t.updated_at
         ORDER BY '
-                    . $orderBy,
-            )
-            ->fetchAll() ?: []
+            . $orderBy,
     );
+    $stmt->execute(
+        $mediaTypeReady && $mediaType !== 'all' ? [$mediaType] : [],
+    );
+    return $stmt->fetchAll() ?: [];
 }
 
 /** @return array<int,array<string,mixed>> */
@@ -416,7 +638,37 @@ function tag_model_admin_image_usage_rows(int $tagId): array
     return $stmt->fetchAll() ?: [];
 }
 
-/** @return array<string,mixed>|null */
+/**
+ * Return logical song usage rows for one music tag.
+ *
+ * @param int $tagId Music-tag identifier.
+ * @return list<array{id:int|string,title:string|null,indexed_title:string|null,filename:string|null}> Song identities and canonical-title source fields.
+ */
+function tag_model_admin_song_usage_rows(int $tagId): array
+{
+    $stmt = db()->prepare(
+        'SELECT s.id, s.title,
+        (SELECT i.indexed_title FROM music_track_instances i
+            WHERE i.song_id = s.id AND i.active = 1
+            ORDER BY i.gallery_id, i.track_id LIMIT 1) AS indexed_title,
+        (SELECT i.filename FROM music_track_instances i
+            WHERE i.song_id = s.id AND i.active = 1
+            ORDER BY i.gallery_id, i.track_id LIMIT 1) AS filename
+        FROM music_song_tags mst
+        JOIN music_songs s ON s.id = mst.song_id
+        WHERE mst.tag_id = ?
+        ORDER BY s.title, s.id',
+    );
+    $stmt->execute([$tagId]);
+    return $stmt->fetchAll() ?: [];
+}
+
+/**
+ * Find one tag row by its database identifier.
+ *
+ * @param int $id Tag identifier to find.
+ * @return array{id:int|string,name:string,slug:string,media_type?:string,description?:string|null,created_at?:string|null,updated_at?:string|null}|null Matching tag row, or null when absent.
+ */
 function tag_model_find_by_id(int $id): ?array
 {
     $stmt = db()->prepare('SELECT * FROM tags WHERE id = ?');
@@ -466,24 +718,44 @@ function tag_model_update_metadata(
 }
 
 /**
- * Delete one tag and its gallery and image assignments in a transaction.
+ * Delete one typed tag and its matching assignments in a transaction.
  *
  * @param int $id Tag identifier to delete.
- * @return void Delete the tag and its gallery and image assignments.
+ * @param string $mediaType Assignment category image or music; defaults to image.
+ * @param bool $musicAssignmentReady Whether music assignment storage is available; defaults to false.
+ * @return void Delete the tag and the assignments owned by its media category.
  * @throws \Throwable Rethrows a database failure after rolling back an active
  *     transaction.
  */
-function tag_model_delete_with_assignments(int $id): void
+function tag_model_delete_with_assignments(
+    int $id,
+    string $mediaType = 'image',
+    bool $musicAssignmentReady = false,
+): void
 {
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $pdo->prepare('DELETE FROM gallery_tags WHERE tag_id = ?')->execute([
-            $id,
-        ]);
-        $pdo->prepare('DELETE FROM image_tags WHERE tag_id = ?')->execute([
-            $id,
-        ]);
+        if ($mediaType === 'music') {
+            if (!$musicAssignmentReady) {
+                throw new InvalidArgumentException(
+                    'Music tag assignments are not available.',
+                );
+            }
+            $pdo->prepare('DELETE FROM music_song_tags WHERE tag_id = ?')
+                ->execute([$id]);
+        } elseif ($mediaType === 'image') {
+            $pdo->prepare('DELETE FROM gallery_tags WHERE tag_id = ?')->execute([
+                $id,
+            ]);
+            $pdo->prepare('DELETE FROM image_tags WHERE tag_id = ?')->execute([
+                $id,
+            ]);
+        } else {
+            throw new InvalidArgumentException(
+                'PDF tags do not have an assignment surface.',
+            );
+        }
         $pdo->prepare('DELETE FROM tags WHERE id = ?')->execute([$id]);
         $pdo->commit();
     } catch (\Throwable $exception) {
@@ -514,27 +786,90 @@ function tag_model_delete_row(int $id): void
  *
  * @param int $targetId Canonical tag identifier to retain.
  * @param int $duplicateId Duplicate tag identifier whose assignments are moved.
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available.
+ * @param bool $musicAssignmentReady Whether music tag assignments are available.
  * @return void Move assignments to the canonical tag and remove the duplicate.
  */
-function tag_model_merge_duplicate(int $targetId, int $duplicateId): void
+function tag_model_merge_duplicate(
+    int $targetId,
+    int $duplicateId,
+    bool $mediaTypeReady = true,
+    bool $musicAssignmentReady = false,
+): void
 {
-    db()
-        ->prepare(
-            'INSERT IGNORE INTO gallery_tags (gallery_id, tag_id) SELECT gallery_id, ? FROM gallery_tags WHERE tag_id = ?',
-        )
-        ->execute([$targetId, $duplicateId]);
-    db()
-        ->prepare(
-            'INSERT IGNORE INTO image_tags (image_id, tag_id) SELECT image_id, ? FROM image_tags WHERE tag_id = ?',
-        )
-        ->execute([$targetId, $duplicateId]);
-    db()
-        ->prepare('DELETE FROM gallery_tags WHERE tag_id = ?')
-        ->execute([$duplicateId]);
-    db()
-        ->prepare('DELETE FROM image_tags WHERE tag_id = ?')
-        ->execute([$duplicateId]);
-    db()->prepare('DELETE FROM tags WHERE id = ?')->execute([$duplicateId]);
+    $connection = db();
+    $ownsTransaction = !$connection->inTransaction();
+    if ($ownsTransaction) {
+        $connection->beginTransaction();
+    }
+    try {
+        if ($mediaTypeReady) {
+            $stmt = $connection->prepare(
+                'SELECT id, media_type FROM tags WHERE id IN (?, ?) ORDER BY id FOR UPDATE',
+            );
+            $stmt->execute([$targetId, $duplicateId]);
+            $rows = $stmt->fetchAll() ?: [];
+            if (
+                count($rows) !== 2
+                || (string) $rows[0]['media_type'] !== (string) $rows[1]['media_type']
+            ) {
+                throw new InvalidArgumentException(
+                    'Tags with different media types cannot be merged.',
+                );
+            }
+            $mediaType = (string) $rows[0]['media_type'];
+        } else {
+            $mediaType = 'image';
+        }
+        if ($mediaType === 'music' && !$musicAssignmentReady) {
+            throw new InvalidArgumentException(
+                'Music tag assignments are not available.',
+            );
+        }
+        if ($mediaType === 'pdf') {
+            throw new InvalidArgumentException('PDF tags cannot be merged.');
+        }
+        if ($mediaType !== 'image' && $mediaType !== 'music') {
+            throw new InvalidArgumentException('Unknown tag media type.');
+        }
+        if ($mediaType === 'music') {
+            $connection
+                ->prepare(
+                    'INSERT IGNORE INTO music_song_tags (song_id, tag_id) SELECT song_id, ? FROM music_song_tags WHERE tag_id = ?',
+                )
+                ->execute([$targetId, $duplicateId]);
+            $connection
+                ->prepare('DELETE FROM music_song_tags WHERE tag_id = ?')
+                ->execute([$duplicateId]);
+        } else {
+            $connection
+                ->prepare(
+                    'INSERT IGNORE INTO gallery_tags (gallery_id, tag_id) SELECT gallery_id, ? FROM gallery_tags WHERE tag_id = ?',
+                )
+                ->execute([$targetId, $duplicateId]);
+            $connection
+                ->prepare(
+                    'INSERT IGNORE INTO image_tags (image_id, tag_id) SELECT image_id, ? FROM image_tags WHERE tag_id = ?',
+                )
+                ->execute([$targetId, $duplicateId]);
+            $connection
+                ->prepare('DELETE FROM gallery_tags WHERE tag_id = ?')
+                ->execute([$duplicateId]);
+            $connection
+                ->prepare('DELETE FROM image_tags WHERE tag_id = ?')
+                ->execute([$duplicateId]);
+        }
+        $connection->prepare('DELETE FROM tags WHERE id = ?')
+            ->execute([$duplicateId]);
+        if ($ownsTransaction) {
+            $connection->commit();
+        }
+    } catch (Throwable $error) {
+        if ($ownsTransaction && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
 }
 
 /**
@@ -559,11 +894,24 @@ function tag_model_update_canonical(
         ->execute([$name, $slug, $now, $id]);
 }
 
-/** @return array<string,mixed>|null */
-function tag_model_find_by_slug(string $slug): ?array
+/**
+ * Find a tag by slug with an optional category boundary.
+ *
+ * @param string $slug Canonical tag slug.
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available.
+ * @param string $mediaType Category to constrain when the column is available.
+ * @return array{id:int|string,name:string,slug:string,media_type?:string,description?:string|null,created_at?:string|null,updated_at?:string|null}|null Matching tag row, or null when absent.
+ */
+function tag_model_find_by_slug(
+    string $slug,
+    bool $mediaTypeReady = true,
+    string $mediaType = 'image',
+): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM tags WHERE slug = ?');
-    $stmt->execute([$slug]);
+    $sql = 'SELECT * FROM tags WHERE slug = ?'
+        . ($mediaTypeReady ? ' AND media_type = ?' : '');
+    $stmt = db()->prepare($sql);
+    $stmt->execute($mediaTypeReady ? [$slug, $mediaType] : [$slug]);
     $row = $stmt->fetch();
     return is_array($row) ? $row : null;
 }
@@ -574,9 +922,14 @@ function tag_model_find_by_slug(string $slug): ?array
  * @param int $tagId Tag identifier to find.
  * @param bool $accessListingReady Whether the optional access_listing column is
  *     available for public listing filtering.
- * @return array<int,array<string,mixed>> Public gallery rows with image_count.
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available; defaults to true.
+ * @return list<array{id:int|string,title:string,slug:string,url_path:string,folder_path:string,image_count:int|string}> Public gallery rows and image counts.
  */
-function tag_model_public_galleries(int $tagId, bool $accessListingReady): array
+function tag_model_public_galleries(
+    int $tagId,
+    bool $accessListingReady,
+    bool $mediaTypeReady = true,
+): array
 {
     $listing =
         "g.visibility = 'public'"
@@ -586,31 +939,40 @@ function tag_model_public_galleries(int $tagId, bool $accessListingReady): array
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
         WHERE "
         . $listing
+        . ($mediaTypeReady
+            ? ' AND EXISTS (SELECT 1 FROM tags typed_tag WHERE typed_tag.id = ? AND typed_tag.media_type = \'image\')'
+            : '')
         . ' AND (
             EXISTS (SELECT 1 FROM gallery_tags gt WHERE gt.gallery_id = g.id AND gt.tag_id = ?)
             OR EXISTS (SELECT 1 FROM image_tags it JOIN images tagged_image ON tagged_image.id = it.image_id WHERE tagged_image.gallery_id = g.id AND it.tag_id = ?)
         )
         GROUP BY g.id
         ORDER BY g.sort_order, g.title');
-    $stmt->execute([$tagId, $tagId]);
+    $stmt->execute($mediaTypeReady
+        ? [$tagId, $tagId, $tagId]
+        : [$tagId, $tagId]);
     return $stmt->fetchAll() ?: [];
 }
 
 /**
- * Return tags assigned within a gallery folder subtree.
+ * Return image tags assigned within a gallery folder subtree.
  *
  * @param string $folderPath Folder path prefix used to select galleries.
  * @param bool $publicOnly Whether only public galleries and images are included.
  * @param bool $accessListingReady Whether the optional access_listing column is
  *     available for public listing filtering.
- * @return array<int,array<string,mixed>> Distinct rows containing id, name,
- *     and slug.
+ * @param bool $mediaTypeReady Whether tags.media_type is confirmed available; defaults to true.
+ * @return list<array{id:int|string,name:string,slug:string}> Distinct matching tag rows.
  */
 function tag_model_contained_for_gallery(
     string $folderPath,
     bool $publicOnly,
     bool $accessListingReady,
+    bool $mediaTypeReady = true,
 ): array {
+    $mediaFilter = $mediaTypeReady
+        ? " AND t.media_type = 'image'"
+        : '';
     $galleryVisibility = '';
     if ($publicOnly) {
         $galleryVisibility =
@@ -626,6 +988,7 @@ function tag_model_contained_for_gallery(
         JOIN gallery_tags gt ON gt.tag_id = t.id
         JOIN galleries g ON g.id = gt.gallery_id
         WHERE g.folder_path LIKE ?'
+            . $mediaFilter
             . $galleryVisibility
             . '
         UNION
@@ -635,6 +998,7 @@ function tag_model_contained_for_gallery(
         JOIN images tagged_image ON tagged_image.id = it.image_id
         JOIN galleries g ON g.id = tagged_image.gallery_id
         WHERE g.folder_path LIKE ?'
+            . $mediaFilter
             . $galleryVisibility
             . $imageVisibility
             . '

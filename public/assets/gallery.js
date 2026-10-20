@@ -69,6 +69,7 @@ import {
     setupGalleryPdfDocuments,
 } from './gallery-modules/admin-pdf-documents.js?v=20261017-media-summary-v1';
 import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261017-music-v3';
+import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261020-music-tabs-popover-drag-v6';
 import {
     setupGalleryMusicPlayback,
 } from './gallery-modules/gallery-music-player.js?v=20261018-presentation-confirm-v1';
@@ -220,6 +221,7 @@ function bootGalleryBrowserFeatures() {
     setupSimbriefOfpViewer();
     setupGalleryPdfDocuments();
     setupGalleryMusic();
+    setupAdminMusic();
     setupGalleryMusicPlayback();
     setupGalleryMediaPanels();
     setupPictureManager();

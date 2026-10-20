@@ -108,6 +108,10 @@ function cms_admin_tags(): void
     if (!in_array($sortMode, ['name', 'usage'], true)) {
         $sortMode = 'usage';
     }
+    $mediaType = strtolower((string) ($_GET['media_type'] ?? 'image'));
+    if (!in_array($mediaType, ['all', 'image', 'music'], true)) {
+        $mediaType = 'image';
+    }
     // Variable $sortDirection stores this steps working value.
     $sortDirection = $sortMode === 'name' ? 'asc' : 'desc';
     // Variable $notice stores this steps working value.
@@ -126,6 +130,12 @@ function cms_admin_tags(): void
         if (!in_array($postedSort, ['name', 'usage'], true)) {
             $postedSort = $sortMode;
         }
+        $postedMediaType = strtolower((string) (
+            $_POST['media_type'] ?? $mediaType
+        ));
+        if (!in_array($postedMediaType, ['all', 'image', 'music'], true)) {
+            $postedMediaType = $mediaType;
+        }
         // Variable $wantsJson stores this steps working value.
         $wantsJson = admin_tags_request_wants_json();
 
@@ -133,7 +143,7 @@ function cms_admin_tags(): void
             // Variable $deletedTag stores this steps working value.
             $deletedTag = find_tag_by_id($tagId);
             // Variable $result stores this steps working value.
-            $result = delete_tag_by_id($tagId);
+            $result = delete_tag_by_id($tagId, $postedMediaType);
             if (!($result['ok'] ?? false)) {
                 if ($wantsJson) {
                     $message = admin_tags_error_message(
@@ -159,6 +169,7 @@ function cms_admin_tags(): void
                 redirect_to(url_for('admin_tags', [
                     'id' => $tagId,
                     'sort' => $postedSort,
+                    'media_type' => $postedMediaType,
                 ]));
             }
             admin_log_event('info', 'tags.deleted', 'Admin deleted tag.', [
@@ -207,6 +218,7 @@ function cms_admin_tags(): void
             (string) ($_POST['name'] ?? ''),
             (string) ($_POST['slug'] ?? ''),
             (string) ($_POST['description'] ?? ''),
+            $postedMediaType,
         );
         if (!($result['ok'] ?? false)) {
             if ($wantsJson) {
@@ -233,6 +245,7 @@ function cms_admin_tags(): void
             redirect_to(url_for('admin_tags', [
                 'id' => $tagId,
                 'sort' => $postedSort,
+                'media_type' => $postedMediaType,
             ]));
         }
         // Variable $updatedTag stores this steps working value.
@@ -244,12 +257,17 @@ function cms_admin_tags(): void
         ]);
         if ($wantsJson) {
             // $editUrl refreshes the mounted editor without changing the browser URL.
-            $editUrl = url_for('admin_tags', ['id' => $tagId, 'panel' => 1]);
+            $editUrl = url_for('admin_tags', [
+                'id' => $tagId,
+                'panel' => 1,
+                'media_type' => $postedMediaType,
+            ]);
             // $publicUrl is canonical after a slug rename only while public tag browsing is enabled.
             $publicTagBrowsingEnabled = feature_capability_effective_enabled(
                 'public_tag_browsing',
             );
             $publicUrl = $publicTagBrowsingEnabled
+                && $postedMediaType === 'image'
                 ? url_for('tag', [
                     'slug' => (string) ($updatedTag['slug'] ?? ''),
                 ]) : '';
@@ -263,6 +281,7 @@ function cms_admin_tags(): void
                 ),
                 admin_mutation_panel_metadata('tag-edit', $editUrl, true),
                 $publicTagBrowsingEnabled
+                && $postedMediaType === 'image'
                     ? [
                         admin_mutation_public_tag_context(
                             $tagId,
@@ -276,6 +295,7 @@ function cms_admin_tags(): void
                 ['redirect_url' => url_for('admin_tags', [
                     'id' => $tagId,
                     'sort' => $postedSort,
+                    'media_type' => $postedMediaType,
                 ])],
             );
             admin_tags_json_response(array_merge($payload, [
@@ -290,16 +310,32 @@ function cms_admin_tags(): void
         redirect_to(url_for('admin_tags', [
             'id' => $tagId,
             'sort' => $postedSort,
+            'media_type' => $postedMediaType,
         ]));
     }
 
     // Variable $tags stores this steps working value.
-    $tags = admin_tag_rows($sortMode, $sortDirection);
+    $tags = admin_tag_rows($sortMode, $sortDirection, $mediaType);
     if ($selectedId <= 0 && $tags) {
         $selectedId = (int) $tags[0]['id'];
     }
     // Variable $selectedTag stores this steps working value.
     $selectedTag = $selectedId > 0 ? find_tag_by_id($selectedId) : null;
+    if (
+        $selectedTag
+        && (
+            !in_array(
+                (string) ($selectedTag['media_type'] ?? 'image'),
+                ['image', 'music'],
+                true,
+            )
+            || ($mediaType !== 'all'
+                && (string) ($selectedTag['media_type'] ?? 'image') !== $mediaType)
+        )
+    ) {
+        $selectedTag = null;
+        $selectedId = 0;
+    }
     // Variable $selectedTagUsage stores this steps working value.
     $selectedTagUsage = $selectedTag
         ? admin_tag_usage_rows((int) $selectedTag['id'])
@@ -309,6 +345,7 @@ function cms_admin_tags(): void
         $tagRow['edit_url'] = url_for('admin_tags', [
             'id' => (int) $tagRow['id'],
             'sort' => $sortMode,
+            'media_type' => $mediaType,
         ]);
     }
     unset($tagRow);
@@ -322,12 +359,17 @@ function cms_admin_tags(): void
     }
 
     $formViewModel = $selectedTag
-        ? admin_tag_form_view_model($selectedTag, $sortMode)
+        ? admin_tag_form_view_model(
+            $selectedTag,
+            $sortMode,
+            (string) ($selectedTag['media_type'] ?? 'image'),
+        )
         : [];
     \Gallery\Views\view_render_admin_tags([
         'panel' => isset($_GET['panel']),
         'selected_id' => $selectedId,
         'sort_mode' => $sortMode,
+        'media_type' => $mediaType,
         'notice' => (string) ($notice ?? ''),
         'error' => (string) ($error ?? ''),
         'selected_tag' => $selectedTag,
@@ -338,10 +380,20 @@ function cms_admin_tags(): void
         'sort_url' => url_for('admin_tags', [
             'id' => $selectedId > 0 ? $selectedId : null,
             'sort' => $sortMode,
+            'media_type' => $mediaType,
         ]),
         'sort_template_url' => url_for('admin_tags', [
             'id' => $selectedId > 0 ? $selectedId : null,
             'sort' => '__SORT__',
+            'media_type' => $mediaType,
+        ]),
+        'media_type_template_url' => url_for('admin_tags', [
+            'id' => $selectedId > 0 ? $selectedId : null,
+            'sort' => $sortMode,
+            'media_type' => '__TYPE__',
+        ]),
+        'filters_url' => url_for('admin_tags', [
+            'panel' => isset($_GET['panel']) ? 1 : null,
         ]),
     ]);
 }
@@ -366,11 +418,13 @@ function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
  *
  * @param array{id:int,name?:string,slug?:string,description?:string} $tag Selected tag row.
  * @param string $sortMode Tag list ordering mode.
- * @return array{tag:array{id:int,name?:string,slug?:string,description?:string},description:string,sort_mode:string,action_url:string,csrf_html:string,public_url:string,theme_url:string} View model.
+ * @param string $mediaType Tag media category used for public-link policy.
+ * @return array{tag:array{id:int,name?:string,slug?:string,description?:string},description:string,sort_mode:string,media_type:string,action_url:string,csrf_html:string,public_url:string,theme_url:string} View model.
  */
 function admin_tag_form_view_model(
     array $tag,
     string $sortMode = 'usage',
+    string $mediaType = 'image',
 ): array {
     $description = tag_description_schema_ready()
         ? (string) ($tag['description'] ?? '')
@@ -384,15 +438,19 @@ function admin_tag_form_view_model(
         'sort_mode' => in_array($sortMode, ['name', 'usage'], true)
             ? $sortMode
             : 'usage',
+        'media_type' => in_array($mediaType, ['all', 'image', 'music'], true)
+            ? $mediaType
+            : 'image',
         'action_url' => url_for('admin_tags', ['id' => (int) $tag['id']]),
         'csrf_html' => csrf_field(),
-        'public_url' => $publicEnabled
+        'public_url' => $publicEnabled && $mediaType === 'image'
             ? url_for('tag', ['slug' => (string) $tag['slug']])
             : '',
-        'theme_url' =>
-            url_for('admin_theme', [
+        'theme_url' => $mediaType === 'image'
+            ? url_for('admin_theme', [
                 'appearance_subtab' => 'admin-theme-appearance-subtab-gallery-tags',
-            ]) . '#admin-theme-tab-appearance',
+            ]) . '#admin-theme-tab-appearance'
+            : '',
     ];
 }
 
@@ -463,6 +521,14 @@ function admin_tags_error_message(string $code): string
         'slug_taken' => t(
             'admin.tags.error_slug_taken',
             'That tag slug is already used by another tag.',
+        ),
+        'media_type_mismatch' => t(
+            'admin.tags.error_media_type_mismatch',
+            'The selected tag belongs to a different media type.',
+        ),
+        'schema_unavailable' => t(
+            'admin.tags.error_schema_unavailable',
+            'Tag storage is not ready. Apply the pending database migrations.',
         ),
         'delete_failed' => t(
             'admin.tags.error_delete_failed',

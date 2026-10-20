@@ -1,5 +1,22 @@
 # Compatibility lifecycle and retirement register
 
+## Logical music catalog and media-typed tags
+
+Owners: existing physical playlist model/service, logical catalog model/service
+and shared tag model/service. Existing JSON indexes remain authoritative for
+bytes, visibility, download permission and playlist order. The SQL catalog is
+an additional metadata layer; no audio migration or filename-based identity
+inference is supported. The global extension preference defaults OFF when
+absent on both new and upgraded installations. Explicit custom titles retain
+their text. Older image tags retain IDs, globally unique slugs and assignments.
+Missing media schema preserves only the documented legacy image path; unknown
+schema never authorizes catalog or typed-tag writes. These are permanent
+compatibility policies; no usage evidence supports retiring them. Live hosting,
+large-library timing and real-device playback evidence remain unknown until
+qualification and deployment acceptance. SQL and filesystem writes cannot
+form one transaction, so the physical index remains playback authority and
+bounded reconciliation repairs derived links without authorizing stale bytes.
+
 ## Visitor-started automatic stable-update continuation
 
 Owners: request maintenance, lightweight updater job lookup, deferred updater

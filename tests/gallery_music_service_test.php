@@ -13,6 +13,15 @@ declare(strict_types=1);
 
 namespace Gallery\Core {
     /**
+     * Return the isolated database used for catalog schema preflight.
+     * @return \PDO SQLite connection with an attached empty information schema.
+     */
+    function db(): \PDO
+    {
+        return $GLOBALS['music_schema_fixture_db'];
+    }
+
+    /**
      * Escape fixture view strings using the production HTML encoding boundary.
      * @param string $value Plain translated text or prepared URL.
      * @return string HTML-safe UTF-8 text.
@@ -118,6 +127,44 @@ namespace Gallery\Services {
 }
 
 namespace {
+    if (!in_array('sqlite', \PDO::getAvailableDrivers(), true)) {
+        echo "SKIP: gallery music service fixture requires PDO SQLite\n";
+        exit(0);
+    }
+
+    $GLOBALS['music_schema_fixture_db'] = new \PDO('sqlite::memory:');
+    $GLOBALS['music_schema_fixture_db']->setAttribute(
+        \PDO::ATTR_ERRMODE,
+        \PDO::ERRMODE_EXCEPTION,
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        'CREATE TABLE app_settings ('
+            . 'setting_key TEXT PRIMARY KEY, '
+            . 'setting_value TEXT NOT NULL, '
+            . 'updated_at TEXT NOT NULL)',
+    );
+    $GLOBALS['music_schema_fixture_db']->sqliteCreateFunction(
+        'DATABASE',
+        static fn(): string => 'main',
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        "ATTACH DATABASE ':memory:' AS information_schema",
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        'CREATE TABLE information_schema.TABLES ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT)',
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        'CREATE TABLE information_schema.COLUMNS ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT, COLUMN_NAME TEXT, '
+            . 'COLUMN_TYPE TEXT, IS_NULLABLE TEXT, ORDINAL_POSITION INTEGER)',
+    );
+    $GLOBALS['music_schema_fixture_db']->exec(
+        'CREATE TABLE information_schema.STATISTICS ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT, INDEX_NAME TEXT)',
+    );
+    require_once dirname(__DIR__) . '/app/models/app_settings.php';
+    require_once dirname(__DIR__) . '/app/models/schema_inspection.php';
     require_once dirname(__DIR__) . '/app/services/gallery_music.php';
 
     /**
@@ -130,6 +177,98 @@ namespace {
     {
         if (!$condition)
             throw new RuntimeException($message);
+    }
+
+    // The attached information_schema begins empty, representing a confirmed
+    // pre-catalog installation rather than a failed metadata inspection.
+    \Gallery\Services\schema_inspection_reset_request_cache();
+    music_assert(
+        \Gallery\Services\music_catalog_physical_write_mode() === 'legacy',
+        'A completely absent catalog schema must permit the legacy playlist path.',
+    );
+
+    $schemaDatabase = $GLOBALS['music_schema_fixture_db'];
+    $schemaDatabase->beginTransaction();
+    try {
+        $schemaDatabase->prepare(
+            'INSERT INTO information_schema.TABLES '
+                . '(TABLE_SCHEMA, TABLE_NAME) VALUES (?, ?)',
+        )->execute(['main', 'music_songs']);
+        $insertColumn = $schemaDatabase->prepare(
+            'INSERT INTO information_schema.COLUMNS '
+                . '(TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME) '
+                . 'VALUES (?, ?, ?)',
+        );
+        foreach (['id', 'title', 'created_at', 'updated_at'] as $column) {
+            $insertColumn->execute(['main', 'music_songs', $column]);
+        }
+        // The available songs table makes this a partial catalog, despite all
+        // other catalog tables remaining positively absent.
+        \Gallery\Services\schema_inspection_reset_request_cache();
+        try {
+            \Gallery\Services\music_catalog_physical_write_mode();
+            throw new LogicException(
+                'A partial catalog schema was accepted for physical writes.',
+            );
+        } catch (\Gallery\Services\PresentationSchemaUnavailableException $error) {
+            music_assert(
+                $error->feature() === 'presentation.music_catalog'
+                    && $error->state() === 'missing'
+                    && $error->operation() === 'music_catalog.playlist_mutation',
+                'Partial catalog refusal must preserve its typed missing-state diagnostics.',
+            );
+        }
+
+        try {
+            \Gallery\Services\schema_inspection_set_query_executor_for_tests(
+                static function (
+                    string $objectType,
+                    string $table,
+                    string $object,
+                ): bool {
+                    throw new \PDOException(
+                        'Fixture schema metadata inspection is unavailable.',
+                    );
+                },
+            );
+            try {
+                \Gallery\Services\music_catalog_physical_write_mode();
+                throw new LogicException(
+                    'Unknown catalog schema was accepted for physical writes.',
+                );
+            } catch (\Gallery\Services\PresentationSchemaUnavailableException $error) {
+                music_assert(
+                    $error->feature() === 'presentation.music_catalog'
+                        && $error->state() === 'unknown'
+                        && $error->operation() === 'music_catalog.playlist_mutation',
+                    'Unknown catalog refusal must retain its typed diagnostics.',
+                );
+            }
+        } finally {
+            // The override is process-wide, so restore production metadata reads
+            // before testing confirmed absence or continuing playlist coverage.
+            \Gallery\Services\schema_inspection_set_query_executor_for_tests(null);
+        }
+
+        $schemaDatabase->exec(
+            "DELETE FROM information_schema.COLUMNS "
+                . "WHERE TABLE_SCHEMA = 'main' AND TABLE_NAME = 'music_songs'",
+        );
+        $schemaDatabase->exec(
+            "DELETE FROM information_schema.TABLES "
+                . "WHERE TABLE_SCHEMA = 'main' AND TABLE_NAME = 'music_songs'",
+        );
+        \Gallery\Services\schema_inspection_reset_request_cache();
+        music_assert(
+            \Gallery\Services\music_catalog_physical_write_mode() === 'legacy',
+            'Removing all partial catalog metadata must restore confirmed legacy mode.',
+        );
+    } finally {
+        \Gallery\Services\schema_inspection_set_query_executor_for_tests(null);
+        \Gallery\Services\schema_inspection_reset_request_cache();
+        if ($schemaDatabase->inTransaction()) {
+            $schemaDatabase->rollBack();
+        }
     }
 
     $root = sys_get_temp_dir() . '/gallery-music-' . bin2hex(random_bytes(8));
@@ -170,8 +309,9 @@ namespace {
             $uploaded === [
                 'revision' => $first['revision'],
                 'track_id' => $id,
+                'catalog_sync_pending' => false,
             ],
-            'Upload must return its exact committed identity and revision.',
+            'Upload must return its exact committed identity and revision without pending catalog synchronization.',
         );
         music_assert(
             !$first['tracks'][0]['downloadable'],
